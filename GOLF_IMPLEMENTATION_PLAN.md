@@ -189,13 +189,13 @@ Cloudflare Artifacts supplies Git-compatible repository primitives and task fork
 
 ## 3. Technology guide adoption
 
-Reference: [Technology Selection Guide](https://technology-selection-guide.aws.ablabs.io/) and [full agent-readable content](https://technology-selection-guide.aws.ablabs.io/llms-full.txt).
+Reference: [Technology Selection Guide](https://technology-selection-guide.aws.ablabs.io/) and [full agent-readable content](https://technology-selection-guide.aws.ablabs.io/llms-full.txt). The dated [Golf adoption register](docs/TECHNOLOGY_GUIDE_REGISTER.md) records source digests, all chapter/ADR coverage, 81 grouped prescriptions, bootstrap gaps, disposition rationale and acceptance tasks. Source review is complete for that revision; pending ADRs and implementation conformance remain separate gates.
 
 Follow applicable MUST requirements, document SHOULD deviations, and record any deliberate departures as ADRs. Maintain a requirement register: source chapter/anchor, prescription, implementation task, verification, applicability, and ADR if changed. This register covers the whole guide, not only the TL;DR summaries.
 
 ### 3.1 Stack and compliance matrix
 
-| Guide area | Golf implementation | Verification / deliberate differences |
+| Guide area | Golf target (not completion status) | Verification / deliberate differences |
 | --- | --- | --- |
 | Architecture | Go domains under `internal`; handler/service/store; one composition root; no mutable global runtime state | Package review; no operator until an actual controller requirement exists. |
 | Data | PostgreSQL, pgx, sqlc, embedded goose migrations with advisory lock; tenant-scoped reads | Real database tests, concurrent migrations, org-boundary tests. |

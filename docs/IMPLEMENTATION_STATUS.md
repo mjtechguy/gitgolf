@@ -24,7 +24,7 @@ The two infrastructure tracks remain distinct choices over shared product policy
 | Production-served browser check | Real sign-in and private repository creation render successfully, with no browser runtime errors; charcoal screenshot inspected | Real local Compose backend, ephemeral test user removed. |
 | `python3 scripts/smoke.py --restart` | Pass: real Gitea sign-in/create/list, unauthenticated and other-user denial, origin rejection, Git push/ref readback, persistent session/repository after restart, Gitea outage reporting, token revocation and logout | Real pinned Gitea 1.27.3 and PostgreSQL 18.4; temporary test users/repos removed. |
 | Website `check`, `build`, `deploy:check`, browser smoke | Pass: Astro/static build, Wrangler dry-run, dark/light screenshots, 1440/390/320px layout, theme persistence and keyboard menu | No publication or live provider deployment. |
-| Docs `check`, `build`, Wrangler dry-run | Pass: Docusaurus/static build, strict link validation, generated agent-readable output, static deployment bundle | Only development docs exist; real release required before version snapshot publication. |
+| Docs `check`, `build`, `check:build`, Wrangler dry-run and browser/version drill | Pass: strict links, dark/light desktop/mobile navigation, disposable latest/next/older snapshots and selector, agent-readable version index, static deployment bundle and local Workers asset routes/404/headers; dependency audit zero findings | Only development docs are committed; disposable snapshots removed. Real release required before version publication. |
 
 The real provider check established Gitea's minimum scope combination: browsing uses `read:user,read:repository`; repository creation uses `write:user,write:repository`. Both route scopes are required by Gitea 1.27.3. UI and setup instructions expose that distinction; an insufficient token correctly receives a denied operation.
 
@@ -43,7 +43,7 @@ The Compose installation uses separate database roles, a non-root Golf runtime a
 | Plan task | State for this increment | Remaining work |
 | --- | --- | --- |
 | P0.1 | Initial layout, private repos, local checks and ledger implemented | Broader contract/version inventories grow with supported features. |
-| P0.2 | Plan baseline and initial deviation ADR present | Full revisioned Technology Selection Guide prescription register remains required. |
+| P0.2 | Full dated [guide source register](TECHNOLOGY_GUIDE_REGISTER.md): 81 grouped prescriptions, all chapters and ADRs reviewed | Review/accept pending ADR dispositions and executable acceptance obligations; complete implementation conformance at the relevant milestones. |
 | P0.8 | Shared Gitea decision and basic API integration verified | Protected-write/conditional-merge proof, full API ownership/license/recovery qualification. |
 | P0.3 / P1.1 | Narrow auth/repository REST contract and real DB migration verified | Planned generated Connect clients/contracts and wider schema. |
 | P1.2 / P1.8 | Per-user token session slice verified | OAuth/OIDC, org/team roles, service/Git credentials, MFA/recovery and account lifecycle. |
@@ -55,7 +55,7 @@ The Compose installation uses separate database roles, a non-root Golf runtime a
 
 ## Next work and release gates
 
-1. Finish guide/ADR and Gitea policy qualification, then extend useful identity/repository/collaboration behavior. Never enforce a Golf restriction solely in the UI while other Gitea writes bypass it.
+1. Resolve the guide register’s pending ADRs and Gitea policy qualification, then extend useful identity/repository/collaboration behavior. Never enforce a Golf restriction solely in the UI while other Gitea writes bypass it.
 2. For the **Cloudflare competition track**, pull forward the smallest real Worker/Artifacts task flow: scoped forks, two overlapping supported agents, cancellation, exact-commit test evidence, comparison and conflict-aware integration. Follow the [requirements/evidence matrix](COMPETITION_READINESS.md); a static website or provider logo is not proof.
 3. For the **portable track**, package the same core for Kubernetes and qualify local/customer execution. Keep all required core behavior usable without Cloudflare or inference; optional backends can be selected individually.
 4. Qualify Actions/GitLab engine subsets and five harness/auth combinations using actual positive/negative lifecycle checks. No adapter placeholders may report ready.
