@@ -1,0 +1,61 @@
+name: golf
+services:
+  postgres:
+    image: postgres:18.4-alpine3.24
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/init-env.sh}
+      GOLF_DB_PASSWORD: ${GOLF_DB_PASSWORD:?Run scripts/init-env.sh}
+      GITEA_DB_PASSWORD: ${GITEA_DB_PASSWORD:?Run scripts/init-env.sh}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - ./deploy/postgres/init.sh:/docker-entrypoint-initdb.d/01-golf.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U postgres']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  gitea:
+    image: gitea/gitea:1.27.3-rootless
+    environment:
+      GITEA__database__DB_TYPE: postgres
+      GITEA__database__HOST: postgres:5432
+      GITEA__database__NAME: gitea
+      GITEA__database__USER: gitea
+      GITEA__database__PASSWD: ${GITEA_DB_PASSWORD:?Run scripts/init-env.sh}
+      GITEA__server__ROOT_URL: http://localhost:3001/
+      GITEA__server__SSH_DOMAIN: localhost
+      GITEA__server__SSH_PORT: 2222
+      GITEA__server__SSH_LISTEN_PORT: 2222
+      GITEA__security__INSTALL_LOCK: 'true'
+      GITEA__service__DISABLE_REGISTRATION: 'true'
+      GITEA__actions__ENABLED: 'false'
+    ports:
+      - '127.0.0.1:3001:3000'
+      - '127.0.0.1:2222:2222'
+    volumes:
+      - gitea-data:/var/lib/gitea
+      - gitea-config:/etc/gitea
+    depends_on:
+      postgres:
+        condition: service_healthy
+  golf:
+    build: .
+    environment:
+      GOLF_LISTEN_ADDR: ':8080'
+      GOLF_PUBLIC_URL: ${GOLF_PUBLIC_URL:-http://localhost:8080}
+      GOLF_ALLOW_INSECURE_COOKIES: "true"
+      GOLF_WEB_DIR: /app/web/dist
+      GOLF_ENCRYPTION_KEY: ${GOLF_ENCRYPTION_KEY:?Run scripts/init-env.sh}
+      DATABASE_URL: postgres://golf:${GOLF_DB_PASSWORD:?Run scripts/init-env.sh}@postgres:5432/golf?sslmode=disable
+      GITEA_URL: http://gitea:3000
+    ports:
+      - '127.0.0.1:8080:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      gitea:
+        condition: service_started
+volumes:
+  postgres-data:
+  gitea-data:
+  gitea-config:
