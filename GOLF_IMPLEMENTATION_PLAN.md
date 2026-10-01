@@ -223,6 +223,8 @@ Follow applicable MUST requirements, document SHOULD deviations, and record any 
 - Infrastructure configuration ownership and deployment reconciliation.
 - OSS/enterprise boundary and licensing.
 
+Effect is a proposed library candidate for substantive TypeScript integration adapters, subject to a comparative Workers/portable-runtime qualification. See [ADR 0002](docs/decisions/0002-effect-typescript-adapters.md) for the concrete failure/cancellation/resource-cleanup pilot. It is not a new dependency of the Go core, UI, marketing site or docs, and does not create a second durable job authority.
+
 ### 3.3 Versions
 
 Do not hardcode stale guide forecasts or copy old version claims. Select maintained stable versions within the chosen supported families, pin them in manifests/lockfiles/image digests, record source and verification date, and test updates through the compatibility corpus. A version update must not silently expand or weaken a published contract.

@@ -21,7 +21,7 @@ Scope limits: the guide's linked external manuals, upstream source repository hi
 
 - **Adopt** means a target requirement, not completed code. The source's MUST/SHOULD/MAY force remains intact; a SHOULD departure also needs rationale.
 - **Defer** names the task or trigger that makes a requirement applicable. It is not permission to ship the affected capability without its controls.
-- **Deviation** means the guide and Golf differ. Only [Golf ADR-0001](decisions/0001-initial-forge-and-vertical-slice.md) is currently accepted; other ADR references below are decision topics to write, not invented accepted records.
+- **Deviation** means the guide and Golf differ. Only [Golf ADR-0001](decisions/0001-initial-forge-and-vertical-slice.md) is currently accepted; [ADR-0002](decisions/0002-effect-typescript-adapters.md) proposes a bounded Effect pilot, without adopting the dependency; other ADR references below are decision topics to write, not invented accepted records.
 - **Not applicable** is limited to the named conditional subsystem or upstream publishing choice. If Golf later introduces that subsystem, reassess the row.
 - `TG-xx.yy` identifiers are stable register IDs. `P*` identifiers refer to the [implementation tasks](../GOLF_IMPLEMENTATION_PLAN.md#16-implementation-phases-and-tasks). A check described here is an acceptance obligation unless the implementation evidence section explicitly says it ran.
 
