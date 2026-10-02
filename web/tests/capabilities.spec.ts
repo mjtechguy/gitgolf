@@ -1,14 +1,15 @@
 import { expect, test } from '@playwright/test';
 import { create, toJsonString } from '@bufbuild/protobuf';
-import { CapabilityState, GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema } from '../src/gen/golf/v1/golf_pb';
+import { CapabilityState, GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListInfrastructureConnectionsResponseSchema } from '../src/gen/golf/v1/golf_pb';
 
-test('status separates portable agents and per-function Cloudflare state, with shared tables and denial cleanup', async ({ page }) => {
+for (const isInstanceAdmin of [false, true]) test(`status setup respects administrator role (${isInstanceAdmin}) and clears denied state`, async ({ page }) => {
   let denied = false;
   await page.route('**/rpc/**', route => {
     const path = new URL(route.request().url()).pathname;
     const reply = (body: string) => route.fulfill({ contentType: 'application/json', headers: { 'Cache-Control': 'no-store' }, body });
-    if (path.endsWith('/GetSession')) return reply(toJsonString(GetSessionResponseSchema, create(GetSessionResponseSchema, { user: { id: '42', login: 'alex' } })));
+    if (path.endsWith('/GetSession')) return reply(toJsonString(GetSessionResponseSchema, create(GetSessionResponseSchema, { user: { id: '42', login: 'alex', isInstanceAdmin } })));
     if (path.endsWith('/GetAuthenticationOptions')) return reply(toJsonString(GetAuthenticationOptionsResponseSchema, create(GetAuthenticationOptionsResponseSchema, {})));
+    if (path.endsWith('/ListInfrastructureConnections')) return reply(toJsonString(ListInfrastructureConnectionsResponseSchema, create(ListInfrastructureConnectionsResponseSchema, {})));
     if (path.endsWith('/ListCapabilities')) {
       if (denied) return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ code: 'permission_denied', message: 'Capability access denied.' }) });
       return reply(toJsonString(ListCapabilitiesResponseSchema, create(ListCapabilitiesResponseSchema, { capabilities: [
@@ -30,6 +31,11 @@ test('status separates portable agents and per-function Cloudflare state, with s
   const cloudflare = page.getByRole('table', { name: 'Cloudflare integrations', exact: true });
   await expect(platform.getByText('Repositories', { exact: true })).toBeVisible();
   await expect(platform.getByText('Slack notifications', { exact: true })).toBeVisible();
+  await expect(platform.getByRole('link', { name: 'Manage repositories', exact: true })).toHaveAttribute('href', '/');
+  await expect(page.getByRole('link', { name: 'Manage connections', exact: true })).toHaveCount(isInstanceAdmin ? 1 : 0);
+  await expect(platform.getByRole('link', { name: 'Manage policies', exact: true })).toHaveCount(isInstanceAdmin ? 1 : 0);
+  await expect(agents.getByText('Setup not available yet', { exact: true })).toHaveCount(2);
+  await expect(cloudflare.getByRole('link', { name: 'Configure source storage', exact: true })).toHaveCount(isInstanceAdmin ? 1 : 0);
   await expect(agents.getByText('Claude Code', { exact: true })).toBeVisible();
   await expect(agents.getByText('Codex', { exact: true })).toBeVisible();
   await expect(agents.getByText('R2 sources', { exact: true })).toHaveCount(0);
@@ -51,4 +57,21 @@ test('status separates portable agents and per-function Cloudflare state, with s
   await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
   await expect(page.getByRole('alert')).toBeVisible();
   await expect(page.getByRole('table')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Manage connections', exact: true })).toHaveCount(0);
+  if (isInstanceAdmin) {
+    denied = false;
+    await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
+    await page.getByRole('link', { name: 'Manage connections', exact: true }).click();
+    await expect(page).toHaveURL('/admin/settings/infrastructure');
+    await expect(page.getByRole('heading', { name: 'Infrastructure connections', exact: true })).toBeVisible();
+    await expect(page.getByLabel('Endpoint', { exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'New connection profile', exact: true }).click();
+    await expect(page.getByLabel('Connection type', { exact: true })).toHaveValue('DATABASE');
+    await page.getByLabel('Connection type', { exact: true }).selectOption('OBJECT_STORAGE');
+    await page.getByLabel('Object-storage backend', { exact: true }).selectOption('R2');
+    await expect(page.getByLabel('Bucket', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('link', { name: 'Back to status', exact: true }).click();
+    await expect(page).toHaveURL('/status');
+  }
 });
