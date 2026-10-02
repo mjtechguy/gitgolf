@@ -20,6 +20,7 @@ import (
 	"connectrpc.com/connect"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 	"github.com/mjtechguy/golf-git/gen/golf/v1/golfv1connect"
+	"github.com/mjtechguy/golf-git/internal/gitinput"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -28,6 +29,7 @@ const help = `Golf — inspect repositories, organizations and your account acti
 
 Usage: golf [--url ORIGIN] [--token-stdin] COMMAND
 
+  mcp                         serve local MCP on stdin/stdout
   repo list [--page N] [--limit N]
   repo view OWNER/REPO
   repo creation IDEMPOTENCY_KEY
@@ -54,6 +56,7 @@ Data uses the versioned API's Protobuf JSON format. No automatic pagination.
 Pass a Gitea token on stdin with --token-stdin, or set GOLF_GITEA_TOKEN.
 GOLF_URL defaults to http://localhost:8080. Remote origins require HTTPS.
 Credentials/cookies are never saved. Each command signs in and signs out.
+MCP takes its token only from GOLF_GITEA_TOKEN; stdin is reserved for the protocol.
 Global flags precede the command; resource flags follow positional arguments.
 Organization reads need read:user and read:organization; code needs read:repository.
 Account activity needs read:user and records successful session lifecycle operations.
@@ -83,7 +86,12 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 		fmt.Fprint(output, help)
 		return 0
 	}
-	command, err := parseCommand(flags.Args())
+	mcpMode := len(flags.Args()) == 1 && flags.Args()[0] == "mcp"
+	var command command
+	var err error
+	if !mcpMode {
+		command, err = parseCommand(flags.Args())
+	}
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			fmt.Fprint(output, help)
@@ -101,6 +109,10 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 		return 2
 	}
 	token := getenv("GOLF_GITEA_TOKEN")
+	if mcpMode && *stdin {
+		fmt.Fprintln(diagnostic, "MCP reserves stdin for its protocol; configure GOLF_GITEA_TOKEN in the owner-controlled process environment.")
+		return 2
+	}
 	if *stdin {
 		data, err := readToken(ctx, input)
 		if err != nil {
@@ -112,6 +124,9 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 	if len(token) < 8 || len(token) > 512 || strings.ContainsAny(token, "\r\n\t ") {
 		fmt.Fprintln(diagnostic, "Supply one valid Gitea token using --token-stdin or GOLF_GITEA_TOKEN.")
 		return 2
+	}
+	if mcpMode {
+		return runMCP(ctx, base, token, input, output, diagnostic)
 	}
 	result, err := execute(ctx, base, command, token)
 	if err != nil {
@@ -229,7 +244,7 @@ func parseCommand(args []string) (command, error) {
 			return result, invalid
 		}
 		for _, part := range parts {
-			if part == "" || part == "." || part == ".." || strings.ContainsAny(part, "\\\r\n\x00") {
+			if !organizationName.MatchString(part) || part == "." || part == ".." {
 				return result, invalid
 			}
 		}
@@ -304,6 +319,9 @@ func parseCommand(args []string) (command, error) {
 	}
 	if paginated {
 		result.page = &golfv1.PageRequest{Page: uint32(page), Limit: uint32(limit)}
+	}
+	if !gitinput.ValidRef(ref) || !gitinput.ValidSourcePath(filePath) {
+		return result, invalid
 	}
 	result.ref, result.path = ref, filePath
 	result.state = map[string]golfv1.IssueState{"open": golfv1.IssueState_ISSUE_STATE_OPEN, "closed": golfv1.IssueState_ISSUE_STATE_CLOSED, "all": golfv1.IssueState_ISSUE_STATE_ALL}[state]

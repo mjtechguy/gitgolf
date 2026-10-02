@@ -2,7 +2,7 @@
 
 Status: product direction and implementation roadmap; completeness review and shared Gitea first-release decision incorporated on 2026-10-01. Provider proofs and implementation evidence remain required. Explicit defaults are engineering decisions that can be revisited through ADRs.
 
-Execution evidence: the [implementation ledger](docs/IMPLEMENTATION_STATUS.md) records the local developer preview, including bounded repository/source/history/commit-diff, issue and PR/native-review reads, member-scoped organization browsing, own-account session activity, the JSON CLI, durable own-account repository creation and coordinated encrypted backup/fresh restore for the canonical Docker profile. These increments do not mark an entire phase, v1 or the Cloudflare competition milestone complete.
+Execution evidence: the [implementation ledger](docs/IMPLEMENTATION_STATUS.md) records the local developer preview, including bounded repository/source/history/commit-diff, issue and PR/native-review reads, member-scoped organization browsing, own-account session activity, the JSON CLI and initial local MCP adapter, durable own-account repository creation and coordinated encrypted backup/fresh restore for the canonical Docker profile. Each adapter's protocol/native qualification is recorded separately. These increments do not mark an entire phase, v1 or the Cloudflare competition milestone complete.
 
 Prepared: 2026-10-01. Provider documentation and limits must be rechecked when implementing each integration.
 
@@ -556,6 +556,8 @@ AI Gateway is optional routing/observability, not a model or agent replacement. 
 ### 9.6 Agent access to Golf and previews
 
 API/CLI/MCP expose authorized task, repository, workspace, test, evidence, PR, and deployment operations. Remote MCP uses authenticated transport and operation-scoped authorization; local adapters call the same domain API. ACP connects Golf to supported agents; it is not interchangeable with MCP tool access.
+
+Current bounded increment: [local stdio MCP](docs/MCP_CONTRACT.md) implements discovery and 19 existing CLI/API reads using official Go SDK v1.8.0, a fixed owner-configured Golf origin and scoped Gitea PAT bootstrap. Each call creates/deletes a temporary Golf session and records session activity; the adapter does not claim side-effect-free or idempotent behavior. Native-provider/SDK-client qualification covers all 19 tools under both `2026-07-28` and legacy `2025-11-25`; separate raw-wire cancellation/framing checks cover both versions. Exact evidence is recorded in the ledger. This advances only part of P0.9/P5.5; full conformance, remote authorization, ACP, tool mutations/approvals, managed credentials, actual coding-agent clients and task execution remain separate gates.
 
 Protected preview access for agents uses configured Access service authentication, distinct from human sign-in. Limit it to the intended application/task, rotate/revoke it, and prevent forwarding credentials to unrelated redirects. See [authenticate coding agents](https://developers.cloudflare.com/cloudflare-one/access-controls/authenticate-agents/).
 
@@ -1315,6 +1317,10 @@ Links are implementation sources, not proof that an integration has already been
 - [Grok CLI/authentication](https://docs.x.ai/build/cli/reference)
 - [xAI model API](https://docs.x.ai/overview)
 - [Pi source/package interfaces](https://github.com/badlogic/pi-mono)
+- [MCP 2026-07-28 versioning](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning)
+- [MCP 2026-07-28 stdio transport](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio)
+- [MCP 2026-07-28 tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)
+- [Official Go MCP SDK v1.8.0](https://github.com/modelcontextprotocol/go-sdk/releases/tag/v1.8.0)
 
 ### Cloudflare execution and AI
 

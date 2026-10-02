@@ -9,7 +9,7 @@ These are infrastructure choices, not editions. AI is optional in Golf's core wo
 
 ## What works now
 
-This is a developer preview: optional scoped Gitea browser OAuth and per-user token bootstrap, encrypted PostgreSQL-backed sessions with account listing/revocation and own-account activity, member-scoped organization/team browsing, repository listing/creation, in-app source, commit history and native commit-diff browsing, read-only issues and pull requests/native reviews, a JSON CLI, black/charcoal and light/system themes, capability reporting, and persistent Compose/Helm installations. Git writes use Gitea directly.
+This is a developer preview: optional scoped Gitea browser OAuth and per-user token bootstrap, encrypted PostgreSQL-backed sessions with account listing/revocation and own-account activity, member-scoped organization/team browsing, repository listing/creation, in-app source, commit history and native commit-diff browsing, read-only issues and pull requests/native reviews, a JSON CLI and local stdio MCP tools, black/charcoal and light/system themes, capability reporting, and persistent Compose/Helm installations. Git writes use Gitea directly.
 
 Golf local/external OIDC identity, organization/role administration, import/connections, PR/review mutations and merge policy, pipelines/runners, agent execution, Cloudflare integrations and protected previews/CD remain roadmap work. This is not complete v1 or a competition-ready entry. No repository CI is configured.
 
@@ -148,7 +148,13 @@ PR/review commands require `read:user` and `read:repository`; review flags remai
 
 Account activity uses a separate keyset contract: `audit list --limit 20`, then `audit list --limit 20 --before-id BEFORE_ID --snapshot-id SNAPSHOT_ID` using exact `data.nextBeforeId` and `data.snapshotId` strings. Each CLI invocation records its own temporary sign-in/sign-out, so retain the first captured snapshot across continuation calls. These reads need only `read:user`; managed CLI OAuth remains unavailable.
 
-Success writes JSON with `schema_version: "golf.cli.v1"` and the API response in `data`. Repository, issue, PR, organization and team collection pagination is explicit; follow `data.page.nextPage` with `--page`, up to `--limit 100`. Activity uses the keyset cursors described above. Exit codes are 0 for success/help, 1 for operation/authentication/session-cleanup failure, and 2 for usage errors. Diagnostics go to stderr. Go and TypeScript clients now share the Protobuf/Connect contract. OAuth/device login, MCP and ACP remain future work.
+Success writes JSON with `schema_version: "golf.cli.v1"` and the API response in `data`. Repository, issue, PR, organization and team collection pagination is explicit; follow `data.page.nextPage` with `--page`, up to `--limit 100`. Activity uses the keyset cursors described above. Exit codes are 0 for success/help, 1 for operation/authentication/session-cleanup failure, and 2 for usage errors. Diagnostics go to stderr. Go and TypeScript clients now share the Protobuf/Connect contract. Managed CLI OAuth/device login and ACP remain future work.
+
+## Local MCP tools
+
+`./bin/golf mcp` exposes 19 existing repository/source/commit-diff/issue/PR/organization/activity reads over stdin/stdout using the official Go MCP SDK. Configure an owner-controlled client to launch that binary and provide `GOLF_GITEA_TOKEN` through its environment from a secret manager; `GOLF_URL` selects the installation. MCP reserves stdin for JSON-RPC, so `--token-stdin` is unavailable. Tool arguments cannot choose credentials, destinations or arbitrary commands.
+
+Each call shares the CLI's scoped API path and temporary sign-in/sign-out, including session audit events. Results use the `golf.mcp.v1` envelope in structured and text content; pagination is explicit, and source/review text remains untrusted data. Four concurrent calls, bounded input/output and cancellation cleanup limit this local adapter. Native checks cover all 19 tools under both `2026-07-28` and legacy `2025-11-25`; separate raw-wire cancellation checks also cover both versions. See the [MCP contract](docs/MCP_CONTRACT.md). This does not provide remote MCP, ACP, mutations, managed authentication or qualified coding-agent execution.
 
 ## Local checks
 
@@ -164,6 +170,10 @@ python3 scripts/smoke.py --restart
 # Optional: include real CLI checks against the same stack.
 make cli
 python3 scripts/smoke.py --cli bin/golf
+# Native stdio MCP discovery, all 19 reads, scope and lifecycle checks.
+python3 scripts/mcp-smoke/run.py --cli bin/golf
+# Raw-wire cancellation, request-ID and input-framing checks.
+python3 scripts/mcp-cancellation-check.py --cli bin/golf
 # Own-account activity API/CLI and production-served browser checks.
 python3 scripts/audit-smoke.py --cli bin/golf
 # Isolated DB/real PAT keyring checks; build bin/golf-server first.
