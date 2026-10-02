@@ -286,3 +286,11 @@ docker compose --env-file .env --env-file .env.ci --env-file .env.storage \
 ```
 
 Use **Admin portal → Infrastructure** for encrypted connection profiles and storage activation. Database profiles can be saved/tested; switching live databases remains an operator cutover. Development data is disposable. **Execution policy** defaults to deny: enable only the repositories and literal workflow paths you intend to run, at every required scope. The local worker daemon is privileged trusted infrastructure; untrusted jobs do not receive its socket or credentials. See the [runner contract](docs/RUNNER_ISOLATION_CONTRACT.md) and [pipeline compatibility](docs/PIPELINE_EXECUTION_COMPATIBILITY.md).
+
+### Native push event intake (local foundation)
+
+Golf can record authenticated native push webhooks without Cloudflare or AI. This first slice does not automatically execute pipelines, agent tasks, outbound webhooks or Slack notifications. The [event contract](docs/REPOSITORY_EVENTS_CONTRACT.md) explains bounded input, immutable repository binding, durable deduplication and the native unsigned-header replay limitation. The [local automation implementation](docs/LOCAL_AUTOMATION_IMPLEMENTATION.md) specifies the next durable authorization and automatic-trigger work.
+
+An operator supplies `GOLF_REPOSITORY_EVENT_CONNECTIONS` as a JSON array of explicit connection ID, native repository ID, owner ID, exact `owner/name` and a distinct random signing secret per repository. Keep this in an ignored mode0600 environment file or the deployment Secret, never the repository. Configure the native repository webhook through supported APIs to POST push events to `/hooks/gitea/<connectionID>` with that secret. Compose passes the variable to Golf; Helm accepts the optional key in its existing Secret. Unset or `[]` disables intake. Secret changes require draining/restarting every serving replica; this slice has no live configuration epoch.
+
+`/status` separates shared platform capabilities, portable coding-agent adapters and individual Cloudflare integrations using the common searchable, sortable, paginated table. Planned integrations remain unavailable; operator configuration or an installed harness alone is not a verified connection.

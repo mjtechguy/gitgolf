@@ -281,6 +281,31 @@ type GolfRepositoryCreationEvent struct {
 	State      string
 }
 
+type GolfRepositoryEvent struct {
+	ID             int64
+	ConnectionID   uuid.UUID
+	DeliveryID     uuid.UUID
+	PayloadSha256  string
+	PayloadBytes   int64
+	EventType      string
+	Ref            string
+	BeforeCommitID string
+	AfterCommitID  string
+	SenderID       int64
+	ReceivedAt     time.Time
+	State          string
+	ExecutionState string
+}
+
+type GolfRepositoryEventConnection struct {
+	ID           uuid.UUID
+	ForgeURL     string
+	RepositoryID int64
+	OwnerID      int64
+	Repository   string
+	CreatedAt    time.Time
+}
+
 type GolfRunnerPresence struct {
 	ForgeURL string
 	RunnerID string

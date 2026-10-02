@@ -469,8 +469,43 @@ func (s *Server) ListCapabilities(ctx context.Context, _ *connect.Request[golfv1
 		}
 	}
 	capabilities = append(capabilities, &golfv1.Capability{Id: "pipelines", Label: "Manual shell pipelines", State: pipelineState, Reason: pipelineReason})
-	for _, entry := range []struct{ id, label string }{{"cloudflare", "Cloudflare integration"}, {"agents", "Coding agents"}, {"deployments", "Protected previews and deployment"}} {
-		capabilities = append(capabilities, &golfv1.Capability{Id: entry.id, Label: entry.label, State: golfv1.CapabilityState_CAPABILITY_STATE_DISABLED, Reason: "Planned; not implemented. No operation is available."})
+	eventState, eventReason := golfv1.CapabilityState_CAPABILITY_STATE_DISABLED, "No native push webhook connection is configured. Durable intake is separate from automatic execution."
+	if len(s.repositoryEventConnections) > 0 {
+		eventState, eventReason = golfv1.CapabilityState_CAPABILITY_STATE_DEGRADED, "Native push intake is configured; its database is unavailable."
+		if s.db != nil && s.db.PingContext(ctx) == nil {
+			eventState, eventReason = golfv1.CapabilityState_CAPABILITY_STATE_READY, "Authenticated native push deliveries can be recorded and deduplicated. Automatic pipelines, agent tasks and outbound notification delivery are not implemented."
+		}
+	}
+	capabilities = append(capabilities, &golfv1.Capability{Id: "events.native", Label: "Native push event intake", State: eventState, Reason: eventReason})
+	for _, entry := range []struct{ id, label, reason string }{
+		{"pipelines.automatic", "Automatic pipelines", "Planned. Durable automation grants and automatic-trigger policy are required; manual worker readiness does not enable push execution."},
+		{"webhooks.outbound", "Outbound webhooks and Slack notifications", "Planned. Event subscriptions, protected destinations, durable delivery history and retries are not implemented."},
+		{"email.outbound", "Outbound email", "Planned. Configurable SMTP/API delivery, verified addresses and notification preferences are not implemented."},
+		{"email.inbound", "Inbound email", "Planned. Authorized email-to-comment, issue and task routing is not implemented."},
+		{"deployments", "Protected previews and deployment", "Planned. Portable and Cloudflare deployment targets require their own qualified adapters."},
+		{"agents.claude-code", "Claude Code", "Planned Golf adapter. Local machine execution and supported account/API authentication need qualification."},
+		{"agents.codex", "Codex", "Planned Golf adapter. Local machine execution and supported account/API authentication need qualification."},
+		{"agents.opencode", "OpenCode", "Planned Golf adapter. Local execution, ACP and supported provider connections need qualification."},
+		{"agents.grok", "Grok", "Planned Golf adapter. Local execution and supported native authentication/protocol need qualification."},
+		{"agents.pi", "Pi", "Planned Golf adapter. Local execution and supported native authentication/protocol need qualification."},
+		{"cloudflare.workers", "Workers: routing and event intake", "Not implemented or connected. Edge routing and provider webhook adapters need live qualification."},
+		{"cloudflare.queues", "Queues: event and work delivery", "Not implemented or connected. Portable event intake does not establish a Cloudflare queue connection."},
+		{"cloudflare.workflows", "Workflows: durable provider steps", "Not implemented or connected. Provisioning, deployment and approval-wait adapters need qualification."},
+		{"cloudflare.sandboxes", "Sandboxes: coding agent execution", "Not implemented or connected. Agent execution remains a generic Golf capability with portable runners."},
+		{"cloudflare.containers", "Containers: CI and application runtime", "Not implemented or connected. Each workload, isolation boundary and capacity must be qualified."},
+		{"cloudflare.r2", "R2: sources, artifacts and backups", "No qualified Cloudflare connection. Each storage consumer must be enabled and tested separately."},
+		{"cloudflare.ai-gateway", "AI Gateway: inference routing", "Not implemented or connected. Provider routes, billing owner and data retention require explicit configuration."},
+		{"cloudflare.workers-ai", "Workers AI: optional inference", "Not implemented or connected. Harness/model combinations must be qualified; AI remains optional."},
+		{"cloudflare.email", "Email Service: sending and routing", "Not implemented or connected. Generic Golf email delivery and inbound authorization require adapters."},
+		{"cloudflare.browser", "Browser Run: preview tests", "Not implemented or connected. Portable browser testing remains an independent option."},
+		{"cloudflare.access", "Access: protected previews", "Not implemented or connected. Authentication policies and preview expiry need qualification."},
+		{"cloudflare.dns", "DNS and TLS: deployment domains", "Not implemented or connected. Exact destination plans, domain readiness and rollback need qualification."},
+		{"cloudflare.tunnel", "Tunnel: approved private origins", "Not implemented or connected. Private-origin reachability requires explicit network authorization."},
+		{"cloudflare.secrets", "Secrets Store: Worker credentials", "Not implemented or connected. Supported consumers and secret references must be qualified."},
+		{"cloudflare.search", "AI Search and Vectorize: retrieval", "Not implemented or connected. Optional derived indexes must enforce current repository access."},
+		{"cloudflare.logs", "Workers logs: runtime diagnosis", "Not implemented or connected. Deployment correlation, private access and retention require adapters."},
+	} {
+		capabilities = append(capabilities, &golfv1.Capability{Id: entry.id, Label: entry.label, State: golfv1.CapabilityState_CAPABILITY_STATE_DISABLED, Reason: entry.reason})
 	}
 	return connect.NewResponse(&golfv1.ListCapabilitiesResponse{Capabilities: capabilities}), nil
 }

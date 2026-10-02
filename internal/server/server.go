@@ -27,6 +27,7 @@ type Config struct {
 	AllowInsecureCookies                                       bool
 	WebDir                                                     string
 	RunnerKeysJSON, RunnerImagesJSON                           string
+	RepositoryEventConnectionsJSON                             string
 	Telemetry                                                  *telemetry.Runtime
 }
 type Server struct {
@@ -37,6 +38,7 @@ type Server struct {
 	handler                       http.Handler
 	runnerKeys                    map[string][32]byte
 	runnerImages                  map[string]string
+	repositoryEventConnections    map[string]repositoryEventConnection
 	defaultObjectStore            *objectstore.Store
 	defaultObjectStoreFingerprint string
 }
@@ -85,6 +87,9 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	if err := s.configureObjectStore(context.Background()); err != nil {
 		return nil, err
 	}
+	if err := s.configureRepositoryEvents(); err != nil {
+		return nil, err
+	}
 	if err := s.configureRunners(); err != nil {
 		return nil, err
 	}
@@ -94,6 +99,7 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) { respond(w, 200, map[string]string{"status": "ok"}) })
 	r.Get("/readyz", s.readiness)
 	r.Get("/auth/gitea/callback", s.oauthCallback)
+	r.Post("/hooks/gitea/{connectionID}", s.repositoryEventWebhook)
 	r.Post("/internal/ci/poll", s.runnerPoll)
 	r.Post("/internal/ci/recover", s.runnerRecover)
 	r.Post("/internal/ci/attempt/{id}/heartbeat", s.runnerAttempt)
@@ -148,7 +154,7 @@ func (s *Server) security(next http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-		if r.URL.Path == "/rpc" || strings.HasPrefix(r.URL.Path, "/rpc/") || strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/internal/ci/") {
+		if r.URL.Path == "/rpc" || strings.HasPrefix(r.URL.Path, "/rpc/") || strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/internal/ci/") || strings.HasPrefix(r.URL.Path, "/hooks/") {
 			w.Header().Set("Cache-Control", "no-store")
 			w.Header().Set("Referrer-Policy", "no-referrer")
 		}
