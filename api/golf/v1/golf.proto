@@ -152,6 +152,21 @@ service OrganizationService {
   rpc ListTeamRepositories(ListTeamRepositoriesRequest) returns (ListTeamRepositoriesResponse);
 }
 
+// Native organization-owner administration of ordinary team membership.
+// Owners-team membership and Golf instance-role changes are excluded.
+service OrganizationAdminService {
+  rpc GetTeamAdministration(GetTeamAdministrationRequest) returns (GetTeamAdministrationResponse);
+  rpc ResolveTeamMember(ResolveTeamMemberRequest) returns (ResolveTeamMemberResponse);
+  rpc AddTeamMember(AddTeamMemberRequest) returns (AddTeamMemberResponse);
+  rpc RemoveTeamMember(RemoveTeamMemberRequest) returns (RemoveTeamMemberResponse);
+}
+
+// Explicitly enrolled Golf administrator reads. Native site administration is
+// not an instance-role grant. Credential material is never returned.
+service InstanceAdminService {
+  rpc ListLocalAccounts(ListLocalAccountsRequest) returns (ListLocalAccountsResponse);
+}
+
 // Own-account successful session lifecycle. This is not a complete security audit.
 service AuditService {
   rpc ListAuditEvents(ListAuditEventsRequest) returns (ListAuditEventsResponse);
@@ -704,4 +719,64 @@ message ListAuditEventsResponse {
   string next_before_id = 2;
   // Empty only for history without any events. No pre-migration history is invented.
   string snapshot_id = 3;
+}
+
+message GetTeamAdministrationRequest {
+  string organization = 1;
+  string team_id = 2;
+}
+message GetTeamAdministrationResponse {
+  string organization_id = 1;
+  OrganizationTeam team = 2;
+  bool can_manage_members = 3;
+  // Observation fingerprint, not an atomic native version lock.
+  string revision = 4;
+  bool is_owner_team = 5;
+}
+message ResolveTeamMemberRequest {
+  string organization = 1;
+  string organization_id = 2;
+  string team_id = 3;
+  string user_login = 4;
+  string expected_revision = 5;
+}
+message ResolveTeamMemberResponse {
+  User user = 1;
+  bool is_member = 2;
+}
+message AddTeamMemberRequest {
+  string organization = 1;
+  string organization_id = 2;
+  string team_id = 3;
+  string user_login = 4;
+  string expected_revision = 5;
+  string user_id = 6;
+}
+message AddTeamMemberResponse { User user = 1; bool is_member = 2; }
+message RemoveTeamMemberRequest {
+  string organization = 1;
+  string organization_id = 2;
+  string team_id = 3;
+  string user_login = 4;
+  string expected_revision = 5;
+  string user_id = 6;
+}
+message RemoveTeamMemberResponse { User user = 1; bool is_member = 2; }
+
+message LocalAccountInfo {
+  string id = 1;
+  string username = 2;
+  string email = 3;
+  string native_user_id = 4;
+  bool is_instance_admin = 5;
+  bool disabled = 6;
+  string credential_version = 7;
+  string created_at = 8;
+  optional string disabled_at = 9;
+  string golf_user_id = 10;
+}
+message ListLocalAccountsRequest { PageRequest page = 1; }
+message ListLocalAccountsResponse {
+  repeated LocalAccountInfo accounts = 1;
+  PageResponse page = 2;
 }

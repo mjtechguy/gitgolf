@@ -53,6 +53,11 @@ const organizationSettingsRoute = createRoute({
   beforeLoad: ({ params }) => { if (!params.organization || /[\/\\]/.test(params.organization)) throw notFound(); },
   component: OrganizationSettingsPage,
 });
+const organizationTeamSettingsRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/organizations/$organization/teams/$teamId/settings',
+  beforeLoad: ({ params }) => { if (!params.organization || /[\/\\]/.test(params.organization) || !/^[1-9][0-9]{0,18}$/.test(params.teamId) || BigInt(params.teamId) > 9223372036854775807n) throw notFound(); },
+  component: OrganizationTeamSettingsPage,
+});
 const instanceSettingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/settings', component: () => <App location={{ kind: 'instance-settings' }} /> });
 const organizationRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -94,6 +99,10 @@ function RepositorySettingsPage() {
   const { owner, name } = repositorySettingsRoute.useParams();
   return <App location={{ kind: 'repository-settings', owner, name }} />;
 }
+function OrganizationTeamSettingsPage() {
+  const { organization, teamId } = organizationTeamSettingsRoute.useParams();
+  return <App location={{ kind: 'organization-team-settings', organization, teamId }} />;
+}
 function OrganizationSettingsPage() {
   const { organization } = organizationSettingsRoute.useParams();
   return <App location={{ kind: 'organization-settings', organization }} />;
@@ -117,7 +126,7 @@ function OrganizationPage() {
 
 // Router owns navigation only. Private server data stays in the cancellable Query cache.
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([homeRoute, repositoryRoute, repositorySettingsRoute, organizationSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, sessionsRoute]),
+  routeTree: rootRoute.addChildren([homeRoute, repositoryRoute, repositorySettingsRoute, organizationSettingsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, sessionsRoute]),
   defaultPreload: false,
   // Refs and paths are opaque strings, including names such as "1234" or "true".
   parseSearch: (search) => Object.fromEntries(new URLSearchParams(search)),

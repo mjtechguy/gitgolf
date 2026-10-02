@@ -56,6 +56,8 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewSessionServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewOrganizationServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewOrganizationAdminServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewInstanceAdminServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewCapabilityServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewAuditServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewApiCredentialServiceHandler(s, options...))
@@ -99,7 +101,8 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		switch procedure {
 		case golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLoginWithPasswordProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
 			public = true
-		case golfv1connect.RepositorySettingsServiceGetRepositorySettingsProcedure, golfv1connect.RepositorySettingsServiceUpdateRepositorySettingsProcedure,
+		case golfv1connect.InstanceAdminServiceListLocalAccountsProcedure, golfv1connect.OrganizationAdminServiceGetTeamAdministrationProcedure, golfv1connect.OrganizationAdminServiceResolveTeamMemberProcedure, golfv1connect.OrganizationAdminServiceAddTeamMemberProcedure, golfv1connect.OrganizationAdminServiceRemoveTeamMemberProcedure,
+			golfv1connect.RepositorySettingsServiceGetRepositorySettingsProcedure, golfv1connect.RepositorySettingsServiceUpdateRepositorySettingsProcedure,
 			golfv1connect.GitAccessServiceListSSHKeysProcedure, golfv1connect.GitAccessServiceAddSSHKeyProcedure, golfv1connect.GitAccessServiceDeleteSSHKeyProcedure,
 			golfv1connect.AuditServiceListAuditEventsProcedure, golfv1connect.SessionServiceGetSessionProcedure,
 			golfv1connect.ApiCredentialServiceCreateApiCredentialProcedure, golfv1connect.ApiCredentialServiceListApiCredentialsProcedure, golfv1connect.ApiCredentialServiceRevokeApiCredentialProcedure,

@@ -46,7 +46,7 @@ const inventory: Record<SettingsScope, SettingEntry[]> = {
     { id: 'agents', section: 'Agent tools and provider credentials', state: 'Planned', detail: 'Model connections, five coding harnesses, MCP tool approvals, credential ownership and budgets need integrated execution and policy enforcement.', task: 'P5 / G4' },
   ],
   organization: [
-    { id: 'members', section: 'Members, teams and roles', state: 'Read only', detail: 'Browse memberships and visible teams. Invites, team editing and delegated Golf roles need supported mutations and last-owner recovery safeguards.', task: 'P1.5 / G1', to: '/organizations' },
+    { id: 'members', section: 'Members, teams and roles', state: 'Read only', detail: 'Browse teams and manage existing account membership in ordinary teams as an organization owner. Invitations, team grant editors and delegated Golf roles still require implementation and ownership safeguards.', task: 'P1.5 / G1', to: '/organizations' },
     { id: 'defaults', section: 'Repository defaults and selection', state: 'Planned', detail: 'Creation defaults and disabled/all/selected execution require immutable repository targeting, inherited ceilings and explicit future-repository behavior.', task: 'G2 / G3' },
     { id: 'ci', section: 'CI, workflows and fork trust', state: 'Planned', detail: 'Actions/GitLab engines, actor/event authorization, dependency allowlists and exact-commit fork approvals require the real scheduler and compatibility corpus.', task: 'P4 / G3' },
     { id: 'runners', section: 'Runner groups', state: 'Planned', detail: 'Repository/workflow access, pool labels, capacity, registration, drain and revocation need actual runner pools; labels alone cannot authorize execution.', task: 'P4 / G3' },
@@ -70,7 +70,7 @@ const inventory: Record<SettingsScope, SettingEntry[]> = {
     { id: 'danger', section: 'Archive, transfer and deletion', state: 'Planned', detail: 'Destructive administration is not exposed yet; ownership recovery, confirmation, target binding and audit must precede these controls.', task: 'P1.5 / P2.3' },
   ],
   instance: [
-    { id: 'enrollment', section: 'Enrollment, identity and SSO', state: 'Read only', detail: 'Local enrollment/reset/disable/email changes use operator commands. No browser account administration, external OIDC or enforced MFA policy exists yet.', task: 'P1.3' },
+    { id: 'enrollment', section: 'Enrollment, identity and SSO', state: 'Read only', detail: 'Enrolled accounts are listed above. Enrollment, reset, disable and email changes remain operator-managed; browser lifecycle editors, external OIDC and enforced MFA are still planned.', task: 'P1.3' },
     { id: 'health', section: 'System health and capabilities', state: 'Ready', detail: 'Inspect currently qualified capability states. Readiness reports dependencies; it is not an infrastructure configuration editor.', task: 'P1.1 / P1.2', to: '/', hash: 'capabilities' },
     { id: 'infrastructure', section: 'Infrastructure and shared pools', state: 'Read only', detail: 'Compose/Helm and operator configuration provide the current portable deployment. Browser pool/storage/provider administration needs live adapters.', task: 'P1 / P4 / P6' },
     { id: 'policy', section: 'Policy ceilings and delegated administration', state: 'Planned', detail: 'Typed inheritance, organization/repository selection, locked limits and authorized roles need persisted policy and admission enforcement.', task: 'G2–G6' },

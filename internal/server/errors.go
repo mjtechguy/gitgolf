@@ -43,6 +43,8 @@ func rpcError(err error) error {
 	var input inputError
 	var upstream forgeError
 	switch {
+	case errors.Is(err, errOrganizationAdminConflict):
+		code, message = connect.CodeFailedPrecondition, "Organization or team membership changed. Refresh before continuing."
 	case errors.Is(err, errRepositorySettingsConflict):
 		code, message = connect.CodeFailedPrecondition, "Repository settings changed. Refresh before editing again."
 	case errors.Is(err, errSSHKeyRejected):

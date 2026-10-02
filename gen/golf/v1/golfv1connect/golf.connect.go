@@ -34,6 +34,10 @@ const (
 	RepositoryServiceName = "golf.v1.RepositoryService"
 	// OrganizationServiceName is the fully-qualified name of the OrganizationService service.
 	OrganizationServiceName = "golf.v1.OrganizationService"
+	// OrganizationAdminServiceName is the fully-qualified name of the OrganizationAdminService service.
+	OrganizationAdminServiceName = "golf.v1.OrganizationAdminService"
+	// InstanceAdminServiceName is the fully-qualified name of the InstanceAdminService service.
+	InstanceAdminServiceName = "golf.v1.InstanceAdminService"
 	// AuditServiceName is the fully-qualified name of the AuditService service.
 	AuditServiceName = "golf.v1.AuditService"
 	// CapabilityServiceName is the fully-qualified name of the CapabilityService service.
@@ -167,6 +171,21 @@ const (
 	// OrganizationServiceListTeamRepositoriesProcedure is the fully-qualified name of the
 	// OrganizationService's ListTeamRepositories RPC.
 	OrganizationServiceListTeamRepositoriesProcedure = "/golf.v1.OrganizationService/ListTeamRepositories"
+	// OrganizationAdminServiceGetTeamAdministrationProcedure is the fully-qualified name of the
+	// OrganizationAdminService's GetTeamAdministration RPC.
+	OrganizationAdminServiceGetTeamAdministrationProcedure = "/golf.v1.OrganizationAdminService/GetTeamAdministration"
+	// OrganizationAdminServiceResolveTeamMemberProcedure is the fully-qualified name of the
+	// OrganizationAdminService's ResolveTeamMember RPC.
+	OrganizationAdminServiceResolveTeamMemberProcedure = "/golf.v1.OrganizationAdminService/ResolveTeamMember"
+	// OrganizationAdminServiceAddTeamMemberProcedure is the fully-qualified name of the
+	// OrganizationAdminService's AddTeamMember RPC.
+	OrganizationAdminServiceAddTeamMemberProcedure = "/golf.v1.OrganizationAdminService/AddTeamMember"
+	// OrganizationAdminServiceRemoveTeamMemberProcedure is the fully-qualified name of the
+	// OrganizationAdminService's RemoveTeamMember RPC.
+	OrganizationAdminServiceRemoveTeamMemberProcedure = "/golf.v1.OrganizationAdminService/RemoveTeamMember"
+	// InstanceAdminServiceListLocalAccountsProcedure is the fully-qualified name of the
+	// InstanceAdminService's ListLocalAccounts RPC.
+	InstanceAdminServiceListLocalAccountsProcedure = "/golf.v1.InstanceAdminService/ListLocalAccounts"
 	// AuditServiceListAuditEventsProcedure is the fully-qualified name of the AuditService's
 	// ListAuditEvents RPC.
 	AuditServiceListAuditEventsProcedure = "/golf.v1.AuditService/ListAuditEvents"
@@ -1478,6 +1497,225 @@ func (UnimplementedOrganizationServiceHandler) ListTeamMembers(context.Context, 
 
 func (UnimplementedOrganizationServiceHandler) ListTeamRepositories(context.Context, *connect.Request[v1.ListTeamRepositoriesRequest]) (*connect.Response[v1.ListTeamRepositoriesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationService.ListTeamRepositories is not implemented"))
+}
+
+// OrganizationAdminServiceClient is a client for the golf.v1.OrganizationAdminService service.
+type OrganizationAdminServiceClient interface {
+	GetTeamAdministration(context.Context, *connect.Request[v1.GetTeamAdministrationRequest]) (*connect.Response[v1.GetTeamAdministrationResponse], error)
+	ResolveTeamMember(context.Context, *connect.Request[v1.ResolveTeamMemberRequest]) (*connect.Response[v1.ResolveTeamMemberResponse], error)
+	AddTeamMember(context.Context, *connect.Request[v1.AddTeamMemberRequest]) (*connect.Response[v1.AddTeamMemberResponse], error)
+	RemoveTeamMember(context.Context, *connect.Request[v1.RemoveTeamMemberRequest]) (*connect.Response[v1.RemoveTeamMemberResponse], error)
+}
+
+// NewOrganizationAdminServiceClient constructs a client for the golf.v1.OrganizationAdminService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewOrganizationAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) OrganizationAdminServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	organizationAdminServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("OrganizationAdminService").Methods()
+	return &organizationAdminServiceClient{
+		getTeamAdministration: connect.NewClient[v1.GetTeamAdministrationRequest, v1.GetTeamAdministrationResponse](
+			httpClient,
+			baseURL+OrganizationAdminServiceGetTeamAdministrationProcedure,
+			connect.WithSchema(organizationAdminServiceMethods.ByName("GetTeamAdministration")),
+			connect.WithClientOptions(opts...),
+		),
+		resolveTeamMember: connect.NewClient[v1.ResolveTeamMemberRequest, v1.ResolveTeamMemberResponse](
+			httpClient,
+			baseURL+OrganizationAdminServiceResolveTeamMemberProcedure,
+			connect.WithSchema(organizationAdminServiceMethods.ByName("ResolveTeamMember")),
+			connect.WithClientOptions(opts...),
+		),
+		addTeamMember: connect.NewClient[v1.AddTeamMemberRequest, v1.AddTeamMemberResponse](
+			httpClient,
+			baseURL+OrganizationAdminServiceAddTeamMemberProcedure,
+			connect.WithSchema(organizationAdminServiceMethods.ByName("AddTeamMember")),
+			connect.WithClientOptions(opts...),
+		),
+		removeTeamMember: connect.NewClient[v1.RemoveTeamMemberRequest, v1.RemoveTeamMemberResponse](
+			httpClient,
+			baseURL+OrganizationAdminServiceRemoveTeamMemberProcedure,
+			connect.WithSchema(organizationAdminServiceMethods.ByName("RemoveTeamMember")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// organizationAdminServiceClient implements OrganizationAdminServiceClient.
+type organizationAdminServiceClient struct {
+	getTeamAdministration *connect.Client[v1.GetTeamAdministrationRequest, v1.GetTeamAdministrationResponse]
+	resolveTeamMember     *connect.Client[v1.ResolveTeamMemberRequest, v1.ResolveTeamMemberResponse]
+	addTeamMember         *connect.Client[v1.AddTeamMemberRequest, v1.AddTeamMemberResponse]
+	removeTeamMember      *connect.Client[v1.RemoveTeamMemberRequest, v1.RemoveTeamMemberResponse]
+}
+
+// GetTeamAdministration calls golf.v1.OrganizationAdminService.GetTeamAdministration.
+func (c *organizationAdminServiceClient) GetTeamAdministration(ctx context.Context, req *connect.Request[v1.GetTeamAdministrationRequest]) (*connect.Response[v1.GetTeamAdministrationResponse], error) {
+	return c.getTeamAdministration.CallUnary(ctx, req)
+}
+
+// ResolveTeamMember calls golf.v1.OrganizationAdminService.ResolveTeamMember.
+func (c *organizationAdminServiceClient) ResolveTeamMember(ctx context.Context, req *connect.Request[v1.ResolveTeamMemberRequest]) (*connect.Response[v1.ResolveTeamMemberResponse], error) {
+	return c.resolveTeamMember.CallUnary(ctx, req)
+}
+
+// AddTeamMember calls golf.v1.OrganizationAdminService.AddTeamMember.
+func (c *organizationAdminServiceClient) AddTeamMember(ctx context.Context, req *connect.Request[v1.AddTeamMemberRequest]) (*connect.Response[v1.AddTeamMemberResponse], error) {
+	return c.addTeamMember.CallUnary(ctx, req)
+}
+
+// RemoveTeamMember calls golf.v1.OrganizationAdminService.RemoveTeamMember.
+func (c *organizationAdminServiceClient) RemoveTeamMember(ctx context.Context, req *connect.Request[v1.RemoveTeamMemberRequest]) (*connect.Response[v1.RemoveTeamMemberResponse], error) {
+	return c.removeTeamMember.CallUnary(ctx, req)
+}
+
+// OrganizationAdminServiceHandler is an implementation of the golf.v1.OrganizationAdminService
+// service.
+type OrganizationAdminServiceHandler interface {
+	GetTeamAdministration(context.Context, *connect.Request[v1.GetTeamAdministrationRequest]) (*connect.Response[v1.GetTeamAdministrationResponse], error)
+	ResolveTeamMember(context.Context, *connect.Request[v1.ResolveTeamMemberRequest]) (*connect.Response[v1.ResolveTeamMemberResponse], error)
+	AddTeamMember(context.Context, *connect.Request[v1.AddTeamMemberRequest]) (*connect.Response[v1.AddTeamMemberResponse], error)
+	RemoveTeamMember(context.Context, *connect.Request[v1.RemoveTeamMemberRequest]) (*connect.Response[v1.RemoveTeamMemberResponse], error)
+}
+
+// NewOrganizationAdminServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewOrganizationAdminServiceHandler(svc OrganizationAdminServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	organizationAdminServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("OrganizationAdminService").Methods()
+	organizationAdminServiceGetTeamAdministrationHandler := connect.NewUnaryHandler(
+		OrganizationAdminServiceGetTeamAdministrationProcedure,
+		svc.GetTeamAdministration,
+		connect.WithSchema(organizationAdminServiceMethods.ByName("GetTeamAdministration")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationAdminServiceResolveTeamMemberHandler := connect.NewUnaryHandler(
+		OrganizationAdminServiceResolveTeamMemberProcedure,
+		svc.ResolveTeamMember,
+		connect.WithSchema(organizationAdminServiceMethods.ByName("ResolveTeamMember")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationAdminServiceAddTeamMemberHandler := connect.NewUnaryHandler(
+		OrganizationAdminServiceAddTeamMemberProcedure,
+		svc.AddTeamMember,
+		connect.WithSchema(organizationAdminServiceMethods.ByName("AddTeamMember")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationAdminServiceRemoveTeamMemberHandler := connect.NewUnaryHandler(
+		OrganizationAdminServiceRemoveTeamMemberProcedure,
+		svc.RemoveTeamMember,
+		connect.WithSchema(organizationAdminServiceMethods.ByName("RemoveTeamMember")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.OrganizationAdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case OrganizationAdminServiceGetTeamAdministrationProcedure:
+			organizationAdminServiceGetTeamAdministrationHandler.ServeHTTP(w, r)
+		case OrganizationAdminServiceResolveTeamMemberProcedure:
+			organizationAdminServiceResolveTeamMemberHandler.ServeHTTP(w, r)
+		case OrganizationAdminServiceAddTeamMemberProcedure:
+			organizationAdminServiceAddTeamMemberHandler.ServeHTTP(w, r)
+		case OrganizationAdminServiceRemoveTeamMemberProcedure:
+			organizationAdminServiceRemoveTeamMemberHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedOrganizationAdminServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedOrganizationAdminServiceHandler struct{}
+
+func (UnimplementedOrganizationAdminServiceHandler) GetTeamAdministration(context.Context, *connect.Request[v1.GetTeamAdministrationRequest]) (*connect.Response[v1.GetTeamAdministrationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationAdminService.GetTeamAdministration is not implemented"))
+}
+
+func (UnimplementedOrganizationAdminServiceHandler) ResolveTeamMember(context.Context, *connect.Request[v1.ResolveTeamMemberRequest]) (*connect.Response[v1.ResolveTeamMemberResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationAdminService.ResolveTeamMember is not implemented"))
+}
+
+func (UnimplementedOrganizationAdminServiceHandler) AddTeamMember(context.Context, *connect.Request[v1.AddTeamMemberRequest]) (*connect.Response[v1.AddTeamMemberResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationAdminService.AddTeamMember is not implemented"))
+}
+
+func (UnimplementedOrganizationAdminServiceHandler) RemoveTeamMember(context.Context, *connect.Request[v1.RemoveTeamMemberRequest]) (*connect.Response[v1.RemoveTeamMemberResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationAdminService.RemoveTeamMember is not implemented"))
+}
+
+// InstanceAdminServiceClient is a client for the golf.v1.InstanceAdminService service.
+type InstanceAdminServiceClient interface {
+	ListLocalAccounts(context.Context, *connect.Request[v1.ListLocalAccountsRequest]) (*connect.Response[v1.ListLocalAccountsResponse], error)
+}
+
+// NewInstanceAdminServiceClient constructs a client for the golf.v1.InstanceAdminService service.
+// By default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped
+// responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewInstanceAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) InstanceAdminServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	instanceAdminServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("InstanceAdminService").Methods()
+	return &instanceAdminServiceClient{
+		listLocalAccounts: connect.NewClient[v1.ListLocalAccountsRequest, v1.ListLocalAccountsResponse](
+			httpClient,
+			baseURL+InstanceAdminServiceListLocalAccountsProcedure,
+			connect.WithSchema(instanceAdminServiceMethods.ByName("ListLocalAccounts")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// instanceAdminServiceClient implements InstanceAdminServiceClient.
+type instanceAdminServiceClient struct {
+	listLocalAccounts *connect.Client[v1.ListLocalAccountsRequest, v1.ListLocalAccountsResponse]
+}
+
+// ListLocalAccounts calls golf.v1.InstanceAdminService.ListLocalAccounts.
+func (c *instanceAdminServiceClient) ListLocalAccounts(ctx context.Context, req *connect.Request[v1.ListLocalAccountsRequest]) (*connect.Response[v1.ListLocalAccountsResponse], error) {
+	return c.listLocalAccounts.CallUnary(ctx, req)
+}
+
+// InstanceAdminServiceHandler is an implementation of the golf.v1.InstanceAdminService service.
+type InstanceAdminServiceHandler interface {
+	ListLocalAccounts(context.Context, *connect.Request[v1.ListLocalAccountsRequest]) (*connect.Response[v1.ListLocalAccountsResponse], error)
+}
+
+// NewInstanceAdminServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewInstanceAdminServiceHandler(svc InstanceAdminServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	instanceAdminServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("InstanceAdminService").Methods()
+	instanceAdminServiceListLocalAccountsHandler := connect.NewUnaryHandler(
+		InstanceAdminServiceListLocalAccountsProcedure,
+		svc.ListLocalAccounts,
+		connect.WithSchema(instanceAdminServiceMethods.ByName("ListLocalAccounts")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.InstanceAdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case InstanceAdminServiceListLocalAccountsProcedure:
+			instanceAdminServiceListLocalAccountsHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedInstanceAdminServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedInstanceAdminServiceHandler struct{}
+
+func (UnimplementedInstanceAdminServiceHandler) ListLocalAccounts(context.Context, *connect.Request[v1.ListLocalAccountsRequest]) (*connect.Response[v1.ListLocalAccountsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InstanceAdminService.ListLocalAccounts is not implemented"))
 }
 
 // AuditServiceClient is a client for the golf.v1.AuditService service.
