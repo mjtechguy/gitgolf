@@ -211,7 +211,7 @@ These are the guide's ADR numbers, distinct from Golf ADR-0001. All were read. T
 
 | Decision topic | Resolution required before the affected milestone |
 | --- | --- |
-| Accepted first-slice exceptions | Golf ADR-0001 covers Gitea bootstrap identity and AES-GCM; ADR-0002 retires its temporary REST/native-history exceptions with generated contracts and typed routes. It does **not** approve every missing guide requirement listed here. Preserve its limited scope. |
+| Accepted first-slice exceptions | Golf ADR-0001 covers Gitea bootstrap identity and AES-GCM; ADR-0003 adds scoped Gitea OAuth/PKCE and encrypted serialized refresh, with local/external OIDC and organization policy still pending; ADR-0002 retires its temporary REST/native-history exceptions with generated contracts and typed routes. It does **not** approve every missing guide requirement listed here. Preserve its limited scope. |
 | Data and layering | Native pgx, wider schema version transition, session retention versus soft deletion, tenant constraints and ciphertext metadata need P1.1–P1.3 implementation or explicit exceptions. |
 | Identity and cookie policy | Resolve short access/rotating refresh versus server sessions; choose the production lifecycle. The surface chapter's Lax cookie guidance and security chapter's stricter recommendation differ. Golf's OAuth/OIDC flows need a documented Lax policy with state/nonce/PKCE and mutation protections. |
 | Frontend substitutions | TanStack Router tradeoff/versions are recorded in ADR-0002; Form and wider runtime validation remain pending. The guide's React Router release forecast is not evidence that the forecast occurred. |

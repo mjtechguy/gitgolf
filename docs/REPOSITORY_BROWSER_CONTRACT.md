@@ -2,7 +2,7 @@
 
 Implementation scope, 2026-10-01. Extends P1.4, P2.1 and P2.2; does not complete those tasks. Existing operations now use generated versioned Protobuf/Connect contracts; see [ADR 0002](decisions/0002-generated-api-and-typed-navigation.md).
 
-All endpoints below require the existing Golf session, use the user's own Gitea token, and send `Cache-Control: no-store`. Authorization is checked upstream on every request. No private content is persisted in browser storage. No new collaboration or Git write path is introduced.
+All endpoints below require the existing Golf session, use the user's own scoped Gitea credential, and send `Cache-Control: no-store`. Authorization is checked upstream on every request. No private content is persisted in browser storage. No new collaboration or Git write path is introduced.
 
 Contract: [`api/golf/v1/golf.proto`](../api/golf/v1/golf.proto). Every procedure is a POST to `/rpc/golf.v1.RepositoryService/{Method}` with `Connect-Protocol-Version: 1`, `Content-Type: application/json` and the exact configured Origin. Generated clients handle protocol details. Old application REST routes are removed.
 

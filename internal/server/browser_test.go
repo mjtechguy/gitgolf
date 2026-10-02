@@ -87,7 +87,7 @@ func TestForgeResponseBounds(t *testing.T) {
 				t.Fatal(err)
 			}
 			var out any
-			_, err = s.forge(context.Background(), "GET", "/user", "test-token", nil, &out)
+			_, err = s.forge(context.Background(), "GET", "/user", forgeCredential{Kind: "pat", Token: "test-token"}, nil, &out)
 			if err == nil || errors.Is(err, errForgeResponseTooLarge) != tc.large {
 				t.Fatalf("unexpected response error: %v", err)
 			}

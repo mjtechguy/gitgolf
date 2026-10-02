@@ -10,9 +10,49 @@ import (
 	"time"
 )
 
-const createSession = `-- name: CreateSession :exec
-INSERT INTO golf_sessions (token_hash, user_id, encrypted_token, expires_at)
+const consumeOAuthAttempt = `-- name: ConsumeOAuthAttempt :one
+DELETE FROM golf_oauth_attempts
+WHERE state_hash = $1 AND binding_hash = $2 AND expires_at > now()
+RETURNING encrypted_verifier
+`
+
+type ConsumeOAuthAttemptParams struct {
+	StateHash   []byte
+	BindingHash []byte
+}
+
+func (q *Queries) ConsumeOAuthAttempt(ctx context.Context, arg ConsumeOAuthAttemptParams) ([]byte, error) {
+	row := q.db.QueryRowContext(ctx, consumeOAuthAttempt, arg.StateHash, arg.BindingHash)
+	var encrypted_verifier []byte
+	err := row.Scan(&encrypted_verifier)
+	return encrypted_verifier, err
+}
+
+const createOAuthAttempt = `-- name: CreateOAuthAttempt :exec
+INSERT INTO golf_oauth_attempts (state_hash, binding_hash, encrypted_verifier, expires_at)
 VALUES ($1, $2, $3, $4)
+`
+
+type CreateOAuthAttemptParams struct {
+	StateHash         []byte
+	BindingHash       []byte
+	EncryptedVerifier []byte
+	ExpiresAt         time.Time
+}
+
+func (q *Queries) CreateOAuthAttempt(ctx context.Context, arg CreateOAuthAttemptParams) error {
+	_, err := q.db.ExecContext(ctx, createOAuthAttempt,
+		arg.StateHash,
+		arg.BindingHash,
+		arg.EncryptedVerifier,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const createSession = `-- name: CreateSession :exec
+INSERT INTO golf_sessions (token_hash, user_id, encrypted_token, expires_at, credential_kind)
+VALUES ($1, $2, $3, $4, $5)
 `
 
 type CreateSessionParams struct {
@@ -20,6 +60,7 @@ type CreateSessionParams struct {
 	UserID         int64
 	EncryptedToken []byte
 	ExpiresAt      time.Time
+	CredentialKind string
 }
 
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) error {
@@ -28,7 +69,17 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 		arg.UserID,
 		arg.EncryptedToken,
 		arg.ExpiresAt,
+		arg.CredentialKind,
 	)
+	return err
+}
+
+const deleteExpiredOAuthAttempts = `-- name: DeleteExpiredOAuthAttempts :exec
+DELETE FROM golf_oauth_attempts WHERE expires_at <= now()
+`
+
+func (q *Queries) DeleteExpiredOAuthAttempts(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteExpiredOAuthAttempts)
 	return err
 }
 
@@ -51,10 +102,10 @@ func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) error {
 }
 
 const getSessionCredential = `-- name: GetSessionCredential :one
-SELECT s.encrypted_token
+SELECT s.encrypted_token, s.credential_kind, u.forge_user_id, s.expires_at
 FROM golf_sessions s
 JOIN golf_users u ON u.id = s.user_id
-WHERE s.token_hash = $1 AND s.expires_at > now() AND u.forge_url = $2
+WHERE s.token_hash = $1 AND s.expires_at > clock_timestamp() AND u.forge_url = $2
 `
 
 type GetSessionCredentialParams struct {
@@ -62,11 +113,69 @@ type GetSessionCredentialParams struct {
 	ForgeURL  string
 }
 
-func (q *Queries) GetSessionCredential(ctx context.Context, arg GetSessionCredentialParams) ([]byte, error) {
+type GetSessionCredentialRow struct {
+	EncryptedToken []byte
+	CredentialKind string
+	ForgeUserID    int64
+	ExpiresAt      time.Time
+}
+
+func (q *Queries) GetSessionCredential(ctx context.Context, arg GetSessionCredentialParams) (GetSessionCredentialRow, error) {
 	row := q.db.QueryRowContext(ctx, getSessionCredential, arg.TokenHash, arg.ForgeURL)
-	var encrypted_token []byte
-	err := row.Scan(&encrypted_token)
-	return encrypted_token, err
+	var i GetSessionCredentialRow
+	err := row.Scan(
+		&i.EncryptedToken,
+		&i.CredentialKind,
+		&i.ForgeUserID,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const lockSessionCredential = `-- name: LockSessionCredential :one
+SELECT s.encrypted_token, s.credential_kind, u.forge_user_id, s.expires_at
+FROM golf_sessions s
+JOIN golf_users u ON u.id = s.user_id
+WHERE s.token_hash = $1 AND s.expires_at > clock_timestamp() AND u.forge_url = $2
+FOR UPDATE OF s
+`
+
+type LockSessionCredentialParams struct {
+	TokenHash []byte
+	ForgeURL  string
+}
+
+type LockSessionCredentialRow struct {
+	EncryptedToken []byte
+	CredentialKind string
+	ForgeUserID    int64
+	ExpiresAt      time.Time
+}
+
+func (q *Queries) LockSessionCredential(ctx context.Context, arg LockSessionCredentialParams) (LockSessionCredentialRow, error) {
+	row := q.db.QueryRowContext(ctx, lockSessionCredential, arg.TokenHash, arg.ForgeURL)
+	var i LockSessionCredentialRow
+	err := row.Scan(
+		&i.EncryptedToken,
+		&i.CredentialKind,
+		&i.ForgeUserID,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const updateSessionCredential = `-- name: UpdateSessionCredential :exec
+UPDATE golf_sessions SET encrypted_token = $2 WHERE token_hash = $1
+`
+
+type UpdateSessionCredentialParams struct {
+	TokenHash      []byte
+	EncryptedToken []byte
+}
+
+func (q *Queries) UpdateSessionCredential(ctx context.Context, arg UpdateSessionCredentialParams) error {
+	_, err := q.db.ExecContext(ctx, updateSessionCredential, arg.TokenHash, arg.EncryptedToken)
+	return err
 }
 
 const upsertUser = `-- name: UpsertUser :one

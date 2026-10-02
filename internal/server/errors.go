@@ -8,6 +8,8 @@ import (
 )
 
 var (
+	errOAuthClientRejected   = errors.New("OAuth application credentials rejected")
+	errOAuthDisabled         = errors.New("OAuth unavailable")
 	errInvalidForgeResponse  = errors.New("invalid forge response")
 	errForgeUnavailable      = errors.New("forge unavailable")
 	errEmptyRepository       = errors.New("repository has no commits")
@@ -42,6 +44,10 @@ func rpcError(err error) error {
 		code, message = connect.CodeUnavailable, "Session credential cannot be decrypted. Sign in again."
 	case errors.Is(err, errResourceNotFound):
 		code, message = connect.CodeNotFound, "This resource does not exist or is not accessible."
+	case errors.Is(err, errOAuthClientRejected):
+		code, message = connect.CodeUnavailable, "Gitea rejected Golf's OAuth application credentials. Ask your administrator to check the OAuth configuration."
+	case errors.Is(err, errOAuthDisabled):
+		code, message = connect.CodeFailedPrecondition, "Gitea OAuth sign-in is not currently available."
 	case errors.Is(err, errEmptyRepository):
 		code, message = connect.CodeFailedPrecondition, "This repository has no commits yet."
 	case errors.Is(err, errForgeResponseTooLarge):

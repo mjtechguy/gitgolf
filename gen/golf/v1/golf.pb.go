@@ -2147,6 +2147,182 @@ func (x *ListCapabilitiesResponse) GetCapabilities() []*Capability {
 	return nil
 }
 
+type GetAuthenticationOptionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAuthenticationOptionsRequest) Reset() {
+	*x = GetAuthenticationOptionsRequest{}
+	mi := &file_golf_v1_golf_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAuthenticationOptionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAuthenticationOptionsRequest) ProtoMessage() {}
+
+func (x *GetAuthenticationOptionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_golf_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAuthenticationOptionsRequest.ProtoReflect.Descriptor instead.
+func (*GetAuthenticationOptionsRequest) Descriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{35}
+}
+
+type GetAuthenticationOptionsResponse struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	GiteaOauthEnabled bool                   `protobuf:"varint,1,opt,name=gitea_oauth_enabled,json=giteaOauthEnabled,proto3" json:"gitea_oauth_enabled,omitempty"`
+	ProviderLabel     string                 `protobuf:"bytes,2,opt,name=provider_label,json=providerLabel,proto3" json:"provider_label,omitempty"`
+	Scopes            []string               `protobuf:"bytes,3,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *GetAuthenticationOptionsResponse) Reset() {
+	*x = GetAuthenticationOptionsResponse{}
+	mi := &file_golf_v1_golf_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAuthenticationOptionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAuthenticationOptionsResponse) ProtoMessage() {}
+
+func (x *GetAuthenticationOptionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_golf_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAuthenticationOptionsResponse.ProtoReflect.Descriptor instead.
+func (*GetAuthenticationOptionsResponse) Descriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *GetAuthenticationOptionsResponse) GetGiteaOauthEnabled() bool {
+	if x != nil {
+		return x.GiteaOauthEnabled
+	}
+	return false
+}
+
+func (x *GetAuthenticationOptionsResponse) GetProviderLabel() string {
+	if x != nil {
+		return x.ProviderLabel
+	}
+	return ""
+}
+
+func (x *GetAuthenticationOptionsResponse) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+type BeginGiteaOAuthRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BeginGiteaOAuthRequest) Reset() {
+	*x = BeginGiteaOAuthRequest{}
+	mi := &file_golf_v1_golf_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BeginGiteaOAuthRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BeginGiteaOAuthRequest) ProtoMessage() {}
+
+func (x *BeginGiteaOAuthRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_golf_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BeginGiteaOAuthRequest.ProtoReflect.Descriptor instead.
+func (*BeginGiteaOAuthRequest) Descriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{37}
+}
+
+type BeginGiteaOAuthResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	AuthorizationUrl string                 `protobuf:"bytes,1,opt,name=authorization_url,json=authorizationUrl,proto3" json:"authorization_url,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *BeginGiteaOAuthResponse) Reset() {
+	*x = BeginGiteaOAuthResponse{}
+	mi := &file_golf_v1_golf_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BeginGiteaOAuthResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BeginGiteaOAuthResponse) ProtoMessage() {}
+
+func (x *BeginGiteaOAuthResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_golf_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BeginGiteaOAuthResponse.ProtoReflect.Descriptor instead.
+func (*BeginGiteaOAuthResponse) Descriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *BeginGiteaOAuthResponse) GetAuthorizationUrl() string {
+	if x != nil {
+		return x.AuthorizationUrl
+	}
+	return ""
+}
+
 var File_golf_v1_golf_proto protoreflect.FileDescriptor
 
 const file_golf_v1_golf_proto_rawDesc = "" +
@@ -2304,7 +2480,15 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x06reason\x18\x04 \x01(\tR\x06reason\"\x19\n" +
 	"\x17ListCapabilitiesRequest\"S\n" +
 	"\x18ListCapabilitiesResponse\x127\n" +
-	"\fcapabilities\x18\x01 \x03(\v2\x13.golf.v1.CapabilityR\fcapabilities*\xb1\x01\n" +
+	"\fcapabilities\x18\x01 \x03(\v2\x13.golf.v1.CapabilityR\fcapabilities\"!\n" +
+	"\x1fGetAuthenticationOptionsRequest\"\x91\x01\n" +
+	" GetAuthenticationOptionsResponse\x12.\n" +
+	"\x13gitea_oauth_enabled\x18\x01 \x01(\bR\x11giteaOauthEnabled\x12%\n" +
+	"\x0eprovider_label\x18\x02 \x01(\tR\rproviderLabel\x12\x16\n" +
+	"\x06scopes\x18\x03 \x03(\tR\x06scopes\"\x18\n" +
+	"\x16BeginGiteaOAuthRequest\"F\n" +
+	"\x17BeginGiteaOAuthResponse\x12+\n" +
+	"\x11authorization_url\x18\x01 \x01(\tR\x10authorizationUrl*\xb1\x01\n" +
 	"\x0fSourceEntryType\x12!\n" +
 	"\x1dSOURCE_ENTRY_TYPE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bSOURCE_ENTRY_TYPE_DIRECTORY\x10\x01\x12\x1a\n" +
@@ -2322,8 +2506,10 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x19CAPABILITY_STATE_DISABLED\x10\x01\x12!\n" +
 	"\x1dCAPABILITY_STATE_UNCONFIGURED\x10\x02\x12\x1a\n" +
 	"\x16CAPABILITY_STATE_READY\x10\x03\x12\x1d\n" +
-	"\x19CAPABILITY_STATE_DEGRADED\x10\x042\xf4\x01\n" +
-	"\x0eSessionService\x12`\n" +
+	"\x19CAPABILITY_STATE_DEGRADED\x10\x042\xbb\x03\n" +
+	"\x0eSessionService\x12o\n" +
+	"\x18GetAuthenticationOptions\x12(.golf.v1.GetAuthenticationOptionsRequest\x1a).golf.v1.GetAuthenticationOptionsResponse\x12T\n" +
+	"\x0fBeginGiteaOAuth\x12\x1f.golf.v1.BeginGiteaOAuthRequest\x1a .golf.v1.BeginGiteaOAuthResponse\x12`\n" +
 	"\x13LoginWithGiteaToken\x12#.golf.v1.LoginWithGiteaTokenRequest\x1a$.golf.v1.LoginWithGiteaTokenResponse\x12E\n" +
 	"\n" +
 	"GetSession\x12\x1a.golf.v1.GetSessionRequest\x1a\x1b.golf.v1.GetSessionResponse\x129\n" +
@@ -2354,46 +2540,50 @@ func file_golf_v1_golf_proto_rawDescGZIP() []byte {
 }
 
 var file_golf_v1_golf_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_golf_v1_golf_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
+var file_golf_v1_golf_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
 var file_golf_v1_golf_proto_goTypes = []any{
-	(SourceEntryType)(0),                // 0: golf.v1.SourceEntryType
-	(IssueState)(0),                     // 1: golf.v1.IssueState
-	(CapabilityState)(0),                // 2: golf.v1.CapabilityState
-	(*User)(nil),                        // 3: golf.v1.User
-	(*Repository)(nil),                  // 4: golf.v1.Repository
-	(*RepositoryKey)(nil),               // 5: golf.v1.RepositoryKey
-	(*PageRequest)(nil),                 // 6: golf.v1.PageRequest
-	(*PageResponse)(nil),                // 7: golf.v1.PageResponse
-	(*LoginWithGiteaTokenRequest)(nil),  // 8: golf.v1.LoginWithGiteaTokenRequest
-	(*LoginWithGiteaTokenResponse)(nil), // 9: golf.v1.LoginWithGiteaTokenResponse
-	(*GetSessionRequest)(nil),           // 10: golf.v1.GetSessionRequest
-	(*GetSessionResponse)(nil),          // 11: golf.v1.GetSessionResponse
-	(*LogoutRequest)(nil),               // 12: golf.v1.LogoutRequest
-	(*LogoutResponse)(nil),              // 13: golf.v1.LogoutResponse
-	(*ListRepositoriesRequest)(nil),     // 14: golf.v1.ListRepositoriesRequest
-	(*ListRepositoriesResponse)(nil),    // 15: golf.v1.ListRepositoriesResponse
-	(*CreateRepositoryRequest)(nil),     // 16: golf.v1.CreateRepositoryRequest
-	(*CreateRepositoryResponse)(nil),    // 17: golf.v1.CreateRepositoryResponse
-	(*GetRepositoryRequest)(nil),        // 18: golf.v1.GetRepositoryRequest
-	(*GetRepositoryResponse)(nil),       // 19: golf.v1.GetRepositoryResponse
-	(*Branch)(nil),                      // 20: golf.v1.Branch
-	(*ListBranchesRequest)(nil),         // 21: golf.v1.ListBranchesRequest
-	(*ListBranchesResponse)(nil),        // 22: golf.v1.ListBranchesResponse
-	(*Commit)(nil),                      // 23: golf.v1.Commit
-	(*ListCommitsRequest)(nil),          // 24: golf.v1.ListCommitsRequest
-	(*ListCommitsResponse)(nil),         // 25: golf.v1.ListCommitsResponse
-	(*SourceEntry)(nil),                 // 26: golf.v1.SourceEntry
-	(*SourceFile)(nil),                  // 27: golf.v1.SourceFile
-	(*GetContentsRequest)(nil),          // 28: golf.v1.GetContentsRequest
-	(*GetContentsResponse)(nil),         // 29: golf.v1.GetContentsResponse
-	(*Issue)(nil),                       // 30: golf.v1.Issue
-	(*ListIssuesRequest)(nil),           // 31: golf.v1.ListIssuesRequest
-	(*ListIssuesResponse)(nil),          // 32: golf.v1.ListIssuesResponse
-	(*GetIssueRequest)(nil),             // 33: golf.v1.GetIssueRequest
-	(*GetIssueResponse)(nil),            // 34: golf.v1.GetIssueResponse
-	(*Capability)(nil),                  // 35: golf.v1.Capability
-	(*ListCapabilitiesRequest)(nil),     // 36: golf.v1.ListCapabilitiesRequest
-	(*ListCapabilitiesResponse)(nil),    // 37: golf.v1.ListCapabilitiesResponse
+	(SourceEntryType)(0),                     // 0: golf.v1.SourceEntryType
+	(IssueState)(0),                          // 1: golf.v1.IssueState
+	(CapabilityState)(0),                     // 2: golf.v1.CapabilityState
+	(*User)(nil),                             // 3: golf.v1.User
+	(*Repository)(nil),                       // 4: golf.v1.Repository
+	(*RepositoryKey)(nil),                    // 5: golf.v1.RepositoryKey
+	(*PageRequest)(nil),                      // 6: golf.v1.PageRequest
+	(*PageResponse)(nil),                     // 7: golf.v1.PageResponse
+	(*LoginWithGiteaTokenRequest)(nil),       // 8: golf.v1.LoginWithGiteaTokenRequest
+	(*LoginWithGiteaTokenResponse)(nil),      // 9: golf.v1.LoginWithGiteaTokenResponse
+	(*GetSessionRequest)(nil),                // 10: golf.v1.GetSessionRequest
+	(*GetSessionResponse)(nil),               // 11: golf.v1.GetSessionResponse
+	(*LogoutRequest)(nil),                    // 12: golf.v1.LogoutRequest
+	(*LogoutResponse)(nil),                   // 13: golf.v1.LogoutResponse
+	(*ListRepositoriesRequest)(nil),          // 14: golf.v1.ListRepositoriesRequest
+	(*ListRepositoriesResponse)(nil),         // 15: golf.v1.ListRepositoriesResponse
+	(*CreateRepositoryRequest)(nil),          // 16: golf.v1.CreateRepositoryRequest
+	(*CreateRepositoryResponse)(nil),         // 17: golf.v1.CreateRepositoryResponse
+	(*GetRepositoryRequest)(nil),             // 18: golf.v1.GetRepositoryRequest
+	(*GetRepositoryResponse)(nil),            // 19: golf.v1.GetRepositoryResponse
+	(*Branch)(nil),                           // 20: golf.v1.Branch
+	(*ListBranchesRequest)(nil),              // 21: golf.v1.ListBranchesRequest
+	(*ListBranchesResponse)(nil),             // 22: golf.v1.ListBranchesResponse
+	(*Commit)(nil),                           // 23: golf.v1.Commit
+	(*ListCommitsRequest)(nil),               // 24: golf.v1.ListCommitsRequest
+	(*ListCommitsResponse)(nil),              // 25: golf.v1.ListCommitsResponse
+	(*SourceEntry)(nil),                      // 26: golf.v1.SourceEntry
+	(*SourceFile)(nil),                       // 27: golf.v1.SourceFile
+	(*GetContentsRequest)(nil),               // 28: golf.v1.GetContentsRequest
+	(*GetContentsResponse)(nil),              // 29: golf.v1.GetContentsResponse
+	(*Issue)(nil),                            // 30: golf.v1.Issue
+	(*ListIssuesRequest)(nil),                // 31: golf.v1.ListIssuesRequest
+	(*ListIssuesResponse)(nil),               // 32: golf.v1.ListIssuesResponse
+	(*GetIssueRequest)(nil),                  // 33: golf.v1.GetIssueRequest
+	(*GetIssueResponse)(nil),                 // 34: golf.v1.GetIssueResponse
+	(*Capability)(nil),                       // 35: golf.v1.Capability
+	(*ListCapabilitiesRequest)(nil),          // 36: golf.v1.ListCapabilitiesRequest
+	(*ListCapabilitiesResponse)(nil),         // 37: golf.v1.ListCapabilitiesResponse
+	(*GetAuthenticationOptionsRequest)(nil),  // 38: golf.v1.GetAuthenticationOptionsRequest
+	(*GetAuthenticationOptionsResponse)(nil), // 39: golf.v1.GetAuthenticationOptionsResponse
+	(*BeginGiteaOAuthRequest)(nil),           // 40: golf.v1.BeginGiteaOAuthRequest
+	(*BeginGiteaOAuthResponse)(nil),          // 41: golf.v1.BeginGiteaOAuthResponse
 }
 var file_golf_v1_golf_proto_depIdxs = []int32{
 	3,  // 0: golf.v1.LoginWithGiteaTokenResponse.user:type_name -> golf.v1.User
@@ -2429,32 +2619,36 @@ var file_golf_v1_golf_proto_depIdxs = []int32{
 	30, // 30: golf.v1.GetIssueResponse.issue:type_name -> golf.v1.Issue
 	2,  // 31: golf.v1.Capability.state:type_name -> golf.v1.CapabilityState
 	35, // 32: golf.v1.ListCapabilitiesResponse.capabilities:type_name -> golf.v1.Capability
-	8,  // 33: golf.v1.SessionService.LoginWithGiteaToken:input_type -> golf.v1.LoginWithGiteaTokenRequest
-	10, // 34: golf.v1.SessionService.GetSession:input_type -> golf.v1.GetSessionRequest
-	12, // 35: golf.v1.SessionService.Logout:input_type -> golf.v1.LogoutRequest
-	14, // 36: golf.v1.RepositoryService.ListRepositories:input_type -> golf.v1.ListRepositoriesRequest
-	16, // 37: golf.v1.RepositoryService.CreateRepository:input_type -> golf.v1.CreateRepositoryRequest
-	18, // 38: golf.v1.RepositoryService.GetRepository:input_type -> golf.v1.GetRepositoryRequest
-	21, // 39: golf.v1.RepositoryService.ListBranches:input_type -> golf.v1.ListBranchesRequest
-	24, // 40: golf.v1.RepositoryService.ListCommits:input_type -> golf.v1.ListCommitsRequest
-	28, // 41: golf.v1.RepositoryService.GetContents:input_type -> golf.v1.GetContentsRequest
-	31, // 42: golf.v1.RepositoryService.ListIssues:input_type -> golf.v1.ListIssuesRequest
-	33, // 43: golf.v1.RepositoryService.GetIssue:input_type -> golf.v1.GetIssueRequest
-	36, // 44: golf.v1.CapabilityService.ListCapabilities:input_type -> golf.v1.ListCapabilitiesRequest
-	9,  // 45: golf.v1.SessionService.LoginWithGiteaToken:output_type -> golf.v1.LoginWithGiteaTokenResponse
-	11, // 46: golf.v1.SessionService.GetSession:output_type -> golf.v1.GetSessionResponse
-	13, // 47: golf.v1.SessionService.Logout:output_type -> golf.v1.LogoutResponse
-	15, // 48: golf.v1.RepositoryService.ListRepositories:output_type -> golf.v1.ListRepositoriesResponse
-	17, // 49: golf.v1.RepositoryService.CreateRepository:output_type -> golf.v1.CreateRepositoryResponse
-	19, // 50: golf.v1.RepositoryService.GetRepository:output_type -> golf.v1.GetRepositoryResponse
-	22, // 51: golf.v1.RepositoryService.ListBranches:output_type -> golf.v1.ListBranchesResponse
-	25, // 52: golf.v1.RepositoryService.ListCommits:output_type -> golf.v1.ListCommitsResponse
-	29, // 53: golf.v1.RepositoryService.GetContents:output_type -> golf.v1.GetContentsResponse
-	32, // 54: golf.v1.RepositoryService.ListIssues:output_type -> golf.v1.ListIssuesResponse
-	34, // 55: golf.v1.RepositoryService.GetIssue:output_type -> golf.v1.GetIssueResponse
-	37, // 56: golf.v1.CapabilityService.ListCapabilities:output_type -> golf.v1.ListCapabilitiesResponse
-	45, // [45:57] is the sub-list for method output_type
-	33, // [33:45] is the sub-list for method input_type
+	38, // 33: golf.v1.SessionService.GetAuthenticationOptions:input_type -> golf.v1.GetAuthenticationOptionsRequest
+	40, // 34: golf.v1.SessionService.BeginGiteaOAuth:input_type -> golf.v1.BeginGiteaOAuthRequest
+	8,  // 35: golf.v1.SessionService.LoginWithGiteaToken:input_type -> golf.v1.LoginWithGiteaTokenRequest
+	10, // 36: golf.v1.SessionService.GetSession:input_type -> golf.v1.GetSessionRequest
+	12, // 37: golf.v1.SessionService.Logout:input_type -> golf.v1.LogoutRequest
+	14, // 38: golf.v1.RepositoryService.ListRepositories:input_type -> golf.v1.ListRepositoriesRequest
+	16, // 39: golf.v1.RepositoryService.CreateRepository:input_type -> golf.v1.CreateRepositoryRequest
+	18, // 40: golf.v1.RepositoryService.GetRepository:input_type -> golf.v1.GetRepositoryRequest
+	21, // 41: golf.v1.RepositoryService.ListBranches:input_type -> golf.v1.ListBranchesRequest
+	24, // 42: golf.v1.RepositoryService.ListCommits:input_type -> golf.v1.ListCommitsRequest
+	28, // 43: golf.v1.RepositoryService.GetContents:input_type -> golf.v1.GetContentsRequest
+	31, // 44: golf.v1.RepositoryService.ListIssues:input_type -> golf.v1.ListIssuesRequest
+	33, // 45: golf.v1.RepositoryService.GetIssue:input_type -> golf.v1.GetIssueRequest
+	36, // 46: golf.v1.CapabilityService.ListCapabilities:input_type -> golf.v1.ListCapabilitiesRequest
+	39, // 47: golf.v1.SessionService.GetAuthenticationOptions:output_type -> golf.v1.GetAuthenticationOptionsResponse
+	41, // 48: golf.v1.SessionService.BeginGiteaOAuth:output_type -> golf.v1.BeginGiteaOAuthResponse
+	9,  // 49: golf.v1.SessionService.LoginWithGiteaToken:output_type -> golf.v1.LoginWithGiteaTokenResponse
+	11, // 50: golf.v1.SessionService.GetSession:output_type -> golf.v1.GetSessionResponse
+	13, // 51: golf.v1.SessionService.Logout:output_type -> golf.v1.LogoutResponse
+	15, // 52: golf.v1.RepositoryService.ListRepositories:output_type -> golf.v1.ListRepositoriesResponse
+	17, // 53: golf.v1.RepositoryService.CreateRepository:output_type -> golf.v1.CreateRepositoryResponse
+	19, // 54: golf.v1.RepositoryService.GetRepository:output_type -> golf.v1.GetRepositoryResponse
+	22, // 55: golf.v1.RepositoryService.ListBranches:output_type -> golf.v1.ListBranchesResponse
+	25, // 56: golf.v1.RepositoryService.ListCommits:output_type -> golf.v1.ListCommitsResponse
+	29, // 57: golf.v1.RepositoryService.GetContents:output_type -> golf.v1.GetContentsResponse
+	32, // 58: golf.v1.RepositoryService.ListIssues:output_type -> golf.v1.ListIssuesResponse
+	34, // 59: golf.v1.RepositoryService.GetIssue:output_type -> golf.v1.GetIssueResponse
+	37, // 60: golf.v1.CapabilityService.ListCapabilities:output_type -> golf.v1.ListCapabilitiesResponse
+	47, // [47:61] is the sub-list for method output_type
+	33, // [33:47] is the sub-list for method input_type
 	33, // [33:33] is the sub-list for extension type_name
 	33, // [33:33] is the sub-list for extension extendee
 	0,  // [0:33] is the sub-list for field type_name
@@ -2473,7 +2667,7 @@ func file_golf_v1_golf_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_golf_v1_golf_proto_rawDesc), len(file_golf_v1_golf_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   35,
+			NumMessages:   39,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

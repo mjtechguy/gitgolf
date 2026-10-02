@@ -48,6 +48,9 @@ services:
       GOLF_ENCRYPTION_KEY: ${GOLF_ENCRYPTION_KEY:?Run scripts/init-env.sh}
       DATABASE_URL: postgres://golf:${GOLF_DB_PASSWORD:?Run scripts/init-env.sh}@postgres:5432/golf?sslmode=disable
       GITEA_URL: http://gitea:3000
+      GITEA_PUBLIC_URL: ${GITEA_PUBLIC_URL:-}
+      GITEA_OAUTH_CLIENT_ID: ${GITEA_OAUTH_CLIENT_ID:-}
+      GITEA_OAUTH_CLIENT_SECRET: ${GITEA_OAUTH_CLIENT_SECRET:-}
     ports:
       - '127.0.0.1:8080:8080'
     depends_on:

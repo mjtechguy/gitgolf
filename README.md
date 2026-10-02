@@ -9,9 +9,9 @@ These are infrastructure choices, not editions. AI is optional in Golf's core wo
 
 ## What works now
 
-This is a developer preview: per-user Gitea-token sign-in, encrypted PostgreSQL-backed sessions, repository listing/creation, in-app source and commit browsing, read-only issues, a JSON CLI, black/charcoal and light/system themes, capability reporting, and a persistent local Compose stack. Git writes use Gitea directly.
+This is a developer preview: optional scoped Gitea browser OAuth and per-user token bootstrap, encrypted PostgreSQL-backed sessions, repository listing/creation, in-app source and commit browsing, read-only issues, a JSON CLI, black/charcoal and light/system themes, capability reporting, and a persistent local Compose stack. Git writes use Gitea directly.
 
-OAuth, organizations/roles, import/connections, review/merge policy, pipelines/runners, agent execution, Cloudflare integrations, protected previews/CD and Kubernetes packaging remain roadmap work. This is not complete v1 or a competition-ready entry. No repository CI is configured.
+Golf local/external OIDC identity, organizations/roles, import/connections, review/merge policy, pipelines/runners, agent execution, Cloudflare integrations, protected previews/CD and Kubernetes packaging remain roadmap work. This is not complete v1 or a competition-ready entry. No repository CI is configured.
 
 ## Run locally
 
@@ -35,7 +35,21 @@ docker compose exec gitea gitea --config /etc/gitea/app.ini admin user create \
   --random-password --must-change-password=false
 ```
 
-Store the printed password securely. Sign into Gitea and create a dedicated token under **Settings → Applications**, using the scopes described below. Paste that token into Golf. Individual team members use their own accounts/tokens; never share a site administrator's token across users.
+Store the printed password securely. Sign into Gitea and create a dedicated token under **Settings → Applications**, using the scopes described below. Paste that token into Golf, or configure browser OAuth below. Individual team members use their own accounts/tokens; never share a site administrator's token across users.
+
+### Optional browser OAuth
+
+Register a **confidential** OAuth application in Gitea Settings → Applications with the exact callback `http://localhost:8080/auth/gitea/callback` (use your Golf HTTPS origin remotely). Leave consent enabled. Save its client secret in ignored `.env` or an operator-managed secret source and set all three variables:
+
+```dotenv
+GITEA_PUBLIC_URL=http://localhost:3001
+GITEA_OAUTH_CLIENT_ID=your-registered-client-id
+GITEA_OAUTH_CLIENT_SECRET=your-registered-client-secret
+```
+
+Run `docker compose up -d golf` to apply the configuration. Golf then offers **Continue with Gitea**; login and consent occur at your configured forge. Golf requests `write:user`, `write:repository` and `read:issue`, including broader upstream repository/user write authority for repository creation. Use a restricted personal token when read-only access is desired. The browser receives only a Golf session cookie; access and refresh credentials remain encrypted on the server. OAuth configuration is optional, not a Cloudflare requirement.
+
+The fixed callback uses single-use ten-minute state, a separate HttpOnly browser binding and S256 PKCE. Sessions retain their absolute twelve-hour expiry despite access-token refresh. Logout removes the Golf session; manage provider consent in Gitea. This is Gitea OAuth, not complete Golf local/OIDC account management, organization policy or CLI OAuth login. See [ADR 0003](docs/decisions/0003-gitea-oauth-and-session-refresh.md).
 
 **Token scopes (verified on Gitea 1.27.3):** use `read:user` plus `read:repository` to sign in and browse. Creating repositories additionally requires `write:user` plus `write:repository` (write includes read). Gitea applies both user and repository scopes to its `/user/repos` route; Golf preserves that authorization. Read-only tokens can browse but creation correctly returns a permission error.
 
@@ -95,9 +109,13 @@ python3 scripts/smoke.py --restart
 # Optional: include real CLI checks against the same stack.
 make cli
 python3 scripts/smoke.py --cli bin/golf
+# Optional browser OAuth and real rotating-refresh checks; briefly recreates services.
+python3 scripts/oauth-smoke.py --refresh
 ```
 
 The browser checks use contract fixtures. `scripts/smoke.py` exercises the real running Compose stack: isolated users/private repositories, cross-user denial, CSRF, real Git pushes, source snapshots/preview boundaries, issues/scope denial, optional CLI/restart/outage checks, revocation and logout. It removes its test Gitea users/repositories afterward. `--restart` briefly interrupts local Golf/Gitea; omit it to skip those service operations. Python 3 and Git are required; `--cli` accepts an already-built CLI executable.
+
+`scripts/oauth-smoke.py` creates disposable users and a confidential provider application, enables OAuth with a private temporary override, and exercises actual browser login/consent. `--refresh` uses two real short-lived token cycles with concurrent requests and revocation. It restores the original Gitea token settings and disabled Golf OAuth, then purges its fixtures. It requires OAuth to be disabled initially; it never edits `.env` or deletes volumes.
 
 The backend's database integration test runs when `GOLF_TEST_DATABASE_URL` points to a dedicated test PostgreSQL database. `make test-integration` requires it; without it, ordinary Go tests explicitly skip that integration case. Do not use a production database.
 

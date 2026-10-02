@@ -120,7 +120,7 @@ func TestCredentialEnvelopeAndRedirect(t *testing.T) {
 			}
 		})
 	}
-	if _, err := s.currentUser(context.Background(), "private-token"); err == nil {
+	if _, err := s.currentUser(context.Background(), forgeCredential{Kind: "pat", Token: "private-token"}); err == nil {
 		t.Fatal("redirect accepted")
 	}
 	if leaked.Load() {
@@ -236,7 +236,7 @@ func TestSessionAndRepositoryWithPostgres(t *testing.T) {
 	}
 	for _, cookie := range httpClient.Jar.Cookies(origin) {
 		if cookie.Name == cookieName {
-			if token, err := restored.sessionCredential(ctx, cookie.Value); err != nil || token != "user-secret-token" {
+			if token, err := restored.sessionCredential(ctx, cookie.Value); err != nil || token != (forgeCredential{Kind: "pat", Token: "user-secret-token"}) {
 				t.Fatal("restart could not recover credential", err)
 			}
 		}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDown, ArrowRight, BookOpen, Check, CircleDot, Command, ExternalLink, GitBranch, KeyRound, Layers2, LoaderCircle, LockKeyhole, LogOut, Monitor, Moon, Plus, RefreshCw, Search, ShieldCheck, Sun, X } from 'lucide-react';
@@ -9,8 +9,9 @@ import { CapabilityState } from './gen/golf/v1/golf_pb';
 import type { Repository, User } from './gen/golf/v1/golf_pb';
 import { repositoryOptions } from './navigation';
 import type { Location } from './navigation';
-import { RepositoryBrowser } from './RepositoryBrowser';
 import { forgetPrivateQueries } from './queryClient';
+
+const RepositoryBrowser = lazy(() => import('./RepositoryBrowser').then((module) => ({ default: module.RepositoryBrowser })));
 
 const themes = ['system', 'dark', 'light'] as const;
 type Theme = typeof themes[number];
@@ -41,9 +42,35 @@ function ErrorMessage({ error }: { error: Error | null }) {
   return error ? <p className="error" role="alert">{errorMessage(error)}</p> : null;
 }
 
-function Login() {
+const scopeLabels: Record<string, string> = {
+  'read:user': 'Read user resources',
+  'write:user': 'Read and write user resources',
+  'read:repository': 'Read repository data',
+  'write:repository': 'Read and write repository data',
+  'read:issue': 'Read issues',
+  'write:issue': 'Read and write issues',
+  all: 'Full account access',
+};
+
+function Login({ oauthFailed }: { oauthFailed: boolean }) {
   const client = useQueryClient();
   const [token, setToken] = useState('');
+  const options = useQuery({
+    queryKey: ['authentication-options'], staleTime: 0, gcTime: 0,
+    queryFn: ({ signal }) => sessionClient.getAuthenticationOptions({}, { signal, timeoutMs: 8_000 }),
+  });
+  const oauthAvailable = options.isSuccess && !options.isFetching && options.data.giteaOauthEnabled;
+  const oauth = useMutation({
+    gcTime: 0,
+    mutationFn: async () => {
+      const result = await sessionClient.beginGiteaOAuth({}, { timeoutMs: 8_000 });
+      const destination = repositoryLink(result.authorizationUrl);
+      if (!destination) throw new ConnectError('Golf received an invalid sign-in address. Try again or use an access token.', Code.Internal);
+      return destination;
+    },
+    onSuccess: (destination) => { window.location.assign(destination); },
+  });
+  const redirecting = oauth.isPending || oauth.isSuccess;
   const mutation = useMutation({
     gcTime: 0,
     mutationFn: (value: string) => sessionClient.loginWithGiteaToken({ token: value }),
@@ -55,8 +82,15 @@ function Login() {
   });
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (token.trim() && !mutation.isPending) mutation.mutate(token.trim());
+    if (token.trim() && !mutation.isPending && !redirecting) mutation.mutate(token.trim());
   }
+  const tokenForm = <form onSubmit={submit}>
+    <label htmlFor="access-token">Gitea access token</label>
+    <input id="access-token" type="password" autoComplete="off" spellCheck={false} required value={token} onChange={(event) => setToken(event.target.value)} placeholder="Enter your scoped access token" aria-describedby="token-help" disabled={mutation.isPending || redirecting} />
+    <p className="field-help" id="token-help">Create a token in Gitea → Settings → Applications. To browse, select read:user and read:repository. Issues also require read:issue. To create repositories, select write:user and write:repository.</p>
+    <ErrorMessage error={mutation.error} />
+    <button className={`button ${oauthAvailable ? 'secondary' : 'primary'} full`} disabled={!token.trim() || mutation.isPending || redirecting}>{mutation.isPending ? <LoaderCircle size={17} className="spin" /> : null}{mutation.isPending ? 'Connecting…' : 'Continue to workspace'}{!mutation.isPending ? <ArrowRight size={17} /> : null}</button>
+  </form>;
   return <div className="login-page">
     <header className="login-header"><Brand /><ThemeSwitch /></header>
     <main className="login-main" id="main-content">
@@ -71,14 +105,16 @@ function Login() {
         <span className="small-icon"><KeyRound size={21} /></span>
         <h2 id="login-title">Welcome to Golf</h2>
         <p>Sign in to your connected Gitea instance.</p>
-        <form onSubmit={submit}>
-          <label htmlFor="access-token">Gitea access token</label>
-          <input id="access-token" type="password" autoComplete="off" spellCheck={false} required value={token} onChange={(event) => setToken(event.target.value)} placeholder="Enter your scoped access token" aria-describedby="token-help" disabled={mutation.isPending} />
-          <p className="field-help" id="token-help">Create a token in Gitea → Settings → Applications. To browse, select read:user and read:repository. Issues also require read:issue. To create repositories, select write:user and write:repository.</p>
-          <ErrorMessage error={mutation.error} />
-          <button className="button primary full" disabled={!token.trim() || mutation.isPending}>{mutation.isPending ? <LoaderCircle size={17} className="spin" /> : null}{mutation.isPending ? 'Connecting…' : 'Continue to workspace'}{!mutation.isPending ? <ArrowRight size={17} /> : null}</button>
-        </form>
-        <div className="login-note"><LockKeyhole size={15} /><span>Your token is sent to Golf to establish a session. It is never saved in browser storage.</span></div>
+        {oauthFailed ? <p className="error" role="alert">Gitea sign-in could not be completed. Please try again or use an access token.</p> : null}
+        {options.isPending || options.isFetching ? <p className="auth-options-status" role="status"><LoaderCircle className="spin" size={14} />Checking sign-in options…</p> : options.isError ? <div className="auth-options-error"><p className="error" role="alert">Sign-in options could not be loaded. You can still use an access token.</p><button className="text-button" onClick={() => void options.refetch()}>Retry sign-in options</button></div> : !oauthAvailable ? <p className="auth-options-status">OAuth sign-in is not available for this installation. Use a scoped access token below.</p> : null}
+        {oauthAvailable ? <section className="oauth-section" aria-label="Gitea sign-in">
+          <p className="oauth-provider">Continue through {options.data.providerLabel || 'Gitea'}. Your Gitea password stays with your provider.</p>
+          <div className="oauth-permissions" id="oauth-permissions"><h3>Requested permissions</h3><p>Golf requests these scopes within your existing Gitea access.</p>{options.data.scopes.length ? <ul>{options.data.scopes.map((scope) => <li key={scope}><code>{scope}</code>{scopeLabels[scope] ? <span>{scopeLabels[scope]}</span> : null}</li>)}</ul> : <p>No additional scopes were listed by this installation.</p>}</div>
+          <ErrorMessage error={oauth.error} />
+          <button className="button primary full" disabled={mutation.isPending || redirecting} aria-describedby="oauth-permissions" onClick={() => { setToken(''); oauth.mutate(); }}>{redirecting ? <LoaderCircle className="spin" size={17} /> : <GitBranch size={17} />}{redirecting ? 'Continuing to Gitea…' : 'Continue with Gitea'}{!redirecting ? <ArrowRight size={17} /> : null}</button>
+        </section> : null}
+        {oauthAvailable ? <details className="token-signin"><summary>Use a Gitea access token instead</summary>{tokenForm}</details> : tokenForm}
+        <div className="login-note"><LockKeyhole size={15} /><span>Golf stores provider credentials on the server. They are never saved in browser storage.</span></div>
       </section>
     </main>
     <footer className="login-footer"><span>Golf · Early development</span><span>Built around developers.</span></footer>
@@ -175,7 +211,7 @@ function Workspace({ user, location }: { user: User; location: Location }) {
       <div className="sidebar-bottom"><div className="forge-note"><GitBranch size={17} /><div><strong>Connected to Gitea</strong><span>Code stays on your forge.</span></div></div><div className="sidebar-controls"><ThemeSwitch /><button className="icon-button" aria-label="Sign out" title="Sign out" disabled={logout.isPending} onClick={() => logout.mutate()}><LogOut size={17} /></button></div><ErrorMessage error={logout.error} /></div>
     </aside>
     <div className="workspace-content"><header className="topbar"><span><span className="muted">Workspace</span><span className="breadcrumb-slash">/</span>{location.kind === 'repository' ? location.name : 'Repositories'}</span><span className="connection-pill"><span className="status-dot" /> Signed in</span></header>
-      <main id="main-content">{location.kind === 'repository' ? <RepositoryBrowser key={`${location.owner}/${location.name}`} location={location} userId={user.id} /> : location.kind === 'missing' ? <section className="empty-state"><h1>Page not found</h1><p>This Golf link does not match a repository page.</p><Link className="button secondary" to="/">Back to repositories</Link></section> : <><section className="workspace-intro"><div><span className="eyebrow">YOUR NEXT COMMIT STARTS HERE</span><h1>Good to see you, {user.fullName || user.login}<span className="accent">.</span></h1><p>A little less friction. A little more building.</p></div><div className="intro-emblem" aria-hidden="true"><Command size={31} /></div></section>
+      <main id="main-content">{location.kind === 'repository' ? <Suspense fallback={<div className="browser-loading" role="status"><LoaderCircle size={20} className="spin" />Opening repository…</div>}><RepositoryBrowser key={`${location.owner}/${location.name}`} location={location} userId={user.id} /></Suspense> : location.kind === 'missing' ? <section className="empty-state"><h1>Page not found</h1><p>This Golf link does not match a repository page.</p><Link className="button secondary" to="/">Back to repositories</Link></section> : <><section className="workspace-intro"><div><span className="eyebrow">YOUR NEXT COMMIT STARTS HERE</span><h1>Good to see you, {user.fullName || user.login}<span className="accent">.</span></h1><p>A little less friction. A little more building.</p></div><div className="intro-emblem" aria-hidden="true"><Command size={31} /></div></section>
         <section className="repository-section" id="repositories" aria-labelledby="repositories-title"><div className="section-heading"><div className="title-count"><h2 id="repositories-title">Repositories</h2>{repositoryQuery.isSuccess ? <span className="count-badge">{repositories.length}{repositoryQuery.hasNextPage ? '+' : ''}</span> : null}</div><button className="button primary" onClick={() => setCreating(true)}><Plus size={16} />New repository</button></div>
           <p className="section-description">Your code, with room for what comes next. Open a repository to browse its source, commits and issues in Golf.</p>
           <div className="repository-toolbar"><div className="search-input"><Search size={17} /><input aria-label="Search loaded repositories" placeholder="Search repositories…" value={search} onChange={(event) => setSearch(event.target.value)} /></div><select aria-label="Repository visibility" value={visibility} onChange={(event) => setVisibility(event.target.value)}><option value="all">All visibility</option><option value="private">Private</option><option value="public">Public</option></select><button className="icon-button refresh" aria-label="Refresh repositories" disabled={repositoryQuery.isFetching} onClick={() => void repositoryQuery.refetch()}><RefreshCw size={17} className={repositoryQuery.isFetching ? 'spin' : ''} /></button></div>
@@ -196,5 +232,5 @@ export function App({ location }: { location: Location }) {
     try { const response = await sessionClient.getSession({}, { signal }); if (!response.user) throw new ConnectError('The session response is missing its user.', Code.Internal); return response.user; }
     catch (error) { if (error instanceof ConnectError && error.code === Code.Unauthenticated) { forgetPrivateQueries(client); return null; } throw error; }
   } });
-  return <><a className="skip-link" href="#main-content">Skip to content</a>{session.isPending ? <main className="loading-screen" id="main-content"><Brand /><p role="status"><LoaderCircle size={18} className="spin" />Opening your workspace…</p></main> : session.error ? <main className="loading-screen" id="main-content"><Brand /><ErrorMessage error={session.error} /><button className="button secondary" onClick={() => void session.refetch()}>Try again</button></main> : session.data ? <Workspace key={session.data.id} user={session.data} location={location} /> : <Login />}</>;
+  return <><a className="skip-link" href="#main-content">Skip to content</a>{session.isPending ? <main className="loading-screen" id="main-content"><Brand /><p role="status"><LoaderCircle size={18} className="spin" />Opening your workspace…</p></main> : session.error ? <main className="loading-screen" id="main-content"><Brand /><ErrorMessage error={session.error} /><button className="button secondary" onClick={() => void session.refetch()}>Try again</button></main> : session.data ? <Workspace key={session.data.id} user={session.data} location={location} /> : <Login oauthFailed={location.kind === 'home' && Boolean(location.oauthFailed)} />}</>;
 }

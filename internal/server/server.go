@@ -20,9 +20,10 @@ import (
 )
 
 type Config struct {
-	PublicURL, GiteaURL, EncryptionKey string
-	AllowInsecureCookies               bool
-	WebDir                             string
+	PublicURL, GiteaURL, EncryptionKey                         string
+	GiteaPublicURL, GiteaOAuthClientID, GiteaOAuthClientSecret string
+	AllowInsecureCookies                                       bool
+	WebDir                                                     string
 }
 type Server struct {
 	config  Config
@@ -50,6 +51,10 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	if err != nil || forge.Host == "" || forge.User != nil || forge.RawQuery != "" || forge.Fragment != "" || (forge.Scheme != "http" && forge.Scheme != "https") {
 		return nil, errors.New("GITEA_URL must be an HTTP(S) URL without credentials or query")
 	}
+	if err := validateOAuthConfig(config); err != nil {
+		return nil, err
+	}
+	config.GiteaPublicURL = strings.TrimRight(config.GiteaPublicURL, "/")
 	key, err := base64.StdEncoding.DecodeString(config.EncryptionKey)
 	if err != nil || len(key) != 32 {
 		return nil, errors.New("GOLF_ENCRYPTION_KEY must be base64 encoding of exactly 32 random bytes")
@@ -73,6 +78,7 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	r.Use(s.security)
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) { respond(w, 200, map[string]string{"status": "ok"}) })
 	r.Get("/readyz", s.readiness)
+	r.Get("/auth/gitea/callback", s.oauthCallback)
 	rpc := s.rpcBoundary(http.StripPrefix("/rpc", s.rpcHandler()))
 	r.Handle("/rpc", rpc)
 	r.Handle("/rpc/*", rpc)
@@ -119,8 +125,9 @@ func (s *Server) security(next http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-		if r.URL.Path == "/rpc" || strings.HasPrefix(r.URL.Path, "/rpc/") || strings.HasPrefix(r.URL.Path, "/api/") {
+		if r.URL.Path == "/rpc" || strings.HasPrefix(r.URL.Path, "/rpc/") || strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/auth/") {
 			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Referrer-Policy", "no-referrer")
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -140,7 +147,7 @@ func (s *Server) dependencyChecks(ctx context.Context) (map[string]string, bool)
 	var version struct {
 		Version string `json:"version"`
 	}
-	if _, err := s.forge(ctx, "GET", "/version", "", nil, &version); err != nil || version.Version == "" {
+	if _, err := s.forge(ctx, "GET", "/version", forgeCredential{}, nil, &version); err != nil || version.Version == "" {
 		checks["gitea"] = "unavailable"
 		ready = false
 	} else if strings.TrimPrefix(version.Version, "v") != "1.27.3" {

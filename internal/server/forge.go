@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+type forgeCredential struct{ Kind, Token string }
+
 type User struct {
 	ID        int64  `json:"id"`
 	Login     string `json:"login"`
@@ -41,7 +43,7 @@ var errForgeResponseTooLarge = errors.New("forge response exceeds the size limit
 
 func (e forgeError) Error() string { return fmt.Sprintf("forge returned HTTP %d", e.status) }
 
-func (s *Server) forge(ctx context.Context, method, path, token string, input, output any) (http.Header, error) {
+func (s *Server) forge(ctx context.Context, method, path string, token forgeCredential, input, output any) (http.Header, error) {
 	var body io.Reader
 	if input != nil {
 		b, err := json.Marshal(input)
@@ -58,8 +60,14 @@ func (s *Server) forge(ctx context.Context, method, path, token string, input, o
 	if input != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if token != "" {
-		req.Header.Set("Authorization", "token "+token)
+	if token.Token != "" {
+		scheme := "token"
+		if token.Kind == "oauth" {
+			scheme = "Bearer"
+		} else if token.Kind != "pat" {
+			return nil, errCredentialUnavailable
+		}
+		req.Header.Set("Authorization", scheme+" "+token.Token)
 	}
 	res, err := s.client.Do(req)
 	if err != nil {
@@ -93,7 +101,7 @@ func (s *Server) forge(ctx context.Context, method, path, token string, input, o
 	return res.Header, nil
 }
 
-func (s *Server) currentUser(ctx context.Context, token string) (User, error) {
+func (s *Server) currentUser(ctx context.Context, token forgeCredential) (User, error) {
 	var user User
 	_, err := s.forge(ctx, http.MethodGet, "/user", token, nil, &user)
 	if err == nil && (user.ID <= 0 || strings.TrimSpace(user.Login) == "") {

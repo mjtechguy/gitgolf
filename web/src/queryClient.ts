@@ -2,7 +2,7 @@ import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 import { Code, ConnectError } from '@connectrpc/connect';
 
 export function forgetPrivateQueries(client: QueryClient) {
-  const filter = { predicate: (query: { queryKey: readonly unknown[] }) => query.queryKey[0] !== 'session' && query.queryKey[0] !== 'capabilities' };
+  const filter = { predicate: (query: { queryKey: readonly unknown[] }) => !['session', 'capabilities', 'authentication-options'].includes(String(query.queryKey[0])) };
   // Cancellation happens before removal so a late response cannot repopulate a signed-out session.
   void client.cancelQueries(filter);
   client.removeQueries(filter);

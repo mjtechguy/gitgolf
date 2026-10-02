@@ -82,7 +82,7 @@ func validSourcePath(value string) bool {
 	}
 	return true
 }
-func (s *Server) listRepositories(ctx context.Context, token string, paging pageRequest) ([]Repository, uint32, error) {
+func (s *Server) listRepositories(ctx context.Context, token forgeCredential, paging pageRequest) ([]Repository, uint32, error) {
 	page, limit, err := pagination(paging)
 	if err != nil {
 		return nil, 0, err
@@ -102,7 +102,7 @@ func (s *Server) listRepositories(ctx context.Context, token string, paging page
 	}
 	return repos, nextPage(headers, page), nil
 }
-func (s *Server) createRepository(ctx context.Context, token, name, description string, private *bool) (Repository, error) {
+func (s *Server) createRepository(ctx context.Context, token forgeCredential, name, description string, private *bool) (Repository, error) {
 	if !repositoryName.MatchString(name) || len(description) > 2000 || private == nil {
 		return Repository{}, invalid("Provide a 1–100 character repository name, description up to 2000 bytes, and explicit private boolean.")
 	}
@@ -121,14 +121,14 @@ func (s *Server) createRepository(ctx context.Context, token, name, description 
 func validRepository(repo Repository) bool {
 	return repo.ID > 0 && repo.Name != "" && repo.FullName != ""
 }
-func (s *Server) getRepository(ctx context.Context, token string, key repositoryKey) (Repository, error) {
+func (s *Server) getRepository(ctx context.Context, token forgeCredential, key repositoryKey) (Repository, error) {
 	base, err := repositoryPath(key)
 	if err != nil {
 		return Repository{}, err
 	}
 	return s.readRepository(ctx, base, token)
 }
-func (s *Server) readRepository(ctx context.Context, base, token string) (Repository, error) {
+func (s *Server) readRepository(ctx context.Context, base string, token forgeCredential) (Repository, error) {
 	var repo Repository
 	_, err := s.forge(ctx, "GET", base, token, nil, &repo)
 	if err == nil && !validRepository(repo) {
@@ -143,7 +143,7 @@ type branch struct {
 	Protected bool   `json:"protected"`
 }
 
-func (s *Server) listBranches(ctx context.Context, token string, key repositoryKey, paging pageRequest) ([]branch, uint32, error) {
+func (s *Server) listBranches(ctx context.Context, token forgeCredential, key repositoryKey, paging pageRequest) ([]branch, uint32, error) {
 	base, err := repositoryPath(key)
 	if err != nil {
 		return nil, 0, err
@@ -195,7 +195,7 @@ type forgeCommit struct {
 	} `json:"commit"`
 }
 
-func (s *Server) readCommits(ctx context.Context, base, token, ref string, page, limit uint32) ([]forgeCommit, http.Header, error) {
+func (s *Server) readCommits(ctx context.Context, base string, token forgeCredential, ref string, page, limit uint32) ([]forgeCommit, http.Header, error) {
 	query := pageQuery(page, limit)
 	query.Set("stat", "false")
 	query.Set("verification", "false")
@@ -219,7 +219,7 @@ func (s *Server) readCommits(ctx context.Context, base, token, ref string, page,
 	}
 	return rows, headers, err
 }
-func (s *Server) listCommits(ctx context.Context, token string, key repositoryKey, ref string, paging pageRequest) ([]forgeCommit, uint32, error) {
+func (s *Server) listCommits(ctx context.Context, token forgeCredential, key repositoryKey, ref string, paging pageRequest) ([]forgeCommit, uint32, error) {
 	base, err := repositoryPath(key)
 	if err != nil {
 		return nil, 0, err
@@ -279,7 +279,7 @@ func escapedSourcePath(value string) string {
 	}
 	return strings.Join(parts, "/")
 }
-func (s *Server) getContents(ctx context.Context, token string, key repositoryKey, ref, requestedPath string) (sourceResult, error) {
+func (s *Server) getContents(ctx context.Context, token forgeCredential, key repositoryKey, ref, requestedPath string) (sourceResult, error) {
 	base, err := repositoryPath(key)
 	if err != nil {
 		return sourceResult{}, err
@@ -394,7 +394,7 @@ func (issue forgeIssue) isPullRequest() bool {
 func validIssue(issue Issue) bool {
 	return issue.ID > 0 && issue.Number > 0 && issue.Number <= 2147483647 && (issue.State == "open" || issue.State == "closed") && issue.Comments >= 0 && issue.Comments <= 4294967295
 }
-func (s *Server) listIssues(ctx context.Context, token string, key repositoryKey, state string, paging pageRequest) ([]Issue, uint32, error) {
+func (s *Server) listIssues(ctx context.Context, token forgeCredential, key repositoryKey, state string, paging pageRequest) ([]Issue, uint32, error) {
 	base, err := repositoryPath(key)
 	if err != nil {
 		return nil, 0, err
@@ -432,7 +432,7 @@ func (s *Server) listIssues(ctx context.Context, token string, key repositoryKey
 	}
 	return result, nextPage(headers, page), nil
 }
-func (s *Server) getIssue(ctx context.Context, token string, key repositoryKey, number uint32) (Issue, error) {
+func (s *Server) getIssue(ctx context.Context, token forgeCredential, key repositoryKey, number uint32) (Issue, error) {
 	base, err := repositoryPath(key)
 	if err != nil {
 		return Issue{}, err

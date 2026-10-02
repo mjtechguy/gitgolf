@@ -15,10 +15,10 @@ import (
 
 type sessionTokenKey struct{}
 
-func rpcToken(ctx context.Context) (string, error) {
-	token, _ := ctx.Value(sessionTokenKey{}).(string)
-	if token == "" {
-		return "", rpcError(errUnauthenticated)
+func rpcToken(ctx context.Context) (forgeCredential, error) {
+	token, _ := ctx.Value(sessionTokenKey{}).(forgeCredential)
+	if token.Token == "" {
+		return forgeCredential{}, rpcError(errUnauthenticated)
 	}
 	return token, nil
 }
@@ -43,7 +43,7 @@ func (s *Server) rpcHandler() http.Handler {
 }
 
 // This HTTP boundary runs before Connect reads, decompresses or decodes a body.
-// Only the three named public procedures skip opaque-session authentication.
+// Only explicitly named public procedures skip opaque-session authentication.
 func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 	writer := connect.NewErrorWriter(connect.WithRequireConnectProtocolHeader())
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -62,7 +62,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		}
 		public := false
 		switch strings.TrimPrefix(r.URL.Path, "/rpc") {
-		case golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
+		case golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
 			public = true
 		case golfv1connect.SessionServiceGetSessionProcedure,
 			golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure,

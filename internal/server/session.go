@@ -54,10 +54,14 @@ func (s *Server) loginSession(ctx context.Context, token, oldValue string) (logi
 	if len(token) < 8 || len(token) > 512 || strings.ContainsAny(token, "\r\n\t ") {
 		return loginResult{}, invalid("Enter a valid Gitea access token.")
 	}
-	user, err := s.currentUser(ctx, token)
+	user, err := s.currentUser(ctx, forgeCredential{Kind: "pat", Token: token})
 	if err != nil {
 		return loginResult{}, err
 	}
+	return s.createSession(ctx, user, "pat", token, oldValue)
+}
+
+func (s *Server) createSession(ctx context.Context, user User, kind, payload, oldValue string) (loginResult, error) {
 	random := make([]byte, 32)
 	if _, err := rand.Read(random); err != nil {
 		return loginResult{}, err
@@ -76,7 +80,7 @@ func (s *Server) loginSession(ctx context.Context, token, oldValue string) (logi
 	queries := database.New(s.db).WithTx(tx)
 	id, err := queries.UpsertUser(ctx, database.UpsertUserParams{ForgeURL: s.config.GiteaURL, ForgeUserID: user.ID, Login: user.Login, FullName: user.FullName, AvatarURL: user.AvatarURL})
 	if err == nil {
-		err = queries.CreateSession(ctx, database.CreateSessionParams{TokenHash: hash, UserID: id, EncryptedToken: s.seal(token, hash), ExpiresAt: expires})
+		err = queries.CreateSession(ctx, database.CreateSessionParams{TokenHash: hash, UserID: id, EncryptedToken: s.seal(payload, hash), ExpiresAt: expires, CredentialKind: kind})
 	}
 	if err == nil {
 		err = queries.DeleteExpiredSessions(ctx)
@@ -92,26 +96,40 @@ func (s *Server) loginSession(ctx context.Context, token, oldValue string) (logi
 	}
 	return loginResult{user, value, expires}, nil
 }
-func (s *Server) sessionCredential(ctx context.Context, value string) (string, error) {
+func (s *Server) sessionCredential(ctx context.Context, value string) (forgeCredential, error) {
 	hash, err := sessionHash(value)
 	if err != nil {
-		return "", errUnauthenticated
+		return forgeCredential{}, errUnauthenticated
 	}
 	if s.db == nil {
-		return "", errStorageUnavailable
+		return forgeCredential{}, errStorageUnavailable
 	}
-	encrypted, err := database.New(s.db).GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+	row, err := database.New(s.db).GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", errUnauthenticated
+		return forgeCredential{}, errUnauthenticated
 	}
 	if err != nil {
-		return "", errStorageUnavailable
+		return forgeCredential{}, errStorageUnavailable
 	}
-	token, err := s.unseal(encrypted, hash)
+	payload, err := s.unseal(row.EncryptedToken, hash)
 	if err != nil {
-		return "", errCredentialUnavailable
+		return forgeCredential{}, errCredentialUnavailable
 	}
-	return token, nil
+	switch row.CredentialKind {
+	case "pat":
+		if !row.ExpiresAt.After(time.Now()) {
+			return forgeCredential{}, errUnauthenticated
+		}
+		return forgeCredential{Kind: "pat", Token: payload}, nil
+	case "oauth":
+		credential, err := s.oauthCredential(ctx, hash, payload)
+		if !row.ExpiresAt.After(time.Now()) {
+			return forgeCredential{}, errUnauthenticated
+		}
+		return credential, err
+	default:
+		return forgeCredential{}, errCredentialUnavailable
+	}
 }
 func (s *Server) logoutSession(ctx context.Context, value string) error {
 	hash, err := sessionHash(value)

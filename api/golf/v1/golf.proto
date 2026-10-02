@@ -8,6 +8,8 @@ option go_package = "github.com/mjtechguy/golf-git/gen/golf/v1;golfv1";
 // effective upstream permissions for every operation. Bootstrap token login is
 // explicitly named; local/OIDC and machine credential lifecycles follow later.
 service SessionService {
+  rpc GetAuthenticationOptions(GetAuthenticationOptionsRequest) returns (GetAuthenticationOptionsResponse);
+  rpc BeginGiteaOAuth(BeginGiteaOAuthRequest) returns (BeginGiteaOAuthResponse);
   rpc LoginWithGiteaToken(LoginWithGiteaTokenRequest) returns (LoginWithGiteaTokenResponse);
   rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
   rpc Logout(LogoutRequest) returns (LogoutResponse);
@@ -201,3 +203,12 @@ message Capability {
 }
 message ListCapabilitiesRequest {}
 message ListCapabilitiesResponse { repeated Capability capabilities = 1; }
+
+message GetAuthenticationOptionsRequest {}
+message GetAuthenticationOptionsResponse {
+  bool gitea_oauth_enabled = 1;
+  string provider_label = 2;
+  repeated string scopes = 3;
+}
+message BeginGiteaOAuthRequest {}
+message BeginGiteaOAuthResponse { string authorization_url = 1; }

@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/mjtechguy/golf-git/internal/server/database"
+	"github.com/pressly/goose/v3"
 	"github.com/pressly/goose/v3/lock"
 )
 
@@ -113,9 +114,9 @@ func TestSessionQueriesPostgres(t *testing.T) {
 	liveHash, expiredHash, otherHash := sha256.Sum256([]byte("live")), sha256.Sum256([]byte("expired")), sha256.Sum256([]byte("other"))
 	credential := []byte{0, 0xff, 0x80, 1, 2, 3}
 	for _, session := range []database.CreateSessionParams{
-		{TokenHash: liveHash[:], UserID: id, EncryptedToken: credential, ExpiresAt: now.Add(time.Hour)},
-		{TokenHash: expiredHash[:], UserID: id, EncryptedToken: []byte("expired envelope"), ExpiresAt: now.Add(-time.Hour)},
-		{TokenHash: otherHash[:], UserID: otherID, EncryptedToken: []byte("other envelope"), ExpiresAt: now.Add(time.Hour)},
+		{CredentialKind: "pat", TokenHash: liveHash[:], UserID: id, EncryptedToken: credential, ExpiresAt: now.Add(time.Hour)},
+		{CredentialKind: "pat", TokenHash: expiredHash[:], UserID: id, EncryptedToken: []byte("expired envelope"), ExpiresAt: now.Add(-time.Hour)},
+		{CredentialKind: "pat", TokenHash: otherHash[:], UserID: otherID, EncryptedToken: []byte("other envelope"), ExpiresAt: now.Add(time.Hour)},
 	} {
 		if err := queries.CreateSession(ctx, session); err != nil {
 			t.Fatal(err)
@@ -123,7 +124,7 @@ func TestSessionQueriesPostgres(t *testing.T) {
 	}
 	lookup := database.GetSessionCredentialParams{TokenHash: liveHash[:], ForgeURL: user.ForgeURL}
 	got, err := queries.GetSessionCredential(ctx, lookup)
-	if err != nil || !bytes.Equal(got, credential) {
+	if err != nil || !bytes.Equal(got.EncryptedToken, credential) {
 		t.Fatalf("opaque credential must round-trip unchanged: error=%v", err)
 	}
 	for _, denied := range []database.GetSessionCredentialParams{
@@ -163,7 +164,7 @@ func TestSessionReplacementTransactionPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	oldHash, newHash := sha256.Sum256([]byte("old session")), sha256.Sum256([]byte("new session"))
-	old := database.CreateSessionParams{TokenHash: oldHash[:], UserID: id, EncryptedToken: []byte("old envelope"), ExpiresAt: time.Now().Add(time.Hour)}
+	old := database.CreateSessionParams{CredentialKind: "pat", TokenHash: oldHash[:], UserID: id, EncryptedToken: []byte("old envelope"), ExpiresAt: time.Now().Add(time.Hour)}
 	if err := queries.CreateSession(ctx, old); err != nil {
 		t.Fatal(err)
 	}
@@ -294,5 +295,54 @@ func TestMigrationLockAndConcurrentStartupPostgres(t *testing.T) {
 	}
 	if _, err := database.New(db).UpsertUser(ctx, fixtureUser()); err != nil {
 		t.Fatalf("migrated schema unusable after competing startups: %v", err)
+	}
+}
+
+func TestOAuthMigrationPreservesPATPostgres(t *testing.T) {
+	ctx, dsn := isolatedDatabase(t)
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("migrations"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.UpTo(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+	id, err := database.New(db).UpsertUser(ctx, fixtureUser())
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := sha256.Sum256([]byte("existing PAT"))
+	envelope := []byte{0xff, 0, 1, 2, 3, 0x80}
+	if _, err := db.ExecContext(ctx, "INSERT INTO golf_sessions(token_hash,user_id,encrypted_token,expires_at) VALUES ($1,$2,$3,$4)", hash[:], id, envelope, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	migrated, err := database.Open(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer migrated.Close()
+	row, err := database.New(migrated).GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: hash[:], ForgeURL: fixtureUser().ForgeURL})
+	if err != nil || row.CredentialKind != "pat" || !bytes.Equal(row.EncryptedToken, envelope) {
+		t.Fatal("upgrade changed PAT credential or lost explicit kind")
+	}
+	oauthHash := sha256.Sum256([]byte("OAuth envelope"))
+	if err := database.New(migrated).CreateSession(ctx, database.CreateSessionParams{TokenHash: oauthHash[:], UserID: id, EncryptedToken: []byte("encrypted OAuth"), ExpiresAt: time.Now().Add(time.Hour), CredentialKind: "oauth"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.DownTo(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+	var retained []byte
+	var count int
+	if err := db.QueryRowContext(ctx, "SELECT encrypted_token FROM golf_sessions WHERE token_hash=$1", hash[:]).Scan(&retained); err != nil || !bytes.Equal(retained, envelope) {
+		t.Fatal("downgrade lost PAT")
+	}
+	if err := db.QueryRowContext(ctx, "SELECT count(*) FROM golf_sessions").Scan(&count); err != nil || count != 1 {
+		t.Fatal("downgrade retained an OAuth envelope without its kind")
 	}
 }

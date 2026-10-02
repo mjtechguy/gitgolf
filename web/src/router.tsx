@@ -8,7 +8,14 @@ const rootRoute = createRootRoute({
   notFoundComponent: () => <App location={{ kind: 'missing' }} />,
   errorComponent: () => <App location={{ kind: 'missing' }} />,
 });
-const homeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: () => <App location={{ kind: 'home' }} /> });
+const homeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/',
+  validateSearch: (search: Record<string, unknown>): { auth_error?: 'oauth_failed' } => ({
+    auth_error: search.auth_error === 'oauth_failed' ? 'oauth_failed' : undefined,
+  }),
+  component: HomePage,
+});
 const repositoryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/repositories/$owner/$name',
@@ -33,6 +40,11 @@ function RepositoryPage() {
   const params = repositoryRoute.useParams();
   const search = repositoryRoute.useSearch();
   return <App location={{ ...params, ...search, kind: 'repository' }} />;
+}
+
+function HomePage() {
+  const search = homeRoute.useSearch();
+  return <App location={{ kind: 'home', oauthFailed: search.auth_error === 'oauth_failed' }} />;
 }
 
 // Router owns navigation only. Private server data stays in the cancellable Query cache.

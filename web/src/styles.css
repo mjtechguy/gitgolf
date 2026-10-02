@@ -13,6 +13,23 @@
 @media(max-width:400px) { .refresh { width:33px; } .repository-toolbar select { width:105px; } .search-input { min-width:150px; } .repository-row { padding-inline:12px; } .repository-icon { display:none; } .workspace-content main { padding-inline:16px; } }
 @media(prefers-reduced-motion:reduce) { :root { scroll-behavior:auto; } .spin { animation:none; } }
 
+.auth-options-status { display:flex; align-items:flex-start; gap:8px; color:var(--muted); font-size:11px; line-height:1.7; margin-top:18px; }
+.auth-options-status svg { margin-top:2px; }
+.auth-options-error { margin-top:16px; }
+.auth-options-error .error { margin-bottom:8px; }
+.oauth-section { margin-top:22px; }
+.oauth-provider { color:var(--muted); font-size:12px; line-height:1.75; overflow-wrap:anywhere; }
+.oauth-permissions { border:1px solid var(--line); border-radius:8px; background:var(--bg); padding:14px; margin:17px 0; }
+.oauth-permissions h3 { font-size:12px; letter-spacing:0; }
+.oauth-permissions p { color:var(--muted); font-size:10px; line-height:1.7; margin-top:7px; }
+.oauth-permissions ul { display:flex; flex-direction:column; gap:10px; margin:13px 0 0; padding:0; list-style:none; }
+.oauth-permissions li { display:flex; flex-direction:column; align-items:flex-start; gap:3px; overflow-wrap:anywhere; }
+.oauth-permissions code { color:var(--text); font:10px/1.7 ui-monospace,monospace; }
+.oauth-permissions li>span { color:var(--muted); font-size:10px; line-height:1.6; }
+.token-signin { border-top:1px solid var(--line); margin-top:22px; padding-top:17px; }
+.token-signin>summary { color:var(--accent); font-size:11px; line-height:1.7; padding:3px 0; }
+.token-signin[open]>summary { margin-bottom:5px; }
+
 /* Repository browsing uses the same neutral surfaces in both color themes. */
 summary { cursor:pointer; }
 summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--accent); outline-offset:4px; }

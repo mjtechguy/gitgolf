@@ -27,7 +27,7 @@ func run() error {
 	if os.Getenv("DATABASE_URL") == "" {
 		return errors.New("DATABASE_URL is required")
 	}
-	config := server.Config{PublicURL: env("GOLF_PUBLIC_URL", "http://localhost:8080"), GiteaURL: env("GITEA_URL", "http://gitea:3000"), EncryptionKey: os.Getenv("GOLF_ENCRYPTION_KEY"), AllowInsecureCookies: os.Getenv("GOLF_ALLOW_INSECURE_COOKIES") == "true", WebDir: env("GOLF_WEB_DIR", "web/dist")}
+	config := server.Config{PublicURL: env("GOLF_PUBLIC_URL", "http://localhost:8080"), GiteaURL: env("GITEA_URL", "http://gitea:3000"), GiteaPublicURL: os.Getenv("GITEA_PUBLIC_URL"), GiteaOAuthClientID: os.Getenv("GITEA_OAUTH_CLIENT_ID"), GiteaOAuthClientSecret: os.Getenv("GITEA_OAUTH_CLIENT_SECRET"), EncryptionKey: os.Getenv("GOLF_ENCRYPTION_KEY"), AllowInsecureCookies: os.Getenv("GOLF_ALLOW_INSECURE_COOKIES") == "true", WebDir: env("GOLF_WEB_DIR", "web/dist")}
 	// Validate configuration before opening a database; errors contain no secret values.
 	validationConfig := config
 	validationConfig.WebDir = ""

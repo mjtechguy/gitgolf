@@ -37,6 +37,12 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// SessionServiceGetAuthenticationOptionsProcedure is the fully-qualified name of the
+	// SessionService's GetAuthenticationOptions RPC.
+	SessionServiceGetAuthenticationOptionsProcedure = "/golf.v1.SessionService/GetAuthenticationOptions"
+	// SessionServiceBeginGiteaOAuthProcedure is the fully-qualified name of the SessionService's
+	// BeginGiteaOAuth RPC.
+	SessionServiceBeginGiteaOAuthProcedure = "/golf.v1.SessionService/BeginGiteaOAuth"
 	// SessionServiceLoginWithGiteaTokenProcedure is the fully-qualified name of the SessionService's
 	// LoginWithGiteaToken RPC.
 	SessionServiceLoginWithGiteaTokenProcedure = "/golf.v1.SessionService/LoginWithGiteaToken"
@@ -76,6 +82,8 @@ const (
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
 type SessionServiceClient interface {
+	GetAuthenticationOptions(context.Context, *connect.Request[v1.GetAuthenticationOptionsRequest]) (*connect.Response[v1.GetAuthenticationOptionsResponse], error)
+	BeginGiteaOAuth(context.Context, *connect.Request[v1.BeginGiteaOAuthRequest]) (*connect.Response[v1.BeginGiteaOAuthResponse], error)
 	LoginWithGiteaToken(context.Context, *connect.Request[v1.LoginWithGiteaTokenRequest]) (*connect.Response[v1.LoginWithGiteaTokenResponse], error)
 	GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
 	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
@@ -92,6 +100,18 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 	baseURL = strings.TrimRight(baseURL, "/")
 	sessionServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("SessionService").Methods()
 	return &sessionServiceClient{
+		getAuthenticationOptions: connect.NewClient[v1.GetAuthenticationOptionsRequest, v1.GetAuthenticationOptionsResponse](
+			httpClient,
+			baseURL+SessionServiceGetAuthenticationOptionsProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("GetAuthenticationOptions")),
+			connect.WithClientOptions(opts...),
+		),
+		beginGiteaOAuth: connect.NewClient[v1.BeginGiteaOAuthRequest, v1.BeginGiteaOAuthResponse](
+			httpClient,
+			baseURL+SessionServiceBeginGiteaOAuthProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("BeginGiteaOAuth")),
+			connect.WithClientOptions(opts...),
+		),
 		loginWithGiteaToken: connect.NewClient[v1.LoginWithGiteaTokenRequest, v1.LoginWithGiteaTokenResponse](
 			httpClient,
 			baseURL+SessionServiceLoginWithGiteaTokenProcedure,
@@ -115,9 +135,21 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 
 // sessionServiceClient implements SessionServiceClient.
 type sessionServiceClient struct {
-	loginWithGiteaToken *connect.Client[v1.LoginWithGiteaTokenRequest, v1.LoginWithGiteaTokenResponse]
-	getSession          *connect.Client[v1.GetSessionRequest, v1.GetSessionResponse]
-	logout              *connect.Client[v1.LogoutRequest, v1.LogoutResponse]
+	getAuthenticationOptions *connect.Client[v1.GetAuthenticationOptionsRequest, v1.GetAuthenticationOptionsResponse]
+	beginGiteaOAuth          *connect.Client[v1.BeginGiteaOAuthRequest, v1.BeginGiteaOAuthResponse]
+	loginWithGiteaToken      *connect.Client[v1.LoginWithGiteaTokenRequest, v1.LoginWithGiteaTokenResponse]
+	getSession               *connect.Client[v1.GetSessionRequest, v1.GetSessionResponse]
+	logout                   *connect.Client[v1.LogoutRequest, v1.LogoutResponse]
+}
+
+// GetAuthenticationOptions calls golf.v1.SessionService.GetAuthenticationOptions.
+func (c *sessionServiceClient) GetAuthenticationOptions(ctx context.Context, req *connect.Request[v1.GetAuthenticationOptionsRequest]) (*connect.Response[v1.GetAuthenticationOptionsResponse], error) {
+	return c.getAuthenticationOptions.CallUnary(ctx, req)
+}
+
+// BeginGiteaOAuth calls golf.v1.SessionService.BeginGiteaOAuth.
+func (c *sessionServiceClient) BeginGiteaOAuth(ctx context.Context, req *connect.Request[v1.BeginGiteaOAuthRequest]) (*connect.Response[v1.BeginGiteaOAuthResponse], error) {
+	return c.beginGiteaOAuth.CallUnary(ctx, req)
 }
 
 // LoginWithGiteaToken calls golf.v1.SessionService.LoginWithGiteaToken.
@@ -137,6 +169,8 @@ func (c *sessionServiceClient) Logout(ctx context.Context, req *connect.Request[
 
 // SessionServiceHandler is an implementation of the golf.v1.SessionService service.
 type SessionServiceHandler interface {
+	GetAuthenticationOptions(context.Context, *connect.Request[v1.GetAuthenticationOptionsRequest]) (*connect.Response[v1.GetAuthenticationOptionsResponse], error)
+	BeginGiteaOAuth(context.Context, *connect.Request[v1.BeginGiteaOAuthRequest]) (*connect.Response[v1.BeginGiteaOAuthResponse], error)
 	LoginWithGiteaToken(context.Context, *connect.Request[v1.LoginWithGiteaTokenRequest]) (*connect.Response[v1.LoginWithGiteaTokenResponse], error)
 	GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
 	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
@@ -149,6 +183,18 @@ type SessionServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	sessionServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("SessionService").Methods()
+	sessionServiceGetAuthenticationOptionsHandler := connect.NewUnaryHandler(
+		SessionServiceGetAuthenticationOptionsProcedure,
+		svc.GetAuthenticationOptions,
+		connect.WithSchema(sessionServiceMethods.ByName("GetAuthenticationOptions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceBeginGiteaOAuthHandler := connect.NewUnaryHandler(
+		SessionServiceBeginGiteaOAuthProcedure,
+		svc.BeginGiteaOAuth,
+		connect.WithSchema(sessionServiceMethods.ByName("BeginGiteaOAuth")),
+		connect.WithHandlerOptions(opts...),
+	)
 	sessionServiceLoginWithGiteaTokenHandler := connect.NewUnaryHandler(
 		SessionServiceLoginWithGiteaTokenProcedure,
 		svc.LoginWithGiteaToken,
@@ -169,6 +215,10 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 	)
 	return "/golf.v1.SessionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case SessionServiceGetAuthenticationOptionsProcedure:
+			sessionServiceGetAuthenticationOptionsHandler.ServeHTTP(w, r)
+		case SessionServiceBeginGiteaOAuthProcedure:
+			sessionServiceBeginGiteaOAuthHandler.ServeHTTP(w, r)
 		case SessionServiceLoginWithGiteaTokenProcedure:
 			sessionServiceLoginWithGiteaTokenHandler.ServeHTTP(w, r)
 		case SessionServiceGetSessionProcedure:
@@ -183,6 +233,14 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 
 // UnimplementedSessionServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedSessionServiceHandler struct{}
+
+func (UnimplementedSessionServiceHandler) GetAuthenticationOptions(context.Context, *connect.Request[v1.GetAuthenticationOptionsRequest]) (*connect.Response[v1.GetAuthenticationOptionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.SessionService.GetAuthenticationOptions is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) BeginGiteaOAuth(context.Context, *connect.Request[v1.BeginGiteaOAuthRequest]) (*connect.Response[v1.BeginGiteaOAuthResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.SessionService.BeginGiteaOAuth is not implemented"))
+}
 
 func (UnimplementedSessionServiceHandler) LoginWithGiteaToken(context.Context, *connect.Request[v1.LoginWithGiteaTokenRequest]) (*connect.Response[v1.LoginWithGiteaTokenResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.SessionService.LoginWithGiteaToken is not implemented"))

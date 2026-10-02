@@ -8,12 +8,20 @@ import (
 	"time"
 )
 
+type GolfOauthAttempt struct {
+	StateHash         []byte
+	BindingHash       []byte
+	EncryptedVerifier []byte
+	ExpiresAt         time.Time
+}
+
 type GolfSession struct {
 	TokenHash      []byte
 	UserID         int64
 	EncryptedToken []byte
 	ExpiresAt      time.Time
 	CreatedAt      time.Time
+	CredentialKind string
 }
 
 type GolfUser struct {
