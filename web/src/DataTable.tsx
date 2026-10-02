@@ -6,14 +6,14 @@ import type { ColumnDef, RowData } from '@tanstack/react-table';
 const features = { columnFilteringFeature, globalFilteringFeature, rowPaginationFeature, rowSortingFeature, filterFns, sortFns, filteredRowModel: createFilteredRowModel(), sortedRowModel: createSortedRowModel(), paginatedRowModel: createPaginatedRowModel() };
 export type DataTableColumn<T extends RowData> = ColumnDef<typeof features, T>;
 
-export function DataTable<T extends RowData>({ data, columns, getRowId, label, emptyMessage = 'No entries.' }: {
-  data: T[]; columns: DataTableColumn<T>[]; getRowId: (item: T) => string; label: string; emptyMessage?: string;
+export function DataTable<T extends RowData>({ data, columns, getRowId, label, emptyMessage = 'No entries.', pagination = true }: {
+  data: T[]; columns: DataTableColumn<T>[]; getRowId: (item: T) => string; label: string; emptyMessage?: string; pagination?: boolean;
 }) {
   const searchId = useId();
   const pageSizeId = useId();
   const scopeId = useId();
   const table = useTable({ features, data, columns, getRowId, defaultColumn: { sortDescFirst: false, sortFn: 'text' }, globalFilterFn: 'includesString', initialState: { pagination: { pageIndex: 0, pageSize: 20 } }, autoResetPageIndex: true });
-  const rows = table.getRowModel().rows;
+  const rows = pagination ? table.getRowModel().rows : table.getPrePaginatedRowModel().rows;
   const search = String(table.state.globalFilter ?? '');
   const filteredCount = table.getPrePaginatedRowModel().rows.length;
   const { pageIndex, pageSize } = table.state.pagination;
@@ -33,11 +33,11 @@ export function DataTable<T extends RowData>({ data, columns, getRowId, label, e
         <tbody>{rows.length ? rows.map((row) => <tr key={row.id} data-row-id={row.id}>{row.getAllCells().map((cell) => <td key={cell.id}><table.FlexRender cell={cell} /></td>)}</tr>) : <tr><td colSpan={columns.length} className="data-table-empty">{search && data.length ? 'No loaded entries match your search.' : emptyMessage}</td></tr>}</tbody>
       </table>
     </div>
-    <nav className="data-table-pagination" aria-label={`${label} pages`}>
+    {pagination ? <nav className="data-table-pagination" aria-label={`${label} pages`}>
       <label htmlFor={pageSizeId}>Rows per page<select id={pageSizeId} className="data-table-page-size" aria-label={`Rows per page for ${label}`} value={pageSize} onChange={(event) => table.setPagination({ pageIndex: 0, pageSize: Number(event.target.value) })}>{[10, 20, 50].map(size => <option key={size} value={size}>{size}</option>)}</select></label>
       <span className="data-table-page-status" aria-live="polite">Page {pageIndex + 1} of {pageCount}<span>Rows {firstRow}–{lastRow}</span></span>
       <div className="data-table-page-actions"><button type="button" className="button secondary" aria-label="Previous loaded page" disabled={!table.getCanPreviousPage()} onClick={() => table.previousPage()}>Previous</button><button type="button" className="button secondary" aria-label="Next loaded page" disabled={!table.getCanNextPage()} onClick={() => table.nextPage()}>Next</button></div>
-      <p id={scopeId} className="data-table-scope">Search, sorting and pages cover loaded entries only.</p>
-    </nav>
+      </nav> : null}
+    <p id={scopeId} className="data-table-scope">{pagination ? 'Search, sorting and pages cover loaded entries only.' : 'Search and sorting cover all reported entries.'}</p>
   </div>;
 }

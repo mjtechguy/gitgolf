@@ -54,8 +54,8 @@ func (q *Queries) AddExecutionPolicyWorkflow(ctx context.Context, arg AddExecuti
 }
 
 const appendExecutionPolicyEvent = `-- name: AppendExecutionPolicyEvent :exec
-INSERT INTO golf_execution_policy_events(forge_url,scope,scope_id,revision,revocation_epoch,actor_user_id,actor_session_id,action,mode,manual_dispatch_enabled,allow_all_workflows,selected_repository_count,workflow_count)
-VALUES($1,$2,$3,$4,$5,$6,$7,'UPDATED',$8,$9,$10,$11,$12)
+INSERT INTO golf_execution_policy_events(forge_url,scope,scope_id,revision,revocation_epoch,actor_user_id,actor_session_id,action,mode,manual_dispatch_enabled,allow_all_workflows,selected_repository_count,workflow_count,push_allowed)
+VALUES($1,$2,$3,$4,$5,$6,$7,'UPDATED',$8,$9,$10,$11,$12,$13)
 `
 
 type AppendExecutionPolicyEventParams struct {
@@ -71,6 +71,7 @@ type AppendExecutionPolicyEventParams struct {
 	AllowAllWorkflows       bool
 	SelectedRepositoryCount int32
 	WorkflowCount           int32
+	PushAllowed             bool
 }
 
 func (q *Queries) AppendExecutionPolicyEvent(ctx context.Context, arg AppendExecutionPolicyEventParams) error {
@@ -87,6 +88,7 @@ func (q *Queries) AppendExecutionPolicyEvent(ctx context.Context, arg AppendExec
 		arg.AllowAllWorkflows,
 		arg.SelectedRepositoryCount,
 		arg.WorkflowCount,
+		arg.PushAllowed,
 	)
 	return err
 }
@@ -144,7 +146,7 @@ func (q *Queries) EnsureExecutionPolicy(ctx context.Context, arg EnsureExecution
 }
 
 const getExecutionPolicy = `-- name: GetExecutionPolicy :one
-SELECT forge_url, scope, scope_id, owner_id, mode, manual_dispatch_enabled, allow_all_workflows, revision, revocation_epoch, updated_at FROM golf_execution_policies WHERE forge_url=$1 AND scope=$2 AND scope_id=$3
+SELECT forge_url, scope, scope_id, owner_id, mode, manual_dispatch_enabled, allow_all_workflows, revision, revocation_epoch, updated_at, push_allowed FROM golf_execution_policies WHERE forge_url=$1 AND scope=$2 AND scope_id=$3
 `
 
 type GetExecutionPolicyParams struct {
@@ -167,6 +169,7 @@ func (q *Queries) GetExecutionPolicy(ctx context.Context, arg GetExecutionPolicy
 		&i.Revision,
 		&i.RevocationEpoch,
 		&i.UpdatedAt,
+		&i.PushAllowed,
 	)
 	return i, err
 }
@@ -243,7 +246,7 @@ func (q *Queries) ListExecutionPolicyWorkflows(ctx context.Context, arg ListExec
 }
 
 const lockExecutionPolicy = `-- name: LockExecutionPolicy :one
-SELECT forge_url, scope, scope_id, owner_id, mode, manual_dispatch_enabled, allow_all_workflows, revision, revocation_epoch, updated_at FROM golf_execution_policies WHERE forge_url=$1 AND scope=$2 AND scope_id=$3 FOR UPDATE
+SELECT forge_url, scope, scope_id, owner_id, mode, manual_dispatch_enabled, allow_all_workflows, revision, revocation_epoch, updated_at, push_allowed FROM golf_execution_policies WHERE forge_url=$1 AND scope=$2 AND scope_id=$3 FOR UPDATE
 `
 
 type LockExecutionPolicyParams struct {
@@ -266,20 +269,22 @@ func (q *Queries) LockExecutionPolicy(ctx context.Context, arg LockExecutionPoli
 		&i.Revision,
 		&i.RevocationEpoch,
 		&i.UpdatedAt,
+		&i.PushAllowed,
 	)
 	return i, err
 }
 
 const updateExecutionPolicy = `-- name: UpdateExecutionPolicy :one
-UPDATE golf_execution_policies SET owner_id=$1,mode=$2,manual_dispatch_enabled=$3,allow_all_workflows=$4,revision=revision+1,revocation_epoch=revocation_epoch+1,updated_at=clock_timestamp()
-WHERE forge_url=$5 AND scope=$6 AND scope_id=$7 AND revision=$8
-RETURNING forge_url, scope, scope_id, owner_id, mode, manual_dispatch_enabled, allow_all_workflows, revision, revocation_epoch, updated_at
+UPDATE golf_execution_policies SET owner_id=$1,mode=$2,manual_dispatch_enabled=$3,push_allowed=$4,allow_all_workflows=$5,revision=revision+1,revocation_epoch=revocation_epoch+1,updated_at=clock_timestamp()
+WHERE forge_url=$6 AND scope=$7 AND scope_id=$8 AND revision=$9
+RETURNING forge_url, scope, scope_id, owner_id, mode, manual_dispatch_enabled, allow_all_workflows, revision, revocation_epoch, updated_at, push_allowed
 `
 
 type UpdateExecutionPolicyParams struct {
 	OwnerID               int64
 	Mode                  string
 	ManualDispatchEnabled bool
+	PushAllowed           bool
 	AllowAllWorkflows     bool
 	ForgeURL              string
 	Scope                 string
@@ -292,6 +297,7 @@ func (q *Queries) UpdateExecutionPolicy(ctx context.Context, arg UpdateExecution
 		arg.OwnerID,
 		arg.Mode,
 		arg.ManualDispatchEnabled,
+		arg.PushAllowed,
 		arg.AllowAllWorkflows,
 		arg.ForgeURL,
 		arg.Scope,
@@ -310,6 +316,7 @@ func (q *Queries) UpdateExecutionPolicy(ctx context.Context, arg UpdateExecution
 		&i.Revision,
 		&i.RevocationEpoch,
 		&i.UpdatedAt,
+		&i.PushAllowed,
 	)
 	return i, err
 }

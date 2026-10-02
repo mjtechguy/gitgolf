@@ -101,3 +101,105 @@ func TestCompileWorkflowExecutionStepBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestCompileWorkflowPushExecutionMatchingAndManualSeparation(t *testing.T) {
+	actions := golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITHUB_ACTIONS
+	gitlab := golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITLAB_CI
+	for _, tc := range []struct {
+		name, on, ref string
+		match, manual bool
+	}{
+		{"plain", "on: push", "refs/heads/main", true, false},
+		{"null", "on:\n  push:", "refs/heads/main", true, false},
+		{"empty", "on:\n  push: {}", "refs/heads/topic/one", true, false},
+		{"exact", "on:\n  push:\n    branches: [main, topic/one]", "refs/heads/topic/one", true, false},
+		{"case sensitive", "on:\n  push:\n    branches: [main]", "refs/heads/Main", false, false},
+		{"not prefix", "on:\n  push:\n    branches: [main]", "refs/heads/main-next", false, false},
+		{"not suffix", "on:\n  push:\n    branches: [main]", "refs/heads/topic/main", false, false},
+		{"tag", "on: push", "refs/tags/main", false, false},
+		{"other ref", "on: push", "refs/pull/1/head", false, false},
+		{"short ref", "on: push", "main", false, false},
+		{"invalid branch", "on: push", "refs/heads/../main", false, false},
+		{"empty branch", "on: push", "refs/heads/", false, false},
+		{"manual only", "on: workflow_dispatch", "refs/heads/main", false, true},
+		{"both match", "on:\n  workflow_dispatch:\n  push:\n    branches: [main]", "refs/heads/main", true, true},
+		{"both filtered", "on:\n  push:\n    branches: [main]\n  workflow_dispatch: {}", "refs/heads/other", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data := []byte(strings.Replace(workflowActionsFixture, "on: workflow_dispatch", tc.on, 1))
+			plan, matched, err := compileWorkflowPushExecution(actions, data, tc.ref)
+			if err != nil || matched != tc.match || (plan != nil) != tc.match {
+				t.Fatalf("push selection: matched=%t plan=%t err=%v", matched, plan != nil, err)
+			}
+			if plan != nil && (len(plan.Steps) != 1 || plan.Steps[0].Run != "echo untrusted-script" || plan.Steps[0].Shell != "sh") {
+				t.Fatal("push changed the compiled shell plan")
+			}
+			manual, err := compileWorkflowExecution(actions, data)
+			if tc.manual && (manual == nil || err != nil) || !tc.manual && (manual != nil || connect.CodeOf(err) != connect.CodeFailedPrecondition) {
+				t.Fatal("push declaration changed manual eligibility")
+			}
+		})
+	}
+	data := []byte("check:\n  image: example/build@sha256:" + strings.Repeat("c", 64) + "\n  script: ['export VALUE=bound', 'test \"$VALUE\" = bound']\n")
+	for _, ref := range []string{"refs/heads/main", "refs/heads/topic/one", "refs/tags/main", "main", "refs/heads/bad..name"} {
+		plan, matched, err := compileWorkflowPushExecution(gitlab, data, ref)
+		want := ref == "refs/heads/main" || ref == "refs/heads/topic/one"
+		if err != nil || matched != want || (plan != nil) != want {
+			t.Fatal("GitLab bounded branch-push mapping changed")
+		}
+		if plan != nil && (len(plan.Steps) != 1 || plan.Steps[0].Run != "export VALUE=bound\ntest \"$VALUE\" = bound" || plan.Steps[0].Shell != "sh") {
+			t.Fatal("GitLab push must retain shared shell semantics")
+		}
+	}
+}
+
+func TestCompileWorkflowPushExecutionRejectsUnsupportedTriggers(t *testing.T) {
+	for _, on := range []string{
+		"on: [push]", "on: [push, workflow_dispatch]", "on: pull_request",
+		"on:\n  push: true", "on:\n  push: []", "on:\n  push: [main]",
+		"on:\n  push:\n    branches: main", "on:\n  push:\n    branches: []",
+		"on:\n  push:\n    branches: [main, main]", "on:\n  push:\n    branches: [42]",
+		"on:\n  push:\n    branches: ['']", "on:\n  push:\n    branches: ['topic/**']",
+		"on:\n  push:\n    branches: ['main?']", "on:\n  push:\n    branches: ['[ab]']",
+		"on:\n  push:\n    branches: ['main+']", "on:\n  push:\n    branches: ['!main']",
+		"on:\n  push:\n    branches: ['main\\+']", "on:\n  push:\n    branches: ['bad..name']",
+		"on:\n  push:\n    branches: ['-main']", "on:\n  push:\n    branches: ['.hidden']",
+		"on:\n  push:\n    branches: ['bad.lock']", "on:\n  push:\n    branches: ['bad//name']",
+		"on:\n  push:\n    branches: [main]\n    paths: ['src/**']",
+		"on:\n  push:\n    branches-ignore: [main]", "on:\n  push:\n    tags: [v1]",
+		"on:\n  push:\n    paths-ignore: [README.md]", "on:\n  push:\n    types: [created]",
+		"on:\n  push:\n    branches: ['${{ secrets.private }}']",
+		"on:\n  push: {}\n  workflow_dispatch:\n    inputs: {token: {}}",
+		"on:\n  push: {}\n  schedule: []", "on:\n  push: {}\n  pull_request: {}",
+	} {
+		data := []byte(strings.Replace(workflowActionsFixture, "on: workflow_dispatch", on, 1))
+		// A nonmatching ref cannot turn unsupported syntax into a valid skip.
+		for _, ref := range []string{"refs/heads/main", "refs/tags/main"} {
+			plan, matched, err := compileWorkflowPushExecution(golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITHUB_ACTIONS, data, ref)
+			if plan != nil || matched || connect.CodeOf(err) != connect.CodeFailedPrecondition || strings.Contains(err.Error(), "secrets.private") {
+				t.Fatalf("unsupported trigger produced a plan/skip or exposed source: %q", on)
+			}
+		}
+	}
+	gitlab := "check:\n  image: example/build@sha256:" + strings.Repeat("c", 64) + "\n  script: echo private-command\n"
+	for _, extra := range []string{"  rules: [{if: '$CI_PIPELINE_SOURCE == \"push\"'}]\n", "  only: [branches]\n", "  except: [tags]\n", "  when: manual\n", "workflow:\n  rules: [{when: always}]\n", "include: local.yml\n"} {
+		plan, matched, err := compileWorkflowPushExecution(golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITLAB_CI, []byte(gitlab+extra), "refs/heads/main")
+		if plan != nil || matched || connect.CodeOf(err) != connect.CodeFailedPrecondition || strings.Contains(err.Error(), "private-command") {
+			t.Fatal("GitLab policy syntax was silently treated as a push job")
+		}
+	}
+}
+
+func TestCompileWorkflowPushExecutionBranchBounds(t *testing.T) {
+	for _, count := range []int{50, 51} {
+		on := "on:\n  push:\n    branches:\n"
+		for index := range count {
+			on += "      - branch" + strings.Repeat("a", index+1) + "\n"
+		}
+		data := []byte(strings.Replace(workflowActionsFixture, "on: workflow_dispatch\n", on, 1))
+		plan, matched, err := compileWorkflowPushExecution(golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITHUB_ACTIONS, data, "refs/heads/brancha")
+		if count == 50 && (plan == nil || !matched || err != nil) || count == 51 && (plan != nil || matched || connect.CodeOf(err) != connect.CodeFailedPrecondition) {
+			t.Fatal("exact branch count limit changed")
+		}
+	}
+}

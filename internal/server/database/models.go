@@ -53,6 +53,46 @@ type GolfAuditEvent struct {
 	ExpiresAt       sql.NullTime
 }
 
+type GolfAutomationCredential struct {
+	GrantID             uuid.UUID
+	Version             int64
+	EncryptedCredential []byte
+	CredentialBinding   []byte
+	CredentialKeyID     string
+	CreatedAt           time.Time
+}
+
+type GolfAutomationGrant struct {
+	ID                  uuid.UUID
+	ForgeURL            string
+	RepositoryID        int64
+	OwnerID             int64
+	RepositoryOwner     string
+	RepositoryName      string
+	OrganizationOwned   bool
+	SponsorUserID       int64
+	SponsorNativeUserID int64
+	Revision            int64
+	RevocationEpoch     int64
+	Enabled             bool
+	ExpiresAt           time.Time
+	CreatedAt           time.Time
+	IdempotencyKey      uuid.UUID
+	InputHash           []byte
+	Branches            json.RawMessage
+	WorkflowPaths       json.RawMessage
+}
+
+type GolfAutomationGrantEvent struct {
+	ID             int64
+	GrantID        uuid.UUID
+	Revision       int64
+	Action         string
+	ActorUserID    sql.NullInt64
+	ActorSessionID sql.NullInt64
+	OccurredAt     time.Time
+}
+
 type GolfCryptoEvent struct {
 	ID                             int64
 	OccurredAt                     time.Time
@@ -64,6 +104,7 @@ type GolfCryptoEvent struct {
 	OauthAttemptsCount             int64
 	LocalAccountsCount             int64
 	InfrastructureConnectionsCount int64
+	AutomationCredentialsCount     int64
 }
 
 type GolfEncryptionKey struct {
@@ -89,6 +130,7 @@ type GolfExecutionPolicy struct {
 	Revision              int64
 	RevocationEpoch       int64
 	UpdatedAt             time.Time
+	PushAllowed           bool
 }
 
 type GolfExecutionPolicyEvent struct {
@@ -107,6 +149,7 @@ type GolfExecutionPolicyEvent struct {
 	SelectedRepositoryCount int32
 	WorkflowCount           int32
 	CreatedAt               time.Time
+	PushAllowed             bool
 }
 
 type GolfExecutionPolicyRepository struct {

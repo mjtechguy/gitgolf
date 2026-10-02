@@ -16,12 +16,12 @@ import (
 var errExecutionPolicyConflict = errors.New("execution policy changed")
 
 type executionPolicyState struct {
-	Scope, ScopeID, Mode                     string
-	OwnerID                                  int64
-	Revision, RevocationEpoch                int64
-	ManualDispatchEnabled, AllowAllWorkflows bool
-	Repositories                             map[int64]int64
-	Workflows                                []string
+	Scope, ScopeID, Mode                                  string
+	OwnerID                                               int64
+	Revision, RevocationEpoch                             int64
+	ManualDispatchEnabled, PushAllowed, AllowAllWorkflows bool
+	Repositories                                          map[int64]int64
+	Workflows                                             []string
 }
 
 // A workflow source is an exact path, not a glob or a policy program. Selection
@@ -53,7 +53,19 @@ func executionWorkflowPath(path string) bool {
 }
 
 func executionPolicyAllows(policy executionPolicyState, repositoryID, ownerID int64, event, path string) bool {
-	if event != "manual" || !policy.ManualDispatchEnabled || repositoryID <= 0 || ownerID <= 0 || !executionWorkflowPath(path) {
+	if repositoryID <= 0 || ownerID <= 0 || !executionWorkflowPath(path) {
+		return false
+	}
+	switch event {
+	case "manual":
+		if !policy.ManualDispatchEnabled {
+			return false
+		}
+	case "push":
+		if !policy.PushAllowed {
+			return false
+		}
+	default:
 		return false
 	}
 	if policy.Scope == "repository" && (policy.ScopeID != strconv.FormatInt(repositoryID, 10) || policy.OwnerID != ownerID) {
@@ -276,6 +288,7 @@ func (s *Server) loadExecutionPolicy(ctx context.Context, q *database.Queries, a
 	state.Revision = row.Revision
 	state.RevocationEpoch = row.RevocationEpoch
 	state.ManualDispatchEnabled = row.ManualDispatchEnabled
+	state.PushAllowed = row.PushAllowed
 	state.AllowAllWorkflows = row.AllowAllWorkflows
 	selected, err := q.ListExecutionPolicyRepositories(ctx, database.ListExecutionPolicyRepositoriesParams{ForgeURL: s.config.GiteaURL, Scope: a.Scope, ScopeID: a.ID})
 	if err != nil {
@@ -291,7 +304,7 @@ func (s *Server) loadExecutionPolicy(ctx context.Context, q *database.Queries, a
 	return state, nil
 }
 func wireExecutionPolicy(state executionPolicyState, a executionAuthority, scope golfv1.ExecutionScope) *golfv1.ExecutionPolicy {
-	result := &golfv1.ExecutionPolicy{Scope: scope, ScopeId: state.ScopeID, OwnerId: strconv.FormatInt(state.OwnerID, 10), Mode: executionWireMode(state.Mode), ManualDispatchEnabled: state.ManualDispatchEnabled, AllowAllWorkflows: state.AllowAllWorkflows, WorkflowPaths: state.Workflows, Revision: strconv.FormatInt(state.Revision, 10), RevocationEpoch: strconv.FormatInt(state.RevocationEpoch, 10), CanEdit: a.CanEdit, AuthorityRevision: a.Revision}
+	result := &golfv1.ExecutionPolicy{Scope: scope, ScopeId: state.ScopeID, OwnerId: strconv.FormatInt(state.OwnerID, 10), Mode: executionWireMode(state.Mode), ManualDispatchEnabled: state.ManualDispatchEnabled, PushAllowed: state.PushAllowed, AllowAllWorkflows: state.AllowAllWorkflows, WorkflowPaths: state.Workflows, Revision: strconv.FormatInt(state.Revision, 10), RevocationEpoch: strconv.FormatInt(state.RevocationEpoch, 10), CanEdit: a.CanEdit, AuthorityRevision: a.Revision}
 	for id := range state.Repositories {
 		result.SelectedRepositoryIds = append(result.SelectedRepositoryIds, strconv.FormatInt(id, 10))
 	}
@@ -442,7 +455,7 @@ func (s *Server) UpdateExecutionPolicy(ctx context.Context, req *connect.Request
 			if old.Revision != expected {
 				return errExecutionPolicyConflict
 			}
-			updated, err := q.UpdateExecutionPolicy(ctx, database.UpdateExecutionPolicyParams{ForgeURL: s.config.GiteaURL, Scope: a.Scope, ScopeID: a.ID, ExpectedRevision: expected, OwnerID: a.OwnerID, Mode: mode, ManualDispatchEnabled: m.ManualDispatchEnabled, AllowAllWorkflows: m.AllowAllWorkflows})
+			updated, err := q.UpdateExecutionPolicy(ctx, database.UpdateExecutionPolicyParams{ForgeURL: s.config.GiteaURL, Scope: a.Scope, ScopeID: a.ID, ExpectedRevision: expected, OwnerID: a.OwnerID, Mode: mode, ManualDispatchEnabled: m.ManualDispatchEnabled, PushAllowed: m.PushAllowed, AllowAllWorkflows: m.AllowAllWorkflows})
 			if err != nil {
 				return errStorageUnavailable
 			}
@@ -462,7 +475,7 @@ func (s *Server) UpdateExecutionPolicy(ctx context.Context, req *connect.Request
 					return errStorageUnavailable
 				}
 			}
-			if err = q.AppendExecutionPolicyEvent(ctx, database.AppendExecutionPolicyEventParams{ForgeURL: s.config.GiteaURL, Scope: a.Scope, ScopeID: a.ID, Revision: updated.Revision, RevocationEpoch: updated.RevocationEpoch, ActorUserID: actor.UserID, ActorSessionID: actor.SessionID, Mode: mode, ManualDispatchEnabled: m.ManualDispatchEnabled, AllowAllWorkflows: m.AllowAllWorkflows, SelectedRepositoryCount: int32(len(selected)), WorkflowCount: int32(len(m.WorkflowPaths))}); err != nil {
+			if err = q.AppendExecutionPolicyEvent(ctx, database.AppendExecutionPolicyEventParams{ForgeURL: s.config.GiteaURL, Scope: a.Scope, ScopeID: a.ID, Revision: updated.Revision, RevocationEpoch: updated.RevocationEpoch, ActorUserID: actor.UserID, ActorSessionID: actor.SessionID, Mode: mode, ManualDispatchEnabled: m.ManualDispatchEnabled, PushAllowed: m.PushAllowed, AllowAllWorkflows: m.AllowAllWorkflows, SelectedRepositoryCount: int32(len(selected)), WorkflowCount: int32(len(m.WorkflowPaths))}); err != nil {
 				return errStorageUnavailable
 			}
 			state, err := s.loadExecutionPolicy(ctx, q, a, false)
@@ -492,6 +505,12 @@ type ExecutionAdmission struct {
 }
 
 func (s *Server) readEffectiveExecutionPolicy(ctx context.Context, tx *sql.Tx, repositoryID, ownerID int64, organizationOwned bool, workflowPath string) (ExecutionAdmission, error) {
+	return s.readEffectiveExecutionPolicyForEvent(ctx, tx, repositoryID, ownerID, organizationOwned, "manual", workflowPath)
+}
+
+// Event kind is explicit at admission and every later authority fence. A manual
+// grant never implies push authority, and unsupported event kinds fail closed.
+func (s *Server) readEffectiveExecutionPolicyForEvent(ctx context.Context, tx *sql.Tx, repositoryID, ownerID int64, organizationOwned bool, event, workflowPath string) (ExecutionAdmission, error) {
 	result := ExecutionAdmission{SourceOwnerID: ownerID}
 	if tx == nil {
 		return result, errStorageUnavailable
@@ -510,6 +529,6 @@ func (s *Server) readEffectiveExecutionPolicy(ctx context.Context, tx *sql.Tx, r
 		states = append(states, state)
 		result.Epochs = append(result.Epochs, ExecutionPolicyEpoch{a.Scope, a.ID, state.Revision, state.RevocationEpoch})
 	}
-	result.Allowed = executionPoliciesAllow(states, repositoryID, ownerID, organizationOwned, "manual", workflowPath)
+	result.Allowed = executionPoliciesAllow(states, repositoryID, ownerID, organizationOwned, event, workflowPath)
 	return result, nil
 }

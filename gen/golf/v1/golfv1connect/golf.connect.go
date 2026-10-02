@@ -60,6 +60,8 @@ const (
 	ProfileServiceName = "golf.v1.ProfileService"
 	// AccountSecurityServiceName is the fully-qualified name of the AccountSecurityService service.
 	AccountSecurityServiceName = "golf.v1.AccountSecurityService"
+	// AutomationGrantServiceName is the fully-qualified name of the AutomationGrantService service.
+	AutomationGrantServiceName = "golf.v1.AutomationGrantService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -297,6 +299,15 @@ const (
 	// AccountSecurityServiceChangeOwnLoginEmailProcedure is the fully-qualified name of the
 	// AccountSecurityService's ChangeOwnLoginEmail RPC.
 	AccountSecurityServiceChangeOwnLoginEmailProcedure = "/golf.v1.AccountSecurityService/ChangeOwnLoginEmail"
+	// AutomationGrantServiceListAutomationGrantsProcedure is the fully-qualified name of the
+	// AutomationGrantService's ListAutomationGrants RPC.
+	AutomationGrantServiceListAutomationGrantsProcedure = "/golf.v1.AutomationGrantService/ListAutomationGrants"
+	// AutomationGrantServiceCreateAutomationGrantProcedure is the fully-qualified name of the
+	// AutomationGrantService's CreateAutomationGrant RPC.
+	AutomationGrantServiceCreateAutomationGrantProcedure = "/golf.v1.AutomationGrantService/CreateAutomationGrant"
+	// AutomationGrantServiceRevokeAutomationGrantProcedure is the fully-qualified name of the
+	// AutomationGrantService's RevokeAutomationGrant RPC.
+	AutomationGrantServiceRevokeAutomationGrantProcedure = "/golf.v1.AutomationGrantService/RevokeAutomationGrant"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -3079,4 +3090,126 @@ func (UnimplementedAccountSecurityServiceHandler) ChangeOwnPassword(context.Cont
 
 func (UnimplementedAccountSecurityServiceHandler) ChangeOwnLoginEmail(context.Context, *connect.Request[v1.ChangeOwnLoginEmailRequest]) (*connect.Response[v1.ChangeOwnLoginEmailResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AccountSecurityService.ChangeOwnLoginEmail is not implemented"))
+}
+
+// AutomationGrantServiceClient is a client for the golf.v1.AutomationGrantService service.
+type AutomationGrantServiceClient interface {
+	ListAutomationGrants(context.Context, *connect.Request[v1.ListAutomationGrantsRequest]) (*connect.Response[v1.ListAutomationGrantsResponse], error)
+	CreateAutomationGrant(context.Context, *connect.Request[v1.CreateAutomationGrantRequest]) (*connect.Response[v1.CreateAutomationGrantResponse], error)
+	RevokeAutomationGrant(context.Context, *connect.Request[v1.RevokeAutomationGrantRequest]) (*connect.Response[v1.RevokeAutomationGrantResponse], error)
+}
+
+// NewAutomationGrantServiceClient constructs a client for the golf.v1.AutomationGrantService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewAutomationGrantServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AutomationGrantServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	automationGrantServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("AutomationGrantService").Methods()
+	return &automationGrantServiceClient{
+		listAutomationGrants: connect.NewClient[v1.ListAutomationGrantsRequest, v1.ListAutomationGrantsResponse](
+			httpClient,
+			baseURL+AutomationGrantServiceListAutomationGrantsProcedure,
+			connect.WithSchema(automationGrantServiceMethods.ByName("ListAutomationGrants")),
+			connect.WithClientOptions(opts...),
+		),
+		createAutomationGrant: connect.NewClient[v1.CreateAutomationGrantRequest, v1.CreateAutomationGrantResponse](
+			httpClient,
+			baseURL+AutomationGrantServiceCreateAutomationGrantProcedure,
+			connect.WithSchema(automationGrantServiceMethods.ByName("CreateAutomationGrant")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeAutomationGrant: connect.NewClient[v1.RevokeAutomationGrantRequest, v1.RevokeAutomationGrantResponse](
+			httpClient,
+			baseURL+AutomationGrantServiceRevokeAutomationGrantProcedure,
+			connect.WithSchema(automationGrantServiceMethods.ByName("RevokeAutomationGrant")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// automationGrantServiceClient implements AutomationGrantServiceClient.
+type automationGrantServiceClient struct {
+	listAutomationGrants  *connect.Client[v1.ListAutomationGrantsRequest, v1.ListAutomationGrantsResponse]
+	createAutomationGrant *connect.Client[v1.CreateAutomationGrantRequest, v1.CreateAutomationGrantResponse]
+	revokeAutomationGrant *connect.Client[v1.RevokeAutomationGrantRequest, v1.RevokeAutomationGrantResponse]
+}
+
+// ListAutomationGrants calls golf.v1.AutomationGrantService.ListAutomationGrants.
+func (c *automationGrantServiceClient) ListAutomationGrants(ctx context.Context, req *connect.Request[v1.ListAutomationGrantsRequest]) (*connect.Response[v1.ListAutomationGrantsResponse], error) {
+	return c.listAutomationGrants.CallUnary(ctx, req)
+}
+
+// CreateAutomationGrant calls golf.v1.AutomationGrantService.CreateAutomationGrant.
+func (c *automationGrantServiceClient) CreateAutomationGrant(ctx context.Context, req *connect.Request[v1.CreateAutomationGrantRequest]) (*connect.Response[v1.CreateAutomationGrantResponse], error) {
+	return c.createAutomationGrant.CallUnary(ctx, req)
+}
+
+// RevokeAutomationGrant calls golf.v1.AutomationGrantService.RevokeAutomationGrant.
+func (c *automationGrantServiceClient) RevokeAutomationGrant(ctx context.Context, req *connect.Request[v1.RevokeAutomationGrantRequest]) (*connect.Response[v1.RevokeAutomationGrantResponse], error) {
+	return c.revokeAutomationGrant.CallUnary(ctx, req)
+}
+
+// AutomationGrantServiceHandler is an implementation of the golf.v1.AutomationGrantService service.
+type AutomationGrantServiceHandler interface {
+	ListAutomationGrants(context.Context, *connect.Request[v1.ListAutomationGrantsRequest]) (*connect.Response[v1.ListAutomationGrantsResponse], error)
+	CreateAutomationGrant(context.Context, *connect.Request[v1.CreateAutomationGrantRequest]) (*connect.Response[v1.CreateAutomationGrantResponse], error)
+	RevokeAutomationGrant(context.Context, *connect.Request[v1.RevokeAutomationGrantRequest]) (*connect.Response[v1.RevokeAutomationGrantResponse], error)
+}
+
+// NewAutomationGrantServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewAutomationGrantServiceHandler(svc AutomationGrantServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	automationGrantServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("AutomationGrantService").Methods()
+	automationGrantServiceListAutomationGrantsHandler := connect.NewUnaryHandler(
+		AutomationGrantServiceListAutomationGrantsProcedure,
+		svc.ListAutomationGrants,
+		connect.WithSchema(automationGrantServiceMethods.ByName("ListAutomationGrants")),
+		connect.WithHandlerOptions(opts...),
+	)
+	automationGrantServiceCreateAutomationGrantHandler := connect.NewUnaryHandler(
+		AutomationGrantServiceCreateAutomationGrantProcedure,
+		svc.CreateAutomationGrant,
+		connect.WithSchema(automationGrantServiceMethods.ByName("CreateAutomationGrant")),
+		connect.WithHandlerOptions(opts...),
+	)
+	automationGrantServiceRevokeAutomationGrantHandler := connect.NewUnaryHandler(
+		AutomationGrantServiceRevokeAutomationGrantProcedure,
+		svc.RevokeAutomationGrant,
+		connect.WithSchema(automationGrantServiceMethods.ByName("RevokeAutomationGrant")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.AutomationGrantService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case AutomationGrantServiceListAutomationGrantsProcedure:
+			automationGrantServiceListAutomationGrantsHandler.ServeHTTP(w, r)
+		case AutomationGrantServiceCreateAutomationGrantProcedure:
+			automationGrantServiceCreateAutomationGrantHandler.ServeHTTP(w, r)
+		case AutomationGrantServiceRevokeAutomationGrantProcedure:
+			automationGrantServiceRevokeAutomationGrantHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedAutomationGrantServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedAutomationGrantServiceHandler struct{}
+
+func (UnimplementedAutomationGrantServiceHandler) ListAutomationGrants(context.Context, *connect.Request[v1.ListAutomationGrantsRequest]) (*connect.Response[v1.ListAutomationGrantsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AutomationGrantService.ListAutomationGrants is not implemented"))
+}
+
+func (UnimplementedAutomationGrantServiceHandler) CreateAutomationGrant(context.Context, *connect.Request[v1.CreateAutomationGrantRequest]) (*connect.Response[v1.CreateAutomationGrantResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AutomationGrantService.CreateAutomationGrant is not implemented"))
+}
+
+func (UnimplementedAutomationGrantServiceHandler) RevokeAutomationGrant(context.Context, *connect.Request[v1.RevokeAutomationGrantRequest]) (*connect.Response[v1.RevokeAutomationGrantResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AutomationGrantService.RevokeAutomationGrant is not implemented"))
 }

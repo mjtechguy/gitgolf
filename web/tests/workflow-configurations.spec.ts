@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, InspectWorkflowsRequestSchema, InspectWorkflowsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ExecutionScope, ExecutionMode, GetExecutionPolicyResponseSchema, ListWorkflowRunsResponseSchema, ListWorkflowRunsRequestSchema, WorkflowRunState, WorkflowConfigurationSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
+import { GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetRepositorySettingsResponseSchema, GetSessionResponseSchema, InspectWorkflowsRequestSchema, InspectWorkflowsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ExecutionScope, ExecutionMode, GetExecutionPolicyResponseSchema, ListWorkflowRunsResponseSchema, ListWorkflowRunsRequestSchema, WorkflowRunState, WorkflowConfigurationSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 const path = '/repositories/alex/private/settings/workflows';
@@ -14,6 +14,8 @@ async function backend(page: Page) {
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Your session ended.');
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '9007199254740993', login: 'alex' } });
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'GetRepositoryAccess') return respond(route, GetRepositoryAccessResponseSchema, { access: { repositoryId: '9007199254740997', ownerId: '9007199254740993', currentPermission: 'read' } });
+    if (method === 'GetRepositorySettings') return respond(route, GetRepositorySettingsResponseSchema, { settings: { repositoryId: '9007199254740997', ownerId: '9007199254740993', canEdit: false } });
     if (method === 'GetExecutionPolicy') return respond(route, GetExecutionPolicyResponseSchema, { policy: { scope: ExecutionScope.REPOSITORY, scopeId: '9007199254740997', ownerId: '9007199254740993', mode: ExecutionMode.DISABLED, revision: '0', revocationEpoch: '0', authorityRevision: 'd'.repeat(64) } });
     if (method === 'ListWorkflowRuns') {
       const input = request(route, ListWorkflowRunsRequestSchema); state.requestedRunPages.push(input.page?.page || 1);
@@ -29,7 +31,7 @@ async function backend(page: Page) {
       if (state.mode === 'denied') return reject(route, 'permission_denied', 'Workflow inspection requires repository read access.');
       if (state.mode === 'expired') { state.signedIn = false; return reject(route, 'unauthenticated', 'Your session ended.'); }
       if (state.mode === 'overfull') return reject(route, 'resource_exhausted', 'Workflow configuration inventory exceeds its bound.');
-      return respond(route, InspectWorkflowsResponseSchema, { repositoryId: '9007199254740997', commitId: commit, catalogVersion: 'golf.workflow.inspect.v1', executionAvailable: false, configurations: state.mode === 'empty' ? [] : [manual, { path: '.gitlab-ci.yml', blobId: 'c'.repeat(40), byteSize: 321n, format: WorkflowFormat.GITLAB_CI, state: WorkflowInspectionState.UNSUPPORTED, jobs: [{ id: 'build', stage: 'test', stepCount: 1 }], diagnostics: [{ code: 'unsupported_field', message: 'Remote includes are not fetched.', line: 3, column: 2 }] }] });
+      return respond(route, InspectWorkflowsResponseSchema, { repositoryId: '9007199254740997', commitId: commit, catalogVersion: 'golf.workflow.inspect.v2', executionAvailable: false, configurations: state.mode === 'empty' ? [] : [state.mode === 'push' ? { ...manual, events: ['push'] } : manual, { path: '.gitlab-ci.yml', blobId: 'c'.repeat(40), byteSize: 321n, format: WorkflowFormat.GITLAB_CI, state: WorkflowInspectionState.UNSUPPORTED, jobs: [{ id: 'build', stage: 'test', stepCount: 1 }], diagnostics: [{ code: 'unsupported_field', message: 'Remote includes are not fetched.', line: 3, column: 2 }] }] });
     }
     return reject(route, 'not_found', 'Unsupported workflow fixture.');
   });
@@ -111,4 +113,13 @@ test('run inventory loads the next server page and clears private rows on denial
   state.denyRuns = true; await page.getByRole('button', { name: 'Refresh runs', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Workflow runs require repository read access.');
   await expect(table).toHaveCount(0);
+});
+
+// A checked push file cannot be presented as a runnable manual workflow.
+test('push-only inspection hides the manual Run action', async ({ page }) => {
+  const state = await backend(page); await open(page);
+  state.mode = 'push';
+  await page.getByRole('button', { name: 'Refresh workflow inspection', exact: true }).click();
+  await expect(page.getByText('Push trigger only', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Run workflow', exact: true })).toHaveCount(0);
 });

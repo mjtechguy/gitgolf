@@ -43,6 +43,10 @@ func rpcError(err error) error {
 	var input inputError
 	var upstream forgeError
 	switch {
+	case errors.Is(err, errAutomationGrantConflict):
+		code, message = connect.CodeFailedPrecondition, "Automation grant revision or intent changed. Refresh and review before continuing."
+	case errors.Is(err, errAutomationGrantLimit):
+		code, message = connect.CodeResourceExhausted, "Revoke an active grant before creating another."
 	case errors.Is(err, errInfrastructureConflict):
 		code, message = connect.CodeFailedPrecondition, "Infrastructure connection changed or its source binding is unavailable. Refresh and review before continuing."
 	case errors.Is(err, errOrganizationCreationPolicyConflict):

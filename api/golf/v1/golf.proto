@@ -934,6 +934,7 @@ message ExecutionPolicy {
   string revocation_epoch = 10;
   bool can_edit = 11;
   string authority_revision = 12;
+  bool push_allowed = 13;
 }
 message GetExecutionPolicyRequest {
   ExecutionScope scope = 1;
@@ -953,6 +954,7 @@ message UpdateExecutionPolicyRequest {
   bool manual_dispatch_enabled = 9;
   bool allow_all_workflows = 10;
   repeated string workflow_paths = 11;
+  bool push_allowed = 12;
 }
 message UpdateExecutionPolicyResponse { ExecutionPolicy policy = 1; }
 
@@ -1130,6 +1132,52 @@ service AccountSecurityService {
  rpc ChangeOwnPassword(ChangeOwnPasswordRequest) returns (ChangeOwnPasswordResponse);
  rpc ChangeOwnLoginEmail(ChangeOwnLoginEmailRequest) returns (ChangeOwnLoginEmailResponse);
 }
+
+// Explicit personal native-token delegation; independent of browser sessions.
+service AutomationGrantService {
+ rpc ListAutomationGrants(ListAutomationGrantsRequest) returns (ListAutomationGrantsResponse);
+ rpc CreateAutomationGrant(CreateAutomationGrantRequest) returns (CreateAutomationGrantResponse);
+ rpc RevokeAutomationGrant(RevokeAutomationGrantRequest) returns (RevokeAutomationGrantResponse);
+}
+message AutomationGrant {
+ string id = 1;
+ string repository_id = 2;
+ string owner_id = 3;
+ string sponsor_native_user_id = 4;
+ string revision = 5;
+ string revocation_epoch = 6;
+ bool enabled = 7;
+ string expires_at = 8;
+ string created_at = 9;
+ repeated string branches = 10;
+ repeated string workflow_paths = 11;
+ string execution_state = 12;
+}
+message ListAutomationGrantsRequest {
+ RepositoryKey repository = 1;
+ string after_id = 2;
+}
+message ListAutomationGrantsResponse {
+ repeated AutomationGrant grants = 1;
+ string next_after_id = 2;
+}
+message CreateAutomationGrantRequest {
+ RepositoryKey repository = 1;
+ string expected_repository_id = 2;
+ string expected_owner_id = 3;
+ string native_token = 4;
+ repeated string branches = 5;
+ repeated string workflow_paths = 6;
+ string expires_at = 7;
+ string idempotency_key = 8;
+}
+message CreateAutomationGrantResponse { AutomationGrant grant = 1; }
+message RevokeAutomationGrantRequest {
+ RepositoryKey repository = 1;
+ string grant_id = 2;
+ string expected_revision = 3;
+}
+message RevokeAutomationGrantResponse { AutomationGrant grant = 1; }
 message AccountSecurity {
  string user_id = 1;
  string account_id = 2;

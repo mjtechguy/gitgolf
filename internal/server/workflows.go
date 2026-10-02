@@ -23,7 +23,7 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-const workflowCatalog = "golf.workflow.inspect.v1"
+const workflowCatalog = "golf.workflow.inspect.v2"
 const maxWorkflowBytes = 64 << 10
 const maxWorkflowTotalBytes = 512 << 10
 const maxWorkflowFiles = 20
@@ -177,8 +177,8 @@ func (v workflowInspector) actions(root *yaml.Node) {
 	switch {
 	case workflowString(on):
 		v.config.Events = []string{v.label(on)}
-		if on.Value != "workflow_dispatch" {
-			v.unsupported("event", "Only input-free workflow_dispatch is checked by this inspection subset; no trigger is active.", on)
+		if on.Value != "workflow_dispatch" && on.Value != "push" {
+			v.unsupported("event", "Only input-free workflow_dispatch and bounded branch push declarations are checked; inspection does not activate a trigger.", on)
 		}
 	case on != nil && on.Kind == yaml.MappingNode && len(on.Content) > 0:
 		if len(on.Content) > 100 {
@@ -187,8 +187,15 @@ func (v workflowInspector) actions(root *yaml.Node) {
 		for i := 0; i < len(on.Content) && i < 100; i += 2 {
 			key, value := on.Content[i], on.Content[i+1]
 			v.config.Events = append(v.config.Events, v.label(key))
-			if key.Value != "workflow_dispatch" || !(value.Tag == "!!null" || value.Kind == yaml.MappingNode && len(value.Content) == 0) {
-				v.unsupported("event", "Only input-free workflow_dispatch is checked; event filters, inputs and other triggers are not evaluated.", key)
+			switch key.Value {
+			case "push":
+				v.push(value)
+			case "workflow_dispatch":
+				if !(value.Tag == "!!null" || value.Kind == yaml.MappingNode && len(value.Content) == 0) {
+					v.unsupported("event", "Only input-free workflow_dispatch is checked; inputs are not evaluated.", value)
+				}
+			default:
+				v.unsupported("event", "Only input-free workflow_dispatch and bounded branch push declarations are checked; other events are not evaluated.", key)
 			}
 		}
 	case on != nil && on.Kind == yaml.SequenceNode:
@@ -201,7 +208,7 @@ func (v workflowInspector) actions(root *yaml.Node) {
 			}
 			v.config.Events = append(v.config.Events, v.label(value))
 		}
-		v.unsupported("event", "Event lists are outside the input-free workflow_dispatch inspection shape; no trigger is active.", on)
+		v.unsupported("event", "Event lists are outside this subset; use a supported scalar or explicit event mapping.", on)
 	default:
 		v.invalid("event_shape", "An Actions workflow requires a valid on declaration.", on)
 	}
@@ -257,6 +264,30 @@ func (v workflowInspector) actions(root *yaml.Node) {
 				v.unsupported("shell", "Only literal sh or bash shell names are checked; execution remains unavailable.", shell)
 			}
 		}
+	}
+}
+
+func (v workflowInspector) push(node *yaml.Node) {
+	if node.Tag == "!!null" || node.Kind == yaml.MappingNode && len(node.Content) == 0 {
+		return
+	}
+	if node.Kind != yaml.MappingNode {
+		v.unsupported("push_shape", "Push requires an empty declaration or a mapping containing only an exact branches list.", node)
+		return
+	}
+	v.fields(node, "branches")
+	branches := workflowField(node, "branches")
+	if branches == nil || branches.Kind != yaml.SequenceNode || len(branches.Content) == 0 || len(branches.Content) > 50 {
+		v.unsupported("push_branches", "Push branches must be a nonempty list of at most 50 exact branch names.", branches)
+		return
+	}
+	seen := map[string]bool{}
+	for _, branch := range branches.Content {
+		if !workflowString(branch) || !validRef("refs/heads/"+branch.Value) || strings.HasPrefix(branch.Value, "-") ||
+			strings.ContainsAny(branch.Value, "*?[]+!\\") || seen[branch.Value] {
+			v.unsupported("push_branch_literal", "Push branches require distinct literal Git branch names; glob, negation and escape patterns are not supported.", branch)
+		}
+		seen[branch.Value] = true
 	}
 }
 

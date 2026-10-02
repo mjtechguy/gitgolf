@@ -13,11 +13,13 @@ test('status separates portable agents and per-function Cloudflare state, with s
       if (denied) return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ code: 'permission_denied', message: 'Capability access denied.' }) });
       return reply(toJsonString(ListCapabilitiesResponseSchema, create(ListCapabilitiesResponseSchema, { capabilities: [
         { id: 'repositories', label: 'Repositories', state: CapabilityState.READY, reason: 'Repository access is available.' },
+        { id: 'pipelines', label: 'Manual shell pipelines', state: CapabilityState.DEGRADED, reason: 'Worker is configured but unavailable.' },
         { id: 'webhooks.outbound', label: 'Slack notifications', state: CapabilityState.DISABLED, reason: 'Outbound delivery is planned.' },
         { id: 'agents.claude-code', label: 'Claude Code', state: CapabilityState.DISABLED, reason: 'Local adapter is not implemented.' },
         { id: 'agents.codex', label: 'Codex', state: CapabilityState.DISABLED, reason: 'Local adapter is not implemented.' },
         { id: 'cloudflare.r2.sources', label: 'R2 sources', state: CapabilityState.UNCONFIGURED, reason: 'Source bucket has not been configured or tested.' },
         { id: 'cloudflare.r2.artifacts', label: 'R2 artifacts', state: CapabilityState.DISABLED, reason: 'Artifact consumer is not implemented.' },
+        ...Array.from({ length: 25 }, (_, i) => ({ id: `cloudflare.extra.${i}`, label: `Integration ${i}`, state: CapabilityState.DISABLED, reason: 'Not configured.' })),
       ] })));
     }
     return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ code: 'not_found', message: 'Unavailable.' }) });
@@ -37,7 +39,12 @@ test('status separates portable agents and per-function Cloudflare state, with s
   await page.getByRole('searchbox', { name: 'Search loaded Cloudflare integrations', exact: true }).fill('artifacts');
   await expect(cloudflare.getByText('R2 artifacts', { exact: true })).toBeVisible();
   await expect(cloudflare.getByText('R2 sources', { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel('Rows per page for Coding agents', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Rows per page for Coding agents', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('navigation', { name: 'Golf platform pages' })).toHaveCount(0);
+  await expect(platform.locator('.visibility.available')).toHaveText('ready');
+  await expect(platform.locator('.visibility.configured')).toHaveText('configured · degraded');
+  await page.getByRole('searchbox', { name: 'Search loaded Cloudflare integrations', exact: true }).fill('');
+  await expect(cloudflare.locator('tbody tr[data-row-id]')).toHaveCount(27);
   await page.setViewportSize({ width: 320, height: 800 });
   await expect(page.getByRole('button', { name: 'Refresh status', exact: true })).toBeVisible();
   denied = true;

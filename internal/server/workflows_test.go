@@ -37,6 +37,11 @@ func TestWorkflowInspectionGrammar(t *testing.T) {
 	}{
 		{"actions", workflowActionsFixture, false, valid, ""},
 		{"dispatch mapping", strings.Replace(workflowActionsFixture, "on: workflow_dispatch", "on:\n  workflow_dispatch: {}", 1), false, valid, ""},
+		{"push scalar", strings.Replace(workflowActionsFixture, "on: workflow_dispatch", "on: push", 1), false, valid, ""},
+		{"push mapping", strings.Replace(workflowActionsFixture, "on: workflow_dispatch", "on:\n  push:\n    branches: [main, topic/one]\n  workflow_dispatch:", 1), false, valid, ""},
+		{"push branches shape", strings.Replace(workflowActionsFixture, "on: workflow_dispatch", "on:\n  push:\n    branches: main", 1), false, unsupported, "push_branches"},
+		{"push pattern", strings.Replace(workflowActionsFixture, "on: workflow_dispatch", "on:\n  push:\n    branches: ['topic/**']", 1), false, unsupported, "push_branch_literal"},
+		{"push paths", strings.Replace(workflowActionsFixture, "on: workflow_dispatch", "on:\n  push:\n    branches: [main]\n    paths: [src]", 1), false, unsupported, "unsupported_key"},
 		{"gitlab", gitlab, true, valid, ""},
 		{"dependency", strings.Replace(workflowActionsFixture, "run: echo untrusted-script", "uses: remote/action@main", 1), false, unsupported, "action_dependency"},
 		{"expression", strings.Replace(workflowActionsFixture, "runs-on: linux", "runs-on: ${{ secrets.private }}", 1), false, unsupported, "expression"},
@@ -57,6 +62,9 @@ func TestWorkflowInspectionGrammar(t *testing.T) {
 		{"include", gitlab + "include: https://private.invalid/secret\n", true, unsupported, "gitlab_global"},
 		{"unpinned", strings.Replace(gitlab, "alpine@sha256:"+strings.Repeat("a", 64), "alpine:latest", 1), true, unsupported, "image_pin"},
 		{"rules", gitlab + "  rules: [{when: manual}]\n", true, unsupported, "unsupported_key"},
+		{"GitLab only", gitlab + "  only: [branches]\n", true, unsupported, "unsupported_key"},
+		{"GitLab except", gitlab + "  except: [tags]\n", true, unsupported, "unsupported_key"},
+		{"GitLab workflow", gitlab + "workflow:\n  rules: [{when: always}]\n", true, unsupported, "gitlab_global"},
 		{"script", strings.Replace(gitlab, "  script: [echo checked]\n", "", 1), true, invalid, "script_shape"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -83,6 +91,10 @@ func TestWorkflowInspectionGrammar(t *testing.T) {
 			}
 			if tc.name == "actions" && (len(config.Events) != 1 || config.Events[0] != "workflow_dispatch") {
 				t.Fatal("YAML on became boolean")
+			}
+			if tc.name == "push scalar" && (len(config.Events) != 1 || config.Events[0] != "push") ||
+				tc.name == "push mapping" && (len(config.Events) != 2 || config.Events[0] != "push" || config.Events[1] != "workflow_dispatch") {
+				t.Fatal("inspection lost the explicit event declarations")
 			}
 		})
 	}

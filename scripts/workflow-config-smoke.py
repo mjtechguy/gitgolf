@@ -100,7 +100,7 @@ def main():
             stage('actual pinned source discovery, blob identity and three inspection outcomes')
             result = inspect()
             assert result['commitId'] == original and result['repositoryId'] == created['repository']['id']
-            assert result['catalogVersion'] == 'golf.workflow.inspect.v1' and not result.get('executionAvailable', False)
+            assert result['catalogVersion'] == 'golf.workflow.inspect.v2'
             rows = {row['path']: row for row in result['configurations']}
             expected = {
                 '.github/workflows/manual.yml': 'VALIDATED_SUBSET', '.gitlab-ci.yml': 'VALIDATED_SUBSET',

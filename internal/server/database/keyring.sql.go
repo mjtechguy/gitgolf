@@ -13,8 +13,8 @@ import (
 )
 
 const appendCryptoEvent = `-- name: AppendCryptoEvent :exec
-INSERT INTO golf_crypto_events (operation_id, action, key_id, sessions_count, oauth_attempts_count, local_accounts_count,infrastructure_connections_count)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO golf_crypto_events (operation_id, action, key_id, sessions_count, oauth_attempts_count, local_accounts_count,infrastructure_connections_count,automation_credentials_count)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 `
 
 type AppendCryptoEventParams struct {
@@ -25,6 +25,7 @@ type AppendCryptoEventParams struct {
 	OauthAttemptsCount             int64
 	LocalAccountsCount             int64
 	InfrastructureConnectionsCount int64
+	AutomationCredentialsCount     int64
 }
 
 func (q *Queries) AppendCryptoEvent(ctx context.Context, arg AppendCryptoEventParams) error {
@@ -36,8 +37,45 @@ func (q *Queries) AppendCryptoEvent(ctx context.Context, arg AppendCryptoEventPa
 		arg.OauthAttemptsCount,
 		arg.LocalAccountsCount,
 		arg.InfrastructureConnectionsCount,
+		arg.AutomationCredentialsCount,
 	)
 	return err
+}
+
+const bootstrapLegacyAutomationCredentials = `-- name: BootstrapLegacyAutomationCredentials :many
+SELECT grant_id::text,encrypted_credential,credential_binding
+FROM golf_automation_credentials
+WHERE credential_key_id='legacy' AND grant_id::text>$1::text
+ORDER BY grant_id LIMIT 500
+`
+
+type BootstrapLegacyAutomationCredentialsRow struct {
+	GrantID             string
+	EncryptedCredential []byte
+	CredentialBinding   []byte
+}
+
+func (q *Queries) BootstrapLegacyAutomationCredentials(ctx context.Context, afterGrant string) ([]BootstrapLegacyAutomationCredentialsRow, error) {
+	rows, err := q.db.QueryContext(ctx, bootstrapLegacyAutomationCredentials, afterGrant)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BootstrapLegacyAutomationCredentialsRow
+	for rows.Next() {
+		var i BootstrapLegacyAutomationCredentialsRow
+		if err := rows.Scan(&i.GrantID, &i.EncryptedCredential, &i.CredentialBinding); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const bootstrapLegacyInfrastructureConnections = `-- name: BootstrapLegacyInfrastructureConnections :many
@@ -159,15 +197,17 @@ func (q *Queries) BootstrapLegacySessions(ctx context.Context, afterID int64) ([
 }
 
 const countCredentialKeys = `-- name: CountCredentialKeys :many
-SELECT credential_key_id, sum(session_count)::bigint AS sessions, sum(attempt_count)::bigint AS oauth_attempts, sum(local_count)::bigint AS local_accounts, sum(infrastructure_count)::bigint AS infrastructure_connections
+SELECT credential_key_id, sum(session_count)::bigint AS sessions, sum(attempt_count)::bigint AS oauth_attempts, sum(local_count)::bigint AS local_accounts, sum(infrastructure_count)::bigint AS infrastructure_connections, sum(automation_count)::bigint AS automation_credentials
 FROM (
-    SELECT credential_key_id, count(*) AS session_count, 0::bigint AS attempt_count, 0::bigint AS local_count, 0::bigint AS infrastructure_count FROM golf_sessions GROUP BY credential_key_id
+    SELECT credential_key_id, count(*) AS session_count, 0::bigint AS attempt_count, 0::bigint AS local_count, 0::bigint AS infrastructure_count, 0::bigint AS automation_count FROM golf_sessions GROUP BY credential_key_id
     UNION ALL
-    SELECT credential_key_id, 0::bigint, count(*), 0::bigint, 0::bigint FROM golf_oauth_attempts GROUP BY credential_key_id
+    SELECT credential_key_id, 0::bigint, count(*), 0::bigint, 0::bigint, 0::bigint FROM golf_oauth_attempts GROUP BY credential_key_id
     UNION ALL
-    SELECT credential_key_id, 0::bigint, 0::bigint, count(*), 0::bigint FROM golf_local_accounts GROUP BY credential_key_id
+    SELECT credential_key_id, 0::bigint, 0::bigint, count(*), 0::bigint, 0::bigint FROM golf_local_accounts GROUP BY credential_key_id
     UNION ALL
-    SELECT credential_key_id, 0::bigint, 0::bigint, 0::bigint, count(*) FROM golf_infrastructure_connection_versions GROUP BY credential_key_id
+    SELECT credential_key_id, 0::bigint, 0::bigint, 0::bigint, count(*), 0::bigint FROM golf_infrastructure_connection_versions GROUP BY credential_key_id
+    UNION ALL
+    SELECT credential_key_id, 0::bigint, 0::bigint, 0::bigint, 0::bigint, count(*) FROM golf_automation_credentials GROUP BY credential_key_id
 ) counts
 GROUP BY credential_key_id ORDER BY credential_key_id
 `
@@ -178,6 +218,7 @@ type CountCredentialKeysRow struct {
 	OauthAttempts             int64
 	LocalAccounts             int64
 	InfrastructureConnections int64
+	AutomationCredentials     int64
 }
 
 func (q *Queries) CountCredentialKeys(ctx context.Context) ([]CountCredentialKeysRow, error) {
@@ -195,6 +236,7 @@ func (q *Queries) CountCredentialKeys(ctx context.Context) ([]CountCredentialKey
 			&i.OauthAttempts,
 			&i.LocalAccounts,
 			&i.InfrastructureConnections,
+			&i.AutomationCredentials,
 		); err != nil {
 			return nil, err
 		}
@@ -346,6 +388,56 @@ func (q *Queries) LockOAuthAttempt(ctx context.Context, arg LockOAuthAttemptPara
 	var i LockOAuthAttemptRow
 	err := row.Scan(&i.EncryptedVerifier, &i.CredentialKeyID, &i.ExpiresAt)
 	return i, err
+}
+
+const lockRotationAutomationCredentials = `-- name: LockRotationAutomationCredentials :many
+SELECT grant_id::text,version,encrypted_credential,credential_binding,credential_key_id
+FROM golf_automation_credentials
+WHERE credential_key_id <> $1
+ORDER BY grant_id LIMIT $2
+FOR UPDATE SKIP LOCKED
+`
+
+type LockRotationAutomationCredentialsParams struct {
+	ActiveKeyID string
+	RowLimit    int32
+}
+
+type LockRotationAutomationCredentialsRow struct {
+	GrantID             string
+	Version             int64
+	EncryptedCredential []byte
+	CredentialBinding   []byte
+	CredentialKeyID     string
+}
+
+func (q *Queries) LockRotationAutomationCredentials(ctx context.Context, arg LockRotationAutomationCredentialsParams) ([]LockRotationAutomationCredentialsRow, error) {
+	rows, err := q.db.QueryContext(ctx, lockRotationAutomationCredentials, arg.ActiveKeyID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LockRotationAutomationCredentialsRow
+	for rows.Next() {
+		var i LockRotationAutomationCredentialsRow
+		if err := rows.Scan(
+			&i.GrantID,
+			&i.Version,
+			&i.EncryptedCredential,
+			&i.CredentialBinding,
+			&i.CredentialKeyID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockRotationInfrastructureConnections = `-- name: LockRotationInfrastructureConnections :many
@@ -515,6 +607,28 @@ func (q *Queries) ShareEncryptionPolicy(ctx context.Context) (string, error) {
 	var active_key_id string
 	err := row.Scan(&active_key_id)
 	return active_key_id, err
+}
+
+const updateKeyedAutomationCredential = `-- name: UpdateKeyedAutomationCredential :exec
+UPDATE golf_automation_credentials SET encrypted_credential=$1,credential_key_id=$2
+WHERE grant_id=$3::uuid AND version=$4
+`
+
+type UpdateKeyedAutomationCredentialParams struct {
+	EncryptedCredential []byte
+	CredentialKeyID     string
+	GrantID             uuid.UUID
+	Version             int64
+}
+
+func (q *Queries) UpdateKeyedAutomationCredential(ctx context.Context, arg UpdateKeyedAutomationCredentialParams) error {
+	_, err := q.db.ExecContext(ctx, updateKeyedAutomationCredential,
+		arg.EncryptedCredential,
+		arg.CredentialKeyID,
+		arg.GrantID,
+		arg.Version,
+	)
+	return err
 }
 
 const updateKeyedInfrastructureConnection = `-- name: UpdateKeyedInfrastructureConnection :exec

@@ -129,16 +129,17 @@ func TestExecutionPolicyPostgres(t *testing.T) {
 		return got.Msg.Policy
 	}
 	update := func(policy *golfv1.ExecutionPolicy) (*connect.Response[golfv1.UpdateExecutionPolicyResponse], error) {
-		req := connect.NewRequest(&golfv1.UpdateExecutionPolicyRequest{Scope: policy.Scope, Repository: key, ScopeId: policy.ScopeId, ExpectedRevision: policy.Revision, ExpectedAuthorityRevision: policy.AuthorityRevision, Mode: golfv1.ExecutionMode_EXECUTION_MODE_ALL, ManualDispatchEnabled: true, WorkflowPaths: []string{".github/workflows/check.yml"}})
+		req := connect.NewRequest(&golfv1.UpdateExecutionPolicyRequest{Scope: policy.Scope, Repository: key, ScopeId: policy.ScopeId, ExpectedRevision: policy.Revision, ExpectedAuthorityRevision: policy.AuthorityRevision, Mode: golfv1.ExecutionMode_EXECUTION_MODE_ALL, ManualDispatchEnabled: true, PushAllowed: policy.PushAllowed, WorkflowPaths: []string{".github/workflows/check.yml"}})
 		req.Header().Set("Cookie", cookie)
 		return s.UpdateExecutionPolicy(ctx, req)
 	}
 	original := get()
-	if original.Mode != golfv1.ExecutionMode_EXECUTION_MODE_DISABLED || original.Revision != "0" || !original.CanEdit {
+	if original.Mode != golfv1.ExecutionMode_EXECUTION_MODE_DISABLED || original.Revision != "0" || original.PushAllowed || !original.CanEdit {
 		t.Fatal("initial policy not disabled")
 	}
+	original.PushAllowed = true
 	updated, err := update(original)
-	if err != nil || updated.Msg.Policy.Revision != "1" || updated.Msg.Policy.RevocationEpoch != "1" {
+	if err != nil || updated.Msg.Policy.Revision != "1" || updated.Msg.Policy.RevocationEpoch != "1" || !updated.Msg.Policy.PushAllowed {
 		t.Fatal("first update", err)
 	}
 	if _, err = update(original); connect.CodeOf(err) != connect.CodeFailedPrecondition {
@@ -154,6 +155,7 @@ func TestExecutionPolicyPostgres(t *testing.T) {
 		t.Fatal("repository bypassed missing instance ceiling", err)
 	}
 	before := get()
+	before.PushAllowed = false
 	var wait sync.WaitGroup
 	results := make(chan error, 2)
 	for range 2 {
@@ -186,6 +188,32 @@ func TestExecutionPolicyPostgres(t *testing.T) {
 	if events != 2 || revision != 2 || epoch != 2 {
 		t.Fatal("audit/revision/epoch not atomic", events, revision, epoch)
 	}
+	var currentPush, auditedPush bool
+	if err = db.QueryRowContext(t.Context(), "SELECT push_allowed FROM golf_execution_policies").Scan(&currentPush); err != nil || currentPush {
+		t.Fatal("push disable was not persisted", err)
+	}
+	if err = db.QueryRowContext(t.Context(), "SELECT push_allowed FROM golf_execution_policy_events ORDER BY revision LIMIT 1").Scan(&auditedPush); err != nil || !auditedPush {
+		t.Fatal("push enable was not audited", err)
+	}
+	if err = db.QueryRowContext(t.Context(), "SELECT push_allowed FROM golf_execution_policy_events ORDER BY revision DESC LIMIT 1").Scan(&auditedPush); err != nil || auditedPush {
+		t.Fatal("push disable was not audited", err)
+	}
+	// A policy/epoch change may not survive failure to append its actor event.
+	if _, err = db.Exec(`CREATE FUNCTION reject_push_policy_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture'; END $$; CREATE TRIGGER reject_push_policy_fixture BEFORE INSERT ON golf_execution_policy_events FOR EACH ROW EXECUTE FUNCTION reject_push_policy_fixture()`); err != nil {
+		t.Fatal(err)
+	}
+	attempted := get()
+	attempted.PushAllowed = true
+	if _, err = update(attempted); err == nil {
+		t.Fatal("unaudited push update succeeded")
+	}
+	if _, err = db.Exec("DROP TRIGGER reject_push_policy_fixture ON golf_execution_policy_events"); err != nil {
+		t.Fatal(err)
+	}
+	restored := get()
+	if restored.PushAllowed || restored.Revision != "2" || restored.RevocationEpoch != "2" {
+		t.Fatal("push/audit transaction failed to roll back")
+	}
 	var actorID, actorSession int64
 	if err = db.QueryRowContext(t.Context(), "SELECT actor_user_id,actor_session_id FROM golf_execution_policy_events ORDER BY id LIMIT 1").Scan(&actorID, &actorSession); err != nil || actorID <= 0 || actorSession <= 0 {
 		t.Fatal("missing actor", err)
@@ -213,4 +241,138 @@ func TestExecutionPolicyPostgres(t *testing.T) {
 	if err = db.QueryRowContext(t.Context(), "SELECT count(*) FROM golf_execution_policy_events").Scan(&events); err != nil || events != 2 {
 		t.Fatal("denied save audited as success", err)
 	}
+}
+
+func TestExecutionPolicyPushIndependentCeilings(t *testing.T) {
+	const path = ".github/workflows/check.yml"
+	policies := []executionPolicyState{
+		{Scope: "instance", ScopeID: "instance", Mode: "all", ManualDispatchEnabled: true, AllowAllWorkflows: true},
+		{Scope: "organization", ScopeID: "42", OwnerID: 42, Mode: "all", ManualDispatchEnabled: true, AllowAllWorkflows: true},
+		{Scope: "repository", ScopeID: "99", OwnerID: 42, Mode: "all", ManualDispatchEnabled: true, Workflows: []string{path}},
+	}
+	if executionPoliciesAllow(policies, 99, 42, true, "push", path) {
+		t.Fatal("manual permission enabled push")
+	}
+	for i := range policies {
+		policies[i].PushAllowed = true
+		policies[i].ManualDispatchEnabled = false
+	}
+	if !executionPoliciesAllow(policies, 99, 42, true, "push", path) {
+		t.Fatal("explicit push-only ceilings denied")
+	}
+	if executionPoliciesAllow(policies, 99, 42, true, "manual", path) {
+		t.Fatal("push permission enabled manual")
+	}
+	for i := range policies {
+		for _, mode := range []string{"switch", "disabled", "workflow", "selected owner"} {
+			changed := append([]executionPolicyState(nil), policies...)
+			switch mode {
+			case "switch":
+				changed[i].PushAllowed = false
+			case "disabled":
+				changed[i].Mode = "disabled"
+			case "workflow":
+				changed[i].AllowAllWorkflows = false
+				changed[i].Workflows = nil
+			case "selected owner":
+				if changed[i].Scope == "repository" {
+					changed[i].OwnerID = 43
+				} else {
+					changed[i].Mode = "selected"
+					changed[i].Repositories = map[int64]int64{99: 43}
+				}
+			}
+			if executionPoliciesAllow(changed, 99, 42, true, "push", path) {
+				t.Fatal("push ceiling bypass", policies[i].Scope, mode)
+			}
+		}
+	}
+	for _, kind := range []string{"", "schedule", "pull_request", "PUSH", "manual ", "push "} {
+		if executionPoliciesAllow(policies, 99, 42, true, kind, path) {
+			t.Fatal("unknown event admitted", kind)
+		}
+	}
+	if executionPoliciesAllow(policies[:2], 99, 42, true, "push", path) || executionPoliciesAllow([]executionPolicyState{policies[0], policies[2]}, 99, 42, true, "push", path) {
+		t.Fatal("missing push ceiling bypassed")
+	}
+	if !executionPoliciesAllow([]executionPolicyState{policies[0], policies[2]}, 99, 42, false, "push", path) {
+		t.Fatal("personal push requires nonexistent organization")
+	}
+}
+
+func TestExecutionPolicyPushAdmissionPostgres(t *testing.T) {
+	db := testDatabase(t)
+	s, err := New(testConfig("http://gitea.invalid"), db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range []struct {
+		name, id string
+		owner    int64
+	}{{"instance", "instance", 0}, {"organization", "42", 42}, {"repository", "99", 42}} {
+		if _, err = db.Exec(`INSERT INTO golf_execution_policies(forge_url,scope,scope_id,owner_id,mode,manual_dispatch_enabled,allow_all_workflows) VALUES($1,$2,$3,$4,'all',true,true)`, s.config.GiteaURL, scope.name, scope.id, scope.owner); err != nil {
+			t.Fatal(err)
+		}
+	}
+	check := func(kind string, allowed bool) ExecutionAdmission {
+		t.Helper()
+		tx, e := db.BeginTx(t.Context(), nil)
+		if e != nil {
+			t.Fatal(e)
+		}
+		admission, e := s.readEffectiveExecutionPolicyForEvent(t.Context(), tx, 99, 42, true, kind, ".github/workflows/check.yml")
+		tx.Rollback()
+		if e != nil || admission.Allowed != allowed || len(admission.Epochs) != 3 {
+			t.Fatal("incorrect event admission", kind, e, admission)
+		}
+		return admission
+	}
+	check("manual", true)
+	check("push", false)
+	if _, err = db.Exec(`UPDATE golf_execution_policies SET push_allowed=true,manual_dispatch_enabled=false,revision=revision+1,revocation_epoch=revocation_epoch+1`); err != nil {
+		t.Fatal(err)
+	}
+	admitted := check("push", true)
+	check("manual", false)
+	for _, scope := range []string{"instance", "organization", "repository"} {
+		if _, err = db.Exec(`UPDATE golf_execution_policies SET push_allowed=false,revision=revision+1,revocation_epoch=revocation_epoch+1 WHERE scope=$1`, scope); err != nil {
+			t.Fatal(err)
+		}
+		revoked := check("push", false)
+		var changed bool
+		for i, epoch := range revoked.Epochs {
+			if epoch.Scope == scope {
+				changed = epoch.Revision > admitted.Epochs[i].Revision && epoch.RevocationEpoch > admitted.Epochs[i].RevocationEpoch
+			}
+		}
+		if !changed {
+			t.Fatal("push revocation stamp unchanged", scope)
+		}
+		if _, err = db.Exec(`UPDATE golf_execution_policies SET push_allowed=true WHERE scope=$1`, scope); err != nil {
+			t.Fatal(err)
+		}
+	}
+	check("schedule", false)
+	// The old helper is intentionally manual-only even when push is permitted.
+	tx, err := db.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := s.readEffectiveExecutionPolicy(t.Context(), tx, 99, 42, true, ".github/workflows/check.yml")
+	tx.Rollback()
+	if err != nil || legacy.Allowed {
+		t.Fatal("manual helper inherited push permission", err)
+	}
+	// Immutable selected bindings and workflow restrictions still constrain push.
+	if _, err = db.Exec(`UPDATE golf_execution_policies SET mode='selected' WHERE scope='instance'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`INSERT INTO golf_execution_policy_repositories(forge_url,scope,scope_id,repository_id,owner_id) VALUES($1,'instance','instance',99,43)`, s.config.GiteaURL); err != nil {
+		t.Fatal(err)
+	}
+	check("push", false)
+	if _, err = db.Exec(`UPDATE golf_execution_policy_repositories SET owner_id=42`); err != nil {
+		t.Fatal(err)
+	}
+	check("push", true)
 }

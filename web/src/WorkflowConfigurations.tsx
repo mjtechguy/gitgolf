@@ -8,6 +8,7 @@ import { DataTable, type DataTableColumn } from './DataTable';
 import { Loading, PanelError, privateQuery } from './RepositoryUI';
 import { repositoryOptions } from './navigation';
 import { WorkflowRuns } from './WorkflowRuns';
+import { AutomationGrantPanel } from './AutomationGrantPanel';
 import { ExecutionPolicyPanel } from './ExecutionPolicyPanel';
 import { ExecutionScope, WorkflowFormat, WorkflowInspectionState, type WorkflowConfiguration, type WorkflowDiagnostic } from './gen/golf/v1/golf_pb';
 
@@ -55,7 +56,7 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut }: { us
     { id: 'format', accessorFn: item => format(item.format), header: 'Format' },
     { id: 'state', accessorFn: item => state(item.state), header: 'Inspection' },
     { id: 'size', accessorFn: item => item.byteSize.toString(), header: 'Bytes', cell: ({ row }) => row.original.byteSize.toString(), enableSorting: false },
-    { id: 'run', header: 'Run', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => row.original.state === WorkflowInspectionState.VALIDATED_SUBSET ? <button className="button secondary" disabled={dispatching || uncertain || signingOut || !result?.executionAvailable} onClick={() => void dispatch(row.original.path)}>Run workflow</button> : <span className="muted">Unsupported</span> },
+    { id: 'run', header: 'Run', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => row.original.state === WorkflowInspectionState.VALIDATED_SUBSET && (row.original.format === WorkflowFormat.GITLAB_CI || row.original.events.includes("workflow_dispatch")) ? <button className="button secondary" disabled={dispatching || uncertain || signingOut || !result?.executionAvailable} onClick={() => void dispatch(row.original.path)}>Run workflow</button> : <span className="muted">{row.original.state === WorkflowInspectionState.VALIDATED_SUBSET ? 'Push trigger only' : 'Unsupported'}</span> },
     { id: 'findings', header: 'Details', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => <details>
       <summary>Inspect {row.original.path}</summary>
       <p>Blob <code>{row.original.blobId}</code></p>
@@ -84,6 +85,7 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut }: { us
         <p className="panel-footnote">Limits: 20 files, 64 KiB per inspected file and 512 KiB in total. Oversized files stay metadata-only; an overfull inventory fails visibly. Scripts and provider-specific semantics remain untrusted. Automatic triggers and deployments remain unavailable.</p>
       </section>
       {result ? <><ExecutionPolicyPanel key={`${userId}/${owner}/${name}`} userId={userId} signingOut={signingOut} scope={ExecutionScope.REPOSITORY} repository={{ owner, name }} />
+      <AutomationGrantPanel userId={userId} owner={owner} name={name} signingOut={signingOut} />
       <WorkflowRuns key={`runs/${userId}/${owner}/${name}`} userId={userId} owner={owner} name={name} signingOut={signingOut} /></> : null}
     </section>
   </RepositorySettingsLayout>;

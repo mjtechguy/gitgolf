@@ -3,14 +3,17 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/mjtechguy/golf-git/internal/server/database"
 )
 
@@ -52,7 +55,7 @@ func mustActivate(t *testing.T, db *sql.DB, keys *Keyring) {
 func countKeyUses(status CredentialKeyStatus, id string) uint64 {
 	for _, usage := range status.Keys {
 		if usage.KeyID == id {
-			return usage.Sessions + usage.OAuthAttempts
+			return usage.Sessions + usage.OAuthAttempts + usage.LocalAccounts + usage.InfrastructureConnections + usage.AutomationCredentials
 		}
 	}
 	return 0
@@ -487,5 +490,192 @@ func TestKeyPendingVerifierLockExpiryPostgres(t *testing.T) {
 	var retained int
 	if err := f.db.QueryRowContext(ctx, "SELECT count(*) FROM golf_oauth_attempts WHERE state_hash=$1", state).Scan(&retained); err != nil || retained != 1 {
 		t.Fatal("expired wait destructively consumed verifier", err)
+	}
+}
+
+func seedAutomationCredential(t *testing.T, db *sql.DB, keys *Keyring, forge, id string, expired bool) ([]byte, []byte) {
+	t.Helper()
+	userID, err := database.New(db).UpsertUser(t.Context(), database.UpsertUserParams{ForgeURL: forge, ForgeUserID: 42, Login: "alice"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := sha256.Sum256([]byte(id))
+	encrypted, keyID, err := keys.seal(automationRepositoryDomain, "private-automation-native-token", binding[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, expires := time.Now(), time.Now().Add(time.Hour)
+	if expired {
+		created = time.Now().Add(-2 * time.Hour)
+		expires = time.Now().Add(-time.Hour)
+	}
+	if _, err = db.Exec(`INSERT INTO golf_automation_grants(id,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,sponsor_user_id,sponsor_native_user_id,enabled,created_at,expires_at,idempotency_key,input_hash,branches,workflow_paths) VALUES($1,$2,99,42,'alice','project',false,$3,42,false,$4,$5,$1,$6,'["main"]','[".github/workflows/check.yml"]')`, id, forge, userID, created, expires, binding[:]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`INSERT INTO golf_automation_credentials(grant_id,encrypted_credential,credential_binding,credential_key_id) VALUES($1,$2,$3,$4)`, id, encrypted, binding[:], keyID); err != nil {
+		t.Fatal(err)
+	}
+	return binding[:], encrypted
+}
+
+func TestAutomationCredentialKeyLifecyclePostgres(t *testing.T) {
+	f := newManagementFixture(t)
+	f.session(t, "alice", "pat")
+	ids := []string{uuid.NewString(), uuid.NewString(), uuid.NewString()}
+	for i, id := range ids {
+		seedAutomationCredential(t, f.db, f.s.keyring, f.s.config.GiteaURL, id, i == 2)
+	}
+	keys := rotationKeys(t, f.s.config)
+	status, err := KeyStatus(t.Context(), f.db, keys)
+	if err != nil || countKeyUses(status, "legacy") != 4 {
+		t.Fatal("retained automation count missing", err)
+	}
+	var automation uint64
+	for _, usage := range status.Keys {
+		if usage.KeyID == "legacy" {
+			automation = usage.AutomationCredentials
+		}
+	}
+	if automation != 3 {
+		t.Fatal("disabled/expired automation credentials not counted", automation)
+	}
+	mustActivate(t, f.db, keys)
+	config := keyedConfig(f.s.config)
+	config.EncryptionKey = ""
+	if _, err := New(config, f.db); !errors.Is(err, errKeyPolicy) {
+		t.Fatal("missing automation encryption key accepted", err)
+	}
+	if _, err := CheckKeyRetirement(t.Context(), f.db, keys, "legacy"); !errors.Is(err, errKeyRetirement) {
+		t.Fatal("in-use automation key eligible", err)
+	}
+	first, err := RotateCredentials(t.Context(), f.db, keys, 2, 1)
+	if err != nil || first.Complete || first.Batches != 1 || first.RotatedSessions != 1 || first.RotatedAutomationCredentials != 1 || countKeyUses(first.Status, "legacy") != 2 {
+		t.Fatal("fifth family exceeded global batch or ignored", err, first)
+	}
+	resumed, err := RotateCredentials(t.Context(), f.db, keys, 1, 2)
+	if err != nil || !resumed.Complete || resumed.Batches != 2 || resumed.RotatedAutomationCredentials != 2 {
+		t.Fatal("bounded automation resume", err, resumed)
+	}
+	for _, id := range ids {
+		var encrypted, binding []byte
+		var label string
+		var version int64
+		if err := f.db.QueryRow(`SELECT encrypted_credential,credential_binding,credential_key_id,version FROM golf_automation_credentials WHERE grant_id=$1`, id).Scan(&encrypted, &binding, &label, &version); err != nil {
+			t.Fatal(err)
+		}
+		plain, err := keys.open(label, automationRepositoryDomain, encrypted, binding)
+		if err != nil || plain != "private-automation-native-token" || label != "next" || version != 1 {
+			t.Fatal("rotation altered credential identity", err)
+		}
+		if _, err := keys.open(label, infrastructureConnectionDomain, encrypted, binding); err == nil {
+			t.Fatal("automation ciphertext opened in another domain")
+		}
+	}
+	var activated, rotated int64
+	if err := f.db.QueryRow(`SELECT coalesce(sum(automation_credentials_count) FILTER(WHERE action='ACTIVE_KEY_CHANGED'),0),coalesce(sum(automation_credentials_count) FILTER(WHERE action='CREDENTIAL_BATCH_REENCRYPTED'),0) FROM golf_crypto_events`).Scan(&activated, &rotated); err != nil || activated != 3 || rotated != 3 {
+		t.Fatal("automation operator audit counts", err, activated, rotated)
+	}
+	if _, err := CheckKeyRetirement(t.Context(), f.db, keys, "legacy"); err != nil {
+		t.Fatal("zero-use automation key retirement", err)
+	}
+	if _, err := New(config, f.db); err != nil {
+		t.Fatal("startup after removal of rotated key", err)
+	}
+	raw, _ := json.Marshal(resumed)
+	for _, secret := range []string{"private-automation-native-token", "credential_binding", "encrypted_credential", keyFixture(9)} {
+		if bytes.Contains(raw, []byte(secret)) {
+			t.Fatal("automation rotation output exposed private data")
+		}
+	}
+}
+
+func TestAutomationCredentialKeyRollbackAndBusyPostgres(t *testing.T) {
+	db := testDatabase(t)
+	config := testConfig("https://forge.invalid")
+	s, err := New(config, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstID, secondID := uuid.NewString(), uuid.NewString()
+	_, before := seedAutomationCredential(t, db, s.keyring, config.GiteaURL, firstID, false)
+	seedAutomationCredential(t, db, s.keyring, config.GiteaURL, secondID, false)
+	keys := rotationKeys(t, config)
+	mustActivate(t, db, keys)
+	if _, err := db.Exec(`CREATE FUNCTION reject_automation_crypto_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture'; END $$; CREATE TRIGGER reject_automation_crypto_fixture BEFORE INSERT ON golf_crypto_events FOR EACH ROW EXECUTE FUNCTION reject_automation_crypto_fixture()`); err != nil {
+		t.Fatal(err)
+	}
+	failed, err := RotateCredentials(t.Context(), db, keys, 10, 1)
+	if !errors.Is(err, errStorageUnavailable) || failed.Batches != 0 || failed.RotatedAutomationCredentials != 0 {
+		t.Fatal("unaudited automation rotation reported success", err)
+	}
+	var after []byte
+	var label string
+	if err := db.QueryRow(`SELECT encrypted_credential,credential_key_id FROM golf_automation_credentials WHERE grant_id=$1`, firstID).Scan(&after, &label); err != nil || !bytes.Equal(before, after) || label != "legacy" {
+		t.Fatal("failed audit left partial automation rewrite", err)
+	}
+	if _, err := db.Exec("DROP TRIGGER reject_automation_crypto_fixture ON golf_crypto_events"); err != nil {
+		t.Fatal(err)
+	}
+	held, err := db.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Rollback()
+	if _, err := held.Exec(`SELECT grant_id FROM golf_automation_credentials WHERE grant_id=$1 FOR UPDATE`, firstID); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	partial, err := RotateCredentials(ctx, db, keys, 10, 1)
+	if err != nil || partial.Complete || partial.RotatedAutomationCredentials != 1 || countKeyUses(partial.Status, "legacy") != 1 {
+		t.Fatal("busy automation row was blocked or hidden", err, partial)
+	}
+	if _, err := CheckKeyRetirement(ctx, db, keys, "legacy"); !errors.Is(err, errKeyRetirement) {
+		t.Fatal("busy retained key retired", err)
+	}
+	if err := held.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	resumed, err := RotateCredentials(t.Context(), db, keys, 10, 1)
+	if err != nil || !resumed.Complete || resumed.RotatedAutomationCredentials != 1 {
+		t.Fatal("busy automation resume failed", err)
+	}
+}
+
+func TestAutomationCredentialLegacyBootstrapPagesPostgres(t *testing.T) {
+	db := testDatabase(t)
+	keys := parseTestKeys(t, keyFixture(1), nil, "")
+	var last string
+	var original []byte
+	for i := 1; i <= 501; i++ {
+		id := fmt.Sprintf("00000000-0000-4000-8000-%012x", i)
+		_, encrypted := seedAutomationCredential(t, db, keys, "https://forge.invalid", id, false)
+		if i == 501 {
+			last = id
+			original = encrypted
+		}
+	}
+	damaged := append([]byte(nil), original...)
+	damaged[0] ^= 1
+	if _, err := db.Exec(`UPDATE golf_automation_credentials SET encrypted_credential=$2 WHERE grant_id=$1`, last, damaged); err != nil {
+		t.Fatal(err)
+	}
+	config := testConfig("https://forge.invalid")
+	config.EncryptionKey = keyFixture(1)
+	if _, err := New(config, db); !errors.Is(err, errKeyBootstrap) {
+		t.Fatal("bootstrap skipped fifth-family second page", err)
+	}
+	if _, err := database.New(db).GetKeyFingerprint(t.Context(), "legacy"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatal("failed automation bootstrap registered key label", err)
+	}
+	if _, err := db.Exec(`UPDATE golf_automation_credentials SET encrypted_credential=$2 WHERE grant_id=$1`, last, original); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(config, db); err != nil {
+		t.Fatal("repaired automation bootstrap failed", err)
+	}
+	status, err := KeyStatus(t.Context(), db, keys)
+	if err != nil || countKeyUses(status, "legacy") != 501 {
+		t.Fatal("bootstrap rewrote or discarded automation history", err)
 	}
 }
