@@ -1,0 +1,30 @@
+Golf public origin: {{ .Values.publicURL }}
+Configured Gitea public origin: {{ .Values.gitea.publicURL }}
+
+This chart installs the current portable core. It creates no Secrets, runners,
+Cloudflare resources or load balancers. Secret {{ .Values.existingSecret }} must
+already exist in namespace {{ .Release.Namespace }}; see the chart README for keys.
+
+{{- if .Values.gitea.enabled }}
+Gitea has exactly one canonical writer and retained data/config PVCs. Ordinary
+StatefulSet replacements stop the old Pod first. RWO and StatefulSet identity do
+NOT fence a partitioned node: never force-delete/recreate a writer until the old
+node is fenced from storage. No Gitea HA or safe forced failover is claimed.
+{{- end }}
+{{- if .Values.postgresql.enabled }}
+Bundled PostgreSQL is a single persistent instance, not an HA database. Its init
+script only runs on an empty volume. Secret edits do not rotate database roles.
+{{- end }}
+
+PVCs remain after uninstall. Retain the release name to reattach them, and verify
+backups before removing any PVC. Secret rotation needs coordinated provider/DB
+updates and a workload restart; the chart never reads Secret values into Helm.
+
+{{- if not .Values.ingress.enabled }}
+For local port-forwarding, publicURL must match the browser origin exactly.
+Service: {{ include "golf.fullname" . }} port 8080.
+{{- end }}
+{{- if .Values.networkPolicy.enabled }}
+NetworkPolicy requires an enforcing CNI. Public ingress is denied unless explicit
+ingressFrom peers are configured; kubectl port-forward is not a policy test.
+{{- end }}

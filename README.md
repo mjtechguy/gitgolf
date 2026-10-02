@@ -9,9 +9,9 @@ These are infrastructure choices, not editions. AI is optional in Golf's core wo
 
 ## What works now
 
-This is a developer preview: optional scoped Gitea browser OAuth and per-user token bootstrap, encrypted PostgreSQL-backed sessions, repository listing/creation, in-app source and commit browsing, read-only issues, a JSON CLI, black/charcoal and light/system themes, capability reporting, and a persistent local Compose stack. Git writes use Gitea directly.
+This is a developer preview: optional scoped Gitea browser OAuth and per-user token bootstrap, encrypted PostgreSQL-backed sessions, repository listing/creation, in-app source and commit browsing, read-only issues, a JSON CLI, black/charcoal and light/system themes, capability reporting, and persistent Compose/Helm installations. Git writes use Gitea directly.
 
-Golf local/external OIDC identity, organizations/roles, import/connections, review/merge policy, pipelines/runners, agent execution, Cloudflare integrations, protected previews/CD and Kubernetes packaging remain roadmap work. This is not complete v1 or a competition-ready entry. No repository CI is configured.
+Golf local/external OIDC identity, organizations/roles, import/connections, review/merge policy, pipelines/runners, agent execution, Cloudflare integrations and protected previews/CD remain roadmap work. This is not complete v1 or a competition-ready entry. No repository CI is configured.
 
 ## Run locally
 
@@ -67,6 +67,12 @@ docker compose down      # remove containers/network; retain named volumes
 
 Do not add `--volumes` unless intentionally erasing this installation. Backup/recovery automation and a production deployment profile are not yet qualified. Preserve both databases, Gitea repository/configuration volumes and encryption keys together. Local ports bind only to loopback; this Compose file is a development installation.
 
+## Run on Kubernetes
+
+The [Helm chart](deploy/helm/golf/README.md) installs the same core with existing Secret references, persistent volumes, probes, resource/security bounds and native ingress/network policies. It supports external PostgreSQL and an existing qualified Gitea. Supply an explicitly built Golf image; no public release image is available yet. Cloudflare and AI are optional.
+
+The [Kubernetes guide](docs/KUBERNETES.md) includes an isolated k3d qualification command. The verified developer profile scales Golf to two replicas and retains one canonical Git writer. Single-node restart evidence does not establish storage fencing, multi-node failover, HA or production readiness. Workers/runners and object-storage adapters are not installed by this chart.
+
 ## Browse code and issues
 
 Open a repository in Golf to explore its branches, commit history and source tree. File/folder navigation stays at an exact commit, so a concurrent push cannot silently change the snapshot you are inspecting. Refresh or select a branch again to observe a new head. The commit view can open historical snapshots. Empty repositories display push guidance; after the first push, Gitea may need a moment to finish processing before refresh shows the source.
@@ -102,6 +108,7 @@ Success writes JSON with `schema_version: "golf.cli.v1"` and the API response in
 npm --prefix web ci
 npm --prefix web exec -- playwright install chromium
 make check  # includes generated-output drift checks
+make helm-check # requires Helm; no cluster or credentials
 make generate # after editing Protobuf or SQL queries
 go test -race ./...
 npm --prefix web test

@@ -1,0 +1,7 @@
+image:
+  repository: golf-local
+  tag: chart-render-fixture
+publicURL: https://golf.example.invalid
+gitea:
+  publicURL: https://git.example.invalid
+existingSecret: existing-golf-secret

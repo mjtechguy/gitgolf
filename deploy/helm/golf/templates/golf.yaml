@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "golf.fullname" . }}
+  labels:
+    {{- include "golf.labels" . | nindent 4 }}
+    app.kubernetes.io/component: golf
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "golf.selector" . | nindent 4 }}
+    app.kubernetes.io/component: golf
+  ports:
+    - {name: http, port: 8080, targetPort: http}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "golf.fullname" . }}
+  labels:
+    {{- include "golf.labels" . | nindent 4 }}
+    app.kubernetes.io/component: golf
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  selector:
+    matchLabels:
+      {{- include "golf.selector" . | nindent 6 }}
+      app.kubernetes.io/component: golf
+  template:
+    metadata:
+      labels:
+        {{- include "golf.selector" . | nindent 8 }}
+        app.kubernetes.io/component: golf
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: golf
+          image: {{ include "golf.image" .Values.image | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "golf.containerSecurity" . | nindent 12 }}
+          ports:
+            - {name: http, containerPort: 8080}
+          env:
+            - {name: GOLF_LISTEN_ADDR, value: ":8080"}
+            - {name: GOLF_WEB_DIR, value: /app/web/dist}
+            - name: GOLF_PUBLIC_URL
+              value: {{ trimSuffix "/" .Values.publicURL | quote }}
+            - name: GOLF_ALLOW_INSECURE_COOKIES
+              value: {{ .Values.allowInsecureCookies | quote }}
+            - name: GITEA_URL
+              value: {{ include "golf.giteaURL" . | quote }}
+            {{- range $key := list "DATABASE_URL" "GOLF_ENCRYPTION_KEY" }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef: {name: {{ $.Values.existingSecret | quote }}, key: {{ $key }}}
+            {{- end }}
+            {{- if .Values.oauth.enabled }}
+            - name: GITEA_PUBLIC_URL
+              value: {{ trimSuffix "/" .Values.gitea.publicURL | quote }}
+            {{- range $key := list "GITEA_OAUTH_CLIENT_ID" "GITEA_OAUTH_CLIENT_SECRET" }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef: {name: {{ $.Values.existingSecret | quote }}, key: {{ $key }}}
+            {{- end }}
+            {{- end }}
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 5
+            failureThreshold: 60
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 12
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources: {{ toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 32Mi}

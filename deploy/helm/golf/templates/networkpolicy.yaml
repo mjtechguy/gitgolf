@@ -1,0 +1,121 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "golf.fullname" . }}
+  labels:
+    {{- include "golf.labels" . | nindent 4 }}
+    app.kubernetes.io/component: golf
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "golf.selector" . | nindent 6 }}
+      app.kubernetes.io/component: golf
+  policyTypes: [Ingress, Egress]
+  {{- if .Values.networkPolicy.ingressFrom }}
+  ingress:
+    - from: {{ toYaml .Values.networkPolicy.ingressFrom | nindent 8 }}
+      ports: [{protocol: TCP, port: 8080}]
+  {{- else }}
+  ingress: []
+  {{- end }}
+  egress:
+    {{- include "golf.dnsEgress" . | nindent 4 }}
+    {{- if .Values.gitea.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "golf.selector" . | nindent 14 }}
+              app.kubernetes.io/component: gitea
+      ports: [{protocol: TCP, port: 3000}]
+    {{- end }}
+    {{- if .Values.postgresql.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "golf.selector" . | nindent 14 }}
+              app.kubernetes.io/component: postgres
+      ports: [{protocol: TCP, port: 5432}]
+    {{- end }}
+    {{- with .Values.networkPolicy.externalEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- if .Values.gitea.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "golf.fullname" . }}-gitea
+  labels:
+    {{- include "golf.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gitea
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "golf.selector" . | nindent 6 }}
+      app.kubernetes.io/component: gitea
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "golf.selector" . | nindent 14 }}
+              app.kubernetes.io/component: golf
+      ports: [{protocol: TCP, port: 3000}]
+    {{- with .Values.networkPolicy.giteaIngressFrom }}
+    - from: {{ toYaml . | nindent 8 }}
+      ports: [{protocol: TCP, port: 3000}]
+    {{- end }}
+    {{- with .Values.networkPolicy.ingressFrom }}
+    - from: {{ toYaml . | nindent 8 }}
+      ports: [{protocol: TCP, port: 3000}, {protocol: TCP, port: 2222}]
+    {{- end }}
+  egress:
+    {{- include "golf.dnsEgress" . | nindent 4 }}
+    {{- if .Values.postgresql.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "golf.selector" . | nindent 14 }}
+              app.kubernetes.io/component: postgres
+      ports: [{protocol: TCP, port: 5432}]
+    {{- end }}
+    {{- with .Values.networkPolicy.externalEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
+{{- if .Values.postgresql.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "golf.fullname" . }}-postgres
+  labels:
+    {{- include "golf.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "golf.selector" . | nindent 6 }}
+      app.kubernetes.io/component: postgres
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "golf.selector" . | nindent 14 }}
+              app.kubernetes.io/component: golf
+        {{- if .Values.gitea.enabled }}
+        - podSelector:
+            matchLabels:
+              {{- include "golf.selector" . | nindent 14 }}
+              app.kubernetes.io/component: gitea
+        {{- end }}
+      ports: [{protocol: TCP, port: 5432}]
+    {{- with .Values.networkPolicy.postgresIngressFrom }}
+    - from: {{ toYaml . | nindent 8 }}
+      ports: [{protocol: TCP, port: 5432}]
+    {{- end }}
+  egress: []
+{{- end }}
+{{- end }}

@@ -1,0 +1,88 @@
+# Explicit built image required. No implicit latest or prepublished Golf image.
+image:
+  repository: ""
+  tag: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+replicaCount: 1
+publicURL: ""
+allowInsecureCookies: false
+existingSecret: ""
+oauth:
+  enabled: false
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+gitea:
+  enabled: true
+  # Required public origin; configures clone URLs and optional OAuth navigation.
+  publicURL: ""
+  # Set only when enabled=false. No Gitea storage or workload is then created.
+  externalURL: ""
+  qualifiedVersion: "1.27.3"
+  image:
+    repository: gitea/gitea
+    tag: 1.27.3-rootless
+    digest: ""
+    pullPolicy: IfNotPresent
+  sshPort: 2222
+  database:
+    # Required host:port when bundled PostgreSQL is disabled and Gitea is internal.
+    host: ""
+    name: gitea
+    user: gitea
+    sslMode: verify-full
+  persistence:
+    storageClass: ""
+    dataSize: 10Gi
+    configSize: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+
+postgresql:
+  enabled: true
+  image:
+    repository: postgres
+    tag: 18.4-alpine3.24
+    digest: ""
+    pullPolicy: IfNotPresent
+  persistence:
+    storageClass: ""
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # Existing kubernetes.io/tls Secret covering both public hostnames.
+  tlsSecret: ""
+
+networkPolicy:
+  enabled: true
+  # Explicit peers for HTTP/SSH exposure. Empty means no public pod ingress;
+  # kubectl port-forward still works. Populate for your ingress controller.
+  ingressFrom: []
+  # Extra same/cross-namespace peers for optional external Golf installations.
+  giteaIngressFrom: []
+  postgresIngressFrom: []
+  # Full egress rules required for external Gitea/PostgreSQL with policy enabled.
+  externalEgress: []
+  dnsNamespace: kube-system

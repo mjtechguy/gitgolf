@@ -1,4 +1,4 @@
-.PHONY: setup dev build cli test test-integration check fmt vet web-check generate generate-check up down
+.PHONY: setup dev build cli test test-integration check helm-check fmt vet web-check generate generate-check up down
 setup:
 	./scripts/init-env.sh
 dev: up
@@ -25,6 +25,8 @@ generate:
 generate-check:
 	./scripts/generate.sh --check
 check: fmt vet test web-check generate-check
+helm-check:
+	python3 deploy/helm/golf/check.py
 up: setup
 	docker compose up -d --build
 down:

@@ -1,0 +1,34 @@
+{{- if gt (len .Release.Name) 45 -}}{{ fail "Golf release names must have at most 45 characters" }}{{- end -}}
+{{- $_ := required "existingSecret must reference a precreated Secret" .Values.existingSecret -}}
+{{- range $name, $image := dict "Golf" .Values.image "Gitea" .Values.gitea.image "PostgreSQL" .Values.postgresql.image -}}
+  {{- $_ := required (printf "%s image.repository is required" $name) $image.repository -}}
+  {{- if or (contains ":" (last (splitList "/" $image.repository))) (hasSuffix "/" $image.repository) -}}{{ fail (printf "%s image.repository must not contain a tag or digest" $name) }}{{- end -}}
+  {{- if not (or $image.tag $image.digest) -}}{{ fail (printf "%s requires an explicit image tag or digest" $name) }}{{- end -}}
+  {{- if or (eq (lower $image.tag) "latest") (and $image.tag $image.digest) -}}{{ fail (printf "%s requires exactly one tag or digest, never latest" $name) }}{{- end -}}
+{{- end -}}
+{{- range $name, $value := dict "publicURL" .Values.publicURL "gitea.publicURL" .Values.gitea.publicURL -}}
+  {{- $_ := required (printf "%s is required" $name) $value -}}
+  {{- if not (regexMatch "^https?://[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?/?$" $value) -}}{{ fail (printf "%s must be an HTTP(S) origin without credentials, path, query or fragment" $name) }}{{- end -}}
+  {{- if and (hasPrefix "http://" $value) (not (and $.Values.allowInsecureCookies (regexMatch "^http://(localhost|127\\.[0-9]+\\.[0-9]+\\.[0-9]+)(:[0-9]{1,5})?/?$" $value))) -}}{{ fail (printf "%s requires HTTPS except explicit loopback development" $name) }}{{- end -}}
+{{- end -}}
+{{- if and .Values.allowInsecureCookies (not (regexMatch "^https?://(localhost|127\\.[0-9]+\\.[0-9]+\\.[0-9]+)(:[0-9]{1,5})?/?$" .Values.publicURL)) -}}{{ fail "allowInsecureCookies is allowed only for a loopback Golf publicURL" }}{{- end -}}
+{{- if not .Values.gitea.enabled -}}
+  {{- $_ := required "gitea.externalURL is required when bundled Gitea is disabled" .Values.gitea.externalURL -}}
+  {{- if not (regexMatch "^https?://[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?(/[^?#@]*)?$" .Values.gitea.externalURL) -}}{{ fail "gitea.externalURL must be an HTTP(S) endpoint without credentials or query" }}{{- end -}}
+{{- else if .Values.gitea.externalURL -}}{{ fail "gitea.externalURL cannot be set while bundled Gitea is enabled" }}{{- end -}}
+{{- if and (not .Values.postgresql.enabled) .Values.gitea.enabled -}}
+  {{- $_ := required "gitea.database.host is required for external PostgreSQL" .Values.gitea.database.host -}}
+{{- end -}}
+{{- if and .Values.networkPolicy.enabled (or (not .Values.gitea.enabled) (not .Values.postgresql.enabled)) (empty .Values.networkPolicy.externalEgress) -}}{{ fail "networkPolicy.externalEgress must explicitly permit external dependencies" }}{{- end -}}
+{{- if .Values.ingress.enabled -}}
+  {{- $_ := required "ingress.className must explicitly select your controller" .Values.ingress.className -}}
+  {{- if and .Values.networkPolicy.enabled (empty .Values.networkPolicy.ingressFrom) -}}{{ fail "networkPolicy.ingressFrom must permit your ingress controller" }}{{- end -}}
+  {{- if or (hasPrefix "https://" .Values.publicURL) (and .Values.gitea.enabled (hasPrefix "https://" .Values.gitea.publicURL)) -}}
+    {{- $_ := required "ingress.tlsSecret is required for HTTPS public URLs" .Values.ingress.tlsSecret -}}
+  {{- end -}}
+  {{- if and .Values.gitea.enabled (eq (regexReplaceAll ":[0-9]+$" (urlParse .Values.publicURL).host "") (regexReplaceAll ":[0-9]+$" (urlParse .Values.gitea.publicURL).host "")) -}}{{ fail "Golf and bundled Gitea ingress require distinct public hosts" }}{{- end -}}
+{{- end -}}
+
+{{- if and .Values.postgresql.enabled .Values.gitea.enabled (or (ne .Values.gitea.database.name "gitea") (ne .Values.gitea.database.user "gitea")) -}}{{ fail "bundled PostgreSQL initializes Gitea database/name as gitea; use those fixed roles" }}{{- end -}}
+{{- if and .Values.gitea.enabled .Values.gitea.image.tag (ne .Values.gitea.image.tag "1.27.3-rootless") -}}{{ fail "bundled Gitea requires qualified rootless tag 1.27.3-rootless or its pinned digest" }}{{- end -}}
+{{- if and .Values.postgresql.enabled .Values.postgresql.image.tag (ne .Values.postgresql.image.tag "18.4-alpine3.24") -}}{{ fail "bundled PostgreSQL requires qualified Alpine tag 18.4-alpine3.24 or its pinned digest" }}{{- end -}}
