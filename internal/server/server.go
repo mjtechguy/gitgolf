@@ -2,10 +2,7 @@ package server
 
 import (
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net"
@@ -21,6 +18,7 @@ import (
 
 type Config struct {
 	PublicURL, GiteaURL, EncryptionKey                         string
+	EncryptionKeysJSON, EncryptionActiveKeyID                  string
 	GiteaPublicURL, GiteaOAuthClientID, GiteaOAuthClientSecret string
 	AllowInsecureCookies                                       bool
 	WebDir                                                     string
@@ -28,7 +26,7 @@ type Config struct {
 type Server struct {
 	config  Config
 	db      *sql.DB
-	cipher  cipher.AEAD
+	keyring *Keyring
 	client  *http.Client
 	handler http.Handler
 }
@@ -55,21 +53,20 @@ func New(config Config, db *sql.DB) (*Server, error) {
 		return nil, err
 	}
 	config.GiteaPublicURL = strings.TrimRight(config.GiteaPublicURL, "/")
-	key, err := base64.StdEncoding.DecodeString(config.EncryptionKey)
-	if err != nil || len(key) != 32 {
-		return nil, errors.New("GOLF_ENCRYPTION_KEY must be base64 encoding of exactly 32 random bytes")
-	}
-	block, err := aes.NewCipher(key)
+	keyring, err := ParseKeyring(config.EncryptionKey, config.EncryptionKeysJSON, config.EncryptionActiveKeyID)
 	if err != nil {
 		return nil, err
 	}
-	aead, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
+	if db != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		if err := checkRuntimeKeys(ctx, db, keyring); err != nil {
+			return nil, err
+		}
 	}
 	config.PublicURL = public.Scheme + "://" + public.Host
 	config.GiteaURL = strings.TrimRight(config.GiteaURL, "/")
-	s := &Server{config: config, db: db, cipher: aead, client: &http.Client{Timeout: 10 * time.Second,
+	s := &Server{config: config, db: db, keyring: keyring, client: &http.Client{Timeout: 10 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 
 	r := chi.NewRouter()

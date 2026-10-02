@@ -23,11 +23,6 @@ JOIN golf_sessions s ON s.user_id = u.id
 WHERE s.token_hash = sqlc.arg(token_hash) AND u.forge_url = sqlc.arg(forge_url)
 FOR UPDATE OF u;
 
--- name: CreateAuditedSession :one
-INSERT INTO golf_sessions (token_hash, user_id, encrypted_token, expires_at, credential_kind)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING session_id;
-
 -- Caller must already hold the subject account lock; this also scopes cookie
 -- replacement/logout to this configured forge rather than a global cookie hash.
 -- name: DeleteAuditedSession :one

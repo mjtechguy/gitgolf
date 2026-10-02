@@ -572,8 +572,15 @@ func TestSessionManagementMigrationPreservesCredentialsPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, session := range []loginResult{pat, oauth} {
-		if _, err := f.s.sessionCredential(ctx, session.Value); err != nil {
-			t.Fatal("session-handle downgrade revoked preserved credentials", err)
+		// Read the previous release's columns after deliberately downgrading;
+		// the current runtime requires the later explicit key-ID migration.
+		hash, _ := sessionHash(session.Value)
+		var encrypted []byte
+		if err := f.db.QueryRow("SELECT encrypted_token FROM golf_sessions WHERE token_hash=$1 AND expires_at>clock_timestamp()", hash).Scan(&encrypted); err != nil {
+			t.Fatal("session-handle downgrade lost preserved credentials", err)
+		}
+		if _, err := f.s.keyring.open("legacy", sessionDomain, encrypted, hash); err != nil {
+			t.Fatal("session-handle downgrade changed legacy ciphertext", err)
 		}
 	}
 }

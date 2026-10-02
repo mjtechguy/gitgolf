@@ -12,7 +12,9 @@ The chart **never creates Secrets**, embeds credential values in manifests, read
 
 | Secret key | Required when | Meaning |
 | --- | --- | --- |
-| `GOLF_ENCRYPTION_KEY` | Always | Base64 encoding of exactly 32 random bytes. All Golf replicas sharing sessions use the same key. Preserve this key across restarts/upgrades. |
+| `GOLF_ENCRYPTION_KEY` | Single-key/legacy configuration, or retained legacy ciphertext | Canonical padded base64 encoding of exactly 32 random bytes; registers the `legacy` label. Preserve material required by stored credentials/backups. |
+| `GOLF_ENCRYPTION_KEYS` | JSON keyring configuration | JSON label-to-base64-key map, at most 16 total keys. Each value is exactly 32 random bytes; duplicate/rebound labels are rejected. |
+| `GOLF_ACTIVE_ENCRYPTION_KEY` | JSON keyring configured | Write label present in that keyring and matching the activated database policy. |
 | `DATABASE_URL` | Always | Complete PostgreSQL DSN for the `golf` role/database, with a URL-encoded password and explicit TLS mode. |
 | `POSTGRES_PASSWORD` | Bundled PostgreSQL | PostgreSQL administrative password; never used by Golf or Gitea. |
 | `GOLF_DB_PASSWORD` | Bundled PostgreSQL | Password used once to create the independent `golf` role. It must agree with `DATABASE_URL`. |
@@ -20,9 +22,11 @@ The chart **never creates Secrets**, embeds credential values in manifests, read
 | `GITEA_OAUTH_CLIENT_ID` | `oauth.enabled: true` | Existing confidential Gitea OAuth application ID. |
 | `GITEA_OAUTH_CLIENT_SECRET` | `oauth.enabled: true` | That application's secret. |
 
-For release `golf-dev`, the bundled DSN host is `golf-dev-golf-postgres:5432`, database and role `golf`. Gitea uses database/role `gitea`. The bundled initialization file is an exact copy of [the Compose initializer](../../postgres/init.sh); `check.py` rejects divergence. Initialization runs only on a fresh PostgreSQL volume. Updating a Secret does **not** alter existing database passwords. Coordinate real role/client changes with Secrets and restart affected workloads; key changes require a credential migration or reauthentication strategy, not a casual rollout.
+For release `golf-dev`, the bundled DSN host is `golf-dev-golf-postgres:5432`, database and role `golf`. Gitea uses database/role `gitea`. The bundled initialization file is an exact copy of [the Compose initializer](../../postgres/init.sh); `check.py` rejects divergence. Initialization runs only on a fresh PostgreSQL volume. Updating a Secret does **not** alter existing database passwords. Coordinate real role/client changes with Secrets and restart affected workloads; key changes require the explicit drained activation and re-encryption procedure, not an ordinary rolling update.
 
-Missing Secret keys stop the affected Pods at startup. Helm cannot validate private key contents or whether an external DSN matches the configured endpoints. Runtime configuration validation and `/readyz` remain authoritative.
+Encryption Secret references are individually optional so legacy-only and full-keyring installations can use the same chart; **a valid encryption configuration is still mandatory at runtime**. Other required missing Secret entries prevent affected Pods starting. Helm cannot validate private key contents, stored material bindings or whether an external DSN matches the configured endpoints. Runtime configuration validation and `/readyz` remain authoritative.
+
+All Golf replicas must share the same label/material mapping and database active policy. A fresh JSON-only keyring with a nonlegacy active label requires an operator activation before normal server startup. Drain all old application writers and in-flight OAuth exchanges before activation; the chart does not automate this maintenance boundary. Secret updates do not change running environments, and a database write fence cannot reverse an external refresh. Follow the [credential keyring contract](../../../docs/CREDENTIAL_KEYRING.md) for server-operator commands, bootstrap metadata writes, partial rotation and retirement checks. This packaging does not qualify Kubernetes key cutover or transparent rolling rotation.
 
 ## Disposable local installation
 
@@ -80,7 +84,7 @@ kubectl --kubeconfig "$KUBECONFIG" --context "$KUBE_CONTEXT" -n golf-dev \
 
 In another terminal, forward `service/golf-dev-golf-gitea` with `3006:3000 2226:2222` using the same kubeconfig/context/namespace. Open `http://localhost:8086` exactly: Golf's RPC Origin checks deliberately reject a different browser origin. Registration is disabled and installation is locked. Bootstrap a Gitea user through its supported administrative CLI, with privately supplied credentials, then use PAT sign-in. The repository's Kubernetes smoke harness demonstrates temporary-user provisioning and cleanup without exposing credentials.
 
-For OAuth, first register a confidential Gitea application with the exact callback `http://localhost:8086/auth/gitea/callback`, add its ID and secret to the existing Secret, and set `oauth.enabled: true`. Production uses the corresponding HTTPS callback. The current flow requests only `write:user`, `write:repository`, and `read:issue`; see the [OAuth decision](../../../docs/decisions/0003-gitea-oauth-and-session-refresh.md).
+For OAuth, first register a confidential Gitea application with the exact callback `http://localhost:8086/auth/gitea/callback`, add its ID and secret to the existing Secret, and set `oauth.enabled: true`. Production uses the corresponding HTTPS callback. The current flow requests `write:user`, `write:repository`, `read:issue` and `read:organization`; see the [OAuth decision](../../../docs/decisions/0003-gitea-oauth-and-session-refresh.md).
 
 ## Production and external dependencies
 
@@ -140,7 +144,7 @@ postgresql:
 
 Provide the Golf DSN in the existing Secret and permit both actual destinations in `networkPolicy.externalEgress`. No Gitea StatefulSet/service/PVC, PostgreSQL StatefulSet/service/PVC, or database initializer is created. Golf still verifies the actual Gitea version at runtime; `qualifiedVersion` is an explicit supported-version constraint, not a mocked readiness signal.
 
-A second Golf release can use the first release's canonical Gitea and database. Grant its labeled Golf Pods access through the canonical release's `networkPolicy.giteaIngressFrom` and `postgresIngressFrom`; set corresponding egress selectors in the second release. These fields accept standard Kubernetes NetworkPolicy peers/rules. Selectors without a namespace selector match only the current namespace. All Golf replicas for the same installation must agree on public origin, forge URL, database, encryption key and OAuth client. Do not point two independently writing Gitea installations at the same repository volumes.
+A second Golf release can use the first release's canonical Gitea and database. Grant its labeled Golf Pods access through the canonical release's `networkPolicy.giteaIngressFrom` and `postgresIngressFrom`; set corresponding egress selectors in the second release. These fields accept standard Kubernetes NetworkPolicy peers/rules. Selectors without a namespace selector match only the current namespace. All Golf replicas for the same installation must agree on public origin, forge URL, database, encryption keyring/active policy and OAuth client. Do not point two independently writing Gitea installations at the same repository volumes.
 
 ## Persistence, updates and network boundaries
 

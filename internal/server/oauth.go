@@ -94,7 +94,11 @@ func (s *Server) BeginGiteaOAuth(ctx context.Context, _ *connect.Request[golfv1.
 	if err := queries.DeleteExpiredOAuthAttempts(ctx); err != nil {
 		return nil, rpcError(errStorageUnavailable)
 	}
-	if err := queries.CreateOAuthAttempt(ctx, database.CreateOAuthAttemptParams{StateHash: stateHash, BindingHash: bindingHash, EncryptedVerifier: s.seal(verifier, stateHash), ExpiresAt: expires}); err != nil {
+	encrypted, keyID, err := s.keyring.seal(oauthAttemptDomain, verifier, stateHash)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	if err := queries.CreateKeyedOAuthAttempt(ctx, database.CreateKeyedOAuthAttemptParams{StateHash: stateHash, BindingHash: bindingHash, EncryptedVerifier: encrypted, ExpiresAt: expires, CredentialKeyID: keyID}); err != nil {
 		return nil, rpcError(errStorageUnavailable)
 	}
 	response := connect.NewResponse(&golfv1.BeginGiteaOAuthResponse{AuthorizationUrl: s.oauthConfig().AuthCodeURL(state, oauth2.S256ChallengeOption(verifier))})
@@ -175,18 +179,13 @@ func (s *Server) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		fail()
 		return
 	}
-	encrypted, err := database.New(s.db).ConsumeOAuthAttempt(r.Context(), database.ConsumeOAuthAttemptParams{StateHash: stateHash, BindingHash: bindingHash})
+	verifier, err := s.consumeOAuthVerifier(r.Context(), stateHash, bindingHash)
 	if err != nil {
 		fail()
 		return
 	}
 	// Even denied or malformed callbacks consume an otherwise valid attempt.
 	if query.Has("error") || len(query["code"]) != 1 || query.Get("code") == "" {
-		fail()
-		return
-	}
-	verifier, err := s.unseal(encrypted, stateHash)
-	if err != nil {
 		fail()
 		return
 	}
@@ -249,7 +248,7 @@ func (s *Server) oauthCredential(ctx context.Context, hash []byte, payload strin
 	if row.CredentialKind != "oauth" {
 		return forgeCredential{}, errCredentialUnavailable
 	}
-	payload, err = s.unseal(row.EncryptedToken, hash)
+	payload, err = s.keyring.open(row.CredentialKeyID, sessionDomain, row.EncryptedToken, hash)
 	if err != nil {
 		return forgeCredential{}, errCredentialUnavailable
 	}
@@ -293,7 +292,11 @@ func (s *Server) oauthCredential(ctx context.Context, hash []byte, payload strin
 		}
 		// If user lookup is temporarily unavailable, preserve the newly rotated
 		// refresh token, but do not allow it to authorize a request yet.
-		if saveErr := queries.UpdateSessionCredential(ctx, database.UpdateSessionCredentialParams{TokenHash: hash, EncryptedToken: s.seal(encodeOAuth(envelope), hash)}); saveErr != nil {
+		encrypted, keyID, sealErr := s.keyring.seal(sessionDomain, encodeOAuth(envelope), hash)
+		if sealErr != nil {
+			return forgeCredential{}, sealErr
+		}
+		if saveErr := queries.UpdateKeyedSessionCredential(ctx, database.UpdateKeyedSessionCredentialParams{TokenHash: hash, EncryptedToken: encrypted, CredentialKeyID: keyID}); saveErr != nil {
 			return forgeCredential{}, errStorageUnavailable
 		}
 		if commitErr := tx.Commit(); commitErr != nil {
@@ -327,4 +330,45 @@ func oauthRefreshError(err error) error {
 	default:
 		return errForgeUnavailable
 	}
+}
+
+// Decrypt before committing consumption. Unknown keys or failed authentication
+// preserve the verifier for operator recovery; a valid attempt remains one-use.
+func (s *Server) consumeOAuthVerifier(ctx context.Context, stateHash, bindingHash []byte) (string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", errStorageUnavailable
+	}
+	defer tx.Rollback()
+	queries := database.New(s.db).WithTx(tx)
+	row, err := queries.LockOAuthAttempt(ctx, database.LockOAuthAttemptParams{StateHash: stateHash, BindingHash: bindingHash})
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", errUnauthenticated
+	}
+	if err != nil {
+		return "", errStorageUnavailable
+	}
+	if !row.ExpiresAt.After(time.Now()) {
+		return "", errUnauthenticated
+	}
+	verifier, err := s.keyring.open(row.CredentialKeyID, oauthAttemptDomain, row.EncryptedVerifier, stateHash)
+	if err != nil {
+		return "", err
+	}
+	// Recheck against database time after waiting for the row lock. Do not
+	// rely on the application and PostgreSQL clocks having zero skew.
+	count, err := queries.DeleteOAuthAttempt(ctx, database.DeleteOAuthAttemptParams{StateHash: stateHash, BindingHash: bindingHash})
+	if err != nil {
+		return "", errStorageUnavailable
+	}
+	if count != 1 {
+		return "", errUnauthenticated
+	}
+	if !row.ExpiresAt.After(time.Now()) {
+		return "", errUnauthenticated
+	}
+	if err := tx.Commit(); err != nil {
+		return "", errStorageUnavailable
+	}
+	return verifier, nil
 }

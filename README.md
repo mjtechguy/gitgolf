@@ -61,7 +61,7 @@ Add `read:organization` to browse your organizations and provider-visible teams;
 
 The browser receives an opaque HttpOnly session cookie, not the upstream credential. The server stores only the session identifier's hash and an AES-GCM-encrypted Gitea token. Sessions expire after 12 hours. Token revocation is enforced by Gitea on subsequent calls. Local insecure cookies are explicitly allowed only on loopback origins; remote use requires HTTPS and secure cookies.
 
-Secrets are generated once into ignored `.env`. Keep that file and `GOLF_ENCRYPTION_KEY` secure. The database initializes two independent databases/roles, one for Golf and one for Gitea. Changing `.env` passwords later does not rotate existing PostgreSQL roles. Do not delete `.env` while retaining volumes and expect a fresh credential set to work.
+Secrets are generated once into ignored `.env`. Keep that file and all configured encryption keys secure. The original `GOLF_ENCRYPTION_KEY` remains supported as the `legacy` key; do not replace its bytes under the same label. The database initializes two independent databases/roles, one for Golf and one for Gitea. Changing `.env` passwords later does not rotate existing PostgreSQL roles. Do not delete `.env` while retaining volumes and expect a fresh credential set to work.
 
 ```sh
 docker compose stop      # stop; retain all data
@@ -70,6 +70,14 @@ docker compose down      # remove containers/network; retain named volumes
 ```
 
 Do not add `--volumes` unless intentionally erasing this installation. Backup/recovery automation and a production deployment profile are not yet qualified. Preserve both databases, Gitea repository/configuration volumes and encryption keys together. Local ports bind only to loopback; this Compose file is a development installation.
+
+## Credential key operations
+
+The [keyring contract](docs/CREDENTIAL_KEYRING.md) documents `GOLF_ENCRYPTION_KEYS` (a JSON map of labels to base64 32-byte keys) and `GOLF_ACTIVE_ENCRYPTION_KEY`, alongside the compatible single-key variable. Registered labels are permanently bound to their material. Every stored session and pending OAuth verifier must retain its read key, including expired records.
+
+Operator commands live in the server binary, separately from the read-only user CLI. Supply the Golf database/key environment securely, then use `./bin/golf-server keys status`, `keys activate`, `keys rotate --batch-size 100 --max-batches 10`, or `keys retirement-check --key-id legacy`. The container equivalent is `docker compose run --rm --no-deps golf keys status` with an already-built image and available database. Even status can apply migrations and register legacy metadata; partial rotation can exit zero, so inspect its JSON state/counts.
+
+Before activation, drain all old Golf writers and in-flight OAuth exchanges. Database fencing cannot reverse an issuer's completed refresh, and transparent rolling cutover is not supported. Retirement requires zero uses in both credential tables and does not erase secrets or old backup keys. Targeted database and old-binary PAT/pending-verifier checks pass; live OAuth exchange across activation and wider rollout/recovery qualification remain open. This does not complete P1.3 or add KMS/age/FIPS support.
 
 ## Run on Kubernetes
 
@@ -138,6 +146,8 @@ make cli
 python3 scripts/smoke.py --cli bin/golf
 # Own-account activity API/CLI and production-served browser checks.
 python3 scripts/audit-smoke.py --cli bin/golf
+# Isolated DB/real PAT keyring checks; build bin/golf-server first.
+python3 scripts/keyring-smoke.py
 # Actual PAT session management and production-served dialog checks.
 python3 scripts/sessions-smoke.py
 # Real membership-scoped organizations/teams and production browser checks.

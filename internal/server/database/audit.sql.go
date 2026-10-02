@@ -43,33 +43,6 @@ func (q *Queries) AppendAuditEvent(ctx context.Context, arg AppendAuditEventPara
 	return err
 }
 
-const createAuditedSession = `-- name: CreateAuditedSession :one
-INSERT INTO golf_sessions (token_hash, user_id, encrypted_token, expires_at, credential_kind)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING session_id
-`
-
-type CreateAuditedSessionParams struct {
-	TokenHash      []byte
-	UserID         int64
-	EncryptedToken []byte
-	ExpiresAt      time.Time
-	CredentialKind string
-}
-
-func (q *Queries) CreateAuditedSession(ctx context.Context, arg CreateAuditedSessionParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, createAuditedSession,
-		arg.TokenHash,
-		arg.UserID,
-		arg.EncryptedToken,
-		arg.ExpiresAt,
-		arg.CredentialKind,
-	)
-	var session_id int64
-	err := row.Scan(&session_id)
-	return session_id, err
-}
-
 const deleteAuditedSession = `-- name: DeleteAuditedSession :one
 DELETE FROM golf_sessions s
 USING golf_users u

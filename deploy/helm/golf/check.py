@@ -56,6 +56,11 @@ assert (CHART / "files/postgres-init.sh").read_bytes() == (CHART.parents[1] / "p
 render(BASE, lint=True)
 core = render(BASE)
 assert "kind: Secret\n" not in core, "chart must only reference precreated Secrets"
+golf = find(core, "Deployment", "check-golf")
+for key in ["GOLF_ENCRYPTION_KEY", "GOLF_ENCRYPTION_KEYS", "GOLF_ACTIVE_ENCRYPTION_KEY"]:
+    assert re.search(r"key: " + key + r", optional: true", golf), "keyring settings must reference optional existing Secret keys"
+assert re.search(r"key: DATABASE_URL\}", golf), "database credential must remain required"
+
 for component in ("gitea", "postgres"):
     stateful = find(core, "StatefulSet", f"check-golf-{component}")
     assert re.search(r"^  replicas: 1$", stateful, re.M), "canonical writer count changed"

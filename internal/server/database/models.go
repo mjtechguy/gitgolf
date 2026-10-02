@@ -22,21 +22,46 @@ type GolfAuditEvent struct {
 	ExpiresAt       sql.NullTime
 }
 
+type GolfCryptoEvent struct {
+	ID                 int64
+	OccurredAt         time.Time
+	Actor              string
+	OperationID        string
+	Action             string
+	KeyID              string
+	SessionsCount      int64
+	OauthAttemptsCount int64
+}
+
+type GolfEncryptionKey struct {
+	KeyID        string
+	Fingerprint  []byte
+	RegisteredAt time.Time
+	Actor        string
+}
+
+type GolfEncryptionPolicy struct {
+	Singleton   bool
+	ActiveKeyID string
+}
+
 type GolfOauthAttempt struct {
 	StateHash         []byte
 	BindingHash       []byte
 	EncryptedVerifier []byte
 	ExpiresAt         time.Time
+	CredentialKeyID   string
 }
 
 type GolfSession struct {
-	TokenHash      []byte
-	UserID         int64
-	EncryptedToken []byte
-	ExpiresAt      time.Time
-	CreatedAt      time.Time
-	CredentialKind string
-	SessionID      int64
+	TokenHash       []byte
+	UserID          int64
+	EncryptedToken  []byte
+	ExpiresAt       time.Time
+	CreatedAt       time.Time
+	CredentialKind  string
+	SessionID       int64
+	CredentialKeyID string
 }
 
 type GolfUser struct {

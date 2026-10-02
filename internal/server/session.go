@@ -17,21 +17,6 @@ import (
 const cookieName = "golf_session"
 const sessionLifetime = 12 * time.Hour
 
-func (s *Server) seal(token string, hash []byte) []byte {
-	nonce := make([]byte, s.cipher.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		panic(err)
-	}
-	return s.cipher.Seal(nonce, nonce, []byte(token), hash)
-}
-func (s *Server) unseal(value, hash []byte) (string, error) {
-	n := s.cipher.NonceSize()
-	if len(value) < n {
-		return "", errors.New("invalid credential envelope")
-	}
-	plain, err := s.cipher.Open(nil, value[:n], value[n:], hash)
-	return string(plain), err
-}
 func sessionHash(value string) ([]byte, error) {
 	decoded, err := base64.RawURLEncoding.DecodeString(value)
 	if err != nil || len(decoded) != 32 {
@@ -117,7 +102,11 @@ func (s *Server) createSession(ctx context.Context, user User, kind, payload, ol
 			return loginResult{}, err
 		}
 	}
-	sessionID, err := queries.CreateAuditedSession(ctx, database.CreateAuditedSessionParams{TokenHash: hash, UserID: id, EncryptedToken: s.seal(payload, hash), ExpiresAt: expires, CredentialKind: kind})
+	encrypted, keyID, err := s.keyring.seal(sessionDomain, payload, hash)
+	if err != nil {
+		return loginResult{}, err
+	}
+	sessionID, err := queries.CreateKeyedSession(ctx, database.CreateKeyedSessionParams{TokenHash: hash, UserID: id, EncryptedToken: encrypted, ExpiresAt: expires, CredentialKind: kind, CredentialKeyID: keyID})
 	if err != nil {
 		return loginResult{}, errStorageUnavailable
 	}
@@ -148,7 +137,7 @@ func (s *Server) sessionCredential(ctx context.Context, value string) (forgeCred
 	if err != nil {
 		return forgeCredential{}, errStorageUnavailable
 	}
-	payload, err := s.unseal(row.EncryptedToken, hash)
+	payload, err := s.keyring.open(row.CredentialKeyID, sessionDomain, row.EncryptedToken, hash)
 	if err != nil {
 		return forgeCredential{}, errCredentialUnavailable
 	}

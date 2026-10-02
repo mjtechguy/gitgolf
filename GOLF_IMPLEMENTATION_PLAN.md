@@ -890,7 +890,7 @@ Webhooks require provider-authenticated validation and replay/deduplication hand
 
 ### 14.2 Credentials and production boundaries
 
-Credential records carry key identifier, algorithm, and ciphertext. Support rotation and emergency revocation. Default encryption follows the guide's age approach under the approved ADR; assurance distributions use their separately verified approved path.
+Credential records carry key identifier, algorithm, and ciphertext. Support rotation and emergency revocation. The guide's age default and assurance-specific encryption require an explicit disposition; the current credential families use the narrow AES-GCM departure recorded in ADR 0001. [ADR 0005](docs/decisions/0005-credential-keyring-and-drained-rotation.md) and the [keyring contract](docs/CREDENTIAL_KEYRING.md) extend that implementation with immutable label/material binding, drained activation, bounded re-encryption and zero-use retirement checks. The ledger records bounded database and old-binary PAT/pending-verifier qualification; this adds no KMS, explicit algorithm migration, secret erasure, emergency-compromise guarantee or transparent rolling cutover. Live OAuth exchange across activation and deployment/recovery qualification remain open. It does not silently approve the full guide/security disposition.
 
 Agent/model credentials, repository credentials, and deployment credentials are separately scoped. Long-lived Cloudflare account credentials are held by trusted control/deployment components, not arbitrary builds. Job credentials expire, are revoked on cancellation, and cannot list other tenants' resources.
 
