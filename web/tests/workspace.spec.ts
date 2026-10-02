@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { BeginGiteaOAuthResponseSchema, GetAuthenticationOptionsResponseSchema, CapabilityState, RepositoryCreationState, CreateRepositoryRequestSchema, CreateRepositoryResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, LoginWithGiteaTokenRequestSchema, LoginWithGiteaTokenResponseSchema, LoginWithPasswordRequestSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema, RepositorySchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
+import { GetProfileResponseSchema, BeginGiteaOAuthResponseSchema, GetAuthenticationOptionsResponseSchema, CapabilityState, RepositoryCreationState, CreateRepositoryRequestSchema, CreateRepositoryResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, LoginWithGiteaTokenRequestSchema, LoginWithGiteaTokenResponseSchema, LoginWithPasswordRequestSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema, RepositorySchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
 import type { CreateRepositoryRequest } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
@@ -37,6 +37,7 @@ async function backend(page: Page, signedIn = true) {
       return respond(route, LoginWithGiteaTokenResponseSchema, { user });
     }
     if (path === '/rpc/golf.v1.SessionService/Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
+    if (path === '/rpc/golf.v1.ProfileService/GetProfile') return state.signedIn ? respond(route, GetProfileResponseSchema, { profile: { userId: user.id, login: user.login, fullName: user.fullName, revision: 'a'.repeat(64), canEdit: true } }) : reject(route, 'unauthenticated', 'Sign in required.');
     if (path === '/rpc/golf.v1.SessionService/GetSession') return state.signedIn ? respond(route, GetSessionResponseSchema, { user: { ...user, isInstanceAdmin: state.passwordAdmin } }) : reject(route, 'unauthenticated', 'Sign in required.');
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Your session expired.');
     if (path === '/rpc/golf.v1.CapabilityService/ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, { capabilities: [

@@ -55,6 +55,7 @@ func (s *Server) rpcHandler() http.Handler {
 	}
 	mux := http.NewServeMux()
 	mux.Handle(golfv1connect.NewSessionServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewProfileServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewOrganizationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewOrganizationAdminServiceHandler(s, options...))
@@ -108,7 +109,8 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		switch procedure {
 		case golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLoginWithPasswordProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
 			public = true
-		case golfv1connect.InfrastructureConnectionServiceListInfrastructureConnectionsProcedure, golfv1connect.InfrastructureConnectionServiceSaveInfrastructureConnectionProcedure, golfv1connect.InfrastructureConnectionServiceTestInfrastructureConnectionProcedure, golfv1connect.InfrastructureConnectionServiceActivateInfrastructureConnectionProcedure,
+		case golfv1connect.ProfileServiceGetProfileProcedure, golfv1connect.ProfileServiceUpdateProfileProcedure,
+			golfv1connect.InfrastructureConnectionServiceListInfrastructureConnectionsProcedure, golfv1connect.InfrastructureConnectionServiceSaveInfrastructureConnectionProcedure, golfv1connect.InfrastructureConnectionServiceTestInfrastructureConnectionProcedure, golfv1connect.InfrastructureConnectionServiceActivateInfrastructureConnectionProcedure,
 			golfv1connect.OrganizationCreationServiceGetOrganizationCreationPolicyProcedure, golfv1connect.OrganizationCreationServiceUpdateOrganizationCreationPolicyProcedure, golfv1connect.OrganizationCreationServiceCreateOrganizationProcedure,
 			golfv1connect.ExecutionPolicyServiceGetExecutionPolicyProcedure, golfv1connect.ExecutionPolicyServiceUpdateExecutionPolicyProcedure,
 			golfv1connect.WorkflowRunServiceDispatchWorkflowProcedure, golfv1connect.WorkflowRunServiceGetWorkflowRunProcedure, golfv1connect.WorkflowRunServiceListWorkflowRunsProcedure, golfv1connect.WorkflowRunServiceCancelWorkflowRunProcedure, golfv1connect.WorkflowRunServiceGetWorkflowRunLogsProcedure,

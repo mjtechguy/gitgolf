@@ -1092,3 +1092,31 @@ message TestInfrastructureConnectionResponse { bool accessible = 1; string resul
 
 message ActivateInfrastructureConnectionRequest { string id = 1; string expected_version = 2; string password_confirmation = 3; string expected_active_revision = 4; }
 message ActivateInfrastructureConnectionResponse { InfrastructureConnection connection = 1; string active_revision = 2; }
+
+// Own public profile only. Email, login and authentication changes are separate.
+service ProfileService {
+ rpc GetProfile(GetProfileRequest) returns (GetProfileResponse);
+ rpc UpdateProfile(UpdateProfileRequest) returns (UpdateProfileResponse);
+}
+message Profile {
+ string user_id = 1;
+ string login = 2;
+ string full_name = 3;
+ string bio = 4;
+ string location = 5;
+ string website = 6;
+ // Observed snapshot, not a native atomic compare-and-swap guarantee.
+ string revision = 7;
+ bool can_edit = 8;
+}
+message GetProfileRequest {}
+message GetProfileResponse { Profile profile = 1; }
+message UpdateProfileRequest {
+ string user_id = 1;
+ string expected_revision = 2;
+ optional string full_name = 3;
+ optional string bio = 4;
+ optional string location = 5;
+ optional string website = 6;
+}
+message UpdateProfileResponse { Profile profile = 1; }

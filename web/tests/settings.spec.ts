@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, GetRepositorySettingsResponseSchema, UpdateRepositorySettingsRequestSchema, UpdateRepositorySettingsResponseSchema, GetOrganizationResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, RepositorySettingsSchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
+import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, GetProfileResponseSchema, GetRepositorySettingsResponseSchema, UpdateRepositorySettingsRequestSchema, UpdateRepositorySettingsResponseSchema, GetOrganizationResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, RepositorySettingsSchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 async function backend(page: Page, admin = true) {
@@ -10,6 +10,7 @@ async function backend(page: Page, admin = true) {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: state.user });
+    if (method === 'GetProfile') return respond(route, GetProfileResponseSchema, { profile: { userId: state.user.id, login: state.user.login, fullName: state.user.fullName, revision: 'profile-revision', canEdit: true } });
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, {});
     if (method === 'GetOrganization') return state.denied ? reject(route, 'not_found', 'Organization unavailable.') : respond(route, GetOrganizationResponseSchema, { organization: { id: '21', name: 'team', fullName: 'Team' } });
@@ -33,7 +34,7 @@ test('personal coverage distinguishes supported settings from missing enforcemen
   await backend(page);
   await page.goto('/account/settings');
   await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeVisible();
-  await expect(page.locator('input:not([type=search]),textarea,select')).toHaveCount(0);
+  await expect(page.locator('input:not([type=search]),textarea,select:not(.data-table-page-size)')).toHaveCount(0);
   const table = page.getByRole('table', { name: 'Personal settings', exact: true });
   await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(11);
   await page.getByRole('searchbox', { name: 'Search loaded Personal settings', exact: true }).fill('MFA');
@@ -124,7 +125,7 @@ test('organization settings require membership, distinguish planned policy and f
   const table = page.getByRole('table', { name: 'Organization settings', exact: true });
   await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(10);
   await expect(table.getByText('CI, workflows and fork trust', { exact: true })).toBeVisible();
-  await expect(page.locator('input:not([type=search]),textarea,select')).toHaveCount(0);
+  await expect(page.locator('input:not([type=search]),textarea,select:not(.data-table-page-size)')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   state.denied = true;
   await page.reload();

@@ -1,0 +1,23 @@
+# Own public profile editing
+
+`ProfileService.GetProfile` reads the current authenticated native user's public profile through supported `GET /user/settings`; `UpdateProfile` dispatches one supported `PATCH /user/settings` and verifies its receipt plus a fresh read. Both methods require the browser cookie/Origin boundary; Golf API bearer credentials cannot read or mutate this browser settings surface. There is no caller-supplied login/native route or instance-admin impersonation.
+
+Supported fields are display name (`full_name`, at most 100 UTF-8 bytes), biography (`description`, 255), location (50) and website (255). Explicit optional field presence clears an empty string; absence leaves the field unchanged. At least one field is required. Controls are rejected except biography newline/tab. Proposed websites must be empty or an absolute HTTP(S) URL without credentials. Existing native website text remains readable as bounded plain text, even if it lacks a scheme; it must not become an unvalidated clickable URL. The UI owns Golf theme preferences separately.
+
+Native immutable user ID and login bind the projection and observed revision. A wrong target ID is denied even for a Golf instance administrator. The revision includes the identity and all four public fields. The backend repeats native observations and verifies local session/account authority immediately before dispatch, then verifies receipt, reread and final caller authority before returning success. External native edits can still race between those observations and PATCH: this is best-effort stale-form detection, **not native atomic CAS**. No application feature writes the native database.
+
+`can_edit` means Golf permits an own-profile editing attempt. Gitea does not expose token scopes in this settings response; it is not evidence the supplied native credential carries `write:user`. The native endpoint enforces that scope and can reject the write. Ordinary local Golf users do not gain a native grant or native administrator role through this feature.
+
+There is no retry loop or durable mutation journal for this reversible public-field update. A lost response, mismatched receipt or failed postflight can follow an applied update. The browser stops the editor and requires manual refresh/inspection before another explicit edit. Refresh observes current native values; it does not prove who applied them or replay the failed PATCH. Restart does not roll back the native public profile.
+
+Golf login email/username, password, enrollment mapping, native login/email, avatar uploads and privacy settings are outside this mutation allowlist. Changing public profile fields does not change the operator-enrolled Golf credential or its independent local login email. Read-only Golf enrollment email will need an own-local-account projection; native email must not substitute for it.
+
+Primary native contracts: [Gitea 1.27.3 user settings API](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/api/v1/user/settings.go), [native field definitions and bounds](https://github.com/go-gitea/gitea/blob/v1.27.3/modules/structs/user.go).
+
+## Verification
+
+`TestProfileValidation` and `TestProfileBoundary` cover canonical IDs/revisions, explicit empty clears, missing native fields, safe existing website text, UTF-8 byte/control/URL limits and cookie/Origin/bearer refusal. `TestProfilePostgres` uses real PostgreSQL plus a controlled native API fixture to exercise stale revisions, foreign immutable IDs, a PATCH applied before its receipt is lost without automatic retry, principal substitution and revocation during provider waits.
+
+`python3 scripts/profile-smoke.py --image YOUR_BUILT_IMAGE` creates a fresh private Compose project, ordinary native users with distinct `write:user` and `read:user` scopes, and operator-enrolled Golf local users. It qualifies actual four-field PATCH/readback and clear, native read-only refusal, stale/foreign targets, invalid input, Origin/bearer/revoked-cookie boundaries, server restart persistence and unchanged local email/password sign-in. It removes that disposable project's containers, volumes, network and temporary credentials; retained administrators are untouched. Qualification results belong in the implementation ledger.
+
+The disposable native/local proof passed on 2026-10-02 with Golf image `sha256:666e24485826dc67e8d9cd298de5b6e0a0ec4985e0a1577d064fee98dc314f15` and Gitea 1.27.3. Scoped real PostgreSQL race tests passed in a fresh PostgreSQL fixture; unit/boundary tests also passed after the safe-text website-read change. This qualifies the bounded public profile route, not authentication editing, a native CAS guarantee or a durable mutation journal.

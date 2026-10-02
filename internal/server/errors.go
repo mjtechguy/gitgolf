@@ -67,6 +67,8 @@ func rpcError(err error) error {
 		code, message = connect.CodeFailedPrecondition, "Repository access changed. Refresh and review the current grants before continuing."
 	case errors.Is(err, errOrganizationAdminConflict):
 		code, message = connect.CodeFailedPrecondition, "Organization or team membership changed. Refresh before continuing."
+	case errors.Is(err, errProfileConflict):
+		code, message = connect.CodeFailedPrecondition, "Your profile changed. Refresh and review the current values before editing."
 	case errors.Is(err, errRepositorySettingsConflict):
 		code, message = connect.CodeFailedPrecondition, "Repository settings changed. Refresh before editing again."
 	case errors.Is(err, errSSHKeyRejected):

@@ -56,6 +56,8 @@ const (
 	// InfrastructureConnectionServiceName is the fully-qualified name of the
 	// InfrastructureConnectionService service.
 	InfrastructureConnectionServiceName = "golf.v1.InfrastructureConnectionService"
+	// ProfileServiceName is the fully-qualified name of the ProfileService service.
+	ProfileServiceName = "golf.v1.ProfileService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -269,6 +271,12 @@ const (
 	// InfrastructureConnectionServiceActivateInfrastructureConnectionProcedure is the fully-qualified
 	// name of the InfrastructureConnectionService's ActivateInfrastructureConnection RPC.
 	InfrastructureConnectionServiceActivateInfrastructureConnectionProcedure = "/golf.v1.InfrastructureConnectionService/ActivateInfrastructureConnection"
+	// ProfileServiceGetProfileProcedure is the fully-qualified name of the ProfileService's GetProfile
+	// RPC.
+	ProfileServiceGetProfileProcedure = "/golf.v1.ProfileService/GetProfile"
+	// ProfileServiceUpdateProfileProcedure is the fully-qualified name of the ProfileService's
+	// UpdateProfile RPC.
+	ProfileServiceUpdateProfileProcedure = "/golf.v1.ProfileService/UpdateProfile"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -2755,4 +2763,100 @@ func (UnimplementedInfrastructureConnectionServiceHandler) TestInfrastructureCon
 
 func (UnimplementedInfrastructureConnectionServiceHandler) ActivateInfrastructureConnection(context.Context, *connect.Request[v1.ActivateInfrastructureConnectionRequest]) (*connect.Response[v1.ActivateInfrastructureConnectionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InfrastructureConnectionService.ActivateInfrastructureConnection is not implemented"))
+}
+
+// ProfileServiceClient is a client for the golf.v1.ProfileService service.
+type ProfileServiceClient interface {
+	GetProfile(context.Context, *connect.Request[v1.GetProfileRequest]) (*connect.Response[v1.GetProfileResponse], error)
+	UpdateProfile(context.Context, *connect.Request[v1.UpdateProfileRequest]) (*connect.Response[v1.UpdateProfileResponse], error)
+}
+
+// NewProfileServiceClient constructs a client for the golf.v1.ProfileService service. By default,
+// it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and
+// sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC()
+// or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewProfileServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ProfileServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	profileServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("ProfileService").Methods()
+	return &profileServiceClient{
+		getProfile: connect.NewClient[v1.GetProfileRequest, v1.GetProfileResponse](
+			httpClient,
+			baseURL+ProfileServiceGetProfileProcedure,
+			connect.WithSchema(profileServiceMethods.ByName("GetProfile")),
+			connect.WithClientOptions(opts...),
+		),
+		updateProfile: connect.NewClient[v1.UpdateProfileRequest, v1.UpdateProfileResponse](
+			httpClient,
+			baseURL+ProfileServiceUpdateProfileProcedure,
+			connect.WithSchema(profileServiceMethods.ByName("UpdateProfile")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// profileServiceClient implements ProfileServiceClient.
+type profileServiceClient struct {
+	getProfile    *connect.Client[v1.GetProfileRequest, v1.GetProfileResponse]
+	updateProfile *connect.Client[v1.UpdateProfileRequest, v1.UpdateProfileResponse]
+}
+
+// GetProfile calls golf.v1.ProfileService.GetProfile.
+func (c *profileServiceClient) GetProfile(ctx context.Context, req *connect.Request[v1.GetProfileRequest]) (*connect.Response[v1.GetProfileResponse], error) {
+	return c.getProfile.CallUnary(ctx, req)
+}
+
+// UpdateProfile calls golf.v1.ProfileService.UpdateProfile.
+func (c *profileServiceClient) UpdateProfile(ctx context.Context, req *connect.Request[v1.UpdateProfileRequest]) (*connect.Response[v1.UpdateProfileResponse], error) {
+	return c.updateProfile.CallUnary(ctx, req)
+}
+
+// ProfileServiceHandler is an implementation of the golf.v1.ProfileService service.
+type ProfileServiceHandler interface {
+	GetProfile(context.Context, *connect.Request[v1.GetProfileRequest]) (*connect.Response[v1.GetProfileResponse], error)
+	UpdateProfile(context.Context, *connect.Request[v1.UpdateProfileRequest]) (*connect.Response[v1.UpdateProfileResponse], error)
+}
+
+// NewProfileServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewProfileServiceHandler(svc ProfileServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	profileServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("ProfileService").Methods()
+	profileServiceGetProfileHandler := connect.NewUnaryHandler(
+		ProfileServiceGetProfileProcedure,
+		svc.GetProfile,
+		connect.WithSchema(profileServiceMethods.ByName("GetProfile")),
+		connect.WithHandlerOptions(opts...),
+	)
+	profileServiceUpdateProfileHandler := connect.NewUnaryHandler(
+		ProfileServiceUpdateProfileProcedure,
+		svc.UpdateProfile,
+		connect.WithSchema(profileServiceMethods.ByName("UpdateProfile")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.ProfileService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case ProfileServiceGetProfileProcedure:
+			profileServiceGetProfileHandler.ServeHTTP(w, r)
+		case ProfileServiceUpdateProfileProcedure:
+			profileServiceUpdateProfileHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedProfileServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedProfileServiceHandler struct{}
+
+func (UnimplementedProfileServiceHandler) GetProfile(context.Context, *connect.Request[v1.GetProfileRequest]) (*connect.Response[v1.GetProfileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ProfileService.GetProfile is not implemented"))
+}
+
+func (UnimplementedProfileServiceHandler) UpdateProfile(context.Context, *connect.Request[v1.UpdateProfileRequest]) (*connect.Response[v1.UpdateProfileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ProfileService.UpdateProfile is not implemented"))
 }

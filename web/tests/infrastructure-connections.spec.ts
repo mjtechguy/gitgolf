@@ -26,7 +26,7 @@ async function backend(page: Page) {
 test('infrastructure inventory is compact, searchable and starts without settings forms', async ({ page }) => {
   await backend(page); await page.goto('/admin/settings/infrastructure');
   await expect(page.getByRole('heading', { name: 'Infrastructure connections', exact: true })).toBeVisible();
-  await expect(page.locator('input:not([type=search]),textarea,select')).toHaveCount(0);
+  await expect(page.locator('input:not([type=search]),textarea,select:not(.data-table-page-size):not(.data-table-page-size select)')).toHaveCount(0);
   await expect(page.getByRole('table', { name: 'Deployment connections', exact: true }).getByText('postgres:5432')).toBeVisible();
   await page.getByRole('searchbox', { name: 'Search loaded Infrastructure connections', exact: true }).fill('RustFS');
   await expect(page.getByRole('table', { name: 'Infrastructure connections', exact: true }).locator('tbody tr[data-row-id]')).toHaveCount(1);

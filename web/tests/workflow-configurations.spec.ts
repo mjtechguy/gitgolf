@@ -1,13 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, InspectWorkflowsRequestSchema, InspectWorkflowsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ExecutionScope, ExecutionMode, GetExecutionPolicyResponseSchema, ListWorkflowRunsResponseSchema, WorkflowConfigurationSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
+import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, InspectWorkflowsRequestSchema, InspectWorkflowsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ExecutionScope, ExecutionMode, GetExecutionPolicyResponseSchema, ListWorkflowRunsResponseSchema, ListWorkflowRunsRequestSchema, WorkflowRunState, WorkflowConfigurationSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 const path = '/repositories/alex/private/settings/workflows';
 const commit = 'a'.repeat(40);
 const manual = create(WorkflowConfigurationSchema, { path: '.github/workflows/manual.yml', blobId: 'b'.repeat(40), byteSize: 123n, format: WorkflowFormat.GITHUB_ACTIONS, state: WorkflowInspectionState.VALIDATED_SUBSET, name: '<literal-workflow>', events: ['workflow_dispatch'], jobs: [{ id: 'check', name: '<img src=x onerror=alert(1)>', stepCount: 1 }] });
 async function backend(page: Page) {
-  const state = { mode: 'ready', signedIn: true, barrier: undefined as Promise<void> | undefined, requests: [] as unknown[] };
+  const state = { mode: 'ready', signedIn: true, barrier: undefined as Promise<void> | undefined, requests: [] as unknown[], runPages: false, denyRuns: false, requestedRunPages: [] as number[] };
   await page.route('**/rpc/**', async route => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
@@ -15,7 +15,13 @@ async function backend(page: Page) {
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '9007199254740993', login: 'alex' } });
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
     if (method === 'GetExecutionPolicy') return respond(route, GetExecutionPolicyResponseSchema, { policy: { scope: ExecutionScope.REPOSITORY, scopeId: '9007199254740997', ownerId: '9007199254740993', mode: ExecutionMode.DISABLED, revision: '0', revocationEpoch: '0', authorityRevision: 'd'.repeat(64) } });
-    if (method === 'ListWorkflowRuns') return respond(route, ListWorkflowRunsResponseSchema, {});
+    if (method === 'ListWorkflowRuns') {
+      const input = request(route, ListWorkflowRunsRequestSchema); state.requestedRunPages.push(input.page?.page || 1);
+      if (state.denyRuns) return reject(route, 'permission_denied', 'Workflow runs require repository read access.');
+      if (!state.runPages) return respond(route, ListWorkflowRunsResponseSchema, {});
+      const current = input.page?.page || 1;
+      return respond(route, ListWorkflowRunsResponseSchema, { runs: Array.from({ length: current === 1 ? 20 : 1 }, (_, index) => ({ id: `run-${current}-${index}`, workflowPath: current === 2 ? '.github/workflows/later.yml' : `.github/workflows/job-${index}.yml`, state: WorkflowRunState.SUCCEEDED, commitId: commit })), page: { nextPage: current === 1 ? 2 : 0 } });
+    }
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, {});
     if (method === 'InspectWorkflows') {
       state.requests.push(request(route, InspectWorkflowsRequestSchema));
@@ -88,4 +94,21 @@ test('empty workflow inventory and bounded refusal remain distinct without fake 
   state.mode = 'overfull'; await page.getByRole('button', { name: 'Refresh workflow inspection', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Workflow configuration inventory exceeds its bound.');
   await expect(page.getByText('No matching workflow configuration files at this commit.', { exact: true })).toHaveCount(0);
+});
+
+
+test('run inventory loads the next server page and clears private rows on denial', async ({ page }) => {
+  const state = await backend(page); state.runPages = true; await open(page);
+  const table = page.getByRole('table', { name: 'Workflow runs', exact: true });
+  await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(20);
+  await page.getByRole('button', { name: 'Load more workflow runs', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Load more workflow runs', exact: true })).toHaveCount(0);
+  await page.getByRole('searchbox', { name: 'Search loaded Workflow runs', exact: true }).fill('later.yml');
+  await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(1);
+  await expect(table).toContainText('.github/workflows/later.yml');
+  expect(state.requestedRunPages.filter(value => value === 2)).toEqual([2]);
+  expect(state.requestedRunPages.every(value => value === 1 || value === 2)).toBe(true);
+  state.denyRuns = true; await page.getByRole('button', { name: 'Refresh runs', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveText('Workflow runs require repository read access.');
+  await expect(table).toHaveCount(0);
 });
