@@ -136,7 +136,7 @@ test('configured OAuth shows requested permissions and navigates through the gen
   const state = await backend(page, false);
   state.oauthOptions.giteaOauthEnabled = true;
   state.oauthOptions.providerLabel = 'Team Gitea';
-  state.oauthOptions.scopes = ['write:user', 'write:repository', 'read:issue'];
+  state.oauthOptions.scopes = ['write:user', 'write:repository', 'read:issue', 'read:organization'];
   await page.route('https://forge.example/login/oauth/authorize?**', (route) => route.fulfill({ contentType: 'text/html', body: '<h1>Gitea authorization fixture</h1>' }));
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

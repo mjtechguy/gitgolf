@@ -29,6 +29,16 @@ service RepositoryService {
   rpc GetIssue(GetIssueRequest) returns (GetIssueResponse);
 }
 
+// Native forge membership browsing. These reads do not define Golf roles.
+service OrganizationService {
+  rpc ListOrganizations(ListOrganizationsRequest) returns (ListOrganizationsResponse);
+  rpc GetOrganization(GetOrganizationRequest) returns (GetOrganizationResponse);
+  rpc ListTeams(ListTeamsRequest) returns (ListTeamsResponse);
+  rpc GetTeam(GetTeamRequest) returns (GetTeamResponse);
+  rpc ListTeamMembers(ListTeamMembersRequest) returns (ListTeamMembersResponse);
+  rpc ListTeamRepositories(ListTeamRepositoriesRequest) returns (ListTeamRepositoriesResponse);
+}
+
 service CapabilityService {
   rpc ListCapabilities(ListCapabilitiesRequest) returns (ListCapabilitiesResponse);
 }
@@ -233,3 +243,82 @@ message GetAuthenticationOptionsResponse {
 }
 message BeginGiteaOAuthRequest {}
 message BeginGiteaOAuthResponse { string authorization_url = 1; }
+
+enum OrganizationVisibility {
+  ORGANIZATION_VISIBILITY_UNSPECIFIED = 0;
+  ORGANIZATION_VISIBILITY_PUBLIC = 1;
+  ORGANIZATION_VISIBILITY_LIMITED = 2;
+  ORGANIZATION_VISIBILITY_PRIVATE = 3;
+}
+
+enum TeamVisibility {
+  TEAM_VISIBILITY_UNSPECIFIED = 0;
+  TEAM_VISIBILITY_PUBLIC = 1;
+  TEAM_VISIBILITY_LIMITED = 2;
+  TEAM_VISIBILITY_PRIVATE = 3;
+}
+
+enum TeamPermission {
+  TEAM_PERMISSION_UNSPECIFIED = 0;
+  TEAM_PERMISSION_NONE = 1;
+  TEAM_PERMISSION_READ = 2;
+  TEAM_PERMISSION_WRITE = 3;
+  TEAM_PERMISSION_ADMIN = 4;
+  TEAM_PERMISSION_OWNER = 5;
+}
+
+message Organization {
+  string id = 1;
+  string name = 2;
+  string full_name = 3;
+  string description = 4;
+  OrganizationVisibility visibility = 5;
+}
+message OrganizationTeam {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  // Native provider metadata, not a computed effective Golf role.
+  TeamPermission permission = 4;
+  map<string, TeamPermission> unit_permissions = 5;
+  bool includes_all_repositories = 6;
+  TeamVisibility visibility = 7;
+}
+message ListOrganizationsRequest { PageRequest page = 1; }
+message ListOrganizationsResponse {
+  repeated Organization organizations = 1;
+  PageResponse page = 2;
+}
+message GetOrganizationRequest { string organization = 1; }
+message GetOrganizationResponse { Organization organization = 1; }
+message ListTeamsRequest {
+  string organization = 1;
+  PageRequest page = 2;
+}
+message ListTeamsResponse {
+  repeated OrganizationTeam teams = 1;
+  PageResponse page = 2;
+}
+message GetTeamRequest {
+  string organization = 1;
+  string team_id = 2;
+}
+message GetTeamResponse { OrganizationTeam team = 1; }
+message ListTeamMembersRequest {
+  string organization = 1;
+  string team_id = 2;
+  PageRequest page = 3;
+}
+message ListTeamMembersResponse {
+  repeated User members = 1;
+  PageResponse page = 2;
+}
+message ListTeamRepositoriesRequest {
+  string organization = 1;
+  string team_id = 2;
+  PageRequest page = 3;
+}
+message ListTeamRepositoriesResponse {
+  repeated Repository repositories = 1;
+  PageResponse page = 2;
+}

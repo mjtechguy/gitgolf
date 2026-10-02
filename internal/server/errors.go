@@ -63,7 +63,7 @@ func rpcError(err error) error {
 		case 401:
 			code, message = connect.CodeUnauthenticated, "Gitea rejected this credential. Sign in with a current token."
 		case 403:
-			code, message = connect.CodePermissionDenied, "Gitea denied this operation. Check token scopes and repository access."
+			code, message = connect.CodePermissionDenied, "Gitea denied this operation. Check token scopes and account permissions."
 		case 404:
 			code, message = connect.CodeNotFound, "This resource does not exist or is not accessible."
 		case 409, 422:

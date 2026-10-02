@@ -150,7 +150,19 @@ try {
   check((issues.issues ?? []).some(issue => issue.title === config.issueTitle), 'OAuth read:issue scope did not work');
   const created = await rpc(alice, 'RepositoryService/CreateRepository', { name: 'oauth-created', private: true });
   check(created.repository.private && created.repository.fullName === config.alice.name + '/oauth-created', 'OAuth write:user/write:repository scopes did not work');
-  console.log('PASS: actual Golf button, Gitea login/consent, scoped private source/issues/create');
+  const organizations = await rpc(alice, 'OrganizationService/ListOrganizations');
+  check((organizations.organizations ?? []).some(org => org.name === config.organization), 'OAuth organization scope did not return own membership');
+  const organization = await rpc(alice, 'OrganizationService/GetOrganization', { organization: config.organization });
+  check(organization.organization.name === config.organization, 'OAuth membership-scoped organization mismatch');
+  const teams = await rpc(alice, 'OrganizationService/ListTeams', { organization: config.organization });
+  const owners = (teams.teams ?? []).find(team => team.name === 'Owners');
+  check(owners?.permission === 'TEAM_PERMISSION_OWNER', 'OAuth native owner team metadata missing');
+  await rpc(alice, 'OrganizationService/GetTeam', { organization: config.organization, teamId: owners.id });
+  const members = await rpc(alice, 'OrganizationService/ListTeamMembers', { organization: config.organization, teamId: owners.id });
+  check((members.members ?? []).some(member => member.login === config.alice.name), 'OAuth team member read failed');
+  await rpc(alice, 'OrganizationService/ListTeamRepositories', { organization: config.organization, teamId: owners.id });
+  await rpc(bob, 'OrganizationService/GetOrganization', { organization: config.organization }, 401);
+  console.log('PASS: actual Golf button, Gitea login/consent, scoped private source/issues/create and six organization/team reads');
   stage = 'OAuth session management';
   const control = await browser.newContext(options);
   control.setDefaultTimeout(20000);
@@ -178,6 +190,7 @@ try {
   bobAllowed.setDefaultNavigationTimeout(20000);
   stage = 'Bob browser login and private isolation';
   await login(bobAllowed, config.bob);
+  await rpc(bobAllowed, 'OrganizationService/GetOrganization', { organization: config.organization }, 404);
   await rpc(bobAllowed, 'RepositoryService/GetRepository', { repository }, 404, 'not_found');
   await rpc(bobAllowed, 'RepositoryService/GetContents', { repository, ref: config.revision, path: config.path }, 404, 'not_found');
   await rpc(stranger, 'RepositoryService/GetContents', { repository, ref: config.revision, path: config.path }, 401, 'unauthenticated');
@@ -209,7 +222,10 @@ try {
       console.log('STEP: waiting 16 seconds for real Gitea access-token expiry');
       await new Promise(resolve => setTimeout(resolve, 16000));
       await Promise.all(Array.from({ length: 6 }, async (_, index) => {
-        if (index % 2) {
+        if (index === 0) {
+          const value = await rpc(alice, 'OrganizationService/ListOrganizations');
+          check((value.organizations ?? []).some(org => org.name === config.organization), 'Refreshed organization permission mismatch');
+        } else if (index % 2) {
           const value = await rpc(alice, 'SessionService/GetSession');
           check(value.user.login === config.alice.name, 'Refreshed identity mismatch');
         } else {
@@ -340,6 +356,7 @@ def main():
         raise RuntimeError('Install web dependencies and Playwright Chromium before this smoke')
     original_settings = original_refresh_settings() if args.refresh else None
     users, app, changed = [], None, False
+    organization = None
     suffix = secrets.token_hex(4)
     with tempfile.TemporaryDirectory(prefix='golf-oauth-smoke-', dir='/tmp') as directory:
         path = Path(directory)
@@ -362,6 +379,11 @@ def main():
                           headers={'Authorization': basic(owner)}, expected=201)
             if not app.get('client_id') or not app.get('client_secret') or not app.get('confidential_client'):
                 raise RuntimeError('Gitea did not register the confidential test application')
+            organization_name = 'golf-oauth-org-' + suffix
+            request(client(), 'POST', GITEA + '/api/v1/orgs',
+                    {'username': organization_name, 'visibility': 'private'},
+                    headers={'Authorization': basic(alice)}, expected=201)
+            organization = organization_name
             repository = 'oauth-private'
             request(client(), 'POST', GITEA + '/api/v1/user/repos',
                     {'name': repository, 'private': True, 'auto_init': True, 'readme': 'Default', 'default_branch': 'main'},
@@ -389,9 +411,9 @@ def main():
             browser_script.chmod(0o600)
             config = {'golf': GOLF, 'gitea': GITEA, 'alice': alice, 'bob': bob, 'sessionUser': session_user,
                       'ownerAuthorization': basic(owner), 'clientID': app['client_id'], 'applicationID': app['id'],
-                      'scopes': ['write:user', 'write:repository', 'read:issue'], 'repository': repository,
+                      'scopes': ['write:user', 'write:repository', 'read:issue', 'read:organization'], 'repository': repository,
                       'revision': source['commit']['sha'], 'path': source_path, 'text': text,
-                      'issueTitle': issue_title, 'refresh': args.refresh}
+                      'issueTitle': issue_title, 'organization': organization, 'refresh': args.refresh}
             process = subprocess.Popen(['node', str(browser_script)], cwd=ROOT, stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             try:
@@ -425,6 +447,12 @@ def main():
                         raise RuntimeError('Gitea OAuth timing settings were not restored')
                 except Exception:
                     cleanup_errors.append('service configuration restoration failed; inspect local Compose state')
+            if organization and len(users) > 1:
+                try:
+                    request(client(), 'DELETE', GITEA + '/api/v1/orgs/' + organization,
+                            headers={'Authorization': basic(users[1])}, expected=204)
+                except Exception:
+                    cleanup_errors.append('temporary OAuth organization deletion failed')
             if app and users and 'password' in users[0]:
                 try:
                     delete_application(users[0], app['id'])

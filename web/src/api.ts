@@ -1,6 +1,6 @@
 import { createClient, ConnectError } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
-import { CapabilityService, RepositoryService, SessionService } from './gen/golf/v1/golf_pb';
+import { CapabilityService, OrganizationService, RepositoryService, SessionService } from './gen/golf/v1/golf_pb';
 
 const transport = createConnectTransport({
   baseUrl: '/rpc',
@@ -11,6 +11,7 @@ const transport = createConnectTransport({
 export const sessionClient = createClient(SessionService, transport);
 export const repositoryClient = createClient(RepositoryService, transport);
 export const capabilityClient = createClient(CapabilityService, transport);
+export const organizationClient = createClient(OrganizationService, transport);
 
 export function errorMessage(error: Error) {
   return error instanceof ConnectError ? error.rawMessage : error.message;

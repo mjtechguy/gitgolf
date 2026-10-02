@@ -25,6 +25,8 @@ const (
 	SessionServiceName = "golf.v1.SessionService"
 	// RepositoryServiceName is the fully-qualified name of the RepositoryService service.
 	RepositoryServiceName = "golf.v1.RepositoryService"
+	// OrganizationServiceName is the fully-qualified name of the OrganizationService service.
+	OrganizationServiceName = "golf.v1.OrganizationService"
 	// CapabilityServiceName is the fully-qualified name of the CapabilityService service.
 	CapabilityServiceName = "golf.v1.CapabilityService"
 )
@@ -84,6 +86,24 @@ const (
 	// RepositoryServiceGetIssueProcedure is the fully-qualified name of the RepositoryService's
 	// GetIssue RPC.
 	RepositoryServiceGetIssueProcedure = "/golf.v1.RepositoryService/GetIssue"
+	// OrganizationServiceListOrganizationsProcedure is the fully-qualified name of the
+	// OrganizationService's ListOrganizations RPC.
+	OrganizationServiceListOrganizationsProcedure = "/golf.v1.OrganizationService/ListOrganizations"
+	// OrganizationServiceGetOrganizationProcedure is the fully-qualified name of the
+	// OrganizationService's GetOrganization RPC.
+	OrganizationServiceGetOrganizationProcedure = "/golf.v1.OrganizationService/GetOrganization"
+	// OrganizationServiceListTeamsProcedure is the fully-qualified name of the OrganizationService's
+	// ListTeams RPC.
+	OrganizationServiceListTeamsProcedure = "/golf.v1.OrganizationService/ListTeams"
+	// OrganizationServiceGetTeamProcedure is the fully-qualified name of the OrganizationService's
+	// GetTeam RPC.
+	OrganizationServiceGetTeamProcedure = "/golf.v1.OrganizationService/GetTeam"
+	// OrganizationServiceListTeamMembersProcedure is the fully-qualified name of the
+	// OrganizationService's ListTeamMembers RPC.
+	OrganizationServiceListTeamMembersProcedure = "/golf.v1.OrganizationService/ListTeamMembers"
+	// OrganizationServiceListTeamRepositoriesProcedure is the fully-qualified name of the
+	// OrganizationService's ListTeamRepositories RPC.
+	OrganizationServiceListTeamRepositoriesProcedure = "/golf.v1.OrganizationService/ListTeamRepositories"
 	// CapabilityServiceListCapabilitiesProcedure is the fully-qualified name of the CapabilityService's
 	// ListCapabilities RPC.
 	CapabilityServiceListCapabilitiesProcedure = "/golf.v1.CapabilityService/ListCapabilities"
@@ -591,6 +611,206 @@ func (UnimplementedRepositoryServiceHandler) ListIssues(context.Context, *connec
 
 func (UnimplementedRepositoryServiceHandler) GetIssue(context.Context, *connect.Request[v1.GetIssueRequest]) (*connect.Response[v1.GetIssueResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.GetIssue is not implemented"))
+}
+
+// OrganizationServiceClient is a client for the golf.v1.OrganizationService service.
+type OrganizationServiceClient interface {
+	ListOrganizations(context.Context, *connect.Request[v1.ListOrganizationsRequest]) (*connect.Response[v1.ListOrganizationsResponse], error)
+	GetOrganization(context.Context, *connect.Request[v1.GetOrganizationRequest]) (*connect.Response[v1.GetOrganizationResponse], error)
+	ListTeams(context.Context, *connect.Request[v1.ListTeamsRequest]) (*connect.Response[v1.ListTeamsResponse], error)
+	GetTeam(context.Context, *connect.Request[v1.GetTeamRequest]) (*connect.Response[v1.GetTeamResponse], error)
+	ListTeamMembers(context.Context, *connect.Request[v1.ListTeamMembersRequest]) (*connect.Response[v1.ListTeamMembersResponse], error)
+	ListTeamRepositories(context.Context, *connect.Request[v1.ListTeamRepositoriesRequest]) (*connect.Response[v1.ListTeamRepositoriesResponse], error)
+}
+
+// NewOrganizationServiceClient constructs a client for the golf.v1.OrganizationService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewOrganizationServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) OrganizationServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	organizationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("OrganizationService").Methods()
+	return &organizationServiceClient{
+		listOrganizations: connect.NewClient[v1.ListOrganizationsRequest, v1.ListOrganizationsResponse](
+			httpClient,
+			baseURL+OrganizationServiceListOrganizationsProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("ListOrganizations")),
+			connect.WithClientOptions(opts...),
+		),
+		getOrganization: connect.NewClient[v1.GetOrganizationRequest, v1.GetOrganizationResponse](
+			httpClient,
+			baseURL+OrganizationServiceGetOrganizationProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("GetOrganization")),
+			connect.WithClientOptions(opts...),
+		),
+		listTeams: connect.NewClient[v1.ListTeamsRequest, v1.ListTeamsResponse](
+			httpClient,
+			baseURL+OrganizationServiceListTeamsProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("ListTeams")),
+			connect.WithClientOptions(opts...),
+		),
+		getTeam: connect.NewClient[v1.GetTeamRequest, v1.GetTeamResponse](
+			httpClient,
+			baseURL+OrganizationServiceGetTeamProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("GetTeam")),
+			connect.WithClientOptions(opts...),
+		),
+		listTeamMembers: connect.NewClient[v1.ListTeamMembersRequest, v1.ListTeamMembersResponse](
+			httpClient,
+			baseURL+OrganizationServiceListTeamMembersProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("ListTeamMembers")),
+			connect.WithClientOptions(opts...),
+		),
+		listTeamRepositories: connect.NewClient[v1.ListTeamRepositoriesRequest, v1.ListTeamRepositoriesResponse](
+			httpClient,
+			baseURL+OrganizationServiceListTeamRepositoriesProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("ListTeamRepositories")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// organizationServiceClient implements OrganizationServiceClient.
+type organizationServiceClient struct {
+	listOrganizations    *connect.Client[v1.ListOrganizationsRequest, v1.ListOrganizationsResponse]
+	getOrganization      *connect.Client[v1.GetOrganizationRequest, v1.GetOrganizationResponse]
+	listTeams            *connect.Client[v1.ListTeamsRequest, v1.ListTeamsResponse]
+	getTeam              *connect.Client[v1.GetTeamRequest, v1.GetTeamResponse]
+	listTeamMembers      *connect.Client[v1.ListTeamMembersRequest, v1.ListTeamMembersResponse]
+	listTeamRepositories *connect.Client[v1.ListTeamRepositoriesRequest, v1.ListTeamRepositoriesResponse]
+}
+
+// ListOrganizations calls golf.v1.OrganizationService.ListOrganizations.
+func (c *organizationServiceClient) ListOrganizations(ctx context.Context, req *connect.Request[v1.ListOrganizationsRequest]) (*connect.Response[v1.ListOrganizationsResponse], error) {
+	return c.listOrganizations.CallUnary(ctx, req)
+}
+
+// GetOrganization calls golf.v1.OrganizationService.GetOrganization.
+func (c *organizationServiceClient) GetOrganization(ctx context.Context, req *connect.Request[v1.GetOrganizationRequest]) (*connect.Response[v1.GetOrganizationResponse], error) {
+	return c.getOrganization.CallUnary(ctx, req)
+}
+
+// ListTeams calls golf.v1.OrganizationService.ListTeams.
+func (c *organizationServiceClient) ListTeams(ctx context.Context, req *connect.Request[v1.ListTeamsRequest]) (*connect.Response[v1.ListTeamsResponse], error) {
+	return c.listTeams.CallUnary(ctx, req)
+}
+
+// GetTeam calls golf.v1.OrganizationService.GetTeam.
+func (c *organizationServiceClient) GetTeam(ctx context.Context, req *connect.Request[v1.GetTeamRequest]) (*connect.Response[v1.GetTeamResponse], error) {
+	return c.getTeam.CallUnary(ctx, req)
+}
+
+// ListTeamMembers calls golf.v1.OrganizationService.ListTeamMembers.
+func (c *organizationServiceClient) ListTeamMembers(ctx context.Context, req *connect.Request[v1.ListTeamMembersRequest]) (*connect.Response[v1.ListTeamMembersResponse], error) {
+	return c.listTeamMembers.CallUnary(ctx, req)
+}
+
+// ListTeamRepositories calls golf.v1.OrganizationService.ListTeamRepositories.
+func (c *organizationServiceClient) ListTeamRepositories(ctx context.Context, req *connect.Request[v1.ListTeamRepositoriesRequest]) (*connect.Response[v1.ListTeamRepositoriesResponse], error) {
+	return c.listTeamRepositories.CallUnary(ctx, req)
+}
+
+// OrganizationServiceHandler is an implementation of the golf.v1.OrganizationService service.
+type OrganizationServiceHandler interface {
+	ListOrganizations(context.Context, *connect.Request[v1.ListOrganizationsRequest]) (*connect.Response[v1.ListOrganizationsResponse], error)
+	GetOrganization(context.Context, *connect.Request[v1.GetOrganizationRequest]) (*connect.Response[v1.GetOrganizationResponse], error)
+	ListTeams(context.Context, *connect.Request[v1.ListTeamsRequest]) (*connect.Response[v1.ListTeamsResponse], error)
+	GetTeam(context.Context, *connect.Request[v1.GetTeamRequest]) (*connect.Response[v1.GetTeamResponse], error)
+	ListTeamMembers(context.Context, *connect.Request[v1.ListTeamMembersRequest]) (*connect.Response[v1.ListTeamMembersResponse], error)
+	ListTeamRepositories(context.Context, *connect.Request[v1.ListTeamRepositoriesRequest]) (*connect.Response[v1.ListTeamRepositoriesResponse], error)
+}
+
+// NewOrganizationServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	organizationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("OrganizationService").Methods()
+	organizationServiceListOrganizationsHandler := connect.NewUnaryHandler(
+		OrganizationServiceListOrganizationsProcedure,
+		svc.ListOrganizations,
+		connect.WithSchema(organizationServiceMethods.ByName("ListOrganizations")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationServiceGetOrganizationHandler := connect.NewUnaryHandler(
+		OrganizationServiceGetOrganizationProcedure,
+		svc.GetOrganization,
+		connect.WithSchema(organizationServiceMethods.ByName("GetOrganization")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationServiceListTeamsHandler := connect.NewUnaryHandler(
+		OrganizationServiceListTeamsProcedure,
+		svc.ListTeams,
+		connect.WithSchema(organizationServiceMethods.ByName("ListTeams")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationServiceGetTeamHandler := connect.NewUnaryHandler(
+		OrganizationServiceGetTeamProcedure,
+		svc.GetTeam,
+		connect.WithSchema(organizationServiceMethods.ByName("GetTeam")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationServiceListTeamMembersHandler := connect.NewUnaryHandler(
+		OrganizationServiceListTeamMembersProcedure,
+		svc.ListTeamMembers,
+		connect.WithSchema(organizationServiceMethods.ByName("ListTeamMembers")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationServiceListTeamRepositoriesHandler := connect.NewUnaryHandler(
+		OrganizationServiceListTeamRepositoriesProcedure,
+		svc.ListTeamRepositories,
+		connect.WithSchema(organizationServiceMethods.ByName("ListTeamRepositories")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.OrganizationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case OrganizationServiceListOrganizationsProcedure:
+			organizationServiceListOrganizationsHandler.ServeHTTP(w, r)
+		case OrganizationServiceGetOrganizationProcedure:
+			organizationServiceGetOrganizationHandler.ServeHTTP(w, r)
+		case OrganizationServiceListTeamsProcedure:
+			organizationServiceListTeamsHandler.ServeHTTP(w, r)
+		case OrganizationServiceGetTeamProcedure:
+			organizationServiceGetTeamHandler.ServeHTTP(w, r)
+		case OrganizationServiceListTeamMembersProcedure:
+			organizationServiceListTeamMembersHandler.ServeHTTP(w, r)
+		case OrganizationServiceListTeamRepositoriesProcedure:
+			organizationServiceListTeamRepositoriesHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedOrganizationServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedOrganizationServiceHandler struct{}
+
+func (UnimplementedOrganizationServiceHandler) ListOrganizations(context.Context, *connect.Request[v1.ListOrganizationsRequest]) (*connect.Response[v1.ListOrganizationsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationService.ListOrganizations is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) GetOrganization(context.Context, *connect.Request[v1.GetOrganizationRequest]) (*connect.Response[v1.GetOrganizationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationService.GetOrganization is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) ListTeams(context.Context, *connect.Request[v1.ListTeamsRequest]) (*connect.Response[v1.ListTeamsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationService.ListTeams is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) GetTeam(context.Context, *connect.Request[v1.GetTeamRequest]) (*connect.Response[v1.GetTeamResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationService.GetTeam is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) ListTeamMembers(context.Context, *connect.Request[v1.ListTeamMembersRequest]) (*connect.Response[v1.ListTeamMembersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationService.ListTeamMembers is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) ListTeamRepositories(context.Context, *connect.Request[v1.ListTeamRepositoriesRequest]) (*connect.Response[v1.ListTeamRepositoriesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationService.ListTeamRepositories is not implemented"))
 }
 
 // CapabilityServiceClient is a client for the golf.v1.CapabilityService service.

@@ -38,6 +38,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle(golfv1connect.NewSessionServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewOrganizationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewCapabilityServiceHandler(s, options...))
 	return mux
 }
@@ -68,7 +69,10 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.SessionServiceListSessionsProcedure, golfv1connect.SessionServiceRevokeSessionProcedure, golfv1connect.SessionServiceRevokeOtherSessionsProcedure,
 			golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure,
 			golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure,
-			golfv1connect.RepositoryServiceListIssuesProcedure, golfv1connect.RepositoryServiceGetIssueProcedure:
+			golfv1connect.RepositoryServiceListIssuesProcedure, golfv1connect.RepositoryServiceGetIssueProcedure,
+			golfv1connect.OrganizationServiceListOrganizationsProcedure, golfv1connect.OrganizationServiceGetOrganizationProcedure,
+			golfv1connect.OrganizationServiceListTeamsProcedure, golfv1connect.OrganizationServiceGetTeamProcedure,
+			golfv1connect.OrganizationServiceListTeamMembersProcedure, golfv1connect.OrganizationServiceListTeamRepositoriesProcedure:
 		default:
 			fail(connect.NewError(connect.CodeNotFound, errors.New("RPC procedure not found.")))
 			return
@@ -329,4 +333,102 @@ func (s *Server) ListCapabilities(ctx context.Context, _ *connect.Request[golfv1
 		capabilities = append(capabilities, &golfv1.Capability{Id: entry.id, Label: entry.label, State: golfv1.CapabilityState_CAPABILITY_STATE_DISABLED, Reason: "Planned; not implemented. No operation is available."})
 	}
 	return connect.NewResponse(&golfv1.ListCapabilitiesResponse{Capabilities: capabilities}), nil
+}
+
+func wireOrganization(org forgeOrganization) *golfv1.Organization {
+	visibility := golfv1.OrganizationVisibility(golfv1.OrganizationVisibility_value["ORGANIZATION_VISIBILITY_"+strings.ToUpper(org.Visibility)])
+	return &golfv1.Organization{Id: strconv.FormatInt(org.ID, 10), Name: org.Name, FullName: org.FullName, Description: org.Description, Visibility: visibility}
+}
+func wireOrganizationTeam(team forgeOrganizationTeam) *golfv1.OrganizationTeam {
+	permission := func(value string) golfv1.TeamPermission {
+		return golfv1.TeamPermission(golfv1.TeamPermission_value["TEAM_PERMISSION_"+strings.ToUpper(value)])
+	}
+	units := make(map[string]golfv1.TeamPermission, len(team.UnitPermissions))
+	for unit, value := range team.UnitPermissions {
+		units[unit] = permission(value)
+	}
+	visibility := golfv1.TeamVisibility(golfv1.TeamVisibility_value["TEAM_VISIBILITY_"+strings.ToUpper(team.Visibility)])
+	return &golfv1.OrganizationTeam{Id: strconv.FormatInt(team.ID, 10), Name: team.Name, Description: team.Description, Permission: permission(team.Permission), UnitPermissions: units, IncludesAllRepositories: team.IncludesAllRepositories, Visibility: visibility}
+}
+func (s *Server) ListOrganizations(ctx context.Context, req *connect.Request[golfv1.ListOrganizationsRequest]) (*connect.Response[golfv1.ListOrganizationsResponse], error) {
+	token, err := rpcToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, next, err := s.listOrganizations(ctx, cookieValue(req.Header()), token, pageFrom(req.Msg.Page))
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	response := &golfv1.ListOrganizationsResponse{Page: wirePage(next)}
+	for _, row := range rows {
+		response.Organizations = append(response.Organizations, wireOrganization(row))
+	}
+	return connect.NewResponse(response), nil
+}
+func (s *Server) GetOrganization(ctx context.Context, req *connect.Request[golfv1.GetOrganizationRequest]) (*connect.Response[golfv1.GetOrganizationResponse], error) {
+	token, err := rpcToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	org, err := s.getOrganization(ctx, cookieValue(req.Header()), token, req.Msg.Organization)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return connect.NewResponse(&golfv1.GetOrganizationResponse{Organization: wireOrganization(org)}), nil
+}
+func (s *Server) ListTeams(ctx context.Context, req *connect.Request[golfv1.ListTeamsRequest]) (*connect.Response[golfv1.ListTeamsResponse], error) {
+	token, err := rpcToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, next, err := s.listOrganizationTeams(ctx, cookieValue(req.Header()), token, req.Msg.Organization, pageFrom(req.Msg.Page))
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	response := &golfv1.ListTeamsResponse{Page: wirePage(next)}
+	for _, row := range rows {
+		response.Teams = append(response.Teams, wireOrganizationTeam(row))
+	}
+	return connect.NewResponse(response), nil
+}
+func (s *Server) GetTeam(ctx context.Context, req *connect.Request[golfv1.GetTeamRequest]) (*connect.Response[golfv1.GetTeamResponse], error) {
+	token, err := rpcToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	team, err := s.getOrganizationTeam(ctx, cookieValue(req.Header()), token, req.Msg.Organization, req.Msg.TeamId)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return connect.NewResponse(&golfv1.GetTeamResponse{Team: wireOrganizationTeam(team)}), nil
+}
+func (s *Server) ListTeamMembers(ctx context.Context, req *connect.Request[golfv1.ListTeamMembersRequest]) (*connect.Response[golfv1.ListTeamMembersResponse], error) {
+	token, err := rpcToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, next, err := s.listOrganizationTeamMembers(ctx, cookieValue(req.Header()), token, req.Msg.Organization, req.Msg.TeamId, pageFrom(req.Msg.Page))
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	response := &golfv1.ListTeamMembersResponse{Page: wirePage(next)}
+	for _, row := range rows {
+		response.Members = append(response.Members, wireUser(row))
+	}
+	return connect.NewResponse(response), nil
+}
+func (s *Server) ListTeamRepositories(ctx context.Context, req *connect.Request[golfv1.ListTeamRepositoriesRequest]) (*connect.Response[golfv1.ListTeamRepositoriesResponse], error) {
+	token, err := rpcToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, next, err := s.listOrganizationTeamRepositories(ctx, cookieValue(req.Header()), token, req.Msg.Organization, req.Msg.TeamId, pageFrom(req.Msg.Page))
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	response := &golfv1.ListTeamRepositoriesResponse{Page: wirePage(next)}
+	for _, row := range rows {
+		response.Repositories = append(response.Repositories, wireRepository(row))
+	}
+	return connect.NewResponse(response), nil
 }

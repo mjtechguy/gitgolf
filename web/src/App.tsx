@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowRight, BookOpen, Check, CircleDot, Command, ExternalLink, GitBranch, KeyRound, Layers2, LoaderCircle, LockKeyhole, LogOut, Monitor, Moon, Plus, RefreshCw, Search, ShieldCheck, Sun, X } from 'lucide-react';
+import { ArrowDown, ArrowRight, BookOpen, Building2, Check, CircleDot, Command, ExternalLink, GitBranch, KeyRound, Layers2, LoaderCircle, LockKeyhole, LogOut, Monitor, Moon, Plus, RefreshCw, Search, ShieldCheck, Sun, X } from 'lucide-react';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Link } from '@tanstack/react-router';
 import { capabilityClient, errorMessage, repositoryClient, repositoryLink, sessionClient } from './api';
@@ -12,6 +12,7 @@ import type { Location } from './navigation';
 import { forgetPrivateQueries } from './queryClient';
 
 const RepositoryBrowser = lazy(() => import('./RepositoryBrowser').then((module) => ({ default: module.RepositoryBrowser })));
+const OrganizationBrowser = lazy(() => import('./OrganizationBrowser').then((module) => ({ default: module.OrganizationBrowser })));
 const SessionManager = lazy(() => import('./SessionManager').then((module) => ({ default: module.SessionManager })));
 
 const themes = ['system', 'dark', 'light'] as const;
@@ -49,6 +50,7 @@ const scopeLabels: Record<string, string> = {
   'read:repository': 'Read repository data',
   'write:repository': 'Read and write repository data',
   'read:issue': 'Read issues',
+  'read:organization': 'Read organization resources',
   'write:issue': 'Read and write issues',
   all: 'Full account access',
 };
@@ -88,7 +90,7 @@ function Login({ oauthFailed }: { oauthFailed: boolean }) {
   const tokenForm = <form onSubmit={submit}>
     <label htmlFor="access-token">Gitea access token</label>
     <input id="access-token" type="password" autoComplete="off" spellCheck={false} required value={token} onChange={(event) => setToken(event.target.value)} placeholder="Enter your scoped access token" aria-describedby="token-help" disabled={mutation.isPending || redirecting} />
-    <p className="field-help" id="token-help">Create a token in Gitea → Settings → Applications. To browse, select read:user and read:repository. Issues also require read:issue. To create repositories, select write:user and write:repository.</p>
+    <p className="field-help" id="token-help">Create a token in Gitea → Settings → Applications. To browse, select read:user and read:repository. Issues also require read:issue; organizations require read:organization. To create repositories, select write:user and write:repository.</p>
     <ErrorMessage error={mutation.error} />
     <button className={`button ${oauthAvailable ? 'secondary' : 'primary'} full`} disabled={!token.trim() || mutation.isPending || redirecting}>{mutation.isPending ? <LoaderCircle size={17} className="spin" /> : null}{mutation.isPending ? 'Connecting…' : 'Continue to workspace'}{!mutation.isPending ? <ArrowRight size={17} /> : null}</button>
   </form>;
@@ -210,11 +212,11 @@ function Workspace({ user, location }: { user: User; location: Location }) {
   return <div className="app-shell">
     <aside className="sidebar"><div className="sidebar-top"><Brand /><span className="alpha-tag">EARLY ACCESS</span></div>
       <div className="workspace-label"><span className="workspace-avatar">{user.login.slice(0, 1).toUpperCase()}</span><div><strong>{user.login}</strong><span>Personal workspace</span></div></div>
-      <nav aria-label="Workspace"><span className="nav-label">WORKSPACE</span><Link className="nav-item active" to="/"><BookOpen size={17} />Repositories<span>{location.kind === 'home' && repositoryQuery.isSuccess ? repositories.length : '—'}</span></Link><Link className="nav-item" to="/" hash="capabilities"><Layers2 size={17} />Capabilities</Link><button className="nav-item sessions-nav" aria-haspopup="dialog" onClick={() => setManagingSessions(true)}><ShieldCheck size={17} />Sessions</button></nav>
+      <nav aria-label="Workspace"><span className="nav-label">WORKSPACE</span><Link className={`nav-item ${location.kind === 'home' || location.kind === 'repository' ? 'active' : ''}`} to="/" activeOptions={{ exact: true }}><BookOpen size={17} />Repositories<span>{location.kind === 'home' && repositoryQuery.isSuccess ? repositories.length : '—'}</span></Link><Link className={`nav-item ${location.kind === 'organizations' ? 'active' : ''}`} to="/organizations"><Building2 size={17} />Organizations</Link><Link className="nav-item" to="/" hash="capabilities"><Layers2 size={17} />Capabilities</Link><button className="nav-item sessions-nav" aria-haspopup="dialog" onClick={() => setManagingSessions(true)}><ShieldCheck size={17} />Sessions</button></nav>
       <div className="sidebar-bottom"><div className="forge-note"><GitBranch size={17} /><div><strong>Connected to Gitea</strong><span>Code stays on your forge.</span></div></div><div className="sidebar-controls"><ThemeSwitch /><button className="icon-button" aria-label="Sign out" title="Sign out" disabled={logout.isPending} onClick={() => logout.mutate()}><LogOut size={17} /></button></div><ErrorMessage error={logout.error} /></div>
     </aside>
-    <div className="workspace-content"><header className="topbar"><span><span className="muted">Workspace</span><span className="breadcrumb-slash">/</span>{location.kind === 'repository' ? location.name : 'Repositories'}</span><span className="connection-pill"><span className="status-dot" /> Signed in</span></header>
-      <main id="main-content">{location.kind === 'repository' ? <Suspense fallback={<div className="browser-loading" role="status"><LoaderCircle size={20} className="spin" />Opening repository…</div>}><RepositoryBrowser key={`${location.owner}/${location.name}`} location={location} userId={user.id} /></Suspense> : location.kind === 'missing' ? <section className="empty-state"><h1>Page not found</h1><p>This Golf link does not match a repository page.</p><Link className="button secondary" to="/">Back to repositories</Link></section> : <><section className="workspace-intro"><div><span className="eyebrow">YOUR NEXT COMMIT STARTS HERE</span><h1>Good to see you, {user.fullName || user.login}<span className="accent">.</span></h1><p>A little less friction. A little more building.</p></div><div className="intro-emblem" aria-hidden="true"><Command size={31} /></div></section>
+    <div className="workspace-content"><header className="topbar"><span><span className="muted">Workspace</span><span className="breadcrumb-slash">/</span>{location.kind === 'repository' ? location.name : location.kind === 'organizations' ? location.organization || 'Organizations' : 'Repositories'}</span><span className="connection-pill"><span className="status-dot" /> Signed in</span></header>
+      <main id="main-content">{location.kind === 'organizations' ? <Suspense fallback={<div className="browser-loading" role="status"><LoaderCircle size={20} className="spin" />Opening organizations…</div>}><OrganizationBrowser location={location} userId={user.id} /></Suspense> : location.kind === 'repository' ? <Suspense fallback={<div className="browser-loading" role="status"><LoaderCircle size={20} className="spin" />Opening repository…</div>}><RepositoryBrowser key={`${location.owner}/${location.name}`} location={location} userId={user.id} /></Suspense> : location.kind === 'missing' ? <section className="empty-state"><h1>Page not found</h1><p>This Golf link does not match an available page.</p><Link className="button secondary" to="/">Back to repositories</Link></section> : <><section className="workspace-intro"><div><span className="eyebrow">YOUR NEXT COMMIT STARTS HERE</span><h1>Good to see you, {user.fullName || user.login}<span className="accent">.</span></h1><p>A little less friction. A little more building.</p></div><div className="intro-emblem" aria-hidden="true"><Command size={31} /></div></section>
         <section className="repository-section" id="repositories" aria-labelledby="repositories-title"><div className="section-heading"><div className="title-count"><h2 id="repositories-title">Repositories</h2>{repositoryQuery.isSuccess ? <span className="count-badge">{repositories.length}{repositoryQuery.hasNextPage ? '+' : ''}</span> : null}</div><button className="button primary" onClick={() => setCreating(true)}><Plus size={16} />New repository</button></div>
           <p className="section-description">Your code, with room for what comes next. Open a repository to browse its source, commits and issues in Golf.</p>
           <div className="repository-toolbar"><div className="search-input"><Search size={17} /><input aria-label="Search loaded repositories" placeholder="Search repositories…" value={search} onChange={(event) => setSearch(event.target.value)} /></div><select aria-label="Repository visibility" value={visibility} onChange={(event) => setVisibility(event.target.value)}><option value="all">All visibility</option><option value="private">Private</option><option value="public">Public</option></select><button className="icon-button refresh" aria-label="Refresh repositories" disabled={repositoryQuery.isFetching} onClick={() => void repositoryQuery.refetch()}><RefreshCw size={17} className={repositoryQuery.isFetching ? 'spin' : ''} /></button></div>

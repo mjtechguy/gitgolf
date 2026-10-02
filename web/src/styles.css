@@ -161,3 +161,26 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .session-danger { background:var(--error-bg); border-color:var(--error); color:var(--error); white-space:normal; }
 .session-notice { margin-top:16px; color:var(--accent); }
 @media(max-width:720px) { .sidebar nav { flex-wrap:wrap; } .sessions-nav { width:auto; } .sessions-dialog { padding:21px; } .session-toolbar { flex-wrap:wrap; gap:16px; } .session-row { padding:14px; flex-wrap:wrap; } .session-confirm .dialog-actions { flex-wrap:wrap; } }
+
+.organization-guidance { font-size:12px; color:var(--muted); line-height:1.7; margin:18px 0 25px; }
+.organization-panel { margin-top:22px; min-width:0; }
+.organization-list { list-style:none; margin:0; padding:0; }
+.organization-list>li { padding:19px 22px; border-bottom:1px solid var(--line); }
+.organization-list>li:last-child { border-bottom:0; }
+.organization-list h3 { font-size:14px; letter-spacing:0; overflow-wrap:anywhere; }
+.organization-list p { font-size:12px; color:var(--muted); line-height:1.7; margin-top:7px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.organization-row-title { display:flex; align-items:center; flex-wrap:wrap; gap:9px; }
+.organization-list-footer { padding:14px 22px; margin:0; border-top:1px solid var(--line); flex-wrap:wrap; }
+.organization-native-permission { font-size:11px!important; }
+.organization-team-navigation { display:flex; align-items:center; justify-content:space-between; margin:23px 0 0; }
+.organization-team-metadata { padding:0 22px 22px; font-size:12px; line-height:1.7; overflow-wrap:anywhere; }
+.organization-team-metadata>p:first-child { white-space:pre-wrap; color:var(--muted); }
+.organization-team-metadata dl { margin:19px 0; }
+.organization-team-metadata dl>div { display:grid; grid-template-columns:minmax(130px,1fr) minmax(0,2fr); gap:15px; padding:6px 0; }
+.organization-team-metadata dt { color:var(--muted); }
+.organization-team-metadata dd { margin:0; }
+.organization-team-metadata h3 { margin-top:22px; font-size:13px; }
+.organization-permission-note { border-top:1px solid var(--line); padding-top:17px; color:var(--muted); }
+.organization-team-lists { display:grid; grid-template-columns:1fr 1fr; gap:18px; align-items:start; }
+@media(max-width:900px) { .organization-team-lists { grid-template-columns:1fr; gap:0; } }
+@media(max-width:720px) { .organization-list>li,.organization-list-footer { padding-inline:15px; } .organization-team-metadata { padding-inline:15px; } .organization-team-metadata dl>div { grid-template-columns:1fr; gap:2px; } .organization-guidance { font-size:11px; } }
