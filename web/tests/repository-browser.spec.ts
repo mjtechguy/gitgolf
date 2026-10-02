@@ -274,3 +274,40 @@ test('protobuf preserves empty previews and uint64 sizes while typed routes pres
   await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
   expect(state.methods).not.toContain('GetIssue');
 });
+
+test('repository branding keeps loaded fonts, legible text and reflow at 320px and 200%-equivalent width', async ({ page }) => {
+  await backend(page);
+  // 640 CSS px models a 1280px desktop viewport at 200% browser zoom;
+  // pinch/page-scale emulation does not exercise layout reflow.
+  for (const width of [640, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const theme of ['dark', 'light']) {
+      await page.goto(`/repositories/alex/design-system?ref=${head}&path=src/index.ts`);
+      await expect(page.getByLabel('Plain text preview of index.ts')).toBeVisible();
+      await page.getByRole('button', { name: `${theme === 'dark' ? 'Dark' : 'Light'} theme`, exact: true }).click();
+      await page.evaluate(() => document.fonts.ready);
+      expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toContain('Archivo');
+      expect(await page.evaluate(() => [...document.fonts].some((font) => font.family.includes('Archivo') && font.status === 'loaded'))).toBe(true);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await expect(page.getByRole('link', { name: 'Golf home', exact: true })).toBeVisible();
+      expect(await page.locator('.repository-tabs a').first().evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(13);
+      await page.getByRole('navigation', { name: 'Repository', exact: true }).getByRole('link', { name: 'Issues', exact: true }).click();
+      await page.getByRole('link', { name: issue.title, exact: true }).click();
+      await expect(page.getByLabel('Issue body, plain text')).toBeVisible();
+      expect(await page.locator('.issue-body').evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(13);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.getByLabel('Comment, plain text', { exact: true }).focus();
+      await page.keyboard.type('Keyboard accessible draft');
+      await expect(page.getByRole('button', { name: 'Post comment', exact: true })).toBeEnabled();
+      await page.getByRole('link', { name: 'All open issues', exact: true }).click();
+      await page.getByRole('button', { name: 'New issue', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: 'New issue', exact: true });
+      expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth && element.getBoundingClientRect().width <= innerWidth)).toBe(true);
+      await dialog.getByLabel('Issue title', { exact: true }).focus();
+      await page.keyboard.press('Tab');
+      await expect(dialog.getByLabel('Description, plain text', { exact: true })).toBeFocused();
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('button', { name: 'New issue', exact: true })).toBeFocused();
+    }
+  }
+});

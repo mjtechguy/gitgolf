@@ -31,6 +31,16 @@ try {
   require(createdRepo.status() === 201);
   const repo = await createdRepo.json();
   const repoPath = `repos/${username}/discussion`;
+  let initialized = false;
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const observation = await native.get(repoPath); require(observation.status() === 200);
+    if (!(await observation.json()).empty) { initialized = true; break; }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  require(initialized);
+  const sourceText = '# Golf developer preview\n\nThis is a real private source file.\n<example>Plain text stays plain text.</example>\n';
+  const sourceResult = await native.post(`${repoPath}/contents/branding.txt`, { data: { message: 'Add source browsing fixture', content: Buffer.from(sourceText).toString('base64') } });
+  require(sourceResult.status() === 201);
   browser = await chromium.launch({ headless: true });
   context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, colorScheme: 'dark' });
   const page = await context.newPage(); page.setDefaultTimeout(15_000);
@@ -41,7 +51,33 @@ try {
   await page.goto(golf.origin + listPath);
   await page.getByLabel('Gitea access token', { exact: true }).fill(pat);
   await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
+  await page.getByRole('button', { name: 'New issue', exact: true }).waitFor();
+  stage('branded workspace/source with loaded fonts, narrow and zoom-equivalent reflow');
+  await page.getByRole('link', { name: 'All repositories', exact: true }).click();
+  await page.getByRole('link', { name: `${username}/discussion`, exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Dark theme', exact: true }).click();
+  await page.evaluate(() => document.fonts.ready);
+  require(await page.evaluate(() => [...document.fonts].some((font) => font.family.includes('Archivo') && font.status === 'loaded')));
+  await page.screenshot({ path: `${artifacts}/native-workspace-dark.png`, fullPage: true });
+  await page.getByRole('link', { name: `${username}/discussion`, exact: true }).click();
+  await page.getByRole('link', { name: /^branding\.txt File / }).click();
+  const source = page.getByLabel('Plain text preview of branding.txt', { exact: true });
+  await source.waitFor(); require(await source.textContent() === sourceText);
+  for (const theme of ['Dark', 'Light']) {
+    await page.getByRole('button', { name: `${theme} theme`, exact: true }).click();
+    await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); window.scrollTo({ top: 0, behavior: 'instant' }); });
+    await page.screenshot({ path: `${artifacts}/native-source-${theme.toLowerCase()}.png`, fullPage: true });
+  }
+  for (const width of [640, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    require(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.getByRole('navigation', { name: 'Repository', exact: true }).getByRole('link', { name: 'Source', exact: true }).waitFor();
+    await page.screenshot({ path: `${artifacts}/native-source-light-${width}.png`, fullPage: true });
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(golf.origin + listPath);
   await page.getByRole('button', { name: 'New issue', exact: true }).click();
+  stage('native issue creation, immutable target and literal body');
   const body = '  PRIVATE native issue\n<img src=x onerror="window.executed=true">\t';
   await page.getByLabel('Issue title', { exact: true }).fill('Native Golf discussion');
   await page.getByLabel('Description, plain text', { exact: true }).fill(body);

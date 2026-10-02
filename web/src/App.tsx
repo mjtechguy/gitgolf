@@ -23,7 +23,7 @@ const themes = ['system', 'dark', 'light'] as const;
 type Theme = typeof themes[number];
 
 function Brand() {
-  return <Link className="brand" to="/" aria-label="Golf home"><img src="/golf.svg" width="34" height="34" alt="" /><span>golf<span className="brand-dot">.</span></span></Link>;
+  return <Link className="brand" to="/" aria-label="Golf home"><span className="brand-mark" aria-hidden="true">g</span><span>golf<span className="brand-dot">.</span></span></Link>;
 }
 
 function ThemeSwitch() {

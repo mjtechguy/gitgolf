@@ -273,6 +273,8 @@ Map Golf accounts and groups to Gitea identities; evaluate Gitea permissions for
 
 ### 4.4 Ingress and search
 
+Golf owns the customer-facing UI in both tracks; Gitea is a supported internal forge service, not the product frontend. Use the standard pinned Gitea deployment behind private networking and explicit ingress rules rather than assuming a separate frontend-free distribution. Native REST stays internal to authorized Golf services; expose only deliberately qualified Git/LFS/SSH routes and separately controlled operator access. Current Gitea OAuth login/consent, token setup and unfinished native workflows remain explicit development exceptions until Golf owns their supported replacements. Prove registration/sign-in, consent/revocation, Git/LFS transports, administration and denial of unintended native pages/API writes before claiming an entirely Golf-facing installation. Hiding HTML alone does not fence Git/API/background write bypasses or close P0.8.
+
 Provide a direct Git/LFS ingress option for request sizes or protocols not suited to ordinary Cloudflare proxy limits. SSH is an explicit endpoint; ordinary Workers HTTP routing is not a generic SSH server.
 
 Start with authorized repository-local search. Add Zoekt for indexed cross-repository code search in the scale profile. Search results, cached content, and retrieval must be filtered by effective repository access, including revocation. Content hashes are not authorization.
@@ -359,6 +361,8 @@ Acknowledge authenticated webhooks only after durable intake. Hydrate truncated/
 
 Use React/TypeScript, Vite, Tailwind/shadcn/Radix, Lucide, and TanStack Router/Query/Table/Virtual/Form. Use TanStack Store only for genuinely shared non-server UI state; defer TanStack DB until a verified sync requirement exists.
 
+Use a familiar forge workspace: repository context, source trees, commit history, issues, PRs, reviews and checks should be easy for GitHub/GitLab users to navigate. Apply Golf’s own lowercase wordmark, Archivo typography, Geist Mono code, lime accents and charcoal/neutral-light palette. Keep signed-in workspaces compact and readable; marketing-scale hero headings do not belong in routine repository screens. Typical workflow text is 14–16px and secondary metadata 12–13px minimum, with usable touch targets, zoom/reflow and measured contrast. Marketing/docs use the same brand with more editorial spacing.
+
 Primary areas: overview, repositories, issues/boards, PRs, pipelines, automations, workspaces/runners, projects/deployments, connections, and administration. Shared navigation and consistent detail panels prevent unrelated administrative screens from becoming the product experience.
 
 Filters/sort/pagination live in typed URLs. Paginate server data and virtualize large trees/diffs/logs. Stream logs with reconnect and sequence handling. Display actionable failure/blocker messages and capability availability.
@@ -367,12 +371,13 @@ Filters/sort/pagination live in typed URLs. Paginate server data and virtualize 
 
 | Token | Dark default | Light default |
 | --- | --- | --- |
-| Page background | `#09090B` | `#FAFAFA` |
-| Panel/sidebar | `#111113` | `#FFFFFF` |
-| Raised surface | `#18181B` | `#F4F4F5` |
-| Border | `#303036` | `#E4E4E7` |
-| Main text | `#FAFAFA` | `#18181B` |
-| Secondary text | `#A1A1AA` | `#52525B` |
+| Page background | `#0C0C0C` | `#F2F2EE` |
+| Panel/sidebar | `#151514` | `#FAFAF7` |
+| Raised surface | `#1D1D1A` | `#EAEAE4` |
+| Border | `#343430` | `#D0D0C7` |
+| Main text | `#F2F2EE` | `#101010` |
+| Secondary text | `#AAA9A2` | `#5D5D55` |
+| Accent/link | `#D4FF3A` | `#3F6400` |
 
 Dark mode is black/dark charcoal with neutral surfaces, not navy. Accent colors are semantic and do not replace readable labels. Verify final tokens against WCAG contrast; do not assume the table itself proves compliance.
 
