@@ -455,16 +455,13 @@ def qualify():
         check('all disposable users, organization and repositories purged')
 
 
-def main():
+def run_isolated(check_provider, port=3018, prefix='golf-protection', custom_hooks=False):
     global GITEA, COMPOSE
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--port', type=int, default=3018, help='unused loopback port for the disposable provider (default 3018)')
-    args = parser.parse_args()
-    if not 1024 <= args.port <= 65535:
-        parser.error('--port must be between 1024 and 65535')
-    GITEA = 'http://localhost:' + str(args.port)
-    project = 'golf-protection-proof-' + secrets.token_hex(5)
-    with tempfile.TemporaryDirectory(prefix='golf-protection-provider-') as temporary:
+    assert 1024 <= port <= 65535
+    assert prefix in ('golf-protection', 'golf-publisher')
+    GITEA = 'http://localhost:' + str(port)
+    project = prefix + '-proof-' + secrets.token_hex(5)
+    with tempfile.TemporaryDirectory(prefix=prefix + '-provider-') as temporary:
         path = Path(temporary)
         environment = path / 'runtime.env'
         descriptor = os.open(environment, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -487,10 +484,13 @@ def main():
                     'GITEA__server__ROOT_URL': GITEA + '/',
                     'GITEA__security__INSTALL_LOCK': 'true', 'GITEA__service__DISABLE_REGISTRATION': 'true',
                     'GITEA__actions__ENABLED': 'false'},
-                'ports': ['127.0.0.1:' + str(args.port) + ':3000'],
+                'ports': ['127.0.0.1:' + str(port) + ':3000'],
                 'volumes': ['gitea-data:/var/lib/gitea', 'gitea-config:/etc/gitea'],
                 'depends_on': {'postgres': {'condition': 'service_healthy'}}}},
             'volumes': {'postgres-data': {}, 'gitea-data': {}, 'gitea-config': {}}}
+        if custom_hooks:
+            assert prefix == 'golf-publisher', 'Custom hooks are isolated publisher-fixture only'
+            spec['services']['gitea']['environment']['GITEA__security__DISABLE_GIT_HOOKS'] = 'false'
         compose.write_text(json.dumps(spec))
         COMPOSE = ['docker', 'compose', '-p', project, '--env-file', str(environment), '-f', str(compose)]
         try:
@@ -505,13 +505,22 @@ def main():
                 assert time.monotonic() < deadline, 'Disposable provider startup timed out'
                 time.sleep(0.5)
             check('isolated PostgreSQL18.4/Gitea1.27.3 started; existing Compose untouched')
-            qualify()
+            check_provider()
         finally:
             command(*COMPOSE, 'down', '--volumes', '--remove-orphans')
             for kind in ('container', 'volume', 'network'):
                 remaining = command('docker', kind, 'ls', '--filter', 'label=com.docker.compose.project=' + project, '--quiet')
                 assert not remaining, 'Disposable Docker ' + kind + ' survived cleanup'
             check('dedicated provider containers, volumes and network removed')
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--port', type=int, default=3018, help='unused loopback port for the disposable provider (default 3018)')
+    args = parser.parse_args()
+    if not 1024 <= args.port <= 65535:
+        parser.error('--port must be between 1024 and 65535')
+    run_isolated(qualify, args.port)
 
 
 if __name__ == '__main__':

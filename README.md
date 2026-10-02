@@ -134,7 +134,9 @@ python3 scripts/organizations-smoke.py --cli bin/golf
 python3 scripts/gitea-role-smoke.py
 # Characterize protected writes on disposable port 3018; exit 0 also records limitations.
 python3 scripts/gitea-protection-smoke.py
-# Local Git primitive: unchanged source refs are not verify-only locks.
+# Docker Desktop: publication faults/private-fork races on disposable port 3020.
+python3 scripts/gitea-publisher-smoke.py
+# Deterministic local Git source race; disposable local hook, no provider changes.
 python3 scripts/git-atomic-verify-smoke.py
 # Optional browser OAuth and real rotating-refresh checks; briefly recreates services.
 python3 scripts/oauth-smoke.py --refresh
@@ -143,6 +145,8 @@ python3 scripts/oauth-smoke.py --refresh
 The browser checks use contract fixtures. `scripts/smoke.py` exercises the real running Compose stack: isolated users/private repositories, cross-user denial, CSRF, real Git pushes, source snapshots/preview boundaries, issues/scope denial, optional CLI/restart/outage checks, revocation and logout. It removes its test Gitea users/repositories afterward. `--restart` briefly interrupts local Golf/Gitea; omit it to skip those service operations. Python 3 and Git are required; `--cli` accepts an already-built CLI executable.
 
 `scripts/oauth-smoke.py` creates disposable users and a confidential provider application, enables OAuth with a private temporary override, and exercises actual browser login/consent. `--refresh` uses two real short-lived token cycles with concurrent requests and revocation. It restores the original Gitea token settings and disabled Golf OAuth, then purges its fixtures. It also checks all six member-scoped organization/team reads and OAuth session listing/current/bulk revocation using a separate account. It also obtains a real narrower legacy-equivalent grant, verifies that refresh and a new sign-in cannot expand it, then revokes that provider grant and verifies fresh consent enables organization access. This does not test a complete old-release binary upgrade. It requires OAuth to be disabled initially; it never edits `.env` or deletes volumes.
+
+The [publisher qualification](docs/GITEA_PUBLISHER_QUALIFICATION.md) tests real lost responses, delayed writes, exact private-fork candidate publication and supported PR bookkeeping. Its experimental journal is not a Golf publisher. It reproduces old-authority and private-source races; protected integration remains unavailable. Custom hooks are enabled only in its disposable provider for a bounded callback barrier. This proof currently requires Docker Desktop host callbacks, not a qualified Linux/Kubernetes managed profile.
 
 The backend's database integration test runs when `GOLF_TEST_DATABASE_URL` points to a dedicated test PostgreSQL database. `make test-integration` requires it; without it, ordinary Go tests explicitly skip that integration case. Do not use a production database.
 
