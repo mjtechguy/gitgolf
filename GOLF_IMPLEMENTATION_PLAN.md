@@ -2,7 +2,7 @@
 
 Status: product direction and implementation roadmap; completeness review and shared Gitea first-release decision incorporated on 2026-10-01. Provider proofs and implementation evidence remain required. Explicit defaults are engineering decisions that can be revisited through ADRs.
 
-Execution evidence: the [implementation ledger](docs/IMPLEMENTATION_STATUS.md) records the local developer preview, including bounded repository/source/history/commit-diff, issue and PR/native-review reads, member-scoped organization browsing, own-account session activity and the JSON CLI. These increments do not mark an entire phase, v1 or the Cloudflare competition milestone complete.
+Execution evidence: the [implementation ledger](docs/IMPLEMENTATION_STATUS.md) records the local developer preview, including bounded repository/source/history/commit-diff, issue and PR/native-review reads, member-scoped organization browsing, own-account session activity, the JSON CLI and coordinated encrypted backup/fresh restore for the canonical Docker profile. These increments do not mark an entire phase, v1 or the Cloudflare competition milestone complete.
 
 Prepared: 2026-10-01. Provider documentation and limits must be rechecked when implementing each integration.
 
@@ -828,9 +828,11 @@ Use the same versioned application images, configuration schema, migrations, cap
 
 Helm packages API/worker roles, Gitea or its external connection, execution configuration, ingress, persistent storage, resource requests/limits, probes, security contexts, secrets references, and network policy. Support external PostgreSQL/object storage instead of forcing bundled production databases.
 
-Pin a maintained Gitea release and image digest in the version inventory. Give Gitea its own PostgreSQL database and role; Golf cannot directly query or migrate that database. Begin with one active canonical repository writer and supported persistent storage. Additional Golf API/workers/runners may scale independently; Gitea HA or shared repository storage needs a separate validated topology, write fencing and recovery proof before multiple writers are enabled.
+Pin a maintained Gitea release and image digest in the version inventory. Give Gitea its own PostgreSQL database and role; Golf application features cannot directly query or migrate that database. Privileged offline backup/recovery may use documented native database tools against a stopped, drained installation and a fresh quarantined target; this narrow P1.6 operator boundary does not permit direct application writes. Begin with one active canonical repository writer and supported persistent storage. Additional Golf API/workers/runners may scale independently; Gitea HA or shared repository storage needs a separate validated topology, write fencing and recovery proof before multiple writers are enabled.
 
 Coordinated backups include Golf's database, Gitea's database, Git repositories, LFS objects, attachments/releases, relevant configuration, encryption material and SSH/signing keys. Encrypt backup secrets and preserve supported Gitea restore procedures. Fence writes for a consistent recovery point when required; restore the pinned compatible versions and verify identities, protected refs, LFS, signatures and Golf projections before reopening writes. R2/S3 may store qualified object categories and backups; neither is assumed to replace Gitea's repository filesystem.
+
+The current [offline recovery foundation](docs/RECOVERY.md) implements encrypted native capture/validation and fresh quarantined restoration for the canonical three-service Docker profile only: PostgreSQL 18.4, Gitea 1.27.3 and Golf schema 202610020003, with source runtime configuration, both complete Gitea volumes and locally available exact image IDs. Images are not bundled. The operator must drain all writers; repeated state checks and `--writers-drained` are not an administrator or distributed fence. Real PostgreSQL invalidation, offline archive checks and the bounded native fresh-restore/whole-stack restart drill pass in the [evidence ledger](docs/IMPLEMENTATION_STATUS.md). The small fixture skips its minimum-size-cap negative case; no 8 GiB, load or RPO/RTO result is claimed. Kubernetes, external stores/databases, cross-version restore, full inventory/scale and production recovery objectives remain P1.6 work.
 
 Migrations run once with locking and explicit outcome; concurrent application instances do not race to alter schema. Default images run non-root where their function permits. No application cluster-admin permission. Per-job service accounts and network boundaries are explicit.
 
@@ -978,6 +980,8 @@ These are engineering targets, not promises that an arbitrary customer's configu
 
 Recovery must preserve relationships among Golf's PostgreSQL state, Gitea's database, Git refs, objects, identity/SSH/signing configuration and external deployment state. Verify restored repository integrity through supported Gitea recovery procedures and reconcile Golf operation intents/outbox before permitting writes. Quarantine ambiguous mutations rather than replaying irreversible operations blindly.
 
+The implemented operator safeguard transactionally invalidates all restored Golf sessions and pending OAuth attempts, including expired records, and writes an independent append-only recovery record without fabricating user sign-outs or altering identity/account/crypto history. Its transaction is not old-writer fencing. Restore remains quarantined until authoritative post-backup native/provider revocations, memberships/protections, deletion tombstones and outbound queues/mirrors are reconciled. Restored bytes cannot undo an external issuer's refresh rotation. The current Docker tool does not automate that reconciliation or authorize traffic reopening; a controlled fixture start is narrower evidence. See [recovery operations and remaining gates](docs/RECOVERY.md).
+
 ### 15.5 Failure behavior
 
 | Failure | Required behavior |
@@ -1034,6 +1038,8 @@ Depends on: P0 contracts and ADRs.
 | P1.6 | Object storage and coordinated Golf/Gitea backup/export/restore primitives | Fresh-instance restoration of both DBs, repositories, LFS/attachments/configuration and encrypted key material; integrity checks. |
 | P1.7 | Structured logs/OTel/metrics and optional dev stack | Correlation across API/DB/job; dashboard smoke check. |
 | P1.8 | Human/service/Git credentials, role matrix, MFA/recovery and CLI login | Scoped tokens/SSH, rotation/revocation, owner recovery, local/OIDC paths and noninteractive login checks. |
+
+P1.6 progress is deliberately bounded: the [Docker recovery tool and operator safeguard](docs/RECOVERY.md) pass native encrypted backup/fresh restore, stopped-target quarantine, restored-credential invalidation, private signed Git/LFS/attachment/protection/identity checks, new writes and simultaneous whole-stack restart. The small fixture explicitly skips its minimum-payload-cap negative case; it is not an 8 GiB, load or RPO/RTO qualification. Wider object-storage, Kubernetes/external topology, all-repository inventory, provider revocation/tombstone and outbound-work reconciliation, and production recovery gates remain open. Backup age encryption is separate from the [application credential keyring](docs/CREDENTIAL_KEYRING.md).
 
 Gate: persistent authenticated portable installation with safe tenant boundaries and verified restoration.
 

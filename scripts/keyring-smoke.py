@@ -103,7 +103,7 @@ def main():
         env['DATABASE_URL'] = f'postgres://postgres:{password}@127.0.0.1:{database_port}/golf?sslmode=disable'
         forbidden.append(env['DATABASE_URL'])
         for _ in range(60):
-            probe = subprocess.run(['docker', 'exec', prefix, 'pg_isready', '-U', 'postgres'],
+            probe = subprocess.run(['docker', 'exec', prefix, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres'],
                                    capture_output=True, timeout=5)
             if probe.returncode == 0:
                 break

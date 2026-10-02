@@ -474,7 +474,7 @@ def run_isolated(check_provider, port=3018, prefix='golf-protection', custom_hoo
                 'image': 'postgres:18.4-alpine3.24',
                 'environment': {key: '${' + key + '}' for key in ('POSTGRES_PASSWORD', 'GOLF_DB_PASSWORD', 'GITEA_DB_PASSWORD')},
                 'volumes': ['postgres-data:/var/lib/postgresql', str(ROOT / 'deploy/postgres/init.sh') + ':/docker-entrypoint-initdb.d/01-golf.sh:ro'],
-                'healthcheck': {'test': ['CMD-SHELL', 'pg_isready -U postgres'], 'interval': '2s', 'timeout': '3s', 'retries': 45}},
+                'healthcheck': {'test': ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U postgres'], 'interval': '2s', 'timeout': '3s', 'retries': 45}},
             'gitea': {
                 'image': 'gitea/gitea:1.27.3-rootless',
                 'environment': {

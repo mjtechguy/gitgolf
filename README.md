@@ -69,7 +69,7 @@ docker compose start     # resume
 docker compose down      # remove containers/network; retain named volumes
 ```
 
-Do not add `--volumes` unless intentionally erasing this installation. Backup/recovery automation and a production deployment profile are not yet qualified. Preserve both databases, Gitea repository/configuration volumes and encryption keys together. Local ports bind only to loopback; this Compose file is a development installation.
+Do not add `--volumes` unless intentionally erasing this installation. Preserve both databases, Gitea repository/configuration volumes and encryption keys together. The bounded [offline recovery workflow](docs/RECOVERY.md) below passes the native fresh-restore and whole-stack restart drill; production recovery remains open. Local ports bind only to loopback; this Compose file is a development installation.
 
 ## Credential key operations
 
@@ -78,6 +78,12 @@ The [keyring contract](docs/CREDENTIAL_KEYRING.md) documents `GOLF_ENCRYPTION_KE
 Operator commands live in the server binary, separately from the read-only user CLI. Supply the Golf database/key environment securely, then use `./bin/golf-server keys status`, `keys activate`, `keys rotate --batch-size 100 --max-batches 10`, or `keys retirement-check --key-id legacy`. The container equivalent is `docker compose run --rm --no-deps golf keys status` with an already-built image and available database. Even status can apply migrations and register legacy metadata; partial rotation can exit zero, so inspect its JSON state/counts.
 
 Before activation, drain all old Golf writers and in-flight OAuth exchanges. Database fencing cannot reverse an issuer's completed refresh, and transparent rolling cutover is not supported. Retirement requires zero uses in both credential tables and does not erase secrets or old backup keys. Targeted database and old-binary PAT/pending-verifier checks pass; live OAuth exchange across activation and wider rollout/recovery qualification remain open. This does not complete P1.3 or add KMS/age/FIPS support.
+
+## Offline backup and quarantined restore
+
+The [recovery guide](docs/RECOVERY.md) documents `scripts/recovery.py backup|verify|restore` for the canonical three-service Docker installation: PostgreSQL 18.4, Gitea 1.27.3 and Golf schema 202610020003. It captures native database dumps, both complete Gitea volumes and resolved runtime credentials/configuration into a private age-encrypted archive. A fresh restore requires the exact local image IDs, invalidates every restored Golf session/pending PKCE attempt and leaves Golf/Gitea stopped. Images are not included.
+
+All writers must be stopped and drained before capture or restore; `--writers-drained` asserts that operator precondition and does not fence administrators. Accept only trusted operator backups, protect plaintext staging and restore configuration, and reconcile native/provider revocations, deletion decisions and outbound work before reopening. Real PostgreSQL safeguards, offline archive checks and the full native fresh-restore drill pass, including signed Git, hydrated LFS, attachments, protections, SSH/signing identity, fresh access and simultaneous whole-stack restart. The small fixture skips the minimum-size-cap negative case; this is not an 8 GiB or load qualification. This does not complete P1.6, qualify Kubernetes/external object stores or establish RPO/RTO targets. Backup age encryption does not change the application credential cipher.
 
 ## Run on Kubernetes
 
@@ -153,6 +159,10 @@ python3 scripts/smoke.py --cli bin/golf
 python3 scripts/audit-smoke.py --cli bin/golf
 # Isolated DB/real PAT keyring checks; build bin/golf-server first.
 python3 scripts/keyring-smoke.py
+# Offline recovery archive/configuration validation, without data mutations.
+python3 scripts/recovery-test.py
+# Isolated native backup/restore drill; supply a current locally built image.
+python3 scripts/recovery-smoke.py --image '<LOCAL_GOLF_IMAGE_TAG_OR_ID>'
 # Actual PAT session management and production-served dialog checks.
 python3 scripts/sessions-smoke.py
 # Real membership-scoped organizations/teams and production browser checks.
@@ -174,6 +184,8 @@ python3 scripts/oauth-smoke.py --refresh
 ```
 
 The browser checks use contract fixtures. `scripts/smoke.py` exercises the real running Compose stack: isolated users/private repositories, cross-user denial, CSRF, real Git pushes, source snapshots/preview boundaries, issues/scope denial, optional CLI/restart/outage checks, revocation and logout. It removes its test Gitea users/repositories afterward. `--restart` briefly interrupts local Golf/Gitea; omit it to skip those service operations. Python 3 and Git are required; `--cli` accepts an already-built CLI executable.
+
+`scripts/recovery-smoke.py` creates and removes two isolated Docker installations with native Git, LFS, attachment and key fixtures. Its small archive does not qualify large backups, an 8 GiB payload, or RPO/RTO targets. The size-cap check prints `SKIP` when the actual plaintext payload is at or below the minimum 1 MiB bound; a skipped check or offline file-limit check is not evidence of a successful large restore.
 
 `scripts/audit-smoke.py` checks recorded session events, account privacy, cursor snapshots, ephemeral CLI cleanup and the production activity screen. Its optional `--upgrade` expects a running pre-audit service and an already-built new image; `--restart` briefly interrupts Golf. Provider users and active sessions are removed afterward, while immutable Golf identities/history remain. Drain all old writers before claiming an audited operating window; a mixed-version rolling fleet is not qualified. Automatic cleanup and provider changes are not a complete audit trail.
 

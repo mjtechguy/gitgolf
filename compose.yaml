@@ -10,7 +10,7 @@ services:
       - postgres-data:/var/lib/postgresql
       - ./deploy/postgres/init.sh:/docker-entrypoint-initdb.d/01-golf.sh:ro
     healthcheck:
-      test: [CMD-SHELL, 'pg_isready -U postgres']
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U postgres']
       interval: 3s
       timeout: 3s
       retries: 30

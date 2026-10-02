@@ -53,6 +53,16 @@ type GolfOauthAttempt struct {
 	CredentialKeyID   string
 }
 
+type GolfRecoveryEvent struct {
+	ID                 int64
+	BackupID           string
+	OperationID        string
+	OccurredAt         time.Time
+	Actor              string
+	SessionsCount      int64
+	OauthAttemptsCount int64
+}
+
 type GolfSession struct {
 	TokenHash       []byte
 	UserID          int64

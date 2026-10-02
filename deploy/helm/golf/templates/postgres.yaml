@@ -78,15 +78,15 @@ spec:
                 secretKeyRef: {name: {{ $.Values.existingSecret | quote }}, key: {{ $key }}}
             {{- end }}
           startupProbe:
-            exec: {command: [pg_isready, -U, postgres]}
+            exec: {command: [pg_isready, -h, 127.0.0.1, -U, postgres]}
             periodSeconds: 5
             failureThreshold: 60
           readinessProbe:
-            exec: {command: [pg_isready, -U, postgres]}
+            exec: {command: [pg_isready, -h, 127.0.0.1, -U, postgres]}
             periodSeconds: 5
             timeoutSeconds: 3
           livenessProbe:
-            exec: {command: [pg_isready, -U, postgres]}
+            exec: {command: [pg_isready, -h, 127.0.0.1, -U, postgres]}
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 6

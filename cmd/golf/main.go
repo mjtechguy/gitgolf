@@ -32,6 +32,13 @@ func run() error {
 
 func runCommand(ctx context.Context, args []string, output io.Writer, logger *slog.Logger) error {
 	if len(args) > 0 {
+		if args[0] == "recovery" {
+			options, err := parseRecoveryCommand(args)
+			if err != nil {
+				return err
+			}
+			return runRecovery(ctx, options, output)
+		}
 		options, err := parseKeyCommand(args)
 		if err != nil {
 			return err
