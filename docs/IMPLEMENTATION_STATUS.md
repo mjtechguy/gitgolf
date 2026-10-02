@@ -2,6 +2,12 @@
 
 Updated: 2026-10-02. This ledger records evidence for the [implementation plan](../GOLF_IMPLEMENTATION_PLAN.md). A plan, compiled source and live provider qualification are different evidence levels. Git history identifies the implementation revision containing this ledger.
 
+## Portable local HTTPS increment
+
+The opt-in `compose.https.yaml` / `make local-https-up` profile adds digest-pinned Caddy 2.11.6 with persistent certificate volumes, bounded resources and no host trust installation. It removes the published Golf HTTP port, enables existing secure host-only cookies, rejects unknown hosts, redirects to the fixed origin and denies internal CI/health/metrics paths at the edge. The retained normal HTTP development installation is unchanged. [HTTPS operation and qualification](HTTPS.md) documents local trust, profile switching and public-domain configuration.
+
+Native disposable qualification passes on exact Golf image `sha256:1ff8978ebcb6bba7ef8be14cdfa92451cc90862bcd861c5216677f09d5b2cb2b`: explicitly verified local CA, actual enrolled email/password session, Secure/HttpOnly/SameSite/persistent/host-only cookie, no cookie transmission to HTTP, Origin/fetch denials, RPC no-store, private route denials, unknown-host rejection, redirects, backend port removal, session/CA persistence across backend and edge restart, and logout rejection of the original cookie. Fixture containers/network/volumes are removed; no retained keys/accounts or system trust are changed. Public ACME issuance/renewal, full native Git ingress/write-policy enforcement, Kubernetes/Cloudflare origin security, load/HA and edge-volume recovery remain unqualified. The public certificate configuration is a deployment option, not a completed live production proof. Valkey remains optional and has no implemented consumer.
+
 ## Current recovery and local bootstrap increment
 
 `make dev` / `make local-up` now initializes/preserves all three private environment files, starts Golf/PostgreSQL/the native forge plus RustFS, verifies/initializes CI source storage, builds the local worker independently, and starts its trusted Docker daemon/worker against the current Golf network namespace. `make local-status` reports the complete selected profile; `make local-stop` preserves volumes. The smaller `make up` core remains available. This is the implemented development profile, with default-deny execution policies and no Valkey dependency; agent/email/CD consumers and production HTTPS packaging remain unfinished.

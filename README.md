@@ -274,6 +274,8 @@ Issue discussion creation uses `write:issue` with current user/repository scopes
 
 Run `make dev` (or `make local-up`) for the local development profile: Golf, the Git backend, PostgreSQL, RustFS and the Docker CI worker/daemon. It preserves existing private credentials and volumes, initializes the source bucket, and refreshes the worker network namespace after a Golf replacement. `make local-status` lists the services; `make local-stop` stops them without removing volumes. Execution policies remain default-deny. `make up` retains the smaller three-service core profile.
 
+The opt-in [portable HTTPS edge](docs/HTTPS.md) adds Caddy, verified local TLS and secure persistent cookies: copy `.env.https.example` to `.env.https`, then `make local-https-up`. It switches Golf UI/API to `https://localhost:8443` and removes the published 8080 backend port. Local CA trust is explicit; host trust is never installed automatically. Public Git ingress and production deployment qualification remain separate gates.
+
 The development stack can run the bounded manual shell pipeline catalog with local PostgreSQL, RustFS and an isolated Docker worker. This is not full Actions/GitLab engine compatibility. Coding-agent connectors, notification/email delivery and deployment adapters are separate unfinished consumers. The equivalent explicit Compose commands are:
 
 ```sh

@@ -1,0 +1,35 @@
+# Opt-in UI/API TLS edge. Native Git/operator ports remain loopback-only.
+services:
+  golf:
+    environment:
+      GOLF_PUBLIC_URL: ${GOLF_PUBLIC_URL:?Set the HTTPS origin in .env.https}
+      GOLF_ALLOW_INSECURE_COOKIES: 'false'
+    ports: !reset []
+  caddy:
+    image: caddy:2.11.6-alpine@sha256:c776e0c6413b544d0459665e54ec7b8b2a15000c0cbee8b254da0067b1d184ff
+    environment:
+      GOLF_PUBLIC_URL: ${GOLF_PUBLIC_URL:?Set the HTTPS origin in .env.https}
+      GOLF_HTTPS_HOST: ${GOLF_HTTPS_HOST:-localhost}
+      GOLF_HTTP_PORT: ${GOLF_HTTP_PORT:-8081}
+      GOLF_HTTPS_PORT: ${GOLF_HTTPS_PORT:-8443}
+    ports:
+      - '${GOLF_EDGE_BIND:-127.0.0.1}:${GOLF_HTTPS_PORT:-8443}:${GOLF_HTTPS_PORT:-8443}'
+      - '${GOLF_EDGE_BIND:-127.0.0.1}:${GOLF_HTTP_PORT:-8081}:${GOLF_HTTP_PORT:-8081}'
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${GOLF_CADDY_TLS_FILE:-./deploy/caddy/tls-local.caddy}:/etc/caddy/tls.caddy:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 1
+    restart: unless-stopped
+    depends_on:
+      golf:
+        condition: service_started
+volumes:
+  caddy-data:
+  caddy-config:

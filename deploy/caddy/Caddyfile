@@ -1,0 +1,30 @@
+{
+	admin off
+	auto_https disable_redirects
+	skip_install_trust
+	servers {
+		protocols h1 h2
+		timeouts {
+			read_header 10s
+		}
+	}
+}
+
+{$GOLF_PUBLIC_URL} {
+	import /etc/caddy/tls.caddy
+	@private path /internal /internal/* /healthz /readyz /metrics /metrics/*
+	respond @private 404
+	reverse_proxy golf:8080
+}
+
+http://{$GOLF_HTTPS_HOST}:{$GOLF_HTTP_PORT} {
+	redir {$GOLF_PUBLIC_URL}{uri} 308
+}
+
+https://:{$GOLF_HTTPS_PORT} {
+	respond 421
+}
+
+http://:{$GOLF_HTTP_PORT} {
+	respond 421
+}
