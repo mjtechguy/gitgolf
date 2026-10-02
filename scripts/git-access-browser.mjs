@@ -21,13 +21,15 @@ try {
   await page.getByRole('heading', { name: 'SSH keys', exact: true }).waitFor();
   check(new URL(page.url()).pathname === '/account/ssh-keys');
   check(await page.getByRole('dialog').count() === 0);
+  check(await page.getByLabel('Key title', { exact: true }).count() === 0);
+  await page.getByRole('button', { name: 'New SSH key', exact: true }).click();
   stage = 'reject private key'; await page.getByLabel('Key title', { exact: true }).fill('Browser key');
   await page.getByLabel('Public key', { exact: true }).fill('-----BEGIN OPENSSH PRIVATE KEY-----');
   await page.getByRole('button', { name: 'Add SSH key', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: 'Paste one OpenSSH public key' }).waitFor();
   stage = 'add real key'; await page.getByLabel('Public key', { exact: true }).fill(config.publicKey);
   await page.getByRole('button', { name: 'Add SSH key', exact: true }).click();
-  await page.getByRole('heading', { name: 'Browser key', exact: true }).waitFor();
+  await page.getByRole('cell', { name: 'Browser key Account Git access', exact: true }).waitFor();
   stage = 'persist and mobile'; await page.reload();
   await page.getByRole('button', { name: 'Remove Browser key', exact: true }).waitFor();
   await page.setViewportSize({ width: 320, height: 760 });
@@ -39,7 +41,7 @@ try {
   stage = 'remove real key'; await page.getByRole('button', { name: 'Remove Browser key', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm remove key', exact: true }).click();
   await page.getByRole('status').filter({ hasText: 'SSH key removed.' }).waitFor();
-  check(await page.getByRole('heading', { name: 'Browser key', exact: true }).count() === 0);
+  check(await page.getByRole('cell', { name: 'Browser key Account Git access', exact: true }).count() === 0);
   check(errors.length === 0);
   console.log('PASS: actual Golf SSH settings navigation, validation, add/reload, mobile and confirmed removal');
 } catch {

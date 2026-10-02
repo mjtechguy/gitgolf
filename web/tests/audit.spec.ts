@@ -53,27 +53,27 @@ test('activity preserves a snapshot through new events, exact IDs and all lifecy
   const state = await backend(page);
   await page.goto('/audit');
   await expect(page.getByRole('heading', { name: 'Account activity', exact: true })).toBeVisible();
-  await expect(page.locator('.audit-event')).toHaveCount(2);
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(2);
   await expect(page.getByText('History begins when session activity recording', { exact: false })).toBeVisible();
   const newest = create(AuditEventSchema, { ...events[0]!, id: '9223372036854775807', operationId: 'newer-private-operation' });
   state.events.unshift(newest);
   await page.getByRole('button', { name: 'Load more activity' }).click();
-  await expect(page.locator('.audit-event')).toHaveCount(4);
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(4);
   expect(state.inputs.at(-1)).toEqual({ beforeId: '9007199254740996', snapshotId: '9223372036854775806' });
   await page.getByRole('button', { name: 'Load more activity' }).click();
-  await expect(page.locator('.audit-event')).toHaveCount(5);
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(5);
   await expect(page.getByRole('button', { name: 'Load more activity' })).toHaveCount(0);
-  await expect(page.locator('.audit-event h3')).toHaveText(['Signed in', 'Signed out', 'Other sessions revoked', 'Session revoked', 'Session replaced']);
-  for (const summary of await page.locator('.audit-event summary').all()) await summary.click();
-  await expect(page.locator('.audit-event').first().getByText('9223372036854775806', { exact: true })).toHaveCount(2);
-  await expect(page.locator('.audit-event').nth(2).locator('dd')).toContainText(['9007199254740995', 'bulk-private-operation', '9007199254740993', 'No individual target', '9007199254740993']);
+  await expect(page.locator('table[aria-label="Account activity"] tbody strong')).toHaveText(['Signed in', 'Signed out', 'Other sessions revoked', 'Session revoked', 'Session replaced']);
+  for (const summary of await page.locator('table[aria-label="Account activity"] summary').all()) await summary.click();
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]').first().getByText('9223372036854775806', { exact: true })).toHaveCount(2);
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]').nth(2).locator('dd')).toContainText(['9007199254740995', 'bulk-private-operation', '9007199254740993', 'No individual target', '9007199254740993']);
   await expect(page.locator('.audit-metadata dt', { hasText: /^Session expiry$/ })).toHaveCount(1);
   await expect(page.locator('time[datetime="2026-10-02T12:00:01.123Z"]')).toHaveAttribute('title', '2026-10-02T12:00:01.123Z');
   await expect(page.getByText('newer-private-operation', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Refresh activity' }).click();
-  await expect(page.locator('.audit-event')).toHaveCount(2);
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(2);
   expect(state.inputs.at(-1)).toEqual({ beforeId: '', snapshotId: '' });
-  await page.locator('.audit-event summary').first().click();
+  await page.locator('table[aria-label="Account activity"] summary').first().click();
   await expect(page.getByText('newer-private-operation', { exact: true })).toBeVisible();
   expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toContain('private-operation');
   expect(new URL(page.url()).search).toBe('');
@@ -82,42 +82,42 @@ test('activity preserves a snapshot through new events, exact IDs and all lifecy
 test('empty history is explicit and later successful events appear only after refresh', async ({ page }) => {
   const state = await backend(page); state.events = [];
   await page.goto('/audit');
-  await expect(page.getByRole('heading', { name: 'No recorded account activity' })).toBeVisible();
-  await expect(page.locator('.audit-event')).toHaveCount(0);
+  await expect(page.getByRole('cell', { name: 'No recorded account activity. New successful session events will appear after you refresh.', exact:true })).toBeVisible();
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Load more activity' })).toHaveCount(0);
   state.events = [events[0]!];
   await page.getByRole('button', { name: 'Refresh activity' }).click();
-  await expect(page.locator('.audit-event')).toHaveCount(1);
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(1);
   await expect(page.getByText('1 loaded event', { exact: true })).toBeVisible();
 });
 
 test('denied continuation and refetch remove loaded history; retry starts a new snapshot', async ({ page }) => {
   const state = await backend(page);
   await page.goto('/audit');
-  await expect(page.locator('.audit-event')).toHaveCount(2);
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(2);
   state.error = 'permission_denied';
   await page.getByRole('button', { name: 'Load more activity' }).click();
   await expect(page.getByRole('alert')).toHaveText('Account activity access denied.');
-  await expect(page.locator('.audit-event')).toHaveCount(0);
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(0);
   state.error = undefined;
   await page.getByRole('button', { name: 'Try again' }).click();
-  await expect(page.locator('.audit-event')).toHaveCount(2);
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(2);
   expect(state.inputs.at(-1)).toEqual({ beforeId: '', snapshotId: '' });
   let release!: () => void;
   state.barrier = new Promise<void>((resolve) => { release = resolve; });
   await page.getByRole('button', { name: 'Refresh activity' }).click();
   await expect(page.getByText('Loading account activity…')).toBeVisible();
-  await expect(page.locator('.audit-event')).toHaveCount(0);
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(0);
   state.error = 'unavailable'; release();
   await expect(page.getByRole('alert')).toHaveText('Account activity temporarily unavailable.');
-  await expect(page.locator('.audit-event')).toHaveCount(0);
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(0);
 });
 
 for (const invalid of ['noncanonical cursor', 'changed snapshot', 'non-advancing event']) {
   test(`malformed ${invalid} refuses continuation without exposing old rows`, async ({ page }) => {
     const state = await backend(page);
     await page.goto('/audit');
-    await expect(page.locator('.audit-event')).toHaveCount(2);
+    await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(2);
     state.corrupt = (response) => {
       if (invalid === 'noncanonical cursor') response.nextBeforeId = '09007199254740994';
       else if (invalid === 'changed snapshot') response.snapshotId = '9223372036854775807';
@@ -125,10 +125,10 @@ for (const invalid of ['noncanonical cursor', 'changed snapshot', 'non-advancing
     };
     await page.getByRole('button', { name: 'Load more activity' }).click();
     await expect(page.getByRole('alert')).toContainText('inconsistent history page');
-    await expect(page.locator('.audit-event')).toHaveCount(0);
+    await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(0);
     state.corrupt = undefined;
     await page.getByRole('button', { name: 'Try again' }).click();
-    await expect(page.locator('.audit-event')).toHaveCount(2);
+    await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(2);
   });
 }
 
@@ -139,7 +139,7 @@ test('leaving the view cancels private reads; reopening and deep reload request 
   await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Account activity', exact: true }).click();
   await expect(page).toHaveURL(/\/audit$/);
   await expect(page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Account activity', exact: true })).toHaveAttribute('aria-current', 'page');
-  await expect(page.locator('.audit-event')).toHaveCount(2);
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(2);
   let release!: () => void;
   state.barrier = new Promise<void>((resolve) => { release = resolve; });
   await page.getByRole('button', { name: 'Refresh activity' }).click();
@@ -149,29 +149,29 @@ test('leaving the view cancels private reads; reopening and deep reload request 
   await aborted;
   state.events = [events[4]!]; state.barrier = undefined; release();
   await page.goBack();
-  await expect(page.locator('.audit-event')).toHaveCount(1);
-  await expect(page.getByRole('heading', { name: 'Session replaced', exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Signed in', exact: true })).toHaveCount(0);
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(1);
+  await expect(page.getByText('Session replaced', { exact:true })).toBeVisible();
+  await expect(page.getByText('Signed in', { exact:true })).toHaveCount(0);
   await page.reload();
-  await expect(page.locator('.audit-event')).toHaveCount(1);
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(1);
   expect(state.inputs.at(-1)).toEqual({ beforeId: '', snapshotId: '' });
 });
 
 test('expired sessions clear history and return to sign-in', async ({ page }) => {
   const state = await backend(page);
   await page.goto('/audit');
-  await expect(page.locator('.audit-event')).toHaveCount(2);
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(2);
   state.error = 'unauthenticated';
   await page.getByRole('button', { name: 'Refresh activity' }).click();
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
-  await expect(page.locator('.audit-event')).toHaveCount(0);
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Account activity' })).toHaveCount(0);
 });
 
 test('sign-out aborts pending history and another sign-in never reuses it', async ({ page }) => {
   const state = await backend(page);
   await page.goto('/audit');
-  await expect(page.locator('.audit-event')).toHaveCount(2);
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(2);
   let release!: () => void;
   state.barrier = new Promise<void>((resolve) => { release = resolve; });
   await page.getByRole('button', { name: 'Load more activity' }).click();
@@ -180,13 +180,13 @@ test('sign-out aborts pending history and another sign-in never reuses it', asyn
   await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await aborted;
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
-  await expect(page.locator('.audit-event')).toHaveCount(0);
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(0);
   state.events = []; state.barrier = undefined; release();
   await page.getByText('Advanced token sign-in', { exact: true }).click();
   await page.getByLabel('Provider access token').fill('fixture-only-token');
   await page.getByRole('button', { name: 'Continue to workspace' }).click();
-  await expect(page.getByRole('heading', { name: 'No recorded account activity' })).toBeVisible();
-  await expect(page.locator('.audit-event')).toHaveCount(0);
+  await expect(page.getByRole('cell', { name: 'No recorded account activity. New successful session events will appear after you refresh.', exact:true })).toBeVisible();
+  await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(0);
 });
 
 test('activity details remain plain text, accessible by keyboard, and fit dark desktop and light mobile', async ({ page }) => {
@@ -195,11 +195,11 @@ test('activity details remain plain text, accessible by keyboard, and fit dark d
   const errors: string[] = []; page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/audit');
   if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
-  const details = page.locator('.audit-event summary');
+  const details = page.locator('table[aria-label="Account activity"] summary');
   await details.focus(); await page.keyboard.press('Enter');
-  await expect(page.locator('.audit-event details')).toHaveAttribute('open', '');
+  await expect(page.locator('table[aria-label="Account activity"] details')).toHaveAttribute('open', '');
   await expect(page.getByText('<img src=x onerror="window.executed=true">', { exact: true })).toBeVisible();
-  await expect(page.locator('.audit-event img')).toHaveCount(0);
+  await expect(page.locator('table[aria-label="Account activity"] img')).toHaveCount(0);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.screenshot({ path: 'test-results/activity-dark.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -213,4 +213,32 @@ test('activity details remain plain text, accessible by keyboard, and fit dark d
   await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Account activity', exact: true }).focus();
   await expect(page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Account activity', exact: true })).toBeFocused();
   expect(errors).toEqual([]);
+});
+
+test('audit table sorts and searches loaded events without changing keyset snapshots', async ({ page }) => {
+  const state = await backend(page);
+  await page.goto('/audit');
+  const table = page.getByRole('table', { name:'Account activity', exact:true });
+  await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(2);
+  await page.getByRole('button', { name:'Load more activity' }).click();
+  await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(4);
+  const requests = state.inputs.length;
+  await table.getByRole('button', { name:'Time', exact:true }).click();
+  await expect(table.getByRole('columnheader', { name:'Time', exact:true })).toHaveAttribute('aria-sort','ascending');
+  await expect(table.locator('tbody tr[data-row-id]').first()).toHaveAttribute('data-row-id','9007199254740994');
+  await table.getByRole('button', { name:'Time', exact:true }).click();
+  await expect(table.getByRole('columnheader', { name:'Time', exact:true })).toHaveAttribute('aria-sort','descending');
+  await expect(table.locator('tbody tr[data-row-id]').first()).toHaveAttribute('data-row-id','9223372036854775806');
+  const search = page.getByRole('searchbox', { name:'Search loaded Account activity', exact:true });
+  await search.fill('REVOKE-private');
+  await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(1);
+  await expect(table.locator('tbody tr[data-row-id]')).toHaveAttribute('data-row-id','9007199254740994');
+  await expect(page.getByText('1 of 4 loaded', { exact:true })).toBeVisible();
+  await search.fill('9223372036854775806');
+  await expect(table.locator('tbody tr[data-row-id]')).toHaveAttribute('data-row-id','9223372036854775806');
+  expect(state.inputs).toHaveLength(requests);
+  await search.fill('');
+  await page.getByRole('button', { name:'Load more activity' }).click();
+  await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(5);
+  expect(state.inputs.at(-1)).toEqual({ beforeId:'9007199254740994', snapshotId:'9223372036854775806' });
 });

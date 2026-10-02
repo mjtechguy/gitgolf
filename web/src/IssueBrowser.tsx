@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import { useForm, useStore } from '@tanstack/react-form';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -33,8 +33,10 @@ function Composer({ repositoryKey, repositoryId, queryKey, userId, issue, onCrea
   const kind = issue ? 'comment' : 'issue';
   const storageKey = issueIntentKey(userId, repositoryId, issue?.id);
   const [intent, setIntent] = useState(() => readIssueIntent(storageKey, repositoryId, issue?.id, issue?.number));
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
+  const form = useForm({ defaultValues: { title: '', body: '' }, onSubmit: () => submit() });
+  const { title, body } = useStore(form.store, (state) => state.values);
+  const setTitle = (value: string) => form.setFieldValue('title', value);
+  const setBody = (value: string) => form.setFieldValue('body', value);
   const [record, setRecord] = useState<IssueMutation | null>(null);
   const [posted, setPosted] = useState<IssueComment | null>(null);
   const [error, setError] = useState<Error | null>(null);
@@ -86,11 +88,10 @@ function Composer({ repositoryKey, repositoryId, queryKey, userId, issue, onCrea
   });
   useEffect(() => {
     mounted.current = true;
-    if (intent) statusButton.current?.focus();
+    if (intent) statusButton.current?.focus(); else firstInput.current?.focus();
     return () => { mounted.current = false; controller.current?.abort(); frozen.current = null; };
   }, []);
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function submit() {
     if (latch.current || intent) return;
     const exactTitle = title.trim();
     const titleBytes = new TextEncoder().encode(exactTitle);
@@ -125,7 +126,7 @@ function Composer({ repositoryKey, repositoryId, queryKey, userId, issue, onCrea
   const succeeded = record?.state === IssueMutationState.SUCCEEDED;
   return <div className="issue-composer">
     <p className="field-help">Creating issues and posting comments requires issue-write permission. If your connected account has read-only access, ask your administrator to update it.</p>
-    {posted ? <><p className="session-notice" role="status">Comment posted.</p><Comment comment={posted} /><button className="button secondary" onClick={nextIntent}>Write another comment</button></> : <form onSubmit={submit}>
+    {posted ? <><p className="session-notice" role="status">Comment posted.</p><Comment comment={posted} /><button className="button secondary" onClick={nextIntent}>Write another comment</button></> : <form onSubmit={(event) => { event.preventDefault(); void form.handleSubmit(); }}>
       {!issue ? <><label htmlFor="issue-title-input">Issue title</label><input ref={(element) => { firstInput.current = element; }} id="issue-title-input" value={title} onChange={(event) => setTitle(event.target.value)} required maxLength={255} disabled={Boolean(intent)} autoComplete="off" /></> : null}
       <label htmlFor={issue ? 'issue-comment-input' : 'issue-body-input'}>{issue ? 'Comment, plain text' : 'Description, plain text'}</label><textarea ref={issue ? (element) => { firstInput.current = element; } : undefined} id={issue ? 'issue-comment-input' : 'issue-body-input'} value={body} onChange={(event) => setBody(event.target.value)} required={Boolean(issue)} rows={issue ? 5 : 7} maxLength={6000} disabled={Boolean(intent)} autoComplete="off" />
       <p className="field-help">Text is preserved as submitted and displayed without HTML or Markdown rendering. Maximum 6,000 UTF-8 bytes.</p>
@@ -150,6 +151,8 @@ function NewIssue({ onClose, ...props }: Props & { onClose: () => void; onPendin
 function Comments(props: Props & { issue: Issue; onDenied: (error: Error) => void }) {
   const { issue, repositoryKey, repositoryId, queryKey } = props;
   const client = useQueryClient();
+  const [composing, setComposing] = useState(() => Boolean(readIssueIntent(issueIntentKey(props.userId, repositoryId, issue.id), repositoryId, issue.id, issue.number)));
+  const addButton = useRef<HTMLButtonElement>(null);
   const key = [...queryKey, 'issue', issue.number, issue.id, 'comments'];
   const query = useInfiniteQuery({ ...privateQuery, queryKey: key, initialPageParam: 1,
     queryFn: ({ pageParam, signal }) => repositoryClient.listIssueComments({ repository: repositoryKey, repositoryId, number: issue.number, issueId: issue.id, page: { page: pageParam, limit: 20 } }, { signal, timeoutMs: 8_000 }), getNextPageParam: followingPage });
@@ -161,7 +164,7 @@ function Comments(props: Props & { issue: Issue; onDenied: (error: Error) => voi
       {comments.length ? <ol className="issue-comment-list">{comments.map((comment) => <li key={comment.id}><Comment comment={comment} /></li>)}</ol> : <div className="empty-state"><MessageSquare size={24} /><h3>No comments in the loaded pages.</h3>{query.hasNextPage ? <p>More repository pages may contain comments for this issue.</p> : <p>No visible comments were returned for this issue.</p>}</div>}
       <div className="list-footer"><span>{comments.length} loaded comments</span><More hasMore={query.hasNextPage} loading={query.isFetching} load={() => void query.fetchNextPage()} label="comments" /></div><p className="panel-footnote">Each page reads one repository-wide provider page, filtered to this issue. An empty page can still have a next page.</p>
     </>}
-    {!query.isError ? <section className="issue-comment-compose" aria-labelledby="comment-compose-title"><h2 id="comment-compose-title">Add a comment</h2><Composer {...props} onPosted={() => { void client.invalidateQueries({ queryKey: key, exact: true }); }} /></section> : null}
+    {!query.isError ? <section className="issue-comment-compose" aria-labelledby="comment-compose-title"><h2 id="comment-compose-title">Discussion</h2>{composing ? <><Composer {...props} onPosted={() => { void client.invalidateQueries({ queryKey: key, exact: true }); }} /><button className="button secondary" onClick={() => { setComposing(false); requestAnimationFrame(() => addButton.current?.focus()); }}>Close comment editor</button></> : <button ref={addButton} className="button secondary" onClick={() => setComposing(true)}><Plus size={16} />Add a comment</button>}</section> : null}
   </section>;
 }
 

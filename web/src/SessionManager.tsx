@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowDown, LoaderCircle, RefreshCw, ShieldCheck } from 'lucide-react';
+import { DataTable } from './DataTable';
+import type { DataTableColumn } from './DataTable';
 import { errorMessage, sessionClient } from './api';
 import type { SessionInfo, User } from './gen/golf/v1/golf_pb';
 
@@ -75,6 +77,14 @@ export function SessionManager({ userId, onSignedOut }: { userId: string; onSign
     revoke.mutate(confirmation === 'others' ? { kind: 'others' } : { kind: 'one', sessionId: confirmation.id });
   }
 
+  const columns = useMemo<DataTableColumn<SessionInfo>[]>(() => [
+    { id: 'kind', header: 'Sign-in method', accessorFn: (session) => session.credentialKind === 'oauth' ? 'Provider OAuth' : session.credentialKind === 'pat' ? 'Provider access token' : session.credentialKind === 'local' ? 'Golf password' : 'Golf session' },
+    { accessorKey: 'id', header: 'Session', cell: ({ row }) => <code>{row.original.id}</code> },
+    { id: 'status', header: 'Status', accessorFn: (session) => session.current ? 'Current session' : 'Other session' },
+    { accessorKey: 'createdAt', header: 'Created', cell: ({ row }) => <SessionTime value={row.original.createdAt} /> },
+    { accessorKey: 'expiresAt', header: 'Expires', cell: ({ row }) => <SessionTime value={row.original.expiresAt} /> },
+    { id: 'actions', header: 'Actions', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => <button className="button secondary" disabled={revoke.isPending || query.isFetching} aria-label={row.original.current ? 'Revoke current session' : `Revoke session ${row.original.id}`} onClick={(event) => { confirmationTrigger.current = event.currentTarget; setNotice(''); setConfirmation(row.original); }}>Revoke</button> },
+  ], [revoke.isPending, query.isFetching]);
   return <section className="account-sessions" aria-labelledby="sessions-title">
     <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1 id="sessions-title"><ShieldCheck size={29} />Your Golf sessions</h1><p>Review and revoke browser access.</p></div></header>
     <p className="organization-guidance" id="sessions-boundary">Revoke access to Golf on a session you no longer need. This does not revoke your provider token, OAuth provider consent or Git keys.</p>
@@ -90,10 +100,7 @@ export function SessionManager({ userId, onSignedOut }: { userId: string; onSign
       {!error ? <>
         <div className="session-toolbar"><button className="button secondary" disabled={query.isFetching || revoke.isPending} onClick={refresh}><RefreshCw size={15} />Refresh sessions</button><button className="text-button" disabled={loading || revoke.isPending || !sessions.some((session) => !session.current) && !query.hasNextPage} onClick={(event) => { confirmationTrigger.current = event.currentTarget; setNotice(''); setConfirmation('others'); }}>Revoke all other sessions</button></div>
         <div aria-busy={query.isFetching || revoke.isPending}>
-          {loading ? <p className="browser-loading" role="status"><LoaderCircle className="spin" size={18} />Loading sessions…</p> : sessions.length ? <ul className="session-list">{sessions.map((session) => <li className="session-row" key={session.id}>
-            <div><div className="session-heading"><h3>{session.credentialKind === 'oauth' ? 'Provider OAuth' : session.credentialKind === 'pat' ? 'Provider access token' : session.credentialKind === 'local' ? 'Golf password' : 'Golf session'}</h3>{session.current ? <span className="visibility">Current session</span> : null}</div><p className="session-id">Session {session.id}</p><dl><div><dt>Created</dt><dd><SessionTime value={session.createdAt} /></dd></div><div><dt>Expires</dt><dd><SessionTime value={session.expiresAt} /></dd></div></dl></div>
-            <button className="button secondary" disabled={revoke.isPending || query.isFetching} aria-label={session.current ? 'Revoke current session' : `Revoke session ${session.id}`} onClick={(event) => { confirmationTrigger.current = event.currentTarget; setNotice(''); setConfirmation(session); }}>Revoke</button>
-          </li>)}</ul> : <div className="empty-state"><ShieldCheck size={25} /><h3>No active sessions returned</h3><p>Refresh to check your account again.</p></div>}
+          {loading ? <p className="browser-loading" role="status"><LoaderCircle className="spin" size={18} />Loading sessions…</p> : <DataTable data={sessions} columns={columns} getRowId={(session) => session.id} label="Sessions" emptyMessage="No active sessions returned" />}
         </div>
         {!loading ? <div className="list-footer"><span>{sessions.length} loaded {sessions.length === 1 ? 'session' : 'sessions'}</span>{query.hasNextPage ? <button className="text-button" disabled={query.isFetching || revoke.isPending} onClick={() => void query.fetchNextPage()}>{query.isFetchingNextPage ? 'Loading…' : 'Load more sessions'}<ArrowDown size={14} /></button> : null}</div> : null}
       </> : null}

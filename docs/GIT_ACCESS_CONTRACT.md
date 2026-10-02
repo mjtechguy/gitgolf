@@ -1,6 +1,6 @@
 # Git access in the local developer preview
 
-Golf provides an own-account SSH key page at `/account/ssh-keys`, available through **Your account → User settings → SSH keys**. Git repositories and transports remain native backend operations. This increment does not implement a Golf HTTP credential gateway, protected merge enforcement or scoped agent Git credentials.
+Golf provides an own-account SSH key page at `/account/ssh-keys`, available through **Your account → User settings → SSH keys**. Choose **New SSH key** to open its editor; Cancel clears the draft. Key inventories use the shared compact TanStack Table, with search/sort of loaded rows, and the editor uses TanStack Form with global styles. Git repositories and transports remain native backend operations. This increment does not implement a Golf HTTP credential gateway, protected merge enforcement or scoped agent Git credentials.
 
 ## Public API and authority
 

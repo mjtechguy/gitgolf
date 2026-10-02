@@ -77,7 +77,7 @@ try {
   if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
   await page.screenshot({ path: `${artifacts}/native-workspace-dark.png`, fullPage: true });
   await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Sessions', exact: true }).click();
-  await page.getByRole('heading', { name: 'Golf password', exact: true }).waitFor();
+  await page.getByRole('cell', { name: 'Golf password', exact: true }).waitFor();
   await page.keyboard.press('Escape');
   await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Account activity', exact: true }).click();
   await page.getByText('Golf password', { exact: true }).first().waitFor();

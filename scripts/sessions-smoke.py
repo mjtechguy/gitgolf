@@ -55,10 +55,10 @@ try {
   stage = 'sessions page and metadata';
   await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Sessions', exact: true }).click();
   const dialog = page.getByRole('region', { name: 'Your Golf sessions', exact: true });
-  await dialog.locator('.session-row').nth(1).waitFor();
+  await dialog.locator('table[aria-label="Sessions"] tbody tr[data-row-id]').nth(1).waitFor();
   const listing = await call(context, 'ListSessions');
   check(listing.sessions.length === 2 && listing.sessions.filter(row => row.current).length === 1, 'Real session list mismatch');
-  for (const row of listing.sessions) check((await dialog.innerText()).includes('Session ' + row.id), 'Dialog omitted a real session');
+  for (const row of listing.sessions) check((await dialog.innerText()).includes(row.id), 'Table omitted a real session');
   check((await dialog.innerText()).includes('does not revoke'), 'Provider/session boundary missing');
   await page.screenshot({ path: join(config.screenshots, 'sessions-dark.png') });
   stage = 'light and mobile sessions page';
@@ -66,7 +66,7 @@ try {
   if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Sessions', exact: true }).click();
-  await dialog.locator('.session-row').nth(1).waitFor();
+  await dialog.locator('table[aria-label="Sessions"] tbody tr[data-row-id]').nth(1).waitFor();
   check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Mobile page overflows');
   await page.screenshot({ path: join(config.screenshots, 'sessions-light-mobile.png') });
   stage = 'cancel and confirm other-session revocation';
@@ -82,7 +82,7 @@ try {
   await dialog.getByRole('button', { name: 'Revoke current session', exact: true }).click();
   await dialog.getByRole('button', { name: 'Confirm revoke session', exact: true }).click();
   await page.getByText('Advanced token sign-in', { exact: true }).waitFor();
-  check(await page.locator('.session-row').count() === 0, 'Private session rows survived sign-out');
+  check(await page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]').count() === 0, 'Private session rows survived sign-out');
   await call(context, 'GetSession', {}, 401);
   check(!(await context.cookies(config.golf)).some(cookie => cookie.name === 'golf_session'), 'Current session cookie survived revocation');
   check(errors.length === 0, 'Browser runtime error');

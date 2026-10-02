@@ -76,9 +76,13 @@ async function backend(page: Page) {
 async function open(page: Page) {
   await page.goto('/account/api-credentials');
   await expect(page.getByRole('heading', { name: 'API credentials', exact: true })).toBeVisible();
-  await expect(page.locator('.credential-row')).toHaveCount(2);
+  await expect(page.getByRole('table', { name: 'API credentials', exact: true }).locator('tbody tr[data-row-id]')).toHaveCount(2);
+}
+async function edit(page: Page) {
+  if (!await page.getByLabel('Credential label', { exact: true }).count()) await page.getByRole('button', { name: 'New API credential', exact: true }).click();
 }
 async function issue(page: Page, label = 'My read tool') {
+  await edit(page);
   await page.getByLabel('Credential label', { exact: true }).fill(label);
   await page.getByRole('button', { name: 'Create API credential', exact: true }).click();
   await expect(page.getByLabel('New API credential', { exact: true })).toHaveValue(token);
@@ -94,29 +98,73 @@ test('credential metadata paginates with exact IDs, native source status and lit
   await page.goto('/');
   await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'API credentials', exact: true }).click();
   await expect(page).toHaveURL(/\/account\/api-credentials$/);
-  await expect(page.locator('.credential-row')).toHaveCount(2);
+  await expect(page.getByRole('table', { name: 'API credentials', exact: true }).locator('tbody tr[data-row-id]')).toHaveCount(2);
   await expect(page.getByText('Not revoked or expired', { exact: true })).toBeVisible();
   await expect(page.getByText('<img src=x onerror=alert(1)>', { exact: true })).toBeVisible();
-  await expect(page.locator('.credential-row img')).toHaveCount(0);
+  await expect(page.getByRole('table', { name: 'API credentials', exact: true }).locator('img')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Revoke credential 9007199254740994', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Load more credentials', exact: true }).click();
-  await expect(page.locator('.credential-row')).toHaveCount(3);
+  await expect(page.getByRole('table', { name: 'API credentials', exact: true }).locator('tbody tr[data-row-id]')).toHaveCount(3);
   await expect(page.getByText('Source session ended', { exact: true })).toBeVisible();
   expect(state.pages.at(-1)).toBe(2);
-  await expect(page.locator('.credential-metadata code').filter({ hasText: '9007199254740987' })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'API credentials', exact: true }).locator('code').filter({ hasText: '9007199254740987' })).toBeVisible();
   await page.goBack();
   await expect(page.getByRole('heading', { name: 'Repositories', exact: true })).toBeVisible();
   await page.goForward();
-  await expect(page.locator('.credential-row')).toHaveCount(2);
+  await expect(page.getByRole('table', { name: 'API credentials', exact: true }).locator('tbody tr[data-row-id]')).toHaveCount(2);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'API credentials', exact: true })).toBeVisible();
   await noStoredSecret(page);
+});
+
+test('credential table searches and sorts only loaded metadata with exact IDs', async ({ page }) => {
+  const state = await backend(page);
+  await open(page);
+  const table = page.getByRole('table', { name: 'API credentials', exact: true });
+  const rows = table.locator('tbody tr[data-row-id]');
+  const search = page.getByRole('searchbox', { name: 'Search loaded API credentials', exact: true });
+  await search.fill('Ended source');
+  await expect(rows).toHaveCount(0);
+  await expect(table.getByText('No loaded entries match your search.', { exact: true })).toBeVisible();
+  expect(state.pages.every((pageNumber) => pageNumber === 1)).toBe(true);
+  await page.getByRole('button', { name: 'Load more credentials', exact: true }).click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toHaveAttribute('data-row-id', '9007199254740993');
+  await search.fill('9007199254740995');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toHaveAttribute('data-row-id', '9007199254740995');
+  await search.fill('');
+  await table.getByRole('button', { name: 'Credential', exact: true }).click();
+  await expect(table.getByRole('columnheader', { name: 'Credential', exact: true })).toHaveAttribute('aria-sort', 'ascending');
+  await expect(rows.first()).toHaveAttribute('data-row-id', '9007199254740994');
+  await table.getByRole('button', { name: 'Credential', exact: true }).click();
+  await expect(rows.first()).toHaveAttribute('data-row-id', '9007199254740995');
+  expect(state.issued).toHaveLength(0);
+});
+
+test('credential editor opens explicitly and cancellation clears drafts without issuing', async ({ page }) => {
+  const state = await backend(page);
+  await open(page);
+  await expect(page.getByLabel('Credential label', { exact: true })).toHaveCount(0);
+  await edit(page);
+  await expect(page.getByLabel('Credential label', { exact: true })).toBeFocused();
+  await page.getByLabel('Credential label', { exact: true }).fill('Discarded draft');
+  await page.getByLabel('Requested lifetime').selectOption('43200');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByLabel('Credential label', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'New API credential', exact: true })).toBeFocused();
+  expect(state.issued).toHaveLength(0);
+  await edit(page);
+  await expect(page.getByLabel('Credential label', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Requested lifetime')).toHaveValue('3600');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
 test('issuance shows the secret once, copies explicitly, caps expiry and keeps it out of storage', async ({ page, context }) => {
   const state = await backend(page);
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await open(page);
+  await edit(page);
   await expect(page.getByLabel('Requested lifetime')).toHaveValue('3600');
   await page.getByLabel('Requested lifetime').selectOption('43200');
   await issue(page, '  My tool  ');
@@ -129,10 +177,10 @@ test('issuance shows the secret once, copies explicitly, caps expiry and keeps i
   await noStoredSecret(page);
   await page.getByRole('button', { name: 'Dismiss credential', exact: true }).click();
   await expect(page.getByLabel('New API credential', { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel('Credential label', { exact: true })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'New API credential', exact: true })).toBeFocused();
   await expect(page.getByText('Secret dismissed. Golf cannot show it again.', { exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'My tool', exact: true })).toBeVisible();
+  await expect(page.getByText('My tool', { exact: true })).toBeVisible();
   await expect(page.getByLabel('New API credential', { exact: true })).toHaveCount(0);
   expect(state.issued).toHaveLength(1);
 });
@@ -142,6 +190,7 @@ test('synchronous submit events issue only once and unmount discards a late secr
   let release!: () => void;
   state.createBarrier = new Promise<void>((resolve) => { release = resolve; });
   await open(page);
+  await edit(page);
   await page.getByLabel('Credential label', { exact: true }).fill('Single submit');
   await page.locator('.credential-form-content form').evaluate((form) => {
     form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
@@ -152,7 +201,7 @@ test('synchronous submit events issue only once and unmount discards a late secr
   await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Account activity', exact: true }).click();
   release();
   await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'API credentials', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Single submit', exact: true })).toBeVisible();
+  await expect(page.getByText('Single submit', { exact: true })).toBeVisible();
   await expect(page.getByLabel('New API credential', { exact: true })).toHaveCount(0);
   expect(state.issued).toHaveLength(1);
   await noStoredSecret(page);
@@ -164,13 +213,14 @@ for (const failure of ['lost response', 'missing secret'] as const) {
     state.dropCreation = failure === 'lost response';
     state.emptySecret = failure === 'missing secret';
     await open(page);
+    await edit(page);
     await page.getByLabel('Credential label', { exact: true }).fill('Lost issuance');
     await page.getByRole('button', { name: 'Create API credential', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Issuance outcome is unknown', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'I reviewed the list; start a separate credential', exact: true })).toBeDisabled();
     expect(state.issued).toHaveLength(1);
     await page.getByRole('button', { name: 'Refresh credential list', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Lost issuance', exact: true })).toBeVisible();
+    await expect(page.getByText('Lost issuance', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Revoke credential 9007199254740996', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm revoke credential', exact: true }).click();
     await expect(page.getByText('API credential revoked.', { exact: true })).toBeVisible();
@@ -187,6 +237,7 @@ for (const failure of ['lost response', 'missing secret'] as const) {
 test('label validation uses UTF-8 bytes, controls and Unicode roundtrip before any request', async ({ page }) => {
   const state = await backend(page);
   await open(page);
+  await edit(page);
   for (const invalid of ['é'.repeat(33), 'contains\tcontrol', '\ud800']) {
     const label = page.getByLabel('Credential label', { exact: true });
     if (invalid === '\ud800') {
@@ -224,7 +275,7 @@ test('revoke confirmation is keyboard usable, deduplicates submissions and prese
   await expect(page.getByText('API credential revoked.', { exact: true })).toBeVisible();
   await expect(target).toHaveCount(0);
   expect(state.signedIn).toBe(true);
-  await expect(page.getByRole('heading', { name: 'Local reader', exact: true })).toBeVisible();
+  await expect(page.getByText('Local reader', { exact: true })).toBeVisible();
 });
 
 test('denied pagination and revocation remove the one-time secret and earlier private rows', async ({ page }) => {
@@ -234,17 +285,17 @@ test('denied pagination and revocation remove the one-time secret and earlier pr
   state.errors.ListApiCredentials = 'permission_denied';
   await page.getByRole('button', { name: 'Load more credentials', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Credential access denied.');
-  await expect(page.locator('.credential-row')).toHaveCount(0);
+  await expect(page.getByRole('table', { name: 'API credentials', exact: true }).locator('tbody tr[data-row-id]')).toHaveCount(0);
   await expect(page.getByLabel('New API credential', { exact: true })).toHaveCount(0);
   delete state.errors.ListApiCredentials;
   await page.getByRole('button', { name: 'Try again', exact: true }).click();
-  await expect(page.locator('.credential-row')).toHaveCount(2);
+  await expect(page.getByRole('table', { name: 'API credentials', exact: true }).locator('tbody tr[data-row-id]')).toHaveCount(2);
   await expect(page.getByLabel('New API credential', { exact: true })).toHaveCount(0);
   state.errors.RevokeApiCredential = 'not_found';
   await page.getByRole('button', { name: 'Revoke credential 9007199254740996', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm revoke credential', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Credential access denied.');
-  await expect(page.locator('.credential-row')).toHaveCount(0);
+  await expect(page.getByRole('table', { name: 'API credentials', exact: true }).locator('tbody tr[data-row-id]')).toHaveCount(0);
 });
 
 for (const transition of ['navigation', 'sign out', 'expiry'] as const) {
@@ -283,8 +334,8 @@ test('account switch and empty list do not retain the previous account metadata'
   await page.getByText('Advanced token sign-in', { exact: true }).click();
   await page.getByLabel('Provider access token', { exact: true }).fill('other-token');
   await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'No API credentials', exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'My read tool', exact: true })).toHaveCount(0);
+  await expect(page.getByText('No API credentials', { exact: true })).toBeVisible();
+  await expect(page.getByText('My read tool', { exact: true })).toHaveCount(0);
   await expect(page.getByLabel('New API credential', { exact: true })).toHaveCount(0);
 });
 
@@ -299,7 +350,7 @@ test('pagehide clears the secret before a document can be frozen for browser his
   expect(retained).toBe(false);
   await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
   await expect(page.getByLabel('New API credential', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'My read tool', exact: true })).toBeVisible();
+  await expect(page.getByText('My read tool', { exact: true })).toBeVisible();
 });
 
 test('credential page is usable in dark and light mobile layouts', async ({ page }) => {
@@ -317,7 +368,7 @@ test('credential page is usable in dark and light mobile layouts', async ({ page
   await expect(page.getByRole('button', { name: 'Dismiss credential', exact: true })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.getByLabel('New API credential', { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel('Credential label', { exact: true })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'New API credential', exact: true })).toBeFocused();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: 'test-results/api-credentials-mobile-light.png', fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

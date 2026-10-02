@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { useForm } from '@tanstack/react-form';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Copy, KeyRound, LoaderCircle, Plus, RefreshCw, X } from 'lucide-react';
 import { apiCredentialClient, errorMessage } from './api';
 import type { ApiCredential, User } from './gen/golf/v1/golf_pb';
 import { Loading, More, privateQuery } from './RepositoryUI';
+import { DataTable, type DataTableColumn } from './DataTable';
 
 function CredentialTime({ value }: { value: string }) {
   const date = new Date(value);
@@ -42,8 +43,7 @@ function RevokeCredential({ credential, pending, onCancel, onConfirm }: { creden
 export function ApiCredentials({ userId, signingOut }: { userId: string; signingOut: boolean }) {
   const client = useQueryClient();
   const queryKey = ['api-credentials', userId];
-  const [label, setLabel] = useState('');
-  const [lifetime, setLifetime] = useState('3600');
+  const [editing, setEditing] = useState(false);
   const [validation, setValidation] = useState('');
   const [secret, setSecret] = useState<{ token: string; credential: ApiCredential } | null>(null);
   const [copyNotice, setCopyNotice] = useState('');
@@ -58,7 +58,8 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
   const revokeController = useRef<AbortController | null>(null);
   const labelInput = useRef<HTMLInputElement>(null);
   const copyButton = useRef<HTMLButtonElement>(null);
-  const returnToLabel = useRef(false);
+  const newButton = useRef<HTMLButtonElement>(null);
+  const returnToAction = useRef(false);
   const active = () => alive.current && client.getQueryData<User | null>(['session'])?.id === userId;
   const query = useInfiniteQuery({
     ...privateQuery, queryKey, initialPageParam: 1,
@@ -79,7 +80,7 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
       if (!active() || controller.signal.aborted || client.getQueryState(queryKey)?.error) return;
       if (!response.credential?.id || !response.token) throw new ConnectError('Golf did not return a complete credential. Inspect the list before creating another.', Code.Internal);
       setSecret({ token: response.token, credential: response.credential });
-      setLabel('');
+      form.reset();
       setCopyNotice('');
       setNotice('');
     },
@@ -139,26 +140,30 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
   }, [listError, signingOut]);
   useEffect(() => {
     if (secret) copyButton.current?.focus();
-    else if (returnToLabel.current) { returnToLabel.current = false; labelInput.current?.focus(); }
-  }, [secret]);
+    else if (returnToAction.current) { returnToAction.current = false; newButton.current?.focus(); }
+  }, [secret, editing]);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (submitting.current || secret || uncertain || listError || query.isFetching || signingOut) return;
-    const trimmed = label.trim();
-    const encoded = new TextEncoder().encode(trimmed);
-    if (!trimmed || encoded.byteLength > 64 || new TextDecoder().decode(encoded) !== trimmed || /\p{Cc}/u.test(trimmed)) {
-      setValidation('Use a label of 1–64 UTF-8 bytes without control characters.');
-      labelInput.current?.focus();
-      return;
-    }
-    const seconds = Number(lifetime);
-    if (!Number.isInteger(seconds) || seconds < 60 || seconds > 43200) { setValidation('Choose an expiry between one minute and twelve hours.'); return; }
-    submitting.current = true;
-    setValidation('');
-    setNotice('');
-    issuance.mutate({ label: trimmed, lifetimeSeconds: seconds });
-  }
+  useEffect(() => { if (editing && !secret && !uncertain) labelInput.current?.focus(); }, [editing, secret, uncertain]);
+  const form = useForm({
+    defaultValues: { label: '', lifetime: '3600' },
+    onSubmit: ({ value }) => {
+      if (submitting.current || secret || uncertain || listError || query.isFetching || signingOut) return;
+      const trimmed = value.label.trim();
+      const encoded = new TextEncoder().encode(trimmed);
+      if (!trimmed || encoded.byteLength > 64 || new TextDecoder().decode(encoded) !== trimmed || /\p{Cc}/u.test(trimmed)) {
+        setValidation('Use a label of 1–64 UTF-8 bytes without control characters.');
+        labelInput.current?.focus();
+        return;
+      }
+      const seconds = Number(value.lifetime);
+      if (!Number.isInteger(seconds) || seconds < 60 || seconds > 43200) { setValidation('Choose an expiry between one minute and twelve hours.'); return; }
+      submitting.current = true;
+      setValidation('');
+      setNotice('');
+      issuance.mutate({ label: trimmed, lifetimeSeconds: seconds });
+    },
+  });
+  function cancelEditor() { returnToAction.current = true; form.reset(); setValidation(''); setEditing(false); }
   async function refresh() {
     setSecret(null);
     setCopyNotice('');
@@ -175,17 +180,25 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
       if (active()) setCopyNotice('Credential copied. Dismissing this page does not clear your clipboard.');
     } catch { if (active()) setCopyNotice('Copy failed. Select and copy the credential manually.'); }
   }
-  function dismissSecret() { returnToLabel.current = true; setSecret(null); setCopyNotice(''); setNotice('Secret dismissed. Golf cannot show it again.'); }
+  function dismissSecret() { returnToAction.current = true; setEditing(false); setSecret(null); setCopyNotice(''); setNotice('Secret dismissed. Golf cannot show it again.'); }
   function confirmRevoke() {
     if (!confirmation || revoking.current || signingOut) return;
     revoking.current = true;
     revoke.mutate(confirmation.id);
   }
 
+  const columns = useMemo<DataTableColumn<ApiCredential>[]>(() => [
+    { id: 'credential', accessorFn: (credential) => `${credential.label} ${credential.id}`, header: 'Credential', cell: ({ row }) => <><strong>{row.original.label}</strong><small>Credential <code>{row.original.id}</code></small></> },
+    { id: 'status', accessorFn: credentialStatus, header: 'Status', cell: ({ row }) => <><span className="visibility">{credentialStatus(row.original)}</span>{row.original.revokedAt ? <small>Revoked <CredentialTime value={row.original.revokedAt} /></small> : null}</> },
+    { accessorKey: 'expiresAt', header: 'Expires', cell: ({ row }) => <><CredentialTime value={row.original.expiresAt} /><small>Created <CredentialTime value={row.original.createdAt} /></small></> },
+    { accessorKey: 'sourceSessionId', header: 'Source session', cell: ({ row }) => <><code>{row.original.sourceSessionId}</code><small>{row.original.sourceSessionActive ? 'Active at last check' : 'Ended'}</small></> },
+    { id: 'actions', header: 'Actions', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => !row.original.revokedAt ? <button className="button secondary" disabled={query.isFetching || revoke.isPending || issuance.isPending} aria-label={`Revoke credential ${row.original.id}`} onClick={() => { setNotice(''); setConfirmation(row.original); }}>Revoke</button> : null },
+  ], [query.isFetching, revoke.isPending, issuance.isPending]);
+
   return <div className="api-credentials">
-    <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1><KeyRound size={29} />API credentials</h1><p>Short-lived, read-only access for your tools.</p></div></header>
+    <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1><KeyRound size={29} />API credentials</h1><p>Short-lived, read-only access for your tools.</p></div><button ref={newButton} className="button primary" disabled={editing || Boolean(visibleSecret) || uncertain || Boolean(listError) || query.isFetching || signingOut} onClick={() => { setEditing(true); setNotice(''); }}><Plus size={16} />New API credential</button></header>
     <p className="organization-guidance">These credentials can call Golf’s allowed read operations using your source session’s current repository access. They cannot create repositories, change your account or manage credentials. Signing out, revoking that source session or reaching its expiry also ends this access. They are not provider tokens or Git credentials.</p>
-    <section className="browser-panel credential-create-panel" aria-labelledby="credential-create-title">
+    {editing || visibleSecret || uncertain ? <section className="browser-panel credential-create-panel" aria-labelledby="credential-create-title">
       <div className="browser-panel-heading"><h2 id="credential-create-title">Create a read-only credential</h2><span className="visibility">Read only</span></div>
       <div className="credential-form-content">
         {visibleSecret ? <section className="credential-secret" aria-labelledby="credential-secret-title">
@@ -198,24 +211,21 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
           <h3 id="credential-uncertain-title">Issuance outcome is unknown</h3><p role="alert">A credential may have been issued even though Golf did not receive its secret. This request will not be retried. Refresh the list and revoke any credential whose secret you did not receive before creating a separate one.</p>
           {issuance.error ? <p className="field-help">{errorMessage(issuance.error)}</p> : null}
           <div className="credential-actions"><button className="button secondary" disabled={query.isFetching} onClick={() => void refresh()}>Refresh credential list</button><button className="button secondary" disabled={!reviewed || Boolean(listError) || query.isFetching} onClick={() => { issuance.reset(); setUncertain(false); setReviewed(false); setValidation(''); }}>I reviewed the list; start a separate credential</button></div>
-        </section> : <form onSubmit={submit}>
-          <label htmlFor="credential-label">Credential label</label><input ref={labelInput} id="credential-label" required autoComplete="off" maxLength={64} value={label} disabled={issuance.isPending || signingOut} onChange={(event) => setLabel(event.target.value)} placeholder="Local read-only tool" aria-describedby="credential-label-help" />
-          <p className="field-help" id="credential-label-help">A name you recognize, up to 64 UTF-8 bytes. Do not put a secret in the label.</p>
-          <label htmlFor="credential-lifetime">Requested lifetime</label><select id="credential-lifetime" value={lifetime} disabled={issuance.isPending || signingOut} onChange={(event) => setLifetime(event.target.value)}><option value="900">15 minutes</option><option value="3600">1 hour</option><option value="14400">4 hours</option><option value="43200">12 hours</option></select>
+        </section> : <form onSubmit={(event) => { event.preventDefault(); void form.handleSubmit(); }}>
+          <form.Field name="label">{(field) => <><label htmlFor="credential-label">Credential label</label><input ref={labelInput} id="credential-label" required autoComplete="off" maxLength={64} value={field.state.value} disabled={issuance.isPending || signingOut} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} placeholder="Local read-only tool" aria-describedby="credential-label-help" />
+          <p className="field-help" id="credential-label-help">A name you recognize, up to 64 UTF-8 bytes. Do not put a secret in the label.</p></>}</form.Field>
+          <form.Field name="lifetime">{(field) => <><label htmlFor="credential-lifetime">Requested lifetime</label><select id="credential-lifetime" value={field.state.value} disabled={issuance.isPending || signingOut} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)}><option value="900">15 minutes</option><option value="3600">1 hour</option><option value="14400">4 hours</option><option value="43200">12 hours</option></select></>}</form.Field>
           <p className="field-help">The server caps expiry at this browser session’s remaining lifetime.{sourceExpiresAt ? <> This source session expires <CredentialTime value={sourceExpiresAt} />.</> : null}</p>
           {validation ? <p className="error" role="alert">{validation}</p> : null}
-          <div className="credential-actions"><button className="button primary" disabled={!label.trim() || issuance.isPending || Boolean(listError) || query.isFetching || signingOut}>{issuance.isPending ? <LoaderCircle className="spin" size={16} /> : <Plus size={16} />}{issuance.isPending ? 'Creating…' : 'Create API credential'}</button></div>
+          <div className="credential-actions"><form.Subscribe selector={(state) => state.values.label}>{(label) => <button className="button primary" disabled={!label.trim() || issuance.isPending || Boolean(listError) || query.isFetching || signingOut}>{issuance.isPending ? <LoaderCircle className="spin" size={16} /> : <Plus size={16} />}{issuance.isPending ? 'Creating…' : 'Create API credential'}</button>}</form.Subscribe><button type="button" className="button secondary" disabled={issuance.isPending} onClick={cancelEditor}>Cancel</button></div>
         </form>}
       </div>
-    </section>
+    </section> : null}
     {notice && !listError ? <p className="session-notice" role="status">{notice}</p> : null}
     <section className="browser-panel credential-list-panel" aria-labelledby="credential-list-title" aria-busy={query.isFetching}>
       <div className="browser-panel-heading"><h2 id="credential-list-title">Your API credentials</h2><button className="button secondary" disabled={query.isFetching || issuance.isPending || revoke.isPending} onClick={() => void refresh()}><RefreshCw size={15} className={query.isFetching ? 'spin' : ''} />Refresh credentials</button></div>
       {listError ? <div className="panel-error"><p className="error" role="alert">{errorMessage(listError)}</p><button className="button secondary" disabled={query.isFetching} onClick={() => void refresh()}>Try again</button></div> : loading ? <Loading label="Loading API credentials…" /> : <>
-        {credentials.length ? <ul className="credential-list">{credentials.map((credential) => <li className="credential-row" key={credential.id}>
-          <div><div className="credential-heading"><h3>{credential.label}</h3><span className="visibility">{credentialStatus(credential)}</span></div><dl className="credential-metadata"><div><dt>Credential ID</dt><dd><code>{credential.id}</code></dd></div><div><dt>Source session ID</dt><dd><code>{credential.sourceSessionId}</code></dd></div><div><dt>Created</dt><dd><CredentialTime value={credential.createdAt} /></dd></div><div><dt>Expires</dt><dd><CredentialTime value={credential.expiresAt} /></dd></div>{credential.revokedAt ? <div><dt>Revoked</dt><dd><CredentialTime value={credential.revokedAt} /></dd></div> : null}<div><dt>Source session</dt><dd>{credential.sourceSessionActive ? 'Active at last check' : 'Ended'}</dd></div></dl></div>
-          {!credential.revokedAt ? <button className="button secondary" disabled={query.isFetching || revoke.isPending || issuance.isPending} aria-label={`Revoke credential ${credential.id}`} onClick={() => { setNotice(''); setConfirmation(credential); }}>Revoke</button> : null}
-        </li>)}</ul> : <div className="empty-state"><KeyRound size={25} /><h3>No API credentials</h3><p>Create a short-lived credential when a tool needs read access to Golf.</p></div>}
+        <DataTable data={credentials} columns={columns} getRowId={(credential) => credential.id} label="API credentials" emptyMessage="No API credentials" />
         <div className="list-footer credential-list-footer"><span>{credentials.length} loaded {credentials.length === 1 ? 'credential' : 'credentials'}</span><More hasMore={Boolean(query.hasNextPage)} loading={query.isFetching || revoke.isPending || issuance.isPending} load={() => void query.fetchNextPage()} label="credentials" /></div>
         <p className="panel-footnote">Metadata remains visible after expiry or revocation. An active source session alone does not grant access: the credential must also be unexpired, unrevoked and authorized by the repository service on each call. Lost secrets cannot be recovered.</p>
       </>}

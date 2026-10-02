@@ -68,15 +68,15 @@ test('sessions paginate, preserve IDs, confirm one revoke and return keyboard fo
   const state = await backend(page);
   await page.emulateMedia({ colorScheme: 'dark' });
   await openSessions(page);
-  await expect(page.locator('.session-row')).toHaveCount(2);
+  await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(2);
   await expect(page.getByText('Current session', { exact: true })).toBeVisible();
   await expect(page.getByText('This does not revoke your provider token', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'Load more sessions' }).click();
-  await expect(page.locator('.session-row')).toHaveCount(3);
+  await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(3);
   expect(state.pages).toContain(1);
   expect(state.pages.at(-1)).toBe(2);
   await expect(page.getByText('Time unavailable', { exact: true })).toHaveCount(2);
-  await expect(page.locator('.session-row img')).toHaveCount(0);
+  await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id] img')).toHaveCount(0);
   await page.screenshot({ path: 'test-results/sessions-dark.png', fullPage: true });
   const target = page.getByRole('button', { name: 'Revoke session 9007199254740994', exact: true });
   await target.click();
@@ -88,10 +88,10 @@ test('sessions paginate, preserve IDs, confirm one revoke and return keyboard fo
   await target.click();
   await page.getByRole('button', { name: 'Confirm revoke session', exact: true }).click();
   await expect(page.getByText('Session revoked.', { exact: true })).toBeVisible();
-  await expect(page.locator('.session-row')).toHaveCount(2);
+  await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(2);
   expect(state.revoked).toEqual(['9007199254740994']);
   expect(state.pages.at(-1)).toBe(1);
-  await expect(page.getByText('Session 9007199254740994', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('9007199254740994', { exact: true })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('heading', {name:'Your Golf sessions',exact:true})).toBeVisible();
@@ -109,7 +109,7 @@ test('revoke others covers unloaded sessions, keeps this session and formats big
   await page.getByRole('button', { name: 'Revoke all other sessions', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm revoke other sessions' }).click();
   await expect(page.getByText('9007199254740993 other sessions revoked.', { exact: true })).toBeVisible();
-  await expect(page.locator('.session-row')).toHaveCount(1);
+  await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(1);
   await expect(page.getByText('Current session', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Revoke all other sessions', exact: true })).toBeDisabled();
   expect(state.signedIn).toBe(true);
@@ -124,55 +124,55 @@ test('revoking current session signs out and removes all private content', async
   await page.getByRole('button', { name: 'Confirm revoke session', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   expect(state.revoked).toEqual(['9007199254740993']);
-  await expect(page.locator('.session-row')).toHaveCount(0);
+  await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(0);
   await expect(page.getByText('alex/kept-private')).toHaveCount(0);
 });
 
 test('denied refresh and revoke hide prior rows; reopening waits for fresh data', async ({ page }) => {
   const state = await backend(page);
   await openSessions(page);
-  await expect(page.locator('.session-row')).toHaveCount(2);
+  await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(2);
   state.errors.ListSessions = 'permission_denied';
   await page.getByRole('button', { name: 'Load more sessions' }).click();
   await expect(page.getByRole('alert')).toHaveText('Session access denied.');
-  await expect(page.locator('.session-row')).toHaveCount(0);
+  await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(0);
   delete state.errors.ListSessions;
   await page.getByRole('button', { name: 'Try again' }).click();
-  await expect(page.locator('.session-row')).toHaveCount(2);
+  await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(2);
   state.errors.ListSessions = 'permission_denied';
   await page.getByRole('button', { name: 'Refresh sessions' }).click();
   await expect(page.getByRole('alert')).toHaveText('Session access denied.');
-  await expect(page.locator('.session-row')).toHaveCount(0);
+  await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(0);
   delete state.errors.ListSessions;
   await page.getByRole('button', { name: 'Try again' }).click();
-  await expect(page.locator('.session-row')).toHaveCount(2);
+  await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(2);
   state.errors.RevokeSession = 'not_found';
   await page.getByRole('button', { name: 'Revoke session 9007199254740994', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm revoke session', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Session access denied.');
-  await expect(page.locator('.session-row')).toHaveCount(0);
+  await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(0);
   await page.getByRole('navigation', {name:'Account settings',exact:true}).getByRole('link', {name:'Profile',exact:true}).click();
   let release!: () => void;
   state.listBarrier = new Promise<void>((resolve) => { release = resolve; });
   state.sessions = [originalSessions[0]!];
   await page.getByRole('navigation', { name:'Workspace', exact:true }).getByRole('link', { name: 'Sessions', exact: true }).click();
   await expect(page.getByText('Loading sessions…')).toBeVisible();
-  await expect(page.locator('.session-row')).toHaveCount(0);
+  await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(0);
   release();
-  await expect(page.locator('.session-row')).toHaveCount(1);
+  await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(1);
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
 test('leaving the sessions page cancels an in-flight private list and returning starts fresh', async ({ page }) => {
   const state = await backend(page);
   await openSessions(page);
-  await expect(page.locator('.session-row')).toHaveCount(2);
+  await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(2);
   await page.getByRole('navigation', {name:'Account settings',exact:true}).getByRole('link', {name:'Profile',exact:true}).click();
   let release!: () => void;
   state.listBarrier = new Promise<void>((resolve) => { release = resolve; });
   await page.getByRole('navigation', { name:'Workspace', exact:true }).getByRole('link', { name: 'Sessions', exact: true }).click();
   await expect(page.getByText('Loading sessions…')).toBeVisible();
-  await expect(page.locator('.session-row')).toHaveCount(0);
+  await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(0);
   const aborted = page.waitForEvent('requestfailed', (request) => request.url().endsWith('/ListSessions'));
   await page.getByRole('navigation', {name:'Account settings',exact:true}).getByRole('link', {name:'Profile',exact:true}).click();
   await aborted;
@@ -180,16 +180,16 @@ test('leaving the sessions page cancels an in-flight private list and returning 
   state.sessions = [create(SessionInfoSchema, { ...originalSessions[0]!, id: '9007199254741999' })];
   release();
   await page.getByRole('navigation', { name:'Workspace', exact:true }).getByRole('link', { name: 'Sessions', exact: true }).click();
-  await expect(page.getByText('Session 9007199254741999', { exact: true })).toBeVisible();
-  await expect(page.locator('.session-row')).toHaveCount(1);
-  await expect(page.getByText('Session 9007199254740993', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('9007199254741999', { exact: true })).toBeVisible();
+  await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(1);
+  await expect(page.getByText('9007199254740993', { exact: true })).toHaveCount(0);
 });
 
 for (const method of ['ListSessions', 'RevokeSession', 'RevokeOtherSessions']) {
   test(`${method} expiry clears session and repository queries`, async ({ page }) => {
     const state = await backend(page);
     await openSessions(page);
-    await expect(page.locator('.session-row')).toHaveCount(2);
+    await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(2);
     state.errors[method] = 'unauthenticated';
     if (method === 'ListSessions') await page.getByRole('button', { name: 'Refresh sessions' }).click();
     else {
@@ -197,7 +197,7 @@ for (const method of ['ListSessions', 'RevokeSession', 'RevokeOtherSessions']) {
       await page.getByRole('button', { name: method === 'RevokeSession' ? 'Confirm revoke session' : 'Confirm revoke other sessions', exact: true }).click();
     }
     await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
-    await expect(page.locator('.session-row')).toHaveCount(0);
+    await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(0);
     await expect(page.getByText('alex/kept-private')).toHaveCount(0);
   });
 }
@@ -213,11 +213,11 @@ test('empty and unavailable sessions remain actionable in light mobile page', as
   delete state.errors.ListSessions;
   state.sessions = [];
   await page.getByRole('button', { name: 'Try again' }).click();
-  await expect(page.getByRole('heading', { name: 'No active sessions returned' })).toBeVisible();
+  await expect(page.getByText('No active sessions returned', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Revoke all other sessions', exact: true })).toBeDisabled();
   state.sessions = [...originalSessions];
   await page.getByRole('button', { name: 'Refresh sessions' }).click();
-  await expect(page.locator('.session-row')).toHaveCount(2);
+  await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.screenshot({ path: 'test-results/sessions-mobile-light.png', fullPage: true });

@@ -9,3 +9,5 @@ Read `GOLF_IMPLEMENTATION_PLAN.md` and `docs/IMPLEMENTATION_STATUS.md` before ch
 - Prefer existing code, native platform facilities and small changes. Do not scaffold future subsystems.
 - In parallel work, assign disjoint file ownership and coordinate API contracts before editing.
 - Do not mark roadmap tasks verified without runnable evidence. Document narrower initial slices and remaining acceptance criteria.
+
+- Product settings lead with current values/inventories and explicit Add/New/Edit actions; forms open only on request. Use TanStack Form, the shared DataTable configuration for searchable/sortable inventories, and global styles.css tokens/classes. Avoid page-specific table engines or inline styling; loaded-page search/sort must be labeled honestly.

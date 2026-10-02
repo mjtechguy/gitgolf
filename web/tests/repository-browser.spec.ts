@@ -297,6 +297,7 @@ test('repository branding keeps loaded fonts, legible text and reflow at 320px a
       await expect(page.getByLabel('Issue body, plain text')).toBeVisible();
       expect(await page.locator('.issue-body').evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(13);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.getByRole('button', { name: 'Add a comment', exact: true }).click();
       await page.getByLabel('Comment, plain text', { exact: true }).focus();
       await page.keyboard.type('Keyboard accessible draft');
       await expect(page.getByRole('button', { name: 'Post comment', exact: true })).toBeEnabled();

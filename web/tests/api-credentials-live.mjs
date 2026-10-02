@@ -50,8 +50,12 @@ try {
   await page.getByText('Advanced token sign-in', { exact: true }).click();
   await page.getByLabel('Provider access token', { exact: true }).fill(pat);
   await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
-  await page.getByRole('heading', { name: 'No API credentials', exact: true }).waitFor();
+  await page.getByText('No API credentials', { exact: true }).waitFor();
+  async function edit() {
+    if (!await page.getByLabel('Credential label', { exact: true }).count()) await page.getByRole('button', { name: 'New API credential', exact: true }).click();
+  }
   async function issue(label) {
+    await edit();
     await page.getByLabel('Credential label', { exact: true }).fill(label);
     const response = page.waitForResponse((response) => response.url().endsWith('/golf.v1.ApiCredentialService/CreateApiCredential'));
     await page.getByRole('button', { name: 'Create API credential', exact: true }).click();
@@ -70,6 +74,7 @@ try {
     await page.getByText('API credential revoked.', { exact: true }).waitFor();
   }
   stage('real issuance, clipboard, source expiry and read-only bearer boundary');
+  await edit();
   await page.getByLabel('Requested lifetime').selectOption('43200');
   const first = await issue('Browser read tool');
   const list = await rpc(context.request, 'ApiCredentialService', 'ListApiCredentials');
@@ -86,7 +91,7 @@ try {
   await page.getByLabel('New API credential', { exact: true }).waitFor({ state: 'detached' });
   await page.evaluate(() => navigator.clipboard.writeText(''));
   await page.reload();
-  await page.getByRole('heading', { name: 'Browser read tool', exact: true }).waitFor();
+  await page.getByText('Browser read tool', { exact: true }).waitFor();
   require(await page.getByLabel('New API credential', { exact: true }).count() === 0);
   stage('native revocation and immediate bearer denial');
   await revoke(first.credential.id);
@@ -102,13 +107,14 @@ try {
     lost = await response.json();
     await route.abort('failed');
   });
+  await edit();
   await page.getByLabel('Credential label', { exact: true }).fill('Lost acknowledgment');
   await page.getByRole('button', { name: 'Create API credential', exact: true }).click();
   await page.getByRole('heading', { name: 'Issuance outcome is unknown', exact: true }).waitFor();
   require(issueCalls === 1 && lost?.credential?.id);
   await page.unroute('**/golf.v1.ApiCredentialService/CreateApiCredential');
   await page.getByRole('button', { name: 'Refresh credential list', exact: true }).click();
-  await page.getByRole('heading', { name: 'Lost acknowledgment', exact: true }).waitFor();
+  await page.getByText('Lost acknowledgment', { exact: true }).waitFor();
   require(await page.getByLabel('New API credential', { exact: true }).count() === 0);
   await rpc(machine, 'RepositoryService', 'ListRepositories', {}, 200, lost.token);
   await revoke(lost.credential.id);
@@ -119,10 +125,10 @@ try {
   for (let i = 0; i < 19; i++) await rpc(context.request, 'ApiCredentialService', 'CreateApiCredential', { label: i === 0 ? '<img src=x onerror=alert(1)>' : `Disposable read ${i}`, lifetimeSeconds: 900 });
   await page.getByRole('button', { name: 'Refresh credentials', exact: true }).click();
   await page.getByRole('button', { name: 'Load more credentials', exact: true }).click();
-  await page.getByRole('heading', { name: 'Browser read tool', exact: true }).waitFor();
-  require(await page.locator('.credential-row').count() === 21);
-  require(await page.locator('.credential-row img').count() === 0);
-  await page.getByRole('heading', { name: '<img src=x onerror=alert(1)>', exact: true }).waitFor();
+  await page.getByText('Browser read tool', { exact: true }).waitFor();
+  require(await page.getByRole('table', { name: 'API credentials', exact: true }).locator('tbody tr[data-row-id]').count() === 21);
+  require(await page.getByRole('table', { name: 'API credentials', exact: true }).locator('img').count() === 0);
+  await page.getByText('<img src=x onerror=alert(1)>', { exact: true }).waitFor();
   if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: `${artifacts}/native-dark.png`, fullPage: true });
@@ -142,7 +148,7 @@ try {
   await page.getByRole('button', { name: 'Refresh credentials', exact: true }).click();
   await page.getByRole('heading', { name: 'Welcome to Golf', exact: true }).waitFor();
   require(await page.getByLabel('New API credential', { exact: true }).count() === 0);
-  require(await page.locator('.credential-row').count() === 0);
+  require(await page.getByRole('table', { name: 'API credentials', exact: true }).locator('tbody tr[data-row-id]').count() === 0);
   await rpc(machine, 'RepositoryService', 'ListRepositories', {}, 401, last.token);
   require(!await page.evaluate((secret) => JSON.stringify({ ...localStorage, ...sessionStorage }).includes(secret), last.token));
   require(errors.length === 0);

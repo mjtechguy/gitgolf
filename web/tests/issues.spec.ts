@@ -206,6 +206,7 @@ test('posts comment exactly once, validates native result IDs and clears its per
   const state = await backend(page);
   await page.goto(detailURL);
   const body = '  New private comment\n<img src=x onerror=alert(1)>\t';
+  await page.getByRole('button', { name: 'Add a comment', exact: true }).click();
   await page.getByLabel('Comment, plain text', { exact: true }).fill(body);
   let release!: () => void; state.barrier = new Promise<void>((resolve) => { release = resolve; });
   await page.locator('.issue-composer form').evaluate((form: HTMLFormElement) => { form.requestSubmit(); form.requestSubmit(); });
@@ -222,6 +223,7 @@ test('posts comment exactly once, validates native result IDs and clears its per
 test('comment lost response resumes lookup only after reload without storing body or title', async ({ page }) => {
   const state = await backend(page); state.drop = true;
   await page.goto(detailURL);
+  await page.getByRole('button', { name: 'Add a comment', exact: true }).click();
   await page.getByLabel('Comment, plain text', { exact: true }).fill('PRIVATE_COMMENT');
   await page.getByRole('button', { name: 'Post comment' }).click();
   await expect(page.getByRole('alert')).toBeVisible();
@@ -239,6 +241,7 @@ test('comment lost response resumes lookup only after reload without storing bod
 test('mismatched write/status records never become success or unlock a repost', async ({ page }) => {
   const state = await backend(page); state.mismatch = true;
   await page.goto(detailURL);
+  await page.getByRole('button', { name: 'Add a comment', exact: true }).click();
   await page.getByLabel('Comment, plain text', { exact: true }).fill('Private mismatch draft');
   await page.getByRole('button', { name: 'Post comment' }).click();
   await expect(page.getByRole('alert')).toContainText('does not match this request');
@@ -252,6 +255,7 @@ test('mismatched write/status records never become success or unlock a repost', 
 test('comment scope denial clears the draft and read denial removes prior discussion and controls', async ({ page }) => {
   const state = await backend(page);
   await page.goto(detailURL);
+  await page.getByRole('button', { name: 'Add a comment', exact: true }).click();
   await page.getByLabel('Comment, plain text', { exact: true }).fill('PRIVATE_DRAFT');
   state.errors.CreateIssueComment = 'permission_denied';
   await page.getByRole('button', { name: 'Post comment' }).click();
@@ -290,16 +294,19 @@ test('expired session, sign-out and account switch clear pending private conveni
 test('target IDs namespace resumed requests and prevent reuse for a replaced repository or issue', async ({ page }) => {
   const state = await backend(page); state.unknown = true;
   await page.goto(detailURL);
+  await page.getByRole('button', { name: 'Add a comment', exact: true }).click();
   await page.getByLabel('Comment, plain text', { exact: true }).fill('Original target draft');
   await page.getByRole('button', { name: 'Post comment' }).click();
   await expect(page.getByRole('button', { name: 'Check request status' })).toBeEnabled();
   state.issueId = '777';
   await page.reload();
+  await page.getByRole('button', { name: 'Add a comment', exact: true }).click();
   await expect(page.getByLabel('Comment, plain text', { exact: true })).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Check request status' })).toHaveCount(0);
   expect(state.inspections).toEqual([]); expect(state.posts).toHaveLength(1);
   state.repoId = '888';
   await page.reload();
+  await page.getByRole('button', { name: 'Add a comment', exact: true }).click();
   await expect(page.getByLabel('Comment, plain text', { exact: true })).toBeEnabled();
   expect(state.posts).toHaveLength(1);
 });
@@ -318,9 +325,23 @@ test('issue dialog and discussion remain keyboard usable in charcoal and light m
   await page.goto(detailURL);
   if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Add a comment', exact: true }).click();
   await expect(page.getByLabel('Comment, plain text', { exact: true })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/issues-mobile-light.png', fullPage: true });
   expect(errors).toEqual([]);
+});
+
+test('discussion opens an editor only on request and closing discards the draft', async ({ page }) => {
+  const state = await backend(page);
+  await page.goto(detailURL);
+  await expect(page.getByLabel('Comment, plain text', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Add a comment', exact: true }).click();
+  await page.getByLabel('Comment, plain text', { exact: true }).fill('Discard this private draft');
+  await page.getByRole('button', { name: 'Close comment editor', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Add a comment', exact: true })).toBeFocused();
+  await page.getByRole('button', { name: 'Add a comment', exact: true }).click();
+  await expect(page.getByLabel('Comment, plain text', { exact: true })).toHaveValue('');
+  expect(state.posts).toHaveLength(0);
 });

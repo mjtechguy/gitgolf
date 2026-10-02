@@ -1,5 +1,5 @@
+import { useForm, useStore } from '@tanstack/react-form';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDown, ArrowRight, BookOpen, Building2, Check, CircleDot, Command, ExternalLink, GitBranch, History, KeyRound, Layers2, LoaderCircle, LockKeyhole, LogOut, Moon, Plus, RefreshCw, Search, Settings, ShieldCheck, Sun, UserRound, X } from 'lucide-react';
 import { Code, ConnectError } from '@connectrpc/connect';
@@ -57,9 +57,13 @@ const scopeLabels: Record<string, string> = {
 
 function Login({ oauthFailed }: { oauthFailed: boolean }) {
   const client = useQueryClient();
-  const [token, setToken] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const loginForm = useForm({ defaultValues: { username: '', password: '' }, onSubmit: async () => { await submitPassword(); } });
+  const tokenFields = useForm({ defaultValues: { token: '' }, onSubmit: () => submitToken() });
+  const { username, password } = useStore(loginForm.store, (state) => state.values);
+  const { token } = useStore(tokenFields.store, (state) => state.values);
+  const setUsername = (value: string) => loginForm.setFieldValue('username', value);
+  const setPassword = (value: string) => loginForm.setFieldValue('password', value);
+  const setToken = (value: string) => tokenFields.setFieldValue('token', value);
   const [passwordPending, setPasswordPending] = useState(false);
   const [passwordError, setPasswordError] = useState<Error | null>(null);
   const passwordAttempt = useRef<AbortController | null>(null);
@@ -96,8 +100,7 @@ function Login({ oauthFailed }: { oauthFailed: boolean }) {
     onSuccess: signedIn,
   });
   const busy = passwordPending || mutation.isPending || redirecting;
-  async function submitPassword(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submitPassword() {
     if (!passwordAvailable || busy || passwordAttempt.current || !username.trim() || !password) return;
     // Keep the credential out of mutation/query caches and clear the input before waiting.
     const request = { username: username.trim(), password };
@@ -115,11 +118,10 @@ function Login({ oauthFailed }: { oauthFailed: boolean }) {
       setPasswordPending(false);
     }
   }
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function submitToken() {
     if (token.trim() && !busy && !passwordAttempt.current) { setPassword(''); setPasswordError(null); mutation.mutate(token.trim()); }
   }
-  const tokenForm = <form onSubmit={submit}>
+  const tokenForm = <form onSubmit={(event) => { event.preventDefault(); void tokenFields.handleSubmit(); }}>
     <label htmlFor="access-token">Provider access token</label>
     <input id="access-token" type="password" autoComplete="off" spellCheck={false} required value={token} onChange={(event) => setToken(event.target.value)} placeholder="Enter your scoped access token" aria-describedby="token-help" disabled={busy} />
     <p className="field-help" id="token-help">Use a scoped token supplied by your installation operator. To browse, select read:user and read:repository. Reading issues and comments also requires read:issue; creating issues and posting comments requires write:issue. Organizations require read:organization. To create repositories, select write:user and write:repository.</p>
@@ -142,7 +144,7 @@ function Login({ oauthFailed }: { oauthFailed: boolean }) {
         <p>Sign in with your Golf account.</p>
         {oauthFailed ? <p className="error" role="alert">Provider sign-in could not be completed. Please try again or use an access token.</p> : null}
         {options.isPending || options.isFetching ? <p className="auth-options-status" role="status"><LoaderCircle className="spin" size={14} />Checking sign-in options…</p> : options.isError ? <div className="auth-options-error"><p className="error" role="alert">Sign-in options could not be loaded. You can still use an access token.</p><button className="text-button" onClick={() => void options.refetch()}>Retry sign-in options</button></div> : !passwordAvailable ? <p className="auth-options-status">Golf password sign-in is not enabled for this installation. Use an available sign-in option below.</p> : null}
-        <form onSubmit={submitPassword} aria-label="Golf account sign-in">
+        <form onSubmit={(event) => { event.preventDefault(); void loginForm.handleSubmit(); }} aria-label="Golf account sign-in">
           <label htmlFor="golf-username">Email or username</label>
           <input id="golf-username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={username} onChange={(event) => setUsername(event.target.value)} disabled={!passwordAvailable || busy} />
           <label htmlFor="golf-password">Password</label>
@@ -195,9 +197,11 @@ function CreateRepository({ userId, initial, onPendingChange, onClose }: { userI
   const mounted = useRef(true);
   const client = useQueryClient();
   const [intent, setIntent] = useState(initial);
-  const [name, setName] = useState(initial?.name || '');
-  const [description, setDescription] = useState('');
-  const [isPrivate, setPrivate] = useState(initial?.private ?? true);
+  const form = useForm({ defaultValues: { name: initial?.name || '', description: '', isPrivate: initial?.private ?? true }, onSubmit: () => submit() });
+  const { name, description, isPrivate } = useStore(form.store, (state) => state.values);
+  const setName = (value: string) => form.setFieldValue('name', value);
+  const setDescription = (value: string) => form.setFieldValue('description', value);
+  const setPrivate = (value: boolean) => form.setFieldValue('isPrivate', value);
   const [creation, setCreation] = useState<RepositoryCreation | null>(null);
   const [localError, setLocalError] = useState<Error | null>(null);
   const active = () => client.getQueryData<User | null>(['session'])?.id === userId;
@@ -236,8 +240,7 @@ function CreateRepository({ userId, initial, onPendingChange, onClose }: { userI
   const rejected = creation?.state === RepositoryCreationState.REJECTED;
   const succeeded = creation?.state === RepositoryCreationState.SUCCEEDED;
   useEffect(() => { mounted.current = true; dialog.current?.showModal(); if (initial) statusButton.current?.focus(); else nameInput.current?.focus(); return () => { mounted.current = false; }; }, []);
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function submit() {
     if (!name.trim() || busy || intent || frozen.current) return;
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(name.trim())) {
       setLocalError(new Error('Use 1–100 letters, numbers, dots, underscores or hyphens, starting with a letter or number. No request was sent.'));
@@ -273,7 +276,7 @@ function CreateRepository({ userId, initial, onPendingChange, onClose }: { userI
   return <dialog ref={dialog} className="create-dialog" onClose={onClose} aria-labelledby="create-title">
     <div className="dialog-header"><span className="small-icon"><BookOpen size={21} /></span><button className="icon-button" aria-label="Close new repository form" onClick={onClose}><X size={19} /></button></div>
     <h2 id="create-title">{intent ? 'Repository creation.' : 'Start something new.'}</h2><p className="muted">{intent ? 'Track this creation request.' : 'Create a repository in your Golf workspace.'}</p>
-    <form onSubmit={submit}>
+    <form onSubmit={(event) => { event.preventDefault(); void form.handleSubmit(); }}>
       <label htmlFor="repo-name">Repository name <span className="required">*</span></label>
       <input ref={nameInput} id="repo-name" required maxLength={100} autoComplete="off" value={name} onChange={(event) => setName(event.target.value)} placeholder="my-next-project" disabled={Boolean(intent)} />
       <label htmlFor="repo-description">Description <span className="optional">optional</span></label>

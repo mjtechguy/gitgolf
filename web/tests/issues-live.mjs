@@ -113,6 +113,7 @@ try {
     require(lostComment.mutation.state === 'ISSUE_MUTATION_STATE_SUCCEEDED'); await route.abort('failed');
   });
   const privateComment = '  PRIVATE native comment\n<script>window.executed=true</script>\t';
+  await page.getByRole('button', { name: 'Add a comment', exact: true }).click();
   await page.getByLabel('Comment, plain text', { exact: true }).fill(privateComment);
   await page.getByRole('button', { name: 'Post comment', exact: true }).click();
   await page.getByRole('alert').waitFor();
@@ -174,6 +175,7 @@ try {
   require(!await page.evaluate(() => 'executed' in window));
 
   stage('actual session revocation clears pending convenience data and displayed discussion');
+  await page.getByRole('button', { name: 'Add a comment', exact: true }).click();
   await page.getByLabel('Comment, plain text', { exact: true }).fill('PRIVATE before revoke');
   await page.route('**/golf.v1.RepositoryService/CreateIssueComment', async (route) => { const result = await route.fetch(); require(result.status() === 200); await route.abort('failed'); });
   await page.getByRole('button', { name: 'Post comment', exact: true }).click();
