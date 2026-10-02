@@ -11,6 +11,7 @@ import type { CreateRepositoryRequest, Repository, RepositoryCreation, User } fr
 import { repositoryOptions } from './navigation';
 import type { Location } from './navigation';
 import { forgetPrivateQueries } from './queryClient';
+import { clearOtherIssueIntents } from './issueIntents';
 
 const RepositoryBrowser = lazy(() => import('./RepositoryBrowser').then((module) => ({ default: module.RepositoryBrowser })));
 const OrganizationBrowser = lazy(() => import('./OrganizationBrowser').then((module) => ({ default: module.OrganizationBrowser })));
@@ -93,7 +94,7 @@ function Login({ oauthFailed }: { oauthFailed: boolean }) {
   const tokenForm = <form onSubmit={submit}>
     <label htmlFor="access-token">Gitea access token</label>
     <input id="access-token" type="password" autoComplete="off" spellCheck={false} required value={token} onChange={(event) => setToken(event.target.value)} placeholder="Enter your scoped access token" aria-describedby="token-help" disabled={mutation.isPending || redirecting} />
-    <p className="field-help" id="token-help">Create a token in Gitea → Settings → Applications. To browse, select read:user and read:repository. Issues also require read:issue; organizations require read:organization. To create repositories, select write:user and write:repository.</p>
+    <p className="field-help" id="token-help">Create a token in Gitea → Settings → Applications. To browse, select read:user and read:repository. Reading issues and comments also requires read:issue; creating issues and posting comments requires write:issue. Organizations require read:organization. To create repositories, select write:user and write:repository.</p>
     <ErrorMessage error={mutation.error} />
     <button className={`button ${oauthAvailable ? 'secondary' : 'primary'} full`} disabled={!token.trim() || mutation.isPending || redirecting}>{mutation.isPending ? <LoaderCircle size={17} className="spin" /> : null}{mutation.isPending ? 'Connecting…' : 'Continue to workspace'}{!mutation.isPending ? <ArrowRight size={17} /> : null}</button>
   </form>;
@@ -131,6 +132,7 @@ type PendingCreation = { key: string; name: string; private: boolean };
 const creationStoragePrefix = 'golf.repository-creation.';
 function creationStorageKey(userId: string) { return `${creationStoragePrefix}${window.location.origin}:${userId}`; }
 function clearOtherCreationIntents(userId?: string) {
+  clearOtherIssueIntents(userId);
   try {
     const keep = userId ? creationStorageKey(userId) : undefined;
     for (const key of Object.keys(sessionStorage)) if (key.startsWith(creationStoragePrefix) && key !== keep) sessionStorage.removeItem(key);

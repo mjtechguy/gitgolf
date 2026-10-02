@@ -40,6 +40,8 @@ Usage: golf [--url ORIGIN] [--token-stdin | --api-token-stdin] COMMAND
   commit diff OWNER/REPO SHA
   issue list OWNER/REPO [--state open|closed|all] [--page N] [--limit N]
   issue view OWNER/REPO NUMBER
+  issue comments OWNER/REPO NUMBER [--page N] [--limit N]
+  issue operation IDEMPOTENCY_KEY
   pr list OWNER/REPO [--state open|closed|all] [--page N] [--limit N]
   pr view OWNER/REPO NUMBER
   pr reviews OWNER/REPO NUMBER [--page N] [--limit N]
@@ -70,6 +72,9 @@ Commit diffs require a full lowercase 40- or 64-character commit ID; branch alia
 Diffs preserve bounded native Gitea text; merges compare only the first parent.
 Repository creation inspection needs a canonical UUID v4 key from a prior create request.
 It never creates or retries a repository; OUTCOME_UNKNOWN can include in-flight work.
+Issue comments need read:repository and read:issue; empty pages can have a next page.
+Issue operation inspection takes a canonical UUID v4 and never posts or retries a write.
+An observed result ID is a provisional receipt; OUTCOME_UNKNOWN still means unconfirmed.
 `
 
 // Run writes PAT-mode results only after logout succeeds. Error text excludes credentials
@@ -227,7 +232,7 @@ func parseCommand(args []string) (command, error) {
 	rest := args[2:]
 	switch result.name {
 	case "repo list", "org list", "audit list":
-	case "repo creation":
+	case "repo creation", "issue operation":
 		if len(rest) == 0 || !creationKey.MatchString(rest[0]) {
 			return result, invalid
 		}
@@ -249,7 +254,7 @@ func parseCommand(args []string) (command, error) {
 			result.teamID = rest[0]
 			rest = rest[1:]
 		}
-	case "repo view", "repo branches", "repo commits", "repo contents", "commit diff", "issue list", "issue view", "pr list", "pr view", "pr reviews":
+	case "repo view", "repo branches", "repo commits", "repo contents", "commit diff", "issue list", "issue view", "issue comments", "pr list", "pr view", "pr reviews":
 		if len(rest) == 0 {
 			return result, invalid
 		}
@@ -271,12 +276,12 @@ func parseCommand(args []string) (command, error) {
 			result.commitID = rest[0]
 			rest = rest[1:]
 		}
-		if result.name == "issue view" || result.name == "pr view" || result.name == "pr reviews" {
+		if result.name == "issue view" || result.name == "issue comments" || result.name == "pr view" || result.name == "pr reviews" {
 			if len(rest) == 0 {
 				return result, invalid
 			}
 			number, err := strconv.ParseInt(rest[0], 10, 32)
-			if err != nil || number < 1 || (args[0] == "pr" && strconv.FormatInt(number, 10) != rest[0]) {
+			if err != nil || number < 1 || ((args[0] == "pr" || result.name == "issue comments") && strconv.FormatInt(number, 10) != rest[0]) {
 				return result, invalid
 			}
 			result.number = uint32(number)
@@ -289,7 +294,7 @@ func parseCommand(args []string) (command, error) {
 	flags.SetOutput(io.Discard)
 	var ref, filePath, state string
 	page, limit := 1, 20
-	paginated := result.name == "repo list" || result.name == "repo branches" || result.name == "repo commits" || result.name == "issue list" || result.name == "pr list" || result.name == "pr reviews" || result.name == "org list" || result.name == "org teams" || result.name == "team members" || result.name == "team repos"
+	paginated := result.name == "repo list" || result.name == "repo branches" || result.name == "repo commits" || result.name == "issue list" || result.name == "issue comments" || result.name == "pr list" || result.name == "pr reviews" || result.name == "org list" || result.name == "org teams" || result.name == "team members" || result.name == "team repos"
 	if result.name == "audit list" {
 		flags.IntVar(&limit, "limit", 20, "event limit")
 		flags.StringVar(&result.beforeID, "before-id", "", "exclusive event cursor")
@@ -503,6 +508,34 @@ func (command command) read(ctx context.Context, client golfv1connect.Repository
 		return response.Msg, nil
 	case "issue view":
 		response, err := client.GetIssue(ctx, connect.NewRequest(&golfv1.GetIssueRequest{Repository: command.repository, Number: command.number}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "issue comments":
+		// Resolve both native identities within this call's existing authority.
+		// The server checks these expected IDs again before returning comments.
+		repository, err := client.GetRepository(ctx, connect.NewRequest(&golfv1.GetRepositoryRequest{Repository: command.repository}))
+		if err != nil {
+			return nil, err
+		}
+		issue, err := client.GetIssue(ctx, connect.NewRequest(&golfv1.GetIssueRequest{Repository: command.repository, Number: command.number}))
+		if err != nil {
+			return nil, err
+		}
+		if repository.Msg.GetRepository().GetId() == "" || issue.Msg.GetIssue().GetId() == "" || issue.Msg.GetIssue().GetNumber() != command.number {
+			return nil, errors.New("invalid discussion identity response")
+		}
+		response, err := client.ListIssueComments(ctx, connect.NewRequest(&golfv1.ListIssueCommentsRequest{
+			Repository: command.repository, RepositoryId: repository.Msg.Repository.Id,
+			Number: command.number, IssueId: issue.Msg.Issue.Id, Page: command.page,
+		}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "issue operation":
+		response, err := client.GetIssueMutation(ctx, connect.NewRequest(&golfv1.GetIssueMutationRequest{IdempotencyKey: command.creationKey}))
 		if err != nil {
 			return nil, err
 		}

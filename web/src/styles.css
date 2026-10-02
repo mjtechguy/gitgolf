@@ -119,6 +119,24 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .issue-title>p { font-size:11px; line-height:1.8; }
 .issue-body { margin:0 24px; padding:22px; border:1px solid var(--line); border-radius:7px; background:var(--bg); white-space:pre-wrap; overflow-wrap:anywhere; max-height:650px; overflow:auto; font:12px/1.85 ui-monospace,monospace; }
 .issue-footer { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:19px 24px 5px; color:var(--muted); font-size:10px; }
+.new-issue-dialog { width:min(620px,calc(100vw - 32px)); }
+.issue-list-heading,.issue-list-heading .panel-actions { flex-wrap:wrap; }
+.issue-list-heading .panel-actions { justify-content:flex-end; }
+.issue-comment-list { list-style:none; padding:0; margin:0; }
+.issue-comment-list>li { border-bottom:1px solid var(--line); }
+.issue-comment { padding:24px; min-width:0; }
+.issue-comment-heading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; overflow-wrap:anywhere; }
+.issue-comment-heading h3 { font-size:13px; letter-spacing:0; }
+.issue-comment-heading>span,.issue-comment>.muted { font-size:10px; line-height:1.7; color:var(--muted); }
+.issue-comment>.muted { margin:8px 0 14px; }
+.issue-comment .issue-body { margin:0; }
+.issue-comment>.text-button { margin-top:15px; }
+.issue-comment-compose { padding:24px; border-top:1px solid var(--line); }
+.issue-comment-compose>h2 { font-size:18px; }
+.issue-composer .creation-status { overflow-wrap:anywhere; }
+.issue-composer .issue-comment { padding:0; margin:20px 0; }
+.issue-composer textarea { min-height:130px; }
+@media(max-width:720px) { .issue-list-heading .panel-actions { width:100%; justify-content:flex-start; } .issue-comment,.issue-comment-compose { padding:18px 15px; } .new-issue-dialog { padding:22px; } }
 .clone-address { display:flex; align-items:center; flex-direction:column; gap:8px; padding:10px; max-width:100%; }
 .clone-address>span { font-size:10px; }
 .clone-address code { font-size:11px; overflow-wrap:anywhere; color:var(--text); }

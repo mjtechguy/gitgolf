@@ -276,6 +276,27 @@ def main():
             full_name = repository['fullName']; key = {'owner': users[0], 'name': repository['name']}
             route = 'repos/'+full_name
             remote = smoke.GITEA+'/'+full_name+'.git'
+            issue_request = {'repository': key, 'repository_id': repository['id'],
+                             'title': 'Recovered issue discussion', 'body': 'Original plain-text issue body.',
+                             'idempotency_key': str(uuid.uuid4())}
+            issue_created = smoke.rpc(owner, 'RepositoryService/CreateIssue', issue_request)
+            assert issue_created['mutation']['state'] == 'ISSUE_MUTATION_STATE_SUCCEEDED'
+            discussion = issue_created['issue']
+            comment_request = {'repository': key, 'repository_id': repository['id'],
+                               'number': discussion['number'], 'issue_id': discussion['id'],
+                               'body': 'Original plain-text discussion comment.', 'idempotency_key': str(uuid.uuid4())}
+            comment_created = smoke.rpc(owner, 'RepositoryService/CreateIssueComment', comment_request)
+            assert comment_created['mutation']['state'] == 'ISSUE_MUTATION_STATE_SUCCEEDED'
+            rejected_request = {**issue_request, 'repository_id': str(int(repository['id']) + 1),
+                                'idempotency_key': str(uuid.uuid4())}
+            issue_rejected = smoke.rpc(owner, 'RepositoryService/CreateIssue', rejected_request)
+            assert issue_rejected['mutation']['state'] == 'ISSUE_MUTATION_STATE_REJECTED'
+            assert issue_rejected['mutation']['failureCode'] == 'target_changed'
+            issue_operations = [('CreateIssue', issue_request, issue_created),
+                                ('CreateIssueComment', comment_request, comment_created),
+                                ('CreateIssue', rejected_request, issue_rejected)]
+            print('PASS: durable issue/comment observations and no-dispatch target mismatch', flush=True)
+
             check('native signed Git objects, LFS bytes, release attachment and protection')
             work = directory/'work'; work.mkdir()
             askpass = directory/'askpass'
@@ -352,7 +373,8 @@ def main():
                 ('golf_users', 'id'), ('golf_audit_events', 'id'), ('golf_crypto_events', 'id'),
                 ('golf_encryption_keys', 'key_id'), ('golf_encryption_policy', 'singleton'),
                 ('golf_repository_creations', 'id'), ('golf_repository_creation_events', 'id'),
-                ('golf_api_credentials', 'id'), ('golf_api_credential_events', 'id')]}
+                ('golf_api_credentials', 'id'), ('golf_api_credential_events', 'id'),
+                ('golf_issue_mutations', 'id'), ('golf_issue_mutation_events', 'id')]}
             counts = int(sql('SELECT count(*) FROM golf_sessions;')), int(sql('SELECT count(*) FROM golf_oauth_attempts;'))
             assert counts == (4, 1)
             check('live writers cannot be bypassed by the operator drain assertion')
@@ -443,7 +465,8 @@ def main():
             for table, order in [('golf_users', 'id'), ('golf_audit_events', 'id'), ('golf_crypto_events', 'id'),
                                  ('golf_encryption_keys', 'key_id'), ('golf_encryption_policy', 'singleton'),
                 ('golf_repository_creations', 'id'), ('golf_repository_creation_events', 'id'),
-                ('golf_api_credentials', 'id'), ('golf_api_credential_events', 'id')]:
+                ('golf_api_credentials', 'id'), ('golf_api_credential_events', 'id'),
+                ('golf_issue_mutations', 'id'), ('golf_issue_mutation_events', 'id')]:
                 assert rows(table, order) == history[table], 'Restored Golf history or key metadata differs'
             recovery_events = json.loads(rows('golf_recovery_events'))
             assert len(recovery_events) == 1
@@ -482,6 +505,24 @@ def main():
             for table in ['golf_repository_creations', 'golf_repository_creation_events']:
                 assert rows(table, 'id') == history[table]
             print('PASS: restored creation journal, scoped lookup and same-key replay preserve original evidence', flush=True)
+            for procedure, request, recorded in issue_operations:
+                mutation_lookup = {'idempotency_key': request['idempotency_key']}
+                observed = smoke.rpc(owner, 'RepositoryService/GetIssueMutation', mutation_lookup)
+                assert observed['mutation'] == recorded['mutation']
+                replay = smoke.rpc(owner, 'RepositoryService/' + procedure, request)
+                assert replay['mutation'] == recorded['mutation']
+                if 'issue' in recorded:
+                    assert observed['issue']['id'] == replay['issue']['id'] == recorded['issue']['id']
+                if 'comment' in recorded:
+                    assert observed['comment']['id'] == replay['comment']['id'] == recorded['comment']['id']
+                smoke.rpc(outsider, 'RepositoryService/GetIssueMutation', mutation_lookup, expected=404)
+                assert bearer_rpc(fresh_api['token'], 'RepositoryService/GetIssueMutation', mutation_lookup)['mutation'] == recorded['mutation']
+            for table in ['golf_issue_mutations', 'golf_issue_mutation_events']:
+                assert rows(table, 'id') == history[table]
+            native_comments = smoke.provider(owner_token, 'GET', route+'/issues/'+str(discussion['number'])+'/comments')
+            assert [item['id'] for item in native_comments] == [int(comment_created['comment']['id'])]
+            print('PASS: restored issue/comment journal and original native objects; keyed replay never reposts', flush=True)
+
             smoke.rpc(outsider, 'RepositoryService/GetRepository', {'repository': key}, expected=404)
             smoke.provider(outsider_token, 'GET', route, expected=404)
             assert git('ls-remote', '--heads', '--tags', remote) == refs

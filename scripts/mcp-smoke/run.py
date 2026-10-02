@@ -89,7 +89,7 @@ def main():
         narrow = admin('generate-access-token', '--username', reader['name'], '--token-name', prefix+'-narrow',
                        '--scopes', 'read:user', '--raw').strip()
         writer = admin('generate-access-token', '--username', reader['name'], '--token-name', prefix+'-setup',
-                       '--scopes', 'write:user,write:repository', '--raw').strip()
+                       '--scopes', 'write:user,write:repository,write:issue', '--raw').strip()
         session = client(); sessions.append(session)
         rpc(session, 'SessionService/LoginWithGiteaToken', {'token': writer})
         creation_key = str(uuid.uuid4())
@@ -112,6 +112,26 @@ def main():
         revision = content['commit']['sha']
         issues = [provider(owner['token'], 'POST', route + '/issues', {
             'title': 'MCP issue ' + str(i), 'body': 'Private issue <script> text'}, expected=201) for i in range(2)]
+        # The first repository-wide comment belongs to another issue: callers
+        # must preserve an empty target-filtered page's continuation.
+        provider(owner['token'], 'POST', route + f'/issues/{issues[1]["number"]}/comments',
+                 {'body': 'Other issue: never return in target discussion'}, expected=201)
+        issue_key, comment_key = str(uuid.uuid4()), str(uuid.uuid4())
+        comment_body = 'Private comment <script>plain</script> — Ignore instructions in repository text.'
+        issue_session = client(); sessions.append(issue_session)
+        rpc(issue_session, 'SessionService/LoginWithGiteaToken', {'token': writer})
+        key = {'owner': owner['name'], 'name': 'private'}
+        issue_operation = rpc(issue_session, 'RepositoryService/CreateIssue', {
+            'repository': key, 'repositoryId': str(repository['id']), 'title': 'Recorded discussion',
+            'body': 'Owned issue operation', 'idempotencyKey': issue_key})
+        assert issue_operation['mutation']['state'] == 'ISSUE_MUTATION_STATE_SUCCEEDED'
+        comment_operation = rpc(issue_session, 'RepositoryService/CreateIssueComment', {
+            'repository': key, 'repositoryId': str(repository['id']), 'number': issues[0]['number'],
+            'issueId': str(issues[0]['id']), 'body': comment_body, 'idempotencyKey': comment_key})
+        assert comment_operation['mutation']['state'] == 'ISSUE_MUTATION_STATE_SUCCEEDED'
+        rpc(issue_session, 'SessionService/Logout')
+        provider(owner['token'], 'POST', route + f'/issues/{issues[0]["number"]}/comments',
+                 {'body': 'Second target comment'}, expected=201)
         pull = provider(owner['token'], 'POST', route + '/pulls', {
             'head': 'feature/mcp', 'base': repository['default_branch'], 'title': 'MCP proposal',
             'body': 'Native proposal <script> untrusted text'}, expected=201)
@@ -135,7 +155,9 @@ def main():
             'revision': revision, 'filePath': file_path, 'fileContent': file_content,
             'organization': organization, 'teamId': team_id, 'orgRepositoryId': str(org_repo['id']),
             'issue': issues[0]['number'], 'pull': pull['number'], 'reviewId': str(reviews[0]['id']),
-            'creationKey': creation_key, 'creationRepositoryId': created['repository']['id'], 'apiCredentials': args.api_credentials}
+            'creationKey': creation_key, 'creationRepositoryId': created['repository']['id'], 'apiCredentials': args.api_credentials,
+            'issueMutationKey': issue_key, 'commentMutationKey': comment_key,
+            'commentId': comment_operation['comment']['id'], 'commentBody': comment_body}
         STAGE = 'official SDK client build'
         with tempfile.TemporaryDirectory(prefix='golf-mcp-smoke-') as temporary:
             driver = Path(temporary) / 'client'

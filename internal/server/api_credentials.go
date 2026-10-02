@@ -38,7 +38,7 @@ func apiTokenHash(value string) ([]byte, error) {
 	return hash[:], nil
 }
 
-// These are the nineteen current CLI/MCP reads plus identity inspection. A new
+// These are the twenty-one current CLI/MCP reads plus identity inspection. A new
 // procedure is denied until explicitly reviewed here; public procedures are
 // not an exception, and API credentials cannot manage credentials or sessions.
 func apiReadProcedure(procedure string) bool {
@@ -50,6 +50,7 @@ func apiReadProcedure(procedure string) bool {
 		golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure,
 		golfv1connect.RepositoryServiceGetCommitDiffProcedure, golfv1connect.RepositoryServiceListIssuesProcedure,
 		golfv1connect.RepositoryServiceGetIssueProcedure, golfv1connect.RepositoryServiceListPullRequestsProcedure,
+		golfv1connect.RepositoryServiceListIssueCommentsProcedure, golfv1connect.RepositoryServiceGetIssueMutationProcedure,
 		golfv1connect.RepositoryServiceGetPullRequestProcedure, golfv1connect.RepositoryServiceListPullRequestReviewsProcedure,
 		golfv1connect.OrganizationServiceListOrganizationsProcedure, golfv1connect.OrganizationServiceGetOrganizationProcedure,
 		golfv1connect.OrganizationServiceListTeamsProcedure, golfv1connect.OrganizationServiceGetTeamProcedure,

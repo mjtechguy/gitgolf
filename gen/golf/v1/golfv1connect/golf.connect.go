@@ -105,6 +105,18 @@ const (
 	// RepositoryServiceGetIssueProcedure is the fully-qualified name of the RepositoryService's
 	// GetIssue RPC.
 	RepositoryServiceGetIssueProcedure = "/golf.v1.RepositoryService/GetIssue"
+	// RepositoryServiceListIssueCommentsProcedure is the fully-qualified name of the
+	// RepositoryService's ListIssueComments RPC.
+	RepositoryServiceListIssueCommentsProcedure = "/golf.v1.RepositoryService/ListIssueComments"
+	// RepositoryServiceCreateIssueProcedure is the fully-qualified name of the RepositoryService's
+	// CreateIssue RPC.
+	RepositoryServiceCreateIssueProcedure = "/golf.v1.RepositoryService/CreateIssue"
+	// RepositoryServiceCreateIssueCommentProcedure is the fully-qualified name of the
+	// RepositoryService's CreateIssueComment RPC.
+	RepositoryServiceCreateIssueCommentProcedure = "/golf.v1.RepositoryService/CreateIssueComment"
+	// RepositoryServiceGetIssueMutationProcedure is the fully-qualified name of the RepositoryService's
+	// GetIssueMutation RPC.
+	RepositoryServiceGetIssueMutationProcedure = "/golf.v1.RepositoryService/GetIssueMutation"
 	// RepositoryServiceListPullRequestsProcedure is the fully-qualified name of the RepositoryService's
 	// ListPullRequests RPC.
 	RepositoryServiceListPullRequestsProcedure = "/golf.v1.RepositoryService/ListPullRequests"
@@ -526,6 +538,10 @@ type RepositoryServiceClient interface {
 	GetContents(context.Context, *connect.Request[v1.GetContentsRequest]) (*connect.Response[v1.GetContentsResponse], error)
 	ListIssues(context.Context, *connect.Request[v1.ListIssuesRequest]) (*connect.Response[v1.ListIssuesResponse], error)
 	GetIssue(context.Context, *connect.Request[v1.GetIssueRequest]) (*connect.Response[v1.GetIssueResponse], error)
+	ListIssueComments(context.Context, *connect.Request[v1.ListIssueCommentsRequest]) (*connect.Response[v1.ListIssueCommentsResponse], error)
+	CreateIssue(context.Context, *connect.Request[v1.CreateIssueRequest]) (*connect.Response[v1.CreateIssueResponse], error)
+	CreateIssueComment(context.Context, *connect.Request[v1.CreateIssueCommentRequest]) (*connect.Response[v1.CreateIssueCommentResponse], error)
+	GetIssueMutation(context.Context, *connect.Request[v1.GetIssueMutationRequest]) (*connect.Response[v1.GetIssueMutationResponse], error)
 	ListPullRequests(context.Context, *connect.Request[v1.ListPullRequestsRequest]) (*connect.Response[v1.ListPullRequestsResponse], error)
 	GetPullRequest(context.Context, *connect.Request[v1.GetPullRequestRequest]) (*connect.Response[v1.GetPullRequestResponse], error)
 	ListPullRequestReviews(context.Context, *connect.Request[v1.ListPullRequestReviewsRequest]) (*connect.Response[v1.ListPullRequestReviewsResponse], error)
@@ -602,6 +618,30 @@ func NewRepositoryServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(repositoryServiceMethods.ByName("GetIssue")),
 			connect.WithClientOptions(opts...),
 		),
+		listIssueComments: connect.NewClient[v1.ListIssueCommentsRequest, v1.ListIssueCommentsResponse](
+			httpClient,
+			baseURL+RepositoryServiceListIssueCommentsProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("ListIssueComments")),
+			connect.WithClientOptions(opts...),
+		),
+		createIssue: connect.NewClient[v1.CreateIssueRequest, v1.CreateIssueResponse](
+			httpClient,
+			baseURL+RepositoryServiceCreateIssueProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("CreateIssue")),
+			connect.WithClientOptions(opts...),
+		),
+		createIssueComment: connect.NewClient[v1.CreateIssueCommentRequest, v1.CreateIssueCommentResponse](
+			httpClient,
+			baseURL+RepositoryServiceCreateIssueCommentProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("CreateIssueComment")),
+			connect.WithClientOptions(opts...),
+		),
+		getIssueMutation: connect.NewClient[v1.GetIssueMutationRequest, v1.GetIssueMutationResponse](
+			httpClient,
+			baseURL+RepositoryServiceGetIssueMutationProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("GetIssueMutation")),
+			connect.WithClientOptions(opts...),
+		),
 		listPullRequests: connect.NewClient[v1.ListPullRequestsRequest, v1.ListPullRequestsResponse](
 			httpClient,
 			baseURL+RepositoryServiceListPullRequestsProcedure,
@@ -635,6 +675,10 @@ type repositoryServiceClient struct {
 	getContents            *connect.Client[v1.GetContentsRequest, v1.GetContentsResponse]
 	listIssues             *connect.Client[v1.ListIssuesRequest, v1.ListIssuesResponse]
 	getIssue               *connect.Client[v1.GetIssueRequest, v1.GetIssueResponse]
+	listIssueComments      *connect.Client[v1.ListIssueCommentsRequest, v1.ListIssueCommentsResponse]
+	createIssue            *connect.Client[v1.CreateIssueRequest, v1.CreateIssueResponse]
+	createIssueComment     *connect.Client[v1.CreateIssueCommentRequest, v1.CreateIssueCommentResponse]
+	getIssueMutation       *connect.Client[v1.GetIssueMutationRequest, v1.GetIssueMutationResponse]
 	listPullRequests       *connect.Client[v1.ListPullRequestsRequest, v1.ListPullRequestsResponse]
 	getPullRequest         *connect.Client[v1.GetPullRequestRequest, v1.GetPullRequestResponse]
 	listPullRequestReviews *connect.Client[v1.ListPullRequestReviewsRequest, v1.ListPullRequestReviewsResponse]
@@ -690,6 +734,26 @@ func (c *repositoryServiceClient) GetIssue(ctx context.Context, req *connect.Req
 	return c.getIssue.CallUnary(ctx, req)
 }
 
+// ListIssueComments calls golf.v1.RepositoryService.ListIssueComments.
+func (c *repositoryServiceClient) ListIssueComments(ctx context.Context, req *connect.Request[v1.ListIssueCommentsRequest]) (*connect.Response[v1.ListIssueCommentsResponse], error) {
+	return c.listIssueComments.CallUnary(ctx, req)
+}
+
+// CreateIssue calls golf.v1.RepositoryService.CreateIssue.
+func (c *repositoryServiceClient) CreateIssue(ctx context.Context, req *connect.Request[v1.CreateIssueRequest]) (*connect.Response[v1.CreateIssueResponse], error) {
+	return c.createIssue.CallUnary(ctx, req)
+}
+
+// CreateIssueComment calls golf.v1.RepositoryService.CreateIssueComment.
+func (c *repositoryServiceClient) CreateIssueComment(ctx context.Context, req *connect.Request[v1.CreateIssueCommentRequest]) (*connect.Response[v1.CreateIssueCommentResponse], error) {
+	return c.createIssueComment.CallUnary(ctx, req)
+}
+
+// GetIssueMutation calls golf.v1.RepositoryService.GetIssueMutation.
+func (c *repositoryServiceClient) GetIssueMutation(ctx context.Context, req *connect.Request[v1.GetIssueMutationRequest]) (*connect.Response[v1.GetIssueMutationResponse], error) {
+	return c.getIssueMutation.CallUnary(ctx, req)
+}
+
 // ListPullRequests calls golf.v1.RepositoryService.ListPullRequests.
 func (c *repositoryServiceClient) ListPullRequests(ctx context.Context, req *connect.Request[v1.ListPullRequestsRequest]) (*connect.Response[v1.ListPullRequestsResponse], error) {
 	return c.listPullRequests.CallUnary(ctx, req)
@@ -717,6 +781,10 @@ type RepositoryServiceHandler interface {
 	GetContents(context.Context, *connect.Request[v1.GetContentsRequest]) (*connect.Response[v1.GetContentsResponse], error)
 	ListIssues(context.Context, *connect.Request[v1.ListIssuesRequest]) (*connect.Response[v1.ListIssuesResponse], error)
 	GetIssue(context.Context, *connect.Request[v1.GetIssueRequest]) (*connect.Response[v1.GetIssueResponse], error)
+	ListIssueComments(context.Context, *connect.Request[v1.ListIssueCommentsRequest]) (*connect.Response[v1.ListIssueCommentsResponse], error)
+	CreateIssue(context.Context, *connect.Request[v1.CreateIssueRequest]) (*connect.Response[v1.CreateIssueResponse], error)
+	CreateIssueComment(context.Context, *connect.Request[v1.CreateIssueCommentRequest]) (*connect.Response[v1.CreateIssueCommentResponse], error)
+	GetIssueMutation(context.Context, *connect.Request[v1.GetIssueMutationRequest]) (*connect.Response[v1.GetIssueMutationResponse], error)
 	ListPullRequests(context.Context, *connect.Request[v1.ListPullRequestsRequest]) (*connect.Response[v1.ListPullRequestsResponse], error)
 	GetPullRequest(context.Context, *connect.Request[v1.GetPullRequestRequest]) (*connect.Response[v1.GetPullRequestResponse], error)
 	ListPullRequestReviews(context.Context, *connect.Request[v1.ListPullRequestReviewsRequest]) (*connect.Response[v1.ListPullRequestReviewsResponse], error)
@@ -789,6 +857,30 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 		connect.WithSchema(repositoryServiceMethods.ByName("GetIssue")),
 		connect.WithHandlerOptions(opts...),
 	)
+	repositoryServiceListIssueCommentsHandler := connect.NewUnaryHandler(
+		RepositoryServiceListIssueCommentsProcedure,
+		svc.ListIssueComments,
+		connect.WithSchema(repositoryServiceMethods.ByName("ListIssueComments")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryServiceCreateIssueHandler := connect.NewUnaryHandler(
+		RepositoryServiceCreateIssueProcedure,
+		svc.CreateIssue,
+		connect.WithSchema(repositoryServiceMethods.ByName("CreateIssue")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryServiceCreateIssueCommentHandler := connect.NewUnaryHandler(
+		RepositoryServiceCreateIssueCommentProcedure,
+		svc.CreateIssueComment,
+		connect.WithSchema(repositoryServiceMethods.ByName("CreateIssueComment")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryServiceGetIssueMutationHandler := connect.NewUnaryHandler(
+		RepositoryServiceGetIssueMutationProcedure,
+		svc.GetIssueMutation,
+		connect.WithSchema(repositoryServiceMethods.ByName("GetIssueMutation")),
+		connect.WithHandlerOptions(opts...),
+	)
 	repositoryServiceListPullRequestsHandler := connect.NewUnaryHandler(
 		RepositoryServiceListPullRequestsProcedure,
 		svc.ListPullRequests,
@@ -829,6 +921,14 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 			repositoryServiceListIssuesHandler.ServeHTTP(w, r)
 		case RepositoryServiceGetIssueProcedure:
 			repositoryServiceGetIssueHandler.ServeHTTP(w, r)
+		case RepositoryServiceListIssueCommentsProcedure:
+			repositoryServiceListIssueCommentsHandler.ServeHTTP(w, r)
+		case RepositoryServiceCreateIssueProcedure:
+			repositoryServiceCreateIssueHandler.ServeHTTP(w, r)
+		case RepositoryServiceCreateIssueCommentProcedure:
+			repositoryServiceCreateIssueCommentHandler.ServeHTTP(w, r)
+		case RepositoryServiceGetIssueMutationProcedure:
+			repositoryServiceGetIssueMutationHandler.ServeHTTP(w, r)
 		case RepositoryServiceListPullRequestsProcedure:
 			repositoryServiceListPullRequestsHandler.ServeHTTP(w, r)
 		case RepositoryServiceGetPullRequestProcedure:
@@ -882,6 +982,22 @@ func (UnimplementedRepositoryServiceHandler) ListIssues(context.Context, *connec
 
 func (UnimplementedRepositoryServiceHandler) GetIssue(context.Context, *connect.Request[v1.GetIssueRequest]) (*connect.Response[v1.GetIssueResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.GetIssue is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) ListIssueComments(context.Context, *connect.Request[v1.ListIssueCommentsRequest]) (*connect.Response[v1.ListIssueCommentsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.ListIssueComments is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) CreateIssue(context.Context, *connect.Request[v1.CreateIssueRequest]) (*connect.Response[v1.CreateIssueResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.CreateIssue is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) CreateIssueComment(context.Context, *connect.Request[v1.CreateIssueCommentRequest]) (*connect.Response[v1.CreateIssueCommentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.CreateIssueComment is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) GetIssueMutation(context.Context, *connect.Request[v1.GetIssueMutationRequest]) (*connect.Response[v1.GetIssueMutationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.GetIssueMutation is not implemented"))
 }
 
 func (UnimplementedRepositoryServiceHandler) ListPullRequests(context.Context, *connect.Request[v1.ListPullRequestsRequest]) (*connect.Response[v1.ListPullRequestsResponse], error) {

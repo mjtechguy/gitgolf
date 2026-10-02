@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -34,6 +35,7 @@ type fixture struct {
 	Binary, Golf, Gitea, OwnerToken, ReaderToken, NarrowToken, OutsiderToken           string
 	Reader, Repository, RepositoryID, Revision, FilePath, FileContent                  string
 	Organization, TeamID, OrgRepositoryID, ReviewID, CreationKey, CreationRepositoryID string
+	IssueMutationKey, CommentMutationKey, CommentID, CommentBody                       string
 	Issue, Pull                                                                        int
 	APICredentials                                                                     bool
 }
@@ -185,7 +187,7 @@ func sessionIDs(client *http.Client) []string {
 	return ids
 }
 
-var names = []string{"golf_repo_list", "golf_repo_view", "golf_repo_creation", "golf_repo_branches", "golf_repo_commits", "golf_repo_contents", "golf_commit_diff", "golf_issue_list", "golf_issue_view", "golf_pr_list", "golf_pr_view", "golf_pr_reviews", "golf_org_list", "golf_org_view", "golf_org_teams", "golf_team_view", "golf_team_members", "golf_team_repos", "golf_audit_list"}
+var names = []string{"golf_repo_list", "golf_repo_view", "golf_repo_creation", "golf_repo_branches", "golf_repo_commits", "golf_repo_contents", "golf_commit_diff", "golf_issue_list", "golf_issue_view", "golf_issue_comments", "golf_issue_operation", "golf_pr_list", "golf_pr_view", "golf_pr_reviews", "golf_org_list", "golf_org_view", "golf_org_teams", "golf_team_view", "golf_team_members", "golf_team_repos", "golf_audit_list"}
 
 func catalogue(ctx context.Context, session *mcp.ClientSession) {
 	result, err := session.ListTools(ctx, &mcp.ListToolsParams{})
@@ -211,7 +213,7 @@ func catalogue(ctx context.Context, session *mcp.ClientSession) {
 		check(tool.OutputSchema != nil)
 	}
 	check(len(expected) == 0)
-	for _, name := range []string{"golf_repo_create", "golf_merge", "shell"} {
+	for _, name := range []string{"golf_repo_create", "golf_issue_create", "golf_issue_comment", "golf_merge", "shell"} {
 		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: object{}})
 		check(err != nil && result == nil)
 	}
@@ -238,6 +240,21 @@ func exercise(ctx context.Context, session *mcp.ClientSession) {
 	issues := call(ctx, session, "golf_issue_list", object{"repository": repo, "state": "all", "limit": 1})
 	check(len(rows(issues["issues"])) == 1 && obj(issues["page"])["nextPage"] == float64(2))
 	check(obj(call(ctx, session, "golf_issue_view", object{"repository": repo, "number": cfg.Issue})["issue"])["body"] == "Private issue <script> text")
+	comments := call(ctx, session, "golf_issue_comments", object{"repository": repo, "number": cfg.Issue, "limit": 1})
+	check(len(rows(comments["comments"])) == 0 && obj(comments["page"])["nextPage"] == float64(2))
+	comments = call(ctx, session, "golf_issue_comments", object{"repository": repo, "number": cfg.Issue, "page": 2, "limit": 1})
+	check(first(comments, "comments")["id"] == cfg.CommentID && first(comments, "comments")["body"] == cfg.CommentBody && obj(comments["page"])["nextPage"] == float64(3))
+	for _, test := range []struct{ key, kind string }{{cfg.IssueMutationKey, "ISSUE_MUTATION_KIND_CREATE_ISSUE"}, {cfg.CommentMutationKey, "ISSUE_MUTATION_KIND_CREATE_COMMENT"}} {
+		operation := call(ctx, session, "golf_issue_operation", object{"idempotency_key": test.key})
+		mutation := obj(operation["mutation"])
+		check(mutation["state"] == "ISSUE_MUTATION_STATE_SUCCEEDED" && mutation["kind"] == test.kind && mutation["repositoryId"] == cfg.RepositoryID)
+		check(mutation["observedNumber"] == mutation["number"] && mutation["number"].(float64) > 0)
+		if test.key == cfg.CommentMutationKey {
+			check(obj(operation["comment"])["id"] == cfg.CommentID && mutation["commentId"] == cfg.CommentID && mutation["observedResultId"] == cfg.CommentID)
+		} else {
+			check(mutation["issueId"] == obj(operation["issue"])["id"] && mutation["observedResultId"] == mutation["issueId"] && mutation["observedNumber"] == obj(operation["issue"])["number"])
+		}
+	}
 	pulls := call(ctx, session, "golf_pr_list", object{"repository": repo, "state": "open"})
 	check(obj(first(pulls, "pullRequests")["head"])["retainedSnapshot"] == true)
 	pull := obj(call(ctx, session, "golf_pr_view", object{"repository": repo, "number": cfg.Pull})["pullRequest"])
@@ -344,12 +361,19 @@ func issueAPI(client *http.Client) (string, string) {
 	return token, id
 }
 
-func bearerCLI(ctx context.Context, token string, stdin, failure bool) {
+func nativeCLI(ctx context.Context, token string, api, stdin, failure bool, resource ...string) {
 	args := []string{"--url", cfg.Golf}
-	if stdin {
-		args = append(args, "--api-token-stdin")
+	flag, variable := "--token-stdin", "GOLF_GITEA_TOKEN="
+	if api {
+		flag, variable = "--api-token-stdin", "GOLF_API_TOKEN="
 	}
-	args = append(args, "repo", "contents", cfg.Repository, "--ref", cfg.Revision, "--path", cfg.FilePath)
+	if stdin {
+		args = append(args, flag)
+	}
+	if len(resource) == 0 {
+		resource = []string{"repo", "contents", cfg.Repository, "--ref", cfg.Revision, "--path", cfg.FilePath}
+	}
+	args = append(args, resource...)
 	command := exec.CommandContext(ctx, cfg.Binary, args...)
 	for _, entry := range os.Environ() {
 		if !strings.HasPrefix(entry, "GOLF_GITEA_TOKEN=") && !strings.HasPrefix(entry, "GOLF_API_TOKEN=") && !strings.HasPrefix(entry, "GOLF_URL=") {
@@ -359,7 +383,7 @@ func bearerCLI(ctx context.Context, token string, stdin, failure bool) {
 	if stdin {
 		command.Stdin = strings.NewReader(token + "\n")
 	} else {
-		command.Env = append(command.Env, "GOLF_API_TOKEN="+token)
+		command.Env = append(command.Env, variable+token)
 	}
 	var output bytes.Buffer
 	diagnostic := new(boundedDiagnostic)
@@ -375,11 +399,21 @@ func bearerCLI(ctx context.Context, token string, stdin, failure bool) {
 	var envelope object
 	check(json.Unmarshal(output.Bytes(), &envelope) == nil && envelope["schema_version"] == "golf.cli.v1")
 	data := obj(envelope["data"])
-	check(data["commitId"] == cfg.Revision && obj(data["file"])["content"] == cfg.FileContent)
+	switch resource[0] + " " + resource[1] {
+	case "repo contents":
+		check(data["commitId"] == cfg.Revision && obj(data["file"])["content"] == cfg.FileContent)
+	case "issue comments":
+		check(first(data, "comments")["id"] == cfg.CommentID && first(data, "comments")["body"] == cfg.CommentBody && obj(data["page"])["nextPage"] == float64(3))
+	case "issue operation":
+		mutation := obj(data["mutation"])
+		check(mutation["state"] == "ISSUE_MUTATION_STATE_SUCCEEDED" && obj(data["comment"])["id"] == cfg.CommentID && mutation["observedResultId"] == cfg.CommentID && mutation["observedNumber"] == float64(cfg.Issue))
+	default:
+		panic("unexpected native CLI fixture")
+	}
 }
 
 func bearerQualification(ctx context.Context, control *http.Client, baseline []string) (*mcp.ClientSession, func()) {
-	phase("owner-issued API credential: all 19 tools in both protocol revisions and CLI stdin/environment")
+	phase("owner-issued API credential: all 21 tools in both protocol revisions and CLI stdin/environment")
 	token, id := issueAPI(control)
 	before := rpc(control, "AuditService/ListAuditEvents", object{"limit": 1})["snapshotId"]
 	for _, version := range []string{"2026-07-28", "2025-11-25"} {
@@ -391,8 +425,10 @@ func bearerQualification(ctx context.Context, control *http.Client, baseline []s
 			denied(ctx, session, "golf_repo_view", object{"repository": cfg.Repository, "api_token": "DO-NOT-ECHO"}, "Invalid tool arguments")
 		}()
 	}
-	bearerCLI(ctx, token, false, false)
-	bearerCLI(ctx, token, true, false)
+	nativeCLI(ctx, token, true, false, false)
+	nativeCLI(ctx, token, true, true, false)
+	nativeCLI(ctx, token, true, true, false, "issue", "comments", cfg.Repository, strconv.Itoa(cfg.Issue), "--page", "2", "--limit", "1")
+	nativeCLI(ctx, token, true, false, false, "issue", "operation", cfg.CommentMutationKey)
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
 	check(rpc(control, "AuditService/ListAuditEvents", object{"limit": 1})["snapshotId"] == before)
 	phase("API bearer cancellation and SIGTERM without temporary sessions")
@@ -406,7 +442,7 @@ func bearerQualification(ctx context.Context, control *http.Client, baseline []s
 		call(ctx, session, "golf_repo_view", object{"repository": cfg.Repository})
 		rpc(control, "ApiCredentialService/RevokeApiCredential", object{"credentialId": id})
 		denied(ctx, session, "golf_repo_view", object{"repository": cfg.Repository}, "unauthenticated")
-		bearerCLI(ctx, token, true, true)
+		nativeCLI(ctx, token, true, true, true)
 	}()
 	phase("API credential source-session logout denies its original MCP process")
 	func() {
@@ -422,7 +458,7 @@ func bearerQualification(ctx context.Context, control *http.Client, baseline []s
 		denied(ctx, session, "golf_repo_view", object{"repository": cfg.Repository}, "unauthenticated")
 	}()
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
-	fmt.Println("PASS: API bearer all 19 tools under both revisions, CLI stdin/environment, unchanged session/audit snapshots, cancellation/SIGTERM, direct revocation and source logout")
+	fmt.Println("PASS: API bearer all 21 tools under both revisions, CLI stdin/environment, unchanged session/audit snapshots, cancellation/SIGTERM, direct revocation and source logout")
 	// Keep one live bearer process for the later real provider membership removal.
 	activeToken, _ := issueAPI(control)
 	session, closeSession, _ := connect(ctx, cfg.Golf, activeToken, "2026-07-28", true)
@@ -449,13 +485,17 @@ func run() (err error) {
 	rpc(control, "SessionService/LoginWithGiteaToken", object{"token": cfg.ReaderToken})
 	defer rpc(control, "SessionService/Logout", object{})
 	baseline := sessionIDs(control)
-	phase("modern discovery and all 19 native tools")
+	phase("native discussion CLI reads with one temporary session per command")
+	nativeCLI(ctx, cfg.ReaderToken, false, true, false, "issue", "comments", cfg.Repository, strconv.Itoa(cfg.Issue), "--page", "2", "--limit", "1")
+	nativeCLI(ctx, cfg.ReaderToken, false, false, false, "issue", "operation", cfg.CommentMutationKey)
+	check(reflect.DeepEqual(sessionIDs(control), baseline))
+	phase("modern discovery and all 21 native tools")
 	modern, closeModern, _ := connect(ctx, cfg.Golf, cfg.ReaderToken, "2026-07-28", false)
 	defer closeModern()
 	catalogue(ctx, modern)
 	exercise(ctx, modern)
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
-	fmt.Println("PASS: 2026-07-28 discovery, exact 19-tool catalogue, honest annotations, structured/text parity, private native reads, pagination and temporary-session cleanup")
+	fmt.Println("PASS: 2026-07-28 discovery, exact 21-tool catalogue, honest annotations, structured/text parity, private native reads, pagination and temporary-session cleanup")
 	phase("legacy initialization and native reads")
 	func() {
 		legacy, closeLegacy, _ := connect(ctx, cfg.Golf, cfg.ReaderToken, "2025-11-25", false)
@@ -464,7 +504,7 @@ func run() (err error) {
 		exercise(ctx, legacy)
 	}()
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
-	fmt.Println("PASS: explicit 2025-11-25 initialization and all 19 native tools with JSON parity, pagination and session cleanup")
+	fmt.Println("PASS: explicit 2025-11-25 initialization and all 21 native tools with JSON parity, pagination and session cleanup")
 	phase("strict invalid input before authentication")
 	before := rpc(control, "AuditService/ListAuditEvents", object{"limit": 1})["snapshotId"]
 	for _, input := range []object{{"repository": cfg.Repository, "token": "DO-NOT-ECHO"}, {"repository": cfg.Repository, "origin": "http://DO-NOT-ECHO.invalid"}, {"repository": cfg.Repository, "command": "DO-NOT-ECHO"}, {"repository": "../private"}} {
@@ -479,6 +519,8 @@ func run() (err error) {
 		{"golf_commit_diff", object{"repository": cfg.Repository, "commit_id": "main"}},
 		{"golf_repo_contents", object{"repository": cfg.Repository, "path": "../secret"}},
 		{"golf_repo_creation", object{"idempotency_key": "DO-NOT-ECHO"}},
+		{"golf_issue_operation", object{"idempotency_key": "DO-NOT-ECHO"}},
+		{"golf_issue_comments", object{"repository": cfg.Repository, "number": cfg.Issue, "issue_id": "1"}},
 		{"golf_repo_contents", object{"repository": cfg.Repository, "path": strings.Repeat("x", 17<<10)}},
 	} {
 		denied(ctx, modern, test.name, test.args, "Invalid tool arguments")
@@ -491,6 +533,7 @@ func run() (err error) {
 		narrow, closeNarrow, _ := connect(ctx, cfg.Golf, cfg.NarrowToken, "2026-07-28", false)
 		defer closeNarrow()
 		denied(ctx, narrow, "golf_repo_view", object{"repository": cfg.Repository}, "permission_denied")
+		denied(ctx, narrow, "golf_issue_comments", object{"repository": cfg.Repository, "number": cfg.Issue}, "permission_denied")
 		denied(ctx, narrow, "golf_org_list", object{}, "permission_denied")
 		recorded := call(ctx, narrow, "golf_repo_creation", object{"idempotency_key": cfg.CreationKey})
 		check(obj(recorded["creation"])["state"] == "REPOSITORY_CREATION_STATE_SUCCEEDED" && recorded["repository"] == nil)
@@ -501,6 +544,8 @@ func run() (err error) {
 		denied(ctx, other, "golf_repo_view", object{"repository": cfg.Repository}, "not_found")
 		denied(ctx, other, "golf_org_view", object{"organization": cfg.Organization}, "not_found")
 		denied(ctx, other, "golf_repo_creation", object{"idempotency_key": cfg.CreationKey}, "not_found")
+		denied(ctx, other, "golf_issue_operation", object{"idempotency_key": cfg.CommentMutationKey}, "not_found")
+		denied(ctx, other, "golf_issue_comments", object{"repository": cfg.Repository, "number": cfg.Issue}, "not_found")
 	}()
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
 	fmt.Println("PASS: native scope/foreign-account denial, own creation evidence without repository access and no private error result")
@@ -521,9 +566,11 @@ func run() (err error) {
 	httpJSON(native, "DELETE", cfg.Gitea+"/api/v1/repos/"+cfg.Repository+"/collaborators/"+cfg.Reader, nil, map[string]string{"Authorization": "token " + cfg.OwnerToken}, 204)
 	denied(ctx, modern, "golf_repo_view", object{"repository": cfg.Repository}, "not_found")
 	denied(ctx, modern, "golf_repo_contents", object{"repository": cfg.Repository, "ref": cfg.Revision, "path": cfg.FilePath}, "not_found")
+	denied(ctx, modern, "golf_issue_comments", object{"repository": cfg.Repository, "number": cfg.Issue}, "not_found")
 	if bearer != nil {
 		denied(ctx, bearer, "golf_repo_view", object{"repository": cfg.Repository}, "not_found")
 		denied(ctx, bearer, "golf_repo_contents", object{"repository": cfg.Repository, "ref": cfg.Revision, "path": cfg.FilePath}, "not_found")
+		denied(ctx, bearer, "golf_issue_comments", object{"repository": cfg.Repository, "number": cfg.Issue}, "not_found")
 	}
 	httpJSON(native, "DELETE", cfg.Gitea+"/api/v1/orgs/"+cfg.Organization+"/members/"+cfg.Reader, nil, map[string]string{"Authorization": "token " + cfg.OwnerToken}, 204)
 	denied(ctx, modern, "golf_org_view", object{"organization": cfg.Organization}, "not_found")

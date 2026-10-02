@@ -104,7 +104,7 @@ func TestApiCredentialBoundary(t *testing.T) {
 			t.Fatal("origin boundary lost")
 		}
 	}
-	// Exactly twenty allowlisted methods: the generated descriptor catches any
+	// Exactly twenty-two allowlisted methods: the generated descriptor catches any
 	// accidental broadening when a new procedure is later added to a service.
 	count := 0
 	services := golfv1.File_golf_v1_golf_proto.Services()
@@ -116,7 +116,7 @@ func TestApiCredentialBoundary(t *testing.T) {
 			}
 		}
 	}
-	if count != 20 {
+	if count != 22 {
 		t.Fatal("unexpected bearer allowlist size", count)
 	}
 	for _, invalid := range []string{token + "=", token[:len(token)-1] + "B", strings.TrimPrefix(token, apiTokenPrefix), " " + token} {

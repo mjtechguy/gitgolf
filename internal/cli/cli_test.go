@@ -234,6 +234,8 @@ func TestAdditionalReadCommandsAndEphemeralSession(t *testing.T) {
 		args                                   []string
 		procedure, request, response, fragment string
 	}{
+		{[]string{"issue", "operation", "12345678-1234-4234-8234-123456789abc"}, golfv1connect.RepositoryServiceGetIssueMutationProcedure,
+			`{"idempotencyKey":"12345678-1234-4234-8234-123456789abc"}`, `{"mutation":{"id":"9007199254740993","kind":"ISSUE_MUTATION_KIND_CREATE_COMMENT","state":"ISSUE_MUTATION_STATE_OUTCOME_UNKNOWN","observedResultId":"9007199254740995","observedNumber":2147483647}}`, `"state":"ISSUE_MUTATION_STATE_OUTCOME_UNKNOWN"`},
 		{[]string{"repo", "creation", "12345678-1234-4234-8234-123456789abc"}, golfv1connect.RepositoryServiceGetRepositoryCreationProcedure,
 			`{"idempotencyKey":"12345678-1234-4234-8234-123456789abc"}`, `{"creation":{"id":"opaque-operation","state":"REPOSITORY_CREATION_STATE_OUTCOME_UNKNOWN","requestedName":"<script>plain</script>\u001b[31m"}}`, `"state":"REPOSITORY_CREATION_STATE_OUTCOME_UNKNOWN"`},
 		// An untrusted endpoint can send control text; the CLI must still escape it in JSON.
@@ -333,6 +335,9 @@ func TestAdditionalReadCommandsAndEphemeralSession(t *testing.T) {
 					}
 					if command.procedure == golfv1connect.OrganizationServiceListTeamRepositoriesProcedure && !strings.Contains(compact.String(), `"nextPage":3`) {
 						t.Fatal("empty intermediate page lost continuation")
+					}
+					if command.procedure == golfv1connect.RepositoryServiceGetIssueMutationProcedure && (!strings.Contains(compact.String(), `"observedResultId":"9007199254740995"`) || !strings.Contains(compact.String(), `"observedNumber":2147483647`) || strings.Contains(compact.String(), "SUCCEEDED")) {
+						t.Fatal("provisional receipt lost precision or became confirmed success")
 					}
 				}
 				if strings.Contains(out.String()+diagnostic.String(), token) || strings.Contains(diagnostic.String(), "private-membership-data") || bytes.Contains(out.Bytes(), []byte{27}) {

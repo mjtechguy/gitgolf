@@ -37,6 +37,8 @@ var mcpReads = []mcpRead{
 	{"golf_commit_diff", "Read bounded raw native diff at a full exact commit ID. Roots/first-parent merges are labeled; no completeness or merge-readiness claim.", "commit diff", []string{"repository", "commit_id"}, nil},
 	{"golf_issue_list", "List issues with explicit state and pagination.", "issue list", []string{"repository"}, []string{"state", "page", "limit"}},
 	{"golf_issue_view", "Read issue metadata and plain-text description.", "issue view", []string{"repository", "number"}, nil},
+	{"golf_issue_comments", "Read issue comments after resolving exact native identities. Repository-wide pages are filtered; continue page.nextPage even on an empty page.", "issue comments", []string{"repository", "number"}, []string{"page", "limit"}},
+	{"golf_issue_operation", "Inspect your recorded issue/comment operation by key. Unknown/rejected is not success. Never posts, retries or adopts an outcome.", "issue operation", []string{"idempotency_key"}, nil},
 	{"golf_pr_list", "List pull requests. Native list heads are retained snapshots, not freshness evidence.", "pr list", []string{"repository"}, []string{"state", "page", "limit"}},
 	{"golf_pr_view", "Read pull-request metadata. Native review/check state does not establish Golf merge eligibility.", "pr view", []string{"repository", "number"}, nil},
 	{"golf_pr_reviews", "Read native reviews; continue page.nextPage even on an empty filtered page. No Golf approval eligibility claim.", "pr reviews", []string{"repository", "number"}, []string{"page", "limit"}},

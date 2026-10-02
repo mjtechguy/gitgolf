@@ -76,7 +76,7 @@ func TestMCPDiscoveryReadErrorsAndCleanup(t *testing.T) {
 			defer upstream.Close()
 			s := mcpTestSession(t, upstream.URL, version, context.Background())
 			tools, err := s.ListTools(context.Background(), &mcp.ListToolsParams{})
-			if err != nil || len(tools.Tools) != 19 || logins.Load() != 0 {
+			if err != nil || len(tools.Tools) != 21 || logins.Load() != 0 {
 				t.Fatalf("discovery performed authentication or lost tools: %v", err)
 			}
 			for _, tool := range tools.Tools {
@@ -143,6 +143,9 @@ func TestMCPInputAndLaunchBoundary(t *testing.T) {
 	}
 	for _, entry := range []struct{ name, raw string }{
 		{"golf_issue_list", `{"repository":"a/b","state":""}`},
+		{"golf_issue_comments", `{"repository":"a/b","number":2147483648}`},
+		{"golf_issue_comments", `{"repository":"a/b","number":1,"issue_id":"2"}`},
+		{"golf_issue_operation", `{"idempotency_key":"12345678-1234-1234-8234-123456789abc"}`},
 		{"golf_pr_view", `{"repository":"a/b","number":2147483648}`},
 		{"golf_repo_creation", `{"idempotency_key":"12345678-1234-1234-8234-123456789abc"}`},
 		{"golf_team_view", `{"organization":"org","team_id":9007199254740993}`},

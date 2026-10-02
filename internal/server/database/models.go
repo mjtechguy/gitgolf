@@ -66,6 +66,37 @@ type GolfEncryptionPolicy struct {
 	ActiveKeyID string
 }
 
+type GolfIssueMutation struct {
+	ID                 int64
+	UserID             int64
+	ActorForgeUserID   int64
+	IdempotencyKey     string
+	PayloadFingerprint []byte
+	Kind               string
+	RepositoryID       int64
+	RepositoryOwner    string
+	RepositoryName     string
+	IssueID            int64
+	IssueNumber        int64
+	CommentID          int64
+	ObservedResultID   int64
+	ObservedNumber     int64
+	State              string
+	FailureCode        string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+type GolfIssueMutationEvent struct {
+	ID               int64
+	MutationID       int64
+	OccurredAt       time.Time
+	Phase            string
+	State            string
+	ObservedResultID int64
+	ObservedNumber   int64
+}
+
 type GolfOauthAttempt struct {
 	StateHash         []byte
 	BindingHash       []byte

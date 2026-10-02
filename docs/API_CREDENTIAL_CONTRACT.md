@@ -14,7 +14,7 @@ Issuance and the separate append-only `CREATED` event commit together. Explicit 
 
 Send exactly one `Authorization: Bearer TOKEN` header, with no cookies. Query/form tokens, malformed or duplicate authorization, mixed cookie/bearer requests and nonmatching origin are rejected. Clients use the configured Golf origin, reject redirects and require HTTPS except the explicit local development loopback allowance. This follows the transport protections in [RFC 6750](https://www.rfc-editor.org/rfc/rfc6750); issuance itself is not an OAuth flow.
 
-The explicit allowlist contains the current 19 CLI/MCP reads plus `SessionService/GetSession`. API credentials cannot log in/out, create repositories, manage sessions, issue/list/revoke credentials or call unreviewed future procedures. Authorization runs before body decoding. Every delegated request requires an unexpired/unrevoked credential, the original live source session's exact ID/hash/owner/forge binding, and the matching current native Gitea identity. Post-wait checks re-resolve delegation, and successful unary results receive a final native/local authority check before encoding.
+The explicit allowlist contains the current 21 CLI/MCP reads plus `SessionService/GetSession`. API credentials cannot log in/out, create repositories/issues/comments, manage sessions, issue/list/revoke credentials or call unreviewed future procedures. Authorization runs before body decoding. Every delegated request requires an unexpired/unrevoked credential, the original live source session's exact ID/hash/owner/forge binding, and the matching current native Gitea identity. Post-wait checks re-resolve delegation, and successful unary results receive a final native/local authority check before encoding.
 
 Ending the issuing session invalidates all its credentials. Other still-live sessions are independent. Credential expiry/revocation denies access even while the source session remains live. Native token, membership and repository permission changes still govern each read; a Golf token does not override them. Existing OAuth session refresh can still update upstream session state, so local MCP discovery keeps conservative side-effect annotations.
 
@@ -22,7 +22,7 @@ Ending the issuing session invalidates all its credentials. Other still-live ses
 
 Use `GOLF_API_TOKEN` or `--api-token-stdin` for CLI reads. Neither path opens an ephemeral browser session or calls login/logout. Never pass the secret as a command-line argument. Mixing API-token and Gitea-token sources is rejected before reading stdin or making requests. Existing Gitea PAT mode remains available.
 
-For `golf mcp serve`, the process owner supplies exactly one of `GOLF_API_TOKEN` or `GOLF_GITEA_TOKEN`. Stdin remains reserved for protocol messages; tool arguments cannot override credentials or destinations. Both modes use the same 19 tools, bounds, cancellation guard and output contracts described in [the MCP contract](MCP_CONTRACT.md).
+For `golf mcp`, the process owner supplies exactly one of `GOLF_API_TOKEN` or `GOLF_GITEA_TOKEN`. Stdin remains reserved for protocol messages; tool arguments cannot override credentials or destinations. Both modes use the same 21 tools, bounds, cancellation guard and output contracts described in [the MCP contract](MCP_CONTRACT.md).
 
 ## Recovery and remaining scope
 

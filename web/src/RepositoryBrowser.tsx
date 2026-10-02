@@ -4,13 +4,14 @@ import { ArrowLeft, BookOpen, ChevronRight, CircleDot, ExternalLink, File, Folde
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { repositoryClient, repositoryLink } from './api';
-import { CommitDiffBase, IssueState, SourceEntryType } from './gen/golf/v1/golf_pb';
+import { CommitDiffBase, SourceEntryType } from './gen/golf/v1/golf_pb';
 import type { RepositoryKey, SourceEntry } from './gen/golf/v1/golf_pb';
 import { repositoryOptions } from './navigation';
 import type { RepositoryLocation } from './navigation';
 
 import { DateLabel, Loading, More, PanelError, nextPage, privateQuery, shortSHA } from './RepositoryUI';
 
+const IssueBrowser = lazy(() => import('./IssueBrowser').then((module) => ({ default: module.IssueBrowser })));
 const PullRequestBrowser = lazy(() => import('./PullRequestBrowser').then((module) => ({ default: module.PullRequestBrowser })));
 const isCommit = (value: string) => /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(value);
 
@@ -128,41 +129,6 @@ function CommitDiffPanel({ repositoryKey, queryKey, location }: { repositoryKey:
   </>;
 }
 
-function IssueStateBadge({ state }: { state: IssueState }) {
-  return <span className={`issue-state ${state === IssueState.CLOSED ? 'closed' : ''}`}><CircleDot size={13} />{state === IssueState.OPEN ? 'open' : state === IssueState.CLOSED ? 'closed' : 'unknown'}</span>;
-}
-
-function IssueDetail({ repositoryKey, queryKey, location }: { repositoryKey: Pick<RepositoryKey, 'owner' | 'name'>; queryKey: readonly unknown[]; location: RepositoryLocation }) {
-  const query = useQuery({ ...privateQuery, queryKey: [...queryKey, 'issue', location.issue], queryFn: ({ signal }) => repositoryClient.getIssue({ repository: repositoryKey, number: location.issue }, { signal }).then((response) => { if (!response.issue) throw new ConnectError('The issue response is missing its metadata.', Code.Internal); return response.issue; }) });
-  const issue = query.isSuccess && !query.isFetching ? query.data : undefined;
-  const external = issue && repositoryLink(issue.htmlUrl);
-  return <section className="browser-panel issue-detail" aria-labelledby="issue-detail-title">
-    <div className="browser-panel-heading"><Link className="text-button" {...repositoryOptions(location, { issue: undefined })}><ArrowLeft size={15} />All {location.state === 'all' ? '' : location.state} issues</Link><button className="icon-button" aria-label="Refresh issue" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} /></button></div>
-    {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : !issue ? <Loading label="Loading issue…" /> : <>
-      <div className="issue-title"><IssueStateBadge state={issue.state} /><h2 id="issue-detail-title">{issue.title} <span className="muted">#{issue.number}</span></h2><p className="muted">{issue.user?.login || 'Unknown author'} opened this issue on <DateLabel value={issue.createdAt} /></p></div>
-      <pre className="issue-body" tabIndex={0} aria-label="Issue body, plain text">{issue.body || 'No description provided.'}</pre>
-      <div className="issue-footer"><span>{issue.comments} comments · Updated <DateLabel value={issue.updatedAt} /></span>{external ? <a className="text-button" href={external} target="_blank" rel="noopener noreferrer">Open in Gitea<ExternalLink size={14} /></a> : null}</div>
-      <p className="panel-footnote">Read-only, plain-text view. Comments and issue editing remain in Gitea.</p>
-    </>}
-  </section>;
-}
-
-function IssuesPanel({ repositoryKey, queryKey, location }: { repositoryKey: Pick<RepositoryKey, 'owner' | 'name'>; queryKey: readonly unknown[]; location: RepositoryLocation }) {
-  const navigate = useNavigate();
-  const query = useInfiniteQuery({ ...privateQuery, queryKey: [...queryKey, 'issues', location.state], initialPageParam: 1,
-    queryFn: ({ pageParam, signal }) => repositoryClient.listIssues({ repository: repositoryKey, state: location.state === 'open' ? IssueState.OPEN : location.state === 'closed' ? IssueState.CLOSED : IssueState.ALL, page: { page: pageParam } }, { signal }), getNextPageParam: nextPage });
-  const issues = query.isSuccess && (!query.isFetching || query.isFetchingNextPage) ? [...new Map(query.data.pages.flatMap((page) => page.issues).map((issue) => [issue.id, issue])).values()] : [];
-  return <section className="browser-panel" aria-labelledby="issues-title">
-    <div className="browser-panel-heading"><h2 id="issues-title">Issues</h2><div className="panel-actions"><select aria-label="Issue state" value={location.state} onChange={(event) => void navigate(repositoryOptions(location, { state: event.target.value as RepositoryLocation['state'], issue: undefined }))}><option value="open">Open</option><option value="closed">Closed</option><option value="all">All states</option></select><button className="icon-button" aria-label="Refresh issues" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} /></button></div></div>
-    <p className="panel-footnote issue-help">Reading issues requires the additional <code>read:issue</code> token scope. Pull requests are excluded.</p>
-    {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : query.isPending || (query.isFetching && !query.isFetchingNextPage) ? <Loading label="Loading issues…" /> : <>
-      <ul className="issue-list">{issues.map((issue) => <li key={issue.id}><CircleDot size={19} /><div><h3><Link {...repositoryOptions(location, { issue: issue.number })}>{issue.title}</Link></h3><p>#{issue.number} · {issue.user?.login || 'Unknown author'} · <DateLabel value={issue.createdAt} /> · {issue.comments} comments</p></div><IssueStateBadge state={issue.state} /></li>)}</ul>
-      {!issues.length ? <div className="empty-state"><CircleDot size={25} /><h3>No {location.state === 'all' ? '' : `${location.state} `}issues.</h3><p>There are no issues matching this state.</p></div> : null}
-      <div className="list-footer"><span>{issues.length} loaded issues{query.hasNextPage ? ' · More available' : ''}</span><More hasMore={query.hasNextPage} loading={query.isFetchingNextPage} load={() => void query.fetchNextPage()} label="issues" /></div>
-    </>}
-  </section>;
-}
-
 export function RepositoryBrowser({ location, userId }: { location: RepositoryLocation; userId: string }) {
   const repositoryKey = { owner: location.owner, name: location.name };
   const queryKey = ['repository', userId, location.owner, location.name];
@@ -177,7 +143,7 @@ export function RepositoryBrowser({ location, userId }: { location: RepositoryLo
       <nav className="repository-tabs" aria-label="Repository"><Link {...repositoryOptions(location, { view: 'source', issue: undefined })} aria-current={location.view === 'source' ? 'page' : undefined}><BookOpen size={16} />Source</Link><Link {...repositoryOptions(location, { view: 'commits', issue: undefined, commit: undefined })} aria-current={location.view === 'commits' ? 'page' : undefined}><GitCommitHorizontal size={17} />Commits</Link><Link {...repositoryOptions(location, { view: 'issues', issue: undefined })} aria-current={location.view === 'issues' ? 'page' : undefined}><CircleDot size={16} />Issues</Link><Link {...repositoryOptions(location, { view: 'pulls', pull: undefined })} aria-current={location.view === 'pulls' ? 'page' : undefined}><GitPullRequest size={16} />Pull requests</Link></nav>
       {(location.view === 'source' || location.view === 'commits') && repository.empty ? <section className="browser-panel empty-state"><GitBranch size={29} /><h2>No commits yet.</h2><p>This repository is empty. Push your first commit through Git to add source and branches.</p>{repository.cloneUrl ? <div className="clone-address"><span>HTTPS clone URL</span><code>{repository.cloneUrl}</code></div> : null}{repository.sshUrl ? <div className="clone-address"><span>SSH clone URL</span><code>{repository.sshUrl}</code></div> : null}</section> : <>
         {location.view === 'source' || location.view === 'commits' && !location.commit ? <BranchSelector {...panelProps} /> : null}
-        {location.view === 'source' ? <SourcePanel {...panelProps} /> : location.view === 'commits' ? location.commit ? <CommitDiffPanel key={location.commit} {...panelProps} /> : <CommitsPanel {...panelProps} /> : location.view === 'pulls' ? <Suspense fallback={<Loading label="Opening pull requests…" />}><PullRequestBrowser {...panelProps} /></Suspense> : location.issue ? <IssueDetail {...panelProps} /> : <IssuesPanel {...panelProps} />}
+        {location.view === 'source' ? <SourcePanel {...panelProps} /> : location.view === 'commits' ? location.commit ? <CommitDiffPanel key={location.commit} {...panelProps} /> : <CommitsPanel {...panelProps} /> : location.view === 'pulls' ? <Suspense fallback={<Loading label="Opening pull requests…" />}><PullRequestBrowser {...panelProps} /></Suspense> : <Suspense fallback={<Loading label="Opening issues…" />}><IssueBrowser key={repository.id} {...panelProps} repositoryId={repository.id} userId={userId} /></Suspense>}
       </>}
     </>}
   </div>;

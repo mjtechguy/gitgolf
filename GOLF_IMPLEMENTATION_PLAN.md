@@ -261,6 +261,8 @@ Current bounded increment: the [PR read contract](docs/PULL_REQUEST_READ_CONTRAC
 
 Required check context names remain stable. Changed commits invalidate previous success where appropriate. Code-owner review and protected-file changes are enforced as repository policy, not advisory UI warnings.
 
+Current shared-core discussion increment: [ordinary issue/comment writes](docs/ISSUE_DISCUSSION_CONTRACT.md) use exact-input UUID reservations, provisional native receipt evidence and explicit UNKNOWN/SUCCEEDED/REJECTED outcomes. Filtered comment-page and own-operation reads are available to CLI/MCP; writes remain browser-session-only. Native POST routes lack atomic expected-ID admission; issue lifecycle/boards, PR/review writes, full audit/outbox and protected collaboration gates remain open. Exact final-image evidence belongs in the implementation ledger.
+
 ### 4.3 Identity
 
 OSS includes local invite-only accounts, configurable OIDC login, organizations, teams, and safe bootstrap. Bootstrap issues a one-time administrator enrollment credential; it is invalidated after enrollment. No public default password. Local password storage uses a reviewed password-hashing implementation; hardened profiles may require external federation instead.

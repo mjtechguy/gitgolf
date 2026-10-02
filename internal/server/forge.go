@@ -86,11 +86,20 @@ func (s *Server) forgeRequest(ctx context.Context, method, path, accept string, 
 }
 
 func (s *Server) forge(ctx context.Context, method, path string, token forgeCredential, input, output any) (http.Header, error) {
+	return s.forgeJSON(ctx, method, path, token, input, output, 0)
+}
+
+// expectedStatus is used by the two discussion POSTs, whose provisional native
+// receipts require HTTP 201. Existing read/repository behavior is unchanged.
+func (s *Server) forgeJSON(ctx context.Context, method, path string, token forgeCredential, input, output any, expectedStatus int) (http.Header, error) {
 	res, err := s.forgeRequest(ctx, method, path, "application/json", token, input)
 	if err != nil {
 		return nil, err
 	}
 	defer res.Body.Close()
+	if expectedStatus != 0 && res.StatusCode != expectedStatus {
+		return nil, errInvalidForgeResponse
+	}
 	if output != nil {
 		if res.ContentLength > maxForgeResponse {
 			return nil, errForgeResponseTooLarge

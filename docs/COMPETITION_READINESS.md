@@ -4,7 +4,7 @@ Reviewed: 2026-10-01. **The current bootstrap is not a competition-ready entry.*
 
 This review preserves the private repository, existing licensing state and the instruction to add no repository CI workflows. It does not submit an entry, accept terms, establish eligibility or authorize publication.
 
-**Competition scope is the Cloudflare track only.** The self-hosted product must run independently in Docker Compose and Kubernetes with no Cloudflare requirement; the current bootstrap has Compose, while Kubernetes packaging remains to be implemented. Operators may opt into individual Cloudflare backends without adopting the entire Cloudflare track. Workers, Artifacts and concurrent AI-agent execution are requirements of this competition variant, not installation prerequisites for Golf's portable core.
+**Competition scope is the Cloudflare track only.** The self-hosted product must run independently in Docker Compose and Kubernetes with no Cloudflare requirement; the current developer preview has Compose and Helm packaging with isolated single-node Kubernetes qualification; production topology, recovery and broader execution remain open. Operators may opt into individual Cloudflare backends without adopting the entire Cloudflare track. Workers, Artifacts and concurrent AI-agent execution are requirements of this competition variant, not installation prerequisites for Golf's portable core.
 
 ## Verified source requirements
 

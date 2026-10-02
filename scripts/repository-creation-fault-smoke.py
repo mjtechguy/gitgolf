@@ -56,6 +56,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--server-binary', type=Path, required=True)
     parser.add_argument('--database-url-file', type=Path, required=True)
+    parser.add_argument('--issue-discussions', action='store_true', help='also drop native issue/comment acknowledgments')
     args = parser.parse_args()
     binary = args.server_binary.resolve()
     assert binary.is_file() and (smoke.ROOT / 'web/dist/index.html').is_file()
@@ -66,7 +67,7 @@ def main():
     container = private_text(args.database_url_file.parent / 'container-name')
     assert container.startswith('golf-') and all(letter.isalnum() or letter in '-_' for letter in container)
     inspected = json.loads(smoke.command('docker', 'inspect', container))[0]
-    binding = inspected['HostConfig']['PortBindings']['5432/tcp']
+    binding = inspected['NetworkSettings']['Ports']['5432/tcp']
     assert len(binding) == 1 and binding[0]['HostIp'] == '127.0.0.1' and int(binding[0]['HostPort']) == pg.port
     pg_environment = dict(os.environ, PGPASSWORD=unquote(pg.password or ''))
     result = subprocess.run(['docker', 'exec', '-e', 'PGPASSWORD', container, 'psql',
@@ -76,10 +77,11 @@ def main():
     assert result.returncode == 0 and result.stdout.strip() == '180004|0', 'Use a fresh dedicated PostgreSQL 18.4 public schema'
     assert smoke.request(smoke.client(), 'GET', smoke.GITEA + '/api/v1/version')['version'] == '1.27.3'
 
-    # ponytail: one fixed provider and one fault, not a configurable gateway.
+    # ponytail: one fixed provider and explicit native creation faults, not a configurable gateway.
     # The proxy sees real scoped credentials but never logs headers or bodies.
     counts = {'posts': 0, 'accepted': 0, 'native_id': None, 'error': False}
     count_lock = threading.Lock()
+    issue_faults = {}
 
     class Proxy(ThreadingHTTPServer):
         daemon_threads = False
@@ -114,7 +116,11 @@ def main():
                 assert len(body) == length
                 headers = {name: self.headers[name] for name in ['Authorization', 'Content-Type', 'Accept'] if name in self.headers}
                 is_create = self.command == 'POST' and self.path == '/api/v1/user/repos'
-                assert self.command == 'GET' or is_create
+                issue_fault = self.command == 'POST' and self.path in issue_faults
+                assert self.command == 'GET' or is_create or issue_fault
+                if issue_fault:
+                    with count_lock:
+                        issue_faults[self.path]['posts'] += 1
                 if is_create:
                     with count_lock:
                         counts['posts'] += 1
@@ -122,6 +128,17 @@ def main():
                 response = upstream.getresponse()
                 data = response.read((2 << 20) + 1)
                 assert len(data) <= 2 << 20
+                if issue_fault:
+                    assert response.status == 201, 'Expected actual native issue/comment creation'
+                    native = json.loads(data)
+                    assert isinstance(native['id'], int) and native['id'] > 0
+                    with count_lock:
+                        issue_faults[self.path]['accepted'] += 1
+                        issue_faults[self.path]['native_id'] = native['id']
+                    self.close_connection = True
+                    self.connection.shutdown(socket.SHUT_RDWR)
+                    self.connection.close()
+                    return
                 if is_create:
                     assert response.status == 201, 'Expected actual native repository creation'
                     native = json.loads(data)
@@ -228,7 +245,7 @@ def main():
                     actor = {'name': name, 'session': None}
                     actors.append(actor)
                     actor['token'] = smoke.admin('generate-access-token', '--username', name,
-                        '--token-name', prefix, '--scopes', 'write:user,write:repository', '--raw')
+                        '--token-name', prefix, '--scopes', 'write:user,write:repository' + (',write:issue' if args.issue_discussions else ''), '--raw')
                     forbidden.append(actor['token'])
                     actor['session'] = smoke.client()
                     rpc(actor, 'SessionService/LoginWithGiteaToken', {'token': actor['token']})
@@ -258,6 +275,53 @@ def main():
                 unchanged(rpc(owner, 'RepositoryService/GetRepositoryCreation', {'idempotencyKey': operation_key}), initial)
                 unchanged(rpc(owner, 'RepositoryService/CreateRepository', payload), initial)
                 assert smoke.provider(owner['token'], 'GET', 'repos/' + owner['name'] + '/' + payload['name'])['id'] == native_id
+                if args.issue_discussions:
+                    stage('lose actual native issue/comment responses without adopting or retransmitting')
+                    native_route = 'repos/' + owner['name'] + '/' + payload['name']
+                    target = {'owner': owner['name'], 'name': payload['name']}
+                    issue_path = '/api/v1/' + native_route + '/issues'
+                    issue_faults[issue_path] = {'posts': 0, 'accepted': 0, 'native_id': None}
+                    issue_payload = {'repository': target, 'repositoryId': str(native_id),
+                                     'title': 'Lost issue response', 'body': 'Native accepted issue.',
+                                     'idempotencyKey': str(uuid.uuid4())}
+                    issue_result = rpc(owner, 'RepositoryService/CreateIssue', issue_payload)
+                    issue_id = issue_faults[issue_path]['native_id']
+                    native_issues = smoke.provider(owner['token'], 'GET', native_route + '/issues?type=issues')
+                    native_issue = next(item for item in native_issues if item['id'] == issue_id)
+                    assert native_issue['title'] == issue_payload['title']
+                    comment_path = issue_path + '/' + str(native_issue['number']) + '/comments'
+                    issue_faults[comment_path] = {'posts': 0, 'accepted': 0, 'native_id': None}
+                    comment_payload = {'repository': target, 'repositoryId': str(native_id),
+                                       'number': native_issue['number'], 'issueId': str(issue_id),
+                                       'body': 'Native accepted comment.', 'idempotencyKey': str(uuid.uuid4())}
+                    comment_result = rpc(owner, 'RepositoryService/CreateIssueComment', comment_payload)
+                    def unknown_issue(result, previous, request, path):
+                        record = result['mutation']
+                        assert record['state'] == 'ISSUE_MUTATION_STATE_OUTCOME_UNKNOWN'
+                        assert record['idempotencyKey'] == request['idempotencyKey']
+                        assert not result.get('issue') and not result.get('comment')
+                        assert not record.get('commentId')
+                        if previous: assert record == previous
+                        with count_lock:
+                            row = issue_faults[path]
+                            assert row['posts'] == row['accepted'] == 1 and row['native_id'] > 0 and not counts['error']
+                        return record
+                    operations = [('CreateIssue', issue_payload, issue_result, issue_path),
+                                  ('CreateIssueComment', comment_payload, comment_result, comment_path)]
+                    for procedure, request, result, path in operations:
+                        initial_mutation = unknown_issue(result, None, request, path)
+                        for _ in range(3):
+                            unknown_issue(rpc(owner, 'RepositoryService/' + procedure, request), initial_mutation, request, path)
+                            unknown_issue(rpc(owner, 'RepositoryService/GetIssueMutation', {'idempotencyKey': request['idempotencyKey']}), initial_mutation, request, path)
+                        rpc(owner, 'RepositoryService/' + procedure, {**request, 'body': 'Changed input'}, expected=400, code='failed_precondition')
+                        rpc(other, 'RepositoryService/GetIssueMutation', {'idempotencyKey': request['idempotencyKey']}, expected=404)
+                    stop(); start(log)
+                    for procedure, request, result, path in operations:
+                        unknown_issue(rpc(owner, 'RepositoryService/GetIssueMutation', {'idempotencyKey': request['idempotencyKey']}), result['mutation'], request, path)
+                        unknown_issue(rpc(owner, 'RepositoryService/' + procedure, request), result['mutation'], request, path)
+                    comments = smoke.provider(owner['token'], 'GET', native_route + '/issues/' + str(native_issue['number']) + '/comments')
+                    assert [row['id'] for row in comments] == [issue_faults[comment_path]['native_id']]
+                    print('PASS: real native issue/comment201 loss, one POST per intent, UNKNOWN across retry/restart, no adoption and private lookup', flush=True)
                 current = next(row['id'] for row in rpc(owner, 'SessionService/ListSessions')['sessions'] if row.get('current'))
                 rpc(owner, 'SessionService/RevokeSession', {'sessionId': current})
                 rpc(owner, 'RepositoryService/GetRepositoryCreation', {'idempotencyKey': operation_key}, expected=401)

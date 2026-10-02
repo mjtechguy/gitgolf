@@ -4,7 +4,7 @@ import { create } from '@bufbuild/protobuf';
 import {
   GetAuthenticationOptionsResponseSchema, GetContentsRequestSchema, GetContentsResponseSchema, GetIssueRequestSchema, GetIssueResponseSchema, GetRepositoryResponseSchema,
   GetSessionResponseSchema, IssueSchema, IssueState, ListBranchesRequestSchema, ListBranchesResponseSchema, ListCapabilitiesResponseSchema,
-  ListCommitsRequestSchema, ListCommitsResponseSchema, ListIssuesRequestSchema, ListIssuesResponseSchema, ListRepositoriesResponseSchema,
+  ListCommitsRequestSchema, ListCommitsResponseSchema, ListIssueCommentsResponseSchema, ListIssuesRequestSchema, ListIssuesResponseSchema, ListRepositoriesResponseSchema,
   LoginWithGiteaTokenResponseSchema, LogoutResponseSchema, RepositorySchema, SourceEntrySchema, SourceEntryType, UserSchema,
 } from '../src/gen/golf/v1/golf_pb';
 import type { GetContentsRequest } from '../src/gen/golf/v1/golf_pb';
@@ -64,6 +64,7 @@ async function backend(page: Page) {
       const sha = input.ref === feature ? feature : head;
       return respond(route, ListCommitsResponseSchema, input.page?.page === 2 ? { commits: [{ sha: older, message: 'Initial repository', authorName: 'Alex', authoredAt: '2026-09-30T12:00:00Z' }] } : { commits: [{ sha, message: 'Improve keyboard navigation\n\nKeep focus visible everywhere.', authorName: 'Alex', authoredAt: '2026-10-01T12:00:00Z' }], page: { nextPage: 2 } });
     }
+    if (method === 'ListIssueComments') return respond(route, ListIssueCommentsResponseSchema, {});
     if (method === 'ListIssues' || method === 'GetIssue') {
       if (state.issueStatus !== 200) return error(state.issueStatus, state.issueStatus === 403 ? 'Issue browsing requires read:issue.' : 'Issue not found or inaccessible.');
       if (method === 'ListIssues') {

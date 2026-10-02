@@ -33,7 +33,7 @@ The union for all tools is `read:user,read:repository,read:issue,read:organizati
 
 The adapter pins the [official Go SDK v1.8.0](https://github.com/modelcontextprotocol/go-sdk/releases/tag/v1.8.0) and restricts advertised versions to `2026-07-28` and `2025-11-25`. MCP `2026-07-28` uses `server/discover` and per-request protocol metadata; legacy `2025-11-25` uses `initialize`. These are distinct negotiation paths handled by the SDK, not a Golf-specific protocol. See the dated [versioning rules](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning) and [stdio binding](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio). The evidence section below distinguishes tested versions from SDK capability.
 
-`tools/list` publishes a fixed catalogue of 19 named tools. Tool arguments are JSON objects with `additionalProperties: false`. Required fields are listed below; omitted optional fields use the existing CLI/API defaults.
+`tools/list` publishes a fixed catalogue of 21 named tools. Tool arguments are JSON objects with `additionalProperties: false`. Required fields are listed below; omitted optional fields use the existing CLI/API defaults.
 
 | Tool | Required arguments | Optional arguments |
 | --- | --- | --- |
@@ -46,6 +46,8 @@ The adapter pins the [official Go SDK v1.8.0](https://github.com/modelcontextpro
 | `golf_commit_diff` | `repository`, `commit_id` | None |
 | `golf_issue_list` | `repository` | `state`, `page`, `limit` |
 | `golf_issue_view` | `repository`, `number` | None |
+| `golf_issue_comments` | `repository`, `number` | `page`, `limit` |
+| `golf_issue_operation` | `idempotency_key` | None |
 | `golf_pr_list` | `repository` | `state`, `page`, `limit` |
 | `golf_pr_view` | `repository`, `number` | None |
 | `golf_pr_reviews` | `repository`, `number` | `page`, `limit` |
@@ -59,7 +61,7 @@ The adapter pins the [official Go SDK v1.8.0](https://github.com/modelcontextpro
 
 `repository` is `OWNER/REPO`. `page` defaults to 1 and accepts 1–10,000; `limit` defaults to 20 and accepts 1–100. `number` is a positive issue/PR number within the CLI's signed 32-bit bound. These three fields are JSON integers. `state` accepts `open`, `closed` or `all`, defaulting to `open`.
 
-Team and audit cursor IDs are canonical positive signed-64-bit decimal **strings**, not JSON numbers. `idempotency_key` is a lowercase canonical UUID v4 from a previous creation request. `commit_id` is an exact lowercase 40- or 64-character hexadecimal object ID. Object-ID syntax support does not qualify every forge object format. The adapter bounds `ref` to 1,024 bytes, `path` to 4,096 bytes and other strings to 2,048 bytes before the existing CLI/API validation. Do not convert IDs through floating-point numbers.
+Team and audit cursor IDs are canonical positive signed-64-bit decimal **strings**, not JSON numbers. `idempotency_key` is a lowercase canonical UUID v4 from a previous repository or issue/comment creation request. `commit_id` is an exact lowercase 40- or 64-character hexadecimal object ID. Object-ID syntax support does not qualify every forge object format. The adapter bounds `ref` to 1,024 bytes, `path` to 4,096 bytes and other strings to 2,048 bytes before the existing CLI/API validation. Do not convert IDs through floating-point numbers.
 
 Collections require explicit pagination. Follow `data.page.nextPage`, including when an authorized filtered page is empty. For activity, preserve the first `data.snapshotId` and use the exact `data.nextBeforeId` on subsequent calls; `before_id` requires a snapshot and cannot exceed it. Every PAT continuation call adds its own session events, but the captured snapshot retains the API's stable traversal boundary. Refresh by starting without cursors.
 
@@ -114,3 +116,5 @@ The SDK client's cancelled-call return alone does not prove wire suppression. Th
 Remote MCP transport/OAuth/audience binding, ACP, tool mutations and approval workflows, agent execution, managed client credentials, subscriptions/resources/prompts, Cloudflare MCP integration and actual Claude Code/Codex/OpenCode/Grok/Pi client interoperability remain separate work. No client-specific setup or execution is claimed from the generic protocol proof. No AI or Cloudflare service is required to use these local tools.
 
 The source-session-bound API credential increment also passes all 19 tools on both protocol versions against an isolated canonical core, alongside PAT regression. Bearer CLI stdin/environment reads, no new session/activity records, cancellation/SIGTERM, explicit credential revocation, source-session logout and native membership/collaborator removal are qualified. Both token modes pass the separate raw-wire cancellation/framing check. Exact final image and regression provenance are in the implementation ledger; this does not qualify named coding-agent clients.
+
+Issue comments resolve current repository and issue IDs within the same authenticated call, then return one filtered native repository-wide page. Empty pages may advance. Own issue operation reads never dispatch writes; provisional receipt IDs do not imply success or current access.

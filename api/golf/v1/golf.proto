@@ -69,6 +69,10 @@ service RepositoryService {
   rpc GetContents(GetContentsRequest) returns (GetContentsResponse);
   rpc ListIssues(ListIssuesRequest) returns (ListIssuesResponse);
   rpc GetIssue(GetIssueRequest) returns (GetIssueResponse);
+  rpc ListIssueComments(ListIssueCommentsRequest) returns (ListIssueCommentsResponse);
+  rpc CreateIssue(CreateIssueRequest) returns (CreateIssueResponse);
+  rpc CreateIssueComment(CreateIssueCommentRequest) returns (CreateIssueCommentResponse);
+  rpc GetIssueMutation(GetIssueMutationRequest) returns (GetIssueMutationResponse);
   rpc ListPullRequests(ListPullRequestsRequest) returns (ListPullRequestsResponse);
   rpc GetPullRequest(GetPullRequestRequest) returns (GetPullRequestResponse);
   rpc ListPullRequestReviews(ListPullRequestReviewsRequest) returns (ListPullRequestReviewsResponse);
@@ -322,6 +326,89 @@ message GetIssueRequest {
   uint32 number = 2;
 }
 message GetIssueResponse { Issue issue = 1; }
+
+message IssueComment {
+  string id = 1;
+  // Absent for a deleted or unavailable native author.
+  User user = 2;
+  string body = 3;
+  string created_at = 4;
+  string updated_at = 5;
+  string html_url = 6;
+}
+message ListIssueCommentsRequest {
+  RepositoryKey repository = 1;
+  // Expected native IDs bind the displayed discussion; canonical decimal strings.
+  string repository_id = 2;
+  uint32 number = 3;
+  string issue_id = 4;
+  PageRequest page = 5;
+}
+message ListIssueCommentsResponse {
+  repeated IssueComment comments = 1;
+  // Native repository-wide pages filtered to this issue. Empty pages may advance.
+  PageResponse page = 2;
+}
+enum IssueMutationKind {
+  ISSUE_MUTATION_KIND_UNSPECIFIED = 0;
+  ISSUE_MUTATION_KIND_CREATE_ISSUE = 1;
+  ISSUE_MUTATION_KIND_CREATE_COMMENT = 2;
+}
+enum IssueMutationState {
+  ISSUE_MUTATION_STATE_UNSPECIFIED = 0;
+  ISSUE_MUTATION_STATE_OUTCOME_UNKNOWN = 1;
+  ISSUE_MUTATION_STATE_SUCCEEDED = 2;
+  ISSUE_MUTATION_STATE_REJECTED = 3;
+}
+// Owner-scoped observations, not exactly-once effects or target-side predicates.
+message IssueMutation {
+  string id = 1;
+  string idempotency_key = 2;
+  IssueMutationKind kind = 3;
+  IssueMutationState state = 4;
+  RepositoryKey repository = 5;
+  string repository_id = 6;
+  string issue_id = 7;
+  uint32 number = 8;
+  string comment_id = 9;
+  string created_at = 10;
+  string updated_at = 11;
+  string failure_code = 12;
+  // Provisional native receipt; does not establish successful target binding.
+  string observed_result_id = 13;
+  uint32 observed_number = 14;
+}
+message CreateIssueRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string title = 3;
+  string body = 4;
+  // Required canonical lowercase UUID v4; exact input is frozen per owner/key.
+  string idempotency_key = 5;
+}
+message CreateIssueResponse {
+  IssueMutation mutation = 1;
+  // Optional: observed success does not grant current native access.
+  Issue issue = 2;
+}
+message CreateIssueCommentRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  uint32 number = 3;
+  string issue_id = 4;
+  string body = 5;
+  string idempotency_key = 6;
+}
+message CreateIssueCommentResponse {
+  IssueMutation mutation = 1;
+  IssueComment comment = 2;
+}
+message GetIssueMutationRequest { string idempotency_key = 1; }
+message GetIssueMutationResponse {
+  IssueMutation mutation = 1;
+  Issue issue = 2;
+  IssueComment comment = 3;
+}
 
 // Native provider observations, never Golf merge eligibility or a freshness proof.
 message PullRequestRef {

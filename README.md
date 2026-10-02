@@ -9,7 +9,7 @@ These are infrastructure choices, not editions. AI is optional in Golf's core wo
 
 ## What works now
 
-This is a developer preview: optional scoped Gitea browser OAuth and per-user token bootstrap, encrypted PostgreSQL-backed sessions with account listing/revocation and own-account activity, member-scoped organization/team browsing, repository listing/creation, in-app source, commit history and native commit-diff browsing, read-only issues and pull requests/native reviews, a JSON CLI and local stdio MCP tools, black/charcoal and light/system themes, capability reporting, and persistent Compose/Helm installations. Git writes use Gitea directly.
+This is a developer preview: optional scoped Gitea browser OAuth and per-user token bootstrap, encrypted PostgreSQL-backed sessions with account listing/revocation and own-account activity, member-scoped organization/team browsing, repository listing/creation, in-app source, commit history and native commit-diff browsing, ordinary issue creation/plain-text comments and pull-request/native-review reads, a JSON CLI and local stdio MCP tools, black/charcoal and light/system themes, capability reporting, and persistent Compose/Helm installations. Git writes use Gitea directly.
 
 Golf local/external OIDC identity, organization/role administration, import/connections, PR/review mutations and merge policy, pipelines/runners, agent execution, Cloudflare integrations and protected previews/CD remain roadmap work. This is not complete v1 or a competition-ready entry. No repository CI is configured.
 
@@ -152,9 +152,9 @@ Success writes JSON with `schema_version: "golf.cli.v1"` and the API response in
 
 ## Local MCP tools
 
-`./bin/golf mcp` exposes 19 existing repository/source/commit-diff/issue/PR/organization/activity reads over stdin/stdout using the official Go MCP SDK. Configure an owner-controlled client to launch that binary and provide exactly one of `GOLF_API_TOKEN` or `GOLF_GITEA_TOKEN` through its environment from a secret manager; `GOLF_URL` selects the installation. MCP reserves stdin for JSON-RPC, so both token-stdin flags are unavailable. Tool arguments cannot choose credentials, destinations or arbitrary commands.
+`./bin/golf mcp` exposes 21 existing repository/source/commit-diff/issue/PR/organization/activity reads over stdin/stdout using the official Go MCP SDK. Configure an owner-controlled client to launch that binary and provide exactly one of `GOLF_API_TOKEN` or `GOLF_GITEA_TOKEN` through its environment from a secret manager; `GOLF_URL` selects the installation. MCP reserves stdin for JSON-RPC, so both token-stdin flags are unavailable. Tool arguments cannot choose credentials, destinations or arbitrary commands.
 
-Each call shares the CLI's scoped API path. PAT mode uses temporary sign-in/sign-out with session activity; API credential mode uses its existing source session and creates no login/logout events. Results use the `golf.mcp.v1` envelope in structured and text content; pagination is explicit, and source/review text remains untrusted data. Four concurrent calls, bounded input/output and cancellation cleanup limit this local adapter. Native checks cover all 19 tools under both `2026-07-28` and legacy `2025-11-25`; separate raw-wire cancellation checks also cover both versions. See the [MCP contract](docs/MCP_CONTRACT.md). This does not provide remote MCP, ACP, mutations, managed authentication or qualified coding-agent execution.
+Each call shares the CLI's scoped API path. PAT mode uses temporary sign-in/sign-out with session activity; API credential mode uses its existing source session and creates no login/logout events. Results use the `golf.mcp.v1` envelope in structured and text content; pagination is explicit, and source/review text remains untrusted data. Four concurrent calls, bounded input/output and cancellation cleanup limit this local adapter. Native checks cover all 21 tools under both `2026-07-28` and legacy `2025-11-25`; separate raw-wire cancellation checks also cover both versions. See the [MCP contract](docs/MCP_CONTRACT.md). This does not provide remote MCP, ACP, mutations, managed authentication or qualified coding-agent execution.
 
 ## Local checks
 
@@ -170,7 +170,7 @@ python3 scripts/smoke.py --restart
 # Optional: include real CLI checks against the same stack.
 make cli
 python3 scripts/smoke.py --cli bin/golf
-# Native stdio MCP discovery, all 19 reads, scope and lifecycle checks.
+# Native stdio MCP discovery, all 21 reads, scope and lifecycle checks.
 python3 scripts/mcp-smoke/run.py --cli bin/golf
 # Raw-wire cancellation, request-ID and input-framing checks.
 python3 scripts/mcp-cancellation-check.py --cli bin/golf
@@ -239,3 +239,5 @@ Open **Organizations** to browse memberships, native team/unit settings, members
 ## Optional observability
 
 Golf records correlated JSON request logs and can export bounded API/Gitea/PostgreSQL traces and private Prometheus metrics. Metrics use a separate authenticated listener; export is disabled by default. See the [configuration and privacy contract](docs/OBSERVABILITY.md) and [local monitoring overlay](deploy/observability/README.md). Job/runner instrumentation and production operational qualification remain open.
+
+Issue discussion creation uses `write:issue` with current user/repository scopes and UUID-backed intents. An unknown result is inspected rather than resent; native address races remain a qualification limit. CLI/MCP expose21 read tools, including comment pages and own-operation status, with no new write commands. See [discussion boundaries](docs/ISSUE_DISCUSSION_CONTRACT.md).

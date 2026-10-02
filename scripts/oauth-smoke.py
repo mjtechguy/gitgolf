@@ -190,7 +190,23 @@ try {
   const source = await rpc(alice, 'RepositoryService/GetContents', { repository, ref: config.revision, path: config.path });
   check(source.commitId === config.revision && source.file.content === config.text, 'Private immutable source mismatch');
   const issues = await rpc(alice, 'RepositoryService/ListIssues', { repository });
-  check((issues.issues ?? []).some(issue => issue.title === config.issueTitle), 'OAuth read:issue scope did not work');
+  check((issues.issues ?? []).some(issue => issue.title === config.issueTitle), 'OAuth issue-read access did not work');
+  stage = 'OAuth write:issue discussion';
+  const reported = await rpc(alice, 'RepositoryService/CreateIssue', {
+    repository, repositoryId: own.repository.id, title: 'OAuth authored issue',
+    body: 'Created through the signed-in OAuth session.', idempotencyKey: crypto.randomUUID(),
+  });
+  check(reported.mutation.state === 'ISSUE_MUTATION_STATE_SUCCEEDED' && reported.issue.user.login === config.alice.name, 'OAuth issue creation did not return matching observed success');
+  const replied = await rpc(alice, 'RepositoryService/CreateIssueComment', {
+    repository, repositoryId: own.repository.id, number: reported.issue.number, issueId: reported.issue.id,
+    body: 'Commented through the signed-in OAuth session.', idempotencyKey: crypto.randomUUID(),
+  });
+  check(replied.mutation.state === 'ISSUE_MUTATION_STATE_SUCCEEDED' && replied.comment.user.login === config.alice.name, 'OAuth comment creation did not return matching observed success');
+  const discussion = await rpc(alice, 'RepositoryService/ListIssueComments', {
+    repository, repositoryId: own.repository.id, number: reported.issue.number, issueId: reported.issue.id,
+    page: { page: 1, limit: 100 },
+  });
+  check((discussion.comments ?? []).some(comment => comment.id === replied.comment.id), 'OAuth discussion read omitted its comment');
   const created = await rpc(alice, 'RepositoryService/CreateRepository', { name: 'oauth-created', private: true });
   check(created.repository.private && created.repository.fullName === config.alice.name + '/oauth-created', 'OAuth write:user/write:repository scopes did not work');
   const organizations = await rpc(alice, 'OrganizationService/ListOrganizations');
@@ -283,8 +299,13 @@ try {
   const legacy = await browser.newContext(options);
   legacy.setDefaultTimeout(20000);
   legacy.setDefaultNavigationTimeout(20000);
-  const oldScopes = config.scopes.filter(scope => scope !== 'read:organization');
+  const oldScopes = config.scopes.filter(scope => scope !== 'read:organization').map(scope => scope === 'write:issue' ? 'read:issue' : scope);
   await login(legacy, config.legacyUser, true, oldScopes);
+  const legacyCreated = await rpc(legacy, 'RepositoryService/CreateRepository', { name: 'legacy-issue-scope', private: true });
+  const legacyIssueInput = { repository: { owner: config.legacyUser.name, name: 'legacy-issue-scope' },
+    repositoryId: legacyCreated.repository.id, title: 'Legacy scope report', body: 'Requires explicit new consent.', idempotencyKey: crypto.randomUUID() };
+  const legacyDenied = await rpc(legacy, 'RepositoryService/CreateIssue', legacyIssueInput);
+  check(legacyDenied.mutation.state === 'ISSUE_MUTATION_STATE_REJECTED' && legacyDenied.mutation.failureCode === 'provider_http_403', 'Narrow read:issue grant wrote an issue');
   await rpc(legacy, 'RepositoryService/ListRepositories');
   await rpc(legacy, 'OrganizationService/ListOrganizations', {}, 403);
   await rpc(legacy, 'OrganizationService/GetOrganization', { organization: config.legacyOrganization }, 403);
@@ -302,6 +323,8 @@ try {
   reused.setDefaultNavigationTimeout(20000);
   const reusedLogin = await login(reused, config.legacyUser, true, config.scopes, false);
   await rpc(reused, 'RepositoryService/ListRepositories');
+  const reusedDenied = await rpc(reused, 'RepositoryService/CreateIssue', { ...legacyIssueInput, idempotencyKey: crypto.randomUUID() });
+  check(reusedDenied.mutation.state === 'ISSUE_MUTATION_STATE_REJECTED' && reusedDenied.mutation.failureCode === 'provider_http_403', 'New login silently upgraded the old issue grant');
   await rpc(reused, 'OrganizationService/ListOrganizations', {}, 403);
   await rpc(reused, 'OrganizationService/GetOrganization', { organization: config.legacyOrganization }, 403);
   console.log('PASS: requesting expanded scopes on fresh login reuses the existing narrower grant without consent or broader access');
@@ -315,10 +338,14 @@ try {
   await login(renewed, config.legacyUser);
   const renewedOrg = await rpc(renewed, 'OrganizationService/GetOrganization', { organization: config.legacyOrganization });
   check(renewedOrg.organization.name === config.legacyOrganization, 'Explicit re-consent did not enable own organization reads');
+  const renewedIssue = await rpc(renewed, 'RepositoryService/CreateIssue', { ...legacyIssueInput, idempotencyKey: crypto.randomUUID() });
+  check(renewedIssue.mutation.state === 'ISSUE_MUTATION_STATE_SUCCEEDED' && renewedIssue.issue.user.login === config.legacyUser.name, 'Explicit re-consent did not enable write:issue');
+  const retainedDenial = await rpc(renewed, 'RepositoryService/CreateIssue', legacyIssueInput);
+  check(JSON.stringify(retainedDenial.mutation) === JSON.stringify(legacyDenied.mutation), 'Broader consent redispatched an old rejected intent');
   await rpc(legacy, 'SessionService/Logout');
   await rpc(renewed, 'SessionService/Logout');
   await legacy.close(); await renewed.close();
-  console.log('PASS: real narrower consent stays limited through refresh and new login; explicit user grant revocation and fresh consent enable organization reads');
+  console.log('PASS: real narrower consent stays limited through refresh and new login; explicit user grant revocation and fresh consent enable organization reads/issue writes without replaying old intents');
   await revokeGrant(aliceLogin.page, 'Gitea user consent revocation');
   if (config.refresh) {
     console.log('STEP: waiting 16 seconds to test expiry after user consent revocation');
@@ -480,7 +507,7 @@ def main():
             config = {'golf': GOLF, 'gitea': GITEA, 'alice': alice, 'bob': bob, 'sessionUser': session_user,
                       'legacyUser': legacy_user, 'legacyOrganization': legacy_organization,
                       'ownerAuthorization': basic(owner), 'clientID': app['client_id'], 'applicationID': app['id'],
-                      'scopes': ['write:user', 'write:repository', 'read:issue', 'read:organization'], 'repository': repository,
+                      'scopes': ['write:user', 'write:repository', 'write:issue', 'read:organization'], 'repository': repository,
                       'revision': source['commit']['sha'], 'path': source_path, 'text': text,
                       'issueTitle': issue_title, 'organization': organization, 'refresh': args.refresh}
             process = subprocess.Popen(['node', str(browser_script)], cwd=ROOT, stdin=subprocess.PIPE,

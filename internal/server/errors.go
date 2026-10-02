@@ -8,6 +8,8 @@ import (
 )
 
 var (
+	errIssueTargetChanged         = errors.New("issue target identity changed")
+	errIssueMutationConflict      = errors.New("issue mutation key has different inputs")
 	errApiCredentialReadOnly      = errors.New("API credential procedure denied")
 	errApiCredentialLimit         = errors.New("active API credential limit")
 	errRepositoryCreationConflict = errors.New("repository creation key has different inputs")
@@ -38,6 +40,10 @@ func rpcError(err error) error {
 	var input inputError
 	var upstream forgeError
 	switch {
+	case errors.Is(err, errIssueTargetChanged):
+		code, message = connect.CodeFailedPrecondition, "The repository or issue identity changed. Refresh the discussion before continuing."
+	case errors.Is(err, errIssueMutationConflict):
+		code, message = connect.CodeFailedPrecondition, "This issue mutation key is already bound to different inputs. Inspect its recorded outcome; use a new key only for a new operation."
 	case errors.Is(err, errApiCredentialReadOnly):
 		code, message = connect.CodePermissionDenied, "API credentials allow only the documented read procedures. Use a browser session for this operation."
 	case errors.Is(err, errApiCredentialLimit):
