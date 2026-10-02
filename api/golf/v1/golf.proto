@@ -27,6 +27,9 @@ service RepositoryService {
   rpc GetContents(GetContentsRequest) returns (GetContentsResponse);
   rpc ListIssues(ListIssuesRequest) returns (ListIssuesResponse);
   rpc GetIssue(GetIssueRequest) returns (GetIssueResponse);
+  rpc ListPullRequests(ListPullRequestsRequest) returns (ListPullRequestsResponse);
+  rpc GetPullRequest(GetPullRequestRequest) returns (GetPullRequestResponse);
+  rpc ListPullRequestReviews(ListPullRequestReviewsRequest) returns (ListPullRequestReviewsResponse);
 }
 
 // Native forge membership browsing. These reads do not define Golf roles.
@@ -218,6 +221,86 @@ message GetIssueRequest {
   uint32 number = 2;
 }
 message GetIssueResponse { Issue issue = 1; }
+
+// Native provider observations, never Golf merge eligibility or a freshness proof.
+message PullRequestRef {
+  // Empty when the source repository was deleted or is unavailable.
+  string repository_id = 1;
+  string label = 2;
+  string ref = 3;
+  // May be empty when the provider cannot resolve the reference.
+  string commit_id = 4;
+  // True for list heads (provider retained PR snapshot) and detail retained refs.
+  // False does not establish a live source read or any atomic freshness claim.
+  bool retained_snapshot = 5;
+}
+message PullRequest {
+  string id = 1;
+  uint32 number = 2;
+  string title = 3;
+  string body = 4;
+  IssueState state = 5;
+  // Absent for a deleted or unavailable provider author.
+  User user = 6;
+  string created_at = 7;
+  string updated_at = 8;
+  string html_url = 9;
+  bool draft = 10;
+  bool merged = 11;
+  string merged_at = 12;
+  string merge_commit_id = 13;
+  PullRequestRef head = 14;
+  PullRequestRef base = 15;
+}
+message ListPullRequestsRequest {
+  RepositoryKey repository = 1;
+  // Unspecified defaults to open; ALL includes merged and unmerged closed PRs.
+  IssueState state = 2;
+  PageRequest page = 3;
+}
+message ListPullRequestsResponse {
+  repeated PullRequest pull_requests = 1;
+  PageResponse page = 2;
+}
+message GetPullRequestRequest {
+  RepositoryKey repository = 1;
+  uint32 number = 2;
+}
+message GetPullRequestResponse { PullRequest pull_request = 1; }
+
+enum PullRequestReviewState {
+  PULL_REQUEST_REVIEW_STATE_UNSPECIFIED = 0;
+  PULL_REQUEST_REVIEW_STATE_APPROVED = 1;
+  PULL_REQUEST_REVIEW_STATE_PENDING = 2;
+  PULL_REQUEST_REVIEW_STATE_COMMENT = 3;
+  PULL_REQUEST_REVIEW_STATE_REQUEST_CHANGES = 4;
+  PULL_REQUEST_REVIEW_STATE_REQUEST_REVIEW = 5;
+}
+message PullRequestReview {
+  string id = 1;
+  // Absent for a deleted/unavailable author or a native team review request.
+  User user = 2;
+  string body = 3;
+  PullRequestReviewState state = 4;
+  string commit_id = 5;
+  // Native flags only; these do not determine an eligible Golf approval.
+  bool stale = 6;
+  bool dismissed = 7;
+  bool official = 8;
+  string submitted_at = 9;
+  string updated_at = 10;
+  string html_url = 11;
+}
+message ListPullRequestReviewsRequest {
+  RepositoryKey repository = 1;
+  uint32 number = 2;
+  PageRequest page = 3;
+}
+message ListPullRequestReviewsResponse {
+  // Provider filtering can produce an empty page that still has a next page.
+  repeated PullRequestReview reviews = 1;
+  PageResponse page = 2;
+}
 
 enum CapabilityState {
   CAPABILITY_STATE_UNSPECIFIED = 0;

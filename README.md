@@ -9,9 +9,9 @@ These are infrastructure choices, not editions. AI is optional in Golf's core wo
 
 ## What works now
 
-This is a developer preview: optional scoped Gitea browser OAuth and per-user token bootstrap, encrypted PostgreSQL-backed sessions with account listing/revocation, member-scoped organization/team browsing, repository listing/creation, in-app source and commit browsing, read-only issues, a JSON CLI, black/charcoal and light/system themes, capability reporting, and persistent Compose/Helm installations. Git writes use Gitea directly.
+This is a developer preview: optional scoped Gitea browser OAuth and per-user token bootstrap, encrypted PostgreSQL-backed sessions with account listing/revocation, member-scoped organization/team browsing, repository listing/creation, in-app source and commit browsing, read-only issues and pull requests/native reviews, a JSON CLI, black/charcoal and light/system themes, capability reporting, and persistent Compose/Helm installations. Git writes use Gitea directly.
 
-Golf local/external OIDC identity, organization/role administration, import/connections, review/merge policy, pipelines/runners, agent execution, Cloudflare integrations and protected previews/CD remain roadmap work. This is not complete v1 or a competition-ready entry. No repository CI is configured.
+Golf local/external OIDC identity, organization/role administration, import/connections, PR/review mutations and merge policy, pipelines/runners, agent execution, Cloudflare integrations and protected previews/CD remain roadmap work. This is not complete v1 or a competition-ready entry. No repository CI is configured.
 
 ## Run locally
 
@@ -75,13 +75,15 @@ The [Helm chart](deploy/helm/golf/README.md) installs the same core with existin
 
 The [Kubernetes guide](docs/KUBERNETES.md) includes an isolated k3d qualification command. The verified developer profile scales Golf to two replicas and retains one canonical Git writer. Single-node restart evidence does not establish storage fencing, multi-node failover, HA or production readiness. Workers/runners and object-storage adapters are not installed by this chart.
 
-## Browse code and issues
+## Browse code, issues and pull requests
 
 Open a repository in Golf to explore its branches, commit history and source tree. File/folder navigation stays at an exact commit, so a concurrent push cannot silently change the snapshot you are inspecting. Refresh or select a branch again to observe a new head. The commit view can open historical snapshots. Empty repositories display push guidance; after the first push, Gitea may need a moment to finish processing before refresh shows the source.
 
 Files are rendered as plain text up to 256 KiB. Binary/control content, large files, symlinks, submodules and LFS objects show metadata and an explanation instead. Golf does not execute source HTML, follow source links or fetch submodule targets. Directories above 1,000 entries or upstream responses above 2 MiB fail visibly; this preview does not claim unlimited monorepo browsing.
 
-The Issues tab lists open/closed issues and reads issue bodies as plain text. Issue editing, comments, rendered Markdown, diffs, blame and reviews remain future work. Gitea remains the sole source of collaboration data. See the [browser contract](docs/REPOSITORY_BROWSER_CONTRACT.md) for procedures and bounds.
+The Issues tab lists open/closed issues and reads issue bodies as plain text. Issue editing, comments, rendered Markdown, diffs, blame and review submission remain future work. Gitea remains the sole source of collaboration data. See the [browser contract](docs/REPOSITORY_BROWSER_CONTRACT.md) for procedures and bounds.
+
+The **Pull requests** tab lists open/closed/all PRs and opens plain-text detail with native Gitea reviews. List heads are labeled retained snapshots; detail refs are provider observations or explicit retained fallbacks. These labels, native merge records and review flags do not establish a live source branch, Golf approval eligibility or merge readiness. Pagination can advance from an empty review page because Gitea filters hidden pending reviews after counting. PR and review reads require `read:user` plus `read:repository`, without issue scope. See the [PR read contract](docs/PULL_REQUEST_READ_CONTRACT.md).
 
 ## Read-only CLI
 
@@ -98,6 +100,9 @@ make cli
 ./bin/golf repo contents owner/repository --ref COMMIT_ID --path README.md
 ./bin/golf issue list owner/repository --state open
 ./bin/golf issue view owner/repository 1
+./bin/golf pr list owner/repository --state all --page 1 --limit 20
+./bin/golf pr view owner/repository 12
+./bin/golf pr reviews owner/repository 12 --page 1 --limit 20
 ./bin/golf org list --limit 20
 ./bin/golf org view ORGANIZATION
 ./bin/golf org teams ORGANIZATION
@@ -108,7 +113,7 @@ make cli
 
 Alternatively pipe one token from your secret manager to `./bin/golf --token-stdin repo list`. Credentials are accepted only through stdin or `GOLF_GITEA_TOKEN`, never a command-line token flag. Set `GOLF_URL` or global `--url` for another installation; remote origins require HTTPS. The CLI does not follow redirects or save credentials/cookies. It creates and deletes a temporary Golf session per command, including after an operation fails. Abrupt termination can leave that session until its normal server expiry.
 
-Organization/team commands require `read:user` and `read:organization`; repository source separately requires `read:repository`. Team IDs are canonical positive decimal strings, obtained from `org teams`. Empty collection pages can still have a `nextPage`.
+PR/review commands require `read:user` and `read:repository`; review flags remain provider observations. Organization/team commands require `read:user` and `read:organization`; repository source separately requires `read:repository`. Team IDs are canonical positive decimal strings, obtained from `org teams`. Empty collection pages can still have a `nextPage`.
 
 Success writes JSON with `schema_version: "golf.cli.v1"` and the API response in `data`. Pagination is explicit; follow `data.page.nextPage` with `--page`, up to `--limit 100`. Exit codes are 0 for success/help, 1 for operation/authentication/session-cleanup failure, and 2 for usage errors. Diagnostics go to stderr. Go and TypeScript clients now share the Protobuf/Connect contract. OAuth/device login, MCP and ACP remain future work.
 
@@ -130,6 +135,8 @@ python3 scripts/smoke.py --cli bin/golf
 python3 scripts/sessions-smoke.py
 # Real membership-scoped organizations/teams and production browser checks.
 python3 scripts/organizations-smoke.py --cli bin/golf
+# Real private-fork PR/native-review reads and production browser checks.
+python3 scripts/pulls-smoke.py --cli bin/golf
 # Isolated provider role contract; uses disposable PostgreSQL/Gitea on port 3016.
 python3 scripts/gitea-role-smoke.py
 # Characterize protected writes on disposable port 3018; exit 0 also records limitations.

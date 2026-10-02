@@ -35,6 +35,9 @@ Usage: golf [--url ORIGIN] [--token-stdin] COMMAND
   repo contents OWNER/REPO [--ref REF] [--path PATH]
   issue list OWNER/REPO [--state open|closed|all] [--page N] [--limit N]
   issue view OWNER/REPO NUMBER
+  pr list OWNER/REPO [--state open|closed|all] [--page N] [--limit N]
+  pr view OWNER/REPO NUMBER
+  pr reviews OWNER/REPO NUMBER [--page N] [--limit N]
   org list [--page N] [--limit N]
   org view ORG
   org teams ORG [--page N] [--limit N]
@@ -196,7 +199,7 @@ func parseCommand(args []string) (command, error) {
 			result.teamID = rest[0]
 			rest = rest[1:]
 		}
-	case "repo view", "repo branches", "repo commits", "repo contents", "issue list", "issue view":
+	case "repo view", "repo branches", "repo commits", "repo contents", "issue list", "issue view", "pr list", "pr view", "pr reviews":
 		if len(rest) == 0 {
 			return result, invalid
 		}
@@ -211,12 +214,12 @@ func parseCommand(args []string) (command, error) {
 		}
 		result.repository = &golfv1.RepositoryKey{Owner: parts[0], Name: parts[1]}
 		rest = rest[1:]
-		if result.name == "issue view" {
+		if result.name == "issue view" || result.name == "pr view" || result.name == "pr reviews" {
 			if len(rest) == 0 {
 				return result, invalid
 			}
 			number, err := strconv.ParseInt(rest[0], 10, 32)
-			if err != nil || number < 1 {
+			if err != nil || number < 1 || (args[0] == "pr" && strconv.FormatInt(number, 10) != rest[0]) {
 				return result, invalid
 			}
 			result.number = uint32(number)
@@ -229,7 +232,7 @@ func parseCommand(args []string) (command, error) {
 	flags.SetOutput(io.Discard)
 	var ref, filePath, state string
 	page, limit := 1, 20
-	paginated := result.name == "repo list" || result.name == "repo branches" || result.name == "repo commits" || result.name == "issue list" || result.name == "org list" || result.name == "org teams" || result.name == "team members" || result.name == "team repos"
+	paginated := result.name == "repo list" || result.name == "repo branches" || result.name == "repo commits" || result.name == "issue list" || result.name == "pr list" || result.name == "pr reviews" || result.name == "org list" || result.name == "org teams" || result.name == "team members" || result.name == "team repos"
 	if paginated {
 		flags.IntVar(&page, "page", 1, "page number")
 		flags.IntVar(&limit, "limit", 20, "page size")
@@ -240,8 +243,8 @@ func parseCommand(args []string) (command, error) {
 	if result.name == "repo contents" {
 		flags.StringVar(&filePath, "path", "", "repository-relative file or directory")
 	}
-	if result.name == "issue list" {
-		flags.StringVar(&state, "state", "open", "issue state")
+	if result.name == "issue list" || result.name == "pr list" {
+		flags.StringVar(&state, "state", "open", "open, closed or all")
 	}
 	if err := flags.Parse(rest); err != nil {
 		return result, err
@@ -379,6 +382,24 @@ func (command command) read(ctx context.Context, client golfv1connect.Repository
 		return response.Msg, nil
 	case "issue view":
 		response, err := client.GetIssue(ctx, connect.NewRequest(&golfv1.GetIssueRequest{Repository: command.repository, Number: command.number}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "pr list":
+		response, err := client.ListPullRequests(ctx, connect.NewRequest(&golfv1.ListPullRequestsRequest{Repository: command.repository, State: command.state, Page: command.page}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "pr view":
+		response, err := client.GetPullRequest(ctx, connect.NewRequest(&golfv1.GetPullRequestRequest{Repository: command.repository, Number: command.number}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "pr reviews":
+		response, err := client.ListPullRequestReviews(ctx, connect.NewRequest(&golfv1.ListPullRequestReviewsRequest{Repository: command.repository, Number: command.number, Page: command.page}))
 		if err != nil {
 			return nil, err
 		}

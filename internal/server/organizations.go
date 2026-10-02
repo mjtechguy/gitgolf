@@ -88,7 +88,7 @@ func organizationNextPage(headers http.Header, page uint32) (uint32, error) {
 // session identity, then recheck local revocation/expiry after the last provider
 // wait before returning private membership data. OAuth refresh was resolved by
 // the RPC boundary; never recursively refresh here.
-func (s *Server) withOrganizationCaller(ctx context.Context, value string, credential forgeCredential, operation func(User) error) error {
+func (s *Server) withForgeCaller(ctx context.Context, value string, credential forgeCredential, operation func(User) error) error {
 	user, err := s.currentUser(ctx, credential)
 	if err != nil {
 		return err
@@ -162,7 +162,7 @@ func (s *Server) withOrganization(ctx context.Context, value string, credential 
 	if !validOrganizationName(name) {
 		return invalid("Organization must be a valid name component.")
 	}
-	return s.withOrganizationCaller(ctx, value, credential, func(user User) error {
+	return s.withForgeCaller(ctx, value, credential, func(user User) error {
 		if err := s.requireOrganizationMember(ctx, credential, name, user.Login); err != nil {
 			return err
 		}
@@ -189,7 +189,7 @@ func (s *Server) listOrganizations(ctx context.Context, value string, credential
 	}
 	var rows []forgeOrganization
 	var next uint32
-	err = s.withOrganizationCaller(ctx, value, credential, func(User) error {
+	err = s.withForgeCaller(ctx, value, credential, func(User) error {
 		headers, err := s.forge(ctx, http.MethodGet, "/user/orgs?"+pageQuery(page, limit).Encode(), credential, nil, &rows)
 		if err != nil {
 			return err

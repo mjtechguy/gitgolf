@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file golf/v1/golf.proto.
  */
 export const file_golf_v1_golf: GenFile = /*@__PURE__*/
-  fileDesc("ChJnb2xmL3YxL2dvbGYucHJvdG8SB2dvbGYudjEiSAoEVXNlchIKCgJpZBgBIAEoCRINCgVsb2dpbhgCIAEoCRIRCglmdWxsX25hbWUYAyABKAkSEgoKYXZhdGFyX3VybBgEIAEoCSLQAQoKUmVwb3NpdG9yeRIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhEKCWZ1bGxfbmFtZRgDIAEoCRITCgtkZXNjcmlwdGlvbhgEIAEoCRIPCgdwcml2YXRlGAUgASgIEhAKCGh0bWxfdXJsGAYgASgJEhYKDmRlZmF1bHRfYnJhbmNoGAcgASgJEhIKCnVwZGF0ZWRfYXQYCCABKAkSDQoFZW1wdHkYCSABKAgSEQoJY2xvbmVfdXJsGAogASgJEg8KB3NzaF91cmwYCyABKAkiLAoNUmVwb3NpdG9yeUtleRINCgVvd25lchgBIAEoCRIMCgRuYW1lGAIgASgJIioKC1BhZ2VSZXF1ZXN0EgwKBHBhZ2UYASABKA0SDQoFbGltaXQYAiABKA0iIQoMUGFnZVJlc3BvbnNlEhEKCW5leHRfcGFnZRgBIAEoDSIrChpMb2dpbldpdGhHaXRlYVRva2VuUmVxdWVzdBINCgV0b2tlbhgBIAEoCSI6ChtMb2dpbldpdGhHaXRlYVRva2VuUmVzcG9uc2USGwoEdXNlchgBIAEoCzINLmdvbGYudjEuVXNlciITChFHZXRTZXNzaW9uUmVxdWVzdCIxChJHZXRTZXNzaW9uUmVzcG9uc2USGwoEdXNlchgBIAEoCzINLmdvbGYudjEuVXNlciJrCgtTZXNzaW9uSW5mbxIKCgJpZBgBIAEoCRISCgpjcmVhdGVkX2F0GAIgASgJEhIKCmV4cGlyZXNfYXQYAyABKAkSDwoHY3VycmVudBgEIAEoCBIXCg9jcmVkZW50aWFsX2tpbmQYBSABKAkiOQoTTGlzdFNlc3Npb25zUmVxdWVzdBIiCgRwYWdlGAEgASgLMhQuZ29sZi52MS5QYWdlUmVxdWVzdCJjChRMaXN0U2Vzc2lvbnNSZXNwb25zZRImCghzZXNzaW9ucxgBIAMoCzIULmdvbGYudjEuU2Vzc2lvbkluZm8SIwoEcGFnZRgCIAEoCzIVLmdvbGYudjEuUGFnZVJlc3BvbnNlIioKFFJldm9rZVNlc3Npb25SZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkiOAoVUmV2b2tlU2Vzc2lvblJlc3BvbnNlEh8KF2N1cnJlbnRfc2Vzc2lvbl9yZXZva2VkGAEgASgIIhwKGlJldm9rZU90aGVyU2Vzc2lvbnNSZXF1ZXN0IjQKG1Jldm9rZU90aGVyU2Vzc2lvbnNSZXNwb25zZRIVCg1yZXZva2VkX2NvdW50GAEgASgEIg8KDUxvZ291dFJlcXVlc3QiEAoOTG9nb3V0UmVzcG9uc2UiPQoXTGlzdFJlcG9zaXRvcmllc1JlcXVlc3QSIgoEcGFnZRgBIAEoCzIULmdvbGYudjEuUGFnZVJlcXVlc3QiagoYTGlzdFJlcG9zaXRvcmllc1Jlc3BvbnNlEikKDHJlcG9zaXRvcmllcxgBIAMoCzITLmdvbGYudjEuUmVwb3NpdG9yeRIjCgRwYWdlGAIgASgLMhUuZ29sZi52MS5QYWdlUmVzcG9uc2UiXgoXQ3JlYXRlUmVwb3NpdG9yeVJlcXVlc3QSDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRIUCgdwcml2YXRlGAMgASgISACIAQFCCgoIX3ByaXZhdGUiQwoYQ3JlYXRlUmVwb3NpdG9yeVJlc3BvbnNlEicKCnJlcG9zaXRvcnkYASABKAsyEy5nb2xmLnYxLlJlcG9zaXRvcnkiQgoUR2V0UmVwb3NpdG9yeVJlcXVlc3QSKgoKcmVwb3NpdG9yeRgBIAEoCzIWLmdvbGYudjEuUmVwb3NpdG9yeUtleSJAChVHZXRSZXBvc2l0b3J5UmVzcG9uc2USJwoKcmVwb3NpdG9yeRgBIAEoCzITLmdvbGYudjEuUmVwb3NpdG9yeSI8CgZCcmFuY2gSDAoEbmFtZRgBIAEoCRIRCgljb21taXRfaWQYAiABKAkSEQoJcHJvdGVjdGVkGAMgASgIImUKE0xpc3RCcmFuY2hlc1JlcXVlc3QSKgoKcmVwb3NpdG9yeRgBIAEoCzIWLmdvbGYudjEuUmVwb3NpdG9yeUtleRIiCgRwYWdlGAIgASgLMhQuZ29sZi52MS5QYWdlUmVxdWVzdCJeChRMaXN0QnJhbmNoZXNSZXNwb25zZRIhCghicmFuY2hlcxgBIAMoCzIPLmdvbGYudjEuQnJhbmNoEiMKBHBhZ2UYAiABKAsyFS5nb2xmLnYxLlBhZ2VSZXNwb25zZSJQCgZDb21taXQSCwoDc2hhGAEgASgJEg8KB21lc3NhZ2UYAiABKAkSEwoLYXV0aG9yX25hbWUYAyABKAkSEwoLYXV0aG9yZWRfYXQYBCABKAkicQoSTGlzdENvbW1pdHNSZXF1ZXN0EioKCnJlcG9zaXRvcnkYASABKAsyFi5nb2xmLnYxLlJlcG9zaXRvcnlLZXkSCwoDcmVmGAIgASgJEiIKBHBhZ2UYAyABKAsyFC5nb2xmLnYxLlBhZ2VSZXF1ZXN0IlwKE0xpc3RDb21taXRzUmVzcG9uc2USIAoHY29tbWl0cxgBIAMoCzIPLmdvbGYudjEuQ29tbWl0EiMKBHBhZ2UYAiABKAsyFS5nb2xmLnYxLlBhZ2VSZXNwb25zZSJsCgtTb3VyY2VFbnRyeRIMCgRuYW1lGAEgASgJEgwKBHBhdGgYAiABKAkSJgoEdHlwZRgDIAEoDjIYLmdvbGYudjEuU291cmNlRW50cnlUeXBlEgsKA3NoYRgEIAEoCRIMCgRzaXplGAUgASgEImsKClNvdXJjZUZpbGUSIwoFZW50cnkYASABKAsyFC5nb2xmLnYxLlNvdXJjZUVudHJ5EhQKB2NvbnRlbnQYAiABKAlIAIgBARIWCg5wcmV2aWV3X3JlYXNvbhgDIAEoCUIKCghfY29udGVudCJbChJHZXRDb250ZW50c1JlcXVlc3QSKgoKcmVwb3NpdG9yeRgBIAEoCzIWLmdvbGYudjEuUmVwb3NpdG9yeUtleRILCgNyZWYYAiABKAkSDAoEcGF0aBgDIAEoCSKoAQoTR2V0Q29udGVudHNSZXNwb25zZRIRCgljb21taXRfaWQYASABKAkSDAoEcGF0aBgCIAEoCRImCgRraW5kGAMgASgOMhguZ29sZi52MS5Tb3VyY2VFbnRyeVR5cGUSJQoHZW50cmllcxgEIAMoCzIULmdvbGYudjEuU291cmNlRW50cnkSIQoEZmlsZRgFIAEoCzITLmdvbGYudjEuU291cmNlRmlsZSLNAQoFSXNzdWUSCgoCaWQYASABKAkSDgoGbnVtYmVyGAIgASgNEg0KBXRpdGxlGAMgASgJEgwKBGJvZHkYBCABKAkSIgoFc3RhdGUYBSABKA4yEy5nb2xmLnYxLklzc3VlU3RhdGUSGwoEdXNlchgGIAEoCzINLmdvbGYudjEuVXNlchIQCghjb21tZW50cxgHIAEoDRISCgpjcmVhdGVkX2F0GAggASgJEhIKCnVwZGF0ZWRfYXQYCSABKAkSEAoIaHRtbF91cmwYCiABKAkihwEKEUxpc3RJc3N1ZXNSZXF1ZXN0EioKCnJlcG9zaXRvcnkYASABKAsyFi5nb2xmLnYxLlJlcG9zaXRvcnlLZXkSIgoFc3RhdGUYAiABKA4yEy5nb2xmLnYxLklzc3VlU3RhdGUSIgoEcGFnZRgDIAEoCzIULmdvbGYudjEuUGFnZVJlcXVlc3QiWQoSTGlzdElzc3Vlc1Jlc3BvbnNlEh4KBmlzc3VlcxgBIAMoCzIOLmdvbGYudjEuSXNzdWUSIwoEcGFnZRgCIAEoCzIVLmdvbGYudjEuUGFnZVJlc3BvbnNlIk0KD0dldElzc3VlUmVxdWVzdBIqCgpyZXBvc2l0b3J5GAEgASgLMhYuZ29sZi52MS5SZXBvc2l0b3J5S2V5Eg4KBm51bWJlchgCIAEoDSIxChBHZXRJc3N1ZVJlc3BvbnNlEh0KBWlzc3VlGAEgASgLMg4uZ29sZi52MS5Jc3N1ZSJgCgpDYXBhYmlsaXR5EgoKAmlkGAEgASgJEg0KBWxhYmVsGAIgASgJEicKBXN0YXRlGAMgASgOMhguZ29sZi52MS5DYXBhYmlsaXR5U3RhdGUSDgoGcmVhc29uGAQgASgJIhkKF0xpc3RDYXBhYmlsaXRpZXNSZXF1ZXN0IkUKGExpc3RDYXBhYmlsaXRpZXNSZXNwb25zZRIpCgxjYXBhYmlsaXRpZXMYASADKAsyEy5nb2xmLnYxLkNhcGFiaWxpdHkiIQofR2V0QXV0aGVudGljYXRpb25PcHRpb25zUmVxdWVzdCJnCiBHZXRBdXRoZW50aWNhdGlvbk9wdGlvbnNSZXNwb25zZRIbChNnaXRlYV9vYXV0aF9lbmFibGVkGAEgASgIEhYKDnByb3ZpZGVyX2xhYmVsGAIgASgJEg4KBnNjb3BlcxgDIAMoCSIYChZCZWdpbkdpdGVhT0F1dGhSZXF1ZXN0IjQKF0JlZ2luR2l0ZWFPQXV0aFJlc3BvbnNlEhkKEWF1dGhvcml6YXRpb25fdXJsGAEgASgJIoUBCgxPcmdhbml6YXRpb24SCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIRCglmdWxsX25hbWUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSMwoKdmlzaWJpbGl0eRgFIAEoDjIfLmdvbGYudjEuT3JnYW5pemF0aW9uVmlzaWJpbGl0eSLZAgoQT3JnYW5pemF0aW9uVGVhbRIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEisKCnBlcm1pc3Npb24YBCABKA4yFy5nb2xmLnYxLlRlYW1QZXJtaXNzaW9uEkgKEHVuaXRfcGVybWlzc2lvbnMYBSADKAsyLi5nb2xmLnYxLk9yZ2FuaXphdGlvblRlYW0uVW5pdFBlcm1pc3Npb25zRW50cnkSIQoZaW5jbHVkZXNfYWxsX3JlcG9zaXRvcmllcxgGIAEoCBIrCgp2aXNpYmlsaXR5GAcgASgOMhcuZ29sZi52MS5UZWFtVmlzaWJpbGl0eRpPChRVbml0UGVybWlzc2lvbnNFbnRyeRILCgNrZXkYASABKAkSJgoFdmFsdWUYAiABKA4yFy5nb2xmLnYxLlRlYW1QZXJtaXNzaW9uOgI4ASI+ChhMaXN0T3JnYW5pemF0aW9uc1JlcXVlc3QSIgoEcGFnZRgBIAEoCzIULmdvbGYudjEuUGFnZVJlcXVlc3QibgoZTGlzdE9yZ2FuaXphdGlvbnNSZXNwb25zZRIsCg1vcmdhbml6YXRpb25zGAEgAygLMhUuZ29sZi52MS5Pcmdhbml6YXRpb24SIwoEcGFnZRgCIAEoCzIVLmdvbGYudjEuUGFnZVJlc3BvbnNlIi4KFkdldE9yZ2FuaXphdGlvblJlcXVlc3QSFAoMb3JnYW5pemF0aW9uGAEgASgJIkYKF0dldE9yZ2FuaXphdGlvblJlc3BvbnNlEisKDG9yZ2FuaXphdGlvbhgBIAEoCzIVLmdvbGYudjEuT3JnYW5pemF0aW9uIkwKEExpc3RUZWFtc1JlcXVlc3QSFAoMb3JnYW5pemF0aW9uGAEgASgJEiIKBHBhZ2UYAiABKAsyFC5nb2xmLnYxLlBhZ2VSZXF1ZXN0ImIKEUxpc3RUZWFtc1Jlc3BvbnNlEigKBXRlYW1zGAEgAygLMhkuZ29sZi52MS5Pcmdhbml6YXRpb25UZWFtEiMKBHBhZ2UYAiABKAsyFS5nb2xmLnYxLlBhZ2VSZXNwb25zZSI3Cg5HZXRUZWFtUmVxdWVzdBIUCgxvcmdhbml6YXRpb24YASABKAkSDwoHdGVhbV9pZBgCIAEoCSI6Cg9HZXRUZWFtUmVzcG9uc2USJwoEdGVhbRgBIAEoCzIZLmdvbGYudjEuT3JnYW5pemF0aW9uVGVhbSJjChZMaXN0VGVhbU1lbWJlcnNSZXF1ZXN0EhQKDG9yZ2FuaXphdGlvbhgBIAEoCRIPCgd0ZWFtX2lkGAIgASgJEiIKBHBhZ2UYAyABKAsyFC5nb2xmLnYxLlBhZ2VSZXF1ZXN0Il4KF0xpc3RUZWFtTWVtYmVyc1Jlc3BvbnNlEh4KB21lbWJlcnMYASADKAsyDS5nb2xmLnYxLlVzZXISIwoEcGFnZRgCIAEoCzIVLmdvbGYudjEuUGFnZVJlc3BvbnNlImgKG0xpc3RUZWFtUmVwb3NpdG9yaWVzUmVxdWVzdBIUCgxvcmdhbml6YXRpb24YASABKAkSDwoHdGVhbV9pZBgCIAEoCRIiCgRwYWdlGAMgASgLMhQuZ29sZi52MS5QYWdlUmVxdWVzdCJuChxMaXN0VGVhbVJlcG9zaXRvcmllc1Jlc3BvbnNlEikKDHJlcG9zaXRvcmllcxgBIAMoCzITLmdvbGYudjEuUmVwb3NpdG9yeRIjCgRwYWdlGAIgASgLMhUuZ29sZi52MS5QYWdlUmVzcG9uc2UqsQEKD1NvdXJjZUVudHJ5VHlwZRIhCh1TT1VSQ0VfRU5UUllfVFlQRV9VTlNQRUNJRklFRBAAEh8KG1NPVVJDRV9FTlRSWV9UWVBFX0RJUkVDVE9SWRABEhoKFlNPVVJDRV9FTlRSWV9UWVBFX0ZJTEUQAhIdChlTT1VSQ0VfRU5UUllfVFlQRV9TWU1MSU5LEAMSHwobU09VUkNFX0VOVFJZX1RZUEVfU1VCTU9EVUxFEAQqbAoKSXNzdWVTdGF0ZRIbChdJU1NVRV9TVEFURV9VTlNQRUNJRklFRBAAEhQKEElTU1VFX1NUQVRFX09QRU4QARIWChJJU1NVRV9TVEFURV9DTE9TRUQQAhITCg9JU1NVRV9TVEFURV9BTEwQAyqwAQoPQ2FwYWJpbGl0eVN0YXRlEiAKHENBUEFCSUxJVFlfU1RBVEVfVU5TUEVDSUZJRUQQABIdChlDQVBBQklMSVRZX1NUQVRFX0RJU0FCTEVEEAESIQodQ0FQQUJJTElUWV9TVEFURV9VTkNPTkZJR1VSRUQQAhIaChZDQVBBQklMSVRZX1NUQVRFX1JFQURZEAMSHQoZQ0FQQUJJTElUWV9TVEFURV9ERUdSQURFRBAEKq8BChZPcmdhbml6YXRpb25WaXNpYmlsaXR5EicKI09SR0FOSVpBVElPTl9WSVNJQklMSVRZX1VOU1BFQ0lGSUVEEAASIgoeT1JHQU5JWkFUSU9OX1ZJU0lCSUxJVFlfUFVCTElDEAESIwofT1JHQU5JWkFUSU9OX1ZJU0lCSUxJVFlfTElNSVRFRBACEiMKH09SR0FOSVpBVElPTl9WSVNJQklMSVRZX1BSSVZBVEUQAyqHAQoOVGVhbVZpc2liaWxpdHkSHwobVEVBTV9WSVNJQklMSVRZX1VOU1BFQ0lGSUVEEAASGgoWVEVBTV9WSVNJQklMSVRZX1BVQkxJQxABEhsKF1RFQU1fVklTSUJJTElUWV9MSU1JVEVEEAISGwoXVEVBTV9WSVNJQklMSVRZX1BSSVZBVEUQAyq2AQoOVGVhbVBlcm1pc3Npb24SHwobVEVBTV9QRVJNSVNTSU9OX1VOU1BFQ0lGSUVEEAASGAoUVEVBTV9QRVJNSVNTSU9OX05PTkUQARIYChRURUFNX1BFUk1JU1NJT05fUkVBRBACEhkKFVRFQU1fUEVSTUlTU0lPTl9XUklURRADEhkKFVRFQU1fUEVSTUlTU0lPTl9BRE1JThAEEhkKFVRFQU1fUEVSTUlTU0lPTl9PV05FUhAFMroFCg5TZXNzaW9uU2VydmljZRJvChhHZXRBdXRoZW50aWNhdGlvbk9wdGlvbnMSKC5nb2xmLnYxLkdldEF1dGhlbnRpY2F0aW9uT3B0aW9uc1JlcXVlc3QaKS5nb2xmLnYxLkdldEF1dGhlbnRpY2F0aW9uT3B0aW9uc1Jlc3BvbnNlElQKD0JlZ2luR2l0ZWFPQXV0aBIfLmdvbGYudjEuQmVnaW5HaXRlYU9BdXRoUmVxdWVzdBogLmdvbGYudjEuQmVnaW5HaXRlYU9BdXRoUmVzcG9uc2USYAoTTG9naW5XaXRoR2l0ZWFUb2tlbhIjLmdvbGYudjEuTG9naW5XaXRoR2l0ZWFUb2tlblJlcXVlc3QaJC5nb2xmLnYxLkxvZ2luV2l0aEdpdGVhVG9rZW5SZXNwb25zZRJFCgpHZXRTZXNzaW9uEhouZ29sZi52MS5HZXRTZXNzaW9uUmVxdWVzdBobLmdvbGYudjEuR2V0U2Vzc2lvblJlc3BvbnNlEksKDExpc3RTZXNzaW9ucxIcLmdvbGYudjEuTGlzdFNlc3Npb25zUmVxdWVzdBodLmdvbGYudjEuTGlzdFNlc3Npb25zUmVzcG9uc2USTgoNUmV2b2tlU2Vzc2lvbhIdLmdvbGYudjEuUmV2b2tlU2Vzc2lvblJlcXVlc3QaHi5nb2xmLnYxLlJldm9rZVNlc3Npb25SZXNwb25zZRJgChNSZXZva2VPdGhlclNlc3Npb25zEiMuZ29sZi52MS5SZXZva2VPdGhlclNlc3Npb25zUmVxdWVzdBokLmdvbGYudjEuUmV2b2tlT3RoZXJTZXNzaW9uc1Jlc3BvbnNlEjkKBkxvZ291dBIWLmdvbGYudjEuTG9nb3V0UmVxdWVzdBoXLmdvbGYudjEuTG9nb3V0UmVzcG9uc2Uy/gQKEVJlcG9zaXRvcnlTZXJ2aWNlElcKEExpc3RSZXBvc2l0b3JpZXMSIC5nb2xmLnYxLkxpc3RSZXBvc2l0b3JpZXNSZXF1ZXN0GiEuZ29sZi52MS5MaXN0UmVwb3NpdG9yaWVzUmVzcG9uc2USVwoQQ3JlYXRlUmVwb3NpdG9yeRIgLmdvbGYudjEuQ3JlYXRlUmVwb3NpdG9yeVJlcXVlc3QaIS5nb2xmLnYxLkNyZWF0ZVJlcG9zaXRvcnlSZXNwb25zZRJOCg1HZXRSZXBvc2l0b3J5Eh0uZ29sZi52MS5HZXRSZXBvc2l0b3J5UmVxdWVzdBoeLmdvbGYudjEuR2V0UmVwb3NpdG9yeVJlc3BvbnNlEksKDExpc3RCcmFuY2hlcxIcLmdvbGYudjEuTGlzdEJyYW5jaGVzUmVxdWVzdBodLmdvbGYudjEuTGlzdEJyYW5jaGVzUmVzcG9uc2USSAoLTGlzdENvbW1pdHMSGy5nb2xmLnYxLkxpc3RDb21taXRzUmVxdWVzdBocLmdvbGYudjEuTGlzdENvbW1pdHNSZXNwb25zZRJICgtHZXRDb250ZW50cxIbLmdvbGYudjEuR2V0Q29udGVudHNSZXF1ZXN0GhwuZ29sZi52MS5HZXRDb250ZW50c1Jlc3BvbnNlEkUKCkxpc3RJc3N1ZXMSGi5nb2xmLnYxLkxpc3RJc3N1ZXNSZXF1ZXN0GhsuZ29sZi52MS5MaXN0SXNzdWVzUmVzcG9uc2USPwoIR2V0SXNzdWUSGC5nb2xmLnYxLkdldElzc3VlUmVxdWVzdBoZLmdvbGYudjEuR2V0SXNzdWVSZXNwb25zZTKEBAoTT3JnYW5pemF0aW9uU2VydmljZRJaChFMaXN0T3JnYW5pemF0aW9ucxIhLmdvbGYudjEuTGlzdE9yZ2FuaXphdGlvbnNSZXF1ZXN0GiIuZ29sZi52MS5MaXN0T3JnYW5pemF0aW9uc1Jlc3BvbnNlElQKD0dldE9yZ2FuaXphdGlvbhIfLmdvbGYudjEuR2V0T3JnYW5pemF0aW9uUmVxdWVzdBogLmdvbGYudjEuR2V0T3JnYW5pemF0aW9uUmVzcG9uc2USQgoJTGlzdFRlYW1zEhkuZ29sZi52MS5MaXN0VGVhbXNSZXF1ZXN0GhouZ29sZi52MS5MaXN0VGVhbXNSZXNwb25zZRI8CgdHZXRUZWFtEhcuZ29sZi52MS5HZXRUZWFtUmVxdWVzdBoYLmdvbGYudjEuR2V0VGVhbVJlc3BvbnNlElQKD0xpc3RUZWFtTWVtYmVycxIfLmdvbGYudjEuTGlzdFRlYW1NZW1iZXJzUmVxdWVzdBogLmdvbGYudjEuTGlzdFRlYW1NZW1iZXJzUmVzcG9uc2USYwoUTGlzdFRlYW1SZXBvc2l0b3JpZXMSJC5nb2xmLnYxLkxpc3RUZWFtUmVwb3NpdG9yaWVzUmVxdWVzdBolLmdvbGYudjEuTGlzdFRlYW1SZXBvc2l0b3JpZXNSZXNwb25zZTJsChFDYXBhYmlsaXR5U2VydmljZRJXChBMaXN0Q2FwYWJpbGl0aWVzEiAuZ29sZi52MS5MaXN0Q2FwYWJpbGl0aWVzUmVxdWVzdBohLmdvbGYudjEuTGlzdENhcGFiaWxpdGllc1Jlc3BvbnNlQjJaMGdpdGh1Yi5jb20vbWp0ZWNoZ3V5L2dvbGYtZ2l0L2dlbi9nb2xmL3YxO2dvbGZ2MWIGcHJvdG8z");
+  fileDesc("ChJnb2xmL3YxL2dvbGYucHJvdG8SB2dvbGYudjEiSAoEVXNlchIKCgJpZBgBIAEoCRINCgVsb2dpbhgCIAEoCRIRCglmdWxsX25hbWUYAyABKAkSEgoKYXZhdGFyX3VybBgEIAEoCSLQAQoKUmVwb3NpdG9yeRIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhEKCWZ1bGxfbmFtZRgDIAEoCRITCgtkZXNjcmlwdGlvbhgEIAEoCRIPCgdwcml2YXRlGAUgASgIEhAKCGh0bWxfdXJsGAYgASgJEhYKDmRlZmF1bHRfYnJhbmNoGAcgASgJEhIKCnVwZGF0ZWRfYXQYCCABKAkSDQoFZW1wdHkYCSABKAgSEQoJY2xvbmVfdXJsGAogASgJEg8KB3NzaF91cmwYCyABKAkiLAoNUmVwb3NpdG9yeUtleRINCgVvd25lchgBIAEoCRIMCgRuYW1lGAIgASgJIioKC1BhZ2VSZXF1ZXN0EgwKBHBhZ2UYASABKA0SDQoFbGltaXQYAiABKA0iIQoMUGFnZVJlc3BvbnNlEhEKCW5leHRfcGFnZRgBIAEoDSIrChpMb2dpbldpdGhHaXRlYVRva2VuUmVxdWVzdBINCgV0b2tlbhgBIAEoCSI6ChtMb2dpbldpdGhHaXRlYVRva2VuUmVzcG9uc2USGwoEdXNlchgBIAEoCzINLmdvbGYudjEuVXNlciITChFHZXRTZXNzaW9uUmVxdWVzdCIxChJHZXRTZXNzaW9uUmVzcG9uc2USGwoEdXNlchgBIAEoCzINLmdvbGYudjEuVXNlciJrCgtTZXNzaW9uSW5mbxIKCgJpZBgBIAEoCRISCgpjcmVhdGVkX2F0GAIgASgJEhIKCmV4cGlyZXNfYXQYAyABKAkSDwoHY3VycmVudBgEIAEoCBIXCg9jcmVkZW50aWFsX2tpbmQYBSABKAkiOQoTTGlzdFNlc3Npb25zUmVxdWVzdBIiCgRwYWdlGAEgASgLMhQuZ29sZi52MS5QYWdlUmVxdWVzdCJjChRMaXN0U2Vzc2lvbnNSZXNwb25zZRImCghzZXNzaW9ucxgBIAMoCzIULmdvbGYudjEuU2Vzc2lvbkluZm8SIwoEcGFnZRgCIAEoCzIVLmdvbGYudjEuUGFnZVJlc3BvbnNlIioKFFJldm9rZVNlc3Npb25SZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkiOAoVUmV2b2tlU2Vzc2lvblJlc3BvbnNlEh8KF2N1cnJlbnRfc2Vzc2lvbl9yZXZva2VkGAEgASgIIhwKGlJldm9rZU90aGVyU2Vzc2lvbnNSZXF1ZXN0IjQKG1Jldm9rZU90aGVyU2Vzc2lvbnNSZXNwb25zZRIVCg1yZXZva2VkX2NvdW50GAEgASgEIg8KDUxvZ291dFJlcXVlc3QiEAoOTG9nb3V0UmVzcG9uc2UiPQoXTGlzdFJlcG9zaXRvcmllc1JlcXVlc3QSIgoEcGFnZRgBIAEoCzIULmdvbGYudjEuUGFnZVJlcXVlc3QiagoYTGlzdFJlcG9zaXRvcmllc1Jlc3BvbnNlEikKDHJlcG9zaXRvcmllcxgBIAMoCzITLmdvbGYudjEuUmVwb3NpdG9yeRIjCgRwYWdlGAIgASgLMhUuZ29sZi52MS5QYWdlUmVzcG9uc2UiXgoXQ3JlYXRlUmVwb3NpdG9yeVJlcXVlc3QSDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRIUCgdwcml2YXRlGAMgASgISACIAQFCCgoIX3ByaXZhdGUiQwoYQ3JlYXRlUmVwb3NpdG9yeVJlc3BvbnNlEicKCnJlcG9zaXRvcnkYASABKAsyEy5nb2xmLnYxLlJlcG9zaXRvcnkiQgoUR2V0UmVwb3NpdG9yeVJlcXVlc3QSKgoKcmVwb3NpdG9yeRgBIAEoCzIWLmdvbGYudjEuUmVwb3NpdG9yeUtleSJAChVHZXRSZXBvc2l0b3J5UmVzcG9uc2USJwoKcmVwb3NpdG9yeRgBIAEoCzITLmdvbGYudjEuUmVwb3NpdG9yeSI8CgZCcmFuY2gSDAoEbmFtZRgBIAEoCRIRCgljb21taXRfaWQYAiABKAkSEQoJcHJvdGVjdGVkGAMgASgIImUKE0xpc3RCcmFuY2hlc1JlcXVlc3QSKgoKcmVwb3NpdG9yeRgBIAEoCzIWLmdvbGYudjEuUmVwb3NpdG9yeUtleRIiCgRwYWdlGAIgASgLMhQuZ29sZi52MS5QYWdlUmVxdWVzdCJeChRMaXN0QnJhbmNoZXNSZXNwb25zZRIhCghicmFuY2hlcxgBIAMoCzIPLmdvbGYudjEuQnJhbmNoEiMKBHBhZ2UYAiABKAsyFS5nb2xmLnYxLlBhZ2VSZXNwb25zZSJQCgZDb21taXQSCwoDc2hhGAEgASgJEg8KB21lc3NhZ2UYAiABKAkSEwoLYXV0aG9yX25hbWUYAyABKAkSEwoLYXV0aG9yZWRfYXQYBCABKAkicQoSTGlzdENvbW1pdHNSZXF1ZXN0EioKCnJlcG9zaXRvcnkYASABKAsyFi5nb2xmLnYxLlJlcG9zaXRvcnlLZXkSCwoDcmVmGAIgASgJEiIKBHBhZ2UYAyABKAsyFC5nb2xmLnYxLlBhZ2VSZXF1ZXN0IlwKE0xpc3RDb21taXRzUmVzcG9uc2USIAoHY29tbWl0cxgBIAMoCzIPLmdvbGYudjEuQ29tbWl0EiMKBHBhZ2UYAiABKAsyFS5nb2xmLnYxLlBhZ2VSZXNwb25zZSJsCgtTb3VyY2VFbnRyeRIMCgRuYW1lGAEgASgJEgwKBHBhdGgYAiABKAkSJgoEdHlwZRgDIAEoDjIYLmdvbGYudjEuU291cmNlRW50cnlUeXBlEgsKA3NoYRgEIAEoCRIMCgRzaXplGAUgASgEImsKClNvdXJjZUZpbGUSIwoFZW50cnkYASABKAsyFC5nb2xmLnYxLlNvdXJjZUVudHJ5EhQKB2NvbnRlbnQYAiABKAlIAIgBARIWCg5wcmV2aWV3X3JlYXNvbhgDIAEoCUIKCghfY29udGVudCJbChJHZXRDb250ZW50c1JlcXVlc3QSKgoKcmVwb3NpdG9yeRgBIAEoCzIWLmdvbGYudjEuUmVwb3NpdG9yeUtleRILCgNyZWYYAiABKAkSDAoEcGF0aBgDIAEoCSKoAQoTR2V0Q29udGVudHNSZXNwb25zZRIRCgljb21taXRfaWQYASABKAkSDAoEcGF0aBgCIAEoCRImCgRraW5kGAMgASgOMhguZ29sZi52MS5Tb3VyY2VFbnRyeVR5cGUSJQoHZW50cmllcxgEIAMoCzIULmdvbGYudjEuU291cmNlRW50cnkSIQoEZmlsZRgFIAEoCzITLmdvbGYudjEuU291cmNlRmlsZSLNAQoFSXNzdWUSCgoCaWQYASABKAkSDgoGbnVtYmVyGAIgASgNEg0KBXRpdGxlGAMgASgJEgwKBGJvZHkYBCABKAkSIgoFc3RhdGUYBSABKA4yEy5nb2xmLnYxLklzc3VlU3RhdGUSGwoEdXNlchgGIAEoCzINLmdvbGYudjEuVXNlchIQCghjb21tZW50cxgHIAEoDRISCgpjcmVhdGVkX2F0GAggASgJEhIKCnVwZGF0ZWRfYXQYCSABKAkSEAoIaHRtbF91cmwYCiABKAkihwEKEUxpc3RJc3N1ZXNSZXF1ZXN0EioKCnJlcG9zaXRvcnkYASABKAsyFi5nb2xmLnYxLlJlcG9zaXRvcnlLZXkSIgoFc3RhdGUYAiABKA4yEy5nb2xmLnYxLklzc3VlU3RhdGUSIgoEcGFnZRgDIAEoCzIULmdvbGYudjEuUGFnZVJlcXVlc3QiWQoSTGlzdElzc3Vlc1Jlc3BvbnNlEh4KBmlzc3VlcxgBIAMoCzIOLmdvbGYudjEuSXNzdWUSIwoEcGFnZRgCIAEoCzIVLmdvbGYudjEuUGFnZVJlc3BvbnNlIk0KD0dldElzc3VlUmVxdWVzdBIqCgpyZXBvc2l0b3J5GAEgASgLMhYuZ29sZi52MS5SZXBvc2l0b3J5S2V5Eg4KBm51bWJlchgCIAEoDSIxChBHZXRJc3N1ZVJlc3BvbnNlEh0KBWlzc3VlGAEgASgLMg4uZ29sZi52MS5Jc3N1ZSJxCg5QdWxsUmVxdWVzdFJlZhIVCg1yZXBvc2l0b3J5X2lkGAEgASgJEg0KBWxhYmVsGAIgASgJEgsKA3JlZhgDIAEoCRIRCgljb21taXRfaWQYBCABKAkSGQoRcmV0YWluZWRfc25hcHNob3QYBSABKAgi2gIKC1B1bGxSZXF1ZXN0EgoKAmlkGAEgASgJEg4KBm51bWJlchgCIAEoDRINCgV0aXRsZRgDIAEoCRIMCgRib2R5GAQgASgJEiIKBXN0YXRlGAUgASgOMhMuZ29sZi52MS5Jc3N1ZVN0YXRlEhsKBHVzZXIYBiABKAsyDS5nb2xmLnYxLlVzZXISEgoKY3JlYXRlZF9hdBgHIAEoCRISCgp1cGRhdGVkX2F0GAggASgJEhAKCGh0bWxfdXJsGAkgASgJEg0KBWRyYWZ0GAogASgIEg4KBm1lcmdlZBgLIAEoCBIRCgltZXJnZWRfYXQYDCABKAkSFwoPbWVyZ2VfY29tbWl0X2lkGA0gASgJEiUKBGhlYWQYDiABKAsyFy5nb2xmLnYxLlB1bGxSZXF1ZXN0UmVmEiUKBGJhc2UYDyABKAsyFy5nb2xmLnYxLlB1bGxSZXF1ZXN0UmVmIo0BChdMaXN0UHVsbFJlcXVlc3RzUmVxdWVzdBIqCgpyZXBvc2l0b3J5GAEgASgLMhYuZ29sZi52MS5SZXBvc2l0b3J5S2V5EiIKBXN0YXRlGAIgASgOMhMuZ29sZi52MS5Jc3N1ZVN0YXRlEiIKBHBhZ2UYAyABKAsyFC5nb2xmLnYxLlBhZ2VSZXF1ZXN0ImwKGExpc3RQdWxsUmVxdWVzdHNSZXNwb25zZRIrCg1wdWxsX3JlcXVlc3RzGAEgAygLMhQuZ29sZi52MS5QdWxsUmVxdWVzdBIjCgRwYWdlGAIgASgLMhUuZ29sZi52MS5QYWdlUmVzcG9uc2UiUwoVR2V0UHVsbFJlcXVlc3RSZXF1ZXN0EioKCnJlcG9zaXRvcnkYASABKAsyFi5nb2xmLnYxLlJlcG9zaXRvcnlLZXkSDgoGbnVtYmVyGAIgASgNIkQKFkdldFB1bGxSZXF1ZXN0UmVzcG9uc2USKgoMcHVsbF9yZXF1ZXN0GAEgASgLMhQuZ29sZi52MS5QdWxsUmVxdWVzdCL9AQoRUHVsbFJlcXVlc3RSZXZpZXcSCgoCaWQYASABKAkSGwoEdXNlchgCIAEoCzINLmdvbGYudjEuVXNlchIMCgRib2R5GAMgASgJEi4KBXN0YXRlGAQgASgOMh8uZ29sZi52MS5QdWxsUmVxdWVzdFJldmlld1N0YXRlEhEKCWNvbW1pdF9pZBgFIAEoCRINCgVzdGFsZRgGIAEoCBIRCglkaXNtaXNzZWQYByABKAgSEAoIb2ZmaWNpYWwYCCABKAgSFAoMc3VibWl0dGVkX2F0GAkgASgJEhIKCnVwZGF0ZWRfYXQYCiABKAkSEAoIaHRtbF91cmwYCyABKAkifwodTGlzdFB1bGxSZXF1ZXN0UmV2aWV3c1JlcXVlc3QSKgoKcmVwb3NpdG9yeRgBIAEoCzIWLmdvbGYudjEuUmVwb3NpdG9yeUtleRIOCgZudW1iZXIYAiABKA0SIgoEcGFnZRgDIAEoCzIULmdvbGYudjEuUGFnZVJlcXVlc3QicgoeTGlzdFB1bGxSZXF1ZXN0UmV2aWV3c1Jlc3BvbnNlEisKB3Jldmlld3MYASADKAsyGi5nb2xmLnYxLlB1bGxSZXF1ZXN0UmV2aWV3EiMKBHBhZ2UYAiABKAsyFS5nb2xmLnYxLlBhZ2VSZXNwb25zZSJgCgpDYXBhYmlsaXR5EgoKAmlkGAEgASgJEg0KBWxhYmVsGAIgASgJEicKBXN0YXRlGAMgASgOMhguZ29sZi52MS5DYXBhYmlsaXR5U3RhdGUSDgoGcmVhc29uGAQgASgJIhkKF0xpc3RDYXBhYmlsaXRpZXNSZXF1ZXN0IkUKGExpc3RDYXBhYmlsaXRpZXNSZXNwb25zZRIpCgxjYXBhYmlsaXRpZXMYASADKAsyEy5nb2xmLnYxLkNhcGFiaWxpdHkiIQofR2V0QXV0aGVudGljYXRpb25PcHRpb25zUmVxdWVzdCJnCiBHZXRBdXRoZW50aWNhdGlvbk9wdGlvbnNSZXNwb25zZRIbChNnaXRlYV9vYXV0aF9lbmFibGVkGAEgASgIEhYKDnByb3ZpZGVyX2xhYmVsGAIgASgJEg4KBnNjb3BlcxgDIAMoCSIYChZCZWdpbkdpdGVhT0F1dGhSZXF1ZXN0IjQKF0JlZ2luR2l0ZWFPQXV0aFJlc3BvbnNlEhkKEWF1dGhvcml6YXRpb25fdXJsGAEgASgJIoUBCgxPcmdhbml6YXRpb24SCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIRCglmdWxsX25hbWUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSMwoKdmlzaWJpbGl0eRgFIAEoDjIfLmdvbGYudjEuT3JnYW5pemF0aW9uVmlzaWJpbGl0eSLZAgoQT3JnYW5pemF0aW9uVGVhbRIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEisKCnBlcm1pc3Npb24YBCABKA4yFy5nb2xmLnYxLlRlYW1QZXJtaXNzaW9uEkgKEHVuaXRfcGVybWlzc2lvbnMYBSADKAsyLi5nb2xmLnYxLk9yZ2FuaXphdGlvblRlYW0uVW5pdFBlcm1pc3Npb25zRW50cnkSIQoZaW5jbHVkZXNfYWxsX3JlcG9zaXRvcmllcxgGIAEoCBIrCgp2aXNpYmlsaXR5GAcgASgOMhcuZ29sZi52MS5UZWFtVmlzaWJpbGl0eRpPChRVbml0UGVybWlzc2lvbnNFbnRyeRILCgNrZXkYASABKAkSJgoFdmFsdWUYAiABKA4yFy5nb2xmLnYxLlRlYW1QZXJtaXNzaW9uOgI4ASI+ChhMaXN0T3JnYW5pemF0aW9uc1JlcXVlc3QSIgoEcGFnZRgBIAEoCzIULmdvbGYudjEuUGFnZVJlcXVlc3QibgoZTGlzdE9yZ2FuaXphdGlvbnNSZXNwb25zZRIsCg1vcmdhbml6YXRpb25zGAEgAygLMhUuZ29sZi52MS5Pcmdhbml6YXRpb24SIwoEcGFnZRgCIAEoCzIVLmdvbGYudjEuUGFnZVJlc3BvbnNlIi4KFkdldE9yZ2FuaXphdGlvblJlcXVlc3QSFAoMb3JnYW5pemF0aW9uGAEgASgJIkYKF0dldE9yZ2FuaXphdGlvblJlc3BvbnNlEisKDG9yZ2FuaXphdGlvbhgBIAEoCzIVLmdvbGYudjEuT3JnYW5pemF0aW9uIkwKEExpc3RUZWFtc1JlcXVlc3QSFAoMb3JnYW5pemF0aW9uGAEgASgJEiIKBHBhZ2UYAiABKAsyFC5nb2xmLnYxLlBhZ2VSZXF1ZXN0ImIKEUxpc3RUZWFtc1Jlc3BvbnNlEigKBXRlYW1zGAEgAygLMhkuZ29sZi52MS5Pcmdhbml6YXRpb25UZWFtEiMKBHBhZ2UYAiABKAsyFS5nb2xmLnYxLlBhZ2VSZXNwb25zZSI3Cg5HZXRUZWFtUmVxdWVzdBIUCgxvcmdhbml6YXRpb24YASABKAkSDwoHdGVhbV9pZBgCIAEoCSI6Cg9HZXRUZWFtUmVzcG9uc2USJwoEdGVhbRgBIAEoCzIZLmdvbGYudjEuT3JnYW5pemF0aW9uVGVhbSJjChZMaXN0VGVhbU1lbWJlcnNSZXF1ZXN0EhQKDG9yZ2FuaXphdGlvbhgBIAEoCRIPCgd0ZWFtX2lkGAIgASgJEiIKBHBhZ2UYAyABKAsyFC5nb2xmLnYxLlBhZ2VSZXF1ZXN0Il4KF0xpc3RUZWFtTWVtYmVyc1Jlc3BvbnNlEh4KB21lbWJlcnMYASADKAsyDS5nb2xmLnYxLlVzZXISIwoEcGFnZRgCIAEoCzIVLmdvbGYudjEuUGFnZVJlc3BvbnNlImgKG0xpc3RUZWFtUmVwb3NpdG9yaWVzUmVxdWVzdBIUCgxvcmdhbml6YXRpb24YASABKAkSDwoHdGVhbV9pZBgCIAEoCRIiCgRwYWdlGAMgASgLMhQuZ29sZi52MS5QYWdlUmVxdWVzdCJuChxMaXN0VGVhbVJlcG9zaXRvcmllc1Jlc3BvbnNlEikKDHJlcG9zaXRvcmllcxgBIAMoCzITLmdvbGYudjEuUmVwb3NpdG9yeRIjCgRwYWdlGAIgASgLMhUuZ29sZi52MS5QYWdlUmVzcG9uc2UqsQEKD1NvdXJjZUVudHJ5VHlwZRIhCh1TT1VSQ0VfRU5UUllfVFlQRV9VTlNQRUNJRklFRBAAEh8KG1NPVVJDRV9FTlRSWV9UWVBFX0RJUkVDVE9SWRABEhoKFlNPVVJDRV9FTlRSWV9UWVBFX0ZJTEUQAhIdChlTT1VSQ0VfRU5UUllfVFlQRV9TWU1MSU5LEAMSHwobU09VUkNFX0VOVFJZX1RZUEVfU1VCTU9EVUxFEAQqbAoKSXNzdWVTdGF0ZRIbChdJU1NVRV9TVEFURV9VTlNQRUNJRklFRBAAEhQKEElTU1VFX1NUQVRFX09QRU4QARIWChJJU1NVRV9TVEFURV9DTE9TRUQQAhITCg9JU1NVRV9TVEFURV9BTEwQAyqWAgoWUHVsbFJlcXVlc3RSZXZpZXdTdGF0ZRIpCiVQVUxMX1JFUVVFU1RfUkVWSUVXX1NUQVRFX1VOU1BFQ0lGSUVEEAASJgoiUFVMTF9SRVFVRVNUX1JFVklFV19TVEFURV9BUFBST1ZFRBABEiUKIVBVTExfUkVRVUVTVF9SRVZJRVdfU1RBVEVfUEVORElORxACEiUKIVBVTExfUkVRVUVTVF9SRVZJRVdfU1RBVEVfQ09NTUVOVBADEi0KKVBVTExfUkVRVUVTVF9SRVZJRVdfU1RBVEVfUkVRVUVTVF9DSEFOR0VTEAQSLAooUFVMTF9SRVFVRVNUX1JFVklFV19TVEFURV9SRVFVRVNUX1JFVklFVxAFKrABCg9DYXBhYmlsaXR5U3RhdGUSIAocQ0FQQUJJTElUWV9TVEFURV9VTlNQRUNJRklFRBAAEh0KGUNBUEFCSUxJVFlfU1RBVEVfRElTQUJMRUQQARIhCh1DQVBBQklMSVRZX1NUQVRFX1VOQ09ORklHVVJFRBACEhoKFkNBUEFCSUxJVFlfU1RBVEVfUkVBRFkQAxIdChlDQVBBQklMSVRZX1NUQVRFX0RFR1JBREVEEAQqrwEKFk9yZ2FuaXphdGlvblZpc2liaWxpdHkSJwojT1JHQU5JWkFUSU9OX1ZJU0lCSUxJVFlfVU5TUEVDSUZJRUQQABIiCh5PUkdBTklaQVRJT05fVklTSUJJTElUWV9QVUJMSUMQARIjCh9PUkdBTklaQVRJT05fVklTSUJJTElUWV9MSU1JVEVEEAISIwofT1JHQU5JWkFUSU9OX1ZJU0lCSUxJVFlfUFJJVkFURRADKocBCg5UZWFtVmlzaWJpbGl0eRIfChtURUFNX1ZJU0lCSUxJVFlfVU5TUEVDSUZJRUQQABIaChZURUFNX1ZJU0lCSUxJVFlfUFVCTElDEAESGwoXVEVBTV9WSVNJQklMSVRZX0xJTUlURUQQAhIbChdURUFNX1ZJU0lCSUxJVFlfUFJJVkFURRADKrYBCg5UZWFtUGVybWlzc2lvbhIfChtURUFNX1BFUk1JU1NJT05fVU5TUEVDSUZJRUQQABIYChRURUFNX1BFUk1JU1NJT05fTk9ORRABEhgKFFRFQU1fUEVSTUlTU0lPTl9SRUFEEAISGQoVVEVBTV9QRVJNSVNTSU9OX1dSSVRFEAMSGQoVVEVBTV9QRVJNSVNTSU9OX0FETUlOEAQSGQoVVEVBTV9QRVJNSVNTSU9OX09XTkVSEAUyugUKDlNlc3Npb25TZXJ2aWNlEm8KGEdldEF1dGhlbnRpY2F0aW9uT3B0aW9ucxIoLmdvbGYudjEuR2V0QXV0aGVudGljYXRpb25PcHRpb25zUmVxdWVzdBopLmdvbGYudjEuR2V0QXV0aGVudGljYXRpb25PcHRpb25zUmVzcG9uc2USVAoPQmVnaW5HaXRlYU9BdXRoEh8uZ29sZi52MS5CZWdpbkdpdGVhT0F1dGhSZXF1ZXN0GiAuZ29sZi52MS5CZWdpbkdpdGVhT0F1dGhSZXNwb25zZRJgChNMb2dpbldpdGhHaXRlYVRva2VuEiMuZ29sZi52MS5Mb2dpbldpdGhHaXRlYVRva2VuUmVxdWVzdBokLmdvbGYudjEuTG9naW5XaXRoR2l0ZWFUb2tlblJlc3BvbnNlEkUKCkdldFNlc3Npb24SGi5nb2xmLnYxLkdldFNlc3Npb25SZXF1ZXN0GhsuZ29sZi52MS5HZXRTZXNzaW9uUmVzcG9uc2USSwoMTGlzdFNlc3Npb25zEhwuZ29sZi52MS5MaXN0U2Vzc2lvbnNSZXF1ZXN0Gh0uZ29sZi52MS5MaXN0U2Vzc2lvbnNSZXNwb25zZRJOCg1SZXZva2VTZXNzaW9uEh0uZ29sZi52MS5SZXZva2VTZXNzaW9uUmVxdWVzdBoeLmdvbGYudjEuUmV2b2tlU2Vzc2lvblJlc3BvbnNlEmAKE1Jldm9rZU90aGVyU2Vzc2lvbnMSIy5nb2xmLnYxLlJldm9rZU90aGVyU2Vzc2lvbnNSZXF1ZXN0GiQuZ29sZi52MS5SZXZva2VPdGhlclNlc3Npb25zUmVzcG9uc2USOQoGTG9nb3V0EhYuZ29sZi52MS5Mb2dvdXRSZXF1ZXN0GhcuZ29sZi52MS5Mb2dvdXRSZXNwb25zZTKVBwoRUmVwb3NpdG9yeVNlcnZpY2USVwoQTGlzdFJlcG9zaXRvcmllcxIgLmdvbGYudjEuTGlzdFJlcG9zaXRvcmllc1JlcXVlc3QaIS5nb2xmLnYxLkxpc3RSZXBvc2l0b3JpZXNSZXNwb25zZRJXChBDcmVhdGVSZXBvc2l0b3J5EiAuZ29sZi52MS5DcmVhdGVSZXBvc2l0b3J5UmVxdWVzdBohLmdvbGYudjEuQ3JlYXRlUmVwb3NpdG9yeVJlc3BvbnNlEk4KDUdldFJlcG9zaXRvcnkSHS5nb2xmLnYxLkdldFJlcG9zaXRvcnlSZXF1ZXN0Gh4uZ29sZi52MS5HZXRSZXBvc2l0b3J5UmVzcG9uc2USSwoMTGlzdEJyYW5jaGVzEhwuZ29sZi52MS5MaXN0QnJhbmNoZXNSZXF1ZXN0Gh0uZ29sZi52MS5MaXN0QnJhbmNoZXNSZXNwb25zZRJICgtMaXN0Q29tbWl0cxIbLmdvbGYudjEuTGlzdENvbW1pdHNSZXF1ZXN0GhwuZ29sZi52MS5MaXN0Q29tbWl0c1Jlc3BvbnNlEkgKC0dldENvbnRlbnRzEhsuZ29sZi52MS5HZXRDb250ZW50c1JlcXVlc3QaHC5nb2xmLnYxLkdldENvbnRlbnRzUmVzcG9uc2USRQoKTGlzdElzc3VlcxIaLmdvbGYudjEuTGlzdElzc3Vlc1JlcXVlc3QaGy5nb2xmLnYxLkxpc3RJc3N1ZXNSZXNwb25zZRI/CghHZXRJc3N1ZRIYLmdvbGYudjEuR2V0SXNzdWVSZXF1ZXN0GhkuZ29sZi52MS5HZXRJc3N1ZVJlc3BvbnNlElcKEExpc3RQdWxsUmVxdWVzdHMSIC5nb2xmLnYxLkxpc3RQdWxsUmVxdWVzdHNSZXF1ZXN0GiEuZ29sZi52MS5MaXN0UHVsbFJlcXVlc3RzUmVzcG9uc2USUQoOR2V0UHVsbFJlcXVlc3QSHi5nb2xmLnYxLkdldFB1bGxSZXF1ZXN0UmVxdWVzdBofLmdvbGYudjEuR2V0UHVsbFJlcXVlc3RSZXNwb25zZRJpChZMaXN0UHVsbFJlcXVlc3RSZXZpZXdzEiYuZ29sZi52MS5MaXN0UHVsbFJlcXVlc3RSZXZpZXdzUmVxdWVzdBonLmdvbGYudjEuTGlzdFB1bGxSZXF1ZXN0UmV2aWV3c1Jlc3BvbnNlMoQEChNPcmdhbml6YXRpb25TZXJ2aWNlEloKEUxpc3RPcmdhbml6YXRpb25zEiEuZ29sZi52MS5MaXN0T3JnYW5pemF0aW9uc1JlcXVlc3QaIi5nb2xmLnYxLkxpc3RPcmdhbml6YXRpb25zUmVzcG9uc2USVAoPR2V0T3JnYW5pemF0aW9uEh8uZ29sZi52MS5HZXRPcmdhbml6YXRpb25SZXF1ZXN0GiAuZ29sZi52MS5HZXRPcmdhbml6YXRpb25SZXNwb25zZRJCCglMaXN0VGVhbXMSGS5nb2xmLnYxLkxpc3RUZWFtc1JlcXVlc3QaGi5nb2xmLnYxLkxpc3RUZWFtc1Jlc3BvbnNlEjwKB0dldFRlYW0SFy5nb2xmLnYxLkdldFRlYW1SZXF1ZXN0GhguZ29sZi52MS5HZXRUZWFtUmVzcG9uc2USVAoPTGlzdFRlYW1NZW1iZXJzEh8uZ29sZi52MS5MaXN0VGVhbU1lbWJlcnNSZXF1ZXN0GiAuZ29sZi52MS5MaXN0VGVhbU1lbWJlcnNSZXNwb25zZRJjChRMaXN0VGVhbVJlcG9zaXRvcmllcxIkLmdvbGYudjEuTGlzdFRlYW1SZXBvc2l0b3JpZXNSZXF1ZXN0GiUuZ29sZi52MS5MaXN0VGVhbVJlcG9zaXRvcmllc1Jlc3BvbnNlMmwKEUNhcGFiaWxpdHlTZXJ2aWNlElcKEExpc3RDYXBhYmlsaXRpZXMSIC5nb2xmLnYxLkxpc3RDYXBhYmlsaXRpZXNSZXF1ZXN0GiEuZ29sZi52MS5MaXN0Q2FwYWJpbGl0aWVzUmVzcG9uc2VCMlowZ2l0aHViLmNvbS9tanRlY2hndXkvZ29sZi1naXQvZ2VuL2dvbGYvdjE7Z29sZnYxYgZwcm90bzM");
 
 /**
  * @generated from message golf.v1.User
@@ -970,6 +970,353 @@ export const GetIssueResponseSchema: GenMessage<GetIssueResponse> = /*@__PURE__*
   messageDesc(file_golf_v1_golf, 38);
 
 /**
+ * Native provider observations, never Golf merge eligibility or a freshness proof.
+ *
+ * @generated from message golf.v1.PullRequestRef
+ */
+export type PullRequestRef = Message<"golf.v1.PullRequestRef"> & {
+  /**
+   * Empty when the source repository was deleted or is unavailable.
+   *
+   * @generated from field: string repository_id = 1;
+   */
+  repositoryId: string;
+
+  /**
+   * @generated from field: string label = 2;
+   */
+  label: string;
+
+  /**
+   * @generated from field: string ref = 3;
+   */
+  ref: string;
+
+  /**
+   * May be empty when the provider cannot resolve the reference.
+   *
+   * @generated from field: string commit_id = 4;
+   */
+  commitId: string;
+
+  /**
+   * True for list heads (provider retained PR snapshot) and detail retained refs.
+   * False does not establish a live source read or any atomic freshness claim.
+   *
+   * @generated from field: bool retained_snapshot = 5;
+   */
+  retainedSnapshot: boolean;
+};
+
+/**
+ * Describes the message golf.v1.PullRequestRef.
+ * Use `create(PullRequestRefSchema)` to create a new message.
+ */
+export const PullRequestRefSchema: GenMessage<PullRequestRef> = /*@__PURE__*/
+  messageDesc(file_golf_v1_golf, 39);
+
+/**
+ * @generated from message golf.v1.PullRequest
+ */
+export type PullRequest = Message<"golf.v1.PullRequest"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: uint32 number = 2;
+   */
+  number: number;
+
+  /**
+   * @generated from field: string title = 3;
+   */
+  title: string;
+
+  /**
+   * @generated from field: string body = 4;
+   */
+  body: string;
+
+  /**
+   * @generated from field: golf.v1.IssueState state = 5;
+   */
+  state: IssueState;
+
+  /**
+   * Absent for a deleted or unavailable provider author.
+   *
+   * @generated from field: golf.v1.User user = 6;
+   */
+  user?: User | undefined;
+
+  /**
+   * @generated from field: string created_at = 7;
+   */
+  createdAt: string;
+
+  /**
+   * @generated from field: string updated_at = 8;
+   */
+  updatedAt: string;
+
+  /**
+   * @generated from field: string html_url = 9;
+   */
+  htmlUrl: string;
+
+  /**
+   * @generated from field: bool draft = 10;
+   */
+  draft: boolean;
+
+  /**
+   * @generated from field: bool merged = 11;
+   */
+  merged: boolean;
+
+  /**
+   * @generated from field: string merged_at = 12;
+   */
+  mergedAt: string;
+
+  /**
+   * @generated from field: string merge_commit_id = 13;
+   */
+  mergeCommitId: string;
+
+  /**
+   * @generated from field: golf.v1.PullRequestRef head = 14;
+   */
+  head?: PullRequestRef | undefined;
+
+  /**
+   * @generated from field: golf.v1.PullRequestRef base = 15;
+   */
+  base?: PullRequestRef | undefined;
+};
+
+/**
+ * Describes the message golf.v1.PullRequest.
+ * Use `create(PullRequestSchema)` to create a new message.
+ */
+export const PullRequestSchema: GenMessage<PullRequest> = /*@__PURE__*/
+  messageDesc(file_golf_v1_golf, 40);
+
+/**
+ * @generated from message golf.v1.ListPullRequestsRequest
+ */
+export type ListPullRequestsRequest = Message<"golf.v1.ListPullRequestsRequest"> & {
+  /**
+   * @generated from field: golf.v1.RepositoryKey repository = 1;
+   */
+  repository?: RepositoryKey | undefined;
+
+  /**
+   * Unspecified defaults to open; ALL includes merged and unmerged closed PRs.
+   *
+   * @generated from field: golf.v1.IssueState state = 2;
+   */
+  state: IssueState;
+
+  /**
+   * @generated from field: golf.v1.PageRequest page = 3;
+   */
+  page?: PageRequest | undefined;
+};
+
+/**
+ * Describes the message golf.v1.ListPullRequestsRequest.
+ * Use `create(ListPullRequestsRequestSchema)` to create a new message.
+ */
+export const ListPullRequestsRequestSchema: GenMessage<ListPullRequestsRequest> = /*@__PURE__*/
+  messageDesc(file_golf_v1_golf, 41);
+
+/**
+ * @generated from message golf.v1.ListPullRequestsResponse
+ */
+export type ListPullRequestsResponse = Message<"golf.v1.ListPullRequestsResponse"> & {
+  /**
+   * @generated from field: repeated golf.v1.PullRequest pull_requests = 1;
+   */
+  pullRequests: PullRequest[];
+
+  /**
+   * @generated from field: golf.v1.PageResponse page = 2;
+   */
+  page?: PageResponse | undefined;
+};
+
+/**
+ * Describes the message golf.v1.ListPullRequestsResponse.
+ * Use `create(ListPullRequestsResponseSchema)` to create a new message.
+ */
+export const ListPullRequestsResponseSchema: GenMessage<ListPullRequestsResponse> = /*@__PURE__*/
+  messageDesc(file_golf_v1_golf, 42);
+
+/**
+ * @generated from message golf.v1.GetPullRequestRequest
+ */
+export type GetPullRequestRequest = Message<"golf.v1.GetPullRequestRequest"> & {
+  /**
+   * @generated from field: golf.v1.RepositoryKey repository = 1;
+   */
+  repository?: RepositoryKey | undefined;
+
+  /**
+   * @generated from field: uint32 number = 2;
+   */
+  number: number;
+};
+
+/**
+ * Describes the message golf.v1.GetPullRequestRequest.
+ * Use `create(GetPullRequestRequestSchema)` to create a new message.
+ */
+export const GetPullRequestRequestSchema: GenMessage<GetPullRequestRequest> = /*@__PURE__*/
+  messageDesc(file_golf_v1_golf, 43);
+
+/**
+ * @generated from message golf.v1.GetPullRequestResponse
+ */
+export type GetPullRequestResponse = Message<"golf.v1.GetPullRequestResponse"> & {
+  /**
+   * @generated from field: golf.v1.PullRequest pull_request = 1;
+   */
+  pullRequest?: PullRequest | undefined;
+};
+
+/**
+ * Describes the message golf.v1.GetPullRequestResponse.
+ * Use `create(GetPullRequestResponseSchema)` to create a new message.
+ */
+export const GetPullRequestResponseSchema: GenMessage<GetPullRequestResponse> = /*@__PURE__*/
+  messageDesc(file_golf_v1_golf, 44);
+
+/**
+ * @generated from message golf.v1.PullRequestReview
+ */
+export type PullRequestReview = Message<"golf.v1.PullRequestReview"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * Absent for a deleted/unavailable author or a native team review request.
+   *
+   * @generated from field: golf.v1.User user = 2;
+   */
+  user?: User | undefined;
+
+  /**
+   * @generated from field: string body = 3;
+   */
+  body: string;
+
+  /**
+   * @generated from field: golf.v1.PullRequestReviewState state = 4;
+   */
+  state: PullRequestReviewState;
+
+  /**
+   * @generated from field: string commit_id = 5;
+   */
+  commitId: string;
+
+  /**
+   * Native flags only; these do not determine an eligible Golf approval.
+   *
+   * @generated from field: bool stale = 6;
+   */
+  stale: boolean;
+
+  /**
+   * @generated from field: bool dismissed = 7;
+   */
+  dismissed: boolean;
+
+  /**
+   * @generated from field: bool official = 8;
+   */
+  official: boolean;
+
+  /**
+   * @generated from field: string submitted_at = 9;
+   */
+  submittedAt: string;
+
+  /**
+   * @generated from field: string updated_at = 10;
+   */
+  updatedAt: string;
+
+  /**
+   * @generated from field: string html_url = 11;
+   */
+  htmlUrl: string;
+};
+
+/**
+ * Describes the message golf.v1.PullRequestReview.
+ * Use `create(PullRequestReviewSchema)` to create a new message.
+ */
+export const PullRequestReviewSchema: GenMessage<PullRequestReview> = /*@__PURE__*/
+  messageDesc(file_golf_v1_golf, 45);
+
+/**
+ * @generated from message golf.v1.ListPullRequestReviewsRequest
+ */
+export type ListPullRequestReviewsRequest = Message<"golf.v1.ListPullRequestReviewsRequest"> & {
+  /**
+   * @generated from field: golf.v1.RepositoryKey repository = 1;
+   */
+  repository?: RepositoryKey | undefined;
+
+  /**
+   * @generated from field: uint32 number = 2;
+   */
+  number: number;
+
+  /**
+   * @generated from field: golf.v1.PageRequest page = 3;
+   */
+  page?: PageRequest | undefined;
+};
+
+/**
+ * Describes the message golf.v1.ListPullRequestReviewsRequest.
+ * Use `create(ListPullRequestReviewsRequestSchema)` to create a new message.
+ */
+export const ListPullRequestReviewsRequestSchema: GenMessage<ListPullRequestReviewsRequest> = /*@__PURE__*/
+  messageDesc(file_golf_v1_golf, 46);
+
+/**
+ * @generated from message golf.v1.ListPullRequestReviewsResponse
+ */
+export type ListPullRequestReviewsResponse = Message<"golf.v1.ListPullRequestReviewsResponse"> & {
+  /**
+   * Provider filtering can produce an empty page that still has a next page.
+   *
+   * @generated from field: repeated golf.v1.PullRequestReview reviews = 1;
+   */
+  reviews: PullRequestReview[];
+
+  /**
+   * @generated from field: golf.v1.PageResponse page = 2;
+   */
+  page?: PageResponse | undefined;
+};
+
+/**
+ * Describes the message golf.v1.ListPullRequestReviewsResponse.
+ * Use `create(ListPullRequestReviewsResponseSchema)` to create a new message.
+ */
+export const ListPullRequestReviewsResponseSchema: GenMessage<ListPullRequestReviewsResponse> = /*@__PURE__*/
+  messageDesc(file_golf_v1_golf, 47);
+
+/**
  * @generated from message golf.v1.Capability
  */
 export type Capability = Message<"golf.v1.Capability"> & {
@@ -999,7 +1346,7 @@ export type Capability = Message<"golf.v1.Capability"> & {
  * Use `create(CapabilitySchema)` to create a new message.
  */
 export const CapabilitySchema: GenMessage<Capability> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 39);
+  messageDesc(file_golf_v1_golf, 48);
 
 /**
  * @generated from message golf.v1.ListCapabilitiesRequest
@@ -1012,7 +1359,7 @@ export type ListCapabilitiesRequest = Message<"golf.v1.ListCapabilitiesRequest">
  * Use `create(ListCapabilitiesRequestSchema)` to create a new message.
  */
 export const ListCapabilitiesRequestSchema: GenMessage<ListCapabilitiesRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 40);
+  messageDesc(file_golf_v1_golf, 49);
 
 /**
  * @generated from message golf.v1.ListCapabilitiesResponse
@@ -1029,7 +1376,7 @@ export type ListCapabilitiesResponse = Message<"golf.v1.ListCapabilitiesResponse
  * Use `create(ListCapabilitiesResponseSchema)` to create a new message.
  */
 export const ListCapabilitiesResponseSchema: GenMessage<ListCapabilitiesResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 41);
+  messageDesc(file_golf_v1_golf, 50);
 
 /**
  * @generated from message golf.v1.GetAuthenticationOptionsRequest
@@ -1042,7 +1389,7 @@ export type GetAuthenticationOptionsRequest = Message<"golf.v1.GetAuthentication
  * Use `create(GetAuthenticationOptionsRequestSchema)` to create a new message.
  */
 export const GetAuthenticationOptionsRequestSchema: GenMessage<GetAuthenticationOptionsRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 42);
+  messageDesc(file_golf_v1_golf, 51);
 
 /**
  * @generated from message golf.v1.GetAuthenticationOptionsResponse
@@ -1069,7 +1416,7 @@ export type GetAuthenticationOptionsResponse = Message<"golf.v1.GetAuthenticatio
  * Use `create(GetAuthenticationOptionsResponseSchema)` to create a new message.
  */
 export const GetAuthenticationOptionsResponseSchema: GenMessage<GetAuthenticationOptionsResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 43);
+  messageDesc(file_golf_v1_golf, 52);
 
 /**
  * @generated from message golf.v1.BeginGiteaOAuthRequest
@@ -1082,7 +1429,7 @@ export type BeginGiteaOAuthRequest = Message<"golf.v1.BeginGiteaOAuthRequest"> &
  * Use `create(BeginGiteaOAuthRequestSchema)` to create a new message.
  */
 export const BeginGiteaOAuthRequestSchema: GenMessage<BeginGiteaOAuthRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 44);
+  messageDesc(file_golf_v1_golf, 53);
 
 /**
  * @generated from message golf.v1.BeginGiteaOAuthResponse
@@ -1099,7 +1446,7 @@ export type BeginGiteaOAuthResponse = Message<"golf.v1.BeginGiteaOAuthResponse">
  * Use `create(BeginGiteaOAuthResponseSchema)` to create a new message.
  */
 export const BeginGiteaOAuthResponseSchema: GenMessage<BeginGiteaOAuthResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 45);
+  messageDesc(file_golf_v1_golf, 54);
 
 /**
  * @generated from message golf.v1.Organization
@@ -1136,7 +1483,7 @@ export type Organization = Message<"golf.v1.Organization"> & {
  * Use `create(OrganizationSchema)` to create a new message.
  */
 export const OrganizationSchema: GenMessage<Organization> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 46);
+  messageDesc(file_golf_v1_golf, 55);
 
 /**
  * @generated from message golf.v1.OrganizationTeam
@@ -1185,7 +1532,7 @@ export type OrganizationTeam = Message<"golf.v1.OrganizationTeam"> & {
  * Use `create(OrganizationTeamSchema)` to create a new message.
  */
 export const OrganizationTeamSchema: GenMessage<OrganizationTeam> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 47);
+  messageDesc(file_golf_v1_golf, 56);
 
 /**
  * @generated from message golf.v1.ListOrganizationsRequest
@@ -1202,7 +1549,7 @@ export type ListOrganizationsRequest = Message<"golf.v1.ListOrganizationsRequest
  * Use `create(ListOrganizationsRequestSchema)` to create a new message.
  */
 export const ListOrganizationsRequestSchema: GenMessage<ListOrganizationsRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 48);
+  messageDesc(file_golf_v1_golf, 57);
 
 /**
  * @generated from message golf.v1.ListOrganizationsResponse
@@ -1224,7 +1571,7 @@ export type ListOrganizationsResponse = Message<"golf.v1.ListOrganizationsRespon
  * Use `create(ListOrganizationsResponseSchema)` to create a new message.
  */
 export const ListOrganizationsResponseSchema: GenMessage<ListOrganizationsResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 49);
+  messageDesc(file_golf_v1_golf, 58);
 
 /**
  * @generated from message golf.v1.GetOrganizationRequest
@@ -1241,7 +1588,7 @@ export type GetOrganizationRequest = Message<"golf.v1.GetOrganizationRequest"> &
  * Use `create(GetOrganizationRequestSchema)` to create a new message.
  */
 export const GetOrganizationRequestSchema: GenMessage<GetOrganizationRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 50);
+  messageDesc(file_golf_v1_golf, 59);
 
 /**
  * @generated from message golf.v1.GetOrganizationResponse
@@ -1258,7 +1605,7 @@ export type GetOrganizationResponse = Message<"golf.v1.GetOrganizationResponse">
  * Use `create(GetOrganizationResponseSchema)` to create a new message.
  */
 export const GetOrganizationResponseSchema: GenMessage<GetOrganizationResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 51);
+  messageDesc(file_golf_v1_golf, 60);
 
 /**
  * @generated from message golf.v1.ListTeamsRequest
@@ -1280,7 +1627,7 @@ export type ListTeamsRequest = Message<"golf.v1.ListTeamsRequest"> & {
  * Use `create(ListTeamsRequestSchema)` to create a new message.
  */
 export const ListTeamsRequestSchema: GenMessage<ListTeamsRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 52);
+  messageDesc(file_golf_v1_golf, 61);
 
 /**
  * @generated from message golf.v1.ListTeamsResponse
@@ -1302,7 +1649,7 @@ export type ListTeamsResponse = Message<"golf.v1.ListTeamsResponse"> & {
  * Use `create(ListTeamsResponseSchema)` to create a new message.
  */
 export const ListTeamsResponseSchema: GenMessage<ListTeamsResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 53);
+  messageDesc(file_golf_v1_golf, 62);
 
 /**
  * @generated from message golf.v1.GetTeamRequest
@@ -1324,7 +1671,7 @@ export type GetTeamRequest = Message<"golf.v1.GetTeamRequest"> & {
  * Use `create(GetTeamRequestSchema)` to create a new message.
  */
 export const GetTeamRequestSchema: GenMessage<GetTeamRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 54);
+  messageDesc(file_golf_v1_golf, 63);
 
 /**
  * @generated from message golf.v1.GetTeamResponse
@@ -1341,7 +1688,7 @@ export type GetTeamResponse = Message<"golf.v1.GetTeamResponse"> & {
  * Use `create(GetTeamResponseSchema)` to create a new message.
  */
 export const GetTeamResponseSchema: GenMessage<GetTeamResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 55);
+  messageDesc(file_golf_v1_golf, 64);
 
 /**
  * @generated from message golf.v1.ListTeamMembersRequest
@@ -1368,7 +1715,7 @@ export type ListTeamMembersRequest = Message<"golf.v1.ListTeamMembersRequest"> &
  * Use `create(ListTeamMembersRequestSchema)` to create a new message.
  */
 export const ListTeamMembersRequestSchema: GenMessage<ListTeamMembersRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 56);
+  messageDesc(file_golf_v1_golf, 65);
 
 /**
  * @generated from message golf.v1.ListTeamMembersResponse
@@ -1390,7 +1737,7 @@ export type ListTeamMembersResponse = Message<"golf.v1.ListTeamMembersResponse">
  * Use `create(ListTeamMembersResponseSchema)` to create a new message.
  */
 export const ListTeamMembersResponseSchema: GenMessage<ListTeamMembersResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 57);
+  messageDesc(file_golf_v1_golf, 66);
 
 /**
  * @generated from message golf.v1.ListTeamRepositoriesRequest
@@ -1417,7 +1764,7 @@ export type ListTeamRepositoriesRequest = Message<"golf.v1.ListTeamRepositoriesR
  * Use `create(ListTeamRepositoriesRequestSchema)` to create a new message.
  */
 export const ListTeamRepositoriesRequestSchema: GenMessage<ListTeamRepositoriesRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 58);
+  messageDesc(file_golf_v1_golf, 67);
 
 /**
  * @generated from message golf.v1.ListTeamRepositoriesResponse
@@ -1439,7 +1786,7 @@ export type ListTeamRepositoriesResponse = Message<"golf.v1.ListTeamRepositories
  * Use `create(ListTeamRepositoriesResponseSchema)` to create a new message.
  */
 export const ListTeamRepositoriesResponseSchema: GenMessage<ListTeamRepositoriesResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 59);
+  messageDesc(file_golf_v1_golf, 68);
 
 /**
  * @generated from enum golf.v1.SourceEntryType
@@ -1509,6 +1856,47 @@ export const IssueStateSchema: GenEnum<IssueState> = /*@__PURE__*/
   enumDesc(file_golf_v1_golf, 1);
 
 /**
+ * @generated from enum golf.v1.PullRequestReviewState
+ */
+export enum PullRequestReviewState {
+  /**
+   * @generated from enum value: PULL_REQUEST_REVIEW_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: PULL_REQUEST_REVIEW_STATE_APPROVED = 1;
+   */
+  APPROVED = 1,
+
+  /**
+   * @generated from enum value: PULL_REQUEST_REVIEW_STATE_PENDING = 2;
+   */
+  PENDING = 2,
+
+  /**
+   * @generated from enum value: PULL_REQUEST_REVIEW_STATE_COMMENT = 3;
+   */
+  COMMENT = 3,
+
+  /**
+   * @generated from enum value: PULL_REQUEST_REVIEW_STATE_REQUEST_CHANGES = 4;
+   */
+  REQUEST_CHANGES = 4,
+
+  /**
+   * @generated from enum value: PULL_REQUEST_REVIEW_STATE_REQUEST_REVIEW = 5;
+   */
+  REQUEST_REVIEW = 5,
+}
+
+/**
+ * Describes the enum golf.v1.PullRequestReviewState.
+ */
+export const PullRequestReviewStateSchema: GenEnum<PullRequestReviewState> = /*@__PURE__*/
+  enumDesc(file_golf_v1_golf, 2);
+
+/**
  * @generated from enum golf.v1.CapabilityState
  */
 export enum CapabilityState {
@@ -1542,7 +1930,7 @@ export enum CapabilityState {
  * Describes the enum golf.v1.CapabilityState.
  */
 export const CapabilityStateSchema: GenEnum<CapabilityState> = /*@__PURE__*/
-  enumDesc(file_golf_v1_golf, 2);
+  enumDesc(file_golf_v1_golf, 3);
 
 /**
  * @generated from enum golf.v1.OrganizationVisibility
@@ -1573,7 +1961,7 @@ export enum OrganizationVisibility {
  * Describes the enum golf.v1.OrganizationVisibility.
  */
 export const OrganizationVisibilitySchema: GenEnum<OrganizationVisibility> = /*@__PURE__*/
-  enumDesc(file_golf_v1_golf, 3);
+  enumDesc(file_golf_v1_golf, 4);
 
 /**
  * @generated from enum golf.v1.TeamVisibility
@@ -1604,7 +1992,7 @@ export enum TeamVisibility {
  * Describes the enum golf.v1.TeamVisibility.
  */
 export const TeamVisibilitySchema: GenEnum<TeamVisibility> = /*@__PURE__*/
-  enumDesc(file_golf_v1_golf, 4);
+  enumDesc(file_golf_v1_golf, 5);
 
 /**
  * @generated from enum golf.v1.TeamPermission
@@ -1645,7 +2033,7 @@ export enum TeamPermission {
  * Describes the enum golf.v1.TeamPermission.
  */
 export const TeamPermissionSchema: GenEnum<TeamPermission> = /*@__PURE__*/
-  enumDesc(file_golf_v1_golf, 5);
+  enumDesc(file_golf_v1_golf, 6);
 
 /**
  * Shared API for human and machine clients. Cookie authentication uses the same
@@ -1789,6 +2177,30 @@ export const RepositoryService: GenService<{
     methodKind: "unary";
     input: typeof GetIssueRequestSchema;
     output: typeof GetIssueResponseSchema;
+  },
+  /**
+   * @generated from rpc golf.v1.RepositoryService.ListPullRequests
+   */
+  listPullRequests: {
+    methodKind: "unary";
+    input: typeof ListPullRequestsRequestSchema;
+    output: typeof ListPullRequestsResponseSchema;
+  },
+  /**
+   * @generated from rpc golf.v1.RepositoryService.GetPullRequest
+   */
+  getPullRequest: {
+    methodKind: "unary";
+    input: typeof GetPullRequestRequestSchema;
+    output: typeof GetPullRequestResponseSchema;
+  },
+  /**
+   * @generated from rpc golf.v1.RepositoryService.ListPullRequestReviews
+   */
+  listPullRequestReviews: {
+    methodKind: "unary";
+    input: typeof ListPullRequestReviewsRequestSchema;
+    output: typeof ListPullRequestReviewsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_golf_v1_golf, 1);

@@ -142,6 +142,10 @@ func TestCommandValidationBeforeAuthentication(t *testing.T) {
 	for _, args := range [][]string{
 		{"repo", "view", "../private"}, {"repo", "list", "--limit", "101"}, {"issue", "view", "alice/private", "0"},
 		{"issue", "view", "alice/private", "2147483648"},
+		{"pr", "view", "alice/private", "0"}, {"pr", "view", "alice/private", "01"},
+		{"pr", "view", "alice/private", "+1"}, {"pr", "reviews", "alice/private", "2147483648"},
+		{"pr", "view", "alice/private", "1", "--page", "2"}, {"pr", "list", "alice/private", "--state", "merged"},
+		{"pr", "reviews", "alice/private", "1", "--state", "all"}, {"pr", "merge", "alice/private", "1"},
 		{"issue", "list", "alice/private", "--state", "deleted"}, {"repo", "list", "--token", "do-not-echo-token"},
 		{"org", "view"}, {"org", "view", "."}, {"org", "view", ".."}, {"org", "view", "org/team"},
 		{"org", "view", "space org"}, {"org", "view", "org?token=do-not-echo-token"}, {"org", "view", "世界"},
@@ -207,13 +211,19 @@ func TestCancellationStillClosesSession(t *testing.T) {
 	}
 }
 
-func TestOrganizationCommandsAndEphemeralSession(t *testing.T) {
+func TestMembershipAndPullCommandsAndEphemeralSession(t *testing.T) {
 	const token = "fixture-organization-token"
 	const teamID = "9223372036854775807"
 	for _, command := range []struct {
 		args                                   []string
 		procedure, request, response, fragment string
 	}{
+		{[]string{"pr", "list", "alice/private", "--state", "all", "--page", "2", "--limit", "1"}, golfv1connect.RepositoryServiceListPullRequestsProcedure,
+			`{"repository":{"owner":"alice","name":"private"},"state":"ISSUE_STATE_ALL","page":{"page":2,"limit":1}}`, `{"pullRequests":[{"id":"9007199254740993","number":7,"head":{"repositoryId":"9223372036854775807","retainedSnapshot":true}}],"page":{"nextPage":3}}`, `"retainedSnapshot":true`},
+		{[]string{"pr", "view", "alice/private", "2147483647"}, golfv1connect.RepositoryServiceGetPullRequestProcedure,
+			`{"repository":{"owner":"alice","name":"private"},"number":2147483647}`, `{"pullRequest":{"id":"9007199254740993","number":2147483647,"body":"<script>plain text</script>","merged":true}}`, `"id":"9007199254740993"`},
+		{[]string{"pr", "reviews", "alice/private", "7", "--page", "2", "--limit", "1"}, golfv1connect.RepositoryServiceListPullRequestReviewsProcedure,
+			`{"repository":{"owner":"alice","name":"private"},"number":7,"page":{"page":2,"limit":1}}`, `{"page":{"nextPage":3}}`, `"reviews":[]`},
 		{[]string{"org", "list", "--page", "2", "--limit", "1"}, golfv1connect.OrganizationServiceListOrganizationsProcedure,
 			`{"page":{"page":2,"limit":1}}`, `{"organizations":[{"id":"9007199254740993","name":"workshop","visibility":"ORGANIZATION_VISIBILITY_PRIVATE"}],"page":{"nextPage":3}}`, `"id":"9007199254740993"`},
 		{[]string{"org", "view", "Workshop_2026.test-org"}, golfv1connect.OrganizationServiceGetOrganizationProcedure,
@@ -258,7 +268,7 @@ func TestOrganizationCommandsAndEphemeralSession(t *testing.T) {
 						}
 						var input, expected any
 						if json.NewDecoder(r.Body).Decode(&input) != nil || json.Unmarshal([]byte(command.request), &expected) != nil || !reflect.DeepEqual(input, expected) {
-							t.Error("wrong generated organization request or numeric team ID")
+							t.Error("wrong generated resource request or numeric team ID")
 						}
 						if failure == "denied" {
 							w.WriteHeader(403)

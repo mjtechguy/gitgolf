@@ -38,15 +38,17 @@ const repositoryRoute = createRoute({
   path: '/repositories/$owner/$name',
   validateSearch: (search: Record<string, unknown>): RepositorySearch => {
     const issue = search.issue === undefined ? undefined : Number(search.issue);
+    const pull = search.pull === undefined ? undefined : typeof search.pull === 'number' ? search.pull : typeof search.pull === 'string' && /^[1-9][0-9]*$/.test(search.pull) ? Number(search.pull) : NaN;
     return {
-      view: search.view === 'commits' || search.view === 'issues' ? search.view : 'source',
+      view: search.view === 'commits' || search.view === 'issues' || search.view === 'pulls' ? search.view : 'source',
       ref: typeof search.ref === 'string' ? search.ref : '', path: typeof search.path === 'string' ? search.path : '',
       branch: typeof search.branch === 'string' ? search.branch : '',
-      state: search.state === 'closed' || search.state === 'all' ? search.state : 'open', issue,
+      state: search.state === 'closed' || search.state === 'all' ? search.state : 'open', issue, pull,
     };
   },
   beforeLoad: ({ params, search }) => {
     if (!params.owner || !params.name || /[\/\\]/.test(params.owner + params.name)) throw notFound();
+    if (search.pull !== undefined && (!Number.isSafeInteger(search.pull) || search.pull <= 0 || search.pull > 0x7fffffff)) throw notFound();
     if (search.issue !== undefined && (!Number.isSafeInteger(search.issue) || search.issue <= 0 || search.issue > 0xffffffff)) throw notFound();
   },
   search: { middlewares: [stripSearchParams(defaultRepositorySearch)] },

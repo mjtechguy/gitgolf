@@ -19,7 +19,7 @@ Pagination defaults to page 1/limit 20 for zero values, with bounds page 10,000/
 
 Content is decoded UTF-8 **plain text**, never HTML. A preview is limited to 256 KiB; binary, oversized, symlink, submodule and LFS content receives metadata and a reason instead. Do not follow targets or upstream download URLs. Bounded upstream responses or oversized directories fail visibly rather than returning a seemingly complete subset.
 
-`Issue`: `{id, number, title, body, state, user: User, comments, createdAt, updatedAt, htmlUrl}`. Issue bodies render as plain text in this increment. Comments, issue mutations, rendered Markdown, diffs, blame, reviews and merges remain future work.
+`Issue`: `{id, number, title, body, state, user: User, comments, createdAt, updatedAt, htmlUrl}`. Issue bodies render as plain text in this increment. Comments, issue mutations, rendered Markdown, diffs, blame, review mutations and merges remain future work. Read-only PR/native-review browsing is documented in the [PR read contract](PULL_REQUEST_READ_CONTRACT.md).
 
 Source navigation uses the returned commit ID to keep folder/file traversal consistent if a branch changes. Users can refresh or reselect a branch to observe a new head. Commit history is also browsable at a selected immutable commit. Branch enumeration may be paginated; never imply the first page is the complete branch list.
 

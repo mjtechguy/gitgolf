@@ -2,7 +2,7 @@
 
 Status: product direction and implementation roadmap; completeness review and shared Gitea first-release decision incorporated on 2026-10-01. Provider proofs and implementation evidence remain required. Explicit defaults are engineering decisions that can be revisited through ADRs.
 
-Execution evidence: the [implementation ledger](docs/IMPLEMENTATION_STATUS.md) records the local developer preview, including the bounded repository/source/history/read-only issue browser and JSON CLI. These increments do not mark an entire phase, v1 or the Cloudflare competition milestone complete.
+Execution evidence: the [implementation ledger](docs/IMPLEMENTATION_STATUS.md) records the local developer preview, including bounded repository/source/history, issue and PR/native-review reads, member-scoped organization browsing and the JSON CLI. These increments do not mark an entire phase, v1 or the Cloudflare competition milestone complete.
 
 Prepared: 2026-10-01. Provider documentation and limits must be rechecked when implementing each integration.
 
@@ -256,6 +256,8 @@ Reuse upstream Gitea behavior through supported APIs and events. Add Golf-owned 
 Boards describe planning stages; moving a card to Done does not imply tests passed or production deployed. Agent task status, PR status, pipeline status, and deployment status remain separate.
 
 PR detail displays source/base commits, review state, checks, agent runs, exact tested candidates, preview links, and deployment evidence. Use optimistic concurrency for comments/settings/board mutations where conflicting edits can lose data.
+
+Current bounded increment: the [PR read contract](docs/PULL_REQUEST_READ_CONTRACT.md) exposes list/detail/native-review observations through the generated API, typed UI and read-only CLI. List heads are retained snapshots; detail can also fall back to retained refs. Native review states/flags are not Golf eligibility or trusted evidence, and empty filtered review pages can still advance. This implements part of P1.4/P2.1/P2.2/P5.5 only; mutations, diffs/threads, policy and protected publication remain open. Qualification outcomes belong in the [implementation ledger](docs/IMPLEMENTATION_STATUS.md).
 
 Required check context names remain stable. Changed commits invalidate previous success where appropriate. Code-owner review and protected-file changes are enforced as repository policy, not advisory UI warnings.
 
@@ -1270,7 +1272,7 @@ These deferrals reduce implementation burden without removing requested capabili
 
 ### 18.4 Implementation evidence still required
 
-This checkout has no verified prior implementation. Engine interoperability, provider authentication eligibility, exact live limits, and distribution assurance are proof tasks, not established facts. They remain visible blockers until the assigned phase produces evidence.
+No implementation claimed in the archived conversation is assumed verified. Current scoped results are recorded in the implementation ledger; they do not complete the whole plan. Engine interoperability, provider authentication eligibility, exact live limits, and distribution assurance are proof tasks, not established facts. They remain visible blockers until the assigned phase produces evidence.
 
 ## 19. Primary references
 

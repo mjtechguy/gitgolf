@@ -1,10 +1,11 @@
 export type RepositorySearch = {
-  view: 'source' | 'commits' | 'issues';
+  view: 'source' | 'commits' | 'issues' | 'pulls';
   ref: string;
   path: string;
   branch: string;
   state: 'open' | 'closed' | 'all';
   issue?: number;
+  pull?: number;
 };
 export const defaultRepositorySearch: RepositorySearch = { view: 'source', ref: '', path: '', branch: '', state: 'open' };
 export type RepositoryLocation = RepositorySearch & { kind: 'repository'; owner: string; name: string };
@@ -20,6 +21,7 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
   const search: RepositorySearch = {
     view: next.view, ref: next.ref, path: next.view === 'source' ? next.path : '', branch: next.branch,
     state: next.state, issue: next.view === 'issues' ? next.issue : undefined,
+    pull: next.view === 'pulls' ? next.pull : undefined,
   };
   return { to: '/repositories/$owner/$name' as const, params: { owner: next.owner, name: next.name }, search, activeOptions: { exact: true } };
 }

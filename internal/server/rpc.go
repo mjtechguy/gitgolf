@@ -70,6 +70,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure,
 			golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure,
 			golfv1connect.RepositoryServiceListIssuesProcedure, golfv1connect.RepositoryServiceGetIssueProcedure,
+			golfv1connect.RepositoryServiceListPullRequestsProcedure, golfv1connect.RepositoryServiceGetPullRequestProcedure, golfv1connect.RepositoryServiceListPullRequestReviewsProcedure,
 			golfv1connect.OrganizationServiceListOrganizationsProcedure, golfv1connect.OrganizationServiceGetOrganizationProcedure,
 			golfv1connect.OrganizationServiceListTeamsProcedure, golfv1connect.OrganizationServiceGetTeamProcedure,
 			golfv1connect.OrganizationServiceListTeamMembersProcedure, golfv1connect.OrganizationServiceListTeamRepositoriesProcedure:
@@ -431,4 +432,38 @@ func (s *Server) ListTeamRepositories(ctx context.Context, req *connect.Request[
 		response.Repositories = append(response.Repositories, wireRepository(row))
 	}
 	return connect.NewResponse(response), nil
+}
+
+func (s *Server) ListPullRequests(ctx context.Context, req *connect.Request[golfv1.ListPullRequestsRequest]) (*connect.Response[golfv1.ListPullRequestsResponse], error) {
+	token, err := rpcToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, next, err := s.listPullRequests(ctx, cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), req.Msg.State, pageFrom(req.Msg.Page))
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return connect.NewResponse(&golfv1.ListPullRequestsResponse{PullRequests: rows, Page: wirePage(next)}), nil
+}
+func (s *Server) GetPullRequest(ctx context.Context, req *connect.Request[golfv1.GetPullRequestRequest]) (*connect.Response[golfv1.GetPullRequestResponse], error) {
+	token, err := rpcToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	row, err := s.getPullRequest(ctx, cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), req.Msg.Number)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return connect.NewResponse(&golfv1.GetPullRequestResponse{PullRequest: row}), nil
+}
+func (s *Server) ListPullRequestReviews(ctx context.Context, req *connect.Request[golfv1.ListPullRequestReviewsRequest]) (*connect.Response[golfv1.ListPullRequestReviewsResponse], error) {
+	token, err := rpcToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, next, err := s.listPullRequestReviews(ctx, cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), req.Msg.Number, pageFrom(req.Msg.Page))
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return connect.NewResponse(&golfv1.ListPullRequestReviewsResponse{Reviews: rows, Page: wirePage(next)}), nil
 }
