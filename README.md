@@ -272,7 +272,9 @@ Issue discussion creation uses `write:issue` with current user/repository scopes
 
 ### Local CI and RustFS development profile
 
-The development stack can run the bounded manual shell pipeline catalog with local PostgreSQL, RustFS and an isolated Docker worker. This is not full Actions/GitLab engine compatibility. Initialize private credentials once, then use all three Compose files consistently:
+Run `make dev` (or `make local-up`) for the local development profile: Golf, the Git backend, PostgreSQL, RustFS and the Docker CI worker/daemon. It preserves existing private credentials and volumes, initializes the source bucket, and refreshes the worker network namespace after a Golf replacement. `make local-status` lists the services; `make local-stop` stops them without removing volumes. Execution policies remain default-deny. `make up` retains the smaller three-service core profile.
+
+The development stack can run the bounded manual shell pipeline catalog with local PostgreSQL, RustFS and an isolated Docker worker. This is not full Actions/GitLab engine compatibility. Coding-agent connectors, notification/email delivery and deployment adapters are separate unfinished consumers. The equivalent explicit Compose commands are:
 
 ```sh
 python3 scripts/init-ci-env.py
@@ -293,4 +295,4 @@ Golf can record authenticated native push webhooks without Cloudflare or AI. Thi
 
 An operator supplies `GOLF_REPOSITORY_EVENT_CONNECTIONS` as a JSON array of explicit connection ID, native repository ID, owner ID, exact `owner/name` and a distinct random signing secret per repository. Keep this in an ignored mode0600 environment file or the deployment Secret, never the repository. Configure the native repository webhook through supported APIs to POST push events to `/hooks/gitea/<connectionID>` with that secret. Compose passes the variable to Golf; Helm accepts the optional key in its existing Secret. Unset or `[]` disables intake. Secret changes require draining/restarting every serving replica; this slice has no live configuration epoch.
 
-`/status` separates shared platform capabilities, portable coding-agent adapters and individual Cloudflare integrations using the common searchable, sortable, paginated table. Planned integrations remain unavailable; operator configuration or an installed harness alone is not a verified connection.
+`/status` separates shared platform capabilities, portable coding-agent adapters and individual Cloudflare integrations using the common searchable, sortable table without pagination. Planned integrations remain unavailable; operator configuration or an installed harness alone is not a verified connection.

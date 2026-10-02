@@ -13,6 +13,7 @@ skips when the fixture payload does not exceed that minimum supported bound.
 import argparse
 import base64
 from contextlib import ExitStack
+from datetime import datetime, timedelta, timezone
 import hashlib
 import io
 import json
@@ -27,6 +28,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -36,6 +38,23 @@ import smoke
 
 ROOT = Path(__file__).resolve().parents[1]
 STAGE = 'prerequisites'
+JOB_IMAGE = 'alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0'
+# Fixed Golf metadata only. Mutable grant/run/account state is compared separately.
+HISTORY_TABLES = [
+    ('golf_users', 'id'), ('golf_audit_events', 'id'), ('golf_crypto_events', 'id'),
+    ('golf_encryption_keys', 'key_id'), ('golf_encryption_policy', 'singleton'),
+    ('golf_repository_creations', 'id'), ('golf_repository_creation_events', 'id'),
+    ('golf_api_credentials', 'id'), ('golf_api_credential_events', 'id'),
+    ('golf_issue_mutations', 'id'), ('golf_issue_mutation_events', 'id'),
+    ('golf_execution_policies', 'scope,scope_id'), ('golf_execution_policy_repositories', 'scope,scope_id,repository_id'),
+    ('golf_execution_policy_workflows', 'scope,scope_id,workflow_path'), ('golf_execution_policy_events', 'id'),
+    ('golf_organization_creation_policies', 'forge_url'), ('golf_organization_creation_selections', 'user_id'),
+    ('golf_organization_creation_policy_events', 'id'),
+    ('golf_infrastructure_connections', 'id'), ('golf_infrastructure_connection_versions', 'profile_id,version'),
+    ('golf_infrastructure_activation_events', 'revision'), ('golf_active_object_connection', 'singleton'),
+    ('golf_repository_event_connections', 'id'), ('golf_repository_events', 'id'),
+    ('golf_automation_credentials', 'grant_id'), ('golf_workflow_run_logs', 'run_id,sequence'),
+]
 
 
 def check(message):
@@ -93,8 +112,8 @@ def main():
     for tag in ['postgres:18.4-alpine3.24', 'gitea/gitea:1.27.3-rootless']:
         run('docker', 'image', 'inspect', tag)
     prefix = 'golf-recovery-'+secrets.token_hex(5)
-    source, target, rejected = [prefix+'-'+name for name in ['source', 'restore', 'reject']]
-    projects = [source, target, rejected]
+    source, target, rejected, schema_rejected = [prefix+'-'+name for name in ['source', 'restore', 'reject', 'schema']]
+    projects = [source, target, rejected, schema_rejected]
     for project in projects:
         assert not any(resources(project).values()), 'Fixture project already exists'
     original_urls = smoke.GOLF, smoke.GITEA
@@ -206,7 +225,9 @@ def main():
             passwords = [secrets.token_urlsafe(32) for _ in range(3)]
             legacy, next_key = [base64.b64encode(secrets.token_bytes(32)).decode() for _ in range(2)]
             oauth_secret = secrets.token_urlsafe(32)
-            forbidden.extend(passwords+[legacy, next_key, oauth_secret])
+            runner_key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=')
+            event_secret = secrets.token_urlsafe(32)
+            forbidden.extend(passwords+[legacy, next_key, oauth_secret, runner_key, event_secret])
             config = {'services': {
                 'postgres': {'image': 'postgres:18.4-alpine3.24', 'pull_policy': 'never',
                     'environment': {'POSTGRES_PASSWORD': passwords[0], 'GOLF_DB_PASSWORD': passwords[1],
@@ -222,7 +243,7 @@ def main():
                         'GITEA__server__SSH_DOMAIN': '127.0.0.1', 'GITEA__server__SSH_PORT': str(ssh_port),
                         'GITEA__server__SSH_LISTEN_PORT': '2222', 'GITEA__server__LFS_START_SERVER': 'true',
                         'GITEA__security__INSTALL_LOCK': 'true', 'GITEA__service__DISABLE_REGISTRATION': 'true',
-                        'GITEA__actions__ENABLED': 'false'},
+                        'GITEA__actions__ENABLED': 'false', 'GITEA__webhook__ALLOWED_HOST_LIST': 'golf'},
                     'ports': [f'127.0.0.1:{gitea_port}:3000', f'127.0.0.1:{ssh_port}:2222'],
                     'volumes': ['gitea-data:/var/lib/gitea', 'gitea-config:/etc/gitea'],
                     'depends_on': {'postgres': {'condition': 'service_healthy'}}},
@@ -230,6 +251,8 @@ def main():
                         'GOLF_LISTEN_ADDR': ':8080', 'GOLF_PUBLIC_URL': smoke.GOLF,
                         'GOLF_ALLOW_INSECURE_COOKIES': 'true', 'GOLF_WEB_DIR': '/app/web/dist',
                         'GOLF_ENCRYPTION_KEY': legacy,
+                        'GOLF_RUNNER_KEYS': json.dumps({'recovery-worker': runner_key}),
+                        'GOLF_RUNNER_IMAGES': json.dumps({'linux': JOB_IMAGE}),
                         # Compose must unescape this to a literal dollar, then
                         # backup/restore must preserve that effective value.
                         'GOLF_RECOVERY_FIXTURE_MARKER': 'literal-$$recovery-marker',
@@ -303,6 +326,7 @@ def main():
             assert creation['state'] == 'REPOSITORY_CREATION_STATE_SUCCEEDED'
             full_name = repository['fullName']; key = {'owner': users[0], 'name': repository['name']}
             route = 'repos/'+full_name
+            native_owner_id = str(smoke.provider(owner_token, 'GET', 'user')['id'])
             remote = smoke.GITEA+'/'+full_name+'.git'
             issue_request = {'repository': key, 'repository_id': repository['id'],
                              'title': 'Recovered issue discussion', 'body': 'Original plain-text issue body.',
@@ -361,6 +385,18 @@ def main():
             payload_hash = hashlib.sha256(payload).hexdigest()
             (work/'payload.lfs').write_bytes(payload)
             (work/'README.md').write_text('# Disposable recovery fixture\n')
+            workflow = '.github/workflows/recovery.yml'
+            (work/'.github/workflows').mkdir(parents=True)
+            (work/workflow).write_text('on: {workflow_dispatch: {}, push: {branches: [main]}}\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: printf "Recovery source fixture\\n"\n')
+            event_connection = str(uuid.uuid4())
+            config['services']['golf']['environment']['GOLF_REPOSITORY_EVENT_CONNECTIONS'] = json.dumps([{
+                'id': event_connection, 'repositoryId': repository['id'], 'ownerId': native_owner_id,
+                'repository': full_name, 'secret': event_secret}])
+            private(config_file, json.dumps(config))
+            compose('up', '-d', 'golf'); ready()
+            hook = smoke.provider(owner_token, 'POST', route+'/hooks', {'type': 'gitea', 'active': True,
+                'events': ['push'], 'branch_filter': '*', 'config': {'url': 'http://golf:8080/hooks/gitea/'+event_connection,
+                'content_type': 'json', 'http_method': 'POST', 'secret': event_secret}}, expected=201)
             git('add', '.')
             git('commit', '-m', 'Preserve signed Git and LFS')
             commit_id = git('rev-parse', 'HEAD')
@@ -381,6 +417,67 @@ def main():
             protection = smoke.provider(owner_token, 'POST', route+'/branch_protections',
                 {'rule_name': 'main', 'enable_push': True, 'enable_force_push': False}, expected=201)
             host_keys = ssh_keys()
+            check('current schema event, grant, infrastructure and queued/leased-run recovery fixtures')
+            deadline = time.monotonic()+30
+            while time.monotonic() < deadline and sql('SELECT count(*) FROM golf_repository_events;') == '0':
+                time.sleep(.5)
+            assert int(sql('SELECT count(*) FROM golf_repository_events;')) > 0
+            assert sql("SELECT count(*) FROM golf_repository_events WHERE ref='refs/heads/main' AND after_commit_id='"+commit_id+"';") == '1'
+            # Stop future native deliveries before the stopped-writer snapshot.
+            smoke.provider(owner_token, 'PATCH', route+'/hooks/'+str(hook['id']), {'active': False}, expected=200)
+            grants = []
+            grant_input = {'repository': key, 'expectedRepositoryId': repository['id'],
+                'expectedOwnerId': native_owner_id, 'nativeToken': owner_token,
+                'branches': ['main'], 'workflowPaths': [workflow],
+                'expiresAt': (datetime.now(timezone.utc)+timedelta(hours=1)).isoformat()}
+            for index in range(2):
+                grant = smoke.rpc(owner, 'AutomationGrantService/CreateAutomationGrant',
+                    {**grant_input, 'idempotencyKey': str(uuid.uuid4())})['grant']
+                if index == 1:
+                    grant = smoke.rpc(owner, 'AutomationGrantService/RevokeAutomationGrant',
+                        {'repository': key, 'grantId': grant['id'], 'expectedRevision': grant['revision']})['grant']
+                grants.append(grant)
+            # A third sponsor deliberately has no local password account.
+            pat_name = prefix+'-pat-sponsor'
+            admin('create', '--username', pat_name, '--email', pat_name+'@example.invalid',
+                  '--random-password', '--must-change-password=false')
+            pat_token = admin('generate-access-token', '--username', pat_name, '--token-name', 'recovery-grant',
+                '--scopes', 'write:user,write:repository,write:issue', '--raw')
+            forbidden.append(pat_token)
+            smoke.provider(owner_token, 'PUT', route+'/collaborators/'+pat_name, {'permission': 'admin'}, expected=204)
+            pat_session = smoke.client()
+            smoke.rpc(pat_session, 'SessionService/LoginWithGiteaToken', {'token': pat_token})
+            grants.append(smoke.rpc(pat_session, 'AutomationGrantService/CreateAutomationGrant',
+                {**grant_input, 'nativeToken': pat_token, 'idempotencyKey': str(uuid.uuid4())})['grant'])
+            smoke.rpc(pat_session, 'SessionService/Logout')
+            assert sql('SELECT count(*) FROM golf_automation_grants g JOIN golf_local_accounts l ON l.user_id=g.sponsor_user_id;') == '2'
+            profile = smoke.rpc(local_session, 'InfrastructureConnectionService/SaveInfrastructureConnection', {
+                'connection': {'label': 'Recovery PostgreSQL profile', 'kind': 'DATABASE', 'databaseRole': 'GOLF',
+                    'backend': 'POSTGRESQL', 'endpoint': 'postgres:5432', 'databaseName': 'golf', 'databaseUser': 'golf',
+                    'tlsMode': 'disable', 'allowInsecure': True},
+                'credential': {'databasePassword': passwords[1]}, 'expectedVersion': '0',
+                'passwordConfirmation': local_passwords[0]})['connection']
+            assert smoke.rpc(local_session, 'InfrastructureConnectionService/TestInfrastructureConnection', {
+                'id': profile['id'], 'expectedVersion': profile['version'],
+                'passwordConfirmation': local_passwords[0]})['accessible']
+            for scope, caller in [('INSTANCE', local_session), ('REPOSITORY', owner)]:
+                request = {'scope': 'EXECUTION_SCOPE_'+scope}
+                if scope == 'REPOSITORY': request['repository'] = key
+                previous = smoke.rpc(caller, 'ExecutionPolicyService/GetExecutionPolicy', request)['policy']
+                smoke.rpc(caller, 'ExecutionPolicyService/UpdateExecutionPolicy', {**request,
+                    'scopeId': previous['scopeId'], 'expectedRevision': previous.get('revision', '0'),
+                    'expectedAuthorityRevision': previous['authorityRevision'], 'mode': 'EXECUTION_MODE_ALL',
+                    'manualDispatchEnabled': True, 'pushAllowed': False, 'allowAllWorkflows': True})
+            fixture_runs = [smoke.rpc(owner, 'WorkflowRunService/DispatchWorkflow', {'repository': key,
+                'workflowPath': workflow, 'ref': commit_id, 'idempotencyKey': str(uuid.uuid4())})['run'] for _ in range(2)]
+            poll = urllib.request.Request(smoke.GOLF+'/internal/ci/poll', data=b'{}', method='POST',
+                headers={'Authorization': 'Bearer '+runner_key, 'Golf-Runner-ID': 'recovery-worker', 'Content-Type': 'application/json'})
+            with urllib.request.urlopen(poll, timeout=15) as response:
+                assignment = json.load(response)
+            forbidden.append(assignment['attemptToken'])
+            assert assignment['runId'] in {row['id'] for row in fixture_runs}
+            assert sql("SELECT string_agg(state,',' ORDER BY state) FROM golf_workflow_runs;") == 'queued,running'
+            # This is a leased control-plane attempt, not a claim that a Docker job ran.
             check('drained key activation and partial re-encryption before backup')
             compose('stop', 'golf')
             config['services']['golf']['environment'].update(
@@ -399,12 +496,12 @@ def main():
             assert sum(row.get('local_accounts', 0) for row in local_usage) == 2
             for session in sessions:
                 smoke.rpc(session, 'SessionService/GetSession')
-            history = {table: rows(table, order) for table, order in [
-                ('golf_users', 'id'), ('golf_audit_events', 'id'), ('golf_crypto_events', 'id'),
-                ('golf_encryption_keys', 'key_id'), ('golf_encryption_policy', 'singleton'),
-                ('golf_repository_creations', 'id'), ('golf_repository_creation_events', 'id'),
-                ('golf_api_credentials', 'id'), ('golf_api_credential_events', 'id'),
-                ('golf_issue_mutations', 'id'), ('golf_issue_mutation_events', 'id')]}
+            history = {table: rows(table, order) for table, order in HISTORY_TABLES}
+            grant_history = json.loads(rows('golf_automation_grants'))
+            grant_events = json.loads(rows('golf_automation_grant_events'))
+            run_history = json.loads(rows('golf_workflow_runs'))
+            assert sum(row.get('automation_credentials', 0) for row in local_usage) == 3
+            assert sum(row.get('infrastructure_connections', 0) for row in local_usage) == 1
             local_accounts = json.loads(rows('golf_local_accounts'))
             local_events = json.loads(rows('golf_local_account_events'))
             assert len(local_accounts) == 2 and sum(row['disabled_at'] is not None for row in local_accounts) == 1
@@ -464,17 +561,40 @@ def main():
                 return next(value.split('=', 1)[1] for value in values if value.startswith('GOLF_RECOVERY_FIXTURE_MARKER='))
 
             assert marker_value() == 'literal-$recovery-marker'
+            def encrypted_bundle(contents, destination):
+                stream = io.BytesIO()
+                with tarfile.open(fileobj=stream, mode='w:') as archive:
+                    for name, data in contents.items():
+                        member = tarfile.TarInfo(name); member.size = len(data); member.mode = 0o600
+                        archive.addfile(member, io.BytesIO(data))
+                private(destination, run('age', '-r', recipient, input=stream.getvalue(), binary=True))
+
+            # A permitted historical schema label must still match the restored dump.
+            # Payload integrity alone cannot establish that semantic binding.
+            mislabeled = dict(files)
+            wrong_manifest = json.loads(files['manifest.json'])
+            wrong_manifest['versions']['golf_schema'] = '202610020008'
+            mislabeled['manifest.json'] = json.dumps(wrong_manifest).encode()
+            schema_file = directory/'wrong-schema.age'
+            encrypted_bundle(mislabeled, schema_file)
+            recovery('verify', '--input', str(schema_file), '--identity', str(identity))
+            recovery('restore', '--input', str(schema_file), '--identity', str(identity), '--project', schema_rejected,
+                '--directory', str(directory/'wrong-schema'), '--writers-drained', success=False)
+            rejected_rows = json.loads(run('docker', 'inspect', *resources(schema_rejected)['containers']))
+            assert all(not row['State']['Running'] for row in rejected_rows
+                if row['Config']['Labels'].get('com.docker.compose.service') in {'golf', 'gitea'})
+            rejected_pg = next(row['Id'] for row in rejected_rows
+                if row['Config']['Labels'].get('com.docker.compose.service')=='postgres')
+            assert run('docker', 'exec', rejected_pg, 'psql', '-U', 'postgres', '-d', 'golf', '-Atc',
+                'SELECT count(*) FROM golf_sessions;').strip() == str(counts[0])
+            print('PASS: restored-schema mismatch rejected before invalidation with applications quarantined', flush=True)
+
             # Re-encrypt a structurally valid tar with one changed payload and its
             # original manifest: age passes but the inner checksum must fail.
             damaged = bytearray(files['golf.dump']); damaged[len(damaged)//2] ^= 1
             files['golf.dump'] = bytes(damaged)
-            stream = io.BytesIO()
-            with tarfile.open(fileobj=stream, mode='w:') as archive:
-                for name, data in files.items():
-                    member = tarfile.TarInfo(name); member.size = len(data); member.mode = 0o600
-                    archive.addfile(member, io.BytesIO(data))
             checksum_file = directory/'checksum.age'
-            private(checksum_file, run('age', '-r', recipient, input=stream.getvalue(), binary=True))
+            encrypted_bundle(files, checksum_file)
             truncated = directory/'truncated.age'; private(truncated, encrypted[:-32])
             for bad_file, bad_identity in [(backup_file, wrong_identity), (truncated, identity), (checksum_file, identity)]:
                 recovery('verify', '--input', str(bad_file), '--identity', str(bad_identity), success=False)
@@ -502,12 +622,27 @@ def main():
                 assert not json.loads(run('docker', 'inspect', container(service)))[0]['State']['Running']
             assert sql('SELECT count(*) FROM golf_sessions;') == '0'
             assert sql('SELECT count(*) FROM golf_oauth_attempts;') == '0'
-            for table, order in [('golf_users', 'id'), ('golf_audit_events', 'id'), ('golf_crypto_events', 'id'),
-                                 ('golf_encryption_keys', 'key_id'), ('golf_encryption_policy', 'singleton'),
-                ('golf_repository_creations', 'id'), ('golf_repository_creation_events', 'id'),
-                ('golf_api_credentials', 'id'), ('golf_api_credential_events', 'id'),
-                ('golf_issue_mutations', 'id'), ('golf_issue_mutation_events', 'id')]:
+            for table, order in HISTORY_TABLES:
                 assert rows(table, order) == history[table], 'Restored Golf history or key metadata differs'
+            restored_grants = json.loads(rows('golf_automation_grants'))
+            for previous, actual in zip(grant_history, restored_grants):
+                assert actual['enabled'] is False
+                increment = int(previous['enabled'])
+                assert actual['revision'] == previous['revision']+increment
+                assert actual['revocation_epoch'] == previous['revocation_epoch']+increment
+                excluded = {'enabled', 'revision', 'revocation_epoch'}
+                assert {k:v for k,v in actual.items() if k not in excluded} == {k:v for k,v in previous.items() if k not in excluded}
+            restored_grant_events = json.loads(rows('golf_automation_grant_events'))
+            assert restored_grant_events[:len(grant_events)] == grant_events
+            added = restored_grant_events[len(grant_events):]
+            assert len(added) == 2 and all(row['action']=='RECOVERY_REVOKED' for row in added)
+            assert {row['grant_id'] for row in added} == {row['id'] for row in grant_history if row['enabled']}
+            for previous, actual in zip(run_history, json.loads(rows('golf_workflow_runs'))):
+                assert actual['state'] == 'cancelled' and actual['version'] == previous['version']+1
+                assert actual['lease_token_hash'] is None and actual['finished_at'] is not None
+                excluded = {'state', 'version', 'finished_at', 'reason', 'lease_token_hash'}
+                assert {k:v for k,v in actual.items() if k not in excluded} == {k:v for k,v in previous.items() if k not in excluded}
+            print('PASS: enabled local and PAT-only grants revoked, prior revocation retained, queued/leased runs cancelled and all credential ciphertext/history preserved', flush=True)
             recovery_events = json.loads(rows('golf_recovery_events'))
             assert len(recovery_events) == 1
             event = recovery_events[0]
@@ -534,6 +669,15 @@ def main():
             compose('start', 'gitea', 'golf'); ready()
             for session in sessions:
                 smoke.rpc(session, 'SessionService/GetSession', expected=401)
+            old_attempt = urllib.request.Request(smoke.GOLF+'/internal/ci/attempt/'+assignment['attemptId']+'/heartbeat',
+                data=b'{}', method='POST', headers={'Authorization': 'Bearer '+runner_key,
+                    'Golf-Runner-ID': 'recovery-worker', 'Golf-Attempt-Token': assignment['attemptToken'], 'Content-Type': 'application/json'})
+            try:
+                urllib.request.urlopen(old_attempt, timeout=15)
+                raise AssertionError('Restored attempt capability accepted')
+            except urllib.error.HTTPError as error:
+                assert error.code == 403
+                error.close()
             for index in range(2):
                 smoke.rpc(smoke.client(), 'SessionService/LoginWithPassword',
                     {'username': local_names[index], 'password': local_passwords[index]}, expected=401)
@@ -569,8 +713,28 @@ def main():
             assert smoke.rpc(fresh_local, 'SessionService/LoginWithPassword',
                 {'username': local_names[0], 'password': restored_password})['user'] == local_user
             assert smoke.rpc(fresh_local, 'RepositoryService/GetRepository', {'repository': key})['repository']['id'] == repository['id']
+            assert smoke.rpc(fresh_local, 'InfrastructureConnectionService/TestInfrastructureConnection', {
+                'id': profile['id'], 'expectedVersion': profile['version'],
+                'passwordConfirmation': restored_password})['accessible']
+            retained_grants = smoke.rpc(fresh_local, 'AutomationGrantService/ListAutomationGrants', {'repository': key})['grants']
+            assert {row['id'] for row in retained_grants} == {row['id'] for row in grants}
+            assert all(not row.get('enabled', False) for row in retained_grants)
             smoke.rpc(fresh_local, 'SessionService/Logout')
             print('PASS: all restored local accounts disabled/version-fenced; password-only reset cannot enable, fresh immutable mapping required', flush=True)
+            check('restored fifth-family key rotation and no queued-attempt replay')
+            with urllib.request.urlopen(poll, timeout=15) as response:
+                assert response.status == 204
+            assert sql("SELECT count(*) FROM golf_workflow_runs WHERE state IN ('queued','running');") == '0'
+            rotated = operator('rotate', '--batch-size', '2', '--max-batches', '20')
+            assert rotated['rotated_automation_credentials'] == 3
+            assert rotated['rotated_infrastructure_connections'] == 1
+            assert sql("SELECT count(*) FROM golf_automation_credentials WHERE credential_key_id='next';") == '3'
+            assert sql("SELECT count(*) FROM golf_infrastructure_connection_versions WHERE credential_key_id='next';") == '1'
+            assert operator('retirement-check', '--key-id', 'legacy', state='eligible')['complete']
+            assert all(not row['enabled'] for row in json.loads(rows('golf_automation_grants')))
+            assert not smoke.provider(owner_token, 'GET', route+'/hooks/'+str(hook['id']))['active']
+            print('PASS: restored profile decrypts and tests, all grants remain revoked after login/rotation, inactive key can retire and no run replays', flush=True)
+
             assert smoke.rpc(owner, 'RepositoryService/GetRepository', {'repository': key})['repository']['id'] == repository['id']
             lookup = {'idempotency_key': creation_request['idempotency_key']}
             observed = smoke.rpc(owner, 'RepositoryService/GetRepositoryCreation', lookup)

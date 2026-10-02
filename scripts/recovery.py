@@ -27,6 +27,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 FORMAT = 'golf.backup.v1'
+SUPPORTED_SCHEMAS = {'202610020008', '202610020009', '202610020019'}
 FILES = {'compose.json', 'postgres-init.sh', 'golf.dump', 'gitea.dump',
          'gitea-data.tar', 'gitea-config.tar'}
 PROJECT = re.compile(r'^[a-z0-9][a-z0-9_-]{0,62}$')
@@ -321,7 +322,7 @@ def backup(args, stage):
     schema = run(['docker', 'exec', pg, 'psql', '-U', 'postgres', '-d', 'golf', '-Atc',
                   'SELECT max(version_id) FROM goose_db_version WHERE is_applied;']).decode().strip()
     require(pg_version == 'postgres (PostgreSQL) 18.4' and forge_version.startswith('gitea version 1.27.3 ') and
-            schema in {'202610020008', '202610020009'})
+            schema in SUPPORTED_SCHEMAS)
     write(stage/'compose.json', json.dumps(config).encode())
     write(stage/'postgres-init.sh', initializer)
     for name in ['golf', 'gitea']:
@@ -380,7 +381,7 @@ def verified(args, stage):
             set(manifest['files']) == FILES and set(manifest['images']) == {'postgres', 'gitea', 'golf'})
     require(manifest['versions']['postgres'] == 'postgres (PostgreSQL) 18.4' and
             manifest['versions']['gitea'].startswith('gitea version 1.27.3 ') and
-            manifest['versions']['golf_schema'] in {'202610020008', '202610020009'})
+            manifest['versions']['golf_schema'] in SUPPORTED_SCHEMAS)
     for name in FILES:
         require(manifest['files'][name] == {'bytes': (stage/name).stat().st_size, 'sha256': digest(stage/name)})
     require(sum(row['bytes'] for row in manifest['files'].values()) <= args.max_bytes)
@@ -438,6 +439,9 @@ def restore(args, stage, manifest):
         with (stage/(name+'.dump')).open('rb') as file:
             run(['docker', 'exec', '-i', rows['postgres']['Id'], 'pg_restore', '--no-owner', '--no-acl', '--role='+name,
                  '--single-transaction', '--exit-on-error', '-U', 'postgres', '-d', name], input=file)
+    schema = run(['docker', 'exec', rows['postgres']['Id'], 'psql', '-U', 'postgres', '-d', 'golf', '-Atc',
+                  'SELECT max(version_id) FROM goose_db_version WHERE is_applied;']).decode().strip()
+    require(schema == manifest['versions']['golf_schema'])
     for name, destination in [('gitea-data.tar', '/var/lib'), ('gitea-config.tar', '/etc')]:
         with (stage/name).open('rb') as file:
             run(['docker', 'cp', '-a', '-', rows['gitea']['Id']+':'+destination], input=file)

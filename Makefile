@@ -1,7 +1,8 @@
-.PHONY: setup dev build cli test test-integration check helm-check fmt vet web-check generate generate-check qualify-git qualify-settings qualify-organization-admin qualify-public-repositories qualify-repository-access qualify-workflow-inspection qualify-instance-admin qualify-account-security qualify-repository-events qualify-automation-grants up down
+.PHONY: setup dev build cli test test-integration check helm-check fmt vet web-check generate generate-check qualify-git qualify-settings qualify-organization-admin qualify-public-repositories qualify-repository-access qualify-workflow-inspection qualify-instance-admin qualify-account-security qualify-repository-events qualify-automation-grants up down local-up local-stop local-status
+LOCAL_COMPOSE = docker compose --env-file .env --env-file .env.ci --env-file .env.storage -f compose.yaml -f compose.ci.yaml -f compose.storage.yaml
 setup:
 	./scripts/init-env.sh
-dev: up
+dev: local-up
 build:
 	go build -o bin/golf-server ./cmd/golf
 	go build -o bin/golf ./cmd/golfctl
@@ -52,3 +53,15 @@ up: setup
 	docker compose up -d --build
 down:
 	docker compose down
+local-up: setup
+	python3 scripts/init-ci-env.py
+	python3 scripts/init-storage-env.py
+	$(LOCAL_COMPOSE) stop runner
+	$(LOCAL_COMPOSE) up -d --build golf rustfs
+	$(LOCAL_COMPOSE) exec -T golf golf objectstore initialize
+	$(LOCAL_COMPOSE) build runner
+	$(LOCAL_COMPOSE) up -d --no-build runner
+local-stop:
+	$(LOCAL_COMPOSE) stop
+local-status:
+	$(LOCAL_COMPOSE) ps
