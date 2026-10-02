@@ -48,10 +48,10 @@ try {
   stage = 'actual token sign-in form';
   await page.goto(config.golf);
   await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.getByLabel('Gitea access token', { exact: true }).fill(config.token);
+  await page.getByLabel('Provider access token', { exact: true }).fill(config.token);
   await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
   await page.getByRole('button', { name: 'Sessions', exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Dark theme', exact: true }).click();
+  if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
   stage = 'session dialog and metadata';
   await page.getByRole('button', { name: 'Sessions', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Your Golf sessions', exact: true });
@@ -63,7 +63,7 @@ try {
   await page.screenshot({ path: join(config.screenshots, 'sessions-dark.png') });
   stage = 'light and mobile session dialog';
   await dialog.getByRole('button', { name: 'Close sessions', exact: true }).click();
-  await page.getByRole('button', { name: 'Light theme', exact: true }).click();
+  if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Sessions', exact: true }).click();
   await dialog.locator('.session-row').nth(1).waitFor();

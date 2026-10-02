@@ -201,7 +201,7 @@ for (const transition of ['signout', 'expiry', 'account-switch'] as const) {
       await page.reload();
     } else {
       await page.getByRole('button', { name: 'Close', exact: true }).click();
-      await page.getByRole('button', { name: 'Sign out' }).click();
+      await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out' }).click();
     }
     if (transition === 'account-switch') await expect(page.getByRole('button', { name: 'New repository', exact: true })).toBeVisible();
     else await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();

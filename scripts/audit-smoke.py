@@ -30,7 +30,7 @@ try {
  const page=await context.newPage();const errors=[];page.on('pageerror',()=>errors.push(true));
  stage='sign in';await page.goto(config.golf);
  await page.getByText('Advanced token sign-in', { exact: true }).click();
- await page.getByLabel('Gitea access token',{exact:true}).fill(config.token);
+ await page.getByLabel('Provider access token',{exact:true}).fill(config.token);
  await page.getByRole('button',{name:'Continue to workspace',exact:true}).click();
  await page.getByRole('link',{name:'Account activity',exact:true}).click();
  stage='real activity';await page.getByRole('heading',{name:'Account activity',exact:true}).waitFor();
@@ -41,10 +41,10 @@ try {
  await page.waitForFunction(()=>document.querySelectorAll('.audit-event').length>20);
  check((await page.locator('.audit-id').allTextContents())[0]===first);
  stage='details and charcoal';await page.locator('.audit-event summary').first().click();
- await page.getByRole('button',{name:'Dark theme',exact:true}).click();await page.evaluate(()=>scrollTo(0,0));
+ if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();await page.evaluate(()=>scrollTo(0,0));
  await page.screenshot({path:join(config.screenshots,'audit-dark.png')});
  stage='deep link and mobile';await page.reload();await page.locator('.audit-event').first().waitFor();check(new URL(page.url()).pathname==='/audit');
- await page.getByRole('button',{name:'Light theme',exact:true}).click();await page.setViewportSize({width:390,height:844});
+ if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();await page.setViewportSize({width:390,height:844});
  check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await page.screenshot({path:join(config.screenshots,'audit-light-mobile.png')});
  stage='current-session revocation';const sessions=await context.request.post(config.golf+'/rpc/golf.v1.SessionService/ListSessions',

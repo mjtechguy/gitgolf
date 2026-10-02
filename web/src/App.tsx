@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowRight, BookOpen, Building2, Check, CircleDot, Command, ExternalLink, GitBranch, History, KeyRound, Layers2, LoaderCircle, LockKeyhole, LogOut, Monitor, Moon, Plus, RefreshCw, Search, ShieldCheck, Sun, X } from 'lucide-react';
+import { ArrowDown, ArrowRight, BookOpen, Building2, Check, CircleDot, Command, ExternalLink, GitBranch, History, KeyRound, Layers2, LoaderCircle, LockKeyhole, LogOut, Moon, Plus, RefreshCw, Search, Settings, ShieldCheck, Sun, UserRound, X } from 'lucide-react';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Link, useLocation } from '@tanstack/react-router';
 import { create } from '@bufbuild/protobuf';
@@ -19,7 +19,7 @@ const ApiCredentials = lazy(() => import('./ApiCredentials').then((module) => ({
 const AccountActivity = lazy(() => import('./AccountActivity').then((module) => ({ default: module.AccountActivity })));
 const SessionManager = lazy(() => import('./SessionManager').then((module) => ({ default: module.SessionManager })));
 
-const themes = ['system', 'dark', 'light'] as const;
+const themes = ['dark', 'light'] as const;
 type Theme = typeof themes[number];
 
 function Brand() {
@@ -27,21 +27,15 @@ function Brand() {
 }
 
 function ThemeSwitch() {
-  const [theme, setTheme] = useState<Theme>(() => {
-    const initial = document.documentElement.dataset.theme;
-    return themes.includes(initial as Theme) ? initial as Theme : 'system';
-  });
-  function changeTheme(next: Theme) {
+  const [theme, setTheme] = useState<Theme>(() => document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
+  const next = theme === 'dark' ? 'light' : 'dark';
+  const Icon = next === 'dark' ? Moon : Sun;
+  function toggleTheme() {
     setTheme(next);
     document.documentElement.dataset.theme = next;
     try { localStorage.setItem('golf.theme', next); } catch { /* Theme still works when storage is unavailable. */ }
   }
-  return <div className="theme-switch" role="group" aria-label="Color theme">
-    {themes.map((value) => {
-      const Icon = value === 'system' ? Monitor : value === 'dark' ? Moon : Sun;
-      return <button key={value} type="button" aria-label={`${value[0]!.toUpperCase()}${value.slice(1)} theme`} aria-pressed={theme === value} title={`${value} theme`} onClick={() => changeTheme(value)}><Icon size={15} /></button>;
-    })}
-  </div>;
+  return <button className="theme-toggle" type="button" aria-label={`Switch to ${next} theme`} title={`Switch to ${next} theme`} onClick={toggleTheme}><Icon size={18} aria-hidden="true" /></button>;
 }
 
 function ErrorMessage({ error }: { error: Error | null }) {
@@ -124,9 +118,9 @@ function Login({ oauthFailed }: { oauthFailed: boolean }) {
     if (token.trim() && !busy && !passwordAttempt.current) { setPassword(''); setPasswordError(null); mutation.mutate(token.trim()); }
   }
   const tokenForm = <form onSubmit={submit}>
-    <label htmlFor="access-token">Gitea access token</label>
+    <label htmlFor="access-token">Provider access token</label>
     <input id="access-token" type="password" autoComplete="off" spellCheck={false} required value={token} onChange={(event) => setToken(event.target.value)} placeholder="Enter your scoped access token" aria-describedby="token-help" disabled={busy} />
-    <p className="field-help" id="token-help">Create a token in Gitea → Settings → Applications. To browse, select read:user and read:repository. Reading issues and comments also requires read:issue; creating issues and posting comments requires write:issue. Organizations require read:organization. To create repositories, select write:user and write:repository.</p>
+    <p className="field-help" id="token-help">Use a scoped token supplied by your installation operator. To browse, select read:user and read:repository. Reading issues and comments also requires read:issue; creating issues and posting comments requires write:issue. Organizations require read:organization. To create repositories, select write:user and write:repository.</p>
     <ErrorMessage error={mutation.error} />
     <button className="button secondary full" disabled={!token.trim() || busy}>{mutation.isPending ? <LoaderCircle size={17} className="spin" /> : null}{mutation.isPending ? 'Connecting…' : 'Continue to workspace'}{!mutation.isPending ? <ArrowRight size={17} /> : null}</button>
   </form>;
@@ -144,7 +138,7 @@ function Login({ oauthFailed }: { oauthFailed: boolean }) {
         <span className="small-icon"><KeyRound size={21} /></span>
         <h2 id="login-title">Welcome to Golf</h2>
         <p>Sign in with your Golf account.</p>
-        {oauthFailed ? <p className="error" role="alert">Gitea sign-in could not be completed. Please try again or use an access token.</p> : null}
+        {oauthFailed ? <p className="error" role="alert">Provider sign-in could not be completed. Please try again or use an access token.</p> : null}
         {options.isPending || options.isFetching ? <p className="auth-options-status" role="status"><LoaderCircle className="spin" size={14} />Checking sign-in options…</p> : options.isError ? <div className="auth-options-error"><p className="error" role="alert">Sign-in options could not be loaded. You can still use an access token.</p><button className="text-button" onClick={() => void options.refetch()}>Retry sign-in options</button></div> : !passwordAvailable ? <p className="auth-options-status">Golf password sign-in is not enabled for this installation. Use an available sign-in option below.</p> : null}
         <form onSubmit={submitPassword} aria-label="Golf account sign-in">
           <label htmlFor="golf-username">Email or username</label>
@@ -155,11 +149,11 @@ function Login({ oauthFailed }: { oauthFailed: boolean }) {
           <ErrorMessage error={passwordError} />
           <button className="button primary full" disabled={!passwordAvailable || !username.trim() || !password || busy}>{passwordPending ? <LoaderCircle size={17} className="spin" /> : <ArrowRight size={17} />}{passwordPending ? 'Signing in…' : 'Sign in'}</button>
         </form>
-        {oauthAvailable ? <section className="oauth-section" aria-label="Gitea sign-in">
-          <p className="oauth-provider">Continue through {options.data.providerLabel || 'Gitea'}. Your Gitea password stays with your provider.</p>
-          <div className="oauth-permissions" id="oauth-permissions"><h3>Requested permissions</h3><p>Golf requests these scopes within your existing Gitea access.</p>{options.data.scopes.length ? <ul>{options.data.scopes.map((scope) => <li key={scope}><code>{scope}</code>{scopeLabels[scope] ? <span>{scopeLabels[scope]}</span> : null}</li>)}</ul> : <p>No additional scopes were listed by this installation.</p>}</div>
+        {oauthAvailable ? <section className="oauth-section" aria-label="Provider sign-in">
+          <p className="oauth-provider">Continue through your connected provider. Your provider password stays with it.</p>
+          <div className="oauth-permissions" id="oauth-permissions"><h3>Requested permissions</h3><p>Golf requests these scopes within your existing account access.</p>{options.data.scopes.length ? <ul>{options.data.scopes.map((scope) => <li key={scope}><code>{scope}</code>{scopeLabels[scope] ? <span>{scopeLabels[scope]}</span> : null}</li>)}</ul> : <p>No additional scopes were listed by this installation.</p>}</div>
           <ErrorMessage error={oauth.error} />
-          <button className="button secondary full" disabled={busy} aria-describedby="oauth-permissions" onClick={() => { if (passwordAttempt.current) return; setPassword(''); setToken(''); setPasswordError(null); oauth.mutate(); }}>{redirecting ? <LoaderCircle className="spin" size={17} /> : <GitBranch size={17} />}{redirecting ? 'Continuing to Gitea…' : 'Continue with Gitea'}{!redirecting ? <ArrowRight size={17} /> : null}</button>
+          <button className="button secondary full" disabled={busy} aria-describedby="oauth-permissions" onClick={() => { if (passwordAttempt.current) return; setPassword(''); setToken(''); setPasswordError(null); oauth.mutate(); }}>{redirecting ? <LoaderCircle className="spin" size={17} /> : <GitBranch size={17} />}{redirecting ? 'Continuing to provider…' : 'Continue with provider'}{!redirecting ? <ArrowRight size={17} /> : null}</button>
         </section> : null}
         <details className="token-signin"><summary>Advanced token sign-in</summary>{tokenForm}</details>
         <div className="login-note"><LockKeyhole size={15} /><span>Golf stores provider credentials on the server. They are never saved in browser storage.</span></div>
@@ -276,7 +270,7 @@ function CreateRepository({ userId, initial, onPendingChange, onClose }: { userI
   }
   return <dialog ref={dialog} className="create-dialog" onClose={onClose} aria-labelledby="create-title">
     <div className="dialog-header"><span className="small-icon"><BookOpen size={21} /></span><button className="icon-button" aria-label="Close new repository form" onClick={onClose}><X size={19} /></button></div>
-    <h2 id="create-title">{intent ? 'Repository creation.' : 'Start something new.'}</h2><p className="muted">{intent ? 'Track this creation request.' : 'Create a repository in your Gitea account.'}</p>
+    <h2 id="create-title">{intent ? 'Repository creation.' : 'Start something new.'}</h2><p className="muted">{intent ? 'Track this creation request.' : 'Create a repository in your Golf workspace.'}</p>
     <form onSubmit={submit}>
       <label htmlFor="repo-name">Repository name <span className="required">*</span></label>
       <input ref={nameInput} id="repo-name" required maxLength={100} autoComplete="off" value={name} onChange={(event) => setName(event.target.value)} placeholder="my-next-project" disabled={Boolean(intent)} />
@@ -301,7 +295,7 @@ function RepositoryRow({ repository }: { repository: Repository }) {
       <p>{repository.description || 'No description yet.'}</p>
       <div className="repository-meta"><span><GitBranch size={13} />{repository.defaultBranch || 'No default branch'}</span>{!Number.isNaN(updated.getTime()) ? <time dateTime={repository.updatedAt} title={updated.toLocaleString()}>Updated {updated.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</time> : <span>Update time unavailable</span>}</div>
     </div>
-    {link ? <a className="open-repository" href={link} target="_blank" rel="noopener noreferrer" aria-label={`Open ${repository.fullName || repository.name} in Gitea`}><ExternalLink size={16} /></a> : null}
+    {link ? <a className="open-repository" href={link} target="_blank" rel="noopener noreferrer" aria-label={`Open ${repository.fullName || repository.name} in the repository interface`}><ExternalLink size={16} /></a> : null}
   </article>;
 }
 
@@ -319,6 +313,18 @@ function Capabilities() {
   </section>;
 }
 
+function UserSettings({ user, onClose, onSessions }: { user: User; onClose: () => void; onSessions: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => { dialog.current?.showModal(); closeButton.current?.focus(); }, []);
+  return <dialog ref={dialog} className="create-dialog settings-dialog" aria-labelledby="settings-title" onClose={onClose}>
+    <div className="dialog-header"><span className="small-icon"><Settings size={21} /></span><button ref={closeButton} className="icon-button" aria-label="Close user settings" onClick={onClose}><X size={19} /></button></div>
+    <h2 id="settings-title">User settings</h2><p className="muted">Manage your account access and activity.</p>
+    <dl className="settings-profile"><div><dt>Username</dt><dd>{user.login}</dd></div>{user.fullName ? <div><dt>Name</dt><dd>{user.fullName}</dd></div> : null}<div><dt>Account</dt><dd>{user.isInstanceAdmin ? 'Instance administrator' : 'Personal workspace'}</dd></div></dl>
+    <div className="settings-actions"><button className="button secondary" onClick={onSessions}><ShieldCheck size={17} />Manage sessions</button><Link className="button secondary" to="/account/api-credentials" onClick={onClose}><KeyRound size={17} />API credentials</Link><Link className="button secondary" to="/audit" onClick={onClose}><History size={17} />Account activity</Link></div>
+  </dialog>;
+}
+
 function Workspace({ user, location }: { user: User; location: Location }) {
   const hash = useLocation({ select: (current) => current.hash });
   const client = useQueryClient();
@@ -327,6 +333,9 @@ function Workspace({ user, location }: { user: User; location: Location }) {
   const [creating, setCreating] = useState(false);
   const [pending, setPending] = useState(() => pendingCreation(user.id));
   const [managingSessions, setManagingSessions] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const accountMenu = useRef<HTMLDetailsElement>(null);
+  function closeAccountMenu() { if (accountMenu.current) accountMenu.current.open = false; }
   const repositoryQuery = useInfiniteQuery({
     queryKey: ['repositories', user.id], initialPageParam: 1, staleTime: 0, gcTime: 0, enabled: location.kind === 'home',
     queryFn: ({ pageParam, signal }) => repositoryClient.listRepositories({ page: { page: pageParam } }, { signal }),
@@ -346,11 +355,10 @@ function Workspace({ user, location }: { user: User; location: Location }) {
   });
   return <div className="app-shell">
     <aside className="sidebar"><div className="sidebar-top"><Brand /><span className="alpha-tag">EARLY ACCESS</span></div>
-      <div className="workspace-label"><span className="workspace-avatar">{user.login.slice(0, 1).toUpperCase()}</span><div><strong>{user.login}</strong><span>{user.isInstanceAdmin ? 'Instance administrator' : 'Personal workspace'}</span></div></div>
       <nav aria-label="Workspace"><span className="nav-label">WORKSPACE</span><Link className={`nav-item ${(location.kind === 'home' && hash !== 'capabilities') || location.kind === 'repository' ? 'active' : ''}`} to="/" activeOptions={{ exact: true, includeHash: true }}><BookOpen size={17} />Repositories<span>{location.kind === 'home' && repositoryQuery.isSuccess ? repositories.length : '—'}</span></Link><Link className={`nav-item ${location.kind === 'organizations' ? 'active' : ''}`} to="/organizations"><Building2 size={17} />Organizations</Link><Link className={`nav-item ${location.kind === 'audit' ? 'active' : ''}`} to="/audit"><History size={17} />Account activity</Link><Link className={`nav-item ${location.kind === 'api-credentials' ? 'active' : ''}`} to="/account/api-credentials"><KeyRound size={17} />API credentials</Link><Link className="nav-item" to="/" hash="capabilities" activeOptions={{ exact: true, includeHash: true }}><Layers2 size={17} />Capabilities</Link><button className="nav-item sessions-nav" aria-haspopup="dialog" onClick={() => setManagingSessions(true)}><ShieldCheck size={17} />Sessions</button></nav>
-      <div className="sidebar-bottom"><div className="forge-note"><GitBranch size={17} /><div><strong>Connected to Gitea</strong><span>Code stays on your forge.</span></div></div><div className="sidebar-controls"><ThemeSwitch /><button className="icon-button" aria-label="Sign out" title="Sign out" disabled={logout.isPending} onClick={() => logout.mutate()}><LogOut size={17} /></button></div><ErrorMessage error={logout.error} /></div>
+
     </aside>
-    <div className="workspace-content"><header className="topbar"><span><span className="muted">Workspace</span><span className="breadcrumb-slash">/</span>{location.kind === 'repository' ? location.name : location.kind === 'organizations' ? location.organization || 'Organizations' : location.kind === 'audit' ? 'Account activity' : location.kind === 'api-credentials' ? 'API credentials' : 'Repositories'}</span><span className="connection-pill"><span className="status-dot" /> Signed in</span></header>
+    <div className="workspace-content"><header className="topbar"><span><span className="muted">Workspace</span><span className="breadcrumb-slash">/</span>{location.kind === 'repository' ? location.name : location.kind === 'organizations' ? location.organization || 'Organizations' : location.kind === 'audit' ? 'Account activity' : location.kind === 'api-credentials' ? 'API credentials' : 'Repositories'}</span><div className="topbar-controls"><ThemeSwitch /><details ref={accountMenu} className="account-menu" onKeyDown={(event) => { if (event.key === 'Escape') { closeAccountMenu(); accountMenu.current?.querySelector('summary')?.focus(); } }} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) closeAccountMenu(); }}><summary aria-label="Your account" title="Your account"><UserRound size={18} aria-hidden="true" /></summary><div className="account-dropdown"><div className="account-label"><strong>{user.login}</strong><span>{user.isInstanceAdmin ? 'Instance administrator' : 'Personal workspace'}</span></div><button type="button" onClick={() => { closeAccountMenu(); setSettingsOpen(true); }}><Settings size={17} />User settings</button><button type="button" disabled={logout.isPending} onClick={() => { closeAccountMenu(); logout.mutate(); }}><LogOut size={17} />Sign out</button></div></details></div></header><div className="logout-error"><ErrorMessage error={logout.error} /></div>
       <main id="main-content">{location.kind === 'api-credentials' ? <Suspense fallback={<div className="browser-loading" role="status"><LoaderCircle size={20} className="spin" />Opening API credentials…</div>}><ApiCredentials userId={user.id} signingOut={logout.isPending} /></Suspense> : location.kind === 'audit' ? <Suspense fallback={<div className="browser-loading" role="status"><LoaderCircle size={20} className="spin" />Opening account activity…</div>}><AccountActivity userId={user.id} /></Suspense> : location.kind === 'organizations' ? <Suspense fallback={<div className="browser-loading" role="status"><LoaderCircle size={20} className="spin" />Opening organizations…</div>}><OrganizationBrowser location={location} userId={user.id} /></Suspense> : location.kind === 'repository' ? <Suspense fallback={<div className="browser-loading" role="status"><LoaderCircle size={20} className="spin" />Opening repository…</div>}><RepositoryBrowser key={`${location.owner}/${location.name}`} location={location} userId={user.id} /></Suspense> : location.kind === 'missing' ? <section className="empty-state"><h1>Page not found</h1><p>This Golf link does not match an available page.</p><Link className="button secondary" to="/">Back to repositories</Link></section> : <><section className="workspace-intro"><div><span className="eyebrow">YOUR NEXT COMMIT STARTS HERE</span><h1>Good to see you, {user.fullName || user.login}<span className="accent">.</span></h1><p>A little less friction. A little more building.</p></div><div className="intro-emblem" aria-hidden="true"><Command size={31} /></div></section>
         <section className="repository-section" id="repositories" aria-labelledby="repositories-title"><div className="section-heading"><div className="title-count"><h2 id="repositories-title">Repositories</h2>{repositoryQuery.isSuccess ? <span className="count-badge">{repositories.length}{repositoryQuery.hasNextPage ? '+' : ''}</span> : null}</div><button className="button primary" onClick={() => setCreating(true)}><Plus size={16} />{pending ? 'Resume repository creation' : 'New repository'}</button></div>
           <p className="section-description">Your code, with room for what comes next. Open a repository to browse its source, commits and issues in Golf.</p>
@@ -362,7 +370,7 @@ function Workspace({ user, location }: { user: User; location: Location }) {
           {repositoryQuery.isSuccess ? <div className="list-footer"><span role="status">{filtered.length} of {repositories.length} loaded repositories{repositoryQuery.hasNextPage ? ' · Search applies to loaded results' : ''}</span>{repositoryQuery.hasNextPage ? <button className="text-button" disabled={repositoryQuery.isFetchingNextPage} onClick={() => void repositoryQuery.fetchNextPage()}>{repositoryQuery.isFetchingNextPage ? 'Loading…' : 'Load more'}<ArrowDown size={14} /></button> : <span>Sorted by last update</span>}</div> : null}
         </section><Capabilities /></>}<footer className="workspace-footer"><span>Made for the work ahead.</span><span>golf<span className="accent">.</span></span></footer>
       </main>
-    </div>{creating ? <CreateRepository userId={user.id} initial={pending} onPendingChange={setPending} onClose={() => setCreating(false)} /> : null}{managingSessions ? <Suspense fallback={<p className="browser-loading" role="status">Opening sessions…</p>}><SessionManager userId={user.id} onClose={() => setManagingSessions(false)} onSignedOut={signedOut} /></Suspense> : null}
+    </div>{settingsOpen ? <UserSettings user={user} onClose={() => { setSettingsOpen(false); accountMenu.current?.querySelector('summary')?.focus(); }} onSessions={() => { setSettingsOpen(false); accountMenu.current?.querySelector('summary')?.focus(); setManagingSessions(true); }} /> : null}{creating ? <CreateRepository userId={user.id} initial={pending} onPendingChange={setPending} onClose={() => setCreating(false)} /> : null}{managingSessions ? <Suspense fallback={<p className="browser-loading" role="status">Opening sessions…</p>}><SessionManager userId={user.id} onClose={() => setManagingSessions(false)} onSignedOut={signedOut} /></Suspense> : null}
   </div>;
 }
 

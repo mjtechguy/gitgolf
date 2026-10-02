@@ -278,12 +278,12 @@ test('expired session, sign-out and account switch clear pending private conveni
   delete state.errors.GetIssueMutation;
   state.user = create(UserSchema, { id: '22', login: 'other' });
   await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.getByLabel('Gitea access token').fill('fixture');
+  await page.getByLabel('Provider access token').fill('fixture');
   await page.getByRole('button', { name: 'Continue to workspace' }).click();
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  await expect(page.getByLabel('Your account', { exact: true })).toBeVisible();
   await expect.poll(() => stored(page)).toEqual([]);
   await page.evaluate(() => sessionStorage.setItem('golf.issue-intent.synthetic', '{}'));
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out' }).click();
   await expect.poll(() => stored(page)).toEqual([]);
 });
 
@@ -316,7 +316,7 @@ test('issue dialog and discussion remain keyboard usable in charcoal and light m
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'New issue', exact: true })).toBeFocused();
   await page.goto(detailURL);
-  await page.getByRole('button', { name: 'Light theme', exact: true }).click();
+  if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByLabel('Comment, plain text', { exact: true })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');

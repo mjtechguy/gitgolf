@@ -177,13 +177,13 @@ test('sign-out aborts pending history and another sign-in never reuses it', asyn
   await page.getByRole('button', { name: 'Load more activity' }).click();
   await expect(page.locator('.account-activity section')).toHaveAttribute('aria-busy', 'true');
   const aborted = page.waitForEvent('requestfailed', (request) => request.url().endsWith('/ListAuditEvents'));
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await aborted;
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   await expect(page.locator('.audit-event')).toHaveCount(0);
   state.events = []; state.barrier = undefined; release();
   await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.getByLabel('Gitea access token').fill('fixture-only-token');
+  await page.getByLabel('Provider access token').fill('fixture-only-token');
   await page.getByRole('button', { name: 'Continue to workspace' }).click();
   await expect(page.getByRole('heading', { name: 'No recorded account activity' })).toBeVisible();
   await expect(page.locator('.audit-event')).toHaveCount(0);
@@ -194,7 +194,7 @@ test('activity details remain plain text, accessible by keyboard, and fit dark d
   state.events = [create(AuditEventSchema, { ...events[0]!, operationId: '<img src=x onerror="window.executed=true">', actorSessionId: '9007199254741999' })];
   const errors: string[] = []; page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/audit');
-  await page.getByRole('button', { name: 'Dark theme', exact: true }).click();
+  if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
   const details = page.locator('.audit-event summary');
   await details.focus(); await page.keyboard.press('Enter');
   await expect(page.locator('.audit-event details')).toHaveAttribute('open', '');
@@ -203,7 +203,7 @@ test('activity details remain plain text, accessible by keyboard, and fit dark d
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.screenshot({ path: 'test-results/activity-dark.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Light theme', exact: true }).click();
+  if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await expect(page.getByRole('button', { name: 'Refresh activity' })).toBeVisible();
   await page.screenshot({ path: 'test-results/activity-light-mobile.png', fullPage: true });

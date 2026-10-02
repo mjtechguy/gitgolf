@@ -47,7 +47,7 @@ try {
  const stored=()=>page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('golf.repository-creation.')));
  stage='actual sign-in';await page.goto(config.golf);
  await page.getByText('Advanced token sign-in', { exact: true }).click();
- await page.getByLabel('Gitea access token',{exact:true}).fill(config.token);
+ await page.getByLabel('Provider access token',{exact:true}).fill(config.token);
  await page.getByRole('button',{name:'Continue to workspace',exact:true}).click();
  await page.getByRole('button',{name:'New repository',exact:true}).click();
  await page.getByLabel('Repository name').fill('browser-lost-ack');
@@ -67,7 +67,7 @@ try {
  check(!JSON.stringify(await page.evaluate(()=>({...sessionStorage,...localStorage}))).includes(config.token));
  check(!saved[0][1].includes(description));
  await page.getByRole('button',{name:'Close',exact:true}).click();
- await page.getByRole('button',{name:'Dark theme',exact:true}).click();
+ if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
  stage='reload resumes status-only lookup';await page.reload();
  await page.getByRole('button',{name:'Resume repository creation',exact:true}).click();
  stage='resumed intent is inspection-only';
@@ -89,7 +89,7 @@ try {
  const rejected=sent.at(-1).idempotencyKey;await page.getByRole('button',{name:'Check status',exact:true}).click();
  await page.getByRole('button',{name:'Start a new request',exact:true}).waitFor();check(sent.length===2);
  await page.getByRole('button',{name:'Close',exact:true}).click();
- await page.getByRole('button',{name:'Light theme',exact:true}).click();await page.setViewportSize({width:390,height:844});
+ if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();await page.setViewportSize({width:390,height:844});
  await page.getByRole('button',{name:'Resume repository creation',exact:true}).click();
  await page.getByRole('button',{name:'Check status',exact:true}).click();
  await page.getByRole('button',{name:'Start a new request',exact:true}).waitFor();

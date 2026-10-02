@@ -72,7 +72,7 @@ async function backend(page: Page) {
 }
 
 async function visibleReview(page: Page) {
-  await expect(page.getByRole('heading', { name: 'Native Gitea reviews' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Reviews', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Load more reviews' }).click();
   await expect(page.getByLabel(`Review ${review.id} body, plain text`)).toBeVisible();
 }
@@ -122,11 +122,11 @@ test('detail preserves exact refs and IDs; review pagination retains empty pages
   await page.getByRole('button', { name: 'Load more reviews' }).click();
   await expect(page.locator('.pull-review-list>li')).toHaveCount(2);
   expect([...new Set(state.reviewPages)]).toEqual([1, 2, 3]);
-  await expect(page.getByText('Approved (Gitea)', { exact: true })).toBeVisible();
-  await expect(page.getByText('Pending (Gitea)', { exact: true })).toBeVisible();
+  await expect(page.getByText('Approved', { exact: true })).toBeVisible();
+  await expect(page.getByText('Pending', { exact: true })).toBeVisible();
   await expect(page.locator('.pull-review-list>li').first().locator('dl')).toContainText('Marked staleYes');
   await expect(page.locator('.pull-review-list>li').first().locator('dl')).toContainText('DismissedYes');
-  await expect(page.locator('.pull-review-list>li').first().locator('dl')).toContainText('Official (Gitea)Yes');
+  await expect(page.locator('.pull-review-list>li').first().locator('dl')).toContainText('OfficialYes');
   await expect(page.getByRole('heading', { name: 'Deleted or unavailable author' })).toBeVisible();
   await expect(page.locator('.issue-body script,.issue-body img,.issue-body a')).toHaveCount(0);
   await expect(page.locator('a[href^="javascript:"]')).toHaveCount(0);
@@ -142,7 +142,7 @@ test('retained or deleted source metadata and merged records never imply a live 
   await expect(page.getByRole('region', { name: 'Head metadata' })).toContainText('refs/pull/14/head');
   await expect(page.getByRole('region', { name: 'Head metadata' })).toContainText('Repository IDUnavailable');
   await expect(page.getByText('Deleted or unavailable author opened this pull request', { exact: false })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Open in Gitea', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Open original', exact: true })).toHaveCount(0);
   await page.goto('/repositories/alex/design-system?view=pulls&pull=13');
   await expect(page.locator('.pull-merge-record')).toContainText(merged);
   await expect(page.locator('.pull-detail .pull-state')).toHaveText('Merged');
@@ -171,7 +171,7 @@ test('review and detail denials remove cached private content throughout retry a
   await expect(page.getByRole('alert')).toHaveText('Pull request not found or inaccessible.');
   await expect(page.getByText('PRIVATE PULL', { exact: false })).toHaveCount(0);
   await expect(page.getByText('PRIVATE REVIEW', { exact: false })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'Native Gitea reviews' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Reviews', exact: true })).toHaveCount(0);
   state.metadataStatus = 404;
   await page.getByRole('button', { name: 'Refresh repository access' }).click();
   await expect(page.getByRole('alert')).toHaveText('Repository not found or inaccessible.');
@@ -189,14 +189,14 @@ test('expired sessions and logout discard pull and review data, including naviga
   await expect(page.getByText('PRIVATE REVIEW', { exact: false })).toHaveCount(0);
   state.detailStatus = 404;
   await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.getByLabel('Gitea access token').fill('second-session-token');
+  await page.getByLabel('Provider access token').fill('second-session-token');
   await page.getByRole('button', { name: 'Continue to workspace' }).click();
   await expect(page.getByRole('alert')).toHaveText('Pull request not found or inaccessible.');
   await expect(page.getByText('PRIVATE REVIEW', { exact: false })).toHaveCount(0);
   state.detailStatus = 200;
   await page.getByRole('button', { name: 'Try again' }).click();
   await expect(page.getByLabel('Pull request body, plain text')).toBeVisible();
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   await expect(page.getByText('PRIVATE PULL', { exact: false })).toHaveCount(0);
   expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toMatch(/PRIVATE|second-session-token/);
@@ -238,7 +238,7 @@ test('pull browsing is keyboard accessible and fits charcoal and light mobile la
   await page.getByRole('link', { name: pull.title }).focus();
   await page.keyboard.press('Enter');
   await expect(page.getByLabel('Pull request body, plain text')).toBeVisible();
-  await page.getByRole('button', { name: 'Dark theme' }).click();
+  if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
   await page.getByRole('button', { name: 'Load more reviews' }).focus();
   await page.keyboard.press('Enter');
   await expect(page.getByLabel(`Review ${review.id} body, plain text`)).toBeVisible();
@@ -246,7 +246,7 @@ test('pull browsing is keyboard accessible and fits charcoal and light mobile la
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/pull-request-mobile-dark.png', fullPage: true });
-  await page.getByRole('button', { name: 'Light theme' }).click();
+  if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/pull-request-mobile-light.png', fullPage: true });

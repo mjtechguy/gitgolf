@@ -36,16 +36,16 @@ function Reviews({ repositoryKey, queryKey, location }: Props) {
   const reviews = query.isSuccess && (!query.isFetching || query.isFetchingNextPage)
     ? [...new Map(query.data.pages.flatMap((page) => page.reviews).map((review) => [review.id, review])).values()] : [];
   return <section className="browser-panel pull-reviews" aria-labelledby="reviews-title">
-    <div className="browser-panel-heading"><h2 id="reviews-title">Native Gitea reviews</h2><button className="icon-button" aria-label="Refresh reviews" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} /></button></div>
+    <div className="browser-panel-heading"><h2 id="reviews-title">Reviews</h2><button className="icon-button" aria-label="Refresh reviews" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} /></button></div>
     <p className="panel-footnote issue-help">Provider records only. These states do not establish Golf approval eligibility or merge readiness.</p>
     {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : query.isPending || (query.isFetching && !query.isFetchingNextPage) ? <Loading label="Loading reviews…" /> : <>
       {reviews.length ? <ol className="pull-review-list">{reviews.map((review) => {
         const external = repositoryLink(review.htmlUrl);
-        return <li key={review.id}><div className="pull-review-heading"><h3>{review.user?.login || 'Deleted or unavailable author'}</h3><span className="visibility">{reviewLabels[review.state] || 'Unknown review state'} (Gitea)</span></div>
+        return <li key={review.id}><div className="pull-review-heading"><h3>{review.user?.login || 'Deleted or unavailable author'}</h3><span className="visibility">{reviewLabels[review.state] || 'Unknown review state'}</span></div>
           <p className="muted">Submitted <DateLabel value={review.submittedAt} /> · Updated <DateLabel value={review.updatedAt} /></p>
           <pre className="issue-body review-body" tabIndex={0} aria-label={`Review ${review.id} body, plain text`}>{review.body || 'No review text provided.'}</pre>
-          <dl className="review-metadata"><div><dt>Review ID</dt><dd><code>{review.id}</code></dd></div><div><dt>Reviewed commit</dt><dd><code>{review.commitId || 'Unavailable'}</code></dd></div><div><dt>Marked stale</dt><dd>{review.stale ? 'Yes' : 'No'}</dd></div><div><dt>Dismissed</dt><dd>{review.dismissed ? 'Yes' : 'No'}</dd></div><div><dt>Official (Gitea)</dt><dd>{review.official ? 'Yes' : 'No'}</dd></div></dl>
-          {external ? <a className="text-button" href={external} target="_blank" rel="noopener noreferrer">Open review in Gitea<ExternalLink size={14} /></a> : null}
+          <dl className="review-metadata"><div><dt>Review ID</dt><dd><code>{review.id}</code></dd></div><div><dt>Reviewed commit</dt><dd><code>{review.commitId || 'Unavailable'}</code></dd></div><div><dt>Marked stale</dt><dd>{review.stale ? 'Yes' : 'No'}</dd></div><div><dt>Dismissed</dt><dd>{review.dismissed ? 'Yes' : 'No'}</dd></div><div><dt>Official</dt><dd>{review.official ? 'Yes' : 'No'}</dd></div></dl>
+          {external ? <a className="text-button" href={external} target="_blank" rel="noopener noreferrer">Open original review<ExternalLink size={14} /></a> : null}
         </li>;
       })}</ol> : <div className="empty-state"><GitPullRequest size={24} /><h3>No visible reviews in the loaded pages.</h3>{query.hasNextPage ? <p>More provider pages may contain visible reviews.</p> : null}</div>}
       <div className="list-footer"><span>{reviews.length} loaded reviews{query.hasNextPage ? ' · More available' : ''}</span><More hasMore={query.hasNextPage} loading={query.isFetching} load={() => void query.fetchNextPage()} label="reviews" /></div>
@@ -70,7 +70,7 @@ function PullDetail(props: Props) {
         <div className="pull-refs"><RefMetadata title="Base" value={pull.base} /><RefMetadata title="Head" value={pull.head} /></div>
         <p className="panel-footnote">Refs and commits are provider observations. A retained PR snapshot is not proof of an existing source branch, freshness, or protected integration eligibility.</p>
         {pull.merged ? <div className="pull-merge-record"><strong>Native merge record</strong><p>Merged <DateLabel value={pull.mergedAt} /></p><code>{pull.mergeCommitId || 'Merge commit unavailable'}</code></div> : null}
-        <div className="issue-footer"><span>Updated <DateLabel value={pull.updatedAt} /></span>{external ? <a className="text-button" href={external} target="_blank" rel="noopener noreferrer">Open in Gitea<ExternalLink size={14} /></a> : null}</div>
+        <div className="issue-footer"><span>Updated <DateLabel value={pull.updatedAt} /></span>{external ? <a className="text-button" href={external} target="_blank" rel="noopener noreferrer">Open original<ExternalLink size={14} /></a> : null}</div>
         <p className="panel-footnote">Read-only, plain-text view. Reviews below show native records; protected integration remains unavailable.</p>
       </>}
     </section>
@@ -85,7 +85,7 @@ function PullList({ repositoryKey, queryKey, location }: Props) {
     ? [...new Map(query.data.pages.flatMap((page) => page.pullRequests).map((pull) => [pull.id, pull])).values()] : [];
   return <section className="browser-panel" aria-labelledby="pulls-title">
     <div className="browser-panel-heading"><h2 id="pulls-title">Pull requests</h2><div className="panel-actions"><select aria-label="Pull request state" value={location.state} onChange={(event) => void navigate(repositoryOptions(location, { state: event.target.value as RepositoryLocation['state'], pull: undefined }))}><option value="open">Open</option><option value="closed">Closed</option><option value="all">All states</option></select><button className="icon-button" aria-label="Refresh pull requests" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} /></button></div></div>
-    <p className="panel-footnote issue-help">Read-only Gitea pull requests and native reviews. Browsing requires <code>read:repository</code>.</p>
+    <p className="panel-footnote issue-help">Read-only pull requests and reviews. Your repository permissions apply.</p>
     {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : query.isPending || (query.isFetching && !query.isFetchingNextPage) ? <Loading label="Loading pull requests…" /> : <>
       <ul className="issue-list pull-list">{pulls.map((pull) => <li key={pull.id}><GitPullRequest size={19} /><div><h3><Link {...repositoryOptions(location, { pull: pull.number })}>{pull.title}</Link></h3><p>#{pull.number} · {pull.user?.login || 'Deleted or unavailable author'} · <DateLabel value={pull.createdAt} /></p>{pull.head?.retainedSnapshot ? <p className="pull-observation">Retained PR snapshot</p> : null}</div><PullState pull={pull} /></li>)}</ul>
       {!pulls.length ? <div className="empty-state"><GitPullRequest size={25} /><h3>No {location.state === 'all' ? '' : `${location.state} `}pull requests.</h3>{query.hasNextPage ? <p>More provider pages may contain visible pull requests.</p> : <p>There are no pull requests matching this state.</p>}</div> : null}

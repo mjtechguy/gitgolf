@@ -222,14 +222,14 @@ test('permission denial hides cached source through retries; expiry and sign-out
   await expect(page.getByText('PRIVATE_SOURCE', { exact: false })).toHaveCount(0);
   state.metadataStatus = 404;
   await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.getByLabel('Gitea access token').fill('another-session-token');
+  await page.getByLabel('Provider access token').fill('another-session-token');
   await page.getByRole('button', { name: 'Continue to workspace' }).click();
   await expect(page.getByRole('alert')).toHaveText('Repository not found or inaccessible.');
   await expect(page.getByText('PRIVATE_SOURCE', { exact: false })).toHaveCount(0);
   state.metadataStatus = 200;
   await page.goto('/repositories/alex/design-system?view=issues&issue=12');
   await expect(page.getByLabel('Issue body, plain text')).toBeVisible();
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   await expect(page.getByText('PRIVATE ISSUE', { exact: false })).toHaveCount(0);
   expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toMatch(/PRIVATE|another-session-token/);
@@ -239,7 +239,7 @@ test('repository browser is keyboard reachable and fits light/dark mobile screen
   await backend(page);
   await page.goto(`/repositories/alex/design-system?ref=${head}&path=src/index.ts`);
   await expect(page.getByLabel('Plain text preview of index.ts')).toBeVisible();
-  await page.getByRole('button', { name: 'Dark theme' }).click();
+  if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
   await page.screenshot({ path: 'test-results/repository-source-dark.png', fullPage: true });
   await page.locator('.branch-picker > summary').focus();
   await page.keyboard.press('Enter');
@@ -249,7 +249,7 @@ test('repository browser is keyboard reachable and fits light/dark mobile screen
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/repository-source-mobile-dark.png', fullPage: true });
-  await page.getByRole('button', { name: 'Light theme' }).click();
+  if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
   await page.getByRole('navigation', { name: 'Repository', exact: true }).getByRole('link', { name: 'Issues' }).click();
   await page.getByRole('link', { name: issue.title }).click();
   await expect(page.getByLabel('Issue body, plain text')).toBeVisible();
@@ -285,7 +285,7 @@ test('repository branding keeps loaded fonts, legible text and reflow at 320px a
     for (const theme of ['dark', 'light']) {
       await page.goto(`/repositories/alex/design-system?ref=${head}&path=src/index.ts`);
       await expect(page.getByLabel('Plain text preview of index.ts')).toBeVisible();
-      await page.getByRole('button', { name: `${theme === 'dark' ? 'Dark' : 'Light'} theme`, exact: true }).click();
+      if (await page.locator('html').getAttribute('data-theme') !== theme) await page.getByRole('button', { name: `Switch to ${theme} theme`, exact: true }).click();
       await page.evaluate(() => document.fonts.ready);
       expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toContain('Archivo');
       expect(await page.evaluate(() => [...document.fonts].some((font) => font.family.includes('Archivo') && font.status === 'loaded'))).toBe(true);

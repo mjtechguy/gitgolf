@@ -48,7 +48,7 @@ try {
   stage('real token sign-in and account navigation');
   await page.goto(`${golf.origin}/account/api-credentials`);
   await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.getByLabel('Gitea access token', { exact: true }).fill(pat);
+  await page.getByLabel('Provider access token', { exact: true }).fill(pat);
   await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
   await page.getByRole('heading', { name: 'No API credentials', exact: true }).waitFor();
   async function issue(label) {
@@ -123,11 +123,11 @@ try {
   require(await page.locator('.credential-row').count() === 21);
   require(await page.locator('.credential-row img').count() === 0);
   await page.getByRole('heading', { name: '<img src=x onerror=alert(1)>', exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Dark theme', exact: true }).click();
+  if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: `${artifacts}/native-dark.png`, fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Light theme', exact: true }).click();
+  if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
   require(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: `${artifacts}/native-mobile-light.png`, fullPage: true });

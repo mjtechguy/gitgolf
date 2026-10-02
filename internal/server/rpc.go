@@ -425,11 +425,11 @@ func (s *Server) GetIssue(ctx context.Context, req *connect.Request[golfv1.GetIs
 }
 func (s *Server) ListCapabilities(ctx context.Context, _ *connect.Request[golfv1.ListCapabilitiesRequest]) (*connect.Response[golfv1.ListCapabilitiesResponse], error) {
 	_, ready := s.dependencyChecks(ctx)
-	state, reason := golfv1.CapabilityState_CAPABILITY_STATE_READY, "Repository listing, creation, code browsing and read-only issues use your Gitea permissions. Issues require read:issue scope."
+	state, reason := golfv1.CapabilityState_CAPABILITY_STATE_READY, "Browse and create repositories, explore code, and read issues using your account permissions."
 	if !ready {
-		state, reason = golfv1.CapabilityState_CAPABILITY_STATE_DEGRADED, "PostgreSQL or the qualified Gitea 1.27.3 dependency is unavailable. Check readiness before using repositories."
+		state, reason = golfv1.CapabilityState_CAPABILITY_STATE_DEGRADED, "A required service is unavailable. Check system health before using repositories."
 	}
-	capabilities := []*golfv1.Capability{{Id: "repositories", Label: "Gitea repositories", State: state, Reason: reason}}
+	capabilities := []*golfv1.Capability{{Id: "repositories", Label: "Repositories", State: state, Reason: reason}}
 	for _, entry := range []struct{ id, label string }{{"cloudflare", "Cloudflare integration"}, {"pipelines", "Pipeline execution"}, {"agents", "Coding agents"}, {"deployments", "Protected previews and deployment"}} {
 		capabilities = append(capabilities, &golfv1.Capability{Id: entry.id, Label: entry.label, State: golfv1.CapabilityState_CAPABILITY_STATE_DISABLED, Reason: "Planned; not implemented. No operation is available."})
 	}

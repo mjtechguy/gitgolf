@@ -169,11 +169,11 @@ test('private organization views do not survive sign-out and a different user', 
   const state = await backend(page);
   await page.goto(`/organizations/lab?team=${teamId}`);
   await expect(page.getByText('private-member', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   state.login = 'bob';
   await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.getByLabel('Gitea access token').fill('bob-fixture-token');
+  await page.getByLabel('Provider access token').fill('bob-fixture-token');
   await page.getByRole('button', { name: 'Continue to workspace' }).click();
   await expect(page.getByRole('alert')).toHaveText('Organization or team not found or inaccessible.');
   await expect(page.getByText('private-member', { exact: true })).toHaveCount(0);
@@ -187,7 +187,7 @@ test('organization team detail fits charcoal desktop and light mobile with keybo
   await page.goto(`/organizations/lab?team=${teamId}`);
   await expect(page.getByRole('heading', { name: 'Native unit permissions' })).toBeVisible();
   await page.screenshot({ path: 'test-results/organization-dark.png', fullPage: true });
-  await page.getByRole('button', { name: 'Light theme' }).click();
+  if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
   await page.setViewportSize({ width: 320, height: 740 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/organization-mobile-light.png', fullPage: true });

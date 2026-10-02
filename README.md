@@ -9,7 +9,7 @@ These are infrastructure choices, not editions. AI is optional in Golf's core wo
 
 ## What works now
 
-This is a developer preview: Golf-owned local email-or-username/password sign-in, optional scoped Gitea browser OAuth and advanced per-user token bootstrap, encrypted PostgreSQL-backed sessions with account listing/revocation and own-account activity, member-scoped organization/team browsing, repository listing/creation, in-app source, commit history and native commit-diff browsing, ordinary issue creation/plain-text comments and pull-request/native-review reads, a JSON CLI and local stdio MCP tools, black/charcoal and light/system themes, capability reporting, and persistent Compose/Helm installations. Git writes use Gitea directly.
+This is a developer preview: Golf-owned local email-or-username/password sign-in, optional scoped Gitea browser OAuth and advanced per-user token bootstrap, encrypted PostgreSQL-backed sessions with account listing/revocation and own-account activity, member-scoped organization/team browsing, repository listing/creation, in-app source, commit history and native commit-diff browsing, ordinary issue creation/plain-text comments and pull-request/native-review reads, a JSON CLI and local stdio MCP tools, black/charcoal and light themes with a single toggle, capability reporting, and persistent Compose/Helm installations. Git writes use Gitea directly.
 
 Self-service local account lifecycle, external OIDC, organization/role administration, import/connections, PR/review mutations and merge policy, pipelines/runners, agent execution, Cloudflare integrations and protected previews/CD remain roadmap work. This is not complete v1 or a competition-ready entry. No repository CI is configured.
 

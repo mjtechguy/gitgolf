@@ -34,16 +34,16 @@ try {
  const page=await context.newPage();const errors=[];page.on('pageerror',()=>errors.push(true));
  stage='sign in';await page.goto(config.golf);
  await page.getByText('Advanced token sign-in', { exact: true }).click();
- await page.getByLabel('Gitea access token',{exact:true}).fill(config.memberToken);
+ await page.getByLabel('Provider access token',{exact:true}).fill(config.memberToken);
  await page.getByRole('button',{name:'Continue to workspace',exact:true}).click();
- await page.getByRole('button',{name:'Sign out',exact:true}).waitFor();
+ await page.getByLabel('Your account', { exact: true }).waitFor();
  const url=config.golf+'/repositories/'+config.owner+'/diffs?view=commits&commit='+config.root;
  stage='root diff deep link';await page.goto(url);
  const diff=page.getByLabel('Unified diff, plain text',{exact:true});await diff.waitFor();
  check((await diff.innerText()).includes('<script>window.golfDiffExecuted=true</script>'));
  check(await page.evaluate(()=>window.golfDiffExecuted!==true));
  check(await page.locator('.branch-picker').count()===0);
- await page.getByRole('button',{name:'Dark theme',exact:true}).click();
+ if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
  await page.screenshot({path:join(config.screenshots,'commit-diff-dark.png')});
  stage='reload, source and history';await page.reload();await diff.waitFor();
  check(new URL(page.url()).searchParams.get('commit')===config.root);
@@ -54,7 +54,7 @@ try {
  await page.locator('.commit-list').waitFor();
  stage='merge diff and mobile';await page.goto(config.golf+'/repositories/'+config.owner+'/diffs?view=commits&commit='+config.merge);
  await diff.waitFor();check((await diff.innerText()).includes('side.txt'));check(!(await diff.innerText()).includes('diff --git a/README.md'));
- await page.getByRole('button',{name:'Light theme',exact:true}).click();await page.setViewportSize({width:390,height:844});
+ if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();await page.setViewportSize({width:390,height:844});
  check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await page.screenshot({path:join(config.screenshots,'commit-diff-light-mobile.png')});
  stage='provider membership revocation';const removed=await context.request.delete(config.gitea+'/api/v1/repos/'+config.owner+'/diffs/collaborators/'+config.member,

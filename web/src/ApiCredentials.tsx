@@ -33,7 +33,7 @@ function RevokeCredential({ credential, pending, onCancel, onConfirm }: { creden
   return <dialog ref={dialog} className="create-dialog" aria-labelledby="revoke-credential-title" onClose={onCancel} onCancel={(event) => { if (pending) event.preventDefault(); }}>
     <div className="dialog-header"><span className="small-icon"><KeyRound size={21} /></span><button className="icon-button" aria-label="Close credential revocation" disabled={pending} onClick={onCancel}><X size={19} /></button></div>
     <h2 id="revoke-credential-title">Revoke this API credential?</h2>
-    <p className="organization-guidance">“{credential.label}” will lose Golf API access. Your browser session, Gitea token, OAuth consent and Git keys stay unchanged.</p>
+    <p className="organization-guidance">“{credential.label}” will lose Golf API access. Your browser session, provider token, OAuth consent and Git keys stay unchanged.</p>
     <p className="field-help">Credential ID <code>{credential.id}</code></p>
     <div className="dialog-actions"><button ref={cancel} className="button secondary" disabled={pending} onClick={onCancel}>Cancel</button><button className="button session-danger" disabled={pending} onClick={onConfirm}>{pending ? <LoaderCircle className="spin" size={16} /> : null}{pending ? 'Revoking…' : 'Confirm revoke credential'}</button></div>
   </dialog>;
@@ -184,7 +184,7 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
 
   return <div className="api-credentials">
     <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1><KeyRound size={29} />API credentials</h1><p>Short-lived, read-only access for your tools.</p></div></header>
-    <p className="organization-guidance">These credentials can call Golf’s allowed read operations using your source session’s current Gitea access. They cannot create repositories, change your account or manage credentials. Signing out, revoking that source session or reaching its expiry also ends this access. They are not Gitea tokens or Git credentials.</p>
+    <p className="organization-guidance">These credentials can call Golf’s allowed read operations using your source session’s current repository access. They cannot create repositories, change your account or manage credentials. Signing out, revoking that source session or reaching its expiry also ends this access. They are not provider tokens or Git credentials.</p>
     <section className="browser-panel credential-create-panel" aria-labelledby="credential-create-title">
       <div className="browser-panel-heading"><h2 id="credential-create-title">Create a read-only credential</h2><span className="visibility">Read only</span></div>
       <div className="credential-form-content">
@@ -217,7 +217,7 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
           {!credential.revokedAt ? <button className="button secondary" disabled={query.isFetching || revoke.isPending || issuance.isPending} aria-label={`Revoke credential ${credential.id}`} onClick={() => { setNotice(''); setConfirmation(credential); }}>Revoke</button> : null}
         </li>)}</ul> : <div className="empty-state"><KeyRound size={25} /><h3>No API credentials</h3><p>Create a short-lived credential when a tool needs read access to Golf.</p></div>}
         <div className="list-footer credential-list-footer"><span>{credentials.length} loaded {credentials.length === 1 ? 'credential' : 'credentials'}</span><More hasMore={Boolean(query.hasNextPage)} loading={query.isFetching || revoke.isPending || issuance.isPending} load={() => void query.fetchNextPage()} label="credentials" /></div>
-        <p className="panel-footnote">Metadata remains visible after expiry or revocation. An active source session alone does not grant access: the credential must also be unexpired, unrevoked and authorized by Gitea on each call. Lost secrets cannot be recovered.</p>
+        <p className="panel-footnote">Metadata remains visible after expiry or revocation. An active source session alone does not grant access: the credential must also be unexpired, unrevoked and authorized by the repository service on each call. Lost secrets cannot be recovered.</p>
       </>}
     </section>
     {confirmation && !listError ? <RevokeCredential credential={confirmation} pending={revoke.isPending} onCancel={() => { if (!revoke.isPending) setConfirmation(null); }} onConfirm={confirmRevoke} /> : null}

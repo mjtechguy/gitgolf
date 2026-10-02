@@ -256,10 +256,10 @@ for (const transition of ['navigation', 'sign out', 'expiry'] as const) {
       await page.getByRole('link', { name: 'Repositories', exact: false }).first().click();
       await page.goBack();
     } else if (transition === 'sign out') {
-      await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+      await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out', exact: true }).click();
       await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
       await page.getByText('Advanced token sign-in', { exact: true }).click();
-      await page.getByLabel('Gitea access token', { exact: true }).fill('fixture-token');
+      await page.getByLabel('Provider access token', { exact: true }).fill('fixture-token');
       await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
     } else {
       state.errors.ListApiCredentials = 'unauthenticated';
@@ -276,12 +276,12 @@ test('account switch and empty list do not retain the previous account metadata'
   const state = await backend(page);
   await open(page);
   await issue(page);
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   state.user = create(UserSchema, { id: '9007199254740900', login: 'other', fullName: 'Other' });
   state.credentials = [];
   await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.getByLabel('Gitea access token', { exact: true }).fill('other-token');
+  await page.getByLabel('Provider access token', { exact: true }).fill('other-token');
   await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'No API credentials', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'My read tool', exact: true })).toHaveCount(0);
@@ -305,11 +305,11 @@ test('pagehide clears the secret before a document can be frozen for browser his
 test('credential page is usable in dark and light mobile layouts', async ({ page }) => {
   await backend(page);
   await open(page);
-  await page.getByRole('button', { name: 'Dark theme', exact: true }).click();
+  if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.screenshot({ path: 'test-results/api-credentials-dark.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Light theme', exact: true }).click();
+  if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await issue(page);
   await expect(page.getByRole('button', { name: 'Copy credential', exact: true })).toBeFocused();

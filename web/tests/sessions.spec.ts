@@ -70,7 +70,7 @@ test('sessions paginate, preserve IDs, confirm one revoke and return keyboard fo
   await expect(page.getByRole('button', { name: 'Close sessions' })).toBeFocused();
   await expect(page.locator('.session-row')).toHaveCount(2);
   await expect(page.getByText('Current session', { exact: true })).toBeVisible();
-  await expect(page.getByText('This does not revoke your Gitea token', { exact: false })).toBeVisible();
+  await expect(page.getByText('This does not revoke your provider token', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'Load more sessions' }).click();
   await expect(page.locator('.session-row')).toHaveCount(3);
   expect(state.pages).toContain(1);
@@ -206,7 +206,7 @@ test('empty and unavailable sessions remain actionable in light mobile dialog', 
   const state = await backend(page);
   state.errors.ListSessions = 'unavailable';
   await page.goto('/');
-  await page.getByRole('button', { name: 'Light theme' }).click();
+  if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
   await page.setViewportSize({ width: 320, height: 740 });
   await page.getByRole('button', { name: 'Sessions', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Sessions temporarily unavailable.');

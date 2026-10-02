@@ -92,7 +92,7 @@ try {
     stage = loginStage + ': Golf login page';
     await page.goto(golf);
     stage = loginStage + ': Golf OAuth button';
-    const button = page.getByRole('button', { name: 'Continue with Gitea', exact: true });
+    const button = page.getByRole('button', { name: 'Continue with provider', exact: true });
     await button.waitFor({ state: 'visible' });
     stage = loginStage + ': Golf OAuth initiation response';
     const [begin] = await Promise.all([
@@ -418,7 +418,7 @@ def original_refresh_settings():
         key, value = line.split('=', 1)
         settings[key] = value.strip('"').lower()
     if not settings['ACCESS_TOKEN_EXPIRATION_TIME'].isdigit() or settings['INVALIDATE_REFRESH_TOKENS'] not in ('true', 'false'):
-        raise RuntimeError('Cannot safely determine original Gitea OAuth settings')
+        raise RuntimeError('Cannot safely determine original Provider OAuth settings')
     return {'GITEA__oauth2__' + key: value for key, value in settings.items()}
 
 
@@ -483,7 +483,7 @@ def main():
             request(client(), 'POST', GITEA + '/api/v1/user/repos',
                     {'name': repository, 'private': True, 'auto_init': True, 'readme': 'Default', 'default_branch': 'main'},
                     headers={'Authorization': basic(alice)}, expected=201)
-            source_path, text = 'nested space/source.txt', 'Private source from real Gitea OAuth.\n'
+            source_path, text = 'nested space/source.txt', 'Private source from real Provider OAuth.\n'
             source = request(client(), 'POST', GITEA + '/api/v1/repos/' + alice['name'] + '/' + repository + '/contents/' + urllib.parse.quote(source_path),
                              {'content': base64.b64encode(text.encode()).decode(), 'message': 'OAuth smoke source', 'branch': 'main'},
                              headers={'Authorization': basic(alice)}, expected=201)
@@ -540,7 +540,7 @@ def main():
                     if rpc(client(), 'SessionService/GetAuthenticationOptions').get('giteaOauthEnabled', False):
                         raise RuntimeError('Golf OAuth remained enabled after restoration')
                     if original_settings is not None and original_refresh_settings() != original_settings:
-                        raise RuntimeError('Gitea OAuth timing settings were not restored')
+                        raise RuntimeError('Provider OAuth timing settings were not restored')
                 except Exception:
                     cleanup_errors.append('service configuration restoration failed; inspect local Compose state')
             if organization and len(users) > 1:

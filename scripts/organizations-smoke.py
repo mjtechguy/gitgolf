@@ -34,7 +34,7 @@ try {
   stage = 'actual sign-in';
   await page.goto(config.golf);
   await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.getByLabel('Gitea access token', { exact: true }).fill(config.memberToken);
+  await page.getByLabel('Provider access token', { exact: true }).fill(config.memberToken);
   await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
   await page.getByRole('link', { name: 'Organizations', exact: true }).click();
   await page.getByRole('link', { name: config.organization, exact: true }).click();
@@ -46,13 +46,13 @@ try {
   check(await page.getByText('repo.code', { exact: true }).count() === 1);
   check(await page.getByText('hidden-team', { exact: true }).count() === 0);
   check((await page.locator('.organization-permission-note').innerText()).includes('not a computed effective Golf role'));
-  await page.getByRole('button', { name: 'Dark theme', exact: true }).click();
+  if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
   await page.screenshot({ path: join(config.screenshots, 'organizations-dark.png'), fullPage: true });
   stage = 'typed deep-link reload and mobile';
   await page.reload();
   await page.getByRole('heading', { name: 'readers', exact: true }).waitFor();
   check(new URL(page.url()).searchParams.get('team') === config.teamId);
-  await page.getByRole('button', { name: 'Light theme', exact: true }).click();
+  if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await page.screenshot({ path: join(config.screenshots, 'organizations-light-mobile.png'), fullPage: true });
@@ -72,7 +72,7 @@ try {
   check(await page.getByRole('heading', { name: 'readers', exact: true }).count() === 0);
   check(await page.getByRole('heading', { name: config.member, exact: true }).count() === 0);
   check(await page.locator('.unit-permissions').count() === 0);
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await page.getByText('Advanced token sign-in', { exact: true }).waitFor();
   check(errors.length === 0);
   console.log('PASS: production-served organization/team navigation, dark/light/mobile, source links and membership-revocation cleanup');

@@ -30,7 +30,7 @@ try {
  const page = await context.newPage(); const errors=[]; page.on('pageerror',()=>errors.push(true));
  stage='sign in'; await page.goto(config.golf);
  await page.getByText('Advanced token sign-in', { exact: true }).click();
- await page.getByLabel('Gitea access token',{exact:true}).fill(config.token);
+ await page.getByLabel('Provider access token',{exact:true}).fill(config.token);
  await page.getByRole('button',{name:'Continue to workspace',exact:true}).click();
  await page.getByRole('link',{name:'Organizations',exact:true}).waitFor();
  stage='private PR list'; await page.goto(config.golf+'/repositories/'+config.repository+'?view=pulls');
@@ -39,15 +39,15 @@ try {
  stage='private PR metadata'; await page.getByLabel('Pull request body, plain text').waitFor();
  check((await page.getByLabel('Pull request body, plain text').innerText()).includes('<script>'));
  await page.getByRole('region',{name:'Head metadata'}).waitFor();
- await page.getByRole('heading',{name:'Native Gitea reviews'}).waitFor();
+ await page.getByRole('heading',{name:'Reviews'}).waitFor();
  stage='review pagination'; await page.getByRole('button',{name:'Load more reviews',exact:true}).click();
  await page.getByLabel('Review '+config.lastReview+' body, plain text').waitFor();
- stage='theme and deep link'; await page.getByRole('button',{name:'Dark theme',exact:true}).click();
+ stage='theme and deep link'; if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
  await page.evaluate(()=>scrollTo(0,0));
  await page.screenshot({path:join(config.screenshots,'pulls-dark.png')});
  await page.reload(); await page.getByRole('heading',{name:config.title,exact:false}).waitFor();
  check(new URL(page.url()).searchParams.get('pull')===String(config.number));
- await page.getByRole('button',{name:'Light theme',exact:true}).click(); await page.setViewportSize({width:390,height:844});
+ if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click(); await page.setViewportSize({width:390,height:844});
  check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await page.evaluate(()=>scrollTo(0,0));
  await page.screenshot({path:join(config.screenshots,'pulls-light-mobile.png')});
@@ -55,7 +55,7 @@ try {
  {headers:{Authorization:'token '+config.ownerToken}}); check(response.status()===204);
  await page.getByRole('button',{name:'Refresh pull request',exact:true}).click();
  await page.getByRole('alert').waitFor(); check(await page.getByLabel('Pull request body, plain text').count()===0);
- check(await page.getByRole('heading',{name:'Native Gitea reviews'}).count()===0);
+ check(await page.getByRole('heading',{name:'Reviews'}).count()===0);
  check(errors.length===0); console.log('PASS: production PR navigation, review pagination, deep links, dark/light/mobile and revoked-access cleanup');
 } catch { console.error('PR browser failed at '+stage+'; sensitive diagnostics withheld'); process.exitCode=1; }
 finally {

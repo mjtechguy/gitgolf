@@ -37,7 +37,7 @@ function EventTime({ value }: { value: string }) {
 
 function EventRow({ event }: { event: AuditEvent }) {
   return <li className="audit-event">
-    <div className="audit-event-heading"><h3>{actionLabels[event.action] || 'Session event'}</h3><span className="visibility">{event.credentialKind === 'oauth' ? 'Gitea OAuth' : event.credentialKind === 'pat' ? 'Gitea access token' : event.credentialKind === 'local' ? 'Golf password' : 'Golf session'}</span></div>
+    <div className="audit-event-heading"><h3>{actionLabels[event.action] || 'Session event'}</h3><span className="visibility">{event.credentialKind === 'oauth' ? 'Provider OAuth' : event.credentialKind === 'pat' ? 'Provider access token' : event.credentialKind === 'local' ? 'Golf password' : 'Golf session'}</span></div>
     <p className="audit-time"><EventTime value={event.occurredAt} /></p>
     <details><summary>Event details <span className="audit-id">{event.id}</span></summary><dl className="audit-metadata">
       <div><dt>Event ID</dt><dd><code>{event.id}</code></dd></div>
@@ -65,7 +65,7 @@ export function AccountActivity({ userId }: { userId: string }) {
   const events = query.isSuccess && !loading ? query.data.pages.flatMap((page) => page.events) : [];
   return <div className="account-activity">
     <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1><History size={29} />Account activity</h1><p>Successful sign-ins, sign-outs and session changes for your account.</p></div></header>
-    <p className="organization-guidance">History begins when session activity recording is enabled on this installation. Earlier activity, failed sign-ins and changes made in Gitea are not included.</p>
+    <p className="organization-guidance">History begins when session activity recording is enabled on this installation. Earlier activity, failed sign-ins and changes made outside Golf are not included.</p>
     <section className="browser-panel" aria-labelledby="activity-title" aria-busy={query.isFetching}>
       <div className="browser-panel-heading"><h2 id="activity-title">Session history</h2><button className="button secondary" disabled={query.isFetching} onClick={refresh}><RefreshCw size={15} className={query.isFetching ? 'spin' : ''} />Refresh activity</button></div>
       {query.isError ? <PanelError error={query.error} retry={refresh} /> : loading ? <Loading label="Loading account activity…" /> : <>
