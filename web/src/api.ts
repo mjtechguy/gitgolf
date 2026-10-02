@@ -1,63 +1,19 @@
-export type User = { id: number; login: string; full_name: string; avatar_url: string };
-export type Repository = {
-  id: number;
-  name: string;
-  full_name: string;
-  description: string;
-  private: boolean;
-  html_url: string;
-  default_branch: string;
-  updated_at: string;
-};
-export type RepositoryPage = { repositories: Repository[]; next_page?: number };
-export type RepositoryDetail = Repository & { empty: boolean; clone_url: string; ssh_url: string };
-export type Branch = { name: string; commit_id: string; protected: boolean };
-export type BranchPage = { branches: Branch[]; next_page?: number };
-export type Commit = { sha: string; message: string; author_name: string; authored_at: string };
-export type CommitPage = { commits: Commit[]; next_page?: number };
-export type SourceEntry = { name: string; path: string; type: 'dir' | 'file' | 'symlink' | 'submodule'; sha: string; size: number };
-export type Source = {
-  commit_id: string;
-  path: string;
-  kind: 'directory' | 'file' | 'symlink' | 'submodule';
-  entries?: SourceEntry[];
-  file?: SourceEntry & { content?: string; preview_reason?: string };
-};
-export type Issue = { id: number; number: number; title: string; body: string; state: string; user: User; comments: number; created_at: string; updated_at: string; html_url: string };
-export type IssuePage = { issues: Issue[]; next_page?: number };
-export type Capability = { id: string; label: string; state: string; reason: string };
+import { createClient, ConnectError } from '@connectrpc/connect';
+import { createConnectTransport } from '@connectrpc/connect-web';
+import { CapabilityService, RepositoryService, SessionService } from './gen/golf/v1/golf_pb';
 
-export class ApiError extends Error {
-  constructor(public status: number, message: string) {
-    super(message);
-  }
-}
+const transport = createConnectTransport({
+  baseUrl: '/rpc',
+  useBinaryFormat: false,
+  fetch: (input, init) => fetch(input, { ...init, credentials: 'same-origin', cache: 'no-store' }),
+});
 
-export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(path, {
-      ...options,
-      credentials: 'same-origin',
-      cache: 'no-store',
-      headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers },
-    });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') throw error;
-    throw new ApiError(0, 'Golf could not be reached. Check your connection and try again.');
-  }
-  const body: unknown = response.status === 204 ? undefined : await response.json().catch(() => undefined);
-  if (!response.ok) {
-    const error = typeof body === 'object' && body !== null && 'error' in body ? body.error : undefined;
-    const detail = typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
-      ? error.message
-      : typeof error === 'string' ? error
-      : typeof body === 'object' && body !== null && 'message' in body && typeof body.message === 'string'
-        ? body.message
-        : `The request failed (${response.status}). Please try again.`;
-    throw new ApiError(response.status, detail);
-  }
-  return body as T;
+export const sessionClient = createClient(SessionService, transport);
+export const repositoryClient = createClient(RepositoryService, transport);
+export const capabilityClient = createClient(CapabilityService, transport);
+
+export function errorMessage(error: Error) {
+  return error instanceof ConnectError ? error.rawMessage : error.message;
 }
 
 // Never turn a forge-provided URL into an executable browser link.

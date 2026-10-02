@@ -1,8 +1,7 @@
-// Package cli implements the bootstrap, read-only Golf JSON client.
+// Package cli implements the read-only Golf client using generated Connect contracts.
 package cli
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,6 +15,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"connectrpc.com/connect"
+	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
+	"github.com/mjtechguy/golf-git/gen/golf/v1/golfv1connect"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 const help = `Golf — inspect repositories using your own permissions.
@@ -30,9 +35,9 @@ Usage: golf [--url ORIGIN] [--token-stdin] COMMAND
   issue list OWNER/REPO [--state open|closed|all] [--page N] [--limit N]
   issue view OWNER/REPO NUMBER
 
-Success writes JSON: {"schema_version":"golf.cli.v0","data":...}.
+Success writes JSON: {"schema_version":"golf.cli.v1","data":...}.
 Exit codes: 0 success/help; 1 operation/authentication failure; 2 usage error.
-This bootstrap schema is not a stable public API. No automatic pagination.
+Data uses the versioned API's Protobuf JSON format. No automatic pagination.
 Pass a Gitea token on stdin with --token-stdin, or set GOLF_GITEA_TOKEN.
 GOLF_URL defaults to http://localhost:8080. Remote origins require HTTPS.
 Credentials/cookies are never saved. Each command signs in and signs out.
@@ -58,7 +63,7 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 		fmt.Fprint(output, help)
 		return 0
 	}
-	path, err := endpoint(flags.Args())
+	command, err := parseCommand(flags.Args())
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			fmt.Fprint(output, help)
@@ -88,7 +93,7 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 		fmt.Fprintln(diagnostic, "Supply one valid Gitea token using --token-stdin or GOLF_GITEA_TOKEN.")
 		return 2
 	}
-	result, err := execute(ctx, base, path, token)
+	result, err := execute(ctx, base, command, token)
 	if err != nil {
 		fmt.Fprintln(diagnostic, err)
 		return 1
@@ -98,7 +103,7 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 	if err := enc.Encode(struct {
 		Schema string          `json:"schema_version"`
 		Data   json.RawMessage `json:"data"`
-	}{"golf.cli.v0", result}); err != nil {
+	}{"golf.cli.v1", result}); err != nil {
 		fmt.Fprintln(diagnostic, "Could not write command result.")
 		return 1
 	}
@@ -142,98 +147,100 @@ func parseOrigin(value string) (string, error) {
 	return u.Scheme + "://" + u.Host, nil
 }
 
-func endpoint(args []string) (string, error) {
+type command struct {
+	name       string
+	repository *golfv1.RepositoryKey
+	page       *golfv1.PageRequest
+	ref        string
+	path       string
+	state      golfv1.IssueState
+	number     uint32
+}
+
+func parseCommand(args []string) (command, error) {
 	invalid := errors.New("invalid command")
+	var result command
 	if len(args) < 2 {
-		return "", invalid
+		return result, invalid
 	}
-	command := args[0] + " " + args[1]
-	path := "/api/repositories"
+	result.name = args[0] + " " + args[1]
 	rest := args[2:]
-	switch command {
+	switch result.name {
 	case "repo list":
 	case "repo view", "repo branches", "repo commits", "repo contents", "issue list", "issue view":
 		if len(rest) == 0 {
-			return "", invalid
+			return result, invalid
 		}
 		parts := strings.Split(rest[0], "/")
 		if len(parts) != 2 {
-			return "", invalid
+			return result, invalid
 		}
 		for _, part := range parts {
 			if part == "" || part == "." || part == ".." || strings.ContainsAny(part, "\\\r\n\x00") {
-				return "", invalid
+				return result, invalid
 			}
-			path += "/" + url.PathEscape(part)
 		}
+		result.repository = &golfv1.RepositoryKey{Owner: parts[0], Name: parts[1]}
 		rest = rest[1:]
-		switch command {
-		case "repo branches", "repo commits", "repo contents":
-			path += "/" + args[1]
-		case "issue list", "issue view":
-			path += "/issues"
-			if command == "issue view" {
-				if len(rest) == 0 {
-					return "", invalid
-				}
-				number, err := strconv.ParseInt(rest[0], 10, 32)
-				if err != nil || number < 1 {
-					return "", invalid
-				}
-				path += "/" + strconv.FormatInt(number, 10)
-				rest = rest[1:]
+		if result.name == "issue view" {
+			if len(rest) == 0 {
+				return result, invalid
 			}
+			number, err := strconv.ParseInt(rest[0], 10, 32)
+			if err != nil || number < 1 {
+				return result, invalid
+			}
+			result.number = uint32(number)
+			rest = rest[1:]
 		}
 	default:
-		return "", invalid
+		return result, invalid
 	}
-	flags := flag.NewFlagSet(command, flag.ContinueOnError)
+	flags := flag.NewFlagSet(result.name, flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	var ref, filePath, state string
 	page, limit := 1, 20
-	paginated := command == "repo list" || command == "repo branches" || command == "repo commits" || command == "issue list"
+	paginated := result.name == "repo list" || result.name == "repo branches" || result.name == "repo commits" || result.name == "issue list"
 	if paginated {
 		flags.IntVar(&page, "page", 1, "page number")
 		flags.IntVar(&limit, "limit", 20, "page size")
 	}
-	if command == "repo commits" || command == "repo contents" {
+	if result.name == "repo commits" || result.name == "repo contents" {
 		flags.StringVar(&ref, "ref", "", "branch or commit")
 	}
-	if command == "repo contents" {
+	if result.name == "repo contents" {
 		flags.StringVar(&filePath, "path", "", "repository-relative file or directory")
 	}
-	if command == "issue list" {
+	if result.name == "issue list" {
 		flags.StringVar(&state, "state", "open", "issue state")
 	}
 	if err := flags.Parse(rest); err != nil {
-		return "", err
+		return result, err
 	}
 	if len(flags.Args()) != 0 || page < 1 || page > 10000 || limit < 1 || limit > 100 || (state != "" && state != "open" && state != "closed" && state != "all") {
-		return "", invalid
+		return result, invalid
 	}
-	query := url.Values{}
 	if paginated {
-		query.Set("page", strconv.Itoa(page))
-		query.Set("limit", strconv.Itoa(limit))
+		result.page = &golfv1.PageRequest{Page: uint32(page), Limit: uint32(limit)}
 	}
-	for key, value := range map[string]string{"ref": ref, "path": filePath, "state": state} {
-		if value != "" {
-			query.Set(key, value)
-		}
-	}
-	if len(query) != 0 {
-		path += "?" + query.Encode()
-	}
-	return path, nil
+	result.ref, result.path = ref, filePath
+	result.state = map[string]golfv1.IssueState{"open": golfv1.IssueState_ISSUE_STATE_OPEN, "closed": golfv1.IssueState_ISSUE_STATE_CLOSED, "all": golfv1.IssueState_ISSUE_STATE_ALL}[state]
+	return result, nil
 }
 
-func execute(ctx context.Context, origin, path, token string) (result json.RawMessage, err error) {
+func execute(ctx context.Context, origin string, command command, token string) (result json.RawMessage, err error) {
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	}}
-	body, _ := json.Marshal(map[string]string{"token": token})
-	_, err = request(ctx, client, origin, "POST", "/api/session", body)
+	options := []connect.ClientOption{connect.WithProtoJSON(), connect.WithReadMaxBytes(8 << 20), connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, request connect.AnyRequest) (connect.AnyResponse, error) {
+			request.Header().Set("Origin", origin)
+			return next(ctx, request)
+		}
+	}))}
+	sessions := golfv1connect.NewSessionServiceClient(client, origin+"/rpc", options...)
+	_, err = sessions.LoginWithGiteaToken(ctx, connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: token}))
 	// Also clear a cookie set by a malformed login response. SIGKILL cannot run
 	// cleanup; the server's normal session expiry remains the final bound.
 	u, _ := url.Parse(origin)
@@ -241,45 +248,76 @@ func execute(ctx context.Context, origin, path, token string) (result json.RawMe
 		defer func() {
 			cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			if _, logoutErr := request(cleanup, client, origin, "DELETE", "/api/session", nil); logoutErr != nil {
+			if _, logoutErr := sessions.Logout(cleanup, connect.NewRequest(&golfv1.LogoutRequest{})); logoutErr != nil {
 				err = errors.Join(err, errors.New("could not close the temporary Golf session; it will expire on the server"))
 			}
 		}()
 	}
 	if err != nil {
-		return nil, err
+		return nil, operationError(err)
 	}
 	if len(jar.Cookies(u)) == 0 {
 		return nil, errors.New("Golf did not establish a session")
 	}
-	return request(ctx, client, origin, "GET", path, nil)
+	repositories := golfv1connect.NewRepositoryServiceClient(client, origin+"/rpc", options...)
+	message, err := command.read(ctx, repositories)
+	if err != nil {
+		return nil, operationError(err)
+	}
+	return protojson.MarshalOptions{EmitDefaultValues: true}.Marshal(message)
 }
 
-func request(ctx context.Context, client *http.Client, origin, method, path string, body []byte) (json.RawMessage, error) {
-	req, err := http.NewRequestWithContext(ctx, method, origin+path, bytes.NewReader(body))
-	if err != nil {
-		return nil, errors.New("could not construct Golf request")
+func operationError(err error) error {
+	// Never forward a remote error message: a malicious endpoint could echo the
+	// credential, source text, or a terminal escape in a diagnostic.
+	return fmt.Errorf("Golf returned %s; check the origin, connection, token scopes and resource access", connect.CodeOf(err))
+}
+
+func (command command) read(ctx context.Context, client golfv1connect.RepositoryServiceClient) (proto.Message, error) {
+	switch command.name {
+	case "repo list":
+		response, err := client.ListRepositories(ctx, connect.NewRequest(&golfv1.ListRepositoriesRequest{Page: command.page}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "repo view":
+		response, err := client.GetRepository(ctx, connect.NewRequest(&golfv1.GetRepositoryRequest{Repository: command.repository}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "repo branches":
+		response, err := client.ListBranches(ctx, connect.NewRequest(&golfv1.ListBranchesRequest{Repository: command.repository, Page: command.page}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "repo commits":
+		response, err := client.ListCommits(ctx, connect.NewRequest(&golfv1.ListCommitsRequest{Repository: command.repository, Page: command.page, Ref: command.ref}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "repo contents":
+		response, err := client.GetContents(ctx, connect.NewRequest(&golfv1.GetContentsRequest{Repository: command.repository, Ref: command.ref, Path: command.path}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "issue list":
+		response, err := client.ListIssues(ctx, connect.NewRequest(&golfv1.ListIssuesRequest{Repository: command.repository, State: command.state, Page: command.page}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "issue view":
+		response, err := client.GetIssue(ctx, connect.NewRequest(&golfv1.GetIssueRequest{Repository: command.repository, Number: command.number}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	default:
+		return nil, errors.New("invalid command")
 	}
-	req.Header.Set("Origin", origin)
-	req.Header.Set("Accept", "application/json")
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	res, err := client.Do(req)
-	if err != nil {
-		return nil, errors.New("Golf request failed; check the origin, connection and TLS certificate")
-	}
-	defer res.Body.Close()
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return nil, fmt.Errorf("Golf returned HTTP %d for %s; verify your token scopes and resource access", res.StatusCode, method)
-	}
-	if method == "DELETE" && res.StatusCode == http.StatusNoContent {
-		return nil, nil
-	}
-	const maxResponse = 8 << 20
-	raw, err := io.ReadAll(io.LimitReader(res.Body, maxResponse+1))
-	if err != nil || len(raw) > maxResponse || !json.Valid(raw) {
-		return nil, errors.New("Golf returned invalid JSON or exceeded the 8 MiB response limit")
-	}
-	return raw, nil
 }

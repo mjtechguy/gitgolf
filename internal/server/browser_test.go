@@ -3,17 +3,17 @@ package server
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
+	"connectrpc.com/connect"
+	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
+	"github.com/mjtechguy/golf-git/gen/golf/v1/golfv1connect"
 )
 
 func TestBrowserInputBoundaries(t *testing.T) {
@@ -43,31 +43,23 @@ func TestBrowserInputBoundaries(t *testing.T) {
 			t.Errorf("path %q valid=%v, want %v", tc.value, got, tc.valid)
 		}
 	}
+
 	for _, tc := range []struct {
-		owner, repo, query string
-		valid              bool
-	}{
-		{"developer", ".github", "ref=feature%2Ffix", true},
-		{"..", "example", "", false}, {"a%2Fb", "example", "", false},
-		{"developer", "example", "ref=main&ref=other", false},
-		{"developer", "example", "url=https://evil.example", false},
-		{"developer", "example", "ref=%GG", false},
-	} {
-		request := httptest.NewRequest("GET", "/?"+tc.query, nil)
-		route := chi.NewRouteContext()
-		route.URLParams.Add("owner", tc.owner)
-		route.URLParams.Add("repo", tc.repo)
-		request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, route))
-		_, _, got := browserInput(httptest.NewRecorder(), request, "ref")
-		if got != tc.valid {
-			t.Errorf("route/query %#v valid=%v", tc, got)
+		owner, repo string
+		valid       bool
+	}{{"developer", ".github", true}, {"..", "repo", false}, {"a%2Fb", "repo", false}, {"", "repo", false}, {"owner", "../repo", false}} {
+		_, err := repositoryPath(repositoryKey{tc.owner, tc.repo})
+		if (err == nil) != tc.valid {
+			t.Errorf("key %#v: %v", tc, err)
 		}
 	}
-	for _, raw := range []string{"page=0", "page=10001", "limit=101", "limit=", "page=01", "page=%2B1"} {
-		query, _ := url.ParseQuery(raw)
-		if _, _, ok := browserPage(httptest.NewRecorder(), query); ok {
-			t.Errorf("invalid pagination accepted: %s", raw)
+	for _, paging := range []pageRequest{{10001, 20}, {1, 101}} {
+		if _, _, err := pagination(paging); err == nil {
+			t.Error("invalid pagination accepted")
 		}
+	}
+	if page, limit, err := pagination(pageRequest{}); err != nil || page != 1 || limit != 20 {
+		t.Fatal("incorrect default pagination")
 	}
 }
 
@@ -108,13 +100,26 @@ func TestBrowserRequiresSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, suffix := range []string{"", "/branches", "/commits", "/contents", "/issues", "/issues/1"} {
+	for _, procedure := range []string{golfv1connect.SessionServiceGetSessionProcedure, golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure, golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure, golfv1connect.RepositoryServiceListIssuesProcedure, golfv1connect.RepositoryServiceGetIssueProcedure} {
+		body := &unreadBody{t: t}
+		r := httptest.NewRequest("POST", "/rpc"+procedure, body)
+		r.Header.Set("Origin", s.config.PublicURL)
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Content-Encoding", "gzip")
+		r.Header.Set("Connect-Protocol-Version", "1")
 		w := httptest.NewRecorder()
-		s.ServeHTTP(w, httptest.NewRequest("GET", "/api/repositories/dev/repo"+suffix, nil))
-		if w.Code != 401 || w.Header().Get("Cache-Control") != "no-store" {
-			t.Errorf("anonymous %s: status=%d cache=%s", suffix, w.Code, w.Header().Get("Cache-Control"))
+		s.ServeHTTP(w, r)
+		if w.Code != 401 || !strings.Contains(w.Body.String(), `"code":"unauthenticated"`) || w.Header().Get("Cache-Control") != "no-store" {
+			t.Errorf("anonymous %s: %d %s", procedure, w.Code, w.Body.String())
 		}
 	}
+}
+
+type unreadBody struct{ t *testing.T }
+
+func (r *unreadBody) Read([]byte) (int, error) {
+	r.t.Error("unauthenticated compressed body was read before rejection")
+	return 0, errors.New("must not read")
 }
 
 func TestRepositoryBrowserWithPostgres(t *testing.T) {
@@ -249,104 +254,193 @@ func TestRepositoryBrowserWithPostgres(t *testing.T) {
 		}
 	}))
 	defer upstream.Close()
+
 	s, err := New(testConfig(upstream.URL), db)
 	if err != nil {
 		t.Fatal(err)
 	}
-	login := httptest.NewRequest("POST", "/api/session", strings.NewReader(`{"token":"browser-user-token"}`))
-	login.Header.Set("Origin", "http://localhost:8080")
-	login.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	s.ServeHTTP(w, login)
-	if w.Code != 200 {
-		t.Fatalf("login: %d %s", w.Code, w.Body.String())
+	sessions, repositories, _, _, _ := testRPCClients(t, s)
+	ctx := context.Background()
+	if _, err := sessions.LoginWithGiteaToken(ctx, connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: "browser-user-token"})); err != nil {
+		t.Fatal(err)
 	}
-	cookie := w.Result().Cookies()[0]
-	request := func(target string) *httptest.ResponseRecorder {
-		t.Helper()
-		r := httptest.NewRequest("GET", "/api/repositories/developer/"+target, nil)
-		r.AddCookie(cookie)
-		out := httptest.NewRecorder()
-		s.ServeHTTP(out, r)
-		if out.Header().Get("Cache-Control") != "no-store" || strings.Contains(out.Body.String(), "browser-user-token") {
-			t.Fatal("private response/cache boundary failed")
-		}
-		return out
+	key := func(name string) *golfv1.RepositoryKey { return &golfv1.RepositoryKey{Owner: "developer", Name: name} }
+	repo, err := repositories.GetRepository(ctx, connect.NewRequest(&golfv1.GetRepositoryRequest{Repository: key("example")}))
+	if err != nil || !repo.Msg.Repository.Private || repo.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("repository metadata", err)
+	}
+	empty, err := repositories.GetRepository(ctx, connect.NewRequest(&golfv1.GetRepositoryRequest{Repository: key("empty")}))
+	if err != nil || !empty.Msg.Repository.Empty {
+		t.Fatal("empty metadata", err)
+	}
+	branches, err := repositories.ListBranches(ctx, connect.NewRequest(&golfv1.ListBranchesRequest{Repository: key("empty")}))
+	if err != nil || len(branches.Msg.Branches) != 0 {
+		t.Fatal("empty branches", err)
+	}
+	commits, err := repositories.ListCommits(ctx, connect.NewRequest(&golfv1.ListCommitsRequest{Repository: key("empty")}))
+	if err != nil || len(commits.Msg.Commits) != 0 {
+		t.Fatal("empty commits", err)
+	}
+	branches, err = repositories.ListBranches(ctx, connect.NewRequest(&golfv1.ListBranchesRequest{Repository: key("example"), Page: &golfv1.PageRequest{Limit: 1}}))
+	if err != nil || branches.Msg.Page.NextPage != 2 || branches.Msg.Branches[0].Name != "feature/slash" {
+		t.Fatal("branches pagination", err)
+	}
+	commits, err = repositories.ListCommits(ctx, connect.NewRequest(&golfv1.ListCommitsRequest{Repository: key("example"), Ref: "feature/slash", Page: &golfv1.PageRequest{Limit: 1}}))
+	if err != nil || commits.Msg.Page.NextPage != 2 || commits.Msg.Commits[0].AuthorName != "Author" {
+		t.Fatal("commit history", err)
+	}
+	commits, err = repositories.ListCommits(ctx, connect.NewRequest(&golfv1.ListCommitsRequest{Repository: key("example"), Page: &golfv1.PageRequest{Page: 2}}))
+	if err != nil || len(commits.Msg.Commits) != 0 || commits.Msg.Page.NextPage != 0 {
+		t.Fatal("terminal page", err)
+	}
+	directory, err := repositories.GetContents(ctx, connect.NewRequest(&golfv1.GetContentsRequest{Repository: key("example"), Ref: "feature/slash"}))
+	if err != nil || directory.Msg.Kind != golfv1.SourceEntryType_SOURCE_ENTRY_TYPE_DIRECTORY || directory.Msg.CommitId != sha {
+		t.Fatal("pinned directory", err)
+	}
+	nested, err := repositories.GetContents(ctx, connect.NewRequest(&golfv1.GetContentsRequest{Repository: key("example"), Path: "nested/hello world 雪.txt"}))
+	if err != nil || nested.Msg.File.GetContent() != plain {
+		t.Fatal("nested unicode path", err)
 	}
 	for _, tc := range []struct {
-		target string
-		status int
-		marker string
+		name string
+		call func() error
+		code connect.Code
 	}{
-		{"example", 200, `"private":true`}, {"empty", 200, `"empty":true`},
-		{"empty/branches", 200, `"branches":[]`}, {"empty/commits", 200, `"commits":[]`}, {"empty/contents", 409, `empty_repository`},
-		{"example/branches?limit=1", 200, `"next_page":2`},
-		{"example/commits?ref=feature%2Fslash&limit=1", 200, `"author_name":"Author"`},
-		{"example/commits?page=2", 200, `"commits":[]`},
-		{"example/commits?ref=missing", 404, `not_found`},
-		{"example/contents?ref=feature%2Fslash", 200, `"kind":"directory"`},
-		{"example/contents?path=nested%2Fhello%20world%20%E9%9B%AA.txt", 200, `"kind":"file"`},
-		{"example/contents?path=missing", 404, `not_found`},
-		{"example/contents?path=mismatch", 502, `invalid_forge_response`},
-		{"example/contents?path=huge-directory", 502, `forge_response_too_large`},
-		{"example/issues", 200, `"issues":[`}, {"example/issues/1", 200, `"state":"closed"`},
-		{"example/issues/2", 404, `not_found`}, {"example/issues/0", 400, `invalid_issue`},
-		{"example/issues?state=bogus", 400, `invalid_state`},
-		{"example?extra=yes", 400, `invalid_query`}, {"example/branches?limit=101", 400, `invalid_pagination`},
-		{"example/commits?ref=main%5E", 400, `invalid_ref`},
-		{"example/contents?path=..%2Fsecret", 400, `invalid_source`},
-		{"hidden/contents", 404, `not_found`}, {"denied/issues", 403, `forge_forbidden`}, {"outage", 502, `forge_unavailable`},
+		{"missing commit", func() error {
+			_, err := repositories.ListCommits(ctx, connect.NewRequest(&golfv1.ListCommitsRequest{Repository: key("example"), Ref: "missing"}))
+			return err
+		}, connect.CodeNotFound},
+		{"empty contents", func() error {
+			_, err := repositories.GetContents(ctx, connect.NewRequest(&golfv1.GetContentsRequest{Repository: key("empty")}))
+			return err
+		}, connect.CodeFailedPrecondition},
+		{"missing file", func() error {
+			_, err := repositories.GetContents(ctx, connect.NewRequest(&golfv1.GetContentsRequest{Repository: key("example"), Path: "missing"}))
+			return err
+		}, connect.CodeNotFound},
+		{"pinned metadata mismatch", func() error {
+			_, err := repositories.GetContents(ctx, connect.NewRequest(&golfv1.GetContentsRequest{Repository: key("example"), Path: "mismatch"}))
+			return err
+		}, connect.CodeUnavailable},
+		{"oversized directory", func() error {
+			_, err := repositories.GetContents(ctx, connect.NewRequest(&golfv1.GetContentsRequest{Repository: key("example"), Path: "huge-directory"}))
+			return err
+		}, connect.CodeResourceExhausted},
+		{"PR is not issue", func() error {
+			_, err := repositories.GetIssue(ctx, connect.NewRequest(&golfv1.GetIssueRequest{Repository: key("example"), Number: 2}))
+			return err
+		}, connect.CodeNotFound},
+		{"zero issue", func() error {
+			_, err := repositories.GetIssue(ctx, connect.NewRequest(&golfv1.GetIssueRequest{Repository: key("example")}))
+			return err
+		}, connect.CodeInvalidArgument},
+		{"oversized issue number", func() error {
+			_, err := repositories.GetIssue(ctx, connect.NewRequest(&golfv1.GetIssueRequest{Repository: key("example"), Number: 4294967295}))
+			return err
+		}, connect.CodeInvalidArgument},
+		{"unknown enum", func() error {
+			_, err := repositories.ListIssues(ctx, connect.NewRequest(&golfv1.ListIssuesRequest{Repository: key("example"), State: golfv1.IssueState(99)}))
+			return err
+		}, connect.CodeInvalidArgument},
+		{"missing key", func() error {
+			_, err := repositories.GetRepository(ctx, connect.NewRequest(&golfv1.GetRepositoryRequest{}))
+			return err
+		}, connect.CodeInvalidArgument},
+		{"page bound", func() error {
+			_, err := repositories.ListBranches(ctx, connect.NewRequest(&golfv1.ListBranchesRequest{Repository: key("example"), Page: &golfv1.PageRequest{Limit: 101}}))
+			return err
+		}, connect.CodeInvalidArgument},
+		{"revision expression", func() error {
+			_, err := repositories.ListCommits(ctx, connect.NewRequest(&golfv1.ListCommitsRequest{Repository: key("example"), Ref: "main^"}))
+			return err
+		}, connect.CodeInvalidArgument},
+		{"traversal", func() error {
+			_, err := repositories.GetContents(ctx, connect.NewRequest(&golfv1.GetContentsRequest{Repository: key("example"), Path: "../secret"}))
+			return err
+		}, connect.CodeInvalidArgument},
+		{"private", func() error {
+			_, err := repositories.GetContents(ctx, connect.NewRequest(&golfv1.GetContentsRequest{Repository: key("hidden")}))
+			return err
+		}, connect.CodeNotFound},
+		{"scope denial", func() error {
+			_, err := repositories.ListIssues(ctx, connect.NewRequest(&golfv1.ListIssuesRequest{Repository: key("denied")}))
+			return err
+		}, connect.CodePermissionDenied},
+		{"outage", func() error {
+			_, err := repositories.GetRepository(ctx, connect.NewRequest(&golfv1.GetRepositoryRequest{Repository: key("outage")}))
+			return err
+		}, connect.CodeUnavailable},
 	} {
-		t.Run(tc.target, func(t *testing.T) {
-			out := request(tc.target)
-			if out.Code != tc.status || !strings.Contains(out.Body.String(), tc.marker) {
-				t.Fatalf("status=%d body=%s", out.Code, out.Body.String())
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.call(); connect.CodeOf(err) != tc.code {
+				t.Fatalf("got %v, want %v", err, tc.code)
 			}
 		})
 	}
 	for _, name := range []string{"plain.txt", "limit.txt", "binary", "control", "invalid-utf8", "lfs", "lfs-pointer", "large", "symlink", "submodule"} {
 		t.Run("preview/"+name, func(t *testing.T) {
 			before := contentFetches.Load()
-			out := request("example/contents?ref=feature%2Fslash&path=" + name)
-			if out.Code != 200 {
-				t.Fatalf("preview: %d %s", out.Code, out.Body.String())
-			}
-			var result struct {
-				CommitID string     `json:"commit_id"`
-				File     sourceFile `json:"file"`
-			}
-			if err := json.Unmarshal(out.Body.Bytes(), &result); err != nil {
+			result, err := repositories.GetContents(ctx, connect.NewRequest(&golfv1.GetContentsRequest{Repository: key("example"), Ref: "feature/slash", Path: name}))
+			if err != nil {
 				t.Fatal(err)
 			}
-			if result.CommitID != sha {
-				t.Fatal("source was not pinned")
+			if result.Msg.CommitId != sha || result.Header().Get("Cache-Control") != "no-store" {
+				t.Fatal("pin/cache boundary")
 			}
+			file := result.Msg.File
 			if name == "plain.txt" || name == "limit.txt" {
-				if result.File.Content == nil || result.File.PreviewReason != "" {
-					t.Fatal("plain UTF-8 preview missing")
+				if file.Content == nil || file.PreviewReason != "" {
+					t.Fatal("text missing")
 				}
-				if name == "plain.txt" && *result.File.Content != plain {
-					t.Fatal("source text was transformed")
+				if name == "plain.txt" && *file.Content != plain {
+					t.Fatal("text transformed")
 				}
-			} else if result.File.Content != nil || result.File.PreviewReason == "" {
-				t.Fatal("unsafe preview exposed or missing explanation")
+			} else if file.Content != nil || file.PreviewReason == "" {
+				t.Fatal("unsafe preview exposed")
 			}
 			if (name == "large" || name == "lfs" || name == "symlink" || name == "submodule") && contentFetches.Load() != before {
 				t.Fatal("metadata-only object fetched")
 			}
 		})
 	}
-	out := request("example/issues")
-	var list struct {
-		Issues []Issue `json:"issues"`
+	issues, err := repositories.ListIssues(ctx, connect.NewRequest(&golfv1.ListIssuesRequest{Repository: key("example")}))
+	if err != nil || len(issues.Msg.Issues) != 1 || issues.Msg.Issues[0].Body != "<script>plain text</script>" {
+		t.Fatal("issue filtering/text", err)
 	}
-	if err := json.Unmarshal(out.Body.Bytes(), &list); err != nil || len(list.Issues) != 1 || list.Issues[0].Body != "<script>plain text</script>" {
-		t.Fatal("issue-only or plain-text boundary failed", err)
+	issue, err := repositories.GetIssue(ctx, connect.NewRequest(&golfv1.GetIssueRequest{Repository: key("example"), Number: 1}))
+	if err != nil || issue.Msg.Issue.State != golfv1.IssueState_ISSUE_STATE_CLOSED {
+		t.Fatal("issue detail", err)
 	}
 	revoked.Store(true)
-	for _, suffix := range []string{"", "/branches", "/commits", "/contents", "/issues", "/issues/1"} {
-		if out := request("example" + suffix); out.Code != 401 {
-			t.Errorf("revoked token %s: %d", suffix, out.Code)
+	calls := []func() error{
+		func() error {
+			_, err := repositories.GetRepository(ctx, connect.NewRequest(&golfv1.GetRepositoryRequest{Repository: key("example")}))
+			return err
+		},
+		func() error {
+			_, err := repositories.ListBranches(ctx, connect.NewRequest(&golfv1.ListBranchesRequest{Repository: key("example")}))
+			return err
+		},
+		func() error {
+			_, err := repositories.ListCommits(ctx, connect.NewRequest(&golfv1.ListCommitsRequest{Repository: key("example")}))
+			return err
+		},
+		func() error {
+			_, err := repositories.GetContents(ctx, connect.NewRequest(&golfv1.GetContentsRequest{Repository: key("example")}))
+			return err
+		},
+		func() error {
+			_, err := repositories.ListIssues(ctx, connect.NewRequest(&golfv1.ListIssuesRequest{Repository: key("example")}))
+			return err
+		},
+		func() error {
+			_, err := repositories.GetIssue(ctx, connect.NewRequest(&golfv1.GetIssueRequest{Repository: key("example"), Number: 1}))
+			return err
+		},
+	}
+	for _, call := range calls {
+		if err := call(); connect.CodeOf(err) != connect.CodeUnauthenticated {
+			t.Fatal("revoked upstream token accepted", err)
 		}
 	}
 }

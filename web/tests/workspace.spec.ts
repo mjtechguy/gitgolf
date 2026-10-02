@@ -1,43 +1,42 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import type { Repository } from '../src/api';
+import { create } from '@bufbuild/protobuf';
+import { CapabilityState, CreateRepositoryRequestSchema, CreateRepositoryResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, LoginWithGiteaTokenRequestSchema, LoginWithGiteaTokenResponseSchema, LogoutResponseSchema, RepositorySchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
+import type { CreateRepositoryRequest } from '../src/gen/golf/v1/golf_pb';
+import { reject, request, respond } from './rpc';
 
-const originalRepositories: Repository[] = [
-  { id: 1, name: 'design-system', full_name: 'alex/design-system', description: 'A shared foundation for our next idea.', private: true, html_url: 'https://forge.example/alex/design-system', default_branch: 'main', updated_at: '2026-10-01T12:00:00Z' },
-  { id: 2, name: 'tiny-tools', full_name: 'alex/tiny-tools', description: 'Small tools for everyday work.', private: false, html_url: 'https://forge.example/alex/tiny-tools', default_branch: 'main', updated_at: '2026-09-30T10:00:00Z' },
+const originalRepositories = [
+  create(RepositorySchema, { id: '9007199254740992', name: 'design-system', fullName: 'alex/design-system', description: 'A shared foundation for our next idea.', private: true, htmlUrl: 'https://forge.example/alex/design-system', defaultBranch: 'main', updatedAt: '2026-10-01T12:00:00Z' }),
+  create(RepositorySchema, { id: '9007199254740993', name: 'tiny-tools', fullName: 'alex/tiny-tools', description: 'Small tools for everyday work.', private: false, htmlUrl: 'https://forge.example/alex/tiny-tools', defaultBranch: 'main', updatedAt: '2026-09-30T10:00:00Z' }),
 ];
+const user = create(UserSchema, { id: '9007199254740993', login: 'alex', fullName: 'Alex' });
 
 async function backend(page: Page, signedIn = true) {
-  const state = { signedIn, repositories: [...originalRepositories], rejectCreation: false, receivedToken: '', created: undefined as unknown };
-  await page.route('**/api/**', async (route) => {
-    const request = route.request();
-    const path = new URL(request.url()).pathname;
-    if (path === '/api/session') {
-      if (request.method() === 'POST') {
-        state.receivedToken = request.postDataJSON().token as string;
-        if (state.receivedToken !== 'test-scoped-token') return route.fulfill({ status: 401, json: { error: { code: 'unauthorized', message: 'Gitea did not accept this token.' } } });
-        state.signedIn = true;
-      }
-      if (request.method() === 'DELETE') { state.signedIn = false; return route.fulfill({ status: 204 }); }
-      return route.fulfill({ status: state.signedIn ? 200 : 401, json: state.signedIn ? { user: { id: 7, login: 'alex', full_name: 'Alex', avatar_url: '' } } : { error: { code: 'unauthorized', message: 'Sign in required.' } } });
+  const state = { signedIn, repositories: [...originalRepositories], rejectCreation: false, receivedToken: '', created: undefined as CreateRepositoryRequest | undefined };
+  await page.route('**/rpc/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/rpc/golf.v1.SessionService/LoginWithGiteaToken') {
+      state.receivedToken = request(route, LoginWithGiteaTokenRequestSchema).token;
+      if (state.receivedToken !== 'test-scoped-token') return reject(route, 'unauthenticated', 'Gitea did not accept this token.');
+      state.signedIn = true;
+      return respond(route, LoginWithGiteaTokenResponseSchema, { user });
     }
-    if (!state.signedIn) return route.fulfill({ status: 401, json: { error: { code: 'unauthorized', message: 'Your session expired.' } } });
-    if (path === '/api/capabilities') return route.fulfill({ json: { capabilities: [
-      { id: 'repositories', label: 'Repositories', state: 'configured', reason: 'Browse and create repositories on your connected Gitea instance. Check readiness for live dependency health.' },
-      { id: 'agents', label: 'Agent workflows', state: 'disabled', reason: 'Agent execution is planned and is not available in this build.' },
-    ] } });
-    if (path === '/api/repositories') {
-      if (request.method() === 'POST') {
-        state.created = request.postDataJSON();
-        if (state.rejectCreation) return route.fulfill({ status: 409, json: { error: { code: 'conflict', message: 'A repository with this name already exists.' } } });
-        const input = state.created as { name: string; description: string; private: boolean };
-        const repository = { ...originalRepositories[0]!, ...input, id: 3, full_name: `alex/${input.name}`, html_url: `https://forge.example/alex/${input.name}` };
-        state.repositories.push(repository);
-        return route.fulfill({ status: 201, json: { repository } });
-      }
-      return route.fulfill({ json: { repositories: state.repositories } });
+    if (path === '/rpc/golf.v1.SessionService/Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
+    if (path === '/rpc/golf.v1.SessionService/GetSession') return state.signedIn ? respond(route, GetSessionResponseSchema, { user }) : reject(route, 'unauthenticated', 'Sign in required.');
+    if (!state.signedIn) return reject(route, 'unauthenticated', 'Your session expired.');
+    if (path === '/rpc/golf.v1.CapabilityService/ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, { capabilities: [
+      { id: 'repositories', label: 'Repositories', state: CapabilityState.READY, reason: 'Browse and create repositories on your connected Gitea instance. Check readiness for live dependency health.' },
+      { id: 'agents', label: 'Agent workflows', state: CapabilityState.DISABLED, reason: 'Agent execution is planned and is not available in this build.' },
+    ] });
+    if (path === '/rpc/golf.v1.RepositoryService/CreateRepository') {
+      const input = state.created = request(route, CreateRepositoryRequestSchema);
+      if (state.rejectCreation) return reject(route, 'already_exists', 'A repository with this name already exists.');
+      const repository = create(RepositorySchema, { ...originalRepositories[0]!, name: input.name, description: input.description, private: input.private ?? true, id: '3', fullName: `alex/${input.name}`, htmlUrl: `https://forge.example/alex/${input.name}` });
+      state.repositories.push(repository);
+      return respond(route, CreateRepositoryResponseSchema, { repository });
     }
-    return route.fulfill({ status: 404 });
+    if (path === '/rpc/golf.v1.RepositoryService/ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: state.repositories });
+    return reject(route, 'not_found', 'Method not found.');
   });
   return state;
 }
@@ -60,8 +59,9 @@ test('sign-in handles errors, establishes a session, and never persists the toke
 
 test('repository filtering, safe links, theme persistence and mobile layout', async ({ page }) => {
   const state = await backend(page);
-  state.repositories.push({ ...originalRepositories[0]!, id: 9, name: 'untrusted-link', full_name: 'alex/untrusted-link', html_url: 'javascript:alert(1)' });
+  state.repositories.push({ ...originalRepositories[0]!, id: '9', name: 'untrusted-link', fullName: 'alex/untrusted-link', htmlUrl: 'javascript:alert(1)' });
   await page.goto('/');
+  await expect(page.locator('.repository-row')).toHaveCount(3);
   await expect(page.getByRole('link', { name: 'Open alex/design-system in Gitea' })).toHaveAttribute('href', 'https://forge.example/alex/design-system');
   await expect(page.getByRole('link', { name: 'Open alex/untrusted-link in Gitea' })).toHaveCount(0);
   await page.getByLabel('Repository visibility').selectOption('public');
@@ -95,7 +95,7 @@ test('private creation keeps actionable errors, refreshes repositories and signs
   state.rejectCreation = true;
   await page.getByRole('button', { name: 'Create repository', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('A repository with this name already exists.');
-  expect(state.created).toEqual({ name: 'next-project', description: 'An idea worth building.', private: true });
+  expect(state.created).toMatchObject({ name: 'next-project', description: 'An idea worth building.', private: true });
   state.rejectCreation = false;
   await page.getByRole('button', { name: 'Create repository', exact: true }).click();
   await expect(page.getByRole('dialog')).not.toBeVisible();
@@ -113,4 +113,15 @@ test('session expiry clears repository content', async ({ page }) => {
   await page.getByRole('button', { name: 'Refresh repositories' }).click();
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   await expect(page.getByText('alex/design-system')).toHaveCount(0);
+});
+
+test('explicit public visibility preserves the optional false value over Connect', async ({ page }) => {
+  const state = await backend(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New repository' }).click();
+  await page.getByLabel('Repository name').fill('public-project');
+  await page.getByRole('checkbox', { name: 'Private repository' }).uncheck();
+  await page.getByRole('button', { name: 'Create repository', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'alex/public-project' })).toBeVisible();
+  expect(state.created?.private).toBe(false);
 });

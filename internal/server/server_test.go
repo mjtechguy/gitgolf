@@ -7,17 +7,23 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
+	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
+	"github.com/mjtechguy/golf-git/gen/golf/v1/golfv1connect"
 	"github.com/mjtechguy/golf-git/internal/server/database"
 )
 
@@ -69,9 +75,10 @@ func TestOriginAndBodyBoundary(t *testing.T) {
 		{"header injection", "http://localhost:8080", `{"token":"abc\r\ndef123"}`, "application/json", 400},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest("POST", "/api/session", strings.NewReader(tt.body))
+			req := httptest.NewRequest("POST", "/rpc"+golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, strings.NewReader(tt.body))
 			req.Header.Set("Origin", tt.origin)
 			req.Header.Set("Content-Type", tt.contentType)
+			req.Header.Set("Connect-Protocol-Version", "1")
 			w := httptest.NewRecorder()
 			s.ServeHTTP(w, req)
 			if w.Code != tt.status {
@@ -120,7 +127,7 @@ func TestCredentialEnvelopeAndRedirect(t *testing.T) {
 		t.Fatal("credential request followed redirect")
 	}
 	w := httptest.NewRecorder()
-	s.setCookie(w, "opaque", time.Now().Add(time.Hour), 3600)
+	http.SetCookie(w, s.sessionCookie("opaque", time.Now().Add(time.Hour), 3600))
 	cookies := w.Result().Cookies()
 	if len(cookies) != 1 || !cookies[0].HttpOnly || cookies[0].SameSite != http.SameSiteLaxMode {
 		t.Fatal("unsafe session cookie")
@@ -195,30 +202,23 @@ func TestSessionAndRepositoryWithPostgres(t *testing.T) {
 		}
 	}))
 	defer forge.Close()
+
 	s, err := New(testConfig(forge.URL), db)
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := func(method, path, body string, cookie *http.Cookie) *httptest.ResponseRecorder {
-		t.Helper()
-		r := httptest.NewRequest(method, path, strings.NewReader(body))
-		r.Header.Set("Content-Type", "application/json")
-		r.Header.Set("Origin", "http://localhost:8080")
-		if cookie != nil {
-			r.AddCookie(cookie)
-		}
-		w := httptest.NewRecorder()
-		s.ServeHTTP(w, r)
-		return w
+	sessions, repositories, _, httpClient, origin := testRPCClients(t, s)
+	ctx := context.Background()
+	if _, err := repositories.ListRepositories(ctx, connect.NewRequest(&golfv1.ListRepositoriesRequest{})); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatal("anonymous access", err)
 	}
-	if w := request("GET", "/api/repositories", "", nil); w.Code != 401 {
-		t.Fatalf("anonymous read: %d", w.Code)
+	login, err := sessions.LoginWithGiteaToken(ctx, connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: "user-secret-token"}))
+	if err != nil {
+		t.Fatal(err)
 	}
-	w := request("POST", "/api/session", `{"token":"user-secret-token"}`, nil)
-	if w.Code != 200 {
-		t.Fatalf("login: %d %s", w.Code, w.Body.String())
+	if login.Msg.User.Id != "42" || login.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("login response lost identity/cache policy")
 	}
-	cookie := w.Result().Cookies()[0]
 	var encrypted []byte
 	var count int
 	if err := db.QueryRow(`SELECT encrypted_token FROM golf_sessions`).Scan(&encrypted); err != nil {
@@ -228,40 +228,73 @@ func TestSessionAndRepositoryWithPostgres(t *testing.T) {
 		t.Fatal("stored plaintext credential")
 	}
 	if err := db.QueryRow(`SELECT count(*) FROM golf_users`).Scan(&count); err != nil || count != 1 {
-		t.Fatal("missing persistent identity", err)
+		t.Fatal("missing identity", err)
 	}
-	// A fresh server instance can recover the same encrypted session.
-	s, err = New(testConfig(forge.URL), db)
+	restored, err := New(testConfig(forge.URL), db)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/api/session", "/api/repositories"} {
-		if w := request("GET", path, "", cookie); w.Code != 200 {
-			t.Fatalf("%s: %d %s", path, w.Code, w.Body.String())
+	for _, cookie := range httpClient.Jar.Cookies(origin) {
+		if cookie.Name == cookieName {
+			if token, err := restored.sessionCredential(ctx, cookie.Value); err != nil || token != "user-secret-token" {
+				t.Fatal("restart could not recover credential", err)
+			}
 		}
 	}
-	if w := request("POST", "/api/repositories", `{"name":"example","description":"","private":true}`, cookie); w.Code != 201 {
-		t.Fatalf("create: %d %s", w.Code, w.Body.String())
-	}
-	if w := request("POST", "/api/repositories", `{"name":"example","description":""}`, cookie); w.Code != 400 {
-		t.Fatalf("implicit public repository allowed: %d", w.Code)
-	}
-	revoked.Store(true)
-	if w := request("GET", "/api/repositories", "", cookie); w.Code != 401 {
-		t.Fatalf("revoked upstream token accepted: %d", w.Code)
-	}
-	revoked.Store(false)
-	if w := request("DELETE", "/api/session", "", cookie); w.Code != 204 {
-		t.Fatalf("logout: %d", w.Code)
-	}
-	if w := request("GET", "/api/session", "", cookie); w.Code != 401 {
-		t.Fatalf("logged-out cookie accepted: %d", w.Code)
-	}
-	var unused int
-	if err := db.QueryRow(`SELECT count(*) FROM golf_sessions`).Scan(&unused); err != nil && err != sql.ErrNoRows {
+	if _, err := sessions.GetSession(ctx, connect.NewRequest(&golfv1.GetSessionRequest{})); err != nil {
 		t.Fatal(err)
 	}
-	if unused != 0 {
-		t.Fatal("session not deleted")
+	if _, err := repositories.ListRepositories(ctx, connect.NewRequest(&golfv1.ListRepositoriesRequest{})); err != nil {
+		t.Fatal(err)
 	}
+	private := true
+	if _, err := repositories.CreateRepository(ctx, connect.NewRequest(&golfv1.CreateRepositoryRequest{Name: "example", Private: &private})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repositories.CreateRepository(ctx, connect.NewRequest(&golfv1.CreateRepositoryRequest{Name: "example"})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatal("implicit public repository allowed", err)
+	}
+	// Re-authentication invalidates the prior opaque session.
+	oldCookies := httpClient.Jar.Cookies(origin)
+	if _, err := sessions.LoginWithGiteaToken(ctx, connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: "user-secret-token"})); err != nil {
+		t.Fatal(err)
+	}
+	for _, cookie := range oldCookies {
+		if cookie.Name == cookieName {
+			if _, err := s.sessionCredential(ctx, cookie.Value); !errors.Is(err, errUnauthenticated) {
+				t.Fatal("old session remains live", err)
+			}
+		}
+	}
+	revoked.Store(true)
+	if _, err := repositories.ListRepositories(ctx, connect.NewRequest(&golfv1.ListRepositoriesRequest{})); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatal("revoked token accepted", err)
+	}
+	revoked.Store(false)
+	if _, err := sessions.Logout(ctx, connect.NewRequest(&golfv1.LogoutRequest{})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sessions.GetSession(ctx, connect.NewRequest(&golfv1.GetSessionRequest{})); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatal("logged-out cookie accepted", err)
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM golf_sessions`).Scan(&count); err != nil || count != 0 {
+		t.Fatal("session not deleted", err)
+	}
+}
+
+func testRPCClients(t *testing.T, s *Server) (golfv1connect.SessionServiceClient, golfv1connect.RepositoryServiceClient, golfv1connect.CapabilityServiceClient, *http.Client, *url.URL) {
+	t.Helper()
+	server := httptest.NewServer(s)
+	t.Cleanup(server.Close)
+	jar, _ := cookiejar.New(nil)
+	client := server.Client()
+	client.Jar = jar
+	options := []connect.ClientOption{connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			req.Header().Set("Origin", s.config.PublicURL)
+			return next(ctx, req)
+		}
+	}))}
+	origin, _ := url.Parse(server.URL)
+	return golfv1connect.NewSessionServiceClient(client, server.URL+"/rpc", options...), golfv1connect.NewRepositoryServiceClient(client, server.URL+"/rpc", options...), golfv1connect.NewCapabilityServiceClient(client, server.URL+"/rpc", options...), client, origin
 }

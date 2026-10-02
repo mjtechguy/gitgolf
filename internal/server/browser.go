@@ -13,62 +13,47 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
-
-	"github.com/go-chi/chi/v5"
 )
 
 const maxPreviewBytes = 256 << 10
 const maxDirectoryEntries = 1000
 
 var repositoryComponent = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,100}$`)
+var repositoryName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
 var objectID = regexp.MustCompile(`^(?:[0-9a-f]{40}|[0-9a-f]{64})$`)
 
-// Browser routes accept data, never an upstream URL or a Git revision expression.
-func browserInput(w http.ResponseWriter, r *http.Request, allowed ...string) (string, url.Values, bool) {
-	owner, repo := chi.URLParam(r, "owner"), chi.URLParam(r, "repo")
-	for _, name := range []string{owner, repo} {
+type repositoryKey struct{ Owner, Name string }
+type pageRequest struct{ Page, Limit uint32 }
+
+func repositoryPath(key repositoryKey) (string, error) {
+	for _, name := range []string{key.Owner, key.Name} {
 		if !repositoryComponent.MatchString(name) || name == "." || name == ".." {
-			problem(w, 400, "invalid_repository", "Owner and repository must be valid name components.")
-			return "", nil, false
+			return "", invalid("Owner and repository must be valid name components.")
 		}
 	}
-	query, err := url.ParseQuery(r.URL.RawQuery)
-	if err != nil || len(r.URL.RawQuery) > 8192 {
-		problem(w, 400, "invalid_query", "The query is malformed or too long.")
-		return "", nil, false
-	}
-	for name, values := range query {
-		known := false
-		for _, candidate := range allowed {
-			known = known || name == candidate
-		}
-		if !known || len(values) != 1 {
-			problem(w, 400, "invalid_query", "Use only the documented query parameters, once each.")
-			return "", nil, false
-		}
-	}
-	return "/repos/" + owner + "/" + repo, query, true
+	return "/repos/" + key.Owner + "/" + key.Name, nil
 }
-
-func browserPage(w http.ResponseWriter, query url.Values) (int, int, bool) {
-	page, limit := 1, 20
-	for _, item := range []struct {
-		key string
-		max int
-		dst *int
-	}{{"page", 10000, &page}, {"limit", 100, &limit}} {
-		if values, exists := query[item.key]; exists {
-			value, err := strconv.Atoi(values[0])
-			if err != nil || value < 1 || value > item.max || strconv.Itoa(value) != values[0] {
-				problem(w, 400, "invalid_pagination", "Page must be 1–10000 and limit must be 1–100.")
-				return 0, 0, false
-			}
-			*item.dst = value
-		}
+func pagination(page pageRequest) (uint32, uint32, error) {
+	if page.Page == 0 {
+		page.Page = 1
 	}
-	return page, limit, true
+	if page.Limit == 0 {
+		page.Limit = 20
+	}
+	if page.Page > 10000 || page.Limit > 100 {
+		return 0, 0, invalid("Page must be 1–10000 and limit must be 1–100.")
+	}
+	return page.Page, page.Limit, nil
 }
-
+func pageQuery(page, limit uint32) url.Values {
+	return url.Values{"page": {strconv.FormatUint(uint64(page), 10)}, "limit": {strconv.FormatUint(uint64(limit), 10)}}
+}
+func nextPage(headers http.Header, page uint32) uint32 {
+	if strings.Contains(headers.Get("Link"), `rel="next"`) && page < 10000 {
+		return page + 1
+	}
+	return 0
+}
 func validRef(ref string) bool {
 	if ref == "" {
 		return true
@@ -83,7 +68,6 @@ func validRef(ref string) bool {
 	}
 	return strings.IndexFunc(ref, unicode.IsControl) == -1
 }
-
 func validSourcePath(value string) bool {
 	if len(value) > 4096 || !utf8.ValidString(value) || strings.Contains(value, "\\") || strings.IndexFunc(value, unicode.IsControl) != -1 {
 		return false
@@ -98,37 +82,57 @@ func validSourcePath(value string) bool {
 	}
 	return true
 }
-
-func pageResponse(w http.ResponseWriter, key string, value any, headers http.Header, page int) {
-	result := map[string]any{key: value}
-	if strings.Contains(headers.Get("Link"), `rel="next"`) && page < 10000 {
-		result["next_page"] = page + 1
-	}
-	respond(w, 200, result)
-}
-
-func (s *Server) repository(w http.ResponseWriter, r *http.Request) {
-	token, ok := s.token(w, r)
-	if !ok {
-		return
-	}
-	base, _, ok := browserInput(w, r)
-	if !ok {
-		return
-	}
-	repo, err := s.readRepository(r.Context(), base, token)
+func (s *Server) listRepositories(ctx context.Context, token string, paging pageRequest) ([]Repository, uint32, error) {
+	page, limit, err := pagination(paging)
 	if err != nil {
-		s.forgeProblem(w, err)
-		return
+		return nil, 0, err
 	}
-	respond(w, 200, map[string]any{"repository": repo})
+	repos := []Repository{}
+	headers, err := s.forge(ctx, "GET", "/user/repos?"+pageQuery(page, limit).Encode(), token, nil, &repos)
+	if err != nil {
+		return nil, 0, err
+	}
+	if len(repos) > int(limit) {
+		return nil, 0, errForgeResponseTooLarge
+	}
+	for _, repo := range repos {
+		if !validRepository(repo) {
+			return nil, 0, errInvalidForgeResponse
+		}
+	}
+	return repos, nextPage(headers, page), nil
 }
-
+func (s *Server) createRepository(ctx context.Context, token, name, description string, private *bool) (Repository, error) {
+	if !repositoryName.MatchString(name) || len(description) > 2000 || private == nil {
+		return Repository{}, invalid("Provide a 1–100 character repository name, description up to 2000 bytes, and explicit private boolean.")
+	}
+	input := struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Private     bool   `json:"private"`
+	}{name, description, *private}
+	var repo Repository
+	_, err := s.forge(ctx, "POST", "/user/repos", token, input, &repo)
+	if err == nil && !validRepository(repo) {
+		err = errInvalidForgeResponse
+	}
+	return repo, err
+}
+func validRepository(repo Repository) bool {
+	return repo.ID > 0 && repo.Name != "" && repo.FullName != ""
+}
+func (s *Server) getRepository(ctx context.Context, token string, key repositoryKey) (Repository, error) {
+	base, err := repositoryPath(key)
+	if err != nil {
+		return Repository{}, err
+	}
+	return s.readRepository(ctx, base, token)
+}
 func (s *Server) readRepository(ctx context.Context, base, token string) (Repository, error) {
 	var repo Repository
 	_, err := s.forge(ctx, "GET", base, token, nil, &repo)
-	if err == nil && (repo.ID <= 0 || repo.Name == "" || repo.FullName == "") {
-		err = errors.New("invalid repository metadata")
+	if err == nil && !validRepository(repo) {
+		err = errInvalidForgeResponse
 	}
 	return repo, err
 }
@@ -139,32 +143,23 @@ type branch struct {
 	Protected bool   `json:"protected"`
 }
 
-func (s *Server) branches(w http.ResponseWriter, r *http.Request) {
-	token, ok := s.token(w, r)
-	if !ok {
-		return
-	}
-	base, query, ok := browserInput(w, r, "page", "limit")
-	if !ok {
-		return
-	}
-	page, limit, ok := browserPage(w, query)
-	if !ok {
-		return
-	}
-	// Gitea 1.27.3 can fail branch reads while its first-push metadata is
-	// still empty. Honor that state; a later refresh observes the new head.
-	repo, err := s.readRepository(r.Context(), base, token)
+func (s *Server) listBranches(ctx context.Context, token string, key repositoryKey, paging pageRequest) ([]branch, uint32, error) {
+	base, err := repositoryPath(key)
 	if err != nil {
-		s.forgeProblem(w, err)
-		return
+		return nil, 0, err
+	}
+	page, limit, err := pagination(paging)
+	if err != nil {
+		return nil, 0, err
+	}
+	// Gitea 1.27.3 can fail branch reads while first-push metadata is still empty.
+	repo, err := s.readRepository(ctx, base, token)
+	if err != nil {
+		return nil, 0, err
 	}
 	if repo.Empty {
-		respond(w, 200, map[string]any{"branches": []branch{}})
-		return
+		return []branch{}, 0, nil
 	}
-	query.Set("page", strconv.Itoa(page))
-	query.Set("limit", strconv.Itoa(limit))
 	var rows []struct {
 		Name      string `json:"name"`
 		Protected bool   `json:"protected"`
@@ -172,24 +167,21 @@ func (s *Server) branches(w http.ResponseWriter, r *http.Request) {
 			ID string `json:"id"`
 		} `json:"commit"`
 	}
-	headers, err := s.forge(r.Context(), "GET", base+"/branches?"+query.Encode(), token, nil, &rows)
+	headers, err := s.forge(ctx, "GET", base+"/branches?"+pageQuery(page, limit).Encode(), token, nil, &rows)
 	if err != nil {
-		s.forgeProblem(w, err)
-		return
+		return nil, 0, err
 	}
-	if len(rows) > limit {
-		s.forgeProblem(w, errForgeResponseTooLarge)
-		return
+	if len(rows) > int(limit) {
+		return nil, 0, errForgeResponseTooLarge
 	}
 	result := make([]branch, 0, len(rows))
 	for _, row := range rows {
 		if row.Name == "" || !validRef(row.Name) || !objectID.MatchString(row.Commit.ID) {
-			problem(w, 502, "invalid_forge_response", "Gitea returned invalid branch metadata.")
-			return
+			return nil, 0, errInvalidForgeResponse
 		}
 		result = append(result, branch{row.Name, row.Commit.ID, row.Protected})
 	}
-	pageResponse(w, "branches", result, headers, page)
+	return result, nextPage(headers, page), nil
 }
 
 type forgeCommit struct {
@@ -203,71 +195,47 @@ type forgeCommit struct {
 	} `json:"commit"`
 }
 
-func (s *Server) readCommits(ctx context.Context, base, token, ref string, page, limit int) ([]forgeCommit, http.Header, error) {
-	query := url.Values{"page": {strconv.Itoa(page)}, "limit": {strconv.Itoa(limit)}, "stat": {"false"}, "verification": {"false"}, "files": {"false"}}
+func (s *Server) readCommits(ctx context.Context, base, token, ref string, page, limit uint32) ([]forgeCommit, http.Header, error) {
+	query := pageQuery(page, limit)
+	query.Set("stat", "false")
+	query.Set("verification", "false")
+	query.Set("files", "false")
 	if ref != "" {
 		query.Set("sha", ref)
 	}
 	rows := []forgeCommit{}
 	headers, err := s.forge(ctx, "GET", base+"/commits?"+query.Encode(), token, nil, &rows)
-	if err == nil && len(rows) > limit {
+	var upstream forgeError
+	if errors.As(err, &upstream) && upstream.status == 409 {
+		err = errEmptyRepository
+	}
+	if err == nil && len(rows) > int(limit) {
 		err = errForgeResponseTooLarge
 	}
 	for _, row := range rows {
 		if !objectID.MatchString(row.SHA) {
-			err = errors.New("invalid commit metadata")
+			err = errInvalidForgeResponse
 		}
 	}
 	return rows, headers, err
 }
-
-func (s *Server) commitProblem(w http.ResponseWriter, err error) {
-	var upstream forgeError
-	if errors.As(err, &upstream) && upstream.status == 409 {
-		problem(w, 409, "empty_repository", "This repository has no commits yet.")
-		return
-	}
-	s.forgeProblem(w, err)
-}
-
-func (s *Server) commits(w http.ResponseWriter, r *http.Request) {
-	token, ok := s.token(w, r)
-	if !ok {
-		return
-	}
-	base, query, ok := browserInput(w, r, "ref", "page", "limit")
-	if !ok {
-		return
-	}
-	page, limit, ok := browserPage(w, query)
-	if !ok {
-		return
-	}
-	if !validRef(query.Get("ref")) {
-		problem(w, 400, "invalid_ref", "Select a branch, tag or commit ID, not a revision expression.")
-		return
-	}
-	rows, headers, err := s.readCommits(r.Context(), base, token, query.Get("ref"), page, limit)
+func (s *Server) listCommits(ctx context.Context, token string, key repositoryKey, ref string, paging pageRequest) ([]forgeCommit, uint32, error) {
+	base, err := repositoryPath(key)
 	if err != nil {
-		var upstream forgeError
-		if errors.As(err, &upstream) && upstream.status == 409 {
-			respond(w, 200, map[string]any{"commits": []forgeCommit{}})
-			return
-		}
-		s.commitProblem(w, err)
-		return
+		return nil, 0, err
 	}
-	type commit struct {
-		SHA        string `json:"sha"`
-		Message    string `json:"message"`
-		AuthorName string `json:"author_name"`
-		AuthoredAt string `json:"authored_at"`
+	page, limit, err := pagination(paging)
+	if err != nil {
+		return nil, 0, err
 	}
-	result := make([]commit, 0, len(rows))
-	for _, row := range rows {
-		result = append(result, commit{row.SHA, row.Commit.Message, row.Commit.Author.Name, row.Commit.Author.Date})
+	if !validRef(ref) {
+		return nil, 0, invalid("Select a branch, tag or commit ID, not a revision expression.")
 	}
-	pageResponse(w, "commits", result, headers, page)
+	rows, headers, err := s.readCommits(ctx, base, token, ref, page, limit)
+	if errors.Is(err, errEmptyRepository) {
+		return []forgeCommit{}, 0, nil
+	}
+	return rows, nextPage(headers, page), err
 }
 
 type sourceEntry struct {
@@ -277,29 +245,30 @@ type sourceEntry struct {
 	SHA  string `json:"sha"`
 	Size int64  `json:"size"`
 }
-
 type forgeContents struct {
 	sourceEntry
 	Encoding string `json:"encoding"`
 	Content  string `json:"content"`
 	LFSOID   string `json:"lfs_oid"`
 }
-
 type contentsEnvelope struct {
 	Directory []forgeContents `json:"dir_contents"`
 	File      *forgeContents  `json:"file_contents"`
 }
-
 type sourceFile struct {
 	sourceEntry
 	Content       *string `json:"content,omitempty"`
 	PreviewReason string  `json:"preview_reason,omitempty"`
 }
+type sourceResult struct {
+	CommitID, Path, Kind string
+	Entries              []sourceEntry
+	File                 *sourceFile
+}
 
 func validEntry(entry sourceEntry) bool {
 	return entry.Path != "" && validSourcePath(entry.Path) && path.Base(entry.Path) == entry.Name && objectID.MatchString(entry.SHA) && entry.Size >= 0 && (entry.Type == "dir" || entry.Type == "file" || entry.Type == "symlink" || entry.Type == "submodule")
 }
-
 func escapedSourcePath(value string) string {
 	if value == "" {
 		return "."
@@ -310,70 +279,54 @@ func escapedSourcePath(value string) string {
 	}
 	return strings.Join(parts, "/")
 }
-
-func (s *Server) contents(w http.ResponseWriter, r *http.Request) {
-	token, ok := s.token(w, r)
-	if !ok {
-		return
-	}
-	base, query, ok := browserInput(w, r, "ref", "path")
-	if !ok {
-		return
-	}
-	ref, requestedPath := query.Get("ref"), query.Get("path")
-	if !validRef(ref) || !validSourcePath(requestedPath) {
-		problem(w, 400, "invalid_source", "Use a valid ref and a relative repository path without dot segments.")
-		return
-	}
-	commits, _, err := s.readCommits(r.Context(), base, token, ref, 1, 1)
+func (s *Server) getContents(ctx context.Context, token string, key repositoryKey, ref, requestedPath string) (sourceResult, error) {
+	base, err := repositoryPath(key)
 	if err != nil {
-		s.commitProblem(w, err)
-		return
+		return sourceResult{}, err
+	}
+	if !validRef(ref) || !validSourcePath(requestedPath) {
+		return sourceResult{}, invalid("Use a valid ref and relative repository path without dot segments.")
+	}
+	commits, _, err := s.readCommits(ctx, base, token, ref, 1, 1)
+	if err != nil {
+		return sourceResult{}, err
 	}
 	if len(commits) != 1 {
-		problem(w, 404, "not_found", "No commit is available for this ref.")
-		return
+		return sourceResult{}, errResourceNotFound
 	}
-	commitID := commits[0].SHA
-	query = url.Values{"ref": {commitID}, "includes": {"lfs_metadata"}}
+	result := sourceResult{CommitID: commits[0].SHA, Path: requestedPath}
+	query := url.Values{"ref": {result.CommitID}, "includes": {"lfs_metadata"}}
 	endpoint := base + "/contents-ext/" + escapedSourcePath(requestedPath)
 	var metadata contentsEnvelope
-	if _, err := s.forge(r.Context(), "GET", endpoint+"?"+query.Encode(), token, nil, &metadata); err != nil {
-		s.forgeProblem(w, err)
-		return
+	if _, err := s.forge(ctx, "GET", endpoint+"?"+query.Encode(), token, nil, &metadata); err != nil {
+		return sourceResult{}, err
 	}
-	result := map[string]any{"commit_id": commitID, "path": requestedPath}
 	if metadata.File == nil {
 		if metadata.Directory == nil {
-			problem(w, 502, "invalid_forge_response", "Gitea returned no source metadata.")
-			return
+			return sourceResult{}, errInvalidForgeResponse
 		}
 		if len(metadata.Directory) > maxDirectoryEntries {
-			s.forgeProblem(w, errForgeResponseTooLarge)
-			return
+			return sourceResult{}, errForgeResponseTooLarge
 		}
-		entries := make([]sourceEntry, 0, len(metadata.Directory))
+		result.Kind = "dir"
+		result.Entries = make([]sourceEntry, 0, len(metadata.Directory))
 		for _, entry := range metadata.Directory {
 			parent := path.Dir(entry.Path)
 			if parent == "." {
 				parent = ""
 			}
 			if !validEntry(entry.sourceEntry) || parent != requestedPath {
-				problem(w, 502, "invalid_forge_response", "Gitea returned inconsistent directory metadata.")
-				return
+				return sourceResult{}, errInvalidForgeResponse
 			}
-			entries = append(entries, entry.sourceEntry)
+			result.Entries = append(result.Entries, entry.sourceEntry)
 		}
-		result["kind"], result["entries"] = "directory", entries
-		respond(w, 200, result)
-		return
+		return result, nil
 	}
 	entry := metadata.File
 	if !validEntry(entry.sourceEntry) || entry.Path != requestedPath || entry.Type == "dir" || metadata.Directory != nil {
-		problem(w, 502, "invalid_forge_response", "Gitea returned inconsistent file metadata.")
-		return
+		return sourceResult{}, errInvalidForgeResponse
 	}
-	file := sourceFile{sourceEntry: entry.sourceEntry}
+	file := &sourceFile{sourceEntry: entry.sourceEntry}
 	switch {
 	case entry.Type == "symlink":
 		file.PreviewReason = "Symbolic links are metadata-only; Golf does not follow their targets."
@@ -386,24 +339,20 @@ func (s *Server) contents(w http.ResponseWriter, r *http.Request) {
 	default:
 		query.Set("includes", "file_content,lfs_metadata")
 		var content contentsEnvelope
-		if _, err := s.forge(r.Context(), "GET", endpoint+"?"+query.Encode(), token, nil, &content); err != nil {
-			s.forgeProblem(w, err)
-			return
+		if _, err := s.forge(ctx, "GET", endpoint+"?"+query.Encode(), token, nil, &content); err != nil {
+			return sourceResult{}, err
 		}
 		if content.File == nil || content.File.sourceEntry != entry.sourceEntry || content.Directory != nil {
-			problem(w, 502, "invalid_forge_response", "Gitea returned content that does not match its pinned metadata.")
-			return
+			return sourceResult{}, errInvalidForgeResponse
 		}
 		if content.File.LFSOID != "" {
 			file.PreviewReason = "Git LFS objects are metadata-only; Golf does not download the large object."
 		} else if content.File.Encoding != "base64" {
-			problem(w, 502, "invalid_forge_response", "Gitea returned an unsupported file encoding.")
-			return
+			return sourceResult{}, errInvalidForgeResponse
 		} else {
 			data, err := base64.StdEncoding.DecodeString(content.File.Content)
 			if err != nil || int64(len(data)) != entry.Size {
-				problem(w, 502, "invalid_forge_response", "Gitea returned inconsistent file contents.")
-				return
+				return sourceResult{}, errInvalidForgeResponse
 			}
 			switch {
 			case len(data) > maxPreviewBytes:
@@ -418,8 +367,8 @@ func (s *Server) contents(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	result["kind"], result["file"] = entry.Type, file
-	respond(w, 200, result)
+	result.Kind, result.File = entry.Type, file
+	return result, nil
 }
 
 type Issue struct {
@@ -434,7 +383,6 @@ type Issue struct {
 	UpdatedAt string `json:"updated_at"`
 	HTMLURL   string `json:"html_url"`
 }
-
 type forgeIssue struct {
 	Issue
 	PullRequest json.RawMessage `json:"pull_request"`
@@ -443,45 +391,34 @@ type forgeIssue struct {
 func (issue forgeIssue) isPullRequest() bool {
 	return len(issue.PullRequest) != 0 && string(issue.PullRequest) != "null"
 }
-
 func validIssue(issue Issue) bool {
-	return issue.ID > 0 && issue.Number > 0 && (issue.State == "open" || issue.State == "closed") && issue.Comments >= 0
+	return issue.ID > 0 && issue.Number > 0 && issue.Number <= 2147483647 && (issue.State == "open" || issue.State == "closed") && issue.Comments >= 0 && issue.Comments <= 4294967295
 }
-
-func (s *Server) issues(w http.ResponseWriter, r *http.Request) {
-	token, ok := s.token(w, r)
-	if !ok {
-		return
+func (s *Server) listIssues(ctx context.Context, token string, key repositoryKey, state string, paging pageRequest) ([]Issue, uint32, error) {
+	base, err := repositoryPath(key)
+	if err != nil {
+		return nil, 0, err
 	}
-	base, query, ok := browserInput(w, r, "state", "page", "limit")
-	if !ok {
-		return
+	page, limit, err := pagination(paging)
+	if err != nil {
+		return nil, 0, err
 	}
-	page, limit, ok := browserPage(w, query)
-	if !ok {
-		return
-	}
-	state := query.Get("state")
 	if state == "" {
 		state = "open"
 	}
 	if state != "open" && state != "closed" && state != "all" {
-		problem(w, 400, "invalid_state", "Issue state must be open, closed or all.")
-		return
+		return nil, 0, invalid("Issue state must be open, closed or all.")
 	}
+	query := pageQuery(page, limit)
 	query.Set("state", state)
 	query.Set("type", "issues")
-	query.Set("page", strconv.Itoa(page))
-	query.Set("limit", strconv.Itoa(limit))
 	var rows []forgeIssue
-	headers, err := s.forge(r.Context(), "GET", base+"/issues?"+query.Encode(), token, nil, &rows)
+	headers, err := s.forge(ctx, "GET", base+"/issues?"+query.Encode(), token, nil, &rows)
 	if err != nil {
-		s.forgeProblem(w, err)
-		return
+		return nil, 0, err
 	}
-	if len(rows) > limit {
-		s.forgeProblem(w, errForgeResponseTooLarge)
-		return
+	if len(rows) > int(limit) {
+		return nil, 0, errForgeResponseTooLarge
 	}
 	result := make([]Issue, 0, len(rows))
 	for _, row := range rows {
@@ -489,41 +426,29 @@ func (s *Server) issues(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if !validIssue(row.Issue) {
-			problem(w, 502, "invalid_forge_response", "Gitea returned invalid issue metadata.")
-			return
+			return nil, 0, errInvalidForgeResponse
 		}
 		result = append(result, row.Issue)
 	}
-	pageResponse(w, "issues", result, headers, page)
+	return result, nextPage(headers, page), nil
 }
-
-func (s *Server) issue(w http.ResponseWriter, r *http.Request) {
-	token, ok := s.token(w, r)
-	if !ok {
-		return
+func (s *Server) getIssue(ctx context.Context, token string, key repositoryKey, number uint32) (Issue, error) {
+	base, err := repositoryPath(key)
+	if err != nil {
+		return Issue{}, err
 	}
-	base, _, ok := browserInput(w, r)
-	if !ok {
-		return
-	}
-	raw := chi.URLParam(r, "number")
-	number, err := strconv.ParseInt(raw, 10, 32)
-	if err != nil || number < 1 || strconv.FormatInt(number, 10) != raw {
-		problem(w, 400, "invalid_issue", "Issue number must be a positive integer.")
-		return
+	if number == 0 || number > 2147483647 {
+		return Issue{}, invalid("Issue number must be 1–2147483647.")
 	}
 	var row forgeIssue
-	if _, err := s.forge(r.Context(), "GET", base+"/issues/"+raw, token, nil, &row); err != nil {
-		s.forgeProblem(w, err)
-		return
+	if _, err := s.forge(ctx, "GET", base+"/issues/"+strconv.FormatUint(uint64(number), 10), token, nil, &row); err != nil {
+		return Issue{}, err
 	}
 	if row.isPullRequest() {
-		problem(w, 404, "not_found", "This resource does not exist or is not accessible.")
-		return
+		return Issue{}, errResourceNotFound
 	}
-	if !validIssue(row.Issue) || row.Number != number {
-		problem(w, 502, "invalid_forge_response", "Gitea returned invalid issue metadata.")
-		return
+	if !validIssue(row.Issue) || row.Number != int64(number) {
+		return Issue{}, errInvalidForgeResponse
 	}
-	respond(w, 200, map[string]any{"issue": row.Issue})
+	return row.Issue, nil
 }

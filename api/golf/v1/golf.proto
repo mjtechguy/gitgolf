@@ -1,0 +1,203 @@
+syntax = "proto3";
+
+package golf.v1;
+
+option go_package = "github.com/mjtechguy/golf-git/gen/golf/v1;golfv1";
+
+// Shared API for human and machine clients. Cookie authentication uses the same
+// effective upstream permissions for every operation. Bootstrap token login is
+// explicitly named; local/OIDC and machine credential lifecycles follow later.
+service SessionService {
+  rpc LoginWithGiteaToken(LoginWithGiteaTokenRequest) returns (LoginWithGiteaTokenResponse);
+  rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+}
+
+service RepositoryService {
+  rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse);
+  rpc CreateRepository(CreateRepositoryRequest) returns (CreateRepositoryResponse);
+  rpc GetRepository(GetRepositoryRequest) returns (GetRepositoryResponse);
+  rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse);
+  rpc ListCommits(ListCommitsRequest) returns (ListCommitsResponse);
+  rpc GetContents(GetContentsRequest) returns (GetContentsResponse);
+  rpc ListIssues(ListIssuesRequest) returns (ListIssuesResponse);
+  rpc GetIssue(GetIssueRequest) returns (GetIssueResponse);
+}
+
+service CapabilityService {
+  rpc ListCapabilities(ListCapabilitiesRequest) returns (ListCapabilitiesResponse);
+}
+
+message User {
+  // Decimal upstream identifier, treated as opaque by clients.
+  string id = 1;
+  string login = 2;
+  string full_name = 3;
+  string avatar_url = 4;
+}
+
+message Repository {
+  string id = 1;
+  string name = 2;
+  string full_name = 3;
+  string description = 4;
+  bool private = 5;
+  string html_url = 6;
+  string default_branch = 7;
+  string updated_at = 8;
+  bool empty = 9;
+  string clone_url = 10;
+  string ssh_url = 11;
+}
+
+message RepositoryKey {
+  string owner = 1;
+  string name = 2;
+}
+
+message PageRequest {
+  // Zero means the default: page 1, limit 20. Bounds are page <=10000, limit <=100.
+  uint32 page = 1;
+  uint32 limit = 2;
+}
+
+message PageResponse {
+  // Zero means no further page. Preserve the upstream's bounded page semantics.
+  uint32 next_page = 1;
+}
+
+message LoginWithGiteaTokenRequest { string token = 1; }
+message LoginWithGiteaTokenResponse { User user = 1; }
+message GetSessionRequest {}
+message GetSessionResponse { User user = 1; }
+message LogoutRequest {}
+message LogoutResponse {}
+
+message ListRepositoriesRequest { PageRequest page = 1; }
+message ListRepositoriesResponse {
+  repeated Repository repositories = 1;
+  PageResponse page = 2;
+}
+message CreateRepositoryRequest {
+  string name = 1;
+  string description = 2;
+  // Presence is required: an omitted value must never silently create publicly.
+  optional bool private = 3;
+}
+message CreateRepositoryResponse { Repository repository = 1; }
+message GetRepositoryRequest { RepositoryKey repository = 1; }
+message GetRepositoryResponse { Repository repository = 1; }
+
+message Branch {
+  string name = 1;
+  string commit_id = 2;
+  // Upstream metadata only; not a claim of qualified Golf merge policy.
+  bool protected = 3;
+}
+message ListBranchesRequest {
+  RepositoryKey repository = 1;
+  PageRequest page = 2;
+}
+message ListBranchesResponse {
+  repeated Branch branches = 1;
+  PageResponse page = 2;
+}
+message Commit {
+  string sha = 1;
+  string message = 2;
+  string author_name = 3;
+  string authored_at = 4;
+}
+message ListCommitsRequest {
+  RepositoryKey repository = 1;
+  string ref = 2;
+  PageRequest page = 3;
+}
+message ListCommitsResponse {
+  repeated Commit commits = 1;
+  PageResponse page = 2;
+}
+
+enum SourceEntryType {
+  SOURCE_ENTRY_TYPE_UNSPECIFIED = 0;
+  SOURCE_ENTRY_TYPE_DIRECTORY = 1;
+  SOURCE_ENTRY_TYPE_FILE = 2;
+  SOURCE_ENTRY_TYPE_SYMLINK = 3;
+  SOURCE_ENTRY_TYPE_SUBMODULE = 4;
+}
+message SourceEntry {
+  string name = 1;
+  string path = 2;
+  SourceEntryType type = 3;
+  string sha = 4;
+  // Integral bytes, preserved without JavaScript precision loss.
+  uint64 size = 5;
+}
+message SourceFile {
+  SourceEntry entry = 1;
+  // Present even for an empty text file; absent for a metadata-only preview.
+  optional string content = 2;
+  string preview_reason = 3;
+}
+message GetContentsRequest {
+  RepositoryKey repository = 1;
+  string ref = 2;
+  string path = 3;
+}
+message GetContentsResponse {
+  string commit_id = 1;
+  string path = 2;
+  SourceEntryType kind = 3;
+  repeated SourceEntry entries = 4;
+  SourceFile file = 5;
+}
+
+enum IssueState {
+  ISSUE_STATE_UNSPECIFIED = 0;
+  ISSUE_STATE_OPEN = 1;
+  ISSUE_STATE_CLOSED = 2;
+  ISSUE_STATE_ALL = 3;
+}
+message Issue {
+  string id = 1;
+  uint32 number = 2;
+  string title = 3;
+  string body = 4;
+  IssueState state = 5;
+  User user = 6;
+  uint32 comments = 7;
+  string created_at = 8;
+  string updated_at = 9;
+  string html_url = 10;
+}
+message ListIssuesRequest {
+  RepositoryKey repository = 1;
+  // Unspecified defaults to open. Other unknown enum values are invalid.
+  IssueState state = 2;
+  PageRequest page = 3;
+}
+message ListIssuesResponse {
+  repeated Issue issues = 1;
+  PageResponse page = 2;
+}
+message GetIssueRequest {
+  RepositoryKey repository = 1;
+  uint32 number = 2;
+}
+message GetIssueResponse { Issue issue = 1; }
+
+enum CapabilityState {
+  CAPABILITY_STATE_UNSPECIFIED = 0;
+  CAPABILITY_STATE_DISABLED = 1;
+  CAPABILITY_STATE_UNCONFIGURED = 2;
+  CAPABILITY_STATE_READY = 3;
+  CAPABILITY_STATE_DEGRADED = 4;
+}
+message Capability {
+  string id = 1;
+  string label = 2;
+  CapabilityState state = 3;
+  string reason = 4;
+}
+message ListCapabilitiesRequest {}
+message ListCapabilitiesResponse { repeated Capability capabilities = 1; }

@@ -1,5 +1,5 @@
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
-import { ApiError } from './api';
+import { Code, ConnectError } from '@connectrpc/connect';
 
 export function forgetPrivateQueries(client: QueryClient) {
   const filter = { predicate: (query: { queryKey: readonly unknown[] }) => query.queryKey[0] !== 'session' && query.queryKey[0] !== 'capabilities' };
@@ -10,7 +10,7 @@ export function forgetPrivateQueries(client: QueryClient) {
 
 export function createQueryClient() {
   function onError(error: Error) {
-    if (error instanceof ApiError && error.status === 401) {
+    if (error instanceof ConnectError && error.code === Code.Unauthenticated) {
       client.setQueryData(['session'], null);
       forgetPrivateQueries(client);
     }

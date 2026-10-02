@@ -1,31 +1,33 @@
 # Repository browser increment
 
-Implementation scope, 2026-10-01. Extends P1.4, P2.1 and P2.2; does not complete those tasks. These bootstrap REST endpoints are not yet the plan's stable generated API.
+Implementation scope, 2026-10-01. Extends P1.4, P2.1 and P2.2; does not complete those tasks. Existing operations now use generated versioned Protobuf/Connect contracts; see [ADR 0002](decisions/0002-generated-api-and-typed-navigation.md).
 
 All endpoints below require the existing Golf session, use the user's own Gitea token, and send `Cache-Control: no-store`. Authorization is checked upstream on every request. No private content is persisted in browser storage. No new collaboration or Git write path is introduced.
 
-Base: `/api/repositories/{owner}/{repo}`. Names are validated path components, not arbitrary upstream URLs. Pagination defaults to page 1, limit 20 (maximum 100), using `next_page` only when more data exists.
+Contract: [`api/golf/v1/golf.proto`](../api/golf/v1/golf.proto). Every procedure is a POST to `/rpc/golf.v1.RepositoryService/{Method}` with `Connect-Protocol-Version: 1`, `Content-Type: application/json` and the exact configured Origin. Generated clients handle protocol details. Old application REST routes are removed.
 
-| GET route | Response |
+| Procedure | Request and response |
 | --- | --- |
-| Base | `{repository: Repository}`; existing fields plus `empty: boolean`, `clone_url: string`, `ssh_url: string`. |
-| `/branches?page=&limit=` | `{branches: [{name, commit_id, protected}], next_page?}`. |
-| `/commits?ref=&page=&limit=` | `{commits: [{sha, message, author_name, authored_at}], next_page?}`. Optional ref defaults to the repository's default branch. |
-| `/contents?ref=&path=` | `{commit_id, path, kind, entries?, file?}`. Resolve the selected ref to a commit once, then read only that commit. Empty path means root. |
-| `/issues?state=open|closed|all&page=&limit=` | `{issues: [Issue], next_page?}`; default open, excludes pull requests. |
-| `/issues/{number}` | `{issue: Issue}`; rejects pull-request numbers. |
+| GetRepository | `{repository:{owner,name}}` → `{repository}` |
+| ListBranches | repository and optional `{page:{page,limit}}` → `{branches,page:{nextPage}}` |
+| ListCommits | repository, optional ref/page → `{commits,page}` |
+| GetContents | repository, optional ref/path → `{commitId,path,kind,entries,file}` |
+| ListIssues | repository, optional enum state/page → `{issues,page}` |
+| GetIssue | repository and positive number → `{issue}` |
 
-`entries`: `{name, path, type, sha, size}[]`, where type is `dir`, `file`, `symlink` or `submodule`. `kind` is `directory`, `file`, `symlink` or `submodule`. `file`: `{name, path, type, sha, size, content?, preview_reason?}`. Content is decoded UTF-8 **plain text**, never HTML. A preview is limited to 256 KiB; binary, oversized, symlink, submodule and LFS content receives metadata and a reason instead. Do not follow symlink/submodule targets or upstream download URLs. Bounded upstream responses or oversized directories fail visibly rather than returning a seemingly complete subset.
+Pagination defaults to page 1/limit 20 for zero values, with bounds page 10,000/limit 100. A zero `nextPage` means end. Protobuf JSON omits defaults/empty arrays; generated clients restore them. IDs are opaque strings; sizes are uint64 (decimal strings in JSON, bigint in TypeScript). States and kinds use the schema's enum names. Files contain `{entry,content?,previewReason}`; optional content is present even for empty text.
 
-`Issue`: `{id, number, title, body, state, user: User, comments, created_at, updated_at, html_url}`. Issue bodies render as plain text in this increment. Comments, issue mutations, rendered Markdown, diffs, blame, reviews and merges remain future work.
+Content is decoded UTF-8 **plain text**, never HTML. A preview is limited to 256 KiB; binary, oversized, symlink, submodule and LFS content receives metadata and a reason instead. Do not follow targets or upstream download URLs. Bounded upstream responses or oversized directories fail visibly rather than returning a seemingly complete subset.
+
+`Issue`: `{id, number, title, body, state, user: User, comments, createdAt, updatedAt, htmlUrl}`. Issue bodies render as plain text in this increment. Comments, issue mutations, rendered Markdown, diffs, blame, reviews and merges remain future work.
 
 Source navigation uses the returned commit ID to keep folder/file traversal consistent if a branch changes. Users can refresh or reselect a branch to observe a new head. Commit history is also browsable at a selected immutable commit. Branch enumeration may be paginated; never imply the first page is the complete branch list.
 
-Errors use the existing `{error:{code,message}}` shape. Inaccessible/missing upstream resources return the same 404. Expired/revoked credentials return 401; insufficient scope returns 403; bad input returns 400; oversized source responses return a visible bounded-response error; provider failure returns 502. An empty repository has `empty: true`, empty branch/history lists, and contents returns `409 empty_repository` because no commit/tree exists. Gitea may briefly retain `empty: true` while processing an initial push; refresh after processing completes. Do not invent a source tree or treat an arbitrary provider 500 as an empty repository.
+Errors use standard Connect `{code,message}` responses. Missing/inaccessible resources share `not_found` (404); expired/revoked credentials use `unauthenticated` (401), scopes use `permission_denied` (403), invalid input uses `invalid_argument` (400), response bounds use `resource_exhausted` (429), provider/storage failure uses `unavailable` (503). Empty contents uses `failed_precondition` (400); branch/history lists remain empty. Initial-push processing can temporarily retain empty state; arbitrary provider failures never become empty state.
 
 The existing token scopes cover code browsing (`read:user,read:repository`). Issue browsing additionally requires `read:issue`; this combination was qualified against pinned Gitea 1.27.3. The local smoke check must exercise real Git pushes, slash-containing refs, source rendering boundaries, empty/private repositories, scope denial and revocation. UI fixtures supplement, rather than replace, real-provider checks.
 
-The read-only `golf` CLI calls these same endpoints with a temporary Golf session. Global `--token-stdin` or `GOLF_GITEA_TOKEN` supplies a bootstrap credential; no credentials/cookies are written to disk. Commands finish by deleting the session, including after an operation fails or normal cancellation. Abrupt process termination cannot execute cleanup; server session expiry is the final limit. Output uses `{schema_version:"golf.cli.v0",data:<API response>}` and preserves pagination. Exit codes are 0 success/help, 1 operation/authentication/cleanup failure, 2 invalid usage. This does not implement the plan's OAuth/device login, stable generated clients, full CLI, MCP or ACP.
+The read-only `golf` CLI uses generated Go clients for these same procedures with a temporary Golf session. Global `--token-stdin` or `GOLF_GITEA_TOKEN` supplies a bootstrap credential; no credentials/cookies are written to disk. Commands finish by deleting the session, including after an operation fails or normal cancellation. Abrupt process termination cannot execute cleanup; server session expiry is the final limit. Output uses `{schema_version:"golf.cli.v1",data:<API response>}` and preserves pagination. Exit codes are 0 success/help, 1 operation/authentication/cleanup failure, 2 invalid usage. This does not implement the plan's OAuth/device login, full CLI, MCP or ACP.
 
 ## Provider qualification
 

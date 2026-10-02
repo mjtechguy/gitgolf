@@ -63,7 +63,10 @@ func (s *Server) forge(ctx context.Context, method, path, token string, input, o
 	}
 	res, err := s.client.Do(req)
 	if err != nil {
-		return nil, errors.New("forge unavailable")
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, errForgeUnavailable
 	}
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
@@ -75,13 +78,16 @@ func (s *Server) forge(ctx context.Context, method, path, token string, input, o
 		}
 		data, err := io.ReadAll(io.LimitReader(res.Body, maxForgeResponse+1))
 		if err != nil {
-			return nil, errors.New("invalid forge response")
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, errInvalidForgeResponse
 		}
 		if len(data) > maxForgeResponse {
 			return nil, errForgeResponseTooLarge
 		}
 		if err := json.Unmarshal(data, output); err != nil {
-			return nil, errors.New("invalid forge response")
+			return nil, errInvalidForgeResponse
 		}
 	}
 	return res.Header, nil
@@ -91,7 +97,7 @@ func (s *Server) currentUser(ctx context.Context, token string) (User, error) {
 	var user User
 	_, err := s.forge(ctx, http.MethodGet, "/user", token, nil, &user)
 	if err == nil && (user.ID <= 0 || strings.TrimSpace(user.Login) == "") {
-		err = errors.New("invalid forge identity")
+		err = errInvalidForgeResponse
 	}
 	return user, err
 }

@@ -2,9 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDown, ArrowRight, BookOpen, Check, CircleDot, Command, ExternalLink, GitBranch, KeyRound, Layers2, LoaderCircle, LockKeyhole, LogOut, Monitor, Moon, Plus, RefreshCw, Search, ShieldCheck, Sun, X } from 'lucide-react';
-import { api, ApiError, repositoryLink } from './api';
-import type { Capability, Repository, RepositoryPage, User } from './api';
-import { InternalLink, repositoryHref, useLocation } from './navigation';
+import { Code, ConnectError } from '@connectrpc/connect';
+import { Link } from '@tanstack/react-router';
+import { capabilityClient, errorMessage, repositoryClient, repositoryLink, sessionClient } from './api';
+import { CapabilityState } from './gen/golf/v1/golf_pb';
+import type { Repository, User } from './gen/golf/v1/golf_pb';
+import { repositoryOptions } from './navigation';
+import type { Location } from './navigation';
 import { RepositoryBrowser } from './RepositoryBrowser';
 import { forgetPrivateQueries } from './queryClient';
 
@@ -12,7 +16,7 @@ const themes = ['system', 'dark', 'light'] as const;
 type Theme = typeof themes[number];
 
 function Brand() {
-  return <InternalLink className="brand" href="/" aria-label="Golf home"><img src="/golf.svg" width="34" height="34" alt="" /><span>golf<span className="brand-dot">.</span></span></InternalLink>;
+  return <Link className="brand" to="/" aria-label="Golf home"><img src="/golf.svg" width="34" height="34" alt="" /><span>golf<span className="brand-dot">.</span></span></Link>;
 }
 
 function ThemeSwitch() {
@@ -34,7 +38,7 @@ function ThemeSwitch() {
 }
 
 function ErrorMessage({ error }: { error: Error | null }) {
-  return error ? <p className="error" role="alert">{error.message}</p> : null;
+  return error ? <p className="error" role="alert">{errorMessage(error)}</p> : null;
 }
 
 function Login() {
@@ -42,7 +46,7 @@ function Login() {
   const [token, setToken] = useState('');
   const mutation = useMutation({
     gcTime: 0,
-    mutationFn: (value: string) => api('/api/session', { method: 'POST', body: JSON.stringify({ token: value }) }),
+    mutationFn: (value: string) => sessionClient.loginWithGiteaToken({ token: value }),
     onSuccess: async () => {
       setToken('');
       forgetPrivateQueries(client);
@@ -89,7 +93,7 @@ function CreateRepository({ onClose }: { onClose: () => void }) {
   const [description, setDescription] = useState('');
   const [isPrivate, setPrivate] = useState(true);
   const mutation = useMutation({
-    mutationFn: () => api('/api/repositories', { method: 'POST', body: JSON.stringify({ name: name.trim(), description: description.trim(), private: isPrivate }) }),
+    mutationFn: () => repositoryClient.createRepository({ name: name.trim(), description: description.trim(), private: isPrivate }),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ['repositories'] });
       onClose();
@@ -116,49 +120,48 @@ function CreateRepository({ onClose }: { onClose: () => void }) {
 }
 
 function RepositoryRow({ repository }: { repository: Repository }) {
-  const link = repositoryLink(repository.html_url);
-  const owner = repository.full_name.split('/')[0];
-  const internal = owner ? repositoryHref(owner, repository.name) : undefined;
-  const updated = new Date(repository.updated_at);
+  const link = repositoryLink(repository.htmlUrl);
+  const owner = repository.fullName.split('/')[0];
+  const internal = owner ? repositoryOptions({ owner, name: repository.name }) : undefined;
+  const updated = new Date(repository.updatedAt);
   return <article className="repository-row">
     <div className="repository-icon"><BookOpen size={21} /></div>
-    <div className="repository-detail"><div className="repository-heading"><h3>{internal ? <InternalLink href={internal}>{repository.full_name || repository.name}</InternalLink> : repository.full_name || repository.name}</h3><span className={`visibility ${repository.private ? 'private' : ''}`}>{repository.private ? <LockKeyhole size={11} /> : null}{repository.private ? 'Private' : 'Public'}</span></div>
+    <div className="repository-detail"><div className="repository-heading"><h3>{internal ? <Link {...internal}>{repository.fullName || repository.name}</Link> : repository.fullName || repository.name}</h3><span className={`visibility ${repository.private ? 'private' : ''}`}>{repository.private ? <LockKeyhole size={11} /> : null}{repository.private ? 'Private' : 'Public'}</span></div>
       <p>{repository.description || 'No description yet.'}</p>
-      <div className="repository-meta"><span><GitBranch size={13} />{repository.default_branch || 'No default branch'}</span>{!Number.isNaN(updated.getTime()) ? <time dateTime={repository.updated_at} title={updated.toLocaleString()}>Updated {updated.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</time> : <span>Update time unavailable</span>}</div>
+      <div className="repository-meta"><span><GitBranch size={13} />{repository.defaultBranch || 'No default branch'}</span>{!Number.isNaN(updated.getTime()) ? <time dateTime={repository.updatedAt} title={updated.toLocaleString()}>Updated {updated.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</time> : <span>Update time unavailable</span>}</div>
     </div>
-    {link ? <a className="open-repository" href={link} target="_blank" rel="noopener noreferrer" aria-label={`Open ${repository.full_name || repository.name} in Gitea`}><ExternalLink size={16} /></a> : null}
+    {link ? <a className="open-repository" href={link} target="_blank" rel="noopener noreferrer" aria-label={`Open ${repository.fullName || repository.name} in Gitea`}><ExternalLink size={16} /></a> : null}
   </article>;
 }
 
 function Capabilities() {
-  const query = useQuery({ queryKey: ['capabilities'], queryFn: () => api<{ capabilities: Capability[] }>('/api/capabilities') });
+  const query = useQuery({ queryKey: ['capabilities'], queryFn: () => capabilityClient.listCapabilities({}) });
   return <section className="capabilities-section" id="capabilities" aria-labelledby="capabilities-title">
     <div className="section-heading"><div><span className="eyebrow">A CLEAR VIEW OF WHAT’S AVAILABLE</span><h2 id="capabilities-title">Your workspace today</h2></div><span className="outline-badge">Early development</span></div>
     <p className="section-description">Availability comes directly from this Golf installation.</p>
     <ErrorMessage error={query.error} />
     {query.isPending ? <p role="status" className="muted">Loading capabilities…</p> : null}
     <div className="capability-grid">{query.data?.capabilities.map((capability) => {
-      const available = capability.state === 'ready';
-      return <article className="capability" key={capability.id}><div><span className={available ? 'capability-marker available' : 'capability-marker'}>{available ? <Check size={14} /> : <CircleDot size={14} />}</span><h3>{capability.label}</h3><span className={`capability-state ${available ? 'available' : ''}`}>{capability.state.replaceAll('_', ' ')}</span></div><p>{capability.reason}</p></article>;
+      const available = capability.state === CapabilityState.READY;
+      return <article className="capability" key={capability.id}><div><span className={available ? 'capability-marker available' : 'capability-marker'}>{available ? <Check size={14} /> : <CircleDot size={14} />}</span><h3>{capability.label}</h3><span className={`capability-state ${available ? 'available' : ''}`}>{CapabilityState[capability.state]?.toLowerCase() || 'unknown'}</span></div><p>{capability.reason}</p></article>;
     })}</div>
   </section>;
 }
 
-function Workspace({ user }: { user: User }) {
+function Workspace({ user, location }: { user: User; location: Location }) {
   const client = useQueryClient();
-  const location = useLocation();
   const [search, setSearch] = useState('');
   const [visibility, setVisibility] = useState('all');
   const [creating, setCreating] = useState(false);
   const repositoryQuery = useInfiniteQuery({
     queryKey: ['repositories', user.id], initialPageParam: 1, staleTime: 0, gcTime: 0, enabled: location.kind === 'home',
-    queryFn: ({ pageParam, signal }) => api<RepositoryPage>(`/api/repositories?page=${pageParam}`, { signal }),
-    getNextPageParam: (lastPage) => lastPage.next_page && lastPage.next_page > 0 ? lastPage.next_page : undefined,
+    queryFn: ({ pageParam, signal }) => repositoryClient.listRepositories({ page: { page: pageParam } }, { signal }),
+    getNextPageParam: (lastPage) => lastPage.page?.nextPage || undefined,
   });
   const repositories = repositoryQuery.isSuccess && (!repositoryQuery.isFetching || repositoryQuery.isFetchingNextPage) ? [...new Map(repositoryQuery.data.pages.flatMap((page) => page.repositories).map((repository) => [repository.id, repository])).values()] : [];
-  const filtered = repositories.filter((repository) => `${repository.full_name} ${repository.description}`.toLowerCase().includes(search.toLowerCase().trim()) && (visibility === 'all' || repository.private === (visibility === 'private'))).sort((left, right) => right.updated_at.localeCompare(left.updated_at));
+  const filtered = repositories.filter((repository) => `${repository.fullName} ${repository.description}`.toLowerCase().includes(search.toLowerCase().trim()) && (visibility === 'all' || repository.private === (visibility === 'private'))).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   const logout = useMutation({
-    mutationFn: () => api('/api/session', { method: 'DELETE' }),
+    mutationFn: () => sessionClient.logout({}),
     onSuccess: async () => {
       await client.cancelQueries();
       client.setQueryData(['session'], null);
@@ -168,11 +171,11 @@ function Workspace({ user }: { user: User }) {
   return <div className="app-shell">
     <aside className="sidebar"><div className="sidebar-top"><Brand /><span className="alpha-tag">EARLY ACCESS</span></div>
       <div className="workspace-label"><span className="workspace-avatar">{user.login.slice(0, 1).toUpperCase()}</span><div><strong>{user.login}</strong><span>Personal workspace</span></div></div>
-      <nav aria-label="Workspace"><span className="nav-label">WORKSPACE</span><InternalLink className="nav-item active" href="/"><BookOpen size={17} />Repositories<span>{location.kind === 'home' && repositoryQuery.isSuccess ? repositories.length : '—'}</span></InternalLink><a className="nav-item" href="/#capabilities"><Layers2 size={17} />Capabilities</a></nav>
+      <nav aria-label="Workspace"><span className="nav-label">WORKSPACE</span><Link className="nav-item active" to="/"><BookOpen size={17} />Repositories<span>{location.kind === 'home' && repositoryQuery.isSuccess ? repositories.length : '—'}</span></Link><Link className="nav-item" to="/" hash="capabilities"><Layers2 size={17} />Capabilities</Link></nav>
       <div className="sidebar-bottom"><div className="forge-note"><GitBranch size={17} /><div><strong>Connected to Gitea</strong><span>Code stays on your forge.</span></div></div><div className="sidebar-controls"><ThemeSwitch /><button className="icon-button" aria-label="Sign out" title="Sign out" disabled={logout.isPending} onClick={() => logout.mutate()}><LogOut size={17} /></button></div><ErrorMessage error={logout.error} /></div>
     </aside>
     <div className="workspace-content"><header className="topbar"><span><span className="muted">Workspace</span><span className="breadcrumb-slash">/</span>{location.kind === 'repository' ? location.name : 'Repositories'}</span><span className="connection-pill"><span className="status-dot" /> Signed in</span></header>
-      <main id="main-content">{location.kind === 'repository' ? <RepositoryBrowser key={`${location.owner}/${location.name}`} location={location} userId={user.id} /> : location.kind === 'missing' ? <section className="empty-state"><h1>Page not found</h1><p>This Golf link does not match a repository page.</p><InternalLink className="button secondary" href="/">Back to repositories</InternalLink></section> : <><section className="workspace-intro"><div><span className="eyebrow">YOUR NEXT COMMIT STARTS HERE</span><h1>Good to see you, {user.full_name || user.login}<span className="accent">.</span></h1><p>A little less friction. A little more building.</p></div><div className="intro-emblem" aria-hidden="true"><Command size={31} /></div></section>
+      <main id="main-content">{location.kind === 'repository' ? <RepositoryBrowser key={`${location.owner}/${location.name}`} location={location} userId={user.id} /> : location.kind === 'missing' ? <section className="empty-state"><h1>Page not found</h1><p>This Golf link does not match a repository page.</p><Link className="button secondary" to="/">Back to repositories</Link></section> : <><section className="workspace-intro"><div><span className="eyebrow">YOUR NEXT COMMIT STARTS HERE</span><h1>Good to see you, {user.fullName || user.login}<span className="accent">.</span></h1><p>A little less friction. A little more building.</p></div><div className="intro-emblem" aria-hidden="true"><Command size={31} /></div></section>
         <section className="repository-section" id="repositories" aria-labelledby="repositories-title"><div className="section-heading"><div className="title-count"><h2 id="repositories-title">Repositories</h2>{repositoryQuery.isSuccess ? <span className="count-badge">{repositories.length}{repositoryQuery.hasNextPage ? '+' : ''}</span> : null}</div><button className="button primary" onClick={() => setCreating(true)}><Plus size={16} />New repository</button></div>
           <p className="section-description">Your code, with room for what comes next. Open a repository to browse its source, commits and issues in Golf.</p>
           <div className="repository-toolbar"><div className="search-input"><Search size={17} /><input aria-label="Search loaded repositories" placeholder="Search repositories…" value={search} onChange={(event) => setSearch(event.target.value)} /></div><select aria-label="Repository visibility" value={visibility} onChange={(event) => setVisibility(event.target.value)}><option value="all">All visibility</option><option value="private">Private</option><option value="public">Public</option></select><button className="icon-button refresh" aria-label="Refresh repositories" disabled={repositoryQuery.isFetching} onClick={() => void repositoryQuery.refetch()}><RefreshCw size={17} className={repositoryQuery.isFetching ? 'spin' : ''} /></button></div>
@@ -187,11 +190,11 @@ function Workspace({ user }: { user: User }) {
   </div>;
 }
 
-export function App() {
+export function App({ location }: { location: Location }) {
   const client = useQueryClient();
   const session = useQuery({ queryKey: ['session'], queryFn: async ({ signal }) => {
-    try { return await api<{ user: User }>('/api/session', { signal }); }
-    catch (error) { if (error instanceof ApiError && error.status === 401) { forgetPrivateQueries(client); return null; } throw error; }
+    try { const response = await sessionClient.getSession({}, { signal }); if (!response.user) throw new ConnectError('The session response is missing its user.', Code.Internal); return response.user; }
+    catch (error) { if (error instanceof ConnectError && error.code === Code.Unauthenticated) { forgetPrivateQueries(client); return null; } throw error; }
   } });
-  return <><a className="skip-link" href="#main-content">Skip to content</a>{session.isPending ? <main className="loading-screen" id="main-content"><Brand /><p role="status"><LoaderCircle size={18} className="spin" />Opening your workspace…</p></main> : session.error ? <main className="loading-screen" id="main-content"><Brand /><ErrorMessage error={session.error} /><button className="button secondary" onClick={() => void session.refetch()}>Try again</button></main> : session.data ? <Workspace key={session.data.user.id} user={session.data.user} /> : <Login />}</>;
+  return <><a className="skip-link" href="#main-content">Skip to content</a>{session.isPending ? <main className="loading-screen" id="main-content"><Brand /><p role="status"><LoaderCircle size={18} className="spin" />Opening your workspace…</p></main> : session.error ? <main className="loading-screen" id="main-content"><Brand /><ErrorMessage error={session.error} /><button className="button secondary" onClick={() => void session.refetch()}>Try again</button></main> : session.data ? <Workspace key={session.data.id} user={session.data} location={location} /> : <Login />}</>;
 }

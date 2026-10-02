@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: Object.fromEntries(
-      ['/api', '/healthz', '/readyz'].map((path) => [path, 'http://localhost:8080']),
+      ['/rpc', '/healthz', '/readyz'].map((path) => [path, 'http://localhost:8080']),
     ),
   },
 });

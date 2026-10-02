@@ -1,69 +1,78 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import type { Issue, RepositoryDetail, SourceEntry } from '../src/api';
+import { create } from '@bufbuild/protobuf';
+import {
+  GetContentsRequestSchema, GetContentsResponseSchema, GetIssueRequestSchema, GetIssueResponseSchema, GetRepositoryResponseSchema,
+  GetSessionResponseSchema, IssueSchema, IssueState, ListBranchesRequestSchema, ListBranchesResponseSchema, ListCapabilitiesResponseSchema,
+  ListCommitsRequestSchema, ListCommitsResponseSchema, ListIssuesRequestSchema, ListIssuesResponseSchema, ListRepositoriesResponseSchema,
+  LoginWithGiteaTokenResponseSchema, LogoutResponseSchema, RepositorySchema, SourceEntrySchema, SourceEntryType, UserSchema,
+} from '../src/gen/golf/v1/golf_pb';
+import type { GetContentsRequest } from '../src/gen/golf/v1/golf_pb';
+import { reject, request, respond } from './rpc';
 
 const head = 'a'.repeat(40);
 const feature = 'b'.repeat(40);
 const older = 'c'.repeat(40);
-const user = { id: 7, login: 'alex', full_name: 'Alex', avatar_url: '' };
-const repository: RepositoryDetail = {
-  id: 1, name: 'design-system', full_name: 'alex/design-system', description: 'A shared foundation for our next idea.', private: true,
-  html_url: 'https://forge.example/alex/design-system', default_branch: 'main', updated_at: '2026-10-01T12:00:00Z', empty: false,
-  clone_url: 'https://forge.example/alex/design-system.git', ssh_url: 'git@forge.example:alex/design-system.git',
-};
-const issue: Issue = { id: 1, number: 12, title: 'Make navigation keyboard accessible', body: '# PRIVATE ISSUE\n<img src=x onerror="window.executed=true">\n[Unsafe](javascript:alert(1))', state: 'open', user, comments: 3, created_at: '2026-10-01T12:00:00Z', updated_at: '2026-10-01T12:00:00Z', html_url: 'https://forge.example/alex/design-system/issues/12' };
-const closedIssue = { ...issue, id: 2, number: 13, title: 'Fix focus order', body: '', state: 'closed' };
-const secondIssue = { ...issue, id: 3, number: 14, title: 'Document focus management' };
-const entries: SourceEntry[] = [
-  { name: 'src', path: 'src', type: 'dir', sha: head, size: 0 },
-  ...['README.md', 'binary.png', 'large.txt', 'pointer.lfs', 'link', 'module'].map((name): SourceEntry => ({ name, path: name, type: name === 'link' ? 'symlink' : name === 'module' ? 'submodule' : 'file', sha: head, size: name === 'large.txt' ? 300_000 : 128 })),
+const user = create(UserSchema, { id: '9007199254740993', login: 'alex', fullName: 'Alex' });
+const repository = create(RepositorySchema, {
+  id: '9007199254740993', name: 'design-system', fullName: 'alex/design-system', description: 'A shared foundation for our next idea.', private: true,
+  htmlUrl: 'https://forge.example/alex/design-system', defaultBranch: 'main', updatedAt: '2026-10-01T12:00:00Z', empty: false,
+  cloneUrl: 'https://forge.example/alex/design-system.git', sshUrl: 'git@forge.example:alex/design-system.git',
+});
+const issue = create(IssueSchema, { id: '9007199254740993', number: 12, title: 'Make navigation keyboard accessible', body: '# PRIVATE ISSUE\n<img src=x onerror="window.executed=true">\n[Unsafe](javascript:alert(1))', state: IssueState.OPEN, user, comments: 3, createdAt: '2026-10-01T12:00:00Z', updatedAt: '2026-10-01T12:00:00Z', htmlUrl: 'https://forge.example/alex/design-system/issues/12' });
+const closedIssue = create(IssueSchema, { ...issue, id: '9007199254740994', number: 13, title: 'Fix focus order', body: '', state: IssueState.CLOSED });
+const secondIssue = create(IssueSchema, { ...issue, id: '9007199254740995', number: 14, title: 'Document focus management' });
+const entries = [
+  create(SourceEntrySchema, { name: 'src', path: 'src', type: SourceEntryType.DIRECTORY, sha: head }),
+  ...['README.md', 'binary.png', 'large.txt', 'pointer.lfs', 'link', 'module', 'empty.txt', 'huge.bin'].map((name) => create(SourceEntrySchema, { name, path: name, type: name === 'link' ? SourceEntryType.SYMLINK : name === 'module' ? SourceEntryType.SUBMODULE : SourceEntryType.FILE, sha: head, size: name === 'huge.bin' ? 18446744073709551615n : name === 'large.txt' ? 300_000n : name === 'empty.txt' ? 0n : 128n })),
 ];
 
 async function backend(page: Page) {
-  const state = { featureHead: feature, signedIn: true, empty: false, metadataStatus: 200, sourceStatus: 200, issueStatus: 200, sourceWait: undefined as Promise<void> | undefined, calls: [] as URL[] };
-  await page.route('**/api/**', async (route) => {
-    const request = route.request();
-    const url = new URL(request.url());
-    const path = url.pathname;
-    state.calls.push(url);
-    const error = (status: number, message: string) => route.fulfill({ status, json: { error: { code: status === 403 ? 'scope_required' : status === 404 ? 'not_found' : 'upstream_error', message } } });
-    if (path === '/api/session') {
-      if (request.method() === 'POST') state.signedIn = true;
-      if (request.method() === 'DELETE') { state.signedIn = false; return route.fulfill({ status: 204 }); }
-      return state.signedIn ? route.fulfill({ json: { user } }) : error(401, 'Sign in required.');
-    }
+  const state = { featureHead: feature, signedIn: true, empty: false, metadataStatus: 200, sourceStatus: 200, issueStatus: 200, sourceWait: undefined as Promise<void> | undefined, methods: [] as string[], sourceRequests: [] as GetContentsRequest[] };
+  await page.route('**/rpc/**', async (route) => {
+    const method = new URL(route.request().url()).pathname.split('/').at(-1)!;
+    state.methods.push(method);
+    expect(route.request().method()).toBe('POST');
+    expect(route.request().headers()['connect-protocol-version']).toBe('1');
+    const error = (status: number, message: string) => reject(route, status === 401 ? 'unauthenticated' : status === 403 ? 'permission_denied' : status === 404 ? 'not_found' : status === 502 ? 'resource_exhausted' : 'unavailable', message);
+    if (method === 'LoginWithGiteaToken') { state.signedIn = true; return respond(route, LoginWithGiteaTokenResponseSchema, { user }); }
+    if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
+    if (method === 'GetSession') return state.signedIn ? respond(route, GetSessionResponseSchema, { user }) : error(401, 'Sign in required.');
     if (!state.signedIn) return error(401, 'Your session expired.');
-    if (path === '/api/capabilities') return route.fulfill({ json: { capabilities: [] } });
-    if (path === '/api/repositories') return route.fulfill({ json: { repositories: [repository] } });
-    if (path === '/api/repositories/alex/design-system') return state.metadataStatus === 200 ? route.fulfill({ json: { repository: { ...repository, empty: state.empty } } }) : error(state.metadataStatus, 'Repository not found or inaccessible.');
-    if (path.endsWith('/branches')) return route.fulfill({ json: url.searchParams.get('page') === '2' ? { branches: [{ name: 'feature/UI', commit_id: feature, protected: false }] } : { branches: [{ name: 'main', commit_id: head, protected: true }], next_page: 2 } });
-    if (path.endsWith('/contents')) {
+    if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, { capabilities: [] });
+    if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
+    if (method === 'GetRepository') return state.metadataStatus === 200 ? respond(route, GetRepositoryResponseSchema, { repository: { ...repository, empty: state.empty } }) : error(state.metadataStatus, 'Repository not found or inaccessible.');
+    if (method === 'ListBranches') return respond(route, ListBranchesResponseSchema, request(route, ListBranchesRequestSchema).page?.page === 2 ? { branches: [{ name: 'feature/UI', commitId: feature }] } : { branches: [{ name: 'main', commitId: head, protected: true }], page: { nextPage: 2 } });
+    if (method === 'GetContents') {
+      const input = request(route, GetContentsRequestSchema);
+      state.sourceRequests.push(input);
       if (state.sourceWait) await state.sourceWait;
       if (state.sourceStatus !== 200) return error(state.sourceStatus, state.sourceStatus === 403 ? 'Token does not have permission to read source.' : state.sourceStatus === 404 ? 'Source not found or inaccessible.' : 'Directory exceeds the supported response limit.');
-      const ref = url.searchParams.get('ref');
-      const commit_id = ref === 'feature/UI' ? state.featureHead : ref && /^[a-f]{40}$/.test(ref) ? ref : head;
-      const sourcePath = url.searchParams.get('path') || '';
-      if (!sourcePath) return route.fulfill({ json: { commit_id, path: '', kind: 'directory', entries } });
-      if (sourcePath === 'src') return route.fulfill({ json: { commit_id, path: sourcePath, kind: 'directory', entries: [{ name: 'index.ts', path: 'src/index.ts', type: 'file', sha: head, size: 40 }] } });
-      if (sourcePath === 'src/index.ts') return route.fulfill({ json: { commit_id, path: sourcePath, kind: 'file', file: { name: 'index.ts', path: sourcePath, type: 'file', sha: head, size: 40, content: 'export const PRIVATE_SOURCE = true;\n' } } });
+      const commitId = input.ref === 'feature/UI' ? state.featureHead : /^[a-f]{40}$/.test(input.ref) ? input.ref : head;
+      const sourcePath = input.path;
+      if (!sourcePath) return respond(route, GetContentsResponseSchema, { commitId, kind: SourceEntryType.DIRECTORY, entries });
+      if (sourcePath === 'src') return respond(route, GetContentsResponseSchema, { commitId, path: sourcePath, kind: SourceEntryType.DIRECTORY, entries: [{ name: 'index.ts', path: 'src/index.ts', type: SourceEntryType.FILE, sha: head, size: 40n }] });
+      if (sourcePath === 'src/index.ts') return respond(route, GetContentsResponseSchema, { commitId, path: sourcePath, kind: SourceEntryType.FILE, file: { entry: { name: 'index.ts', path: sourcePath, type: SourceEntryType.FILE, sha: head, size: 40n }, content: 'export const PRIVATE_SOURCE = true;\n' } });
       const entry = entries.find((item) => item.path === sourcePath);
       if (!entry) return error(404, 'Source not found or inaccessible.');
-      const reasons: Record<string, string> = { 'binary.png': 'Binary content cannot be previewed.', 'large.txt': 'File exceeds the 256 KiB preview limit.', 'pointer.lfs': 'Git LFS content is not fetched.', link: 'Symlink targets are not followed.', module: 'Submodule repositories are not followed.' };
-      return route.fulfill({ json: { commit_id, path: sourcePath, kind: entry.type, file: { ...entry, content: sourcePath === 'README.md' ? '# PRIVATE README\n<script>window.executed=true</script>\n<a href="javascript:alert(1)">Untrusted</a>\n' : undefined, preview_reason: reasons[sourcePath] } } });
+      const reasons: Record<string, string> = { 'binary.png': 'Binary content cannot be previewed.', 'large.txt': 'File exceeds the 256 KiB preview limit.', 'pointer.lfs': 'Git LFS content is not fetched.', link: 'Symlink targets are not followed.', module: 'Submodule repositories are not followed.', 'huge.bin': 'File exceeds the 256 KiB preview limit.' };
+      return respond(route, GetContentsResponseSchema, { commitId, path: sourcePath, kind: entry.type, file: { entry, content: sourcePath === 'README.md' ? '# PRIVATE README\n<script>window.executed=true</script>\n<a href="javascript:alert(1)">Untrusted</a>\n' : sourcePath === 'empty.txt' ? '' : undefined, previewReason: reasons[sourcePath] } });
     }
-    if (path.endsWith('/commits')) {
-      const sha = url.searchParams.get('ref') === feature ? feature : head;
-      return route.fulfill({ json: url.searchParams.get('page') === '2' ? { commits: [{ sha: older, message: 'Initial repository', author_name: 'Alex', authored_at: '2026-09-30T12:00:00Z' }] } : { commits: [{ sha, message: 'Improve keyboard navigation\n\nKeep focus visible everywhere.', author_name: 'Alex', authored_at: '2026-10-01T12:00:00Z' }], next_page: 2 } });
+    if (method === 'ListCommits') {
+      const input = request(route, ListCommitsRequestSchema);
+      const sha = input.ref === feature ? feature : head;
+      return respond(route, ListCommitsResponseSchema, input.page?.page === 2 ? { commits: [{ sha: older, message: 'Initial repository', authorName: 'Alex', authoredAt: '2026-09-30T12:00:00Z' }] } : { commits: [{ sha, message: 'Improve keyboard navigation\n\nKeep focus visible everywhere.', authorName: 'Alex', authoredAt: '2026-10-01T12:00:00Z' }], page: { nextPage: 2 } });
     }
-    if (path.includes('/issues')) {
+    if (method === 'ListIssues' || method === 'GetIssue') {
       if (state.issueStatus !== 200) return error(state.issueStatus, state.issueStatus === 403 ? 'Issue browsing requires read:issue.' : 'Issue not found or inaccessible.');
-      if (path.endsWith('/issues')) {
-        const selected = url.searchParams.get('state');
-        return route.fulfill({ json: selected === 'closed' ? { issues: [closedIssue] } : selected === 'all' ? { issues: [issue, closedIssue, secondIssue] } : url.searchParams.get('page') === '2' ? { issues: [secondIssue] } : { issues: [issue], next_page: 2 } });
+      if (method === 'ListIssues') {
+        const input = request(route, ListIssuesRequestSchema);
+        return respond(route, ListIssuesResponseSchema, input.state === IssueState.CLOSED ? { issues: [closedIssue] } : input.state === IssueState.ALL ? { issues: [issue, closedIssue, secondIssue] } : input.page?.page === 2 ? { issues: [secondIssue] } : { issues: [issue], page: { nextPage: 2 } });
       }
-      if (path.endsWith('/12')) return route.fulfill({ json: { issue } });
-      if (path.endsWith('/13')) return route.fulfill({ json: { issue: closedIssue } });
-      if (path.endsWith('/14')) return route.fulfill({ json: { issue: secondIssue } });
+      const number = request(route, GetIssueRequestSchema).number;
+      if (number === 12) return respond(route, GetIssueResponseSchema, { issue });
+      if (number === 13) return respond(route, GetIssueResponseSchema, { issue: closedIssue });
+      if (number === 14) return respond(route, GetIssueResponseSchema, { issue: secondIssue });
       return error(404, 'Issue not found or inaccessible.');
     }
     return error(404, 'Repository not found or inaccessible.');
@@ -88,7 +97,7 @@ test('repository navigation pins snapshots, paginates branches, supports slash r
   await expect(page.getByLabel('Plain text preview of index.ts')).toBeVisible();
   await page.reload();
   await expect(page.getByLabel('Plain text preview of index.ts')).toBeVisible();
-  expect(state.calls.filter((url) => url.pathname.endsWith('/contents') && url.searchParams.get('path')).every((url) => url.searchParams.get('ref') === head)).toBe(true);
+  expect(state.sourceRequests.filter((input) => input.path).every((input) => input.ref === head)).toBe(true);
   await page.locator('.branch-picker > summary').click();
   await page.getByRole('button', { name: 'Load more branches' }).click();
   await page.getByRole('link', { name: `feature/UI Listed at ${feature.slice(0, 12)}` }).click();
@@ -96,7 +105,7 @@ test('repository navigation pins snapshots, paginates branches, supports slash r
   await expect(page.getByRole('link', { name: 'README.md File 128 B', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Latest branch head' }).click();
   await expect(page).toHaveURL(new RegExp(`ref=${feature}&branch=feature%2FUI`));
-  expect(state.calls.some((url) => url.pathname.endsWith('/contents') && url.searchParams.get('ref') === 'feature/UI')).toBe(true);
+  expect(state.sourceRequests.some((input) => input.ref === 'feature/UI')).toBe(true);
   state.featureHead = older;
   await page.locator('.branch-picker > summary').click();
   await page.getByRole('link', { name: `feature/UI Listed at ${feature.slice(0, 12)}` }).click();
@@ -164,7 +173,7 @@ test('empty repositories are normal, source bounds are visible, and missing repo
   state.empty = true;
   await page.goto('/repositories/alex/design-system');
   await expect(page.getByRole('heading', { name: 'No commits yet.' })).toBeVisible();
-  expect(state.calls.some((url) => /\/(contents|branches|commits)$/.test(url.pathname))).toBe(false);
+  expect(state.methods.some((method) => ['GetContents', 'ListBranches', 'ListCommits'].includes(method))).toBe(false);
   state.empty = false;
   await page.getByRole('button', { name: 'Refresh repository access' }).click();
   await expect(page.getByRole('link', { name: 'README.md File 128 B', exact: true })).toBeVisible();
@@ -231,8 +240,25 @@ test('repository browser is keyboard reachable and fits light/dark mobile screen
   await page.getByRole('navigation', { name: 'Repository', exact: true }).getByRole('link', { name: 'Issues' }).click();
   await page.getByRole('link', { name: issue.title }).click();
   await expect(page.getByLabel('Issue body, plain text')).toBeVisible();
+  await expect(page.locator('.repository-tabs [aria-current="page"]')).toHaveCount(1);
+  await expect(page.locator('.repository-tabs [aria-current="page"]')).toHaveText('Issues');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/repository-issue-mobile-light.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({ path: 'test-results/repository-issue-light.png', fullPage: true });
+});
+
+test('protobuf preserves empty previews and uint64 sizes while typed routes preserve numeric refs', async ({ page }) => {
+  const state = await backend(page);
+  await page.goto('/repositories/alex/design-system?ref=1234&branch=1234&path=empty.txt');
+  await expect(page.getByLabel('Plain text preview of empty.txt')).toHaveText('(Empty text file)');
+  expect(state.sourceRequests[0]?.ref).toBe('1234');
+  await expect(page.locator('.branch-picker > summary')).toContainText('1234');
+  await page.goto(`/repositories/alex/design-system?ref=${head}&path=huge.bin`);
+  await expect(page.getByRole('heading', { name: 'Preview unavailable' })).toBeVisible();
+  await expect(page.locator('.file-meta [title="18446744073709551615 bytes"]')).toHaveText('16.0 EiB');
+  await expect(page.locator('.source-preview')).toHaveCount(0);
+  await page.goto('/repositories/alex/design-system?view=issues&issue=4294967296');
+  await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
+  expect(state.methods).not.toContain('GetIssue');
 });

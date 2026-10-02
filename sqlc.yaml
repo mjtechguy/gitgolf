@@ -1,0 +1,11 @@
+version: "2"
+sql:
+  - engine: postgresql
+    schema: internal/server/database/migrations
+    queries: internal/server/database/queries
+    gen:
+      go:
+        package: database
+        out: internal/server/database
+        sql_package: database/sql
+        initialisms: [id, url]

@@ -31,3 +31,7 @@ The read-only CLI uses ephemeral bootstrap sessions and emits a named developmen
 The browser uses native URL/history navigation with the existing React Query cache for this bounded repository surface. This temporarily extends the initial thin-client departure from the planned TanStack Router/Connect foundation; it does not adopt an alternative routing framework. Deep links, history, cancellation, authentication changes and cached private-content invalidation require executable browser checks. Revisit this departure with the versioned API and broader multi-domain navigation rather than accumulating independent routing/authentication implementations.
 
 Provider reads use bounded JSON and Gitea's metadata-only contents endpoint before requesting a small ordinary text file. Immutable commit IDs bind source traversal; binary/LFS/symlink/submodule content is not executed or fetched through untrusted URLs. Exact bounds, scope combinations and failure behavior live in the [browser contract](../REPOSITORY_BROWSER_CONTRACT.md).
+
+## Superseded exceptions
+
+[ADR 0002](0002-generated-api-and-typed-navigation.md) retires temporary application REST, native history and inline session SQL. Existing operations now use generated Connect clients/handlers, TanStack Router and SQLC. Other bootstrap limitations remain.

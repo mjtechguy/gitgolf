@@ -25,7 +25,7 @@ docker compose up -d --build
 curl --fail http://localhost:8080/readyz
 ```
 
-Open **http://localhost:8080** for Golf and **http://localhost:3001** for Gitea. Use `localhost` consistently: browser writes check the exact configured origin. Readiness returns 503 until PostgreSQL and Gitea are ready; retry after first startup.
+Open **http://localhost:8080** for Golf and **http://localhost:3001** for Gitea. Use `localhost` consistently: all RPC calls check the exact configured origin. Readiness returns 503 until PostgreSQL and Gitea are ready; retry after first startup.
 
 Registration is disabled. Create your local account with Gitea's supported command (replace the example identity):
 
@@ -59,7 +59,7 @@ Open a repository in Golf to explore its branches, commit history and source tre
 
 Files are rendered as plain text up to 256 KiB. Binary/control content, large files, symlinks, submodules and LFS objects show metadata and an explanation instead. Golf does not execute source HTML, follow source links or fetch submodule targets. Directories above 1,000 entries or upstream responses above 2 MiB fail visibly; this preview does not claim unlimited monorepo browsing.
 
-The Issues tab lists open/closed issues and reads issue bodies as plain text. Issue editing, comments, rendered Markdown, diffs, blame and reviews remain future work. Gitea remains the sole source of collaboration data. See the [browser contract](docs/REPOSITORY_BROWSER_CONTRACT.md) for endpoints and bounds.
+The Issues tab lists open/closed issues and reads issue bodies as plain text. Issue editing, comments, rendered Markdown, diffs, blame and reviews remain future work. Gitea remains the sole source of collaboration data. See the [browser contract](docs/REPOSITORY_BROWSER_CONTRACT.md) for procedures and bounds.
 
 ## Read-only CLI
 
@@ -80,14 +80,15 @@ make cli
 
 Alternatively pipe one token from your secret manager to `./bin/golf --token-stdin repo list`. Credentials are accepted only through stdin or `GOLF_GITEA_TOKEN`, never a command-line token flag. Set `GOLF_URL` or global `--url` for another installation; remote origins require HTTPS. The CLI does not follow redirects or save credentials/cookies. It creates and deletes a temporary Golf session per command, including after an operation fails. Abrupt termination can leave that session until its normal server expiry.
 
-Success writes JSON with `schema_version: "golf.cli.v0"` and the API response in `data`. Pagination is explicit; follow `data.next_page` with `--page`, up to `--limit 100`. Exit codes are 0 for success/help, 1 for operation/authentication/session-cleanup failure, and 2 for usage errors. Diagnostics go to stderr. This bootstrap interface is not the planned stable generated API, OAuth/device login, MCP or ACP.
+Success writes JSON with `schema_version: "golf.cli.v1"` and the API response in `data`. Pagination is explicit; follow `data.page.nextPage` with `--page`, up to `--limit 100`. Exit codes are 0 for success/help, 1 for operation/authentication/session-cleanup failure, and 2 for usage errors. Diagnostics go to stderr. Go and TypeScript clients now share the Protobuf/Connect contract. OAuth/device login, MCP and ACP remain future work.
 
 ## Local checks
 
 ```sh
 npm --prefix web ci
 npm --prefix web exec -- playwright install chromium
-make check
+make check  # includes generated-output drift checks
+make generate # after editing Protobuf or SQL queries
 go test -race ./...
 npm --prefix web test
 python3 scripts/smoke.py --restart

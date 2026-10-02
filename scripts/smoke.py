@@ -17,7 +17,6 @@ import subprocess
 import tempfile
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,9 +51,21 @@ def request(opener, method, url, payload=None, headers=None, expected=200):
     with response:
         raw = response.read()
         assert response.status == expected, f'{method} {url}: {response.status}, expected {expected}'
-        if url.startswith(GOLF + '/api/'):
+        if url.startswith(GOLF + '/rpc/'):
             assert response.headers.get('Cache-Control') == 'no-store', f'Missing no-store: {url}'
         return json.loads(raw) if raw else None
+
+
+def rpc(session, procedure, payload=None, expected=200, headers=None, code=None):
+    """Call the Connect JSON protocol directly; return its unmodified wire shape."""
+    result = request(session, 'POST', GOLF + '/rpc/golf.v1.' + procedure,
+                     {} if payload is None else payload,
+                     {'Connect-Protocol-Version': '1', **(headers or {})}, expected)
+    if expected != 200:
+        codes = {400: 'invalid_argument', 401: 'unauthenticated', 403: 'permission_denied',
+                 404: 'not_found', 429: 'resource_exhausted', 503: 'unavailable'}
+        assert result['code'] == (code or codes[expected]) and result['message'], f'Unexpected Connect error for {procedure}'
+    return result
 
 
 def ready():
@@ -84,22 +95,24 @@ def wait_for_push(token, full_name):
     raise RuntimeError('Gitea did not finish initial push processing within 45 seconds')
 
 
-def pages(session, url, field):
+def pages(session, procedure, payload, field):
     """Require complete, advancing pagination rather than silently stopping early."""
     values, page = [], 1
     for _ in range(20):
-        result = request(session, 'GET', url + ('&' if '?' in url else '?') + f'limit=1&page={page}')
-        assert len(result[field]) <= 1
-        values.extend(result[field])
-        if 'next_page' not in result:
+        result = rpc(session, procedure, {**payload, 'page': {'limit': 1, 'page': page}})
+        rows = result.get(field, [])
+        assert len(rows) <= 1
+        values.extend(rows)
+        next_page = result.get('page', {}).get('nextPage', 0)
+        if not next_page:
             return values
-        assert result[field] and result['next_page'] == page + 1
+        assert rows and next_page == page + 1
         page += 1
     raise AssertionError('Fixture pagination did not terminate')
 
 
-def content(session, base, ref, path=''):
-    return request(session, 'GET', base + '/contents?' + urllib.parse.urlencode({'ref': ref, 'path': path}))
+def content(session, repository, ref, path=''):
+    return rpc(session, 'RepositoryService/GetContents', {'repository': repository, 'ref': ref, 'path': path})
 
 
 def commit(path, message):
@@ -118,8 +131,8 @@ def cli_check(binary, token, full_name, revision, nested_path, nested_text):
     assert result.returncode == 0, 'CLI failed (output withheld to protect credentials)'
     assert token not in result.stdout and token not in result.stderr
     envelope = json.loads(result.stdout)
-    assert envelope['schema_version'] == 'golf.cli.v0'
-    assert envelope['data']['commit_id'] == revision
+    assert envelope['schema_version'] == 'golf.cli.v1'
+    assert envelope['data']['commitId'] == revision
     assert envelope['data']['file']['content'] == nested_text
     invalid = secrets.token_hex(20)
     result = subprocess.run(args, input=invalid + '\n', cwd=ROOT, env=env, capture_output=True, text=True)
@@ -149,30 +162,30 @@ def main():
             token = admin('generate-access-token', '--username', name, '--token-name', 'golf-local-check',
                           '--scopes', 'write:user,write:repository,write:issue', '--raw')
             session = client()
-            identity = request(session, 'POST', GOLF + '/api/session', {'token': token})['user']
-            assert identity['login'] == name
+            identity = rpc(session, 'SessionService/LoginWithGiteaToken', {'token': token})['user']
+            assert identity['login'] == name and isinstance(identity['id'], str) and identity['id'].isdigit()
             if label == 'alice':
                 alice, alice_token, alice_password = session, token, password
                 alice_name = name
             else:
                 bob = session
-        request(client(), 'GET', GOLF + '/api/repositories', expected=401)
-        request(alice, 'POST', GOLF + '/api/repositories', {'name': 'rejected', 'private': True},
-                headers={'Origin': 'https://invalid.example'}, expected=403)
-        repo = request(alice, 'POST', GOLF + '/api/repositories',
-                       {'name': 'smoke-private', 'description': 'Temporary local verification', 'private': True}, expected=201)['repository']
-        assert repo['private'] is True
-        full_name = repo['full_name']
-        base = GOLF + '/api/repositories/' + full_name
-        assert any(r['full_name'] == full_name for r in request(alice, 'GET', GOLF + '/api/repositories')['repositories'])
-        assert all(r['full_name'] != full_name for r in request(bob, 'GET', GOLF + '/api/repositories')['repositories'])
+        rpc(client(), 'RepositoryService/ListRepositories', expected=401)
+        rpc(alice, 'RepositoryService/CreateRepository', {'name': 'rejected', 'private': True},
+            headers={'Origin': 'https://invalid.example'}, expected=403)
+        rpc(alice, 'RepositoryService/CreateRepository', {'name': 'missing-visibility'}, expected=400)
+        repo = rpc(alice, 'RepositoryService/CreateRepository',
+                   {'name': 'smoke-private', 'description': 'Temporary local verification', 'private': True})['repository']
+        assert repo['private'] is True and isinstance(repo['id'], str) and repo['id'].isdigit()
+        full_name = repo['fullName']
+        repository = {'owner': alice_name, 'name': repo['name']}
+        assert any(r['fullName'] == full_name for r in rpc(alice, 'RepositoryService/ListRepositories').get('repositories', []))
+        assert all(r['fullName'] != full_name for r in rpc(bob, 'RepositoryService/ListRepositories').get('repositories', []))
         request(client(), 'GET', GITEA + '/api/v1/repos/' + full_name, expected=404)
-        assert request(alice, 'GET', base)['repository']['empty'] is True
-        assert request(alice, 'GET', base + '/branches')['branches'] == []
-        assert request(alice, 'GET', base + '/commits')['commits'] == []
-        empty = request(alice, 'GET', base + '/contents', expected=409)
-        assert empty['error']['code'] == 'empty_repository'
-        assert request(alice, 'GET', base + '/issues')['issues'] == []
+        assert rpc(alice, 'RepositoryService/GetRepository', {'repository': repository})['repository']['empty'] is True
+        assert rpc(alice, 'RepositoryService/ListBranches', {'repository': repository}).get('branches', []) == []
+        assert rpc(alice, 'RepositoryService/ListCommits', {'repository': repository}).get('commits', []) == []
+        rpc(alice, 'RepositoryService/GetContents', {'repository': repository}, expected=400, code='failed_precondition')
+        assert rpc(alice, 'RepositoryService/ListIssues', {'repository': repository}).get('issues', []) == []
         with tempfile.TemporaryDirectory(prefix='golf-git-smoke-') as directory:
             path = Path(directory)
             work = path / 'work'
@@ -186,6 +199,7 @@ def main():
             nested_text = 'Hello, 世界. This is an immutable source fixture.\n'
             (work / nested_path).parent.mkdir(parents=True)
             (work / nested_path).write_text(nested_text, encoding='utf-8')
+            (work / 'empty.txt').write_text('')
             (work / 'binary.bin').write_bytes(b'Golf\x00binary\xff\n')
             (work / 'preview-limit.txt').write_bytes(b'x' * (256 * 1024))
             (work / 'large.txt').write_bytes(b'x' * (256 * 1024 + 1))
@@ -213,23 +227,26 @@ def main():
                              'refs/heads/main', env=env, cwd=work)
             assert remote.split()[0] == revision
             wait_for_push(alice_token, full_name)
-            detail = request(alice, 'GET', base)['repository']
-            assert detail['empty'] is False and detail['private'] is True
-            assert detail['clone_url'] and detail['ssh_url']
-            snapshot = content(alice, base, 'main')
-            assert snapshot['kind'] == 'directory' and snapshot['commit_id'] == revision
+            detail = rpc(alice, 'RepositoryService/GetRepository', {'repository': repository})['repository']
+            assert detail.get('empty', False) is False and detail['private'] is True
+            assert detail['cloneUrl'] and detail['sshUrl']
+            snapshot = content(alice, repository, 'main')
+            assert snapshot['kind'] == 'SOURCE_ENTRY_TYPE_DIRECTORY' and snapshot['commitId'] == revision
             entries = {entry['name']: entry for entry in snapshot['entries']}
-            assert entries['docs']['type'] == 'dir' and entries['README.md']['type'] == 'file'
-            assert content(alice, base, revision, nested_path)['file']['content'] == nested_text
-            assert content(alice, base, revision, 'README.md')['file']['content'] == initial_text
-            assert len(content(alice, base, revision, 'preview-limit.txt')['file']['content']) == 256 * 1024
-            bounded = request(alice, 'GET', base + '/contents?' + urllib.parse.urlencode({'ref': revision, 'path': 'crowded'}), expected=502)
-            assert bounded['error']['code'] == 'forge_response_too_large'
-            for file_path, kind in [('binary.bin', 'file'), ('large.txt', 'file'), ('pointer.lfs', 'file'),
-                                    ('outside-link', 'symlink'), ('vendor/sample', 'submodule')]:
-                result = content(alice, base, revision, file_path)
-                assert result['commit_id'] == revision and result['kind'] == kind
-                assert result['file']['preview_reason'] and not result['file'].get('content')
+            assert entries['docs']['type'] == 'SOURCE_ENTRY_TYPE_DIRECTORY' and entries['README.md']['type'] == 'SOURCE_ENTRY_TYPE_FILE'
+            assert content(alice, repository, revision, nested_path)['file']['content'] == nested_text
+            assert content(alice, repository, revision, 'README.md')['file']['content'] == initial_text
+            empty_file = content(alice, repository, revision, 'empty.txt')['file']
+            assert empty_file['content'] == '' and empty_file['entry'].get('size', '0') == '0'
+            limit_file = content(alice, repository, revision, 'preview-limit.txt')['file']
+            assert len(limit_file['content']) == 256 * 1024 and limit_file['entry']['size'] == str(256 * 1024)
+            rpc(alice, 'RepositoryService/GetContents', {'repository': repository, 'ref': revision, 'path': 'crowded'}, expected=429)
+            for file_path, kind in [('binary.bin', 'FILE'), ('large.txt', 'FILE'), ('pointer.lfs', 'FILE'),
+                                    ('outside-link', 'SYMLINK'), ('vendor/sample', 'SUBMODULE')]:
+                result = content(alice, repository, revision, file_path)
+                assert result['commitId'] == revision and result['kind'] == 'SOURCE_ENTRY_TYPE_' + kind
+                assert result['file']['entry']['type'] == result['kind']
+                assert result['file']['previewReason'] and 'content' not in result['file']
 
             branch_name = 'feature/source-browser'
             command('git', 'checkout', '-b', branch_name, cwd=work)
@@ -238,21 +255,21 @@ def main():
             feature_revision = commit(work, 'Add a pull request fixture')
             command('git', '-c', 'credential.helper=', 'push', remote_url, branch_name, env=env, cwd=work)
             command('git', 'checkout', 'main', cwd=work)
-            branches = pages(alice, base + '/branches', 'branches')
-            assert {b['name']: b['commit_id'] for b in branches} == {'main': revision, branch_name: feature_revision}
-            assert content(alice, base, branch_name, 'feature.txt')['commit_id'] == feature_revision
-            history = pages(alice, base + '/commits?ref=' + urllib.parse.quote(revision, safe=''), 'commits')
+            branches = pages(alice, 'RepositoryService/ListBranches', {'repository': repository}, 'branches')
+            assert {b['name']: b['commitId'] for b in branches} == {'main': revision, branch_name: feature_revision}
+            assert content(alice, repository, branch_name, 'feature.txt')['commitId'] == feature_revision
+            history = pages(alice, 'RepositoryService/ListCommits', {'repository': repository, 'ref': revision}, 'commits')
             assert [entry['sha'] for entry in history] == [revision, first_revision]
-            assert all(entry['message'] and entry['author_name'] and entry['authored_at'] for entry in history)
+            assert all(entry['message'] and entry['authorName'] and entry['authoredAt'] for entry in history)
 
             (work / 'README.md').write_text('A new branch head\n')
             command('git', 'add', 'README.md', cwd=work)
             latest_revision = commit(work, 'Move main after the browser snapshot')
             command('git', '-c', 'credential.helper=', 'push', remote_url, 'main', env=env, cwd=work)
-            assert content(alice, base, 'main', 'README.md')['commit_id'] == latest_revision
-            old_file = content(alice, base, snapshot['commit_id'], 'README.md')
-            assert old_file['commit_id'] == revision and old_file['file']['content'] == initial_text
-            assert content(alice, base, snapshot['commit_id'], nested_path)['file']['content'] == nested_text
+            assert content(alice, repository, 'main', 'README.md')['commitId'] == latest_revision
+            old_file = content(alice, repository, snapshot['commitId'], 'README.md')
+            assert old_file['commitId'] == revision and old_file['file']['content'] == initial_text
+            assert content(alice, repository, snapshot['commitId'], nested_path)['file']['content'] == nested_text
 
             issues_route = 'repos/' + full_name + '/issues'
             issue_body = '<script>issue text, never execute</script>\nA reproducible fixture.'
@@ -262,42 +279,51 @@ def main():
             other = provider(alice_token, 'POST', issues_route, {'title': 'Second open fixture'}, 201)
             pull = provider(alice_token, 'POST', 'repos/' + full_name + '/pulls',
                             {'title': 'Excluded pull request', 'base': 'main', 'head': branch_name}, 201)
-            for state, expected_numbers in [('all', {opened['number'], closed['number'], other['number']}),
-                                             ('open', {opened['number'], other['number']}), ('closed', {closed['number']})]:
-                issues = pages(alice, base + '/issues?state=' + state, 'issues')
+            for state, expected_numbers in [('ISSUE_STATE_ALL', {opened['number'], closed['number'], other['number']}),
+                                             ('ISSUE_STATE_OPEN', {opened['number'], other['number']}), ('ISSUE_STATE_CLOSED', {closed['number']})]:
+                issues = pages(alice, 'RepositoryService/ListIssues', {'repository': repository, 'state': state}, 'issues')
                 assert len(issues) == len(expected_numbers) and {i['number'] for i in issues} == expected_numbers
-            issue_path = '/issues/' + str(opened['number'])
-            issue = request(alice, 'GET', base + issue_path)['issue']
+            issue_request = {'repository': repository, 'number': opened['number']}
+            issue = rpc(alice, 'RepositoryService/GetIssue', issue_request)['issue']
             assert issue['body'] == issue_body and issue['user']['login'] == alice_name
-            assert issue['state'] == 'open' and issue['html_url'] and issue['created_at'] and issue['updated_at']
-            request(alice, 'GET', base + '/issues/' + str(pull['number']), expected=404)
+            assert isinstance(issue['id'], str) and issue['id'].isdigit()
+            assert issue['state'] == 'ISSUE_STATE_OPEN' and issue['htmlUrl'] and issue['createdAt'] and issue['updatedAt']
+            rpc(alice, 'RepositoryService/GetIssue', {'repository': repository, 'number': pull['number']}, expected=404)
             print('PASS: empty repositories, source boundaries, slash refs, immutable snapshots, pagination and issues excluding PRs')
 
-            routes = ['', '/branches', '/commits', '/contents', '/contents?' + urllib.parse.urlencode({'ref': revision, 'path': nested_path}),
-                      '/issues', issue_path]
-            missing = request(alice, 'GET', GOLF + '/api/repositories/' + alice_name + '/missing-repository', expected=404)
-            for route in routes:
-                request(client(), 'GET', base + route, expected=401)
-                denied = request(bob, 'GET', base + route, expected=404)
+            calls = [('RepositoryService/GetRepository', {'repository': repository}),
+                     ('RepositoryService/ListBranches', {'repository': repository}),
+                     ('RepositoryService/ListCommits', {'repository': repository}),
+                     ('RepositoryService/GetContents', {'repository': repository}),
+                     ('RepositoryService/GetContents', {'repository': repository, 'ref': revision, 'path': nested_path}),
+                     ('RepositoryService/ListIssues', {'repository': repository}),
+                     ('RepositoryService/GetIssue', issue_request)]
+            missing = rpc(alice, 'RepositoryService/GetRepository',
+                          {'repository': {'owner': alice_name, 'name': 'missing-repository'}}, expected=404)
+            for procedure, payload in calls:
+                rpc(client(), procedure, payload, expected=401)
+                denied = rpc(bob, procedure, payload, expected=404)
                 assert denied == missing, 'Private denial differs from a missing resource'
-            for query in ['page=0', 'limit=101']:
-                request(alice, 'GET', base + '/branches?' + query, expected=400)
-            request(alice, 'GET', base + '/issues?state=invalid', expected=400)
-            request(alice, 'GET', base + '/contents?' + urllib.parse.urlencode({'path': '../README.md'}), expected=400)
-            request(alice, 'GET', base + '/contents?' + urllib.parse.urlencode({'ref': 'missing-branch'}), expected=404)
+            for page in [{'page': 10001}, {'limit': 101}]:
+                rpc(alice, 'RepositoryService/ListBranches', {'repository': repository, 'page': page}, expected=400)
+            defaults = rpc(alice, 'RepositoryService/ListBranches', {'repository': repository, 'page': {'page': 0, 'limit': 0}})
+            assert {b['name'] for b in defaults.get('branches', [])} == {'main', branch_name}
+            rpc(alice, 'RepositoryService/ListIssues', {'repository': repository, 'state': 999}, expected=400)
+            rpc(alice, 'RepositoryService/GetContents', {'repository': repository, 'path': '../README.md'}, expected=400)
+            rpc(alice, 'RepositoryService/GetContents', {'repository': repository, 'ref': 'missing-branch'}, expected=404)
 
             for label, scopes in [('identity', 'read:user'), ('code', 'read:user,read:repository'),
                                   ('reader', 'read:user,read:repository,read:issue')]:
                 token = admin('generate-access-token', '--username', alice_name, '--token-name', 'golf-check-' + label,
                               '--scopes', scopes, '--raw')
                 scoped = client()
-                request(scoped, 'POST', GOLF + '/api/session', {'token': token})
-                request(scoped, 'GET', base, expected=403 if label == 'identity' else 200)
-                request(scoped, 'GET', base + '/contents', expected=403 if label == 'identity' else 200)
-                request(scoped, 'GET', base + issue_path, expected=200 if label == 'reader' else 403)
-                request(scoped, 'GET', base + '/issues', expected=200 if label == 'reader' else 403)
-                request(scoped, 'POST', GOLF + '/api/repositories', {'name': 'scope-denied', 'private': True}, expected=403)
-                request(scoped, 'DELETE', GOLF + '/api/session', expected=204)
+                rpc(scoped, 'SessionService/LoginWithGiteaToken', {'token': token})
+                rpc(scoped, 'RepositoryService/GetRepository', {'repository': repository}, expected=403 if label == 'identity' else 200)
+                rpc(scoped, 'RepositoryService/GetContents', {'repository': repository}, expected=403 if label == 'identity' else 200)
+                rpc(scoped, 'RepositoryService/GetIssue', issue_request, expected=200 if label == 'reader' else 403)
+                rpc(scoped, 'RepositoryService/ListIssues', {'repository': repository}, expected=200 if label == 'reader' else 403)
+                rpc(scoped, 'RepositoryService/CreateRepository', {'name': 'scope-denied', 'private': True}, expected=403)
+                assert rpc(scoped, 'SessionService/Logout') == {}
                 if label == 'reader' and cli:
                     cli_check(cli, token, full_name, revision, nested_path, nested_text)
             print('PASS: direct private-resource isolation, no-store responses, input validation and least-privilege scopes')
@@ -305,13 +331,13 @@ def main():
         if args.restart:
             command('docker', 'compose', 'restart', 'golf', 'gitea')
             ready()
-            assert any(r['full_name'] == full_name for r in request(alice, 'GET', GOLF + '/api/repositories')['repositories'])
-            assert content(alice, base, revision, nested_path)['file']['content'] == nested_text
+            assert any(r['fullName'] == full_name for r in rpc(alice, 'RepositoryService/ListRepositories').get('repositories', []))
+            assert content(alice, repository, revision, nested_path)['file']['content'] == nested_text
             try:
                 command('docker', 'compose', 'stop', 'gitea')
                 request(client(), 'GET', GOLF + '/readyz', expected=503)
-                request(alice, 'GET', GOLF + '/api/repositories', expected=502)
-                request(alice, 'GET', base + '/contents', expected=502)
+                rpc(alice, 'RepositoryService/ListRepositories', expected=503)
+                rpc(alice, 'RepositoryService/GetContents', {'repository': repository}, expected=503)
             finally:
                 command('docker', 'compose', 'start', 'gitea')
                 ready()
@@ -321,11 +347,11 @@ def main():
         tokens = request(client(), 'GET', tokens_url, headers={'Authorization': 'Basic ' + basic})
         token_id = next(t['id'] for t in tokens if t['name'] == 'golf-local-check')
         request(client(), 'DELETE', tokens_url + '/' + str(token_id), headers={'Authorization': 'Basic ' + basic}, expected=204)
-        for route in routes:
-            request(alice, 'GET', base + route, expected=401)
-        request(alice, 'GET', GOLF + '/api/session', expected=401)
-        request(bob, 'DELETE', GOLF + '/api/session', expected=204)
-        request(bob, 'GET', GOLF + '/api/repositories', expected=401)
+        for procedure, payload in calls:
+            rpc(alice, procedure, payload, expected=401)
+        rpc(alice, 'SessionService/GetSession', expected=401)
+        assert rpc(bob, 'SessionService/Logout') == {}
+        rpc(bob, 'RepositoryService/ListRepositories', expected=401)
         print('PASS: upstream token revocation and Golf logout')
     finally:
         cleanup_errors = []

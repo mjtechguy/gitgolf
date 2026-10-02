@@ -1,4 +1,4 @@
-.PHONY: setup dev build cli test test-integration check fmt vet web-check up down
+.PHONY: setup dev build cli test test-integration check fmt vet web-check generate generate-check up down
 setup:
 	./scripts/init-env.sh
 dev: up
@@ -20,7 +20,11 @@ vet:
 	go vet ./...
 web-check:
 	npm --prefix web run check
-check: fmt vet test web-check
+generate:
+	./scripts/generate.sh
+generate-check:
+	./scripts/generate.sh --check
+check: fmt vet test web-check generate-check
 up: setup
 	docker compose up -d --build
 down:
