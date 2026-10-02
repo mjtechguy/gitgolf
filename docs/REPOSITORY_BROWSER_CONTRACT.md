@@ -11,6 +11,7 @@ Contract: [`api/golf/v1/golf.proto`](../api/golf/v1/golf.proto). Every procedure
 | GetRepository | `{repository:{owner,name}}` → `{repository}` |
 | ListBranches | repository and optional `{page:{page,limit}}` → `{branches,page:{nextPage}}` |
 | ListCommits | repository, optional ref/page → `{commits,page}` |
+| GetCommitDiff | repository and exact lowercase `commitId` → commit/parents/base, bounded `rawDiff` and numeric `byteSize`; see the [diff contract](COMMIT_DIFF_CONTRACT.md) |
 | GetContents | repository, optional ref/path → `{commitId,path,kind,entries,file}` |
 | ListIssues | repository, optional enum state/page → `{issues,page}` |
 | GetIssue | repository and positive number → `{issue}` |
@@ -19,7 +20,9 @@ Pagination defaults to page 1/limit 20 for zero values, with bounds page 10,000/
 
 Content is decoded UTF-8 **plain text**, never HTML. A preview is limited to 256 KiB; binary, oversized, symlink, submodule and LFS content receives metadata and a reason instead. Do not follow targets or upstream download URLs. Bounded upstream responses or oversized directories fail visibly rather than returning a seemingly complete subset.
 
-`Issue`: `{id, number, title, body, state, user: User, comments, createdAt, updatedAt, htmlUrl}`. Issue bodies render as plain text in this increment. Comments, issue mutations, rendered Markdown, diffs, blame, review mutations and merges remain future work. Read-only PR/native-review browsing is documented in the [PR read contract](PULL_REQUEST_READ_CONTRACT.md).
+`Issue`: `{id, number, title, body, state, user: User, comments, createdAt, updatedAt, htmlUrl}`. Issue bodies render as plain text in this increment. Comments, issue mutations, rendered Markdown, PR comparisons, blame, review mutations and merges remain future work. Read-only PR/native-review browsing is documented in the [PR read contract](PULL_REQUEST_READ_CONTRACT.md).
+
+Read-only [commit diffs](COMMIT_DIFF_CONTRACT.md) show native root/first-parent output for one exact commit, including merges against their first parent. They use a separate 512 KiB plain-text bound; provider output is not independently verified patch completeness or approval evidence.
 
 Source navigation uses the returned commit ID to keep folder/file traversal consistent if a branch changes. Users can refresh or reselect a branch to observe a new head. Commit history is also browsable at a selected immutable commit. Branch enumeration may be paginated; never imply the first page is the complete branch list.
 

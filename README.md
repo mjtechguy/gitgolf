@@ -9,7 +9,7 @@ These are infrastructure choices, not editions. AI is optional in Golf's core wo
 
 ## What works now
 
-This is a developer preview: optional scoped Gitea browser OAuth and per-user token bootstrap, encrypted PostgreSQL-backed sessions with account listing/revocation and own-account activity, member-scoped organization/team browsing, repository listing/creation, in-app source and commit browsing, read-only issues and pull requests/native reviews, a JSON CLI, black/charcoal and light/system themes, capability reporting, and persistent Compose/Helm installations. Git writes use Gitea directly.
+This is a developer preview: optional scoped Gitea browser OAuth and per-user token bootstrap, encrypted PostgreSQL-backed sessions with account listing/revocation and own-account activity, member-scoped organization/team browsing, repository listing/creation, in-app source, commit history and native commit-diff browsing, read-only issues and pull requests/native reviews, a JSON CLI, black/charcoal and light/system themes, capability reporting, and persistent Compose/Helm installations. Git writes use Gitea directly.
 
 Golf local/external OIDC identity, organization/role administration, import/connections, PR/review mutations and merge policy, pipelines/runners, agent execution, Cloudflare integrations and protected previews/CD remain roadmap work. This is not complete v1 or a competition-ready entry. No repository CI is configured.
 
@@ -91,7 +91,9 @@ Open a repository in Golf to explore its branches, commit history and source tre
 
 Files are rendered as plain text up to 256 KiB. Binary/control content, large files, symlinks, submodules and LFS objects show metadata and an explanation instead. Golf does not execute source HTML, follow source links or fetch submodule targets. Directories above 1,000 entries or upstream responses above 2 MiB fail visibly; this preview does not claim unlimited monorepo browsing.
 
-The Issues tab lists open/closed issues and reads issue bodies as plain text. Issue editing, comments, rendered Markdown, diffs, blame and review submission remain future work. Gitea remains the sole source of collaboration data. See the [browser contract](docs/REPOSITORY_BROWSER_CONTRACT.md) for procedures and bounds.
+The Issues tab lists open/closed issues and reads issue bodies as plain text. Issue editing, comments, rendered Markdown, PR comparisons, blame and review submission remain future work. Gitea remains the sole source of collaboration data. See the [browser contract](docs/REPOSITORY_BROWSER_CONTRACT.md) for procedures and bounds.
+
+In **Commits**, choose **View diff** to inspect an exact object and its first-parent comparison (or root output). Merge diffs show only the first parent. Native text is limited to 512 KiB and stays plain text; binary notices and root commit metadata, including author email, remain as supplied by Gitea. Oversized/invalid text fails visibly. **Browse this commit** opens that object’s source. This is unparsed provider output, not independently verified patch completeness or merge readiness. See the [commit-diff contract](docs/COMMIT_DIFF_CONTRACT.md).
 
 The **Pull requests** tab lists open/closed/all PRs and opens plain-text detail with native Gitea reviews. List heads are labeled retained snapshots; detail refs are provider observations or explicit retained fallbacks. These labels, native merge records and review flags do not establish a live source branch, Golf approval eligibility or merge readiness. Pagination can advance from an empty review page because Gitea filters hidden pending reviews after counting. PR and review reads require `read:user` plus `read:repository`, without issue scope. See the [PR read contract](docs/PULL_REQUEST_READ_CONTRACT.md).
 
@@ -108,6 +110,7 @@ make cli
 ./bin/golf repo branches owner/repository
 ./bin/golf repo commits owner/repository --ref feature/example
 ./bin/golf repo contents owner/repository --ref COMMIT_ID --path README.md
+./bin/golf commit diff owner/repository FULL_LOWERCASE_COMMIT_SHA
 ./bin/golf issue list owner/repository --state open
 ./bin/golf issue view owner/repository 1
 ./bin/golf pr list owner/repository --state all --page 1 --limit 20
@@ -123,6 +126,8 @@ make cli
 ```
 
 Alternatively pipe one token from your secret manager to `./bin/golf --token-stdin repo list`. Credentials are accepted only through stdin or `GOLF_GITEA_TOKEN`, never a command-line token flag. Set `GOLF_URL` or global `--url` for another installation; remote origins require HTTPS. The CLI does not follow redirects or save credentials/cookies. It creates and deletes a temporary Golf session per command, including after an operation fails. Abrupt termination can leave that session until its normal server expiry.
+
+`commit diff` requires an exact lowercase 40- or 64-character hexadecimal SHA, accepts no branch/revision expressions or pagination, and returns JSON-escaped `data.rawDiff` plus commit/parent/base metadata and numeric `data.byteSize`. It uses the same `read:user,read:repository` scopes as source browsing; syntax acceptance does not qualify every forge object format.
 
 PR/review commands require `read:user` and `read:repository`; review flags remain provider observations. Organization/team commands require `read:user` and `read:organization`; repository source separately requires `read:repository`. Team IDs are canonical positive decimal strings, obtained from `org teams`. Empty collection pages can still have a `nextPage`.
 
@@ -152,6 +157,8 @@ python3 scripts/keyring-smoke.py
 python3 scripts/sessions-smoke.py
 # Real membership-scoped organizations/teams and production browser checks.
 python3 scripts/organizations-smoke.py --cli bin/golf
+# Native Git commit diffs, bounded plain text, CLI and production browser checks.
+python3 scripts/commit-diff-smoke.py --cli bin/golf
 # Real private-fork PR/native-review reads and production browser checks.
 python3 scripts/pulls-smoke.py --cli bin/golf
 # Isolated provider role contract; uses disposable PostgreSQL/Gitea on port 3016.

@@ -9,7 +9,7 @@ export function respond<Schema extends DescMessage>(route: Route, schema: Schema
 export function request<Schema extends DescMessage>(route: Route, schema: Schema) {
   return fromJson(schema, route.request().postDataJSON());
 }
-export function reject(route: Route, code: 'unauthenticated' | 'permission_denied' | 'not_found' | 'already_exists' | 'resource_exhausted' | 'unavailable', message: string) {
-  const status = { unauthenticated: 401, permission_denied: 403, not_found: 404, already_exists: 409, resource_exhausted: 429, unavailable: 503 }[code];
+export function reject(route: Route, code: 'unauthenticated' | 'permission_denied' | 'not_found' | 'already_exists' | 'failed_precondition' | 'resource_exhausted' | 'unavailable', message: string) {
+  const status = { unauthenticated: 401, permission_denied: 403, not_found: 404, already_exists: 409, failed_precondition: 400, resource_exhausted: 429, unavailable: 503 }[code];
   return route.fulfill({ status, contentType: 'application/json', json: { code, message } });
 }

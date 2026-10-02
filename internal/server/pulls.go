@@ -182,7 +182,7 @@ func pullNextPage(headers http.Header, page, limit uint32) (uint32, error) {
 	return page + 1, nil
 }
 
-func (s *Server) withPullRepository(ctx context.Context, value string, token forgeCredential, key repositoryKey, operation func(string, Repository) error) error {
+func (s *Server) withRepositoryRead(ctx context.Context, value string, token forgeCredential, key repositoryKey, operation func(string, Repository) error) error {
 	base, err := repositoryPath(key)
 	if err != nil {
 		return err
@@ -231,7 +231,7 @@ func (s *Server) listPullRequests(ctx context.Context, value string, token forge
 	}
 	var result []*golfv1.PullRequest
 	var next uint32
-	err = s.withPullRepository(ctx, value, token, key, func(base string, repo Repository) error {
+	err = s.withRepositoryRead(ctx, value, token, key, func(base string, repo Repository) error {
 		query := pageQuery(page, limit)
 		query.Set("state", filter)
 		query.Set("sort", "recentupdate")
@@ -268,7 +268,7 @@ func (s *Server) getPullRequest(ctx context.Context, value string, token forgeCr
 		return nil, err
 	}
 	var result *golfv1.PullRequest
-	err := s.withPullRepository(ctx, value, token, key, func(base string, repo Repository) error {
+	err := s.withRepositoryRead(ctx, value, token, key, func(base string, repo Repository) error {
 		row, err := s.readPull(ctx, token, base, repo, number)
 		if err == nil {
 			result = wirePull(row, false)
@@ -291,7 +291,7 @@ func (s *Server) listPullRequestReviews(ctx context.Context, value string, token
 	}
 	var result []*golfv1.PullRequestReview
 	var next uint32
-	err = s.withPullRepository(ctx, value, token, key, func(base string, repo Repository) error {
+	err = s.withRepositoryRead(ctx, value, token, key, func(base string, repo Repository) error {
 		pull, err := s.readPull(ctx, token, base, repo, number)
 		if err != nil {
 			return err

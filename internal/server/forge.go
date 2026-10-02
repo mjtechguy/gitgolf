@@ -43,7 +43,9 @@ var errForgeResponseTooLarge = errors.New("forge response exceeds the size limit
 
 func (e forgeError) Error() string { return fmt.Sprintf("forge returned HTTP %d", e.status) }
 
-func (s *Server) forge(ctx context.Context, method, path string, token forgeCredential, input, output any) (http.Header, error) {
+// forgeRequest is shared by JSON and raw diff reads. Callers close successful
+// responses and enforce the appropriate payload bound before returning data.
+func (s *Server) forgeRequest(ctx context.Context, method, path, accept string, token forgeCredential, input any) (*http.Response, error) {
 	var body io.Reader
 	if input != nil {
 		b, err := json.Marshal(input)
@@ -56,7 +58,7 @@ func (s *Server) forge(ctx context.Context, method, path string, token forgeCred
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", accept)
 	if input != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -76,10 +78,19 @@ func (s *Server) forge(ctx context.Context, method, path string, token forgeCred
 		}
 		return nil, errForgeUnavailable
 	}
-	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		res.Body.Close()
 		return nil, forgeError{res.StatusCode}
 	}
+	return res, nil
+}
+
+func (s *Server) forge(ctx context.Context, method, path string, token forgeCredential, input, output any) (http.Header, error) {
+	res, err := s.forgeRequest(ctx, method, path, "application/json", token, input)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
 	if output != nil {
 		if res.ContentLength > maxForgeResponse {
 			return nil, errForgeResponseTooLarge

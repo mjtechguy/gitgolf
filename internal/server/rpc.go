@@ -70,6 +70,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.SessionServiceListSessionsProcedure, golfv1connect.SessionServiceRevokeSessionProcedure, golfv1connect.SessionServiceRevokeOtherSessionsProcedure,
 			golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure,
 			golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure,
+			golfv1connect.RepositoryServiceGetCommitDiffProcedure,
 			golfv1connect.RepositoryServiceListIssuesProcedure, golfv1connect.RepositoryServiceGetIssueProcedure,
 			golfv1connect.RepositoryServiceListPullRequestsProcedure, golfv1connect.RepositoryServiceGetPullRequestProcedure, golfv1connect.RepositoryServiceListPullRequestReviewsProcedure,
 			golfv1connect.OrganizationServiceListOrganizationsProcedure, golfv1connect.OrganizationServiceGetOrganizationProcedure,
@@ -269,6 +270,17 @@ func (s *Server) ListCommits(ctx context.Context, req *connect.Request[golfv1.Li
 		response.Commits = append(response.Commits, &golfv1.Commit{Sha: row.SHA, Message: row.Commit.Message, AuthorName: row.Commit.Author.Name, AuthoredAt: row.Commit.Author.Date})
 	}
 	return connect.NewResponse(response), nil
+}
+func (s *Server) GetCommitDiff(ctx context.Context, req *connect.Request[golfv1.GetCommitDiffRequest]) (*connect.Response[golfv1.GetCommitDiffResponse], error) {
+	token, err := rpcToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result, err := s.getCommitDiff(ctx, cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), req.Msg.CommitId)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return connect.NewResponse(result), nil
 }
 func (s *Server) GetContents(ctx context.Context, req *connect.Request[golfv1.GetContentsRequest]) (*connect.Response[golfv1.GetContentsResponse], error) {
 	token, err := rpcToken(ctx)

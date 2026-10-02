@@ -98,6 +98,18 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .commit-message { margin-top:10px; font-size:11px; }
 .commit-message summary { color:var(--muted); }
 .commit-message pre { margin:10px 0 0; padding:12px; background:var(--raised); border-radius:5px; white-space:pre-wrap; overflow-wrap:anywhere; font:11px/1.8 ui-monospace,monospace; }
+.commit-diff-link { margin-top:12px; font-size:11px; }
+.commit-diff-navigation { display:flex; justify-content:space-between; gap:15px; flex-wrap:wrap; margin:24px 0 18px; }
+.commit-diff-metadata { padding:20px 22px; font-size:11px; line-height:1.8; }
+.commit-diff-metadata dl { margin:0; }
+.commit-diff-metadata dl>div { display:grid; grid-template-columns:85px minmax(0,1fr); gap:14px; margin-bottom:9px; }
+.commit-diff-metadata dt { color:var(--muted); }
+.commit-diff-metadata dd { margin:0; overflow-wrap:anywhere; }
+.commit-diff-metadata dd code { display:block; }
+.commit-diff-message { margin:16px 0 0; padding:12px; max-height:180px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; border:1px solid var(--line); border-radius:5px; font:inherit; }
+.commit-diff-metadata p { margin-top:13px; color:var(--muted); }
+.commit-diff-preview { border-top:1px solid var(--line); }
+@media(max-width:720px) { .commit-diff-metadata { padding-inline:15px; } .commit-diff-metadata dl>div { grid-template-columns:1fr; gap:0; margin-bottom:13px; } }
 .browser-panel>.list-footer { margin:0; padding:16px 20px; }
 .issue-help { border-bottom:1px solid var(--line); }
 .issue-state { display:inline-flex; align-items:center; gap:5px; color:var(--accent); border:1px solid var(--line-strong); border-radius:20px; padding:4px 8px; font-size:10px; white-space:nowrap; text-transform:capitalize; }

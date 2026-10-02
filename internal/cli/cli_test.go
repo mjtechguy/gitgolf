@@ -142,6 +142,14 @@ func TestCommandValidationBeforeAuthentication(t *testing.T) {
 	for _, args := range [][]string{
 		{"repo", "view", "../private"}, {"repo", "list", "--limit", "101"}, {"issue", "view", "alice/private", "0"},
 		{"issue", "view", "alice/private", "2147483648"},
+		{"commit", "diff", "alice/private"}, {"commit", "diff", "alice/private", "main"},
+		{"commit", "diff", "alice/private", "refs/heads/main"}, {"commit", "diff", "alice/private", strings.Repeat("a", 12)},
+		{"commit", "diff", "alice/private", strings.Repeat("A", 40)}, {"commit", "diff", "alice/private", strings.Repeat("a", 39)},
+		{"commit", "diff", "alice/private", strings.Repeat("a", 41)}, {"commit", "diff", "alice/private", strings.Repeat("a", 63)},
+		{"commit", "diff", "alice/private", strings.Repeat("a", 65)}, {"commit", "diff", "alice/private", strings.Repeat("g", 40)},
+		{"commit", "diff", "alice/private", " " + strings.Repeat("a", 40)}, {"commit", "diff", "alice/private", strings.Repeat("a", 40) + " "},
+		{"commit", "diff", "alice/private", strings.Repeat("a", 40), "--ref", "main"}, {"commit", "diff", "alice/private", strings.Repeat("a", 40), "--page", "2"},
+		{"commit", "diff", "alice/private", strings.Repeat("a", 40), "extra"}, {"commit", "diff", "alice/private", "do-not-echo-token"},
 		{"pr", "view", "alice/private", "0"}, {"pr", "view", "alice/private", "01"},
 		{"pr", "view", "alice/private", "+1"}, {"pr", "reviews", "alice/private", "2147483648"},
 		{"pr", "view", "alice/private", "1", "--page", "2"}, {"pr", "list", "alice/private", "--state", "merged"},
@@ -222,6 +230,11 @@ func TestAdditionalReadCommandsAndEphemeralSession(t *testing.T) {
 		args                                   []string
 		procedure, request, response, fragment string
 	}{
+		// An untrusted endpoint can send control text; the CLI must still escape it in JSON.
+		{[]string{"commit", "diff", "alice/private", strings.Repeat("a", 40)}, golfv1connect.RepositoryServiceGetCommitDiffProcedure,
+			`{"repository":{"owner":"alice","name":"private"},"commitId":"` + strings.Repeat("a", 40) + `"}`, `{"commit":{"sha":"` + strings.Repeat("a", 40) + `"},"base":"COMMIT_DIFF_BASE_ROOT","rawDiff":"<script>plain text</script>\u001b[31m","byteSize":32}`, `"base":"COMMIT_DIFF_BASE_ROOT"`},
+		{[]string{"commit", "diff", "alice/private", strings.Repeat("1", 64)}, golfv1connect.RepositoryServiceGetCommitDiffProcedure,
+			`{"repository":{"owner":"alice","name":"private"},"commitId":"` + strings.Repeat("1", 64) + `"}`, `{"commit":{"sha":"` + strings.Repeat("1", 64) + `"},"base":"COMMIT_DIFF_BASE_FIRST_PARENT","parentCommitIds":["` + strings.Repeat("2", 64) + `"],"baseCommitId":"` + strings.Repeat("2", 64) + `"}`, `"rawDiff":""`},
 		{[]string{"audit", "list", "--limit", "1", "--before-id", "9007199254740993", "--snapshot-id", "9223372036854775807"}, golfv1connect.AuditServiceListAuditEventsProcedure,
 			`{"limit":1,"beforeId":"9007199254740993","snapshotId":"9223372036854775807"}`, `{"events":[{"id":"9007199254740992","action":"AUDIT_ACTION_SIGN_IN","actorSessionId":"9007199254740993","credentialKind":"pat"}],"nextBeforeId":"9007199254740992","snapshotId":"9223372036854775807"}`, `"id":"9007199254740992"`},
 		{[]string{"audit", "list"}, golfv1connect.AuditServiceListAuditEventsProcedure,
@@ -316,7 +329,7 @@ func TestAdditionalReadCommandsAndEphemeralSession(t *testing.T) {
 						t.Fatal("empty intermediate page lost continuation")
 					}
 				}
-				if strings.Contains(out.String()+diagnostic.String(), token) || strings.Contains(diagnostic.String(), "private-membership-data") {
+				if strings.Contains(out.String()+diagnostic.String(), token) || strings.Contains(diagnostic.String(), "private-membership-data") || bytes.Contains(out.Bytes(), []byte{27}) {
 					t.Fatal("remote error leaked credential or private data")
 				}
 				want := []string{"/rpc" + golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, "/rpc" + command.procedure, "/rpc" + golfv1connect.SessionServiceLogoutProcedure}

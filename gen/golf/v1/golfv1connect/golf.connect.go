@@ -79,6 +79,9 @@ const (
 	// RepositoryServiceListCommitsProcedure is the fully-qualified name of the RepositoryService's
 	// ListCommits RPC.
 	RepositoryServiceListCommitsProcedure = "/golf.v1.RepositoryService/ListCommits"
+	// RepositoryServiceGetCommitDiffProcedure is the fully-qualified name of the RepositoryService's
+	// GetCommitDiff RPC.
+	RepositoryServiceGetCommitDiffProcedure = "/golf.v1.RepositoryService/GetCommitDiff"
 	// RepositoryServiceGetContentsProcedure is the fully-qualified name of the RepositoryService's
 	// GetContents RPC.
 	RepositoryServiceGetContentsProcedure = "/golf.v1.RepositoryService/GetContents"
@@ -382,6 +385,7 @@ type RepositoryServiceClient interface {
 	GetRepository(context.Context, *connect.Request[v1.GetRepositoryRequest]) (*connect.Response[v1.GetRepositoryResponse], error)
 	ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error)
 	ListCommits(context.Context, *connect.Request[v1.ListCommitsRequest]) (*connect.Response[v1.ListCommitsResponse], error)
+	GetCommitDiff(context.Context, *connect.Request[v1.GetCommitDiffRequest]) (*connect.Response[v1.GetCommitDiffResponse], error)
 	GetContents(context.Context, *connect.Request[v1.GetContentsRequest]) (*connect.Response[v1.GetContentsResponse], error)
 	ListIssues(context.Context, *connect.Request[v1.ListIssuesRequest]) (*connect.Response[v1.ListIssuesResponse], error)
 	GetIssue(context.Context, *connect.Request[v1.GetIssueRequest]) (*connect.Response[v1.GetIssueResponse], error)
@@ -431,6 +435,12 @@ func NewRepositoryServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(repositoryServiceMethods.ByName("ListCommits")),
 			connect.WithClientOptions(opts...),
 		),
+		getCommitDiff: connect.NewClient[v1.GetCommitDiffRequest, v1.GetCommitDiffResponse](
+			httpClient,
+			baseURL+RepositoryServiceGetCommitDiffProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("GetCommitDiff")),
+			connect.WithClientOptions(opts...),
+		),
 		getContents: connect.NewClient[v1.GetContentsRequest, v1.GetContentsResponse](
 			httpClient,
 			baseURL+RepositoryServiceGetContentsProcedure,
@@ -477,6 +487,7 @@ type repositoryServiceClient struct {
 	getRepository          *connect.Client[v1.GetRepositoryRequest, v1.GetRepositoryResponse]
 	listBranches           *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
 	listCommits            *connect.Client[v1.ListCommitsRequest, v1.ListCommitsResponse]
+	getCommitDiff          *connect.Client[v1.GetCommitDiffRequest, v1.GetCommitDiffResponse]
 	getContents            *connect.Client[v1.GetContentsRequest, v1.GetContentsResponse]
 	listIssues             *connect.Client[v1.ListIssuesRequest, v1.ListIssuesResponse]
 	getIssue               *connect.Client[v1.GetIssueRequest, v1.GetIssueResponse]
@@ -508,6 +519,11 @@ func (c *repositoryServiceClient) ListBranches(ctx context.Context, req *connect
 // ListCommits calls golf.v1.RepositoryService.ListCommits.
 func (c *repositoryServiceClient) ListCommits(ctx context.Context, req *connect.Request[v1.ListCommitsRequest]) (*connect.Response[v1.ListCommitsResponse], error) {
 	return c.listCommits.CallUnary(ctx, req)
+}
+
+// GetCommitDiff calls golf.v1.RepositoryService.GetCommitDiff.
+func (c *repositoryServiceClient) GetCommitDiff(ctx context.Context, req *connect.Request[v1.GetCommitDiffRequest]) (*connect.Response[v1.GetCommitDiffResponse], error) {
+	return c.getCommitDiff.CallUnary(ctx, req)
 }
 
 // GetContents calls golf.v1.RepositoryService.GetContents.
@@ -547,6 +563,7 @@ type RepositoryServiceHandler interface {
 	GetRepository(context.Context, *connect.Request[v1.GetRepositoryRequest]) (*connect.Response[v1.GetRepositoryResponse], error)
 	ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error)
 	ListCommits(context.Context, *connect.Request[v1.ListCommitsRequest]) (*connect.Response[v1.ListCommitsResponse], error)
+	GetCommitDiff(context.Context, *connect.Request[v1.GetCommitDiffRequest]) (*connect.Response[v1.GetCommitDiffResponse], error)
 	GetContents(context.Context, *connect.Request[v1.GetContentsRequest]) (*connect.Response[v1.GetContentsResponse], error)
 	ListIssues(context.Context, *connect.Request[v1.ListIssuesRequest]) (*connect.Response[v1.ListIssuesResponse], error)
 	GetIssue(context.Context, *connect.Request[v1.GetIssueRequest]) (*connect.Response[v1.GetIssueResponse], error)
@@ -590,6 +607,12 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 		RepositoryServiceListCommitsProcedure,
 		svc.ListCommits,
 		connect.WithSchema(repositoryServiceMethods.ByName("ListCommits")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryServiceGetCommitDiffHandler := connect.NewUnaryHandler(
+		RepositoryServiceGetCommitDiffProcedure,
+		svc.GetCommitDiff,
+		connect.WithSchema(repositoryServiceMethods.ByName("GetCommitDiff")),
 		connect.WithHandlerOptions(opts...),
 	)
 	repositoryServiceGetContentsHandler := connect.NewUnaryHandler(
@@ -640,6 +663,8 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 			repositoryServiceListBranchesHandler.ServeHTTP(w, r)
 		case RepositoryServiceListCommitsProcedure:
 			repositoryServiceListCommitsHandler.ServeHTTP(w, r)
+		case RepositoryServiceGetCommitDiffProcedure:
+			repositoryServiceGetCommitDiffHandler.ServeHTTP(w, r)
 		case RepositoryServiceGetContentsProcedure:
 			repositoryServiceGetContentsHandler.ServeHTTP(w, r)
 		case RepositoryServiceListIssuesProcedure:
@@ -679,6 +704,10 @@ func (UnimplementedRepositoryServiceHandler) ListBranches(context.Context, *conn
 
 func (UnimplementedRepositoryServiceHandler) ListCommits(context.Context, *connect.Request[v1.ListCommitsRequest]) (*connect.Response[v1.ListCommitsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.ListCommits is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) GetCommitDiff(context.Context, *connect.Request[v1.GetCommitDiffRequest]) (*connect.Response[v1.GetCommitDiffResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.GetCommitDiff is not implemented"))
 }
 
 func (UnimplementedRepositoryServiceHandler) GetContents(context.Context, *connect.Request[v1.GetContentsRequest]) (*connect.Response[v1.GetContentsResponse], error) {

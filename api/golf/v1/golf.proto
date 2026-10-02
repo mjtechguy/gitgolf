@@ -24,6 +24,7 @@ service RepositoryService {
   rpc GetRepository(GetRepositoryRequest) returns (GetRepositoryResponse);
   rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse);
   rpc ListCommits(ListCommitsRequest) returns (ListCommitsResponse);
+  rpc GetCommitDiff(GetCommitDiffRequest) returns (GetCommitDiffResponse);
   rpc GetContents(GetContentsRequest) returns (GetContentsResponse);
   rpc ListIssues(ListIssuesRequest) returns (ListIssuesResponse);
   rpc GetIssue(GetIssueRequest) returns (GetIssueResponse);
@@ -157,6 +158,28 @@ message ListCommitsRequest {
 message ListCommitsResponse {
   repeated Commit commits = 1;
   PageResponse page = 2;
+}
+
+enum CommitDiffBase {
+  COMMIT_DIFF_BASE_UNSPECIFIED = 0;
+  COMMIT_DIFF_BASE_ROOT = 1;
+  COMMIT_DIFF_BASE_FIRST_PARENT = 2;
+}
+message GetCommitDiffRequest {
+  RepositoryKey repository = 1;
+  // Full lowercase immutable object ID. Branches and revision expressions denied.
+  string commit_id = 2;
+}
+message GetCommitDiffResponse {
+  Commit commit = 1;
+  repeated string parent_commit_ids = 2;
+  // Empty for root commits; otherwise the first parent, including merges.
+  string base_commit_id = 3;
+  CommitDiffBase base = 4;
+  // Native Gitea output, including root-commit preamble. UTF-8, at most 512 KiB;
+  // never silently truncated. This is not a parsed patch or merge evidence.
+  string raw_diff = 5;
+  uint32 byte_size = 6;
 }
 
 enum SourceEntryType {

@@ -147,6 +147,16 @@ test('commit history paginates and opens the selected immutable source commit', 
   await expect(page.locator('.commit-pin')).toHaveText(older.slice(0, 12));
 });
 
+test('commit diff routes reject aliases and noncanonical IDs before repository requests', async ({ page }) => {
+  const state = await backend(page);
+  for (const commit of ['', 'main', 'refs/heads/main', 'a'.repeat(12), 'a'.repeat(39), 'a'.repeat(41), 'a'.repeat(63), 'a'.repeat(65), 'A'.repeat(40), 'g'.repeat(40), ` ${head}`, `${head} `]) {
+    await page.goto(`/repositories/alex/design-system?view=commits&commit=${encodeURIComponent(commit)}`);
+    await expect(page.getByRole('heading', { name: 'Page not found', exact: true })).toBeVisible();
+  }
+  expect(state.methods).not.toContain('GetRepository');
+  expect(state.methods).not.toContain('GetCommitDiff');
+});
+
 test('issues support state filters, pagination, deep-linked detail and isolated scope errors', async ({ page }) => {
   const state = await backend(page);
   await page.goto('/repositories/alex/design-system?view=issues');

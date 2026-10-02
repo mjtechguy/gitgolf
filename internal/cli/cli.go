@@ -33,6 +33,7 @@ Usage: golf [--url ORIGIN] [--token-stdin] COMMAND
   repo branches OWNER/REPO [--page N] [--limit N]
   repo commits OWNER/REPO [--ref REF] [--page N] [--limit N]
   repo contents OWNER/REPO [--ref REF] [--path PATH]
+  commit diff OWNER/REPO SHA
   issue list OWNER/REPO [--state open|closed|all] [--page N] [--limit N]
   issue view OWNER/REPO NUMBER
   pr list OWNER/REPO [--state open|closed|all] [--page N] [--limit N]
@@ -56,6 +57,8 @@ Global flags precede the command; resource flags follow positional arguments.
 Organization reads need read:user and read:organization; code needs read:repository.
 Account activity needs read:user and records successful session lifecycle operations.
 Audit pagination preserves the first snapshot ID; each CLI call also records its own login/logout.
+Commit diffs require a full lowercase 40- or 64-character commit ID; branch aliases are not accepted.
+Diffs preserve bounded native Gitea text; merges compare only the first parent.
 `
 
 // Run writes results only after logout succeeds. Error text excludes credentials
@@ -162,6 +165,7 @@ func parseOrigin(value string) (string, error) {
 }
 
 var organizationName = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,100}$`)
+var commitID = regexp.MustCompile(`^(?:[a-f0-9]{40}|[a-f0-9]{64})$`)
 
 type command struct {
 	name         string
@@ -170,6 +174,7 @@ type command struct {
 	repository   *golfv1.RepositoryKey
 	page         *golfv1.PageRequest
 	ref          string
+	commitID     string
 	path         string
 	state        golfv1.IssueState
 	number       uint32
@@ -205,7 +210,7 @@ func parseCommand(args []string) (command, error) {
 			result.teamID = rest[0]
 			rest = rest[1:]
 		}
-	case "repo view", "repo branches", "repo commits", "repo contents", "issue list", "issue view", "pr list", "pr view", "pr reviews":
+	case "repo view", "repo branches", "repo commits", "repo contents", "commit diff", "issue list", "issue view", "pr list", "pr view", "pr reviews":
 		if len(rest) == 0 {
 			return result, invalid
 		}
@@ -220,6 +225,13 @@ func parseCommand(args []string) (command, error) {
 		}
 		result.repository = &golfv1.RepositoryKey{Owner: parts[0], Name: parts[1]}
 		rest = rest[1:]
+		if result.name == "commit diff" {
+			if len(rest) == 0 || !commitID.MatchString(rest[0]) {
+				return result, invalid
+			}
+			result.commitID = rest[0]
+			rest = rest[1:]
+		}
 		if result.name == "issue view" || result.name == "pr view" || result.name == "pr reviews" {
 			if len(rest) == 0 {
 				return result, invalid
@@ -405,6 +417,12 @@ func (command command) read(ctx context.Context, client golfv1connect.Repository
 		return response.Msg, nil
 	case "repo contents":
 		response, err := client.GetContents(ctx, connect.NewRequest(&golfv1.GetContentsRequest{Repository: command.repository, Ref: command.ref, Path: command.path}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "commit diff":
+		response, err := client.GetCommitDiff(ctx, connect.NewRequest(&golfv1.GetCommitDiffRequest{Repository: command.repository, CommitId: command.commitID}))
 		if err != nil {
 			return nil, err
 		}

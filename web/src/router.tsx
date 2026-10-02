@@ -1,6 +1,6 @@
 import { createRootRoute, createRoute, createRouter, notFound, Outlet, stripSearchParams } from '@tanstack/react-router';
 import { App } from './App';
-import { defaultRepositorySearch } from './navigation';
+import { defaultRepositorySearch, isCommitID } from './navigation';
 import type { RepositorySearch } from './navigation';
 
 const rootRoute = createRootRoute({
@@ -49,12 +49,14 @@ const repositoryRoute = createRoute({
       ref: typeof search.ref === 'string' ? search.ref : '', path: typeof search.path === 'string' ? search.path : '',
       branch: typeof search.branch === 'string' ? search.branch : '',
       state: search.state === 'closed' || search.state === 'all' ? search.state : 'open', issue, pull,
+      commit: search.commit === undefined ? undefined : typeof search.commit === 'string' ? search.commit : '',
     };
   },
   beforeLoad: ({ params, search }) => {
     if (!params.owner || !params.name || /[\/\\]/.test(params.owner + params.name)) throw notFound();
     if (search.pull !== undefined && (!Number.isSafeInteger(search.pull) || search.pull <= 0 || search.pull > 0x7fffffff)) throw notFound();
     if (search.issue !== undefined && (!Number.isSafeInteger(search.issue) || search.issue <= 0 || search.issue > 0xffffffff)) throw notFound();
+    if (search.commit !== undefined && !isCommitID(search.commit)) throw notFound();
   },
   search: { middlewares: [stripSearchParams(defaultRepositorySearch)] },
   component: RepositoryPage,

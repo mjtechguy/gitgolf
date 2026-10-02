@@ -4,7 +4,7 @@ import { ArrowLeft, BookOpen, ChevronRight, CircleDot, ExternalLink, File, Folde
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { repositoryClient, repositoryLink } from './api';
-import { IssueState, SourceEntryType } from './gen/golf/v1/golf_pb';
+import { CommitDiffBase, IssueState, SourceEntryType } from './gen/golf/v1/golf_pb';
 import type { RepositoryKey, SourceEntry } from './gen/golf/v1/golf_pb';
 import { repositoryOptions } from './navigation';
 import type { RepositoryLocation } from './navigation';
@@ -92,12 +92,40 @@ function CommitsPanel({ repositoryKey, queryKey, location, defaultBranch }: { re
   return <section aria-labelledby="commits-title" className="browser-panel">
     <div className="browser-panel-heading"><h2 id="commits-title">Commit history</h2><button className="icon-button" aria-label="Refresh commits" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} /></button></div>
     {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : query.isPending || (query.isFetching && !query.isFetchingNextPage) ? <Loading label="Loading commits…" /> : <>
-      <ol className="commit-list">{commits.map((commit) => <li key={commit.sha}><GitCommitHorizontal size={20} /><div><h3>{commit.message.split('\n')[0] || 'Untitled commit'}</h3><p>{commit.authorName || 'Unknown author'} · <DateLabel value={commit.authoredAt} /></p>{commit.message.includes('\n') ? <details className="commit-message"><summary>Full commit message</summary><pre>{commit.message}</pre></details> : null}</div><Link className="sha-link" {...repositoryOptions(location, { view: 'source', ref: commit.sha, branch: '', path: '' })} aria-label={`Browse commit ${shortSHA(commit.sha)}`} title={commit.sha}>{shortSHA(commit.sha)}<ChevronRight size={14} /></Link></li>)}</ol>
+      <ol className="commit-list">{commits.map((commit) => <li key={commit.sha}><GitCommitHorizontal size={20} /><div><h3>{commit.message.split('\n')[0] || 'Untitled commit'}</h3><p>{commit.authorName || 'Unknown author'} · <DateLabel value={commit.authoredAt} /></p>{commit.message.includes('\n') ? <details className="commit-message"><summary>Full commit message</summary><pre>{commit.message}</pre></details> : null}<Link className="text-button commit-diff-link" {...repositoryOptions(location, { commit: commit.sha })} aria-label={`View diff ${shortSHA(commit.sha)}`}>View diff<ChevronRight size={13} /></Link></div><Link className="sha-link" {...repositoryOptions(location, { view: 'source', ref: commit.sha, branch: '', path: '' })} aria-label={`Browse commit ${shortSHA(commit.sha)}`} title={commit.sha}>{shortSHA(commit.sha)}<ChevronRight size={14} /></Link></li>)}</ol>
       {!commits.length ? <div className="empty-state"><GitCommitHorizontal size={25} /><h3>No commits at this ref.</h3></div> : null}
       <div className="list-footer"><span>{commits.length} loaded commits{query.hasNextPage ? ' · More available' : ''}</span><More hasMore={query.hasNextPage} loading={query.isFetchingNextPage} load={() => void query.fetchNextPage()} label="commits" /></div>
     </>}
-    <p className="panel-footnote">Open a commit to browse its source snapshot. Commit diffs are not available yet.</p>
+    <p className="panel-footnote">View a commit’s native diff or browse its source snapshot.</p>
   </section>;
+}
+
+function CommitDiffPanel({ repositoryKey, queryKey, location }: { repositoryKey: Pick<RepositoryKey, 'owner' | 'name'>; queryKey: readonly unknown[]; location: RepositoryLocation }) {
+  const commitId = location.commit!;
+  const query = useQuery({ ...privateQuery, queryKey: [...queryKey, 'commit-diff', commitId],
+    queryFn: async ({ signal }) => {
+      const response = await repositoryClient.getCommitDiff({ repository: repositoryKey, commitId }, { signal, timeoutMs: 8_000 });
+      if (!response.commit || response.commit.sha !== commitId || ![CommitDiffBase.ROOT, CommitDiffBase.FIRST_PARENT].includes(response.base)) throw new ConnectError('The diff response does not identify the requested commit and comparison.', Code.Internal);
+      if (response.rawDiff.length > 512 * 1024 || response.byteSize > 512 * 1024 || new TextEncoder().encode(response.rawDiff).byteLength !== response.byteSize) throw new ConnectError('The diff response exceeds its supported text bounds.', Code.ResourceExhausted);
+      return response;
+    },
+  });
+  const diff = query.isSuccess && !query.isFetching ? query.data : undefined;
+  return <>
+    <div className="commit-diff-navigation"><Link className="text-button" {...repositoryOptions(location, { commit: undefined })}><ArrowLeft size={15} />Back to commit history</Link><Link className="text-button" {...repositoryOptions(location, { view: 'source', ref: commitId, branch: '', path: '' })}>Browse this commit<ChevronRight size={15} /></Link></div>
+    <section className="browser-panel" aria-labelledby="commit-diff-title">
+      <div className="browser-panel-heading"><h2 id="commit-diff-title">Commit diff</h2><button className="icon-button" aria-label="Refresh diff" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} /></button></div>
+      {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : !diff ? <Loading label="Loading commit diff…" /> : <>
+        <div className="commit-diff-metadata"><dl><div><dt>Commit</dt><dd><code>{diff.commit!.sha}</code></dd></div><div><dt>Comparison</dt><dd>{diff.base === CommitDiffBase.ROOT ? 'Root commit · no parent' : 'First parent'}{diff.baseCommitId ? <code>{diff.baseCommitId}</code> : null}</dd></div><div><dt>Parents</dt><dd>{diff.parentCommitIds.length ? diff.parentCommitIds.map((id) => <code key={id}>{id}</code>) : 'None'}</dd></div><div><dt>Author</dt><dd>{diff.commit!.authorName || 'Unknown author'} · <DateLabel value={diff.commit!.authoredAt} /></dd></div></dl>
+          <pre className="commit-diff-message" tabIndex={0} aria-label="Commit message, plain text">{diff.commit!.message || '(No commit message)'}</pre>
+          {diff.parentCommitIds.length > 1 ? <p>Merge commit: only the first-parent comparison is shown.</p> : null}
+          {diff.base === CommitDiffBase.ROOT ? <p>Root output may include Git’s commit header before the patch.</p> : null}
+        </div>
+        {diff.rawDiff ? <pre className="source-preview commit-diff-preview" tabIndex={0} aria-label="Unified diff, plain text"><code>{diff.rawDiff}</code></pre> : <div className="empty-state"><GitCommitHorizontal size={25} /><h3>No diff text returned</h3><p>The provider returned empty output for this commit.</p></div>}
+        <p className="panel-footnote">{diff.byteSize.toLocaleString()} bytes · Native Gitea output, plain text; not merge eligibility or independently verified patch evidence. Binary content is not expanded. Text is limited to 512 KiB; larger responses are refused.</p>
+      </>}
+    </section>
+  </>;
 }
 
 function IssueStateBadge({ state }: { state: IssueState }) {
@@ -146,10 +174,10 @@ export function RepositoryBrowser({ location, userId }: { location: RepositoryLo
     <Link to="/" className="text-button repository-back"><ArrowLeft size={15} />All repositories</Link>
     {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : !repository ? <Loading label="Opening repository…" /> : <>
       <header className="repository-intro"><div><span className="eyebrow">{location.owner} / REPOSITORY</span><h1><BookOpen size={29} />{repository.name}<span className={`visibility ${repository.private ? 'private' : ''}`}>{repository.private ? <LockKeyhole size={11} /> : null}{repository.private ? 'Private' : 'Public'}</span></h1><p>{repository.description || 'No description yet.'}</p></div><div className="panel-actions"><button className="icon-button" aria-label="Refresh repository access" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} /></button>{external ? <a className="button secondary" href={external} target="_blank" rel="noopener noreferrer">Gitea<ExternalLink size={15} /></a> : null}</div></header>
-      <nav className="repository-tabs" aria-label="Repository"><Link {...repositoryOptions(location, { view: 'source', issue: undefined })} aria-current={location.view === 'source' ? 'page' : undefined}><BookOpen size={16} />Source</Link><Link {...repositoryOptions(location, { view: 'commits', issue: undefined })} aria-current={location.view === 'commits' ? 'page' : undefined}><GitCommitHorizontal size={17} />Commits</Link><Link {...repositoryOptions(location, { view: 'issues', issue: undefined })} aria-current={location.view === 'issues' ? 'page' : undefined}><CircleDot size={16} />Issues</Link><Link {...repositoryOptions(location, { view: 'pulls', pull: undefined })} aria-current={location.view === 'pulls' ? 'page' : undefined}><GitPullRequest size={16} />Pull requests</Link></nav>
+      <nav className="repository-tabs" aria-label="Repository"><Link {...repositoryOptions(location, { view: 'source', issue: undefined })} aria-current={location.view === 'source' ? 'page' : undefined}><BookOpen size={16} />Source</Link><Link {...repositoryOptions(location, { view: 'commits', issue: undefined, commit: undefined })} aria-current={location.view === 'commits' ? 'page' : undefined}><GitCommitHorizontal size={17} />Commits</Link><Link {...repositoryOptions(location, { view: 'issues', issue: undefined })} aria-current={location.view === 'issues' ? 'page' : undefined}><CircleDot size={16} />Issues</Link><Link {...repositoryOptions(location, { view: 'pulls', pull: undefined })} aria-current={location.view === 'pulls' ? 'page' : undefined}><GitPullRequest size={16} />Pull requests</Link></nav>
       {(location.view === 'source' || location.view === 'commits') && repository.empty ? <section className="browser-panel empty-state"><GitBranch size={29} /><h2>No commits yet.</h2><p>This repository is empty. Push your first commit through Git to add source and branches.</p>{repository.cloneUrl ? <div className="clone-address"><span>HTTPS clone URL</span><code>{repository.cloneUrl}</code></div> : null}{repository.sshUrl ? <div className="clone-address"><span>SSH clone URL</span><code>{repository.sshUrl}</code></div> : null}</section> : <>
-        {location.view === 'source' || location.view === 'commits' ? <BranchSelector {...panelProps} /> : null}
-        {location.view === 'source' ? <SourcePanel {...panelProps} /> : location.view === 'commits' ? <CommitsPanel {...panelProps} /> : location.view === 'pulls' ? <Suspense fallback={<Loading label="Opening pull requests…" />}><PullRequestBrowser {...panelProps} /></Suspense> : location.issue ? <IssueDetail {...panelProps} /> : <IssuesPanel {...panelProps} />}
+        {location.view === 'source' || location.view === 'commits' && !location.commit ? <BranchSelector {...panelProps} /> : null}
+        {location.view === 'source' ? <SourcePanel {...panelProps} /> : location.view === 'commits' ? location.commit ? <CommitDiffPanel key={location.commit} {...panelProps} /> : <CommitsPanel {...panelProps} /> : location.view === 'pulls' ? <Suspense fallback={<Loading label="Opening pull requests…" />}><PullRequestBrowser {...panelProps} /></Suspense> : location.issue ? <IssueDetail {...panelProps} /> : <IssuesPanel {...panelProps} />}
       </>}
     </>}
   </div>;
