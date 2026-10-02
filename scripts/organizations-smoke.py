@@ -116,7 +116,7 @@ def call(session, procedure, data=None, expected=200):
 
 
 def cli_call(binary, token, arguments, expected=0):
-    environment = {key: value for key, value in os.environ.items() if key != 'GOLF_GITEA_TOKEN'}
+    environment = {key: value for key, value in os.environ.items() if key not in {'GOLF_GITEA_TOKEN', 'GOLF_API_TOKEN'}}
     environment['GOLF_URL'] = GOLF
     result = subprocess.run([str(binary), '--token-stdin', *arguments], input=token + '\n',
         cwd=ROOT, env=environment, text=True, capture_output=True, timeout=30)

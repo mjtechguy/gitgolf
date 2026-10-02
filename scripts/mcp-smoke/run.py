@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Exercise the actual Golf stdio MCP process with the official Go SDK client.
 
-Requires the normal local Compose stack and a current built bin/golf. Creates
+Uses the normal local Compose stack or explicit loopback/disposable-container
+arguments, plus a current built bin/golf. --api-credentials also qualifies
+owner-issued Golf API credentials while their source browser session is live.
+Creates
 only disposable ordinary Gitea users/orgs/repos via supported interfaces; no
 configuration/database edits or service restarts. Credentials remain in memory,
 fixture-driver stdin and the MCP child's owner-controlled environment. The Go
@@ -11,6 +14,7 @@ import argparse
 import base64
 import importlib.util
 import json
+import ipaddress
 import os
 from pathlib import Path
 import secrets
@@ -19,11 +23,13 @@ import subprocess
 import sys
 import tempfile
 import uuid
+from urllib.parse import urlsplit
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from smoke import GITEA, GOLF, admin, client, ready, rpc, wait_for_push
+import smoke
 spec = importlib.util.spec_from_file_location('organization_helpers', ROOT / 'scripts/organizations-smoke.py')
 helpers = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helpers)
@@ -32,10 +38,34 @@ STAGE = 'initialization'
 
 
 def main():
-    global STAGE
+    global STAGE, GOLF, GITEA, admin
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cli', type=Path, required=True)
+    parser.add_argument('--api-credentials', action='store_true', help='also issue owner-bound Golf bearer credentials and qualify CLI/MCP reads')
+    parser.add_argument('--golf-url', default=GOLF, help='explicit local fixture Golf origin')
+    parser.add_argument('--gitea-url', default=GITEA, help='explicit local fixture Gitea origin')
+    parser.add_argument('--gitea-container', help='explicit disposable Gitea container for supported fixture user CLI')
     args = parser.parse_args()
+    for origin in (args.golf_url, args.gitea_url):
+        parsed = urlsplit(origin)
+        assert parsed.scheme == 'http' and not parsed.username and not parsed.password and not parsed.path and not parsed.query and not parsed.fragment
+        assert parsed.hostname == 'localhost' or ipaddress.ip_address(parsed.hostname).is_loopback
+        assert parsed.port and 0 < parsed.port < 65536
+    GOLF, GITEA = args.golf_url, args.gitea_url
+    smoke.GOLF, smoke.GITEA, helpers.GITEA = GOLF, GITEA, GITEA
+    if args.gitea_container:
+        inspected = json.loads(subprocess.check_output(['docker', 'inspect', args.gitea_container], text=True))[0]
+        labels = inspected['Config']['Labels']
+        assert labels.get('com.docker.compose.service') == 'gitea'
+        assert labels.get('com.docker.compose.project', '').startswith('golf-api-proof-')
+        def fixture_admin(*arguments):
+            result = subprocess.run(['docker', 'exec', args.gitea_container, 'gitea', '--config', '/etc/gitea/app.ini',
+                'admin', 'user', *arguments], capture_output=True, text=True, timeout=45)
+            assert result.returncode == 0, 'Fixture CLI failed; private output withheld'
+            return result.stdout.strip()
+        admin = fixture_admin
+    else:
+        assert GOLF == 'http://localhost:8080' and GITEA == 'http://localhost:3001', 'Alternate targets need an explicit disposable container'
     binary = args.cli.resolve()
     assert binary.is_file(), 'Build the current Golf CLI first'
     ready()
@@ -105,7 +135,7 @@ def main():
             'revision': revision, 'filePath': file_path, 'fileContent': file_content,
             'organization': organization, 'teamId': team_id, 'orgRepositoryId': str(org_repo['id']),
             'issue': issues[0]['number'], 'pull': pull['number'], 'reviewId': str(reviews[0]['id']),
-            'creationKey': creation_key, 'creationRepositoryId': created['repository']['id']}
+            'creationKey': creation_key, 'creationRepositoryId': created['repository']['id'], 'apiCredentials': args.api_credentials}
         STAGE = 'official SDK client build'
         with tempfile.TemporaryDirectory(prefix='golf-mcp-smoke-') as temporary:
             driver = Path(temporary) / 'client'
@@ -113,11 +143,11 @@ def main():
                 cwd=ROOT, capture_output=True, text=True, timeout=120)
             assert result.returncode == 0, 'MCP smoke client build failed; diagnostics withheld'
             STAGE = 'real stdio protocol and native authorization checks'
-            environment = {k: v for k, v in os.environ.items() if k not in {'GOLF_GITEA_TOKEN', 'GOLF_URL', 'MCPGODEBUG'}}
+            environment = {k: v for k, v in os.environ.items() if k not in {'GOLF_GITEA_TOKEN', 'GOLF_API_TOKEN', 'GOLF_URL', 'MCPGODEBUG'}}
             process = subprocess.Popen([str(driver)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, cwd=ROOT, env=environment, text=True, start_new_session=True)
             try:
-                output, diagnostic = process.communicate(json.dumps(config), timeout=180)
+                output, diagnostic = process.communicate(json.dumps(config), timeout=240)
                 result = subprocess.CompletedProcess(process.args, process.returncode, output, diagnostic)
             finally:
                 if process.poll() is None:

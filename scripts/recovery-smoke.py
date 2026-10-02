@@ -249,6 +249,20 @@ def main():
                 session = smoke.client(); sessions.append(session)
                 smoke.rpc(session, 'SessionService/LoginWithGiteaToken', {'token': token})
             owner, outsider = sessions
+            def bearer_rpc(token, procedure, payload=None, expected=200):
+                return smoke.rpc(smoke.client(), procedure, payload, expected=expected,
+                                 headers={'Authorization': 'Bearer ' + token})
+            api_issued = [smoke.rpc(owner, 'ApiCredentialService/CreateApiCredential',
+                                    {'label': 'recovery delegation ' + str(index), 'lifetime_seconds': 43200})
+                          for index in range(2)]
+            forbidden.extend(issued['token'] for issued in api_issued)
+            assert all('token' in issued and issued['credential']['sourceSessionActive'] for issued in api_issued)
+            for issued in api_issued:
+                assert bearer_rpc(issued['token'], 'SessionService/GetSession')['user'] == smoke.rpc(owner, 'SessionService/GetSession')['user']
+            revoked_api = smoke.rpc(owner, 'ApiCredentialService/RevokeApiCredential',
+                                    {'credential_id': api_issued[0]['credential']['id']})
+            assert revoked_api['credential']['revokedAt']
+            bearer_rpc(api_issued[0]['token'], 'SessionService/GetSession', expected=401)
             owner_token, outsider_token = tokens
             extra = smoke.client(); sessions.append(extra)
             smoke.rpc(extra, 'SessionService/LoginWithGiteaToken', {'token': owner_token})
@@ -337,7 +351,8 @@ def main():
             history = {table: rows(table, order) for table, order in [
                 ('golf_users', 'id'), ('golf_audit_events', 'id'), ('golf_crypto_events', 'id'),
                 ('golf_encryption_keys', 'key_id'), ('golf_encryption_policy', 'singleton'),
-                ('golf_repository_creations', 'id'), ('golf_repository_creation_events', 'id')]}
+                ('golf_repository_creations', 'id'), ('golf_repository_creation_events', 'id'),
+                ('golf_api_credentials', 'id'), ('golf_api_credential_events', 'id')]}
             counts = int(sql('SELECT count(*) FROM golf_sessions;')), int(sql('SELECT count(*) FROM golf_oauth_attempts;'))
             assert counts == (4, 1)
             check('live writers cannot be bypassed by the operator drain assertion')
@@ -427,7 +442,8 @@ def main():
             assert sql('SELECT count(*) FROM golf_oauth_attempts;') == '0'
             for table, order in [('golf_users', 'id'), ('golf_audit_events', 'id'), ('golf_crypto_events', 'id'),
                                  ('golf_encryption_keys', 'key_id'), ('golf_encryption_policy', 'singleton'),
-                ('golf_repository_creations', 'id'), ('golf_repository_creation_events', 'id')]:
+                ('golf_repository_creations', 'id'), ('golf_repository_creation_events', 'id'),
+                ('golf_api_credentials', 'id'), ('golf_api_credential_events', 'id')]:
                 assert rows(table, order) == history[table], 'Restored Golf history or key metadata differs'
             recovery_events = json.loads(rows('golf_recovery_events'))
             assert len(recovery_events) == 1
@@ -444,6 +460,18 @@ def main():
             assert smoke.rpc(owner, 'SessionService/LoginWithGiteaToken', {'token': owner_token})['user'] == owner_identity
             smoke.rpc(outsider, 'SessionService/LoginWithGiteaToken', {'token': outsider_token})
             assert sql("SELECT count(*) FROM golf_sessions WHERE credential_key_id='next';") == '2'
+            for issued in api_issued:
+                bearer_rpc(issued['token'], 'SessionService/GetSession', expected=401)
+            retained = smoke.rpc(owner, 'ApiCredentialService/ListApiCredentials')['credentials']
+            assert {item['id'] for item in retained} == {issued['credential']['id'] for issued in api_issued}
+            assert all(not item.get('sourceSessionActive', False) for item in retained)
+            fresh_api = smoke.rpc(owner, 'ApiCredentialService/CreateApiCredential',
+                                  {'label': 'fresh post-recovery delegation'})
+            forbidden.append(fresh_api['token'])
+            assert bearer_rpc(fresh_api['token'], 'SessionService/GetSession')['user'] == owner_identity
+            for issued in api_issued:
+                bearer_rpc(issued['token'], 'SessionService/GetSession', expected=401)
+            print('PASS: restored API credential metadata/events retained; old delegation stays denied after fresh sign-in', flush=True)
             assert smoke.rpc(owner, 'RepositoryService/GetRepository', {'repository': key})['repository']['id'] == repository['id']
             lookup = {'idempotency_key': creation_request['idempotency_key']}
             observed = smoke.rpc(owner, 'RepositoryService/GetRepositoryCreation', lookup)
@@ -485,6 +513,9 @@ def main():
             check('post-restore signed write and ordinary restart persistence')
             compose('restart', timeout=180); ready()
             assert smoke.rpc(owner, 'SessionService/GetSession')['user'] == owner_identity
+            assert bearer_rpc(fresh_api['token'], 'SessionService/GetSession')['user'] == owner_identity
+            for issued in api_issued:
+                bearer_rpc(issued['token'], 'SessionService/GetSession', expected=401)
             assert git('ls-remote', remote, 'refs/heads/main').split()[0] == next_commit
             git('fetch', '--all', cwd=clone); git('fsck', '--full', cwd=clone)
             git('verify-commit', next_commit, cwd=clone)

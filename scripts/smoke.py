@@ -123,7 +123,7 @@ def commit(path, message):
 
 def cli_check(binary, token, full_name, revision, nested_path, nested_text):
     # Stdin keeps the credential out of process arguments and shell history.
-    env = {key: value for key, value in os.environ.items() if key != 'GOLF_GITEA_TOKEN'}
+    env = {key: value for key, value in os.environ.items() if key not in {'GOLF_GITEA_TOKEN', 'GOLF_API_TOKEN'}}
     env['GOLF_URL'] = GOLF
     args = [str(binary), '--token-stdin', 'repo', 'contents', full_name,
             '--ref', revision, '--path', nested_path]

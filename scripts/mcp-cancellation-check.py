@@ -10,6 +10,7 @@ Legacy ID reuse is deliberately invalid client traffic tested for robustness;
 2025-11-25 clients must use fresh IDs throughout a session.
 """
 import argparse
+import base64
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -27,9 +28,10 @@ import time
 class Fixture(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self):
+    def __init__(self, api_token=False):
         super().__init__(("127.0.0.1", 0), Handler)
-        self.token = secrets.token_hex(24)
+        self.api_token = api_token
+        self.token = 'golf_ro_' + base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=') if api_token else secrets.token_hex(24)
         self.cookie = secrets.token_hex(24)
         self.origin = f"http://127.0.0.1:{self.server_port}"
         self.started = threading.Event()
@@ -53,14 +55,18 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(length))
             assert self.headers.get("Origin") == self.server.origin
             assert self.headers.get("Connect-Protocol-Version") == "1"
-            assert not self.headers.get("Authorization")
+            assert self.headers.get("Authorization", '') == ('Bearer ' + self.server.token if self.server.api_token else '')
             self.server.calls.append(self.path)
             prefix = "/rpc/golf.v1."
-            if self.path == prefix + "SessionService/LoginWithGiteaToken":
+            if self.server.api_token:
+                assert not self.headers.get('Cookie')
+                assert self.path == prefix + "RepositoryService/ListRepositories"
+            elif self.path == prefix + "SessionService/LoginWithGiteaToken":
                 assert body == {"token": self.server.token}
                 self.reply({"user": {"id": "1"}}, cookie=True)
                 return
-            assert self.headers.get("Cookie") == "golf_session=" + self.server.cookie
+            if not self.server.api_token:
+                assert self.headers.get("Cookie") == "golf_session=" + self.server.cookie
             if self.path == prefix + "SessionService/Logout":
                 self.reply({})
                 self.server.logged_out.set()
@@ -94,13 +100,14 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.flush()
 
 
-def check(binary, version, case="cancel"):
-    fixture = Fixture()
+def check(binary, version, case="cancel", api_token=False):
+    fixture = Fixture(api_token)
     threading.Thread(target=fixture.serve_forever, daemon=True).start()
     # Do not inherit owner credentials, proxies, Golf configuration or SDK flags.
     env = {name: value for name, value in os.environ.items()
            if name in ("PATH", "HOME", "TMPDIR", "SYSTEMROOT")}
-    env.update(GOLF_URL=fixture.origin, GOLF_GITEA_TOKEN=fixture.token)
+    env['GOLF_URL'] = fixture.origin
+    env['GOLF_API_TOKEN' if api_token else 'GOLF_GITEA_TOKEN'] = fixture.token
     process = subprocess.Popen([str(binary), "mcp"], stdin=subprocess.PIPE,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
     messages = queue.Queue()
@@ -186,13 +193,16 @@ def check(binary, version, case="cancel"):
         else:
             send("notifications/cancelled", {"requestId": 3, "reason": "fixture cancellation"})
         assert fixture.aborted.wait(3), "HTTP read was not cancelled"
-        assert fixture.logged_out.wait(3), "temporary session was not closed"
+        if not api_token:
+            assert fixture.logged_out.wait(3), "temporary session was not closed"
+        else:
+            assert not fixture.logged_out.is_set(), "bearer flow attempted a logout"
         if case == "duplicate_id":
             assert process.wait(timeout=3) == expected_exit
             assert read_finished.wait(1)
-            assert messages.empty() and len(fixture.calls) == 3 and not fixture.failed.is_set()
+            assert messages.empty() and len(fixture.calls) == (1 if api_token else 3) and not fixture.failed.is_set()
             return {"protocol": version, "case": case, "rejected": True,
-                    "http_cancelled": True, "session_closed": True}
+                    "http_cancelled": True, "session_closed": not api_token, "bearer_only": api_token}
         # A subsequent RPC proves the connection remains usable after cleanup.
         send("tools/list", {}, 4)
         assert "result" in receive(4)
@@ -203,7 +213,7 @@ def check(binary, version, case="cancel"):
             except queue.Empty:
                 break
         assert not fixture.failed.is_set()
-        assert len(fixture.calls) == 3, "unexpected RPC or authentication retry"
+        assert len(fixture.calls) == (1 if api_token else 3), "unexpected RPC or authentication retry"
         responses = [message for message in observed if message.get("id") == 3]
         assert not responses, "response sent after cancellation"
         # Unknown and completed cancellations must not poison a later request
@@ -218,7 +228,7 @@ def check(binary, version, case="cancel"):
         send("tools/list", {}, 3)
         assert "result" in receive(3), "cancelled request ID remained reserved"
         return {"protocol": version, "case": case, "http_cancelled": True,
-                "session_closed": True, "connection_usable": True,
+                "session_closed": not api_token, "bearer_only": api_token, "connection_usable": True,
                 "post_cancel_response": False, "unknown_completed_cancellation_reuse": True,
                 "cleanup_seconds": round(time.monotonic() - started, 3)}
     finally:
@@ -244,16 +254,18 @@ def check(binary, version, case="cancel"):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cli", type=Path, default=Path("bin/golf"))
+    parser.add_argument("--api-token-mode", action='store_true', help='exercise direct Golf bearer reads without login/logout')
     args = parser.parse_args()
     for version in ("2025-11-25", "2026-07-28"):
         for case in ("cancel", "batch", "oversized", "duplicate_id"):
             try:
-                result = check(args.cli.resolve(strict=True), version, case)
+                result = check(args.cli.resolve(strict=True), version, case, args.api_token_mode)
             except Exception:
                 print(f"FAIL: {version} {case}; fixture diagnostics withheld.", file=sys.stderr)
                 return 1
             print(json.dumps(result, sort_keys=True), flush=True)
-    print("PASS: both revisions suppress cancelled replies, clean sessions, preserve ID reuse and reject forbidden frames.")
+    print("PASS: both revisions suppress cancelled replies, preserve ID reuse and reject forbidden frames; " +
+          ("API bearer calls create no sessions." if args.api_token_mode else "PAT sessions are cleaned up."))
     return 0
 
 

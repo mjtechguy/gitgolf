@@ -23,6 +23,8 @@ const _ = connect.IsAtLeastVersion1_13_0
 const (
 	// SessionServiceName is the fully-qualified name of the SessionService service.
 	SessionServiceName = "golf.v1.SessionService"
+	// ApiCredentialServiceName is the fully-qualified name of the ApiCredentialService service.
+	ApiCredentialServiceName = "golf.v1.ApiCredentialService"
 	// RepositoryServiceName is the fully-qualified name of the RepositoryService service.
 	RepositoryServiceName = "golf.v1.RepositoryService"
 	// OrganizationServiceName is the fully-qualified name of the OrganizationService service.
@@ -64,6 +66,15 @@ const (
 	SessionServiceRevokeOtherSessionsProcedure = "/golf.v1.SessionService/RevokeOtherSessions"
 	// SessionServiceLogoutProcedure is the fully-qualified name of the SessionService's Logout RPC.
 	SessionServiceLogoutProcedure = "/golf.v1.SessionService/Logout"
+	// ApiCredentialServiceCreateApiCredentialProcedure is the fully-qualified name of the
+	// ApiCredentialService's CreateApiCredential RPC.
+	ApiCredentialServiceCreateApiCredentialProcedure = "/golf.v1.ApiCredentialService/CreateApiCredential"
+	// ApiCredentialServiceListApiCredentialsProcedure is the fully-qualified name of the
+	// ApiCredentialService's ListApiCredentials RPC.
+	ApiCredentialServiceListApiCredentialsProcedure = "/golf.v1.ApiCredentialService/ListApiCredentials"
+	// ApiCredentialServiceRevokeApiCredentialProcedure is the fully-qualified name of the
+	// ApiCredentialService's RevokeApiCredential RPC.
+	ApiCredentialServiceRevokeApiCredentialProcedure = "/golf.v1.ApiCredentialService/RevokeApiCredential"
 	// RepositoryServiceListRepositoriesProcedure is the fully-qualified name of the RepositoryService's
 	// ListRepositories RPC.
 	RepositoryServiceListRepositoriesProcedure = "/golf.v1.RepositoryService/ListRepositories"
@@ -379,6 +390,128 @@ func (UnimplementedSessionServiceHandler) RevokeOtherSessions(context.Context, *
 
 func (UnimplementedSessionServiceHandler) Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.SessionService.Logout is not implemented"))
+}
+
+// ApiCredentialServiceClient is a client for the golf.v1.ApiCredentialService service.
+type ApiCredentialServiceClient interface {
+	CreateApiCredential(context.Context, *connect.Request[v1.CreateApiCredentialRequest]) (*connect.Response[v1.CreateApiCredentialResponse], error)
+	ListApiCredentials(context.Context, *connect.Request[v1.ListApiCredentialsRequest]) (*connect.Response[v1.ListApiCredentialsResponse], error)
+	RevokeApiCredential(context.Context, *connect.Request[v1.RevokeApiCredentialRequest]) (*connect.Response[v1.RevokeApiCredentialResponse], error)
+}
+
+// NewApiCredentialServiceClient constructs a client for the golf.v1.ApiCredentialService service.
+// By default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped
+// responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewApiCredentialServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ApiCredentialServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	apiCredentialServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("ApiCredentialService").Methods()
+	return &apiCredentialServiceClient{
+		createApiCredential: connect.NewClient[v1.CreateApiCredentialRequest, v1.CreateApiCredentialResponse](
+			httpClient,
+			baseURL+ApiCredentialServiceCreateApiCredentialProcedure,
+			connect.WithSchema(apiCredentialServiceMethods.ByName("CreateApiCredential")),
+			connect.WithClientOptions(opts...),
+		),
+		listApiCredentials: connect.NewClient[v1.ListApiCredentialsRequest, v1.ListApiCredentialsResponse](
+			httpClient,
+			baseURL+ApiCredentialServiceListApiCredentialsProcedure,
+			connect.WithSchema(apiCredentialServiceMethods.ByName("ListApiCredentials")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeApiCredential: connect.NewClient[v1.RevokeApiCredentialRequest, v1.RevokeApiCredentialResponse](
+			httpClient,
+			baseURL+ApiCredentialServiceRevokeApiCredentialProcedure,
+			connect.WithSchema(apiCredentialServiceMethods.ByName("RevokeApiCredential")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// apiCredentialServiceClient implements ApiCredentialServiceClient.
+type apiCredentialServiceClient struct {
+	createApiCredential *connect.Client[v1.CreateApiCredentialRequest, v1.CreateApiCredentialResponse]
+	listApiCredentials  *connect.Client[v1.ListApiCredentialsRequest, v1.ListApiCredentialsResponse]
+	revokeApiCredential *connect.Client[v1.RevokeApiCredentialRequest, v1.RevokeApiCredentialResponse]
+}
+
+// CreateApiCredential calls golf.v1.ApiCredentialService.CreateApiCredential.
+func (c *apiCredentialServiceClient) CreateApiCredential(ctx context.Context, req *connect.Request[v1.CreateApiCredentialRequest]) (*connect.Response[v1.CreateApiCredentialResponse], error) {
+	return c.createApiCredential.CallUnary(ctx, req)
+}
+
+// ListApiCredentials calls golf.v1.ApiCredentialService.ListApiCredentials.
+func (c *apiCredentialServiceClient) ListApiCredentials(ctx context.Context, req *connect.Request[v1.ListApiCredentialsRequest]) (*connect.Response[v1.ListApiCredentialsResponse], error) {
+	return c.listApiCredentials.CallUnary(ctx, req)
+}
+
+// RevokeApiCredential calls golf.v1.ApiCredentialService.RevokeApiCredential.
+func (c *apiCredentialServiceClient) RevokeApiCredential(ctx context.Context, req *connect.Request[v1.RevokeApiCredentialRequest]) (*connect.Response[v1.RevokeApiCredentialResponse], error) {
+	return c.revokeApiCredential.CallUnary(ctx, req)
+}
+
+// ApiCredentialServiceHandler is an implementation of the golf.v1.ApiCredentialService service.
+type ApiCredentialServiceHandler interface {
+	CreateApiCredential(context.Context, *connect.Request[v1.CreateApiCredentialRequest]) (*connect.Response[v1.CreateApiCredentialResponse], error)
+	ListApiCredentials(context.Context, *connect.Request[v1.ListApiCredentialsRequest]) (*connect.Response[v1.ListApiCredentialsResponse], error)
+	RevokeApiCredential(context.Context, *connect.Request[v1.RevokeApiCredentialRequest]) (*connect.Response[v1.RevokeApiCredentialResponse], error)
+}
+
+// NewApiCredentialServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewApiCredentialServiceHandler(svc ApiCredentialServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	apiCredentialServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("ApiCredentialService").Methods()
+	apiCredentialServiceCreateApiCredentialHandler := connect.NewUnaryHandler(
+		ApiCredentialServiceCreateApiCredentialProcedure,
+		svc.CreateApiCredential,
+		connect.WithSchema(apiCredentialServiceMethods.ByName("CreateApiCredential")),
+		connect.WithHandlerOptions(opts...),
+	)
+	apiCredentialServiceListApiCredentialsHandler := connect.NewUnaryHandler(
+		ApiCredentialServiceListApiCredentialsProcedure,
+		svc.ListApiCredentials,
+		connect.WithSchema(apiCredentialServiceMethods.ByName("ListApiCredentials")),
+		connect.WithHandlerOptions(opts...),
+	)
+	apiCredentialServiceRevokeApiCredentialHandler := connect.NewUnaryHandler(
+		ApiCredentialServiceRevokeApiCredentialProcedure,
+		svc.RevokeApiCredential,
+		connect.WithSchema(apiCredentialServiceMethods.ByName("RevokeApiCredential")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.ApiCredentialService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case ApiCredentialServiceCreateApiCredentialProcedure:
+			apiCredentialServiceCreateApiCredentialHandler.ServeHTTP(w, r)
+		case ApiCredentialServiceListApiCredentialsProcedure:
+			apiCredentialServiceListApiCredentialsHandler.ServeHTTP(w, r)
+		case ApiCredentialServiceRevokeApiCredentialProcedure:
+			apiCredentialServiceRevokeApiCredentialHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedApiCredentialServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedApiCredentialServiceHandler struct{}
+
+func (UnimplementedApiCredentialServiceHandler) CreateApiCredential(context.Context, *connect.Request[v1.CreateApiCredentialRequest]) (*connect.Response[v1.CreateApiCredentialResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ApiCredentialService.CreateApiCredential is not implemented"))
+}
+
+func (UnimplementedApiCredentialServiceHandler) ListApiCredentials(context.Context, *connect.Request[v1.ListApiCredentialsRequest]) (*connect.Response[v1.ListApiCredentialsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ApiCredentialService.ListApiCredentials is not implemented"))
+}
+
+func (UnimplementedApiCredentialServiceHandler) RevokeApiCredential(context.Context, *connect.Request[v1.RevokeApiCredentialRequest]) (*connect.Response[v1.RevokeApiCredentialResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ApiCredentialService.RevokeApiCredential is not implemented"))
 }
 
 // RepositoryServiceClient is a client for the golf.v1.RepositoryService service.

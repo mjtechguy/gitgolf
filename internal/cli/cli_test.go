@@ -99,7 +99,7 @@ func TestClientRejectsUnsafeOriginsRedirectsAndMalformedResponses(t *testing.T) 
 	defer destination.Close()
 	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, destination.URL, 307) }))
 	defer redirect.Close()
-	if _, err := execute(context.Background(), redirect.URL, command{name: "repo list"}, "private-token"); err == nil || reached.Load() {
+	if _, err := execute(context.Background(), redirect.URL, command{name: "repo list"}, credential{token: "private-token"}); err == nil || reached.Load() {
 		t.Fatal("credential-bearing request followed a redirect")
 	}
 	for _, failure := range []string{"malformed", "oversized", "logout"} {
@@ -131,7 +131,7 @@ func TestClientRejectsUnsafeOriginsRedirectsAndMalformedResponses(t *testing.T) 
 				}
 			}))
 			defer s.Close()
-			if _, err := execute(context.Background(), s.URL, command{name: "repo contents"}, "private-token"); err == nil || !cleaned.Load() {
+			if _, err := execute(context.Background(), s.URL, command{name: "repo contents"}, credential{token: "private-token"}); err == nil || !cleaned.Load() {
 				t.Fatal("bad response/cleanup was treated as success or session cleanup was skipped")
 			}
 		})
@@ -222,7 +222,7 @@ func TestCancellationStillClosesSession(t *testing.T) {
 		}
 	}))
 	defer s.Close()
-	if _, err := execute(ctx, s.URL, command{name: "repo list"}, "private-token"); err == nil || !cleaned.Load() {
+	if _, err := execute(ctx, s.URL, command{name: "repo list"}, credential{token: "private-token"}); err == nil || !cleaned.Load() {
 		t.Fatal("cancelled read did not clean up through an independent bounded context")
 	}
 }

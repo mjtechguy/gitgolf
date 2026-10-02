@@ -97,9 +97,9 @@ func (s *Server) withForgeCaller(ctx context.Context, value string, credential f
 		return errInvalidForgeResponse
 	}
 	check := func() error {
-		hash, err := sessionHash(value)
+		hash, err := s.authSessionHash(ctx, value, nil)
 		if err != nil {
-			return errUnauthenticated
+			return err
 		}
 		if s.db == nil {
 			return errStorageUnavailable

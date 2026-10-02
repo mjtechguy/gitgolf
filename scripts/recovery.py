@@ -321,7 +321,7 @@ def backup(args, stage):
     schema = run(['docker', 'exec', pg, 'psql', '-U', 'postgres', '-d', 'golf', '-Atc',
                   'SELECT max(version_id) FROM goose_db_version WHERE is_applied;']).decode().strip()
     require(pg_version == 'postgres (PostgreSQL) 18.4' and forge_version.startswith('gitea version 1.27.3 ') and
-            schema == '202610020004')
+            schema == '202610020005')
     write(stage/'compose.json', json.dumps(config).encode())
     write(stage/'postgres-init.sh', initializer)
     for name in ['golf', 'gitea']:
@@ -380,7 +380,7 @@ def verified(args, stage):
             set(manifest['files']) == FILES and set(manifest['images']) == {'postgres', 'gitea', 'golf'})
     require(manifest['versions']['postgres'] == 'postgres (PostgreSQL) 18.4' and
             manifest['versions']['gitea'].startswith('gitea version 1.27.3 ') and
-            manifest['versions']['golf_schema'] == '202610020004')
+            manifest['versions']['golf_schema'] == '202610020005')
     for name in FILES:
         require(manifest['files'][name] == {'bytes': (stage/name).stat().st_size, 'sha256': digest(stage/name)})
     require(sum(row['bytes'] for row in manifest['files'].values()) <= args.max_bytes)

@@ -253,3 +253,34 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .creation-status .field-help { margin:10px 0 0; }
 .creation-status code { font-size:11px; overflow-wrap:anywhere; }
 .creation-actions { flex-wrap:wrap; }
+
+.credential-form-content { padding:22px; font-size:12px; line-height:1.8; }
+.credential-form-content form { max-width:620px; }
+.credential-form-content label { display:block; margin:16px 0 7px; font-size:12px; }
+.credential-form-content label:first-child { margin-top:0; }
+.credential-form-content .field-help { margin:9px 0 0; font-size:11px; overflow-wrap:anywhere; }
+.credential-form-content input,.credential-form-content select,.credential-form-content textarea { width:100%; }
+.credential-form-content select { max-width:280px; }
+.credential-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:20px; }
+.credential-actions button { white-space:normal; }
+.credential-secret h3,.credential-uncertain h3 { font-size:17px; margin-bottom:10px; }
+.credential-secret>p,.credential-uncertain>p { max-width:680px; }
+.credential-secret textarea { font:12px/1.8 ui-monospace,monospace; overflow-wrap:anywhere; resize:vertical; }
+.credential-list-panel { margin-top:25px; }
+.credential-list { list-style:none; padding:0; margin:0; }
+.credential-row { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; padding:23px; border-bottom:1px solid var(--line); }
+.credential-row:last-child { border-bottom:0; }
+.credential-row>div { min-width:0; flex:1; }
+.credential-heading { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.credential-heading h3 { font-size:14px; overflow-wrap:anywhere; letter-spacing:0; }
+.credential-metadata { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:13px 22px; font-size:11px; line-height:1.7; margin:17px 0 0; }
+.credential-metadata dt { color:var(--muted); }
+.credential-metadata dd { margin:2px 0 0; overflow-wrap:anywhere; }
+.credential-list-footer { border-top:1px solid var(--line); flex-wrap:wrap; }
+@media(max-width:720px) {
+  .api-credentials .browser-panel-heading { flex-wrap:wrap; }
+  .credential-form-content,.credential-row { padding:20px 15px; }
+  .credential-row { flex-wrap:wrap; }
+  .credential-row>div { flex-basis:100%; }
+  .credential-metadata { grid-template-columns:1fr; }
+}

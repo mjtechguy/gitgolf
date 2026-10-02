@@ -555,6 +555,9 @@ AI Gateway is optional routing/observability, not a model or agent replacement. 
 
 ### 9.6 Agent access to Golf and previews
 
+Current bounded foundation: [owner-issued read-only API credentials](docs/API_CREDENTIAL_CONTRACT.md) delegate an existing source session for CLI/local MCP, with once-only secrets, digest storage, explicit current-read allowlisting and source-expiry/revocation coupling. This does not complete long-lived service accounts, OAuth/device login, remote MCP, ACP, tenant roles or named harness execution. Verification and remaining gates belong in the [implementation ledger](docs/IMPLEMENTATION_STATUS.md).
+
+
 API/CLI/MCP expose authorized task, repository, workspace, test, evidence, PR, and deployment operations. Remote MCP uses authenticated transport and operation-scoped authorization; local adapters call the same domain API. ACP connects Golf to supported agents; it is not interchangeable with MCP tool access.
 
 Current bounded increment: [local stdio MCP](docs/MCP_CONTRACT.md) implements discovery and 19 existing CLI/API reads using official Go SDK v1.8.0, a fixed owner-configured Golf origin and scoped Gitea PAT bootstrap. Each call creates/deletes a temporary Golf session and records session activity; the adapter does not claim side-effect-free or idempotent behavior. Native-provider/SDK-client qualification covers all 19 tools under both `2026-07-28` and legacy `2025-11-25`; separate raw-wire cancellation/framing checks cover both versions. Exact evidence is recorded in the ledger. This advances only part of P0.9/P5.5; full conformance, remote authorization, ACP, tool mutations/approvals, managed credentials, actual coding-agent clients and task execution remain separate gates.

@@ -34,6 +34,7 @@ func cookieValue(header http.Header) string {
 func (s *Server) rpcHandler() http.Handler {
 	options := []connect.HandlerOption{
 		connect.WithReadMaxBytes(16 << 10), connect.WithSendMaxBytes(16 << 20), connect.WithRequireConnectProtocolHeader(),
+		connect.WithInterceptors(connect.UnaryInterceptorFunc(s.apiReadInterceptor)),
 		connect.WithRecover(func(_ context.Context, _ connect.Spec, _ http.Header, value any) error {
 			if value == http.ErrAbortHandler {
 				panic(http.ErrAbortHandler)
@@ -47,6 +48,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewOrganizationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewCapabilityServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewAuditServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewApiCredentialServiceHandler(s, options...))
 	return mux
 }
 
@@ -68,11 +70,25 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			fail(rpcError(invalid("RPC URLs do not accept query parameters or escaped procedure names.")))
 			return
 		}
+		procedure := strings.TrimPrefix(r.URL.Path, "/rpc")
+		apiHash, delegated, err := apiHeader(r.Header)
+		if err != nil {
+			fail(rpcError(err))
+			return
+		}
+		if delegated {
+			if !apiReadProcedure(procedure) {
+				fail(rpcError(errApiCredentialReadOnly))
+				return
+			}
+			r = r.WithContext(context.WithValue(r.Context(), apiAuthKey{}, apiAuth{hash: apiHash}))
+		}
 		public := false
-		switch strings.TrimPrefix(r.URL.Path, "/rpc") {
+		switch procedure {
 		case golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
 			public = true
 		case golfv1connect.AuditServiceListAuditEventsProcedure, golfv1connect.SessionServiceGetSessionProcedure,
+			golfv1connect.ApiCredentialServiceCreateApiCredentialProcedure, golfv1connect.ApiCredentialServiceListApiCredentialsProcedure, golfv1connect.ApiCredentialServiceRevokeApiCredentialProcedure,
 			golfv1connect.SessionServiceListSessionsProcedure, golfv1connect.SessionServiceRevokeSessionProcedure, golfv1connect.SessionServiceRevokeOtherSessionsProcedure,
 			golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryCreationProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure,
 			golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure,
@@ -91,6 +107,12 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			if err != nil {
 				fail(rpcError(err))
 				return
+			}
+			if delegated {
+				if err := s.checkApiCaller(r.Context(), token); err != nil {
+					fail(rpcError(err))
+					return
+				}
 			}
 			r = r.WithContext(context.WithValue(r.Context(), sessionTokenKey{}, token))
 		}

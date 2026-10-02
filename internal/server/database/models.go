@@ -9,6 +9,27 @@ import (
 	"time"
 )
 
+type GolfApiCredential struct {
+	ID              int64
+	UserID          int64
+	TokenHash       []byte
+	Label           string
+	SourceSessionID int64
+	SourceTokenHash []byte
+	CreatedAt       time.Time
+	ExpiresAt       time.Time
+	RevokedAt       sql.NullTime
+}
+
+type GolfApiCredentialEvent struct {
+	ID             int64
+	CredentialID   int64
+	ActorSessionID int64
+	OccurredAt     time.Time
+	Action         string
+	OperationID    string
+}
+
 type GolfAuditEvent struct {
 	ID              int64
 	UserID          int64

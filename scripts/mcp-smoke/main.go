@@ -1,5 +1,6 @@
 // Command mcp-smoke is a disposable native integration client, not a Golf service.
-// Fixture credentials arrive only on stdin; the MCP child receives one frozen PAT.
+// Fixture credentials arrive only on stdin; the MCP child receives one frozen
+// PAT or an owner-issued Golf bearer credential through its environment.
 package main
 
 import (
@@ -11,6 +12,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -33,12 +35,14 @@ type fixture struct {
 	Reader, Repository, RepositoryID, Revision, FilePath, FileContent                  string
 	Organization, TeamID, OrgRepositoryID, ReviewID, CreationKey, CreationRepositoryID string
 	Issue, Pull                                                                        int
+	APICredentials                                                                     bool
 }
 
 type object = map[string]any
 
 var stage = "initialization"
 var cfg fixture
+var apiSecrets []string
 
 func check(ok bool) {
 	if !ok {
@@ -62,7 +66,7 @@ func hasID(data object, field, id string) bool {
 	return false
 }
 func safe(data []byte) {
-	for _, token := range []string{cfg.OwnerToken, cfg.ReaderToken, cfg.NarrowToken, cfg.OutsiderToken} {
+	for _, token := range append([]string{cfg.OwnerToken, cfg.ReaderToken, cfg.NarrowToken, cfg.OutsiderToken}, apiSecrets...) {
 		check(token != "" && !bytes.Contains(data, []byte(token)))
 	}
 }
@@ -78,14 +82,18 @@ func (b *boundedDiagnostic) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-func connect(ctx context.Context, origin, token, version string) (*mcp.ClientSession, func(), *exec.Cmd) {
+func connect(ctx context.Context, origin, token, version string, api bool) (*mcp.ClientSession, func(), *exec.Cmd) {
 	cmd := exec.Command(cfg.Binary, "--url", origin, "mcp")
 	for _, entry := range os.Environ() {
-		if !strings.HasPrefix(entry, "GOLF_GITEA_TOKEN=") && !strings.HasPrefix(entry, "GOLF_URL=") && !strings.HasPrefix(entry, "MCPGODEBUG=") {
+		if !strings.HasPrefix(entry, "GOLF_GITEA_TOKEN=") && !strings.HasPrefix(entry, "GOLF_API_TOKEN=") && !strings.HasPrefix(entry, "GOLF_URL=") && !strings.HasPrefix(entry, "MCPGODEBUG=") {
 			cmd.Env = append(cmd.Env, entry)
 		}
 	}
-	cmd.Env = append(cmd.Env, "GOLF_GITEA_TOKEN="+token)
+	variable := "GOLF_GITEA_TOKEN="
+	if api {
+		variable = "GOLF_API_TOKEN="
+	}
+	cmd.Env = append(cmd.Env, variable+token)
 	diagnostic := new(boundedDiagnostic)
 	cmd.Stderr = diagnostic
 	client := mcp.NewClient(&mcp.Implementation{Name: "golf-native-smoke", Version: "0.0.0"}, &mcp.ClientOptions{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
@@ -253,7 +261,7 @@ func exercise(ctx context.Context, session *mcp.ClientSession) {
 	check(next["snapshotId"] == snapshot && first(next, "events")["id"] != first(audit, "events")["id"])
 }
 
-func cancellation(ctx context.Context, control *http.Client, baseline []string, terminate bool) {
+func cancellation(ctx context.Context, control *http.Client, baseline []string, terminate bool, token string, api bool) {
 	target, err := url.Parse(cfg.Golf)
 	check(err == nil)
 	reached := make(chan struct{}, 4)
@@ -281,7 +289,7 @@ func cancellation(ctx context.Context, control *http.Client, baseline []string, 
 	}
 	server := httptest.NewServer(proxy)
 	defer server.Close()
-	session, closeSession, command := connect(ctx, server.URL, cfg.ReaderToken, "2026-07-28")
+	session, closeSession, command := connect(ctx, server.URL, token, "2026-07-28", api)
 	defer closeSession()
 	calls, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -299,7 +307,11 @@ func cancellation(ctx context.Context, control *http.Client, baseline []string, 
 			panic("native response barrier timeout")
 		}
 	}
-	check(len(sessionIDs(control)) == len(baseline)+4)
+	createdSessions := 4
+	if api {
+		createdSessions = 0
+	}
+	check(len(sessionIDs(control)) == len(baseline)+createdSessions)
 	denied(ctx, session, "golf_repo_list", object{}, "busy")
 	if terminate {
 		check(command.Process.Signal(syscall.SIGTERM) == nil)
@@ -315,11 +327,106 @@ func cancellation(ctx context.Context, control *http.Client, baseline []string, 
 		}
 	}
 	deadline := time.Now().Add(10 * time.Second)
-	for logouts.Load() != 4 || !reflect.DeepEqual(sessionIDs(control), baseline) {
+	for logouts.Load() != int32(createdSessions) || !reflect.DeepEqual(sessionIDs(control), baseline) {
 		check(time.Now().Before(deadline))
 		time.Sleep(50 * time.Millisecond)
 	}
-	check(logouts.Load() == 4)
+	check(logouts.Load() == int32(createdSessions))
+}
+
+func issueAPI(client *http.Client) (string, string) {
+	issued := rpc(client, "ApiCredentialService/CreateApiCredential", object{"label": "Disposable MCP qualification", "lifetimeSeconds": 3600})
+	token, ok := issued["token"].(string)
+	check(ok && strings.HasPrefix(token, "golf_ro_") && len(token) == 51)
+	apiSecrets = append(apiSecrets, token)
+	id, ok := obj(issued["credential"])["id"].(string)
+	check(ok && id != "")
+	return token, id
+}
+
+func bearerCLI(ctx context.Context, token string, stdin, failure bool) {
+	args := []string{"--url", cfg.Golf}
+	if stdin {
+		args = append(args, "--api-token-stdin")
+	}
+	args = append(args, "repo", "contents", cfg.Repository, "--ref", cfg.Revision, "--path", cfg.FilePath)
+	command := exec.CommandContext(ctx, cfg.Binary, args...)
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, "GOLF_GITEA_TOKEN=") && !strings.HasPrefix(entry, "GOLF_API_TOKEN=") && !strings.HasPrefix(entry, "GOLF_URL=") {
+			command.Env = append(command.Env, entry)
+		}
+	}
+	if stdin {
+		command.Stdin = strings.NewReader(token + "\n")
+	} else {
+		command.Env = append(command.Env, "GOLF_API_TOKEN="+token)
+	}
+	var output bytes.Buffer
+	diagnostic := new(boundedDiagnostic)
+	command.Stdout, command.Stderr = &output, diagnostic
+	err := command.Run()
+	safe(output.Bytes())
+	safe(diagnostic.Bytes())
+	if failure {
+		check(err != nil && output.Len() == 0 && strings.Contains(diagnostic.String(), "unauthenticated"))
+		return
+	}
+	check(err == nil && diagnostic.Len() == 0)
+	var envelope object
+	check(json.Unmarshal(output.Bytes(), &envelope) == nil && envelope["schema_version"] == "golf.cli.v1")
+	data := obj(envelope["data"])
+	check(data["commitId"] == cfg.Revision && obj(data["file"])["content"] == cfg.FileContent)
+}
+
+func bearerQualification(ctx context.Context, control *http.Client, baseline []string) (*mcp.ClientSession, func()) {
+	phase("owner-issued API credential: all 19 tools in both protocol revisions and CLI stdin/environment")
+	token, id := issueAPI(control)
+	before := rpc(control, "AuditService/ListAuditEvents", object{"limit": 1})["snapshotId"]
+	for _, version := range []string{"2026-07-28", "2025-11-25"} {
+		func() {
+			session, closeSession, _ := connect(ctx, cfg.Golf, token, version, true)
+			defer closeSession()
+			catalogue(ctx, session)
+			exercise(ctx, session)
+			denied(ctx, session, "golf_repo_view", object{"repository": cfg.Repository, "api_token": "DO-NOT-ECHO"}, "Invalid tool arguments")
+		}()
+	}
+	bearerCLI(ctx, token, false, false)
+	bearerCLI(ctx, token, true, false)
+	check(reflect.DeepEqual(sessionIDs(control), baseline))
+	check(rpc(control, "AuditService/ListAuditEvents", object{"limit": 1})["snapshotId"] == before)
+	phase("API bearer cancellation and SIGTERM without temporary sessions")
+	cancellation(ctx, control, baseline, false, token, true)
+	cancellation(ctx, control, baseline, true, token, true)
+	check(rpc(control, "AuditService/ListAuditEvents", object{"limit": 1})["snapshotId"] == before)
+	phase("credential revocation denies original MCP process and CLI")
+	func() {
+		session, closeSession, _ := connect(ctx, cfg.Golf, token, "2026-07-28", true)
+		defer closeSession()
+		call(ctx, session, "golf_repo_view", object{"repository": cfg.Repository})
+		rpc(control, "ApiCredentialService/RevokeApiCredential", object{"credentialId": id})
+		denied(ctx, session, "golf_repo_view", object{"repository": cfg.Repository}, "unauthenticated")
+		bearerCLI(ctx, token, true, true)
+	}()
+	phase("API credential source-session logout denies its original MCP process")
+	func() {
+		jar, _ := cookiejar.New(nil)
+		source := &http.Client{Jar: jar, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		rpc(source, "SessionService/LoginWithGiteaToken", object{"token": cfg.ReaderToken})
+		defer rpc(source, "SessionService/Logout", object{})
+		sourceToken, _ := issueAPI(source)
+		session, closeSession, _ := connect(ctx, cfg.Golf, sourceToken, "2026-07-28", true)
+		defer closeSession()
+		call(ctx, session, "golf_repo_view", object{"repository": cfg.Repository})
+		rpc(source, "SessionService/Logout", object{})
+		denied(ctx, session, "golf_repo_view", object{"repository": cfg.Repository}, "unauthenticated")
+	}()
+	check(reflect.DeepEqual(sessionIDs(control), baseline))
+	fmt.Println("PASS: API bearer all 19 tools under both revisions, CLI stdin/environment, unchanged session/audit snapshots, cancellation/SIGTERM, direct revocation and source logout")
+	// Keep one live bearer process for the later real provider membership removal.
+	activeToken, _ := issueAPI(control)
+	session, closeSession, _ := connect(ctx, cfg.Golf, activeToken, "2026-07-28", true)
+	return session, closeSession
 }
 
 func run() (err error) {
@@ -329,8 +436,13 @@ func run() (err error) {
 		}
 	}()
 	check(json.NewDecoder(io.LimitReader(os.Stdin, 65537)).Decode(&cfg) == nil)
-	check(cfg.Golf == "http://localhost:8080" && cfg.Gitea == "http://localhost:3001" && strings.HasPrefix(cfg.Reader, "golf-mcp-"))
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
+	for _, origin := range []string{cfg.Golf, cfg.Gitea} {
+		u, parseErr := url.Parse(origin)
+		check(parseErr == nil && u.Scheme == "http" && u.User == nil && u.Path == "" && u.RawQuery == "" && u.Fragment == "" && u.Port() != "")
+		check(u.Hostname() == "localhost" || net.ParseIP(u.Hostname()).IsLoopback())
+	}
+	check(strings.HasPrefix(cfg.Reader, "golf-mcp-"))
+	ctx, cancel := context.WithTimeout(context.Background(), 210*time.Second)
 	defer cancel()
 	jar, _ := cookiejar.New(nil)
 	control := &http.Client{Jar: jar, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -338,7 +450,7 @@ func run() (err error) {
 	defer rpc(control, "SessionService/Logout", object{})
 	baseline := sessionIDs(control)
 	phase("modern discovery and all 19 native tools")
-	modern, closeModern, _ := connect(ctx, cfg.Golf, cfg.ReaderToken, "2026-07-28")
+	modern, closeModern, _ := connect(ctx, cfg.Golf, cfg.ReaderToken, "2026-07-28", false)
 	defer closeModern()
 	catalogue(ctx, modern)
 	exercise(ctx, modern)
@@ -346,7 +458,7 @@ func run() (err error) {
 	fmt.Println("PASS: 2026-07-28 discovery, exact 19-tool catalogue, honest annotations, structured/text parity, private native reads, pagination and temporary-session cleanup")
 	phase("legacy initialization and native reads")
 	func() {
-		legacy, closeLegacy, _ := connect(ctx, cfg.Golf, cfg.ReaderToken, "2025-11-25")
+		legacy, closeLegacy, _ := connect(ctx, cfg.Golf, cfg.ReaderToken, "2025-11-25", false)
 		defer closeLegacy()
 		catalogue(ctx, legacy)
 		exercise(ctx, legacy)
@@ -376,7 +488,7 @@ func run() (err error) {
 	fmt.Println("PASS: extra credential/origin/command inputs, malformed IDs/paths/bounds and unsupported write tools cannot authenticate or dispatch")
 	phase("narrow-scope and foreign-account denials")
 	func() {
-		narrow, closeNarrow, _ := connect(ctx, cfg.Golf, cfg.NarrowToken, "2026-07-28")
+		narrow, closeNarrow, _ := connect(ctx, cfg.Golf, cfg.NarrowToken, "2026-07-28", false)
 		defer closeNarrow()
 		denied(ctx, narrow, "golf_repo_view", object{"repository": cfg.Repository}, "permission_denied")
 		denied(ctx, narrow, "golf_org_list", object{}, "permission_denied")
@@ -384,7 +496,7 @@ func run() (err error) {
 		check(obj(recorded["creation"])["state"] == "REPOSITORY_CREATION_STATE_SUCCEEDED" && recorded["repository"] == nil)
 	}()
 	func() {
-		other, closeOther, _ := connect(ctx, cfg.Golf, cfg.OutsiderToken, "2026-07-28")
+		other, closeOther, _ := connect(ctx, cfg.Golf, cfg.OutsiderToken, "2026-07-28", false)
 		defer closeOther()
 		denied(ctx, other, "golf_repo_view", object{"repository": cfg.Repository}, "not_found")
 		denied(ctx, other, "golf_org_view", object{"organization": cfg.Organization}, "not_found")
@@ -393,18 +505,31 @@ func run() (err error) {
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
 	fmt.Println("PASS: native scope/foreign-account denial, own creation evidence without repository access and no private error result")
 	phase("four real reads, fifth-call admission and MCP cancellation")
-	cancellation(ctx, control, baseline, false)
+	cancellation(ctx, control, baseline, false, cfg.ReaderToken, false)
 	fmt.Println("PASS: four actual Golf reads held at a fixture response barrier, fifth-call busy denial, SDK cancellation and four independent native logouts")
 	phase("SIGTERM with four authenticated calls in flight")
-	cancellation(ctx, control, baseline, true)
+	cancellation(ctx, control, baseline, true, cfg.ReaderToken, false)
 	fmt.Println("PASS: stdio SIGTERM cancels four native requests, completes independent logouts and exits without private results")
+	var bearer *mcp.ClientSession
+	if cfg.APICredentials {
+		var closeBearer func()
+		bearer, closeBearer = bearerQualification(ctx, control, baseline)
+		defer closeBearer()
+	}
 	phase("revocation in the existing MCP process")
 	native := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	httpJSON(native, "DELETE", cfg.Gitea+"/api/v1/repos/"+cfg.Repository+"/collaborators/"+cfg.Reader, nil, map[string]string{"Authorization": "token " + cfg.OwnerToken}, 204)
 	denied(ctx, modern, "golf_repo_view", object{"repository": cfg.Repository}, "not_found")
 	denied(ctx, modern, "golf_repo_contents", object{"repository": cfg.Repository, "ref": cfg.Revision, "path": cfg.FilePath}, "not_found")
+	if bearer != nil {
+		denied(ctx, bearer, "golf_repo_view", object{"repository": cfg.Repository}, "not_found")
+		denied(ctx, bearer, "golf_repo_contents", object{"repository": cfg.Repository, "ref": cfg.Revision, "path": cfg.FilePath}, "not_found")
+	}
 	httpJSON(native, "DELETE", cfg.Gitea+"/api/v1/orgs/"+cfg.Organization+"/members/"+cfg.Reader, nil, map[string]string{"Authorization": "token " + cfg.OwnerToken}, 204)
 	denied(ctx, modern, "golf_org_view", object{"organization": cfg.Organization}, "not_found")
+	if bearer != nil {
+		denied(ctx, bearer, "golf_org_view", object{"organization": cfg.Organization}, "not_found")
+	}
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
 	fmt.Println("PASS: actual collaborator and membership removal deny subsequent calls in the original stdio process without cached private data")
 	return nil

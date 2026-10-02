@@ -123,9 +123,9 @@ func (s *Server) createSession(ctx context.Context, user User, kind, payload, ol
 	return loginResult{user, value, expires}, nil
 }
 func (s *Server) sessionCredential(ctx context.Context, value string) (forgeCredential, error) {
-	hash, err := sessionHash(value)
+	hash, err := s.authSessionHash(ctx, value, nil)
 	if err != nil {
-		return forgeCredential{}, errUnauthenticated
+		return forgeCredential{}, err
 	}
 	if s.db == nil {
 		return forgeCredential{}, errStorageUnavailable

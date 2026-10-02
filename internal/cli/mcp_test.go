@@ -19,10 +19,14 @@ import (
 )
 
 func mcpTestSession(t *testing.T, origin, version string, ownerContext context.Context) *mcp.ClientSession {
+	return mcpTestCredentialSession(t, origin, version, ownerContext, credential{token: "fixture-private-token"})
+}
+
+func mcpTestCredentialSession(t *testing.T, origin, version string, ownerContext context.Context, auth credential) *mcp.ClientSession {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	a, b := mcp.NewInMemoryTransports()
-	session, err := newMCPServer(ownerContext, origin, "fixture-private-token").Connect(ctx, a, nil)
+	session, err := newMCPServer(ownerContext, origin, auth).Connect(ctx, a, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

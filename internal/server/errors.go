@@ -8,6 +8,8 @@ import (
 )
 
 var (
+	errApiCredentialReadOnly      = errors.New("API credential procedure denied")
+	errApiCredentialLimit         = errors.New("active API credential limit")
 	errRepositoryCreationConflict = errors.New("repository creation key has different inputs")
 	errOAuthClientRejected        = errors.New("OAuth application credentials rejected")
 	errOAuthDisabled              = errors.New("OAuth unavailable")
@@ -36,6 +38,10 @@ func rpcError(err error) error {
 	var input inputError
 	var upstream forgeError
 	switch {
+	case errors.Is(err, errApiCredentialReadOnly):
+		code, message = connect.CodePermissionDenied, "API credentials allow only the documented read procedures. Use a browser session for this operation."
+	case errors.Is(err, errApiCredentialLimit):
+		code, message = connect.CodeResourceExhausted, "This account already has 100 active API credentials. Revoke a credential before creating another."
 	case errors.Is(err, errRepositoryCreationConflict):
 		code, message = connect.CodeFailedPrecondition, "This repository creation key is already bound to different inputs. Use its original inputs or a new key for a new operation."
 	case errors.As(err, &input):

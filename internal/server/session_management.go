@@ -21,9 +21,9 @@ import (
 // locks sessions and never requests a user lock. A revoked/expired caller is
 // rechecked after either lock wait.
 func (s *Server) withManagedSession(ctx context.Context, value string, credential forgeCredential, operation func(*database.Queries, database.LockManagedSessionRow, []byte) error) error {
-	hash, err := sessionHash(value)
+	hash, err := s.authSessionHash(ctx, value, nil)
 	if err != nil {
-		return errUnauthenticated
+		return err
 	}
 	if s.db == nil {
 		return errStorageUnavailable
@@ -58,6 +58,9 @@ func (s *Server) withManagedSession(ctx context.Context, value string, credentia
 	if !caller.ExpiresAt.After(time.Now()) {
 		return errUnauthenticated
 	}
+	if _, err := s.authSessionHash(ctx, value, queries); err != nil {
+		return err
+	}
 	err = operation(queries, caller, hash)
 	// A target row may have been locked by another in-flight request. Never
 	// commit a revocation or reveal a listing after the caller's absolute expiry.
@@ -65,6 +68,9 @@ func (s *Server) withManagedSession(ctx context.Context, value string, credentia
 		return errUnauthenticated
 	}
 	if err != nil {
+		return err
+	}
+	if _, err := s.authSessionHash(ctx, value, queries); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {

@@ -3,6 +3,7 @@ package cli
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -27,7 +28,7 @@ import (
 
 const help = `Golf — inspect repositories, organizations and your account activity.
 
-Usage: golf [--url ORIGIN] [--token-stdin] COMMAND
+Usage: golf [--url ORIGIN] [--token-stdin | --api-token-stdin] COMMAND
 
   mcp                         serve local MCP on stdin/stdout
   repo list [--page N] [--limit N]
@@ -54,26 +55,31 @@ Success writes JSON: {"schema_version":"golf.cli.v1","data":...}.
 Exit codes: 0 success/help; 1 operation/authentication failure; 2 usage error.
 Data uses the versioned API's Protobuf JSON format. No automatic pagination.
 Pass a Gitea token on stdin with --token-stdin, or set GOLF_GITEA_TOKEN.
+Pass a Golf API token on stdin with --api-token-stdin, or set GOLF_API_TOKEN.
+Do not mix Golf API and Gitea token sources. Stdin overrides the same-kind environment token.
 GOLF_URL defaults to http://localhost:8080. Remote origins require HTTPS.
-Credentials/cookies are never saved. Each command signs in and signs out.
-MCP takes its token only from GOLF_GITEA_TOKEN; stdin is reserved for the protocol.
+Credentials/cookies are never saved. Gitea token commands sign in and sign out.
+Golf API tokens send bearer-authenticated reads without a browser session or login/logout.
+They remain bound to the issuing browser session; expiry, revocation or source sign-out denies access.
+MCP takes one token from GOLF_API_TOKEN or GOLF_GITEA_TOKEN; stdin is reserved for the protocol.
 Global flags precede the command; resource flags follow positional arguments.
 Organization reads need read:user and read:organization; code needs read:repository.
 Account activity needs read:user and records successful session lifecycle operations.
-Audit pagination preserves the first snapshot ID; each CLI call also records its own login/logout.
+Audit pagination preserves the first snapshot ID; PAT-mode CLI calls also record their login/logout.
 Commit diffs require a full lowercase 40- or 64-character commit ID; branch aliases are not accepted.
 Diffs preserve bounded native Gitea text; merges compare only the first parent.
 Repository creation inspection needs a canonical UUID v4 key from a prior create request.
 It never creates or retries a repository; OUTCOME_UNKNOWN can include in-flight work.
 `
 
-// Run writes results only after logout succeeds. Error text excludes credentials
+// Run writes PAT-mode results only after logout succeeds. Error text excludes credentials
 // and upstream response bodies; even an untrusted server cannot echo a token.
 func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic io.Writer, getenv func(string) string) int {
 	flags := flag.NewFlagSet("golf", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	origin := flags.String("url", getenv("GOLF_URL"), "Golf origin")
 	stdin := flags.Bool("token-stdin", false, "read the token from stdin")
+	apiStdin := flags.Bool("api-token-stdin", false, "read a Golf API token from stdin")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			fmt.Fprint(output, help)
@@ -108,27 +114,35 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 		fmt.Fprintln(diagnostic, err)
 		return 2
 	}
-	token := getenv("GOLF_GITEA_TOKEN")
-	if mcpMode && *stdin {
-		fmt.Fprintln(diagnostic, "MCP reserves stdin for its protocol; configure GOLF_GITEA_TOKEN in the owner-controlled process environment.")
+	pat, apiToken := getenv("GOLF_GITEA_TOKEN"), getenv("GOLF_API_TOKEN")
+	if (*stdin || pat != "") && (*apiStdin || apiToken != "") {
+		fmt.Fprintln(diagnostic, "Choose one credential kind: Golf API token or Gitea token; mixed sources are not accepted.")
 		return 2
 	}
-	if *stdin {
+	if mcpMode && (*stdin || *apiStdin) {
+		fmt.Fprintln(diagnostic, "MCP reserves stdin for its protocol; configure one of GOLF_API_TOKEN or GOLF_GITEA_TOKEN in the owner-controlled process environment.")
+		return 2
+	}
+	auth := credential{token: pat}
+	if *apiStdin || apiToken != "" {
+		auth = credential{token: apiToken, api: true}
+	}
+	if *stdin || *apiStdin {
 		data, err := readToken(ctx, input)
 		if err != nil {
 			fmt.Fprintln(diagnostic, "Token input failed or was cancelled.")
 			return 1
 		}
-		token = strings.TrimSuffix(strings.TrimSuffix(string(data), "\n"), "\r")
+		auth.token = strings.TrimSuffix(strings.TrimSuffix(string(data), "\n"), "\r")
 	}
-	if len(token) < 8 || len(token) > 512 || strings.ContainsAny(token, "\r\n\t ") {
-		fmt.Fprintln(diagnostic, "Supply one valid Gitea token using --token-stdin or GOLF_GITEA_TOKEN.")
+	if len(auth.token) < 8 || len(auth.token) > 512 || strings.ContainsAny(auth.token, "\r\n\t ") || (auth.api && !validAPIToken(auth.token)) {
+		fmt.Fprintln(diagnostic, "Supply one valid token using its matching stdin flag or environment variable. Run golf --help.")
 		return 2
 	}
 	if mcpMode {
-		return runMCP(ctx, base, token, input, output, diagnostic)
+		return runMCP(ctx, base, auth, input, output, diagnostic)
 	}
-	result, err := execute(ctx, base, command, token)
+	result, err := execute(ctx, base, command, auth)
 	if err != nil {
 		fmt.Fprintln(diagnostic, err)
 		return 1
@@ -328,36 +342,56 @@ func parseCommand(args []string) (command, error) {
 	return result, nil
 }
 
-func execute(ctx context.Context, origin string, command command, token string) (result json.RawMessage, err error) {
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
+type credential struct {
+	token string
+	api   bool
+}
+
+func validAPIToken(token string) bool {
+	value, ok := strings.CutPrefix(token, "golf_ro_")
+	if !ok || len(value) != 43 {
+		return false
+	}
+	decoded, err := base64.RawURLEncoding.Strict().DecodeString(value)
+	return err == nil && len(decoded) == 32 && base64.RawURLEncoding.EncodeToString(decoded) == value
+}
+
+func execute(ctx context.Context, origin string, command command, auth credential) (result json.RawMessage, err error) {
+	client := &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	}}
 	options := []connect.ClientOption{connect.WithProtoJSON(), connect.WithReadMaxBytes(8 << 20), connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, request connect.AnyRequest) (connect.AnyResponse, error) {
 			request.Header().Set("Origin", origin)
+			if auth.api {
+				request.Header().Set("Authorization", "Bearer "+auth.token)
+			}
 			return next(ctx, request)
 		}
 	}))}
-	sessions := golfv1connect.NewSessionServiceClient(client, origin+"/rpc", options...)
-	_, err = sessions.LoginWithGiteaToken(ctx, connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: token}))
-	// Also clear a cookie set by a malformed login response. SIGKILL cannot run
-	// cleanup; the server's normal session expiry remains the final bound.
-	u, _ := url.Parse(origin)
-	if len(jar.Cookies(u)) > 0 {
-		defer func() {
-			cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if _, logoutErr := sessions.Logout(cleanup, connect.NewRequest(&golfv1.LogoutRequest{})); logoutErr != nil {
-				err = errors.Join(err, errors.New("could not close the temporary Golf session; it will expire on the server"))
-			}
-		}()
-	}
-	if err != nil {
-		return nil, operationError(err)
-	}
-	if len(jar.Cookies(u)) == 0 {
-		return nil, errors.New("Golf did not establish a session")
+	if !auth.api {
+		jar, _ := cookiejar.New(nil)
+		client.Jar = jar
+		sessions := golfv1connect.NewSessionServiceClient(client, origin+"/rpc", options...)
+		_, err = sessions.LoginWithGiteaToken(ctx, connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: auth.token}))
+		// Also clear a cookie set by a malformed login response. SIGKILL cannot run
+		// cleanup; the server's normal session expiry remains the final bound.
+		u, _ := url.Parse(origin)
+		if len(jar.Cookies(u)) > 0 {
+			defer func() {
+				cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if _, logoutErr := sessions.Logout(cleanup, connect.NewRequest(&golfv1.LogoutRequest{})); logoutErr != nil {
+					err = errors.Join(err, errors.New("could not close the temporary Golf session; it will expire on the server"))
+				}
+			}()
+		}
+		if err != nil {
+			return nil, operationError(err)
+		}
+		if len(jar.Cookies(u)) == 0 {
+			return nil, errors.New("Golf did not establish a session")
+		}
 	}
 	repositories := golfv1connect.NewRepositoryServiceClient(client, origin+"/rpc", options...)
 	organizations := golfv1connect.NewOrganizationServiceClient(client, origin+"/rpc", options...)

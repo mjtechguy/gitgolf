@@ -18,6 +18,46 @@ service SessionService {
   rpc Logout(LogoutRequest) returns (LogoutResponse);
 }
 
+// Owner-managed, read-only delegation of an existing browser session.
+// Cookie authentication is required for lifecycle operations. Bearer credentials
+// cannot issue, list or revoke credentials, or invoke mutating procedures.
+service ApiCredentialService {
+  rpc CreateApiCredential(CreateApiCredentialRequest) returns (CreateApiCredentialResponse);
+  rpc ListApiCredentials(ListApiCredentialsRequest) returns (ListApiCredentialsResponse);
+  rpc RevokeApiCredential(RevokeApiCredentialRequest) returns (RevokeApiCredentialResponse);
+}
+
+message ApiCredential {
+  // Opaque decimal Golf handle. Never a secret or digest.
+  string id = 1;
+  string label = 2;
+  string created_at = 3;
+  string expires_at = 4;
+  string revoked_at = 5;
+  string source_session_id = 6;
+  bool source_session_active = 7;
+}
+message CreateApiCredentialRequest {
+  // Exact nonempty trimmed UTF-8, at most 64 bytes; no control characters.
+  string label = 1;
+  // Zero defaults to 3600; otherwise 60..43200. Actual expiry is capped by
+  // the authenticated source session's absolute expiry.
+  uint32 lifetime_seconds = 2;
+}
+message CreateApiCredentialResponse {
+  ApiCredential credential = 1;
+  // Returned once. Never returned by metadata reads or persisted in plaintext.
+  string token = 2;
+}
+message ListApiCredentialsRequest { PageRequest page = 1; }
+message ListApiCredentialsResponse {
+  repeated ApiCredential credentials = 1;
+  PageResponse page = 2;
+  string current_source_expires_at = 3;
+}
+message RevokeApiCredentialRequest { string credential_id = 1; }
+message RevokeApiCredentialResponse { ApiCredential credential = 1; }
+
 service RepositoryService {
   rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse);
   rpc CreateRepository(CreateRepositoryRequest) returns (CreateRepositoryResponse);
