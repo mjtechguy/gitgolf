@@ -59,7 +59,9 @@ async function backend(page: Page) {
 
 async function openSessions(page: Page) {
   await page.goto('/');
-  await page.getByRole('navigation', { name:'Workspace', exact:true }).getByRole('link', { name: 'Sessions', exact: true }).click();
+  await page.getByLabel('Your account', { exact: true }).click();
+  await page.getByRole('link', { name: 'User settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Account settings', exact: true }).getByRole('link', { name: 'Sessions', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Your Golf sessions', exact:true })).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 }
@@ -155,7 +157,7 @@ test('denied refresh and revoke hide prior rows; reopening waits for fresh data'
   let release!: () => void;
   state.listBarrier = new Promise<void>((resolve) => { release = resolve; });
   state.sessions = [originalSessions[0]!];
-  await page.getByRole('navigation', { name:'Workspace', exact:true }).getByRole('link', { name: 'Sessions', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Account settings', exact: true }).getByRole('link', { name: 'Sessions', exact: true }).click();
   await expect(page.getByText('Loading sessions…')).toBeVisible();
   await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(0);
   release();
@@ -170,7 +172,7 @@ test('leaving the sessions page cancels an in-flight private list and returning 
   await page.getByRole('navigation', {name:'Account settings',exact:true}).getByRole('link', {name:'Profile',exact:true}).click();
   let release!: () => void;
   state.listBarrier = new Promise<void>((resolve) => { release = resolve; });
-  await page.getByRole('navigation', { name:'Workspace', exact:true }).getByRole('link', { name: 'Sessions', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Account settings', exact: true }).getByRole('link', { name: 'Sessions', exact: true }).click();
   await expect(page.getByText('Loading sessions…')).toBeVisible();
   await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(0);
   const aborted = page.waitForEvent('requestfailed', (request) => request.url().endsWith('/ListSessions'));
@@ -179,7 +181,7 @@ test('leaving the sessions page cancels an in-flight private list and returning 
   state.listBarrier = undefined;
   state.sessions = [create(SessionInfoSchema, { ...originalSessions[0]!, id: '9007199254741999' })];
   release();
-  await page.getByRole('navigation', { name:'Workspace', exact:true }).getByRole('link', { name: 'Sessions', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Account settings', exact: true }).getByRole('link', { name: 'Sessions', exact: true }).click();
   await expect(page.getByText('9007199254741999', { exact: true })).toBeVisible();
   await expect(page.locator('table[aria-label="Sessions"] tbody tr[data-row-id]')).toHaveCount(1);
   await expect(page.getByText('9007199254740993', { exact: true })).toHaveCount(0);
@@ -208,7 +210,9 @@ test('empty and unavailable sessions remain actionable in light mobile page', as
   await page.goto('/');
   if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
   await page.setViewportSize({ width: 320, height: 740 });
-  await page.getByRole('navigation', { name:'Workspace', exact:true }).getByRole('link', { name: 'Sessions', exact: true }).click();
+  await page.getByLabel('Your account', { exact: true }).click();
+  await page.getByRole('link', { name: 'User settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Account settings', exact: true }).getByRole('link', { name: 'Sessions', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Sessions temporarily unavailable.');
   delete state.errors.ListSessions;
   state.sessions = [];

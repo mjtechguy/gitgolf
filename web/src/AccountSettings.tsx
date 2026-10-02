@@ -17,6 +17,14 @@ export function AccountLayout({ children }: { children: ReactNode }) {
   </nav><div className="account-content">{children}</div></div>;
 }
 
+export function RepositorySettingsLayout({ children, owner, name }: { children: ReactNode; owner: string; name: string }) {
+  return <div className="account-layout"><nav className="account-navigation" aria-label="Repository settings"><span className="eyebrow">REPOSITORY SETTINGS</span>
+    <Link to="/repositories/$owner/$name/settings" params={{ owner, name }} activeOptions={{ exact: true }}><UserRound size={18} />General</Link>
+    <Link to="/repositories/$owner/$name/settings/access" params={{ owner, name }} activeOptions={{ exact: true }}><ShieldCheck size={18} />Access</Link>
+    <Link to="/repositories/$owner/$name/settings/workflows" params={{ owner, name }} activeOptions={{ exact: true }}><History size={18} />Workflows</Link>
+  </nav><div className="account-content">{children}</div></div>;
+}
+
 export function AccountSettings({ user }: { user: User }) {
   return <section aria-labelledby="settings-title">
     <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1 id="settings-title"><UserRound size={29} />Profile</h1><p>Your identity, access and account preferences.</p></div></header>
@@ -30,7 +38,7 @@ export function AccountSettings({ user }: { user: User }) {
 }
 
 export type SettingsScope = 'personal' | 'organization' | 'repository' | 'instance';
-type SettingEntry = { id: string; section: string; state: 'Ready' | 'Read only' | 'Planned'; detail: string; task: string; to?: '/account/sessions' | '/account/ssh-keys' | '/account/api-credentials' | '/audit' | '/' | '/organizations'; hash?: string };
+type SettingEntry = { id: string; section: string; state: 'Ready' | 'Read only' | 'Planned'; detail: string; task: string; to?: '/account/sessions' | '/account/ssh-keys' | '/account/api-credentials' | '/audit' | '/' | '/organizations' | '/status'; hash?: string };
 const inventory: Record<SettingsScope, SettingEntry[]> = {
   personal: [
     { id: 'profile', section: 'Profile and email', state: 'Read only', detail: 'Current username, display name and role are visible. Email/profile edits and email verification need self-service identity APIs; enrolled login changes require an operator.', task: 'P1.3 / G1' },
@@ -59,9 +67,9 @@ const inventory: Record<SettingsScope, SettingEntry[]> = {
   ],
   repository: [
     { id: 'general', section: 'General and features', state: 'Ready', detail: 'Current native description, default branch and feature values appear above. Edit is offered only when a fresh supported API grants repository administration.', task: 'P1.4 / G1' },
-    { id: 'access', section: 'Collaborators and deploy keys', state: 'Planned', detail: 'Invites, per-unit roles, expiring deploy keys and transfer need immutable target checks and native authority qualification.', task: 'P1.5 / P1.8' },
+    { id: 'access', section: 'Collaborators and deploy keys', state: 'Ready', detail: 'Qualified personal repository owners and direct admins can review and change existing accounts’ read/write/admin grants. Owner, self and exceptional native owner-level grants are locked; organization/team grants, invitations and deploy keys remain outside this editor.', task: 'P1.5 / P1.8' },
     { id: 'rules', section: 'Rulesets, reviews and merge policy', state: 'Planned', detail: 'Required reviews/checks, branch/tag protection, trusted publishers and merge queues remain gated on complete mutation enforcement.', task: 'P0.8 / P2.3 / G5' },
-    { id: 'ci', section: 'CI engines and workflow controls', state: 'Planned', detail: 'Repository eligibility, individual workflow pause, trigger trust and Actions/GitLab compatibility need an enforcing scheduler; no CI toggle is live.', task: 'P4 / G3' },
+    { id: 'ci', section: 'CI engines and workflow controls', state: 'Read only', detail: 'Inspect direct Actions/GitLab source and unsupported features at an immutable commit. Runners, triggers and execution are unavailable; eligibility, workflow pause and compatibility need an enforcing scheduler.', task: 'P4 / G3' },
     { id: 'runners', section: 'Runners and resource limits', state: 'Planned', detail: 'Choose approved groups and resources only after pools exist and organization ceilings can be enforced.', task: 'P4 / G3' },
     { id: 'secrets', section: 'Secrets, variables and OIDC', state: 'Planned', detail: 'Repository/environment credentials, metadata-only inventories and rotation need a broker; workflow text must not expand permission.', task: 'G3 / G5' },
     { id: 'deployments', section: 'Environments, previews and production', state: 'Planned', detail: 'Reviewers, branch restrictions, protected temporary links, exact artifact promotion and rollback need real CD and destination authority.', task: 'P6 / G5' },
@@ -70,12 +78,12 @@ const inventory: Record<SettingsScope, SettingEntry[]> = {
     { id: 'danger', section: 'Archive, transfer and deletion', state: 'Planned', detail: 'Destructive administration is not exposed yet; ownership recovery, confirmation, target binding and audit must precede these controls.', task: 'P1.5 / P2.3' },
   ],
   instance: [
-    { id: 'enrollment', section: 'Enrollment, identity and SSO', state: 'Read only', detail: 'Enrolled accounts are listed above. Enrollment, reset, disable and email changes remain operator-managed; browser lifecycle editors, external OIDC and enforced MFA are still planned.', task: 'P1.3' },
-    { id: 'health', section: 'System health and capabilities', state: 'Ready', detail: 'Inspect currently qualified capability states. Readiness reports dependencies; it is not an infrastructure configuration editor.', task: 'P1.1 / P1.2', to: '/', hash: 'capabilities' },
+    { id: 'enrollment', section: 'Enrollment, identity and SSO', state: 'Read only', detail: 'Enrolled local accounts have a dedicated administration inventory. Instance administrators can disable ordinary local password sign-in after password confirmation; enrollment, reset, re-enable, email changes, external OIDC and MFA remain operator-managed or planned.', task: 'P1.3' },
+    { id: 'health', section: 'System health and capabilities', state: 'Ready', detail: 'Inspect currently qualified capability states. Readiness reports dependencies; it is not an infrastructure configuration editor.', task: 'P1.1 / P1.2', to: '/status' },
     { id: 'infrastructure', section: 'Infrastructure and shared pools', state: 'Read only', detail: 'Compose/Helm and operator configuration provide the current portable deployment. Browser pool/storage/provider administration needs live adapters.', task: 'P1 / P4 / P6' },
     { id: 'policy', section: 'Policy ceilings and delegated administration', state: 'Planned', detail: 'Typed inheritance, organization/repository selection, locked limits and authorized roles need persisted policy and admission enforcement.', task: 'G2–G6' },
     { id: 'connections', section: 'Provider connections and email', state: 'Planned', detail: 'Cloudflare account/zone bindings, optional portable backends, import providers and email delivery require qualified credentials and adapters.', task: 'P2 / P6' },
-    { id: 'security', section: 'Credentials and compromise response', state: 'Read only', detail: 'Operator keyring/revocation commands exist. Browser lifecycle controls, unified native suspension and service identity policy remain unimplemented.', task: 'P1.3 / P1.8' },
+    { id: 'security', section: 'Credentials and compromise response', state: 'Read only', detail: 'Password-confirmed local disabling revokes Golf password sessions and dependent API credentials. Native Git keys and provider logins remain separate; unified suspension, service identities and keyring lifecycle editors are not implemented.', task: 'P1.3 / P1.8' },
     { id: 'recovery', section: 'Backup and recovery', state: 'Read only', detail: 'Canonical Docker offline recovery has bounded qualification through operator tooling. Browser recovery, Kubernetes cutovers and RPO/RTO qualification remain open.', task: 'P1.6' },
     { id: 'limits', section: 'Budgets, quotas and retention', state: 'Planned', detail: 'Shared resource ceilings, cost accounting and lifecycle retention need actual execution/storage measurements and auditable policy.', task: 'G3 / G6 / P8' },
   ],
@@ -94,5 +102,5 @@ export function SettingsInventory({ scope }: { scope: SettingsScope }) {
 export function ScopedSettings({ scope, name, userId }: { scope: 'organization' | 'instance'; name?: string; userId: string }) {
   const organization = useQuery({ ...privateQuery, queryKey: ['organization-settings', userId, name], enabled: scope === 'organization', queryFn: async ({ signal }) => { const response = await organizationClient.getOrganization({ organization: name || '' }, { signal, timeoutMs: 8_000 }); if (!response.organization?.id) throw new Error('Organization membership could not be confirmed.'); return response; } });
   const title = scope === 'instance' ? 'Instance settings' : 'Organization settings';
-  return <section aria-labelledby="scope-settings-title"><header className="repository-intro"><div><span className="eyebrow">{scope === 'instance' ? 'INSTALLATION ADMINISTRATION' : name || 'ORGANIZATION'}</span><h1 id="scope-settings-title"><ShieldCheck size={29} />{title}</h1><p>{scope === 'instance' ? 'Visible only to an explicitly enrolled Golf instance administrator. Operator-managed configuration is separate from native organization/repository roles; global browser editing is not implemented.' : 'Membership grants this read-only inventory, not organization administration. Owner/admin/member roles remain native observations; Golf organization editors are not implemented.'}</p></div></header>{scope === 'organization' && organization.error ? <PanelError error={organization.error} retry={() => void organization.refetch()} /> : scope === 'organization' && (!organization.isSuccess || organization.isFetching) ? <Loading label="Verifying organization membership…" /> : <SettingsInventory scope={scope} />}</section>;
+  return <section aria-labelledby="scope-settings-title"><header className="repository-intro"><div><span className="eyebrow">{scope === 'instance' ? 'INSTALLATION ADMINISTRATION' : name || 'ORGANIZATION'}</span><h1 id="scope-settings-title"><ShieldCheck size={29} />{title}</h1><p>{scope === 'instance' ? 'Visible only to an explicitly enrolled Golf instance administrator. Operator-managed configuration is separate from native organization/repository roles; global browser editing is not implemented.' : 'Membership grants this settings inventory. Native organization owners can manage existing account membership in ordinary teams; Owners teams, grant editors, invitations and delegated roles remain outside that editor. Golf instance administration does not override organization ownership.'}</p></div></header>{scope === 'organization' && organization.error ? <PanelError error={organization.error} retry={() => void organization.refetch()} /> : scope === 'organization' && (!organization.isSuccess || organization.isFetching) ? <Loading label="Verifying organization membership…" /> : <SettingsInventory scope={scope} />}</section>;
 }

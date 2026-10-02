@@ -43,6 +43,12 @@ func rpcError(err error) error {
 	var input inputError
 	var upstream forgeError
 	switch {
+	case errors.Is(err, errAdminAccountConflict):
+		code, message = connect.CodeFailedPrecondition, "The account state changed. Refresh and inspect it before continuing."
+	case errors.Is(err, errPasswordConfirmation):
+		code, message = connect.CodePermissionDenied, "Password confirmation failed. Check your Golf password and try again."
+	case errors.Is(err, errRepositoryAccessConflict):
+		code, message = connect.CodeFailedPrecondition, "Repository access changed. Refresh and review the current grants before continuing."
 	case errors.Is(err, errOrganizationAdminConflict):
 		code, message = connect.CodeFailedPrecondition, "Organization or team membership changed. Refresh before continuing."
 	case errors.Is(err, errRepositorySettingsConflict):

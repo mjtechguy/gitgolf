@@ -85,7 +85,7 @@ func organizationNextPage(headers http.Header, page uint32) (uint32, error) {
 }
 
 // No account/session lock is held across provider calls. Verify the immutable
-// session identity, then recheck local revocation/expiry after the last provider
+// session identity, then recheck native identity and local revocation/expiry after the last provider
 // wait before returning private membership data. OAuth refresh was resolved by
 // the RPC boundary; never recursively refresh here.
 func (s *Server) withForgeCaller(ctx context.Context, value string, credential forgeCredential, operation func(User) error) error {
@@ -121,6 +121,13 @@ func (s *Server) withForgeCaller(ctx context.Context, value string, credential f
 	}
 	if err := operation(user); err != nil {
 		return err
+	}
+	latest, err := s.currentUser(ctx, credential)
+	if err != nil {
+		return err
+	}
+	if latest.ID != user.ID {
+		return errUnauthenticated
 	}
 	return check()
 }

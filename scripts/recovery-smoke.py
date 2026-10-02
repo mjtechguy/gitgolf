@@ -284,7 +284,14 @@ def main():
             local_user = smoke.rpc(local_session, 'SessionService/LoginWithPassword',
                 {'username': local_names[0], 'password': local_passwords[0]})['user']
             assert local_user['isInstanceAdmin']
-            local_operator('disable', {'username': local_names[1]})
+            local_accounts_before = smoke.rpc(local_session, 'InstanceAdminService/ListLocalAccounts')['accounts']
+            disable_target = next(row for row in local_accounts_before if row['username'] == local_names[1])
+            disable_actor = next(row for row in local_accounts_before if row['username'] == local_names[0])
+            disable_actor_session = next(row for row in smoke.rpc(local_session, 'SessionService/ListSessions')['sessions'] if row.get('current'))
+            admin_disabled = smoke.rpc(local_session, 'InstanceAdminService/DisableLocalAccount', {
+                'accountId': disable_target['id'], 'expectedCredentialVersion': disable_target['credentialVersion'],
+                'passwordConfirmation': local_passwords[0]})
+            assert admin_disabled['account']['disabled'] and admin_disabled['operationId']
             extra = smoke.client(); sessions.append(extra)
             smoke.rpc(extra, 'SessionService/LoginWithGiteaToken', {'token': owner_token})
             owner_identity = smoke.rpc(owner, 'SessionService/GetSession')['user']
@@ -401,6 +408,12 @@ def main():
             local_accounts = json.loads(rows('golf_local_accounts'))
             local_events = json.loads(rows('golf_local_account_events'))
             assert len(local_accounts) == 2 and sum(row['disabled_at'] is not None for row in local_accounts) == 1
+            admin_disable_events = [row for row in local_events if row['action'] == 'ADMIN_DISABLED']
+            assert len(admin_disable_events) == 1
+            admin_disable_event = admin_disable_events[0]
+            assert admin_disable_event['operation_id'] == admin_disabled['operationId']
+            assert admin_disable_event['actor_user_id'] == int(disable_actor['golfUserId'])
+            assert admin_disable_event['actor_session_id'] == int(disable_actor_session['id'])
             counts = int(sql('SELECT count(*) FROM golf_sessions;')), int(sql('SELECT count(*) FROM golf_oauth_attempts;'))
             assert counts == (5, 1)
             check('live writers cannot be bypassed by the operator drain assertion')
@@ -510,6 +523,7 @@ def main():
                     key: value for key, value in previous.items() if key not in ('disabled_at', 'credential_version')}
             restored_local_events = json.loads(rows('golf_local_account_events'))
             assert restored_local_events[:len(local_events)] == local_events
+            assert next(row for row in restored_local_events if row['action'] == 'ADMIN_DISABLED') == admin_disable_event
             local_recovery_events = restored_local_events[len(local_events):]
             assert len(local_recovery_events) == 2 and all(row['action'] == 'RECOVERY_DISABLED' for row in local_recovery_events)
             assert {row['operation_id'] for row in local_recovery_events} == {event['operation_id']}

@@ -76,10 +76,12 @@ try {
   await page.getByLabel('Your account', { exact: true }).click();
   if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
   await page.screenshot({ path: `${artifacts}/native-workspace-dark.png`, fullPage: true });
-  await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Sessions', exact: true }).click();
+  await page.getByLabel('Your account', { exact: true }).click();
+  await page.getByRole('link', { name: 'User settings', exact: true }).click();
+  await page.getByRole('navigation', {name:'Account settings',exact:true}).getByRole('link', { name: 'Sessions', exact: true }).click();
   await page.getByRole('cell', { name: 'Golf password', exact: true }).waitFor();
   await page.keyboard.press('Escape');
-  await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Account activity', exact: true }).click();
+  await page.getByRole('navigation', {name:'Account settings',exact:true}).getByRole('link', { name: 'Account activity', exact: true }).click();
   await page.getByText('Golf password', { exact: true }).first().waitFor();
   stage('sign-out clears credential fields and private account state');
   await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out', exact: true }).click();
@@ -92,7 +94,9 @@ try {
   await page.getByLabel('Email or username', { exact: true }).fill(`${username.toUpperCase()}@EXAMPLE.INVALID`);
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Sessions', exact: true }).click();
+  await page.getByLabel('Your account', { exact: true }).click();
+  await page.getByRole('link', { name: 'User settings', exact: true }).click();
+  await page.getByRole('navigation', {name:'Account settings',exact:true}).getByRole('link', { name: 'Sessions', exact: true }).click();
   await page.getByRole('button', { name: 'Revoke current session', exact: true }).click();
   const revocation = page.waitForResponse((response) => response.url().endsWith('/golf.v1.SessionService/RevokeSession'));
   await page.getByRole('button', { name: 'Confirm revoke session', exact: true }).click();

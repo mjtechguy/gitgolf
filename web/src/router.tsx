@@ -21,6 +21,7 @@ const organizationsRoute = createRoute({
   path: '/organizations',
   component: () => <App location={{ kind: 'organizations' }} />,
 });
+const statusRoute = createRoute({ getParentRoute: () => rootRoute, path: '/status', component: () => <App location={{ kind: 'status' }} /> });
 const auditRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/audit',
@@ -48,6 +49,16 @@ const repositorySettingsRoute = createRoute({
   beforeLoad: ({ params }) => { if (!params.owner || !params.name || /[\/\\]/.test(params.owner + params.name)) throw notFound(); },
   component: RepositorySettingsPage,
 });
+const repositoryAccessSettingsRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/repositories/$owner/$name/settings/access',
+  beforeLoad: ({ params }) => { if (!params.owner || !params.name || /[\/\\]/.test(params.owner + params.name)) throw notFound(); },
+  component: () => { const { owner, name } = repositoryAccessSettingsRoute.useParams(); return <App location={{ kind: 'repository-access-settings', owner, name }} />; },
+});
+const repositoryWorkflowsRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/repositories/$owner/$name/settings/workflows',
+  beforeLoad: ({ params }) => { if (!params.owner || !params.name || /[\/\\]/.test(params.owner + params.name)) throw notFound(); },
+  component: () => { const { owner, name } = repositoryWorkflowsRoute.useParams(); return <App location={{ kind: 'repository-workflows', owner, name }} />; },
+});
 const organizationSettingsRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/organizations/$organization/settings',
   beforeLoad: ({ params }) => { if (!params.organization || /[\/\\]/.test(params.organization)) throw notFound(); },
@@ -58,6 +69,7 @@ const organizationTeamSettingsRoute = createRoute({
   beforeLoad: ({ params }) => { if (!params.organization || /[\/\\]/.test(params.organization) || !/^[1-9][0-9]{0,18}$/.test(params.teamId) || BigInt(params.teamId) > 9223372036854775807n) throw notFound(); },
   component: OrganizationTeamSettingsPage,
 });
+const instanceOverviewRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin', component: () => <App location={{ kind: 'instance-settings', view: 'overview' }} /> });
 const instanceSettingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/settings', component: () => <App location={{ kind: 'instance-settings' }} /> });
 const organizationRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -126,7 +138,7 @@ function OrganizationPage() {
 
 // Router owns navigation only. Private server data stays in the cancellable Query cache.
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([homeRoute, repositoryRoute, repositorySettingsRoute, organizationSettingsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, sessionsRoute]),
+  routeTree: rootRoute.addChildren([homeRoute, statusRoute, repositoryRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, organizationSettingsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, sessionsRoute]),
   defaultPreload: false,
   // Refs and paths are opaque strings, including names such as "1234" or "true".
   parseSearch: (search) => Object.fromEntries(new URLSearchParams(search)),

@@ -122,6 +122,8 @@ type GolfLocalAccountEvent struct {
 	Action            string
 	CredentialVersion int64
 	SessionsRevoked   int64
+	ActorUserID       sql.NullInt64
+	ActorSessionID    sql.NullInt64
 }
 
 type GolfLocalLoginLimit struct {

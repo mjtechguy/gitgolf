@@ -164,6 +164,7 @@ service OrganizationAdminService {
 // Explicitly enrolled Golf administrator reads. Native site administration is
 // not an instance-role grant. Credential material is never returned.
 service InstanceAdminService {
+  rpc DisableLocalAccount(DisableLocalAccountRequest) returns (DisableLocalAccountResponse);
   rpc ListLocalAccounts(ListLocalAccountsRequest) returns (ListLocalAccountsResponse);
 }
 
@@ -779,4 +780,123 @@ message ListLocalAccountsRequest { PageRequest page = 1; }
 message ListLocalAccountsResponse {
   repeated LocalAccountInfo accounts = 1;
   PageResponse page = 2;
+}
+
+// Direct personal-repository grants are distinct from effective native access.
+service RepositoryAccessService {
+  rpc GetRepositoryAccess(GetRepositoryAccessRequest) returns (GetRepositoryAccessResponse);
+  rpc ListRepositoryCollaborators(ListRepositoryCollaboratorsRequest) returns (ListRepositoryCollaboratorsResponse);
+  rpc ResolveRepositoryCollaborator(ResolveRepositoryCollaboratorRequest) returns (ResolveRepositoryCollaboratorResponse);
+  rpc SetRepositoryCollaborator(SetRepositoryCollaboratorRequest) returns (SetRepositoryCollaboratorResponse);
+  rpc RemoveRepositoryCollaborator(RemoveRepositoryCollaboratorRequest) returns (RemoveRepositoryCollaboratorResponse);
+}
+message RepositoryAccess {
+  string repository_id = 1;
+  string owner_id = 2;
+  User owner = 3;
+  bool organization_owned = 4;
+  bool can_manage = 5;
+  string revision = 6;
+  string current_permission = 7;
+}
+message RepositoryCollaborator {
+  User user = 1;
+  string permission = 2;
+  bool is_direct = 3;
+  string revision = 4;
+}
+message GetRepositoryAccessRequest { RepositoryKey repository = 1; }
+message GetRepositoryAccessResponse { RepositoryAccess access = 1; }
+message ListRepositoryCollaboratorsRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string expected_revision = 4;
+  PageRequest page = 5;
+}
+message ListRepositoryCollaboratorsResponse {
+  repeated RepositoryCollaborator collaborators = 1;
+  PageResponse page = 2;
+}
+message ResolveRepositoryCollaboratorRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string expected_revision = 4;
+  string user_login = 5;
+}
+message ResolveRepositoryCollaboratorResponse { RepositoryCollaborator collaborator = 1; }
+message SetRepositoryCollaboratorRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string expected_revision = 4;
+  string user_login = 5;
+  string user_id = 6;
+  string expected_collaborator_revision = 7;
+  string permission = 8;
+}
+message SetRepositoryCollaboratorResponse { RepositoryCollaborator collaborator = 1; }
+message RemoveRepositoryCollaboratorRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string expected_revision = 4;
+  string user_login = 5;
+  string user_id = 6;
+  string expected_collaborator_revision = 7;
+}
+message RemoveRepositoryCollaboratorResponse { RepositoryCollaborator collaborator = 1; }
+
+// Pinned, untrusted workflow-source inspection; this does not execute jobs.
+service WorkflowService {
+  rpc InspectWorkflows(InspectWorkflowsRequest) returns (InspectWorkflowsResponse);
+}
+enum WorkflowFormat {
+  WORKFLOW_FORMAT_UNSPECIFIED = 0;
+  WORKFLOW_FORMAT_GITHUB_ACTIONS = 1;
+  WORKFLOW_FORMAT_GITLAB_CI = 2;
+}
+enum WorkflowInspectionState {
+  WORKFLOW_INSPECTION_STATE_UNSPECIFIED = 0;
+  WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET = 1;
+  WORKFLOW_INSPECTION_STATE_UNSUPPORTED = 2;
+  WORKFLOW_INSPECTION_STATE_INVALID = 3;
+}
+message WorkflowDiagnostic {
+  string code = 1;
+  string message = 2;
+  uint32 line = 3;
+  uint32 column = 4;
+}
+message WorkflowJobSummary { string id = 1; string name = 2; string stage = 3; uint32 step_count = 4; }
+message WorkflowConfiguration {
+  string path = 1;
+  string blob_id = 2;
+  uint64 byte_size = 3;
+  WorkflowFormat format = 4;
+  WorkflowInspectionState state = 5;
+  string name = 6;
+  repeated WorkflowJobSummary jobs = 7;
+  repeated string events = 8;
+  repeated WorkflowDiagnostic diagnostics = 9;
+}
+message InspectWorkflowsRequest { RepositoryKey repository = 1; string ref = 2; }
+message InspectWorkflowsResponse {
+  string repository_id = 1;
+  string commit_id = 2;
+  string catalog_version = 3;
+  bool execution_available = 4;
+  repeated WorkflowConfiguration configurations = 5;
+  repeated WorkflowDiagnostic diagnostics = 6;
+}
+message DisableLocalAccountRequest {
+  string account_id = 1;
+  string expected_credential_version = 2;
+  string password_confirmation = 3;
+}
+message DisableLocalAccountResponse {
+  LocalAccountInfo account = 1;
+  uint64 sessions_revoked = 2;
+  string operation_id = 3;
 }

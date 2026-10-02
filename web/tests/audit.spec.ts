@@ -136,9 +136,11 @@ test('leaving the view cancels private reads; reopening and deep reload request 
   const state = await backend(page);
   await page.goto('/');
   expect(state.inputs).toEqual([]);
-  await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Account activity', exact: true }).click();
+  await page.getByLabel('Your account', { exact: true }).click();
+  await page.getByRole('link', { name: 'User settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Account settings', exact: true }).getByRole('link', { name: 'Account activity', exact: true }).click();
   await expect(page).toHaveURL(/\/audit$/);
-  await expect(page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Account activity', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('navigation', { name: 'Account settings', exact: true }).getByRole('link', { name: 'Account activity', exact: true })).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(2);
   let release!: () => void;
   state.barrier = new Promise<void>((resolve) => { release = resolve; });
@@ -210,8 +212,8 @@ test('activity details remain plain text, accessible by keyboard, and fit dark d
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.setViewportSize({ width: 320, height: 760 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Account activity', exact: true }).focus();
-  await expect(page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Account activity', exact: true })).toBeFocused();
+  await page.getByRole('navigation', { name: 'Account settings', exact: true }).getByRole('link', { name: 'Account activity', exact: true }).focus();
+  await expect(page.getByRole('navigation', { name: 'Account settings', exact: true }).getByRole('link', { name: 'Account activity', exact: true })).toBeFocused();
   expect(errors).toEqual([]);
 });
 

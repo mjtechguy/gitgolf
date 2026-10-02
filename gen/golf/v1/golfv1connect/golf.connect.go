@@ -42,6 +42,10 @@ const (
 	AuditServiceName = "golf.v1.AuditService"
 	// CapabilityServiceName is the fully-qualified name of the CapabilityService service.
 	CapabilityServiceName = "golf.v1.CapabilityService"
+	// RepositoryAccessServiceName is the fully-qualified name of the RepositoryAccessService service.
+	RepositoryAccessServiceName = "golf.v1.RepositoryAccessService"
+	// WorkflowServiceName is the fully-qualified name of the WorkflowService service.
+	WorkflowServiceName = "golf.v1.WorkflowService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -183,6 +187,9 @@ const (
 	// OrganizationAdminServiceRemoveTeamMemberProcedure is the fully-qualified name of the
 	// OrganizationAdminService's RemoveTeamMember RPC.
 	OrganizationAdminServiceRemoveTeamMemberProcedure = "/golf.v1.OrganizationAdminService/RemoveTeamMember"
+	// InstanceAdminServiceDisableLocalAccountProcedure is the fully-qualified name of the
+	// InstanceAdminService's DisableLocalAccount RPC.
+	InstanceAdminServiceDisableLocalAccountProcedure = "/golf.v1.InstanceAdminService/DisableLocalAccount"
 	// InstanceAdminServiceListLocalAccountsProcedure is the fully-qualified name of the
 	// InstanceAdminService's ListLocalAccounts RPC.
 	InstanceAdminServiceListLocalAccountsProcedure = "/golf.v1.InstanceAdminService/ListLocalAccounts"
@@ -192,6 +199,24 @@ const (
 	// CapabilityServiceListCapabilitiesProcedure is the fully-qualified name of the CapabilityService's
 	// ListCapabilities RPC.
 	CapabilityServiceListCapabilitiesProcedure = "/golf.v1.CapabilityService/ListCapabilities"
+	// RepositoryAccessServiceGetRepositoryAccessProcedure is the fully-qualified name of the
+	// RepositoryAccessService's GetRepositoryAccess RPC.
+	RepositoryAccessServiceGetRepositoryAccessProcedure = "/golf.v1.RepositoryAccessService/GetRepositoryAccess"
+	// RepositoryAccessServiceListRepositoryCollaboratorsProcedure is the fully-qualified name of the
+	// RepositoryAccessService's ListRepositoryCollaborators RPC.
+	RepositoryAccessServiceListRepositoryCollaboratorsProcedure = "/golf.v1.RepositoryAccessService/ListRepositoryCollaborators"
+	// RepositoryAccessServiceResolveRepositoryCollaboratorProcedure is the fully-qualified name of the
+	// RepositoryAccessService's ResolveRepositoryCollaborator RPC.
+	RepositoryAccessServiceResolveRepositoryCollaboratorProcedure = "/golf.v1.RepositoryAccessService/ResolveRepositoryCollaborator"
+	// RepositoryAccessServiceSetRepositoryCollaboratorProcedure is the fully-qualified name of the
+	// RepositoryAccessService's SetRepositoryCollaborator RPC.
+	RepositoryAccessServiceSetRepositoryCollaboratorProcedure = "/golf.v1.RepositoryAccessService/SetRepositoryCollaborator"
+	// RepositoryAccessServiceRemoveRepositoryCollaboratorProcedure is the fully-qualified name of the
+	// RepositoryAccessService's RemoveRepositoryCollaborator RPC.
+	RepositoryAccessServiceRemoveRepositoryCollaboratorProcedure = "/golf.v1.RepositoryAccessService/RemoveRepositoryCollaborator"
+	// WorkflowServiceInspectWorkflowsProcedure is the fully-qualified name of the WorkflowService's
+	// InspectWorkflows RPC.
+	WorkflowServiceInspectWorkflowsProcedure = "/golf.v1.WorkflowService/InspectWorkflows"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -1650,6 +1675,7 @@ func (UnimplementedOrganizationAdminServiceHandler) RemoveTeamMember(context.Con
 
 // InstanceAdminServiceClient is a client for the golf.v1.InstanceAdminService service.
 type InstanceAdminServiceClient interface {
+	DisableLocalAccount(context.Context, *connect.Request[v1.DisableLocalAccountRequest]) (*connect.Response[v1.DisableLocalAccountResponse], error)
 	ListLocalAccounts(context.Context, *connect.Request[v1.ListLocalAccountsRequest]) (*connect.Response[v1.ListLocalAccountsResponse], error)
 }
 
@@ -1664,6 +1690,12 @@ func NewInstanceAdminServiceClient(httpClient connect.HTTPClient, baseURL string
 	baseURL = strings.TrimRight(baseURL, "/")
 	instanceAdminServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("InstanceAdminService").Methods()
 	return &instanceAdminServiceClient{
+		disableLocalAccount: connect.NewClient[v1.DisableLocalAccountRequest, v1.DisableLocalAccountResponse](
+			httpClient,
+			baseURL+InstanceAdminServiceDisableLocalAccountProcedure,
+			connect.WithSchema(instanceAdminServiceMethods.ByName("DisableLocalAccount")),
+			connect.WithClientOptions(opts...),
+		),
 		listLocalAccounts: connect.NewClient[v1.ListLocalAccountsRequest, v1.ListLocalAccountsResponse](
 			httpClient,
 			baseURL+InstanceAdminServiceListLocalAccountsProcedure,
@@ -1675,7 +1707,13 @@ func NewInstanceAdminServiceClient(httpClient connect.HTTPClient, baseURL string
 
 // instanceAdminServiceClient implements InstanceAdminServiceClient.
 type instanceAdminServiceClient struct {
-	listLocalAccounts *connect.Client[v1.ListLocalAccountsRequest, v1.ListLocalAccountsResponse]
+	disableLocalAccount *connect.Client[v1.DisableLocalAccountRequest, v1.DisableLocalAccountResponse]
+	listLocalAccounts   *connect.Client[v1.ListLocalAccountsRequest, v1.ListLocalAccountsResponse]
+}
+
+// DisableLocalAccount calls golf.v1.InstanceAdminService.DisableLocalAccount.
+func (c *instanceAdminServiceClient) DisableLocalAccount(ctx context.Context, req *connect.Request[v1.DisableLocalAccountRequest]) (*connect.Response[v1.DisableLocalAccountResponse], error) {
+	return c.disableLocalAccount.CallUnary(ctx, req)
 }
 
 // ListLocalAccounts calls golf.v1.InstanceAdminService.ListLocalAccounts.
@@ -1685,6 +1723,7 @@ func (c *instanceAdminServiceClient) ListLocalAccounts(ctx context.Context, req 
 
 // InstanceAdminServiceHandler is an implementation of the golf.v1.InstanceAdminService service.
 type InstanceAdminServiceHandler interface {
+	DisableLocalAccount(context.Context, *connect.Request[v1.DisableLocalAccountRequest]) (*connect.Response[v1.DisableLocalAccountResponse], error)
 	ListLocalAccounts(context.Context, *connect.Request[v1.ListLocalAccountsRequest]) (*connect.Response[v1.ListLocalAccountsResponse], error)
 }
 
@@ -1695,6 +1734,12 @@ type InstanceAdminServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewInstanceAdminServiceHandler(svc InstanceAdminServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	instanceAdminServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("InstanceAdminService").Methods()
+	instanceAdminServiceDisableLocalAccountHandler := connect.NewUnaryHandler(
+		InstanceAdminServiceDisableLocalAccountProcedure,
+		svc.DisableLocalAccount,
+		connect.WithSchema(instanceAdminServiceMethods.ByName("DisableLocalAccount")),
+		connect.WithHandlerOptions(opts...),
+	)
 	instanceAdminServiceListLocalAccountsHandler := connect.NewUnaryHandler(
 		InstanceAdminServiceListLocalAccountsProcedure,
 		svc.ListLocalAccounts,
@@ -1703,6 +1748,8 @@ func NewInstanceAdminServiceHandler(svc InstanceAdminServiceHandler, opts ...con
 	)
 	return "/golf.v1.InstanceAdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case InstanceAdminServiceDisableLocalAccountProcedure:
+			instanceAdminServiceDisableLocalAccountHandler.ServeHTTP(w, r)
 		case InstanceAdminServiceListLocalAccountsProcedure:
 			instanceAdminServiceListLocalAccountsHandler.ServeHTTP(w, r)
 		default:
@@ -1713,6 +1760,10 @@ func NewInstanceAdminServiceHandler(svc InstanceAdminServiceHandler, opts ...con
 
 // UnimplementedInstanceAdminServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedInstanceAdminServiceHandler struct{}
+
+func (UnimplementedInstanceAdminServiceHandler) DisableLocalAccount(context.Context, *connect.Request[v1.DisableLocalAccountRequest]) (*connect.Response[v1.DisableLocalAccountResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InstanceAdminService.DisableLocalAccount is not implemented"))
+}
 
 func (UnimplementedInstanceAdminServiceHandler) ListLocalAccounts(context.Context, *connect.Request[v1.ListLocalAccountsRequest]) (*connect.Response[v1.ListLocalAccountsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InstanceAdminService.ListLocalAccounts is not implemented"))
@@ -1856,4 +1907,250 @@ type UnimplementedCapabilityServiceHandler struct{}
 
 func (UnimplementedCapabilityServiceHandler) ListCapabilities(context.Context, *connect.Request[v1.ListCapabilitiesRequest]) (*connect.Response[v1.ListCapabilitiesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.CapabilityService.ListCapabilities is not implemented"))
+}
+
+// RepositoryAccessServiceClient is a client for the golf.v1.RepositoryAccessService service.
+type RepositoryAccessServiceClient interface {
+	GetRepositoryAccess(context.Context, *connect.Request[v1.GetRepositoryAccessRequest]) (*connect.Response[v1.GetRepositoryAccessResponse], error)
+	ListRepositoryCollaborators(context.Context, *connect.Request[v1.ListRepositoryCollaboratorsRequest]) (*connect.Response[v1.ListRepositoryCollaboratorsResponse], error)
+	ResolveRepositoryCollaborator(context.Context, *connect.Request[v1.ResolveRepositoryCollaboratorRequest]) (*connect.Response[v1.ResolveRepositoryCollaboratorResponse], error)
+	SetRepositoryCollaborator(context.Context, *connect.Request[v1.SetRepositoryCollaboratorRequest]) (*connect.Response[v1.SetRepositoryCollaboratorResponse], error)
+	RemoveRepositoryCollaborator(context.Context, *connect.Request[v1.RemoveRepositoryCollaboratorRequest]) (*connect.Response[v1.RemoveRepositoryCollaboratorResponse], error)
+}
+
+// NewRepositoryAccessServiceClient constructs a client for the golf.v1.RepositoryAccessService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRepositoryAccessServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepositoryAccessServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	repositoryAccessServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryAccessService").Methods()
+	return &repositoryAccessServiceClient{
+		getRepositoryAccess: connect.NewClient[v1.GetRepositoryAccessRequest, v1.GetRepositoryAccessResponse](
+			httpClient,
+			baseURL+RepositoryAccessServiceGetRepositoryAccessProcedure,
+			connect.WithSchema(repositoryAccessServiceMethods.ByName("GetRepositoryAccess")),
+			connect.WithClientOptions(opts...),
+		),
+		listRepositoryCollaborators: connect.NewClient[v1.ListRepositoryCollaboratorsRequest, v1.ListRepositoryCollaboratorsResponse](
+			httpClient,
+			baseURL+RepositoryAccessServiceListRepositoryCollaboratorsProcedure,
+			connect.WithSchema(repositoryAccessServiceMethods.ByName("ListRepositoryCollaborators")),
+			connect.WithClientOptions(opts...),
+		),
+		resolveRepositoryCollaborator: connect.NewClient[v1.ResolveRepositoryCollaboratorRequest, v1.ResolveRepositoryCollaboratorResponse](
+			httpClient,
+			baseURL+RepositoryAccessServiceResolveRepositoryCollaboratorProcedure,
+			connect.WithSchema(repositoryAccessServiceMethods.ByName("ResolveRepositoryCollaborator")),
+			connect.WithClientOptions(opts...),
+		),
+		setRepositoryCollaborator: connect.NewClient[v1.SetRepositoryCollaboratorRequest, v1.SetRepositoryCollaboratorResponse](
+			httpClient,
+			baseURL+RepositoryAccessServiceSetRepositoryCollaboratorProcedure,
+			connect.WithSchema(repositoryAccessServiceMethods.ByName("SetRepositoryCollaborator")),
+			connect.WithClientOptions(opts...),
+		),
+		removeRepositoryCollaborator: connect.NewClient[v1.RemoveRepositoryCollaboratorRequest, v1.RemoveRepositoryCollaboratorResponse](
+			httpClient,
+			baseURL+RepositoryAccessServiceRemoveRepositoryCollaboratorProcedure,
+			connect.WithSchema(repositoryAccessServiceMethods.ByName("RemoveRepositoryCollaborator")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// repositoryAccessServiceClient implements RepositoryAccessServiceClient.
+type repositoryAccessServiceClient struct {
+	getRepositoryAccess           *connect.Client[v1.GetRepositoryAccessRequest, v1.GetRepositoryAccessResponse]
+	listRepositoryCollaborators   *connect.Client[v1.ListRepositoryCollaboratorsRequest, v1.ListRepositoryCollaboratorsResponse]
+	resolveRepositoryCollaborator *connect.Client[v1.ResolveRepositoryCollaboratorRequest, v1.ResolveRepositoryCollaboratorResponse]
+	setRepositoryCollaborator     *connect.Client[v1.SetRepositoryCollaboratorRequest, v1.SetRepositoryCollaboratorResponse]
+	removeRepositoryCollaborator  *connect.Client[v1.RemoveRepositoryCollaboratorRequest, v1.RemoveRepositoryCollaboratorResponse]
+}
+
+// GetRepositoryAccess calls golf.v1.RepositoryAccessService.GetRepositoryAccess.
+func (c *repositoryAccessServiceClient) GetRepositoryAccess(ctx context.Context, req *connect.Request[v1.GetRepositoryAccessRequest]) (*connect.Response[v1.GetRepositoryAccessResponse], error) {
+	return c.getRepositoryAccess.CallUnary(ctx, req)
+}
+
+// ListRepositoryCollaborators calls golf.v1.RepositoryAccessService.ListRepositoryCollaborators.
+func (c *repositoryAccessServiceClient) ListRepositoryCollaborators(ctx context.Context, req *connect.Request[v1.ListRepositoryCollaboratorsRequest]) (*connect.Response[v1.ListRepositoryCollaboratorsResponse], error) {
+	return c.listRepositoryCollaborators.CallUnary(ctx, req)
+}
+
+// ResolveRepositoryCollaborator calls
+// golf.v1.RepositoryAccessService.ResolveRepositoryCollaborator.
+func (c *repositoryAccessServiceClient) ResolveRepositoryCollaborator(ctx context.Context, req *connect.Request[v1.ResolveRepositoryCollaboratorRequest]) (*connect.Response[v1.ResolveRepositoryCollaboratorResponse], error) {
+	return c.resolveRepositoryCollaborator.CallUnary(ctx, req)
+}
+
+// SetRepositoryCollaborator calls golf.v1.RepositoryAccessService.SetRepositoryCollaborator.
+func (c *repositoryAccessServiceClient) SetRepositoryCollaborator(ctx context.Context, req *connect.Request[v1.SetRepositoryCollaboratorRequest]) (*connect.Response[v1.SetRepositoryCollaboratorResponse], error) {
+	return c.setRepositoryCollaborator.CallUnary(ctx, req)
+}
+
+// RemoveRepositoryCollaborator calls golf.v1.RepositoryAccessService.RemoveRepositoryCollaborator.
+func (c *repositoryAccessServiceClient) RemoveRepositoryCollaborator(ctx context.Context, req *connect.Request[v1.RemoveRepositoryCollaboratorRequest]) (*connect.Response[v1.RemoveRepositoryCollaboratorResponse], error) {
+	return c.removeRepositoryCollaborator.CallUnary(ctx, req)
+}
+
+// RepositoryAccessServiceHandler is an implementation of the golf.v1.RepositoryAccessService
+// service.
+type RepositoryAccessServiceHandler interface {
+	GetRepositoryAccess(context.Context, *connect.Request[v1.GetRepositoryAccessRequest]) (*connect.Response[v1.GetRepositoryAccessResponse], error)
+	ListRepositoryCollaborators(context.Context, *connect.Request[v1.ListRepositoryCollaboratorsRequest]) (*connect.Response[v1.ListRepositoryCollaboratorsResponse], error)
+	ResolveRepositoryCollaborator(context.Context, *connect.Request[v1.ResolveRepositoryCollaboratorRequest]) (*connect.Response[v1.ResolveRepositoryCollaboratorResponse], error)
+	SetRepositoryCollaborator(context.Context, *connect.Request[v1.SetRepositoryCollaboratorRequest]) (*connect.Response[v1.SetRepositoryCollaboratorResponse], error)
+	RemoveRepositoryCollaborator(context.Context, *connect.Request[v1.RemoveRepositoryCollaboratorRequest]) (*connect.Response[v1.RemoveRepositoryCollaboratorResponse], error)
+}
+
+// NewRepositoryAccessServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRepositoryAccessServiceHandler(svc RepositoryAccessServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	repositoryAccessServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryAccessService").Methods()
+	repositoryAccessServiceGetRepositoryAccessHandler := connect.NewUnaryHandler(
+		RepositoryAccessServiceGetRepositoryAccessProcedure,
+		svc.GetRepositoryAccess,
+		connect.WithSchema(repositoryAccessServiceMethods.ByName("GetRepositoryAccess")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryAccessServiceListRepositoryCollaboratorsHandler := connect.NewUnaryHandler(
+		RepositoryAccessServiceListRepositoryCollaboratorsProcedure,
+		svc.ListRepositoryCollaborators,
+		connect.WithSchema(repositoryAccessServiceMethods.ByName("ListRepositoryCollaborators")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryAccessServiceResolveRepositoryCollaboratorHandler := connect.NewUnaryHandler(
+		RepositoryAccessServiceResolveRepositoryCollaboratorProcedure,
+		svc.ResolveRepositoryCollaborator,
+		connect.WithSchema(repositoryAccessServiceMethods.ByName("ResolveRepositoryCollaborator")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryAccessServiceSetRepositoryCollaboratorHandler := connect.NewUnaryHandler(
+		RepositoryAccessServiceSetRepositoryCollaboratorProcedure,
+		svc.SetRepositoryCollaborator,
+		connect.WithSchema(repositoryAccessServiceMethods.ByName("SetRepositoryCollaborator")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryAccessServiceRemoveRepositoryCollaboratorHandler := connect.NewUnaryHandler(
+		RepositoryAccessServiceRemoveRepositoryCollaboratorProcedure,
+		svc.RemoveRepositoryCollaborator,
+		connect.WithSchema(repositoryAccessServiceMethods.ByName("RemoveRepositoryCollaborator")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RepositoryAccessService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RepositoryAccessServiceGetRepositoryAccessProcedure:
+			repositoryAccessServiceGetRepositoryAccessHandler.ServeHTTP(w, r)
+		case RepositoryAccessServiceListRepositoryCollaboratorsProcedure:
+			repositoryAccessServiceListRepositoryCollaboratorsHandler.ServeHTTP(w, r)
+		case RepositoryAccessServiceResolveRepositoryCollaboratorProcedure:
+			repositoryAccessServiceResolveRepositoryCollaboratorHandler.ServeHTTP(w, r)
+		case RepositoryAccessServiceSetRepositoryCollaboratorProcedure:
+			repositoryAccessServiceSetRepositoryCollaboratorHandler.ServeHTTP(w, r)
+		case RepositoryAccessServiceRemoveRepositoryCollaboratorProcedure:
+			repositoryAccessServiceRemoveRepositoryCollaboratorHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRepositoryAccessServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRepositoryAccessServiceHandler struct{}
+
+func (UnimplementedRepositoryAccessServiceHandler) GetRepositoryAccess(context.Context, *connect.Request[v1.GetRepositoryAccessRequest]) (*connect.Response[v1.GetRepositoryAccessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryAccessService.GetRepositoryAccess is not implemented"))
+}
+
+func (UnimplementedRepositoryAccessServiceHandler) ListRepositoryCollaborators(context.Context, *connect.Request[v1.ListRepositoryCollaboratorsRequest]) (*connect.Response[v1.ListRepositoryCollaboratorsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryAccessService.ListRepositoryCollaborators is not implemented"))
+}
+
+func (UnimplementedRepositoryAccessServiceHandler) ResolveRepositoryCollaborator(context.Context, *connect.Request[v1.ResolveRepositoryCollaboratorRequest]) (*connect.Response[v1.ResolveRepositoryCollaboratorResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryAccessService.ResolveRepositoryCollaborator is not implemented"))
+}
+
+func (UnimplementedRepositoryAccessServiceHandler) SetRepositoryCollaborator(context.Context, *connect.Request[v1.SetRepositoryCollaboratorRequest]) (*connect.Response[v1.SetRepositoryCollaboratorResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryAccessService.SetRepositoryCollaborator is not implemented"))
+}
+
+func (UnimplementedRepositoryAccessServiceHandler) RemoveRepositoryCollaborator(context.Context, *connect.Request[v1.RemoveRepositoryCollaboratorRequest]) (*connect.Response[v1.RemoveRepositoryCollaboratorResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryAccessService.RemoveRepositoryCollaborator is not implemented"))
+}
+
+// WorkflowServiceClient is a client for the golf.v1.WorkflowService service.
+type WorkflowServiceClient interface {
+	InspectWorkflows(context.Context, *connect.Request[v1.InspectWorkflowsRequest]) (*connect.Response[v1.InspectWorkflowsResponse], error)
+}
+
+// NewWorkflowServiceClient constructs a client for the golf.v1.WorkflowService service. By default,
+// it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and
+// sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC()
+// or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewWorkflowServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) WorkflowServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	workflowServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("WorkflowService").Methods()
+	return &workflowServiceClient{
+		inspectWorkflows: connect.NewClient[v1.InspectWorkflowsRequest, v1.InspectWorkflowsResponse](
+			httpClient,
+			baseURL+WorkflowServiceInspectWorkflowsProcedure,
+			connect.WithSchema(workflowServiceMethods.ByName("InspectWorkflows")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// workflowServiceClient implements WorkflowServiceClient.
+type workflowServiceClient struct {
+	inspectWorkflows *connect.Client[v1.InspectWorkflowsRequest, v1.InspectWorkflowsResponse]
+}
+
+// InspectWorkflows calls golf.v1.WorkflowService.InspectWorkflows.
+func (c *workflowServiceClient) InspectWorkflows(ctx context.Context, req *connect.Request[v1.InspectWorkflowsRequest]) (*connect.Response[v1.InspectWorkflowsResponse], error) {
+	return c.inspectWorkflows.CallUnary(ctx, req)
+}
+
+// WorkflowServiceHandler is an implementation of the golf.v1.WorkflowService service.
+type WorkflowServiceHandler interface {
+	InspectWorkflows(context.Context, *connect.Request[v1.InspectWorkflowsRequest]) (*connect.Response[v1.InspectWorkflowsResponse], error)
+}
+
+// NewWorkflowServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewWorkflowServiceHandler(svc WorkflowServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	workflowServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("WorkflowService").Methods()
+	workflowServiceInspectWorkflowsHandler := connect.NewUnaryHandler(
+		WorkflowServiceInspectWorkflowsProcedure,
+		svc.InspectWorkflows,
+		connect.WithSchema(workflowServiceMethods.ByName("InspectWorkflows")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.WorkflowService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case WorkflowServiceInspectWorkflowsProcedure:
+			workflowServiceInspectWorkflowsHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedWorkflowServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedWorkflowServiceHandler struct{}
+
+func (UnimplementedWorkflowServiceHandler) InspectWorkflows(context.Context, *connect.Request[v1.InspectWorkflowsRequest]) (*connect.Response[v1.InspectWorkflowsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.WorkflowService.InspectWorkflows is not implemented"))
 }

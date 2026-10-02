@@ -1,0 +1,508 @@
+package server
+
+import (
+	"context"
+	"crypto/sha1"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"errors"
+	"io"
+	"net/http"
+	"net/url"
+	"path"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"unicode"
+	"unicode/utf8"
+
+	"connectrpc.com/connect"
+	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
+	"go.yaml.in/yaml/v3"
+)
+
+const workflowCatalog = "golf.workflow.inspect.v1"
+const maxWorkflowBytes = 64 << 10
+const maxWorkflowTotalBytes = 512 << 10
+const maxWorkflowFiles = 20
+const maxWorkflowDiagnostics = 32
+
+var workflowJobID = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]{0,254}$`)
+var workflowImage = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9./:_-]*@sha256:[a-f0-9]{64}$`)
+
+func workflowDiagnostic(code, message string, node *yaml.Node) *golfv1.WorkflowDiagnostic {
+	result := &golfv1.WorkflowDiagnostic{Code: code, Message: message}
+	if node != nil {
+		result.Line, result.Column = uint32(node.Line), uint32(node.Column)
+	}
+	return result
+}
+
+type workflowInspector struct{ config *golfv1.WorkflowConfiguration }
+
+func (v workflowInspector) reject(state golfv1.WorkflowInspectionState, code, message string, node *yaml.Node) {
+	if v.config.State != golfv1.WorkflowInspectionState_WORKFLOW_INSPECTION_STATE_INVALID {
+		v.config.State = state
+	}
+	if len(v.config.Diagnostics) < maxWorkflowDiagnostics {
+		v.config.Diagnostics = append(v.config.Diagnostics, workflowDiagnostic(code, message, node))
+	} else {
+		v.config.Diagnostics[maxWorkflowDiagnostics-1] = workflowDiagnostic("diagnostic_limit", "Additional findings are omitted after the 32-diagnostic limit; this configuration is not accepted by the inspection subset.", nil)
+	}
+}
+func (v workflowInspector) invalid(code, message string, node *yaml.Node) {
+	v.reject(golfv1.WorkflowInspectionState_WORKFLOW_INSPECTION_STATE_INVALID, code, message, node)
+}
+func (v workflowInspector) unsupported(code, message string, node *yaml.Node) {
+	v.reject(golfv1.WorkflowInspectionState_WORKFLOW_INSPECTION_STATE_UNSUPPORTED, code, message, node)
+}
+func workflowString(node *yaml.Node) bool {
+	return node != nil && node.Kind == yaml.ScalarNode && node.Tag == "!!str" && strings.TrimSpace(node.Value) != ""
+}
+func workflowField(node *yaml.Node, name string) *yaml.Node {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i < len(node.Content); i += 2 {
+		if node.Content[i].Value == name {
+			return node.Content[i+1]
+		}
+	}
+	return nil
+}
+func (v workflowInspector) fields(node *yaml.Node, allowed ...string) {
+	for i := 0; i < len(node.Content); i += 2 {
+		key := node.Content[i]
+		found := false
+		for _, name := range allowed {
+			found = found || key.Value == name
+		}
+		if !found {
+			v.unsupported("unsupported_key", "This field is outside the inspection subset; its semantics are not evaluated.", key)
+		}
+	}
+}
+func (v workflowInspector) label(node *yaml.Node) string {
+	if node == nil {
+		return ""
+	}
+	if !workflowString(node) || len(node.Value) > 255 {
+		v.unsupported("metadata_shape", "Inspection metadata requires a nonempty string of at most 255 UTF-8 bytes.", node)
+		return ""
+	}
+	return node.Value
+}
+
+// Node decoding preserves locations and never expands aliases into Go values.
+// The input is already byte-bounded; traversal adds explicit node/depth limits.
+func (v workflowInspector) safeYAML(node *yaml.Node, depth int, count *int) bool {
+	*count++
+	if depth > 32 || *count > 4096 {
+		v.invalid("yaml_complexity", "YAML exceeds the depth-32 or 4096-node inspection limit.", node)
+		return false
+	}
+	if node.Kind == yaml.AliasNode || node.Anchor != "" || node.Style&yaml.TaggedStyle != 0 || node.Tag == "!!merge" {
+		v.unsupported("yaml_indirection", "YAML anchors, aliases, merge keys and explicit tags are not supported; nothing is expanded or fetched.", node)
+		return false
+	}
+	if strings.IndexFunc(node.Value, func(r rune) bool { return unicode.IsControl(r) && r != '\n' && r != '\r' && r != '\t' }) != -1 {
+		v.invalid("decoded_control", "Decoded YAML values contain unsupported control characters.", node)
+		return false
+	}
+	if strings.Contains(node.Value, "${{") {
+		v.unsupported("expression", "Expressions are not evaluated by this inspection subset.", node)
+	}
+	if node.Kind == yaml.MappingNode {
+		seen := map[string]bool{}
+		for i := 0; i < len(node.Content); i += 2 {
+			key := node.Content[i]
+			if !workflowString(key) {
+				v.invalid("mapping_key", "Configuration mapping keys must be nonempty strings.", key)
+				return false
+			}
+			if seen[key.Value] {
+				v.invalid("duplicate_key", "Duplicate YAML mapping keys are not accepted.", key)
+				return false
+			}
+			seen[key.Value] = true
+		}
+	}
+	for _, child := range node.Content {
+		if !v.safeYAML(child, depth+1, count) {
+			return false
+		}
+	}
+	return true
+}
+
+func inspectWorkflow(config *golfv1.WorkflowConfiguration, data []byte) {
+	config.State = golfv1.WorkflowInspectionState_WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET
+	v := workflowInspector{config}
+	if len(data) > maxWorkflowBytes || !utf8.Valid(data) || strings.IndexFunc(string(data), func(r rune) bool { return unicode.IsControl(r) && r != '\n' && r != '\r' && r != '\t' }) != -1 {
+		v.invalid("text_encoding", "Configuration must be UTF-8 text without unsupported controls and at most 64 KiB.", nil)
+		return
+	}
+	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+	var document, extra yaml.Node
+	if err := decoder.Decode(&document); err != nil || len(document.Content) != 1 {
+		v.invalid("yaml_syntax", "Configuration must contain one nonempty YAML document; parsing failed.", nil)
+		return
+	}
+	if err := decoder.Decode(&extra); err != io.EOF {
+		v.invalid("yaml_documents", "Only one YAML document is accepted.", nil)
+		return
+	}
+	count := 0
+	if !v.safeYAML(&document, 0, &count) {
+		return
+	}
+	root := document.Content[0]
+	if root.Kind != yaml.MappingNode || len(root.Content) == 0 {
+		v.invalid("root_mapping", "Workflow configuration must be a nonempty mapping.", root)
+		return
+	}
+	if config.Format == golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITHUB_ACTIONS {
+		v.actions(root)
+	} else {
+		v.gitlab(root)
+	}
+}
+
+func (v workflowInspector) actions(root *yaml.Node) {
+	v.fields(root, "name", "on", "jobs")
+	v.config.Name = v.label(workflowField(root, "name"))
+	on := workflowField(root, "on")
+	switch {
+	case workflowString(on):
+		v.config.Events = []string{v.label(on)}
+		if on.Value != "workflow_dispatch" {
+			v.unsupported("event", "Only input-free workflow_dispatch is checked by this inspection subset; no trigger is active.", on)
+		}
+	case on != nil && on.Kind == yaml.MappingNode && len(on.Content) > 0:
+		if len(on.Content) > 100 {
+			v.invalid("event_limit", "Configuration exceeds the 50-event inspection limit.", on)
+		}
+		for i := 0; i < len(on.Content) && i < 100; i += 2 {
+			key, value := on.Content[i], on.Content[i+1]
+			v.config.Events = append(v.config.Events, v.label(key))
+			if key.Value != "workflow_dispatch" || !(value.Tag == "!!null" || value.Kind == yaml.MappingNode && len(value.Content) == 0) {
+				v.unsupported("event", "Only input-free workflow_dispatch is checked; event filters, inputs and other triggers are not evaluated.", key)
+			}
+		}
+	case on != nil && on.Kind == yaml.SequenceNode:
+		if len(on.Content) > 50 {
+			v.invalid("event_limit", "Configuration exceeds the 50-event inspection limit.", on)
+		}
+		for i, value := range on.Content {
+			if i >= 50 {
+				break
+			}
+			v.config.Events = append(v.config.Events, v.label(value))
+		}
+		v.unsupported("event", "Event lists are outside the input-free workflow_dispatch inspection shape; no trigger is active.", on)
+	default:
+		v.invalid("event_shape", "An Actions workflow requires a valid on declaration.", on)
+	}
+	jobs := workflowField(root, "jobs")
+	if jobs == nil || jobs.Kind != yaml.MappingNode || len(jobs.Content) == 0 {
+		v.invalid("jobs_shape", "An Actions workflow requires a nonempty jobs mapping.", jobs)
+		return
+	}
+	if len(jobs.Content) > 100 {
+		v.invalid("job_limit", "Configuration exceeds the 50-job inspection limit.", jobs)
+		return
+	}
+	if len(jobs.Content) != 2 {
+		v.unsupported("job_graph", "Only one job is checked; dependencies, parallelism and graph scheduling remain unavailable.", jobs)
+	}
+	for i := 0; i < len(jobs.Content); i += 2 {
+		key, job := jobs.Content[i], jobs.Content[i+1]
+		if !workflowJobID.MatchString(key.Value) || job.Kind != yaml.MappingNode {
+			v.invalid("job_shape", "An Actions job needs a valid job ID and mapping.", key)
+			continue
+		}
+		summary := &golfv1.WorkflowJobSummary{Id: key.Value, Name: v.label(workflowField(job, "name"))}
+		v.config.Jobs = append(v.config.Jobs, summary)
+		v.fields(job, "name", "runs-on", "steps")
+		if workflowField(job, "uses") != nil {
+			v.unsupported("reusable_workflow", "Reusable workflows are not resolved or executed.", job)
+			continue
+		}
+		if !workflowString(workflowField(job, "runs-on")) {
+			v.unsupported("runner_shape", "Inspection requires a literal runs-on label; no runner or hosted image equivalence is provided.", job)
+		}
+		steps := workflowField(job, "steps")
+		if steps == nil || steps.Kind != yaml.SequenceNode || len(steps.Content) == 0 {
+			v.invalid("steps_shape", "A shell job requires a nonempty steps sequence.", steps)
+			continue
+		}
+		summary.StepCount = uint32(len(steps.Content))
+		for _, step := range steps.Content {
+			if step.Kind != yaml.MappingNode {
+				v.invalid("step_shape", "Each Actions step must be a mapping.", step)
+				continue
+			}
+			v.fields(step, "name", "run", "shell")
+			if workflowField(step, "uses") != nil {
+				v.unsupported("action_dependency", "Action dependencies are not fetched, inspected or executed.", step)
+				continue
+			}
+			if !workflowString(workflowField(step, "run")) {
+				v.invalid("run_shape", "A shell step requires a nonempty run string.", step)
+			}
+			v.label(workflowField(step, "name"))
+			if shell := workflowField(step, "shell"); shell != nil && (!workflowString(shell) || shell.Value != "sh" && shell.Value != "bash") {
+				v.unsupported("shell", "Only literal sh or bash shell names are checked; execution remains unavailable.", shell)
+			}
+		}
+	}
+}
+
+func (v workflowInspector) gitlab(root *yaml.Node) {
+	stages := []string{"test"}
+	if node := workflowField(root, "stages"); node != nil {
+		stages = nil
+		if node.Kind != yaml.SequenceNode || len(node.Content) == 0 {
+			v.invalid("stages_shape", "GitLab stages must be a nonempty sequence of names.", node)
+		} else {
+			for _, stage := range node.Content {
+				stages = append(stages, v.label(stage))
+			}
+			if len(stages) != 1 {
+				v.unsupported("stages", "Only one stage is checked; stage scheduling is unavailable.", node)
+			}
+		}
+	}
+	for i := 0; i < len(root.Content); i += 2 {
+		key, job := root.Content[i], root.Content[i+1]
+		if key.Value == "stages" {
+			continue
+		}
+		switch key.Value {
+		case "include", "default", "variables", "workflow", "spec", "image", "services", "before_script", "after_script", "cache", "types":
+			v.unsupported("gitlab_global", "Global defaults, variables, includes, rules and inherited configuration are not resolved or evaluated.", key)
+			continue
+		}
+		if strings.HasPrefix(key.Value, ".") {
+			v.unsupported("hidden_job", "Hidden/template jobs and inheritance are not expanded.", key)
+			continue
+		}
+		if job.Kind != yaml.MappingNode || len(key.Value) > 255 {
+			v.invalid("job_shape", "A GitLab job needs a name of at most 255 bytes and a mapping.", key)
+			continue
+		}
+		if len(v.config.Jobs) == 50 {
+			v.invalid("job_limit", "Configuration exceeds the 50-job inspection limit.", key)
+			break
+		}
+		summary := &golfv1.WorkflowJobSummary{Id: key.Value, Name: key.Value, Stage: "test"}
+		if stage := workflowField(job, "stage"); stage != nil {
+			summary.Stage = v.label(stage)
+		}
+		v.config.Jobs = append(v.config.Jobs, summary)
+		v.fields(job, "stage", "image", "script")
+		found := false
+		for _, stage := range stages {
+			found = found || stage == summary.Stage
+		}
+		if !found {
+			v.unsupported("stage_reference", "This job's stage is outside the declared single-stage inspection shape.", job)
+		}
+		image := workflowField(job, "image")
+		if !workflowString(image) || !workflowImage.MatchString(image.Value) {
+			v.unsupported("image_pin", "Inspection requires a literal image with a lowercase sha256 digest; no image is pulled or approved.", image)
+		}
+		script := workflowField(job, "script")
+		switch {
+		case workflowString(script):
+			summary.StepCount = 1
+		case script != nil && script.Kind == yaml.SequenceNode && len(script.Content) > 0:
+			summary.StepCount = uint32(len(script.Content))
+			for _, command := range script.Content {
+				if !workflowString(command) {
+					v.unsupported("script_shape", "Only a string or a flat nonempty list of script strings is checked.", command)
+				}
+			}
+		default:
+			if workflowField(job, "trigger") != nil || workflowField(job, "extends") != nil || workflowField(root, "include") != nil {
+				v.unsupported("indirect_script", "Trigger, included and inherited scripts are not resolved.", job)
+			} else {
+				v.invalid("script_shape", "A GitLab shell job requires a nonempty script string or sequence.", job)
+			}
+		}
+	}
+	if len(v.config.Jobs) != 1 {
+		v.unsupported("job_graph", "Only one visible job is checked; jobs are not expanded from includes or templates.", root)
+	}
+}
+
+// Metadata first, at an already resolved immutable commit. Never follows a
+// symlink, submodule, LFS target, include, action URL or provider metadata URL.
+func (s *Server) workflowContents(ctx context.Context, token forgeCredential, base, commit, requestedPath string, content bool) (contentsEnvelope, error) {
+	query := url.Values{"ref": {commit}, "includes": {"lfs_metadata"}}
+	if content {
+		query.Set("includes", "file_content,lfs_metadata")
+	}
+	var result contentsEnvelope
+	_, err := s.forge(ctx, http.MethodGet, base+"/contents-ext/"+escapedSourcePath(requestedPath)+"?"+query.Encode(), token, nil, &result)
+	if err != nil {
+		return result, err
+	}
+	if result.File != nil {
+		if !validEntry(result.File.sourceEntry) || result.File.Path != requestedPath || result.File.Type == "dir" || result.Directory != nil {
+			return result, errInvalidForgeResponse
+		}
+	} else {
+		if result.Directory == nil {
+			return result, errInvalidForgeResponse
+		}
+		if len(result.Directory) > maxDirectoryEntries {
+			return result, errForgeResponseTooLarge
+		}
+		seen := map[string]bool{}
+		for _, item := range result.Directory {
+			if !validEntry(item.sourceEntry) || path.Dir(item.Path) != requestedPath || seen[item.Path] {
+				return result, errInvalidForgeResponse
+			}
+			seen[item.Path] = true
+		}
+	}
+	return result, nil
+}
+
+func workflowMissing(err error) bool {
+	var upstream forgeError
+	return errors.As(err, &upstream) && upstream.status == http.StatusNotFound
+}
+
+func workflowBlobMatches(data []byte, expected string) bool {
+	object := append([]byte("blob "+strconv.Itoa(len(data))+"\x00"), data...)
+	if len(expected) == 40 {
+		digest := sha1.Sum(object)
+		return hex.EncodeToString(digest[:]) == expected
+	}
+	digest := sha256.Sum256(object)
+	return len(expected) == 64 && hex.EncodeToString(digest[:]) == expected
+}
+
+func (s *Server) InspectWorkflows(ctx context.Context, req *connect.Request[golfv1.InspectWorkflowsRequest]) (*connect.Response[golfv1.InspectWorkflowsResponse], error) {
+	token, err := rpcToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, delegated := ctx.Value(apiAuthKey{}).(apiAuth); delegated {
+		return nil, rpcError(errApiCredentialReadOnly)
+	}
+	if !validRef(req.Msg.Ref) {
+		return nil, rpcError(invalid("Select a branch, tag or full commit ID, not a revision expression."))
+	}
+	result := &golfv1.InspectWorkflowsResponse{CatalogVersion: workflowCatalog, ExecutionAvailable: false}
+	err = s.withRepositoryRead(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), func(base string, repo Repository) error {
+		if repo.Empty {
+			return errEmptyRepository
+		}
+		commits, _, err := s.readCommits(ctx, base, token, req.Msg.Ref, 1, 1)
+		if err != nil {
+			return err
+		}
+		if len(commits) != 1 || objectID.MatchString(req.Msg.Ref) && commits[0].SHA != req.Msg.Ref {
+			return errInvalidForgeResponse
+		}
+		result.RepositoryId, result.CommitId = strconv.FormatInt(repo.ID, 10), commits[0].SHA
+		var candidates []forgeContents
+		github, err := s.workflowContents(ctx, token, base, result.CommitId, ".github", false)
+		if err != nil && !workflowMissing(err) {
+			return err
+		}
+		if err == nil && github.File != nil {
+			result.Diagnostics = append(result.Diagnostics, workflowDiagnostic("actions_location", ".github is not a directory; no target is followed.", nil))
+		} else if err == nil {
+			for _, item := range github.Directory {
+				if item.Name != "workflows" {
+					continue
+				}
+				if item.Type != "dir" {
+					result.Diagnostics = append(result.Diagnostics, workflowDiagnostic("actions_location", ".github/workflows is not a directory; no target is followed.", nil))
+					break
+				}
+				workflows, err := s.workflowContents(ctx, token, base, result.CommitId, ".github/workflows", false)
+				if err != nil {
+					return err
+				}
+				if workflows.File != nil {
+					return errInvalidForgeResponse
+				}
+				for _, entry := range workflows.Directory {
+					if strings.HasSuffix(entry.Name, ".yml") || strings.HasSuffix(entry.Name, ".yaml") {
+						candidates = append(candidates, entry)
+					}
+				}
+			}
+		}
+		gitlab, err := s.workflowContents(ctx, token, base, result.CommitId, ".gitlab-ci.yml", false)
+		if err != nil && !workflowMissing(err) {
+			return err
+		}
+		if err == nil {
+			if gitlab.File == nil {
+				result.Diagnostics = append(result.Diagnostics, workflowDiagnostic("gitlab_location", ".gitlab-ci.yml is a directory; no configuration is read from it.", nil))
+			} else {
+				candidates = append(candidates, *gitlab.File)
+			}
+		}
+		if len(candidates) > maxWorkflowFiles {
+			return errForgeResponseTooLarge
+		}
+		sort.Slice(candidates, func(i, j int) bool { return candidates[i].Path < candidates[j].Path })
+		total := int64(0)
+		for _, candidate := range candidates {
+			if candidate.Type == "file" && candidate.LFSOID == "" && candidate.Size <= maxWorkflowBytes {
+				total += candidate.Size
+			}
+		}
+		if total > maxWorkflowTotalBytes {
+			return errForgeResponseTooLarge
+		}
+		for _, candidate := range candidates {
+			config := &golfv1.WorkflowConfiguration{Path: candidate.Path, BlobId: candidate.SHA, ByteSize: uint64(candidate.Size), Format: golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITHUB_ACTIONS}
+			if candidate.Path == ".gitlab-ci.yml" {
+				config.Format = golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITLAB_CI
+			}
+			result.Configurations = append(result.Configurations, config)
+			if candidate.Type != "file" || candidate.LFSOID != "" || candidate.Size > maxWorkflowBytes {
+				workflowInspector{config}.unsupported("source_unavailable", "Only ordinary non-LFS files of at most 64 KiB are inspected; no target is followed.", nil)
+				continue
+			}
+			content, err := s.workflowContents(ctx, token, base, result.CommitId, candidate.Path, true)
+			if err != nil {
+				return err
+			}
+			if content.File == nil || content.File.sourceEntry != candidate.sourceEntry || content.File.Encoding != "base64" {
+				return errInvalidForgeResponse
+			}
+			if content.File.LFSOID != "" {
+				workflowInspector{config}.unsupported("lfs", "Git LFS configurations are not downloaded or inspected.", nil)
+				continue
+			}
+			if len(content.File.Content) > base64.StdEncoding.EncodedLen(maxWorkflowBytes)+2048 {
+				return errForgeResponseTooLarge
+			}
+			data, err := base64.StdEncoding.DecodeString(content.File.Content)
+			if err != nil || int64(len(data)) != candidate.Size || len(data) > maxWorkflowBytes || !workflowBlobMatches(data, candidate.SHA) {
+				return errInvalidForgeResponse
+			}
+			if strings.HasPrefix(string(data), "version https://git-lfs.github.com/spec/v1\n") || strings.HasPrefix(string(data), "version https://git-lfs.github.com/spec/v1\r\n") {
+				workflowInspector{config}.unsupported("lfs", "Git LFS pointers are not downloaded or inspected.", nil)
+				continue
+			}
+			inspectWorkflow(config, data)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return connect.NewResponse(result), nil
+}

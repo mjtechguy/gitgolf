@@ -178,7 +178,10 @@ test('repository filtering, safe links, theme persistence and mobile layout', as
   if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.getByLabel('Your account', { exact: true }).click();
+  await page.getByRole('link', { name: 'System status', exact: true }).click();
   await expect(page.getByText('Agent execution is planned')).toBeVisible();
+  await page.getByRole('navigation', { name: 'Workspace', exact: true }).getByRole('link', { name: 'Repositories', exact: true }).click();
   await page.screenshot({ path: 'test-results/workspace-dark.png', fullPage: true });
   if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
   await page.screenshot({ path: 'test-results/workspace-light.png', fullPage: true });
@@ -353,27 +356,31 @@ test('opening optional token sign-in preserves the desktop page layout', async (
 });
 
 
-test('sidebar distinguishes repositories from the capabilities anchor', async ({ page }) => {
-  await backend(page);
+test('work navigation stays compact and system status is separate from repositories', async ({ page }) => {
+  const state = await backend(page);
+  state.repositories.push(create(RepositorySchema, { ...originalRepositories[0]!, id: '22', name: 'shared', fullName: 'other/shared' }));
   await page.goto('/');
   const nav = page.getByRole('navigation', { name: 'Workspace', exact: true });
-  const repositories = nav.getByRole('link', { name: /^Repositories/ });
-  const capabilities = nav.getByRole('link', { name: 'Capabilities', exact: true });
-  await expect(repositories).toHaveClass(/active/);
-  await expect(capabilities).not.toHaveClass(/active/);
-  await expect(capabilities).not.toHaveAttribute('aria-current', 'page');
-  await capabilities.click();
-  await expect(page).toHaveURL(/#capabilities$/);
-  await expect(capabilities).toHaveClass(/active/);
-  await expect(repositories).not.toHaveClass(/active/);
+  const repositories = nav.getByRole('link', { name: 'Repositories', exact: true });
+  await expect(repositories).toHaveAttribute('aria-current', 'page');
+  await expect(nav.getByRole('link')).toHaveCount(2);
+  await expect(page.locator('.sidebar')).toHaveCount(0);
+  await page.getByLabel('Repository ownership', { exact: true }).selectOption('owned');
+  await expect(page.locator('.repository-row')).toHaveCount(2);
+  await page.getByLabel('Repository ownership', { exact: true }).selectOption('all');
+  await expect(page.locator('.repository-row')).toHaveCount(3);
+  await expect(page.getByRole('heading', { name: 'Your workspace today', exact: true })).toHaveCount(0);
+  await page.getByLabel('Your account', { exact: true }).click();
+  await page.getByRole('link', { name: 'System status', exact: true }).click();
+  await expect(page).toHaveURL(/\/status$/);
+  await expect(page.getByRole('heading', { name: 'Your workspace today', exact: true })).toBeVisible();
   await expect(repositories).not.toHaveAttribute('aria-current', 'page');
   await repositories.click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(repositories).toHaveClass(/active/);
-  await expect(capabilities).not.toHaveClass(/active/);
   await page.goBack();
-  await expect(capabilities).toHaveClass(/active/);
-  await expect(repositories).not.toHaveClass(/active/);
+  await expect(page.getByRole('heading', { name: 'Your workspace today', exact: true })).toBeVisible();
+  await page.goto('/#capabilities');
+  await expect(page.getByRole('heading', { name: 'Your workspace today', exact: true })).toBeVisible();
 });
 
 

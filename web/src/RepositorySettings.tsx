@@ -7,7 +7,7 @@ import { LoaderCircle, RefreshCw, Settings } from 'lucide-react';
 import { errorMessage, repositorySettingsClient } from './api';
 import type { RepositorySettings as SettingsValue, User } from './gen/golf/v1/golf_pb';
 import { Loading, PanelError, privateQuery } from './RepositoryUI';
-import { SettingsInventory } from './AccountSettings';
+import { RepositorySettingsLayout, SettingsInventory } from './AccountSettings';
 import { repositoryOptions } from './navigation';
 
 type Draft = { description: string; defaultBranch: string; hasIssues: boolean; hasWiki: boolean; hasPullRequests: boolean };
@@ -77,7 +77,7 @@ export function RepositorySettings({ userId, owner, name, signingOut }: { userId
     await client.resetQueries({ queryKey, exact: true });
     if (active() && !client.getQueryState(queryKey)?.error) { setUncertain(false); mutation.reset(); }
   }
-  return <section aria-labelledby="repository-settings-title">
+  return <RepositorySettingsLayout owner={owner} name={name}><section aria-labelledby="repository-settings-title">
     <header className="repository-intro"><div><span className="eyebrow">{owner}/{name}</span><h1 id="repository-settings-title"><Settings size={29} />Repository settings</h1><p>Repository administration and effective feature availability.</p></div><Link className="button secondary" {...repositoryOptions({ owner, name })}>Back to repository</Link></header>
     <section className="browser-panel credential-list-panel" aria-labelledby="repository-general-title"><div className="browser-panel-heading"><h2 id="repository-general-title">General</h2><div className="credential-actions">{settings?.canEdit ? <button ref={editButton} className="button secondary" disabled={Boolean(editing) || uncertain || mutation.isPending} onClick={() => { setEditing(settings); setNotice(''); }}>Edit general settings</button> : null}<button className="button secondary" disabled={query.isFetching || mutation.isPending} onClick={() => void refresh()}><RefreshCw size={15} />Refresh repository settings</button></div></div>
       {query.error ? <PanelError error={query.error} retry={() => void refresh()} /> : !settings ? <Loading label="Loading repository settings…" /> : <>
@@ -86,5 +86,5 @@ export function RepositorySettings({ userId, owner, name, signingOut }: { userId
       </>}
     </section>
     <SettingsInventory scope="repository" />
-  </section>;
+  </section></RepositorySettingsLayout>;
 }

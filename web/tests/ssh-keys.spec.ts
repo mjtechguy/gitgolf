@@ -40,7 +40,8 @@ async function backend(page: Page) {
 async function open(page: Page) {
   await page.goto('/account/ssh-keys');
   await expect(page.getByRole('cell', { name:'My laptop Account Git access', exact:true })).toBeVisible();
-  await expect(page.locator('.topbar')).toContainText('SSH keys');
+  await expect(page.getByRole('heading', { name: 'SSH keys', exact: true })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Account settings', exact: true }).getByRole('link', { name: 'SSH keys', exact: true })).toHaveAttribute('aria-current', 'page');
 }
 
 test('key removal preserves exact IDs and requires confirmation', async ({ page }) => {
