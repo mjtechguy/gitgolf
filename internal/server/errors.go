@@ -8,6 +8,7 @@ import (
 )
 
 var (
+	errSSHKeyRejected             = errors.New("SSH key rejected")
 	errLocalCredentials           = errors.New("local credentials rejected")
 	errLocalRateLimited           = errors.New("local login rate limit")
 	errIssueTargetChanged         = errors.New("issue target identity changed")
@@ -42,6 +43,8 @@ func rpcError(err error) error {
 	var input inputError
 	var upstream forgeError
 	switch {
+	case errors.Is(err, errSSHKeyRejected):
+		code, message = connect.CodeFailedPrecondition, "The SSH key was rejected or already exists. Refresh your keys and check the public key before trying again."
 	case errors.Is(err, errLocalCredentials):
 		code, message = connect.CodeUnauthenticated, "Sign-in could not be completed. Check your Golf username and password and try again."
 	case errors.Is(err, errLocalRateLimited):

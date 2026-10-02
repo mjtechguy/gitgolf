@@ -73,6 +73,7 @@ spec:
             - name: GITEA__database__PASSWD
               valueFrom:
                 secretKeyRef: {name: {{ .Values.existingSecret | quote }}, key: GITEA_DB_PASSWORD}
+            - {name: GITEA__server__PUBLIC_URL_DETECTION, value: "never"}
             - name: GITEA__server__ROOT_URL
               value: {{ printf "%s/" (trimSuffix "/" .Values.gitea.publicURL) | quote }}
             - name: GITEA__server__SSH_DOMAIN

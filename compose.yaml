@@ -23,6 +23,7 @@ services:
       GITEA__database__USER: gitea
       GITEA__database__PASSWD: ${GITEA_DB_PASSWORD:?Run scripts/init-env.sh}
       GITEA__server__ROOT_URL: http://localhost:3001/
+      GITEA__server__PUBLIC_URL_DETECTION: never
       GITEA__server__SSH_DOMAIN: localhost
       GITEA__server__SSH_PORT: 2222
       GITEA__server__SSH_LISTEN_PORT: 2222

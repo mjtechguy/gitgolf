@@ -2,7 +2,7 @@
 
 The current account control lists and revokes the signed-in user's active **Golf sessions**. It works with scoped Gitea PAT bootstrap and configured Gitea browser OAuth. It does not replace Golf local/OIDC identity, invitation, MFA/recovery, credential rotation or organization authorization work.
 
-Open **Sessions** in the workspace sidebar. The dialog identifies the current session, creation and absolute expiration times, and whether its stored upstream credential uses PAT or OAuth. It shows no inferred device/location/IP data. Revocation requires an explicit confirmation; cancelling leaves access unchanged.
+Open **Sessions** in the workspace sidebar. The page identifies the current session, creation and absolute expiration times, and whether its stored upstream credential uses PAT or OAuth. It shows no inferred device/location/IP data. Revocation requires an explicit confirmation; cancelling leaves access unchanged.
 
 ## API and metadata
 
@@ -52,3 +52,5 @@ The PAT smoke creates disposable users, checks private pagination/foreign-ID den
 The isolated Kubernetes smoke also exercises listing through both actual Golf pods, revoking a second session on another replica, saved-session rejection and stable management IDs after replacing all core workloads. It shares the PostgreSQL/session policy across both infrastructure tracks; no Cloudflare dependency is required.
 
 These controls address concrete session lifecycle requirements from the plan. They do not close the full identity/role/security release gate. Reference: [OWASP session management guidance](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html).
+
+Account sessions are managed on the dedicated `/account/sessions` page, inside the shared personal-settings navigation. Only revocation confirmations use dialogs. Leaving the page cancels pending private reads and revocation requests; a cancellation does not undo a native mutation that already completed.

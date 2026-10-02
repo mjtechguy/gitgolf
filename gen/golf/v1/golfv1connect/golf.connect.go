@@ -25,6 +25,8 @@ const (
 	SessionServiceName = "golf.v1.SessionService"
 	// ApiCredentialServiceName is the fully-qualified name of the ApiCredentialService service.
 	ApiCredentialServiceName = "golf.v1.ApiCredentialService"
+	// GitAccessServiceName is the fully-qualified name of the GitAccessService service.
+	GitAccessServiceName = "golf.v1.GitAccessService"
 	// RepositoryServiceName is the fully-qualified name of the RepositoryService service.
 	RepositoryServiceName = "golf.v1.RepositoryService"
 	// OrganizationServiceName is the fully-qualified name of the OrganizationService service.
@@ -78,6 +80,15 @@ const (
 	// ApiCredentialServiceRevokeApiCredentialProcedure is the fully-qualified name of the
 	// ApiCredentialService's RevokeApiCredential RPC.
 	ApiCredentialServiceRevokeApiCredentialProcedure = "/golf.v1.ApiCredentialService/RevokeApiCredential"
+	// GitAccessServiceListSSHKeysProcedure is the fully-qualified name of the GitAccessService's
+	// ListSSHKeys RPC.
+	GitAccessServiceListSSHKeysProcedure = "/golf.v1.GitAccessService/ListSSHKeys"
+	// GitAccessServiceAddSSHKeyProcedure is the fully-qualified name of the GitAccessService's
+	// AddSSHKey RPC.
+	GitAccessServiceAddSSHKeyProcedure = "/golf.v1.GitAccessService/AddSSHKey"
+	// GitAccessServiceDeleteSSHKeyProcedure is the fully-qualified name of the GitAccessService's
+	// DeleteSSHKey RPC.
+	GitAccessServiceDeleteSSHKeyProcedure = "/golf.v1.GitAccessService/DeleteSSHKey"
 	// RepositoryServiceListRepositoriesProcedure is the fully-qualified name of the RepositoryService's
 	// ListRepositories RPC.
 	RepositoryServiceListRepositoriesProcedure = "/golf.v1.RepositoryService/ListRepositories"
@@ -553,6 +564,128 @@ func (UnimplementedApiCredentialServiceHandler) ListApiCredentials(context.Conte
 
 func (UnimplementedApiCredentialServiceHandler) RevokeApiCredential(context.Context, *connect.Request[v1.RevokeApiCredentialRequest]) (*connect.Response[v1.RevokeApiCredentialResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ApiCredentialService.RevokeApiCredential is not implemented"))
+}
+
+// GitAccessServiceClient is a client for the golf.v1.GitAccessService service.
+type GitAccessServiceClient interface {
+	ListSSHKeys(context.Context, *connect.Request[v1.ListSSHKeysRequest]) (*connect.Response[v1.ListSSHKeysResponse], error)
+	AddSSHKey(context.Context, *connect.Request[v1.AddSSHKeyRequest]) (*connect.Response[v1.AddSSHKeyResponse], error)
+	DeleteSSHKey(context.Context, *connect.Request[v1.DeleteSSHKeyRequest]) (*connect.Response[v1.DeleteSSHKeyResponse], error)
+}
+
+// NewGitAccessServiceClient constructs a client for the golf.v1.GitAccessService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewGitAccessServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) GitAccessServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	gitAccessServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("GitAccessService").Methods()
+	return &gitAccessServiceClient{
+		listSSHKeys: connect.NewClient[v1.ListSSHKeysRequest, v1.ListSSHKeysResponse](
+			httpClient,
+			baseURL+GitAccessServiceListSSHKeysProcedure,
+			connect.WithSchema(gitAccessServiceMethods.ByName("ListSSHKeys")),
+			connect.WithClientOptions(opts...),
+		),
+		addSSHKey: connect.NewClient[v1.AddSSHKeyRequest, v1.AddSSHKeyResponse](
+			httpClient,
+			baseURL+GitAccessServiceAddSSHKeyProcedure,
+			connect.WithSchema(gitAccessServiceMethods.ByName("AddSSHKey")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteSSHKey: connect.NewClient[v1.DeleteSSHKeyRequest, v1.DeleteSSHKeyResponse](
+			httpClient,
+			baseURL+GitAccessServiceDeleteSSHKeyProcedure,
+			connect.WithSchema(gitAccessServiceMethods.ByName("DeleteSSHKey")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// gitAccessServiceClient implements GitAccessServiceClient.
+type gitAccessServiceClient struct {
+	listSSHKeys  *connect.Client[v1.ListSSHKeysRequest, v1.ListSSHKeysResponse]
+	addSSHKey    *connect.Client[v1.AddSSHKeyRequest, v1.AddSSHKeyResponse]
+	deleteSSHKey *connect.Client[v1.DeleteSSHKeyRequest, v1.DeleteSSHKeyResponse]
+}
+
+// ListSSHKeys calls golf.v1.GitAccessService.ListSSHKeys.
+func (c *gitAccessServiceClient) ListSSHKeys(ctx context.Context, req *connect.Request[v1.ListSSHKeysRequest]) (*connect.Response[v1.ListSSHKeysResponse], error) {
+	return c.listSSHKeys.CallUnary(ctx, req)
+}
+
+// AddSSHKey calls golf.v1.GitAccessService.AddSSHKey.
+func (c *gitAccessServiceClient) AddSSHKey(ctx context.Context, req *connect.Request[v1.AddSSHKeyRequest]) (*connect.Response[v1.AddSSHKeyResponse], error) {
+	return c.addSSHKey.CallUnary(ctx, req)
+}
+
+// DeleteSSHKey calls golf.v1.GitAccessService.DeleteSSHKey.
+func (c *gitAccessServiceClient) DeleteSSHKey(ctx context.Context, req *connect.Request[v1.DeleteSSHKeyRequest]) (*connect.Response[v1.DeleteSSHKeyResponse], error) {
+	return c.deleteSSHKey.CallUnary(ctx, req)
+}
+
+// GitAccessServiceHandler is an implementation of the golf.v1.GitAccessService service.
+type GitAccessServiceHandler interface {
+	ListSSHKeys(context.Context, *connect.Request[v1.ListSSHKeysRequest]) (*connect.Response[v1.ListSSHKeysResponse], error)
+	AddSSHKey(context.Context, *connect.Request[v1.AddSSHKeyRequest]) (*connect.Response[v1.AddSSHKeyResponse], error)
+	DeleteSSHKey(context.Context, *connect.Request[v1.DeleteSSHKeyRequest]) (*connect.Response[v1.DeleteSSHKeyResponse], error)
+}
+
+// NewGitAccessServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewGitAccessServiceHandler(svc GitAccessServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	gitAccessServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("GitAccessService").Methods()
+	gitAccessServiceListSSHKeysHandler := connect.NewUnaryHandler(
+		GitAccessServiceListSSHKeysProcedure,
+		svc.ListSSHKeys,
+		connect.WithSchema(gitAccessServiceMethods.ByName("ListSSHKeys")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gitAccessServiceAddSSHKeyHandler := connect.NewUnaryHandler(
+		GitAccessServiceAddSSHKeyProcedure,
+		svc.AddSSHKey,
+		connect.WithSchema(gitAccessServiceMethods.ByName("AddSSHKey")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gitAccessServiceDeleteSSHKeyHandler := connect.NewUnaryHandler(
+		GitAccessServiceDeleteSSHKeyProcedure,
+		svc.DeleteSSHKey,
+		connect.WithSchema(gitAccessServiceMethods.ByName("DeleteSSHKey")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.GitAccessService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case GitAccessServiceListSSHKeysProcedure:
+			gitAccessServiceListSSHKeysHandler.ServeHTTP(w, r)
+		case GitAccessServiceAddSSHKeyProcedure:
+			gitAccessServiceAddSSHKeyHandler.ServeHTTP(w, r)
+		case GitAccessServiceDeleteSSHKeyProcedure:
+			gitAccessServiceDeleteSSHKeyHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedGitAccessServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedGitAccessServiceHandler struct{}
+
+func (UnimplementedGitAccessServiceHandler) ListSSHKeys(context.Context, *connect.Request[v1.ListSSHKeysRequest]) (*connect.Response[v1.ListSSHKeysResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.GitAccessService.ListSSHKeys is not implemented"))
+}
+
+func (UnimplementedGitAccessServiceHandler) AddSSHKey(context.Context, *connect.Request[v1.AddSSHKeyRequest]) (*connect.Response[v1.AddSSHKeyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.GitAccessService.AddSSHKey is not implemented"))
+}
+
+func (UnimplementedGitAccessServiceHandler) DeleteSSHKey(context.Context, *connect.Request[v1.DeleteSSHKeyRequest]) (*connect.Response[v1.DeleteSSHKeyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.GitAccessService.DeleteSSHKey is not implemented"))
 }
 
 // RepositoryServiceClient is a client for the golf.v1.RepositoryService service.

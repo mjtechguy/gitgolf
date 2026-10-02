@@ -59,6 +59,37 @@ message ListApiCredentialsResponse {
 message RevokeApiCredentialRequest { string credential_id = 1; }
 message RevokeApiCredentialResponse { ApiCredential credential = 1; }
 
+// Own-account native SSH authentication keys. Browser sessions only; these are
+// persistent account keys, not session-bound or repository-scoped delegations.
+service GitAccessService {
+  rpc ListSSHKeys(ListSSHKeysRequest) returns (ListSSHKeysResponse);
+  rpc AddSSHKey(AddSSHKeyRequest) returns (AddSSHKeyResponse);
+  rpc DeleteSSHKey(DeleteSSHKeyRequest) returns (DeleteSSHKeyResponse);
+}
+message SSHKey {
+  string id = 1;
+  string title = 2;
+  string public_key = 3;
+  string fingerprint = 4;
+  string created_at = 5;
+  string last_used_at = 6;
+}
+message ListSSHKeysRequest { PageRequest page = 1; }
+message ListSSHKeysResponse {
+  repeated SSHKey keys = 1;
+  PageResponse page = 2;
+}
+message AddSSHKeyRequest {
+  // Trimmed UTF-8 label, 1..64 bytes, without controls.
+  string title = 1;
+  // One OpenSSH public authentication key, at most 8192 bytes. No options,
+  // certificates, private keys or multiple keys. Comments are discarded.
+  string public_key = 2;
+}
+message AddSSHKeyResponse { SSHKey key = 1; }
+message DeleteSSHKeyRequest { string key_id = 1; }
+message DeleteSSHKeyResponse {}
+
 service RepositoryService {
   rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse);
   rpc CreateRepository(CreateRepositoryRequest) returns (CreateRepositoryResponse);

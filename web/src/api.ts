@@ -1,6 +1,6 @@
 import { createClient, ConnectError } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
-import { ApiCredentialService, AuditService, CapabilityService, OrganizationService, RepositoryService, SessionService } from './gen/golf/v1/golf_pb';
+import { GitAccessService, ApiCredentialService, AuditService, CapabilityService, OrganizationService, RepositoryService, SessionService } from './gen/golf/v1/golf_pb';
 
 const transport = createConnectTransport({
   baseUrl: '/rpc',
@@ -8,6 +8,7 @@ const transport = createConnectTransport({
   fetch: (input, init) => fetch(input, { ...init, credentials: 'same-origin', cache: 'no-store' }),
 });
 
+export const gitAccessClient = createClient(GitAccessService, transport);
 export const sessionClient = createClient(SessionService, transport);
 export const repositoryClient = createClient(RepositoryService, transport);
 export const capabilityClient = createClient(CapabilityService, transport);

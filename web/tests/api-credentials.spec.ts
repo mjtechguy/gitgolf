@@ -92,7 +92,7 @@ async function noStoredSecret(page: Page) {
 test('credential metadata paginates with exact IDs, native source status and literal labels', async ({ page }) => {
   const state = await backend(page);
   await page.goto('/');
-  await page.getByRole('link', { name: 'API credentials', exact: true }).click();
+  await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'API credentials', exact: true }).click();
   await expect(page).toHaveURL(/\/account\/api-credentials$/);
   await expect(page.locator('.credential-row')).toHaveCount(2);
   await expect(page.getByText('Not revoked or expired', { exact: true })).toBeVisible();
@@ -149,9 +149,9 @@ test('synchronous submit events issue only once and unmount discards a late secr
   });
   await expect.poll(() => state.issued.length).toBe(1);
   await expect(page.getByRole('button', { name: 'Creating…', exact: true })).toBeDisabled();
-  await page.getByRole('link', { name: 'Account activity', exact: true }).click();
+  await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Account activity', exact: true }).click();
   release();
-  await page.getByRole('link', { name: 'API credentials', exact: true }).click();
+  await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'API credentials', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Single submit', exact: true })).toBeVisible();
   await expect(page.getByLabel('New API credential', { exact: true })).toHaveCount(0);
   expect(state.issued).toHaveLength(1);

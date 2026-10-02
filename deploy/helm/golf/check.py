@@ -69,6 +69,7 @@ for component in ("gitea", "postgres"):
     assert "automountServiceAccountToken: false" in stateful
     assert "readOnlyRootFilesystem: true" in stateful
     assert "runAsNonRoot: true" in stateful
+assert 'name: GITEA__server__PUBLIC_URL_DETECTION, value: "never"' in find(core, "StatefulSet", "check-golf-gitea"), "native clone URLs must use the configured public origin"
 assert core.count("annotations: {helm.sh/resource-policy: keep}") == 3, "expected three retained PVC templates"
 assert "ingress: []" in find(core, "NetworkPolicy", "check-golf"), "default public ingress must be denied"
 assert "egress: []" in find(core, "NetworkPolicy", "check-golf-postgres"), "PostgreSQL egress must be denied"

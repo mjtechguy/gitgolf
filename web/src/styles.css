@@ -371,3 +371,20 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .settings-profile dt { color:var(--muted); }
 .settings-profile dd { margin:0; }
 .settings-actions { display:flex; flex-direction:column; gap:12px; }
+
+.account-layout { display:grid; grid-template-columns:200px minmax(0,1fr); align-items:start; gap:32px; }
+.account-navigation { display:flex; flex-direction:column; gap:5px; }
+.account-navigation .eyebrow { font-size:.75rem; margin:5px 0 15px; }
+.account-navigation a { display:flex; align-items:center; gap:10px; min-height:44px; padding:11px 12px; font-size:.875rem; border:1px solid transparent; }
+.account-navigation a:hover { background:var(--hover); }
+.account-navigation a[aria-current="page"] { background:var(--hover); border-color:var(--line-strong); color:var(--text); }
+.account-content { min-width:0; }
+.account-dropdown a { display:flex; gap:10px; align-items:center; width:100%; padding:11px 12px; border:0; background:transparent; color:var(--text); font-size:.875rem; text-align:left; }
+.account-dropdown a:hover { background:var(--hover); color:var(--accent); }
+.account-sessions .session-toolbar,.account-sessions .list-footer { padding:18px 20px; }
+.account-sessions .list-footer { margin-top:0; }
+@media(max-width:1100px) {
+  .account-layout { grid-template-columns:1fr; gap:25px; }
+  .account-navigation { flex-direction:row; flex-wrap:wrap; padding-bottom:16px; border-bottom:1px solid var(--line); }
+  .account-navigation .eyebrow { flex-basis:100%; margin-bottom:7px; }
+}

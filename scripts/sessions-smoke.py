@@ -50,22 +50,22 @@ try {
   await page.getByText('Advanced token sign-in', { exact: true }).click();
   await page.getByLabel('Provider access token', { exact: true }).fill(config.token);
   await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
-  await page.getByRole('button', { name: 'Sessions', exact: true }).waitFor();
+  await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Sessions', exact: true }).waitFor();
   if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
-  stage = 'session dialog and metadata';
-  await page.getByRole('button', { name: 'Sessions', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Your Golf sessions', exact: true });
+  stage = 'sessions page and metadata';
+  await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Sessions', exact: true }).click();
+  const dialog = page.getByRole('region', { name: 'Your Golf sessions', exact: true });
   await dialog.locator('.session-row').nth(1).waitFor();
   const listing = await call(context, 'ListSessions');
   check(listing.sessions.length === 2 && listing.sessions.filter(row => row.current).length === 1, 'Real session list mismatch');
   for (const row of listing.sessions) check((await dialog.innerText()).includes('Session ' + row.id), 'Dialog omitted a real session');
   check((await dialog.innerText()).includes('does not revoke'), 'Provider/session boundary missing');
   await page.screenshot({ path: join(config.screenshots, 'sessions-dark.png') });
-  stage = 'light and mobile session dialog';
-  await dialog.getByRole('button', { name: 'Close sessions', exact: true }).click();
+  stage = 'light and mobile sessions page';
+  await page.getByRole('navigation', {name:'Account settings',exact:true}).getByRole('link', {name:'Profile',exact:true}).click();
   if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Sessions', exact: true }).click();
+  await page.getByRole('navigation', {name:'Workspace',exact:true}).getByRole('link', { name: 'Sessions', exact: true }).click();
   await dialog.locator('.session-row').nth(1).waitFor();
   check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Mobile page overflows');
   await page.screenshot({ path: join(config.screenshots, 'sessions-light-mobile.png') });
@@ -86,7 +86,7 @@ try {
   await call(context, 'GetSession', {}, 401);
   check(!(await context.cookies(config.golf)).some(cookie => cookie.name === 'golf_session'), 'Current session cookie survived revocation');
   check(errors.length === 0, 'Browser runtime error');
-  console.log('PASS: production-served session dialog, real metadata, dark/light/mobile, cancel/confirm and revoked-session UI cleanup');
+  console.log('PASS: production-served sessions page, real metadata, dark/light/mobile, cancel/confirm and revoked-session UI cleanup');
 } catch (error) {
   console.error('FAIL: ' + stage + (error instanceof CheckFailure ? ': ' + error.message : ' (diagnostics withheld)'));
   process.exitCode = 1;

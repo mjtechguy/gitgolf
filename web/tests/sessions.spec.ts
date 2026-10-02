@@ -59,15 +59,15 @@ async function backend(page: Page) {
 
 async function openSessions(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Sessions', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Your Golf sessions' })).toBeVisible();
+  await page.getByRole('navigation', { name:'Workspace', exact:true }).getByRole('link', { name: 'Sessions', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Your Golf sessions', exact:true })).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
 test('sessions paginate, preserve IDs, confirm one revoke and return keyboard focus', async ({ page }) => {
   const state = await backend(page);
   await page.emulateMedia({ colorScheme: 'dark' });
   await openSessions(page);
-  await expect(page.getByRole('button', { name: 'Close sessions' })).toBeFocused();
   await expect(page.locator('.session-row')).toHaveCount(2);
   await expect(page.getByText('Current session', { exact: true })).toBeVisible();
   await expect(page.getByText('This does not revoke your provider token', { exact: false })).toBeVisible();
@@ -84,7 +84,7 @@ test('sessions paginate, preserve IDs, confirm one revoke and return keyboard fo
   expect(state.revoked).toEqual([]);
   await page.keyboard.press('Escape');
   await expect(target).toBeFocused();
-  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await target.click();
   await page.getByRole('button', { name: 'Confirm revoke session', exact: true }).click();
   await expect(page.getByText('Session revoked.', { exact: true })).toBeVisible();
@@ -94,7 +94,7 @@ test('sessions paginate, preserve IDs, confirm one revoke and return keyboard fo
   await expect(page.getByText('Session 9007199254740994', { exact: true })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Sessions', exact: true })).toBeFocused();
+  await expect(page.getByRole('heading', {name:'Your Golf sessions',exact:true})).toBeVisible();
   expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toContain('900719925474099');
 });
 
@@ -151,11 +151,11 @@ test('denied refresh and revoke hide prior rows; reopening waits for fresh data'
   await page.getByRole('button', { name: 'Confirm revoke session', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Session access denied.');
   await expect(page.locator('.session-row')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Close sessions' }).click();
+  await page.getByRole('navigation', {name:'Account settings',exact:true}).getByRole('link', {name:'Profile',exact:true}).click();
   let release!: () => void;
   state.listBarrier = new Promise<void>((resolve) => { release = resolve; });
   state.sessions = [originalSessions[0]!];
-  await page.getByRole('button', { name: 'Sessions', exact: true }).click();
+  await page.getByRole('navigation', { name:'Workspace', exact:true }).getByRole('link', { name: 'Sessions', exact: true }).click();
   await expect(page.getByText('Loading sessions…')).toBeVisible();
   await expect(page.locator('.session-row')).toHaveCount(0);
   release();
@@ -163,23 +163,23 @@ test('denied refresh and revoke hide prior rows; reopening waits for fresh data'
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
-test('closing cancels an in-flight private list and reopening starts fresh', async ({ page }) => {
+test('leaving the sessions page cancels an in-flight private list and returning starts fresh', async ({ page }) => {
   const state = await backend(page);
   await openSessions(page);
   await expect(page.locator('.session-row')).toHaveCount(2);
-  await page.getByRole('button', { name: 'Close sessions' }).click();
+  await page.getByRole('navigation', {name:'Account settings',exact:true}).getByRole('link', {name:'Profile',exact:true}).click();
   let release!: () => void;
   state.listBarrier = new Promise<void>((resolve) => { release = resolve; });
-  await page.getByRole('button', { name: 'Sessions', exact: true }).click();
+  await page.getByRole('navigation', { name:'Workspace', exact:true }).getByRole('link', { name: 'Sessions', exact: true }).click();
   await expect(page.getByText('Loading sessions…')).toBeVisible();
   await expect(page.locator('.session-row')).toHaveCount(0);
   const aborted = page.waitForEvent('requestfailed', (request) => request.url().endsWith('/ListSessions'));
-  await page.getByRole('button', { name: 'Close sessions' }).click();
+  await page.getByRole('navigation', {name:'Account settings',exact:true}).getByRole('link', {name:'Profile',exact:true}).click();
   await aborted;
   state.listBarrier = undefined;
   state.sessions = [create(SessionInfoSchema, { ...originalSessions[0]!, id: '9007199254741999' })];
   release();
-  await page.getByRole('button', { name: 'Sessions', exact: true }).click();
+  await page.getByRole('navigation', { name:'Workspace', exact:true }).getByRole('link', { name: 'Sessions', exact: true }).click();
   await expect(page.getByText('Session 9007199254741999', { exact: true })).toBeVisible();
   await expect(page.locator('.session-row')).toHaveCount(1);
   await expect(page.getByText('Session 9007199254740993', { exact: true })).toHaveCount(0);
@@ -202,13 +202,13 @@ for (const method of ['ListSessions', 'RevokeSession', 'RevokeOtherSessions']) {
   });
 }
 
-test('empty and unavailable sessions remain actionable in light mobile dialog', async ({ page }) => {
+test('empty and unavailable sessions remain actionable in light mobile page', async ({ page }) => {
   const state = await backend(page);
   state.errors.ListSessions = 'unavailable';
   await page.goto('/');
   if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
   await page.setViewportSize({ width: 320, height: 740 });
-  await page.getByRole('button', { name: 'Sessions', exact: true }).click();
+  await page.getByRole('navigation', { name:'Workspace', exact:true }).getByRole('link', { name: 'Sessions', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Sessions temporarily unavailable.');
   delete state.errors.ListSessions;
   state.sessions = [];
@@ -219,8 +219,8 @@ test('empty and unavailable sessions remain actionable in light mobile dialog', 
   await page.getByRole('button', { name: 'Refresh sessions' }).click();
   await expect(page.locator('.session-row')).toHaveCount(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  expect(await page.getByRole('dialog').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.screenshot({ path: 'test-results/sessions-mobile-light.png', fullPage: true });
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: 'Sessions', exact: true })).toBeFocused();
+  await expect(page.getByRole('heading', {name:'Your Golf sessions',exact:true})).toBeVisible();
 });
