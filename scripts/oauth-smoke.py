@@ -151,6 +151,24 @@ try {
   const created = await rpc(alice, 'RepositoryService/CreateRepository', { name: 'oauth-created', private: true });
   check(created.repository.private && created.repository.fullName === config.alice.name + '/oauth-created', 'OAuth write:user/write:repository scopes did not work');
   console.log('PASS: actual Golf button, Gitea login/consent, scoped private source/issues/create');
+  stage = 'OAuth session management';
+  const control = await browser.newContext(options);
+  control.setDefaultTimeout(20000);
+  control.setDefaultNavigationTimeout(20000);
+  await login(control, config.sessionUser);
+  const active = (await rpc(control, 'SessionService/ListSessions')).sessions ?? [];
+  check(active.length === 1 && active[0].current && active[0].credentialKind === 'oauth', 'OAuth session metadata mismatch');
+  check(Object.keys(active[0]).every(key => ['id', 'createdAt', 'expiresAt', 'current', 'credentialKind'].includes(key)), 'Session metadata exposed unexpected fields');
+  const noOthers = await rpc(control, 'SessionService/RevokeOtherSessions');
+  check((noOthers.revokedCount ?? '0') === '0', 'Revoke-other removed the current OAuth session');
+  const expired = await rpc(control, 'SessionService/RevokeSession', { sessionId: active[0].id });
+  check(expired.currentSessionRevoked === true, 'OAuth session revocation did not identify current session');
+  await rpc(control, 'SessionService/GetSession', {}, 401, 'unauthenticated');
+  await rpc(control, 'SessionService/ListSessions', {}, 401, 'unauthenticated');
+  check(!(await control.cookies(golf)).some(cookie => cookie.name === 'golf_session'), 'OAuth session cookie was not cleared');
+  check((await rpc(alice, 'SessionService/GetSession')).user.login === config.alice.name, 'Session controls crossed an OAuth user boundary');
+  await control.close();
+  console.log('PASS: real OAuth session listing, current-preserving bulk operation and current-cookie revocation');
   stage = 'denied consent';
   await login(bob, config.bob, false);
   // A fresh context repeats the actual password and consent flow for success.
@@ -327,7 +345,7 @@ def main():
         path = Path(directory)
         os.chmod(path, 0o700)
         try:
-            for label in ('owner', 'alice', 'bob'):
+            for label in ('owner', 'alice', 'bob', 'session-control'):
                 name = 'golf-oauth-' + label + '-' + suffix
                 output = admin('create', '--username', name, '--email', name + '@example.invalid',
                                '--random-password', '--random-password-length', '32', '--must-change-password=false')
@@ -337,7 +355,7 @@ def main():
                 if not match:
                     raise RuntimeError('Could not capture generated test-user password')
                 user['password'] = match.group(1)
-            owner, alice, bob = users
+            owner, alice, bob, session_user = users
             app = request(client(), 'POST', GITEA + '/api/v1/user/applications/oauth2',
                           {'name': 'Golf OAuth smoke ' + suffix, 'redirect_uris': [GOLF + '/auth/gitea/callback'],
                            'confidential_client': True, 'skip_secondary_authorization': False},
@@ -369,7 +387,7 @@ def main():
             browser_script = path / 'check.mjs'
             browser_script.write_text(BROWSER_CHECK)
             browser_script.chmod(0o600)
-            config = {'golf': GOLF, 'gitea': GITEA, 'alice': alice, 'bob': bob,
+            config = {'golf': GOLF, 'gitea': GITEA, 'alice': alice, 'bob': bob, 'sessionUser': session_user,
                       'ownerAuthorization': basic(owner), 'clientID': app['client_id'], 'applicationID': app['id'],
                       'scopes': ['write:user', 'write:repository', 'read:issue'], 'repository': repository,
                       'revision': source['commit']['sha'], 'path': source_path, 'text': text,

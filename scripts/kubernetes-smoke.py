@@ -263,16 +263,33 @@ def main():
             smoke.cli_check(binary, alice_token, full_name, revision, nested_path, text)
             print('PASS: real Kubernetes Git push/clone, private immutable source, CLI and cross-user/anonymous denial', flush=True)
 
+            extra_alice = smoke.client()
+            smoke.rpc(extra_alice, 'SessionService/LoginWithGiteaToken', {'token': alice_token})
+            extra_id = next(row['id'] for row in smoke.rpc(extra_alice, 'SessionService/ListSessions')['sessions'] if row.get('current'))
+            caller_id = next(row['id'] for row in smoke.rpc(alice, 'SessionService/ListSessions')['sessions'] if row.get('current'))
+            bob_id = next(row['id'] for row in smoke.rpc(bob, 'SessionService/ListSessions')['sessions'] if row.get('current'))
+            smoke.rpc(alice, 'SessionService/RevokeSession', {'sessionId': bob_id}, expected=404)
+
             # Address each actual API pod to prove shared session/key/database state,
             # rather than assuming a service port-forward balances requests.
-            for pod in objects('pod', f'app.kubernetes.io/instance={release},app.kubernetes.io/component=golf'):
+            for index, pod in enumerate(objects('pod', f'app.kubernetes.io/instance={release},app.kubernetes.io/component=golf')):
                 process = forward('pod/' + pod['metadata']['name'], 8088, 8080)
                 try:
                     result = smoke.request(alice, 'POST', 'http://localhost:8088/rpc/golf.v1.SessionService/GetSession', {},
                                            {'Connect-Protocol-Version': '1'})
                     assert result['user']['login'] == alice_name
+                    listed = smoke.request(alice, 'POST', 'http://localhost:8088/rpc/golf.v1.SessionService/ListSessions', {},
+                                           {'Connect-Protocol-Version': '1'})['sessions']
+                    assert {row['id'] for row in listed} == {caller_id, extra_id}
+                    if index == 1:
+                        revoked = smoke.request(alice, 'POST', 'http://localhost:8088/rpc/golf.v1.SessionService/RevokeSession',
+                                                {'sessionId': extra_id}, {'Connect-Protocol-Version': '1'})
+                        assert not revoked.get('currentSessionRevoked', False)
                 finally:
                     stop_forward(process)
+            smoke.rpc(extra_alice, 'SessionService/GetSession', expected=401)
+            assert [row['id'] for row in smoke.rpc(alice, 'SessionService/ListSessions')['sessions']] == [caller_id]
+            print('PASS: session listing and cross-replica revocation share one database and deny foreign-user IDs', flush=True)
             with ThreadPoolExecutor(max_workers=6) as pool:
                 results = list(pool.map(lambda _: smoke.rpc(alice, 'RepositoryService/GetContents',
                                                           {'repository': reference, 'ref': revision, 'path': nested_path}), range(6)))
@@ -288,6 +305,7 @@ def main():
             forward_core()
             assert {item['metadata']['name']: item['metadata']['uid'] for item in objects('pvc')} == pvcs
             assert smoke.rpc(alice, 'SessionService/GetSession')['user']['login'] == alice_name
+            assert [row['id'] for row in smoke.rpc(alice, 'SessionService/ListSessions')['sessions']] == [caller_id]
             assert smoke.content(alice, reference, revision, nested_path)['file']['content'] == text
             assert run('git', '-c', 'credential.helper=', 'ls-remote', remote_url, 'refs/heads/main', env=git_env, cwd=work).split()[0] == revision
             print('PASS: encrypted session, exact Git commit and source survive all workload pod replacements', flush=True)

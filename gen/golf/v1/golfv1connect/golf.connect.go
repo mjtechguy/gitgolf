@@ -49,6 +49,15 @@ const (
 	// SessionServiceGetSessionProcedure is the fully-qualified name of the SessionService's GetSession
 	// RPC.
 	SessionServiceGetSessionProcedure = "/golf.v1.SessionService/GetSession"
+	// SessionServiceListSessionsProcedure is the fully-qualified name of the SessionService's
+	// ListSessions RPC.
+	SessionServiceListSessionsProcedure = "/golf.v1.SessionService/ListSessions"
+	// SessionServiceRevokeSessionProcedure is the fully-qualified name of the SessionService's
+	// RevokeSession RPC.
+	SessionServiceRevokeSessionProcedure = "/golf.v1.SessionService/RevokeSession"
+	// SessionServiceRevokeOtherSessionsProcedure is the fully-qualified name of the SessionService's
+	// RevokeOtherSessions RPC.
+	SessionServiceRevokeOtherSessionsProcedure = "/golf.v1.SessionService/RevokeOtherSessions"
 	// SessionServiceLogoutProcedure is the fully-qualified name of the SessionService's Logout RPC.
 	SessionServiceLogoutProcedure = "/golf.v1.SessionService/Logout"
 	// RepositoryServiceListRepositoriesProcedure is the fully-qualified name of the RepositoryService's
@@ -86,6 +95,9 @@ type SessionServiceClient interface {
 	BeginGiteaOAuth(context.Context, *connect.Request[v1.BeginGiteaOAuthRequest]) (*connect.Response[v1.BeginGiteaOAuthResponse], error)
 	LoginWithGiteaToken(context.Context, *connect.Request[v1.LoginWithGiteaTokenRequest]) (*connect.Response[v1.LoginWithGiteaTokenResponse], error)
 	GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
+	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	RevokeSession(context.Context, *connect.Request[v1.RevokeSessionRequest]) (*connect.Response[v1.RevokeSessionResponse], error)
+	RevokeOtherSessions(context.Context, *connect.Request[v1.RevokeOtherSessionsRequest]) (*connect.Response[v1.RevokeOtherSessionsResponse], error)
 	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
 }
 
@@ -124,6 +136,24 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(sessionServiceMethods.ByName("GetSession")),
 			connect.WithClientOptions(opts...),
 		),
+		listSessions: connect.NewClient[v1.ListSessionsRequest, v1.ListSessionsResponse](
+			httpClient,
+			baseURL+SessionServiceListSessionsProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("ListSessions")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeSession: connect.NewClient[v1.RevokeSessionRequest, v1.RevokeSessionResponse](
+			httpClient,
+			baseURL+SessionServiceRevokeSessionProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("RevokeSession")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeOtherSessions: connect.NewClient[v1.RevokeOtherSessionsRequest, v1.RevokeOtherSessionsResponse](
+			httpClient,
+			baseURL+SessionServiceRevokeOtherSessionsProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("RevokeOtherSessions")),
+			connect.WithClientOptions(opts...),
+		),
 		logout: connect.NewClient[v1.LogoutRequest, v1.LogoutResponse](
 			httpClient,
 			baseURL+SessionServiceLogoutProcedure,
@@ -139,6 +169,9 @@ type sessionServiceClient struct {
 	beginGiteaOAuth          *connect.Client[v1.BeginGiteaOAuthRequest, v1.BeginGiteaOAuthResponse]
 	loginWithGiteaToken      *connect.Client[v1.LoginWithGiteaTokenRequest, v1.LoginWithGiteaTokenResponse]
 	getSession               *connect.Client[v1.GetSessionRequest, v1.GetSessionResponse]
+	listSessions             *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
+	revokeSession            *connect.Client[v1.RevokeSessionRequest, v1.RevokeSessionResponse]
+	revokeOtherSessions      *connect.Client[v1.RevokeOtherSessionsRequest, v1.RevokeOtherSessionsResponse]
 	logout                   *connect.Client[v1.LogoutRequest, v1.LogoutResponse]
 }
 
@@ -162,6 +195,21 @@ func (c *sessionServiceClient) GetSession(ctx context.Context, req *connect.Requ
 	return c.getSession.CallUnary(ctx, req)
 }
 
+// ListSessions calls golf.v1.SessionService.ListSessions.
+func (c *sessionServiceClient) ListSessions(ctx context.Context, req *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
+	return c.listSessions.CallUnary(ctx, req)
+}
+
+// RevokeSession calls golf.v1.SessionService.RevokeSession.
+func (c *sessionServiceClient) RevokeSession(ctx context.Context, req *connect.Request[v1.RevokeSessionRequest]) (*connect.Response[v1.RevokeSessionResponse], error) {
+	return c.revokeSession.CallUnary(ctx, req)
+}
+
+// RevokeOtherSessions calls golf.v1.SessionService.RevokeOtherSessions.
+func (c *sessionServiceClient) RevokeOtherSessions(ctx context.Context, req *connect.Request[v1.RevokeOtherSessionsRequest]) (*connect.Response[v1.RevokeOtherSessionsResponse], error) {
+	return c.revokeOtherSessions.CallUnary(ctx, req)
+}
+
 // Logout calls golf.v1.SessionService.Logout.
 func (c *sessionServiceClient) Logout(ctx context.Context, req *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error) {
 	return c.logout.CallUnary(ctx, req)
@@ -173,6 +221,9 @@ type SessionServiceHandler interface {
 	BeginGiteaOAuth(context.Context, *connect.Request[v1.BeginGiteaOAuthRequest]) (*connect.Response[v1.BeginGiteaOAuthResponse], error)
 	LoginWithGiteaToken(context.Context, *connect.Request[v1.LoginWithGiteaTokenRequest]) (*connect.Response[v1.LoginWithGiteaTokenResponse], error)
 	GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
+	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	RevokeSession(context.Context, *connect.Request[v1.RevokeSessionRequest]) (*connect.Response[v1.RevokeSessionResponse], error)
+	RevokeOtherSessions(context.Context, *connect.Request[v1.RevokeOtherSessionsRequest]) (*connect.Response[v1.RevokeOtherSessionsResponse], error)
 	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
 }
 
@@ -207,6 +258,24 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		connect.WithSchema(sessionServiceMethods.ByName("GetSession")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sessionServiceListSessionsHandler := connect.NewUnaryHandler(
+		SessionServiceListSessionsProcedure,
+		svc.ListSessions,
+		connect.WithSchema(sessionServiceMethods.ByName("ListSessions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceRevokeSessionHandler := connect.NewUnaryHandler(
+		SessionServiceRevokeSessionProcedure,
+		svc.RevokeSession,
+		connect.WithSchema(sessionServiceMethods.ByName("RevokeSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceRevokeOtherSessionsHandler := connect.NewUnaryHandler(
+		SessionServiceRevokeOtherSessionsProcedure,
+		svc.RevokeOtherSessions,
+		connect.WithSchema(sessionServiceMethods.ByName("RevokeOtherSessions")),
+		connect.WithHandlerOptions(opts...),
+	)
 	sessionServiceLogoutHandler := connect.NewUnaryHandler(
 		SessionServiceLogoutProcedure,
 		svc.Logout,
@@ -223,6 +292,12 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 			sessionServiceLoginWithGiteaTokenHandler.ServeHTTP(w, r)
 		case SessionServiceGetSessionProcedure:
 			sessionServiceGetSessionHandler.ServeHTTP(w, r)
+		case SessionServiceListSessionsProcedure:
+			sessionServiceListSessionsHandler.ServeHTTP(w, r)
+		case SessionServiceRevokeSessionProcedure:
+			sessionServiceRevokeSessionHandler.ServeHTTP(w, r)
+		case SessionServiceRevokeOtherSessionsProcedure:
+			sessionServiceRevokeOtherSessionsHandler.ServeHTTP(w, r)
 		case SessionServiceLogoutProcedure:
 			sessionServiceLogoutHandler.ServeHTTP(w, r)
 		default:
@@ -248,6 +323,18 @@ func (UnimplementedSessionServiceHandler) LoginWithGiteaToken(context.Context, *
 
 func (UnimplementedSessionServiceHandler) GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.SessionService.GetSession is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.SessionService.ListSessions is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) RevokeSession(context.Context, *connect.Request[v1.RevokeSessionRequest]) (*connect.Response[v1.RevokeSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.SessionService.RevokeSession is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) RevokeOtherSessions(context.Context, *connect.Request[v1.RevokeOtherSessionsRequest]) (*connect.Response[v1.RevokeOtherSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.SessionService.RevokeOtherSessions is not implemented"))
 }
 
 func (UnimplementedSessionServiceHandler) Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error) {

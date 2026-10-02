@@ -22,6 +22,7 @@ type GolfSession struct {
 	ExpiresAt      time.Time
 	CreatedAt      time.Time
 	CredentialKind string
+	SessionID      int64
 }
 
 type GolfUser struct {

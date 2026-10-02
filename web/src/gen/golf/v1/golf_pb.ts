@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file golf/v1/golf.proto.
  */
 export const file_golf_v1_golf: GenFile = /*@__PURE__*/
-  fileDesc("ChJnb2xmL3YxL2dvbGYucHJvdG8SB2dvbGYudjEiSAoEVXNlchIKCgJpZBgBIAEoCRINCgVsb2dpbhgCIAEoCRIRCglmdWxsX25hbWUYAyABKAkSEgoKYXZhdGFyX3VybBgEIAEoCSLQAQoKUmVwb3NpdG9yeRIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhEKCWZ1bGxfbmFtZRgDIAEoCRITCgtkZXNjcmlwdGlvbhgEIAEoCRIPCgdwcml2YXRlGAUgASgIEhAKCGh0bWxfdXJsGAYgASgJEhYKDmRlZmF1bHRfYnJhbmNoGAcgASgJEhIKCnVwZGF0ZWRfYXQYCCABKAkSDQoFZW1wdHkYCSABKAgSEQoJY2xvbmVfdXJsGAogASgJEg8KB3NzaF91cmwYCyABKAkiLAoNUmVwb3NpdG9yeUtleRINCgVvd25lchgBIAEoCRIMCgRuYW1lGAIgASgJIioKC1BhZ2VSZXF1ZXN0EgwKBHBhZ2UYASABKA0SDQoFbGltaXQYAiABKA0iIQoMUGFnZVJlc3BvbnNlEhEKCW5leHRfcGFnZRgBIAEoDSIrChpMb2dpbldpdGhHaXRlYVRva2VuUmVxdWVzdBINCgV0b2tlbhgBIAEoCSI6ChtMb2dpbldpdGhHaXRlYVRva2VuUmVzcG9uc2USGwoEdXNlchgBIAEoCzINLmdvbGYudjEuVXNlciITChFHZXRTZXNzaW9uUmVxdWVzdCIxChJHZXRTZXNzaW9uUmVzcG9uc2USGwoEdXNlchgBIAEoCzINLmdvbGYudjEuVXNlciIPCg1Mb2dvdXRSZXF1ZXN0IhAKDkxvZ291dFJlc3BvbnNlIj0KF0xpc3RSZXBvc2l0b3JpZXNSZXF1ZXN0EiIKBHBhZ2UYASABKAsyFC5nb2xmLnYxLlBhZ2VSZXF1ZXN0ImoKGExpc3RSZXBvc2l0b3JpZXNSZXNwb25zZRIpCgxyZXBvc2l0b3JpZXMYASADKAsyEy5nb2xmLnYxLlJlcG9zaXRvcnkSIwoEcGFnZRgCIAEoCzIVLmdvbGYudjEuUGFnZVJlc3BvbnNlIl4KF0NyZWF0ZVJlcG9zaXRvcnlSZXF1ZXN0EgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSFAoHcHJpdmF0ZRgDIAEoCEgAiAEBQgoKCF9wcml2YXRlIkMKGENyZWF0ZVJlcG9zaXRvcnlSZXNwb25zZRInCgpyZXBvc2l0b3J5GAEgASgLMhMuZ29sZi52MS5SZXBvc2l0b3J5IkIKFEdldFJlcG9zaXRvcnlSZXF1ZXN0EioKCnJlcG9zaXRvcnkYASABKAsyFi5nb2xmLnYxLlJlcG9zaXRvcnlLZXkiQAoVR2V0UmVwb3NpdG9yeVJlc3BvbnNlEicKCnJlcG9zaXRvcnkYASABKAsyEy5nb2xmLnYxLlJlcG9zaXRvcnkiPAoGQnJhbmNoEgwKBG5hbWUYASABKAkSEQoJY29tbWl0X2lkGAIgASgJEhEKCXByb3RlY3RlZBgDIAEoCCJlChNMaXN0QnJhbmNoZXNSZXF1ZXN0EioKCnJlcG9zaXRvcnkYASABKAsyFi5nb2xmLnYxLlJlcG9zaXRvcnlLZXkSIgoEcGFnZRgCIAEoCzIULmdvbGYudjEuUGFnZVJlcXVlc3QiXgoUTGlzdEJyYW5jaGVzUmVzcG9uc2USIQoIYnJhbmNoZXMYASADKAsyDy5nb2xmLnYxLkJyYW5jaBIjCgRwYWdlGAIgASgLMhUuZ29sZi52MS5QYWdlUmVzcG9uc2UiUAoGQ29tbWl0EgsKA3NoYRgBIAEoCRIPCgdtZXNzYWdlGAIgASgJEhMKC2F1dGhvcl9uYW1lGAMgASgJEhMKC2F1dGhvcmVkX2F0GAQgASgJInEKEkxpc3RDb21taXRzUmVxdWVzdBIqCgpyZXBvc2l0b3J5GAEgASgLMhYuZ29sZi52MS5SZXBvc2l0b3J5S2V5EgsKA3JlZhgCIAEoCRIiCgRwYWdlGAMgASgLMhQuZ29sZi52MS5QYWdlUmVxdWVzdCJcChNMaXN0Q29tbWl0c1Jlc3BvbnNlEiAKB2NvbW1pdHMYASADKAsyDy5nb2xmLnYxLkNvbW1pdBIjCgRwYWdlGAIgASgLMhUuZ29sZi52MS5QYWdlUmVzcG9uc2UibAoLU291cmNlRW50cnkSDAoEbmFtZRgBIAEoCRIMCgRwYXRoGAIgASgJEiYKBHR5cGUYAyABKA4yGC5nb2xmLnYxLlNvdXJjZUVudHJ5VHlwZRILCgNzaGEYBCABKAkSDAoEc2l6ZRgFIAEoBCJrCgpTb3VyY2VGaWxlEiMKBWVudHJ5GAEgASgLMhQuZ29sZi52MS5Tb3VyY2VFbnRyeRIUCgdjb250ZW50GAIgASgJSACIAQESFgoOcHJldmlld19yZWFzb24YAyABKAlCCgoIX2NvbnRlbnQiWwoSR2V0Q29udGVudHNSZXF1ZXN0EioKCnJlcG9zaXRvcnkYASABKAsyFi5nb2xmLnYxLlJlcG9zaXRvcnlLZXkSCwoDcmVmGAIgASgJEgwKBHBhdGgYAyABKAkiqAEKE0dldENvbnRlbnRzUmVzcG9uc2USEQoJY29tbWl0X2lkGAEgASgJEgwKBHBhdGgYAiABKAkSJgoEa2luZBgDIAEoDjIYLmdvbGYudjEuU291cmNlRW50cnlUeXBlEiUKB2VudHJpZXMYBCADKAsyFC5nb2xmLnYxLlNvdXJjZUVudHJ5EiEKBGZpbGUYBSABKAsyEy5nb2xmLnYxLlNvdXJjZUZpbGUizQEKBUlzc3VlEgoKAmlkGAEgASgJEg4KBm51bWJlchgCIAEoDRINCgV0aXRsZRgDIAEoCRIMCgRib2R5GAQgASgJEiIKBXN0YXRlGAUgASgOMhMuZ29sZi52MS5Jc3N1ZVN0YXRlEhsKBHVzZXIYBiABKAsyDS5nb2xmLnYxLlVzZXISEAoIY29tbWVudHMYByABKA0SEgoKY3JlYXRlZF9hdBgIIAEoCRISCgp1cGRhdGVkX2F0GAkgASgJEhAKCGh0bWxfdXJsGAogASgJIocBChFMaXN0SXNzdWVzUmVxdWVzdBIqCgpyZXBvc2l0b3J5GAEgASgLMhYuZ29sZi52MS5SZXBvc2l0b3J5S2V5EiIKBXN0YXRlGAIgASgOMhMuZ29sZi52MS5Jc3N1ZVN0YXRlEiIKBHBhZ2UYAyABKAsyFC5nb2xmLnYxLlBhZ2VSZXF1ZXN0IlkKEkxpc3RJc3N1ZXNSZXNwb25zZRIeCgZpc3N1ZXMYASADKAsyDi5nb2xmLnYxLklzc3VlEiMKBHBhZ2UYAiABKAsyFS5nb2xmLnYxLlBhZ2VSZXNwb25zZSJNCg9HZXRJc3N1ZVJlcXVlc3QSKgoKcmVwb3NpdG9yeRgBIAEoCzIWLmdvbGYudjEuUmVwb3NpdG9yeUtleRIOCgZudW1iZXIYAiABKA0iMQoQR2V0SXNzdWVSZXNwb25zZRIdCgVpc3N1ZRgBIAEoCzIOLmdvbGYudjEuSXNzdWUiYAoKQ2FwYWJpbGl0eRIKCgJpZBgBIAEoCRINCgVsYWJlbBgCIAEoCRInCgVzdGF0ZRgDIAEoDjIYLmdvbGYudjEuQ2FwYWJpbGl0eVN0YXRlEg4KBnJlYXNvbhgEIAEoCSIZChdMaXN0Q2FwYWJpbGl0aWVzUmVxdWVzdCJFChhMaXN0Q2FwYWJpbGl0aWVzUmVzcG9uc2USKQoMY2FwYWJpbGl0aWVzGAEgAygLMhMuZ29sZi52MS5DYXBhYmlsaXR5IiEKH0dldEF1dGhlbnRpY2F0aW9uT3B0aW9uc1JlcXVlc3QiZwogR2V0QXV0aGVudGljYXRpb25PcHRpb25zUmVzcG9uc2USGwoTZ2l0ZWFfb2F1dGhfZW5hYmxlZBgBIAEoCBIWCg5wcm92aWRlcl9sYWJlbBgCIAEoCRIOCgZzY29wZXMYAyADKAkiGAoWQmVnaW5HaXRlYU9BdXRoUmVxdWVzdCI0ChdCZWdpbkdpdGVhT0F1dGhSZXNwb25zZRIZChFhdXRob3JpemF0aW9uX3VybBgBIAEoCSqxAQoPU291cmNlRW50cnlUeXBlEiEKHVNPVVJDRV9FTlRSWV9UWVBFX1VOU1BFQ0lGSUVEEAASHwobU09VUkNFX0VOVFJZX1RZUEVfRElSRUNUT1JZEAESGgoWU09VUkNFX0VOVFJZX1RZUEVfRklMRRACEh0KGVNPVVJDRV9FTlRSWV9UWVBFX1NZTUxJTksQAxIfChtTT1VSQ0VfRU5UUllfVFlQRV9TVUJNT0RVTEUQBCpsCgpJc3N1ZVN0YXRlEhsKF0lTU1VFX1NUQVRFX1VOU1BFQ0lGSUVEEAASFAoQSVNTVUVfU1RBVEVfT1BFThABEhYKEklTU1VFX1NUQVRFX0NMT1NFRBACEhMKD0lTU1VFX1NUQVRFX0FMTBADKrABCg9DYXBhYmlsaXR5U3RhdGUSIAocQ0FQQUJJTElUWV9TVEFURV9VTlNQRUNJRklFRBAAEh0KGUNBUEFCSUxJVFlfU1RBVEVfRElTQUJMRUQQARIhCh1DQVBBQklMSVRZX1NUQVRFX1VOQ09ORklHVVJFRBACEhoKFkNBUEFCSUxJVFlfU1RBVEVfUkVBRFkQAxIdChlDQVBBQklMSVRZX1NUQVRFX0RFR1JBREVEEAQyuwMKDlNlc3Npb25TZXJ2aWNlEm8KGEdldEF1dGhlbnRpY2F0aW9uT3B0aW9ucxIoLmdvbGYudjEuR2V0QXV0aGVudGljYXRpb25PcHRpb25zUmVxdWVzdBopLmdvbGYudjEuR2V0QXV0aGVudGljYXRpb25PcHRpb25zUmVzcG9uc2USVAoPQmVnaW5HaXRlYU9BdXRoEh8uZ29sZi52MS5CZWdpbkdpdGVhT0F1dGhSZXF1ZXN0GiAuZ29sZi52MS5CZWdpbkdpdGVhT0F1dGhSZXNwb25zZRJgChNMb2dpbldpdGhHaXRlYVRva2VuEiMuZ29sZi52MS5Mb2dpbldpdGhHaXRlYVRva2VuUmVxdWVzdBokLmdvbGYudjEuTG9naW5XaXRoR2l0ZWFUb2tlblJlc3BvbnNlEkUKCkdldFNlc3Npb24SGi5nb2xmLnYxLkdldFNlc3Npb25SZXF1ZXN0GhsuZ29sZi52MS5HZXRTZXNzaW9uUmVzcG9uc2USOQoGTG9nb3V0EhYuZ29sZi52MS5Mb2dvdXRSZXF1ZXN0GhcuZ29sZi52MS5Mb2dvdXRSZXNwb25zZTL+BAoRUmVwb3NpdG9yeVNlcnZpY2USVwoQTGlzdFJlcG9zaXRvcmllcxIgLmdvbGYudjEuTGlzdFJlcG9zaXRvcmllc1JlcXVlc3QaIS5nb2xmLnYxLkxpc3RSZXBvc2l0b3JpZXNSZXNwb25zZRJXChBDcmVhdGVSZXBvc2l0b3J5EiAuZ29sZi52MS5DcmVhdGVSZXBvc2l0b3J5UmVxdWVzdBohLmdvbGYudjEuQ3JlYXRlUmVwb3NpdG9yeVJlc3BvbnNlEk4KDUdldFJlcG9zaXRvcnkSHS5nb2xmLnYxLkdldFJlcG9zaXRvcnlSZXF1ZXN0Gh4uZ29sZi52MS5HZXRSZXBvc2l0b3J5UmVzcG9uc2USSwoMTGlzdEJyYW5jaGVzEhwuZ29sZi52MS5MaXN0QnJhbmNoZXNSZXF1ZXN0Gh0uZ29sZi52MS5MaXN0QnJhbmNoZXNSZXNwb25zZRJICgtMaXN0Q29tbWl0cxIbLmdvbGYudjEuTGlzdENvbW1pdHNSZXF1ZXN0GhwuZ29sZi52MS5MaXN0Q29tbWl0c1Jlc3BvbnNlEkgKC0dldENvbnRlbnRzEhsuZ29sZi52MS5HZXRDb250ZW50c1JlcXVlc3QaHC5nb2xmLnYxLkdldENvbnRlbnRzUmVzcG9uc2USRQoKTGlzdElzc3VlcxIaLmdvbGYudjEuTGlzdElzc3Vlc1JlcXVlc3QaGy5nb2xmLnYxLkxpc3RJc3N1ZXNSZXNwb25zZRI/CghHZXRJc3N1ZRIYLmdvbGYudjEuR2V0SXNzdWVSZXF1ZXN0GhkuZ29sZi52MS5HZXRJc3N1ZVJlc3BvbnNlMmwKEUNhcGFiaWxpdHlTZXJ2aWNlElcKEExpc3RDYXBhYmlsaXRpZXMSIC5nb2xmLnYxLkxpc3RDYXBhYmlsaXRpZXNSZXF1ZXN0GiEuZ29sZi52MS5MaXN0Q2FwYWJpbGl0aWVzUmVzcG9uc2VCMlowZ2l0aHViLmNvbS9tanRlY2hndXkvZ29sZi1naXQvZ2VuL2dvbGYvdjE7Z29sZnYxYgZwcm90bzM");
+  fileDesc("ChJnb2xmL3YxL2dvbGYucHJvdG8SB2dvbGYudjEiSAoEVXNlchIKCgJpZBgBIAEoCRINCgVsb2dpbhgCIAEoCRIRCglmdWxsX25hbWUYAyABKAkSEgoKYXZhdGFyX3VybBgEIAEoCSLQAQoKUmVwb3NpdG9yeRIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhEKCWZ1bGxfbmFtZRgDIAEoCRITCgtkZXNjcmlwdGlvbhgEIAEoCRIPCgdwcml2YXRlGAUgASgIEhAKCGh0bWxfdXJsGAYgASgJEhYKDmRlZmF1bHRfYnJhbmNoGAcgASgJEhIKCnVwZGF0ZWRfYXQYCCABKAkSDQoFZW1wdHkYCSABKAgSEQoJY2xvbmVfdXJsGAogASgJEg8KB3NzaF91cmwYCyABKAkiLAoNUmVwb3NpdG9yeUtleRINCgVvd25lchgBIAEoCRIMCgRuYW1lGAIgASgJIioKC1BhZ2VSZXF1ZXN0EgwKBHBhZ2UYASABKA0SDQoFbGltaXQYAiABKA0iIQoMUGFnZVJlc3BvbnNlEhEKCW5leHRfcGFnZRgBIAEoDSIrChpMb2dpbldpdGhHaXRlYVRva2VuUmVxdWVzdBINCgV0b2tlbhgBIAEoCSI6ChtMb2dpbldpdGhHaXRlYVRva2VuUmVzcG9uc2USGwoEdXNlchgBIAEoCzINLmdvbGYudjEuVXNlciITChFHZXRTZXNzaW9uUmVxdWVzdCIxChJHZXRTZXNzaW9uUmVzcG9uc2USGwoEdXNlchgBIAEoCzINLmdvbGYudjEuVXNlciJrCgtTZXNzaW9uSW5mbxIKCgJpZBgBIAEoCRISCgpjcmVhdGVkX2F0GAIgASgJEhIKCmV4cGlyZXNfYXQYAyABKAkSDwoHY3VycmVudBgEIAEoCBIXCg9jcmVkZW50aWFsX2tpbmQYBSABKAkiOQoTTGlzdFNlc3Npb25zUmVxdWVzdBIiCgRwYWdlGAEgASgLMhQuZ29sZi52MS5QYWdlUmVxdWVzdCJjChRMaXN0U2Vzc2lvbnNSZXNwb25zZRImCghzZXNzaW9ucxgBIAMoCzIULmdvbGYudjEuU2Vzc2lvbkluZm8SIwoEcGFnZRgCIAEoCzIVLmdvbGYudjEuUGFnZVJlc3BvbnNlIioKFFJldm9rZVNlc3Npb25SZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkiOAoVUmV2b2tlU2Vzc2lvblJlc3BvbnNlEh8KF2N1cnJlbnRfc2Vzc2lvbl9yZXZva2VkGAEgASgIIhwKGlJldm9rZU90aGVyU2Vzc2lvbnNSZXF1ZXN0IjQKG1Jldm9rZU90aGVyU2Vzc2lvbnNSZXNwb25zZRIVCg1yZXZva2VkX2NvdW50GAEgASgEIg8KDUxvZ291dFJlcXVlc3QiEAoOTG9nb3V0UmVzcG9uc2UiPQoXTGlzdFJlcG9zaXRvcmllc1JlcXVlc3QSIgoEcGFnZRgBIAEoCzIULmdvbGYudjEuUGFnZVJlcXVlc3QiagoYTGlzdFJlcG9zaXRvcmllc1Jlc3BvbnNlEikKDHJlcG9zaXRvcmllcxgBIAMoCzITLmdvbGYudjEuUmVwb3NpdG9yeRIjCgRwYWdlGAIgASgLMhUuZ29sZi52MS5QYWdlUmVzcG9uc2UiXgoXQ3JlYXRlUmVwb3NpdG9yeVJlcXVlc3QSDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRIUCgdwcml2YXRlGAMgASgISACIAQFCCgoIX3ByaXZhdGUiQwoYQ3JlYXRlUmVwb3NpdG9yeVJlc3BvbnNlEicKCnJlcG9zaXRvcnkYASABKAsyEy5nb2xmLnYxLlJlcG9zaXRvcnkiQgoUR2V0UmVwb3NpdG9yeVJlcXVlc3QSKgoKcmVwb3NpdG9yeRgBIAEoCzIWLmdvbGYudjEuUmVwb3NpdG9yeUtleSJAChVHZXRSZXBvc2l0b3J5UmVzcG9uc2USJwoKcmVwb3NpdG9yeRgBIAEoCzITLmdvbGYudjEuUmVwb3NpdG9yeSI8CgZCcmFuY2gSDAoEbmFtZRgBIAEoCRIRCgljb21taXRfaWQYAiABKAkSEQoJcHJvdGVjdGVkGAMgASgIImUKE0xpc3RCcmFuY2hlc1JlcXVlc3QSKgoKcmVwb3NpdG9yeRgBIAEoCzIWLmdvbGYudjEuUmVwb3NpdG9yeUtleRIiCgRwYWdlGAIgASgLMhQuZ29sZi52MS5QYWdlUmVxdWVzdCJeChRMaXN0QnJhbmNoZXNSZXNwb25zZRIhCghicmFuY2hlcxgBIAMoCzIPLmdvbGYudjEuQnJhbmNoEiMKBHBhZ2UYAiABKAsyFS5nb2xmLnYxLlBhZ2VSZXNwb25zZSJQCgZDb21taXQSCwoDc2hhGAEgASgJEg8KB21lc3NhZ2UYAiABKAkSEwoLYXV0aG9yX25hbWUYAyABKAkSEwoLYXV0aG9yZWRfYXQYBCABKAkicQoSTGlzdENvbW1pdHNSZXF1ZXN0EioKCnJlcG9zaXRvcnkYASABKAsyFi5nb2xmLnYxLlJlcG9zaXRvcnlLZXkSCwoDcmVmGAIgASgJEiIKBHBhZ2UYAyABKAsyFC5nb2xmLnYxLlBhZ2VSZXF1ZXN0IlwKE0xpc3RDb21taXRzUmVzcG9uc2USIAoHY29tbWl0cxgBIAMoCzIPLmdvbGYudjEuQ29tbWl0EiMKBHBhZ2UYAiABKAsyFS5nb2xmLnYxLlBhZ2VSZXNwb25zZSJsCgtTb3VyY2VFbnRyeRIMCgRuYW1lGAEgASgJEgwKBHBhdGgYAiABKAkSJgoEdHlwZRgDIAEoDjIYLmdvbGYudjEuU291cmNlRW50cnlUeXBlEgsKA3NoYRgEIAEoCRIMCgRzaXplGAUgASgEImsKClNvdXJjZUZpbGUSIwoFZW50cnkYASABKAsyFC5nb2xmLnYxLlNvdXJjZUVudHJ5EhQKB2NvbnRlbnQYAiABKAlIAIgBARIWCg5wcmV2aWV3X3JlYXNvbhgDIAEoCUIKCghfY29udGVudCJbChJHZXRDb250ZW50c1JlcXVlc3QSKgoKcmVwb3NpdG9yeRgBIAEoCzIWLmdvbGYudjEuUmVwb3NpdG9yeUtleRILCgNyZWYYAiABKAkSDAoEcGF0aBgDIAEoCSKoAQoTR2V0Q29udGVudHNSZXNwb25zZRIRCgljb21taXRfaWQYASABKAkSDAoEcGF0aBgCIAEoCRImCgRraW5kGAMgASgOMhguZ29sZi52MS5Tb3VyY2VFbnRyeVR5cGUSJQoHZW50cmllcxgEIAMoCzIULmdvbGYudjEuU291cmNlRW50cnkSIQoEZmlsZRgFIAEoCzITLmdvbGYudjEuU291cmNlRmlsZSLNAQoFSXNzdWUSCgoCaWQYASABKAkSDgoGbnVtYmVyGAIgASgNEg0KBXRpdGxlGAMgASgJEgwKBGJvZHkYBCABKAkSIgoFc3RhdGUYBSABKA4yEy5nb2xmLnYxLklzc3VlU3RhdGUSGwoEdXNlchgGIAEoCzINLmdvbGYudjEuVXNlchIQCghjb21tZW50cxgHIAEoDRISCgpjcmVhdGVkX2F0GAggASgJEhIKCnVwZGF0ZWRfYXQYCSABKAkSEAoIaHRtbF91cmwYCiABKAkihwEKEUxpc3RJc3N1ZXNSZXF1ZXN0EioKCnJlcG9zaXRvcnkYASABKAsyFi5nb2xmLnYxLlJlcG9zaXRvcnlLZXkSIgoFc3RhdGUYAiABKA4yEy5nb2xmLnYxLklzc3VlU3RhdGUSIgoEcGFnZRgDIAEoCzIULmdvbGYudjEuUGFnZVJlcXVlc3QiWQoSTGlzdElzc3Vlc1Jlc3BvbnNlEh4KBmlzc3VlcxgBIAMoCzIOLmdvbGYudjEuSXNzdWUSIwoEcGFnZRgCIAEoCzIVLmdvbGYudjEuUGFnZVJlc3BvbnNlIk0KD0dldElzc3VlUmVxdWVzdBIqCgpyZXBvc2l0b3J5GAEgASgLMhYuZ29sZi52MS5SZXBvc2l0b3J5S2V5Eg4KBm51bWJlchgCIAEoDSIxChBHZXRJc3N1ZVJlc3BvbnNlEh0KBWlzc3VlGAEgASgLMg4uZ29sZi52MS5Jc3N1ZSJgCgpDYXBhYmlsaXR5EgoKAmlkGAEgASgJEg0KBWxhYmVsGAIgASgJEicKBXN0YXRlGAMgASgOMhguZ29sZi52MS5DYXBhYmlsaXR5U3RhdGUSDgoGcmVhc29uGAQgASgJIhkKF0xpc3RDYXBhYmlsaXRpZXNSZXF1ZXN0IkUKGExpc3RDYXBhYmlsaXRpZXNSZXNwb25zZRIpCgxjYXBhYmlsaXRpZXMYASADKAsyEy5nb2xmLnYxLkNhcGFiaWxpdHkiIQofR2V0QXV0aGVudGljYXRpb25PcHRpb25zUmVxdWVzdCJnCiBHZXRBdXRoZW50aWNhdGlvbk9wdGlvbnNSZXNwb25zZRIbChNnaXRlYV9vYXV0aF9lbmFibGVkGAEgASgIEhYKDnByb3ZpZGVyX2xhYmVsGAIgASgJEg4KBnNjb3BlcxgDIAMoCSIYChZCZWdpbkdpdGVhT0F1dGhSZXF1ZXN0IjQKF0JlZ2luR2l0ZWFPQXV0aFJlc3BvbnNlEhkKEWF1dGhvcml6YXRpb25fdXJsGAEgASgJKrEBCg9Tb3VyY2VFbnRyeVR5cGUSIQodU09VUkNFX0VOVFJZX1RZUEVfVU5TUEVDSUZJRUQQABIfChtTT1VSQ0VfRU5UUllfVFlQRV9ESVJFQ1RPUlkQARIaChZTT1VSQ0VfRU5UUllfVFlQRV9GSUxFEAISHQoZU09VUkNFX0VOVFJZX1RZUEVfU1lNTElOSxADEh8KG1NPVVJDRV9FTlRSWV9UWVBFX1NVQk1PRFVMRRAEKmwKCklzc3VlU3RhdGUSGwoXSVNTVUVfU1RBVEVfVU5TUEVDSUZJRUQQABIUChBJU1NVRV9TVEFURV9PUEVOEAESFgoSSVNTVUVfU1RBVEVfQ0xPU0VEEAISEwoPSVNTVUVfU1RBVEVfQUxMEAMqsAEKD0NhcGFiaWxpdHlTdGF0ZRIgChxDQVBBQklMSVRZX1NUQVRFX1VOU1BFQ0lGSUVEEAASHQoZQ0FQQUJJTElUWV9TVEFURV9ESVNBQkxFRBABEiEKHUNBUEFCSUxJVFlfU1RBVEVfVU5DT05GSUdVUkVEEAISGgoWQ0FQQUJJTElUWV9TVEFURV9SRUFEWRADEh0KGUNBUEFCSUxJVFlfU1RBVEVfREVHUkFERUQQBDK6BQoOU2Vzc2lvblNlcnZpY2USbwoYR2V0QXV0aGVudGljYXRpb25PcHRpb25zEiguZ29sZi52MS5HZXRBdXRoZW50aWNhdGlvbk9wdGlvbnNSZXF1ZXN0GikuZ29sZi52MS5HZXRBdXRoZW50aWNhdGlvbk9wdGlvbnNSZXNwb25zZRJUCg9CZWdpbkdpdGVhT0F1dGgSHy5nb2xmLnYxLkJlZ2luR2l0ZWFPQXV0aFJlcXVlc3QaIC5nb2xmLnYxLkJlZ2luR2l0ZWFPQXV0aFJlc3BvbnNlEmAKE0xvZ2luV2l0aEdpdGVhVG9rZW4SIy5nb2xmLnYxLkxvZ2luV2l0aEdpdGVhVG9rZW5SZXF1ZXN0GiQuZ29sZi52MS5Mb2dpbldpdGhHaXRlYVRva2VuUmVzcG9uc2USRQoKR2V0U2Vzc2lvbhIaLmdvbGYudjEuR2V0U2Vzc2lvblJlcXVlc3QaGy5nb2xmLnYxLkdldFNlc3Npb25SZXNwb25zZRJLCgxMaXN0U2Vzc2lvbnMSHC5nb2xmLnYxLkxpc3RTZXNzaW9uc1JlcXVlc3QaHS5nb2xmLnYxLkxpc3RTZXNzaW9uc1Jlc3BvbnNlEk4KDVJldm9rZVNlc3Npb24SHS5nb2xmLnYxLlJldm9rZVNlc3Npb25SZXF1ZXN0Gh4uZ29sZi52MS5SZXZva2VTZXNzaW9uUmVzcG9uc2USYAoTUmV2b2tlT3RoZXJTZXNzaW9ucxIjLmdvbGYudjEuUmV2b2tlT3RoZXJTZXNzaW9uc1JlcXVlc3QaJC5nb2xmLnYxLlJldm9rZU90aGVyU2Vzc2lvbnNSZXNwb25zZRI5CgZMb2dvdXQSFi5nb2xmLnYxLkxvZ291dFJlcXVlc3QaFy5nb2xmLnYxLkxvZ291dFJlc3BvbnNlMv4EChFSZXBvc2l0b3J5U2VydmljZRJXChBMaXN0UmVwb3NpdG9yaWVzEiAuZ29sZi52MS5MaXN0UmVwb3NpdG9yaWVzUmVxdWVzdBohLmdvbGYudjEuTGlzdFJlcG9zaXRvcmllc1Jlc3BvbnNlElcKEENyZWF0ZVJlcG9zaXRvcnkSIC5nb2xmLnYxLkNyZWF0ZVJlcG9zaXRvcnlSZXF1ZXN0GiEuZ29sZi52MS5DcmVhdGVSZXBvc2l0b3J5UmVzcG9uc2USTgoNR2V0UmVwb3NpdG9yeRIdLmdvbGYudjEuR2V0UmVwb3NpdG9yeVJlcXVlc3QaHi5nb2xmLnYxLkdldFJlcG9zaXRvcnlSZXNwb25zZRJLCgxMaXN0QnJhbmNoZXMSHC5nb2xmLnYxLkxpc3RCcmFuY2hlc1JlcXVlc3QaHS5nb2xmLnYxLkxpc3RCcmFuY2hlc1Jlc3BvbnNlEkgKC0xpc3RDb21taXRzEhsuZ29sZi52MS5MaXN0Q29tbWl0c1JlcXVlc3QaHC5nb2xmLnYxLkxpc3RDb21taXRzUmVzcG9uc2USSAoLR2V0Q29udGVudHMSGy5nb2xmLnYxLkdldENvbnRlbnRzUmVxdWVzdBocLmdvbGYudjEuR2V0Q29udGVudHNSZXNwb25zZRJFCgpMaXN0SXNzdWVzEhouZ29sZi52MS5MaXN0SXNzdWVzUmVxdWVzdBobLmdvbGYudjEuTGlzdElzc3Vlc1Jlc3BvbnNlEj8KCEdldElzc3VlEhguZ29sZi52MS5HZXRJc3N1ZVJlcXVlc3QaGS5nb2xmLnYxLkdldElzc3VlUmVzcG9uc2UybAoRQ2FwYWJpbGl0eVNlcnZpY2USVwoQTGlzdENhcGFiaWxpdGllcxIgLmdvbGYudjEuTGlzdENhcGFiaWxpdGllc1JlcXVlc3QaIS5nb2xmLnYxLkxpc3RDYXBhYmlsaXRpZXNSZXNwb25zZUIyWjBnaXRodWIuY29tL21qdGVjaGd1eS9nb2xmLWdpdC9nZW4vZ29sZi92MTtnb2xmdjFiBnByb3RvMw");
 
 /**
  * @generated from message golf.v1.User
@@ -243,6 +243,150 @@ export const GetSessionResponseSchema: GenMessage<GetSessionResponse> = /*@__PUR
   messageDesc(file_golf_v1_golf, 8);
 
 /**
+ * @generated from message golf.v1.SessionInfo
+ */
+export type SessionInfo = Message<"golf.v1.SessionInfo"> & {
+  /**
+   * Non-credential decimal identifier, always scoped to the authenticated user.
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string created_at = 2;
+   */
+  createdAt: string;
+
+  /**
+   * @generated from field: string expires_at = 3;
+   */
+  expiresAt: string;
+
+  /**
+   * @generated from field: bool current = 4;
+   */
+  current: boolean;
+
+  /**
+   * Current supported upstream credentials: pat or oauth. No token is returned.
+   *
+   * @generated from field: string credential_kind = 5;
+   */
+  credentialKind: string;
+};
+
+/**
+ * Describes the message golf.v1.SessionInfo.
+ * Use `create(SessionInfoSchema)` to create a new message.
+ */
+export const SessionInfoSchema: GenMessage<SessionInfo> = /*@__PURE__*/
+  messageDesc(file_golf_v1_golf, 9);
+
+/**
+ * @generated from message golf.v1.ListSessionsRequest
+ */
+export type ListSessionsRequest = Message<"golf.v1.ListSessionsRequest"> & {
+  /**
+   * @generated from field: golf.v1.PageRequest page = 1;
+   */
+  page?: PageRequest | undefined;
+};
+
+/**
+ * Describes the message golf.v1.ListSessionsRequest.
+ * Use `create(ListSessionsRequestSchema)` to create a new message.
+ */
+export const ListSessionsRequestSchema: GenMessage<ListSessionsRequest> = /*@__PURE__*/
+  messageDesc(file_golf_v1_golf, 10);
+
+/**
+ * @generated from message golf.v1.ListSessionsResponse
+ */
+export type ListSessionsResponse = Message<"golf.v1.ListSessionsResponse"> & {
+  /**
+   * @generated from field: repeated golf.v1.SessionInfo sessions = 1;
+   */
+  sessions: SessionInfo[];
+
+  /**
+   * @generated from field: golf.v1.PageResponse page = 2;
+   */
+  page?: PageResponse | undefined;
+};
+
+/**
+ * Describes the message golf.v1.ListSessionsResponse.
+ * Use `create(ListSessionsResponseSchema)` to create a new message.
+ */
+export const ListSessionsResponseSchema: GenMessage<ListSessionsResponse> = /*@__PURE__*/
+  messageDesc(file_golf_v1_golf, 11);
+
+/**
+ * @generated from message golf.v1.RevokeSessionRequest
+ */
+export type RevokeSessionRequest = Message<"golf.v1.RevokeSessionRequest"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+};
+
+/**
+ * Describes the message golf.v1.RevokeSessionRequest.
+ * Use `create(RevokeSessionRequestSchema)` to create a new message.
+ */
+export const RevokeSessionRequestSchema: GenMessage<RevokeSessionRequest> = /*@__PURE__*/
+  messageDesc(file_golf_v1_golf, 12);
+
+/**
+ * @generated from message golf.v1.RevokeSessionResponse
+ */
+export type RevokeSessionResponse = Message<"golf.v1.RevokeSessionResponse"> & {
+  /**
+   * @generated from field: bool current_session_revoked = 1;
+   */
+  currentSessionRevoked: boolean;
+};
+
+/**
+ * Describes the message golf.v1.RevokeSessionResponse.
+ * Use `create(RevokeSessionResponseSchema)` to create a new message.
+ */
+export const RevokeSessionResponseSchema: GenMessage<RevokeSessionResponse> = /*@__PURE__*/
+  messageDesc(file_golf_v1_golf, 13);
+
+/**
+ * @generated from message golf.v1.RevokeOtherSessionsRequest
+ */
+export type RevokeOtherSessionsRequest = Message<"golf.v1.RevokeOtherSessionsRequest"> & {
+};
+
+/**
+ * Describes the message golf.v1.RevokeOtherSessionsRequest.
+ * Use `create(RevokeOtherSessionsRequestSchema)` to create a new message.
+ */
+export const RevokeOtherSessionsRequestSchema: GenMessage<RevokeOtherSessionsRequest> = /*@__PURE__*/
+  messageDesc(file_golf_v1_golf, 14);
+
+/**
+ * @generated from message golf.v1.RevokeOtherSessionsResponse
+ */
+export type RevokeOtherSessionsResponse = Message<"golf.v1.RevokeOtherSessionsResponse"> & {
+  /**
+   * @generated from field: uint64 revoked_count = 1;
+   */
+  revokedCount: bigint;
+};
+
+/**
+ * Describes the message golf.v1.RevokeOtherSessionsResponse.
+ * Use `create(RevokeOtherSessionsResponseSchema)` to create a new message.
+ */
+export const RevokeOtherSessionsResponseSchema: GenMessage<RevokeOtherSessionsResponse> = /*@__PURE__*/
+  messageDesc(file_golf_v1_golf, 15);
+
+/**
  * @generated from message golf.v1.LogoutRequest
  */
 export type LogoutRequest = Message<"golf.v1.LogoutRequest"> & {
@@ -253,7 +397,7 @@ export type LogoutRequest = Message<"golf.v1.LogoutRequest"> & {
  * Use `create(LogoutRequestSchema)` to create a new message.
  */
 export const LogoutRequestSchema: GenMessage<LogoutRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 9);
+  messageDesc(file_golf_v1_golf, 16);
 
 /**
  * @generated from message golf.v1.LogoutResponse
@@ -266,7 +410,7 @@ export type LogoutResponse = Message<"golf.v1.LogoutResponse"> & {
  * Use `create(LogoutResponseSchema)` to create a new message.
  */
 export const LogoutResponseSchema: GenMessage<LogoutResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 10);
+  messageDesc(file_golf_v1_golf, 17);
 
 /**
  * @generated from message golf.v1.ListRepositoriesRequest
@@ -283,7 +427,7 @@ export type ListRepositoriesRequest = Message<"golf.v1.ListRepositoriesRequest">
  * Use `create(ListRepositoriesRequestSchema)` to create a new message.
  */
 export const ListRepositoriesRequestSchema: GenMessage<ListRepositoriesRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 11);
+  messageDesc(file_golf_v1_golf, 18);
 
 /**
  * @generated from message golf.v1.ListRepositoriesResponse
@@ -305,7 +449,7 @@ export type ListRepositoriesResponse = Message<"golf.v1.ListRepositoriesResponse
  * Use `create(ListRepositoriesResponseSchema)` to create a new message.
  */
 export const ListRepositoriesResponseSchema: GenMessage<ListRepositoriesResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 12);
+  messageDesc(file_golf_v1_golf, 19);
 
 /**
  * @generated from message golf.v1.CreateRepositoryRequest
@@ -334,7 +478,7 @@ export type CreateRepositoryRequest = Message<"golf.v1.CreateRepositoryRequest">
  * Use `create(CreateRepositoryRequestSchema)` to create a new message.
  */
 export const CreateRepositoryRequestSchema: GenMessage<CreateRepositoryRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 13);
+  messageDesc(file_golf_v1_golf, 20);
 
 /**
  * @generated from message golf.v1.CreateRepositoryResponse
@@ -351,7 +495,7 @@ export type CreateRepositoryResponse = Message<"golf.v1.CreateRepositoryResponse
  * Use `create(CreateRepositoryResponseSchema)` to create a new message.
  */
 export const CreateRepositoryResponseSchema: GenMessage<CreateRepositoryResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 14);
+  messageDesc(file_golf_v1_golf, 21);
 
 /**
  * @generated from message golf.v1.GetRepositoryRequest
@@ -368,7 +512,7 @@ export type GetRepositoryRequest = Message<"golf.v1.GetRepositoryRequest"> & {
  * Use `create(GetRepositoryRequestSchema)` to create a new message.
  */
 export const GetRepositoryRequestSchema: GenMessage<GetRepositoryRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 15);
+  messageDesc(file_golf_v1_golf, 22);
 
 /**
  * @generated from message golf.v1.GetRepositoryResponse
@@ -385,7 +529,7 @@ export type GetRepositoryResponse = Message<"golf.v1.GetRepositoryResponse"> & {
  * Use `create(GetRepositoryResponseSchema)` to create a new message.
  */
 export const GetRepositoryResponseSchema: GenMessage<GetRepositoryResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 16);
+  messageDesc(file_golf_v1_golf, 23);
 
 /**
  * @generated from message golf.v1.Branch
@@ -414,7 +558,7 @@ export type Branch = Message<"golf.v1.Branch"> & {
  * Use `create(BranchSchema)` to create a new message.
  */
 export const BranchSchema: GenMessage<Branch> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 17);
+  messageDesc(file_golf_v1_golf, 24);
 
 /**
  * @generated from message golf.v1.ListBranchesRequest
@@ -436,7 +580,7 @@ export type ListBranchesRequest = Message<"golf.v1.ListBranchesRequest"> & {
  * Use `create(ListBranchesRequestSchema)` to create a new message.
  */
 export const ListBranchesRequestSchema: GenMessage<ListBranchesRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 18);
+  messageDesc(file_golf_v1_golf, 25);
 
 /**
  * @generated from message golf.v1.ListBranchesResponse
@@ -458,7 +602,7 @@ export type ListBranchesResponse = Message<"golf.v1.ListBranchesResponse"> & {
  * Use `create(ListBranchesResponseSchema)` to create a new message.
  */
 export const ListBranchesResponseSchema: GenMessage<ListBranchesResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 19);
+  messageDesc(file_golf_v1_golf, 26);
 
 /**
  * @generated from message golf.v1.Commit
@@ -490,7 +634,7 @@ export type Commit = Message<"golf.v1.Commit"> & {
  * Use `create(CommitSchema)` to create a new message.
  */
 export const CommitSchema: GenMessage<Commit> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 20);
+  messageDesc(file_golf_v1_golf, 27);
 
 /**
  * @generated from message golf.v1.ListCommitsRequest
@@ -517,7 +661,7 @@ export type ListCommitsRequest = Message<"golf.v1.ListCommitsRequest"> & {
  * Use `create(ListCommitsRequestSchema)` to create a new message.
  */
 export const ListCommitsRequestSchema: GenMessage<ListCommitsRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 21);
+  messageDesc(file_golf_v1_golf, 28);
 
 /**
  * @generated from message golf.v1.ListCommitsResponse
@@ -539,7 +683,7 @@ export type ListCommitsResponse = Message<"golf.v1.ListCommitsResponse"> & {
  * Use `create(ListCommitsResponseSchema)` to create a new message.
  */
 export const ListCommitsResponseSchema: GenMessage<ListCommitsResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 22);
+  messageDesc(file_golf_v1_golf, 29);
 
 /**
  * @generated from message golf.v1.SourceEntry
@@ -578,7 +722,7 @@ export type SourceEntry = Message<"golf.v1.SourceEntry"> & {
  * Use `create(SourceEntrySchema)` to create a new message.
  */
 export const SourceEntrySchema: GenMessage<SourceEntry> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 23);
+  messageDesc(file_golf_v1_golf, 30);
 
 /**
  * @generated from message golf.v1.SourceFile
@@ -607,7 +751,7 @@ export type SourceFile = Message<"golf.v1.SourceFile"> & {
  * Use `create(SourceFileSchema)` to create a new message.
  */
 export const SourceFileSchema: GenMessage<SourceFile> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 24);
+  messageDesc(file_golf_v1_golf, 31);
 
 /**
  * @generated from message golf.v1.GetContentsRequest
@@ -634,7 +778,7 @@ export type GetContentsRequest = Message<"golf.v1.GetContentsRequest"> & {
  * Use `create(GetContentsRequestSchema)` to create a new message.
  */
 export const GetContentsRequestSchema: GenMessage<GetContentsRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 25);
+  messageDesc(file_golf_v1_golf, 32);
 
 /**
  * @generated from message golf.v1.GetContentsResponse
@@ -671,7 +815,7 @@ export type GetContentsResponse = Message<"golf.v1.GetContentsResponse"> & {
  * Use `create(GetContentsResponseSchema)` to create a new message.
  */
 export const GetContentsResponseSchema: GenMessage<GetContentsResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 26);
+  messageDesc(file_golf_v1_golf, 33);
 
 /**
  * @generated from message golf.v1.Issue
@@ -733,7 +877,7 @@ export type Issue = Message<"golf.v1.Issue"> & {
  * Use `create(IssueSchema)` to create a new message.
  */
 export const IssueSchema: GenMessage<Issue> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 27);
+  messageDesc(file_golf_v1_golf, 34);
 
 /**
  * @generated from message golf.v1.ListIssuesRequest
@@ -762,7 +906,7 @@ export type ListIssuesRequest = Message<"golf.v1.ListIssuesRequest"> & {
  * Use `create(ListIssuesRequestSchema)` to create a new message.
  */
 export const ListIssuesRequestSchema: GenMessage<ListIssuesRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 28);
+  messageDesc(file_golf_v1_golf, 35);
 
 /**
  * @generated from message golf.v1.ListIssuesResponse
@@ -784,7 +928,7 @@ export type ListIssuesResponse = Message<"golf.v1.ListIssuesResponse"> & {
  * Use `create(ListIssuesResponseSchema)` to create a new message.
  */
 export const ListIssuesResponseSchema: GenMessage<ListIssuesResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 29);
+  messageDesc(file_golf_v1_golf, 36);
 
 /**
  * @generated from message golf.v1.GetIssueRequest
@@ -806,7 +950,7 @@ export type GetIssueRequest = Message<"golf.v1.GetIssueRequest"> & {
  * Use `create(GetIssueRequestSchema)` to create a new message.
  */
 export const GetIssueRequestSchema: GenMessage<GetIssueRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 30);
+  messageDesc(file_golf_v1_golf, 37);
 
 /**
  * @generated from message golf.v1.GetIssueResponse
@@ -823,7 +967,7 @@ export type GetIssueResponse = Message<"golf.v1.GetIssueResponse"> & {
  * Use `create(GetIssueResponseSchema)` to create a new message.
  */
 export const GetIssueResponseSchema: GenMessage<GetIssueResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 31);
+  messageDesc(file_golf_v1_golf, 38);
 
 /**
  * @generated from message golf.v1.Capability
@@ -855,7 +999,7 @@ export type Capability = Message<"golf.v1.Capability"> & {
  * Use `create(CapabilitySchema)` to create a new message.
  */
 export const CapabilitySchema: GenMessage<Capability> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 32);
+  messageDesc(file_golf_v1_golf, 39);
 
 /**
  * @generated from message golf.v1.ListCapabilitiesRequest
@@ -868,7 +1012,7 @@ export type ListCapabilitiesRequest = Message<"golf.v1.ListCapabilitiesRequest">
  * Use `create(ListCapabilitiesRequestSchema)` to create a new message.
  */
 export const ListCapabilitiesRequestSchema: GenMessage<ListCapabilitiesRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 33);
+  messageDesc(file_golf_v1_golf, 40);
 
 /**
  * @generated from message golf.v1.ListCapabilitiesResponse
@@ -885,7 +1029,7 @@ export type ListCapabilitiesResponse = Message<"golf.v1.ListCapabilitiesResponse
  * Use `create(ListCapabilitiesResponseSchema)` to create a new message.
  */
 export const ListCapabilitiesResponseSchema: GenMessage<ListCapabilitiesResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 34);
+  messageDesc(file_golf_v1_golf, 41);
 
 /**
  * @generated from message golf.v1.GetAuthenticationOptionsRequest
@@ -898,7 +1042,7 @@ export type GetAuthenticationOptionsRequest = Message<"golf.v1.GetAuthentication
  * Use `create(GetAuthenticationOptionsRequestSchema)` to create a new message.
  */
 export const GetAuthenticationOptionsRequestSchema: GenMessage<GetAuthenticationOptionsRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 35);
+  messageDesc(file_golf_v1_golf, 42);
 
 /**
  * @generated from message golf.v1.GetAuthenticationOptionsResponse
@@ -925,7 +1069,7 @@ export type GetAuthenticationOptionsResponse = Message<"golf.v1.GetAuthenticatio
  * Use `create(GetAuthenticationOptionsResponseSchema)` to create a new message.
  */
 export const GetAuthenticationOptionsResponseSchema: GenMessage<GetAuthenticationOptionsResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 36);
+  messageDesc(file_golf_v1_golf, 43);
 
 /**
  * @generated from message golf.v1.BeginGiteaOAuthRequest
@@ -938,7 +1082,7 @@ export type BeginGiteaOAuthRequest = Message<"golf.v1.BeginGiteaOAuthRequest"> &
  * Use `create(BeginGiteaOAuthRequestSchema)` to create a new message.
  */
 export const BeginGiteaOAuthRequestSchema: GenMessage<BeginGiteaOAuthRequest> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 37);
+  messageDesc(file_golf_v1_golf, 44);
 
 /**
  * @generated from message golf.v1.BeginGiteaOAuthResponse
@@ -955,7 +1099,7 @@ export type BeginGiteaOAuthResponse = Message<"golf.v1.BeginGiteaOAuthResponse">
  * Use `create(BeginGiteaOAuthResponseSchema)` to create a new message.
  */
 export const BeginGiteaOAuthResponseSchema: GenMessage<BeginGiteaOAuthResponse> = /*@__PURE__*/
-  messageDesc(file_golf_v1_golf, 38);
+  messageDesc(file_golf_v1_golf, 45);
 
 /**
  * @generated from enum golf.v1.SourceEntryType
@@ -1099,6 +1243,30 @@ export const SessionService: GenService<{
     methodKind: "unary";
     input: typeof GetSessionRequestSchema;
     output: typeof GetSessionResponseSchema;
+  },
+  /**
+   * @generated from rpc golf.v1.SessionService.ListSessions
+   */
+  listSessions: {
+    methodKind: "unary";
+    input: typeof ListSessionsRequestSchema;
+    output: typeof ListSessionsResponseSchema;
+  },
+  /**
+   * @generated from rpc golf.v1.SessionService.RevokeSession
+   */
+  revokeSession: {
+    methodKind: "unary";
+    input: typeof RevokeSessionRequestSchema;
+    output: typeof RevokeSessionResponseSchema;
+  },
+  /**
+   * @generated from rpc golf.v1.SessionService.RevokeOtherSessions
+   */
+  revokeOtherSessions: {
+    methodKind: "unary";
+    input: typeof RevokeOtherSessionsRequestSchema;
+    output: typeof RevokeOtherSessionsResponseSchema;
   },
   /**
    * @generated from rpc golf.v1.SessionService.Logout

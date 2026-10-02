@@ -12,6 +12,7 @@ import type { Location } from './navigation';
 import { forgetPrivateQueries } from './queryClient';
 
 const RepositoryBrowser = lazy(() => import('./RepositoryBrowser').then((module) => ({ default: module.RepositoryBrowser })));
+const SessionManager = lazy(() => import('./SessionManager').then((module) => ({ default: module.SessionManager })));
 
 const themes = ['system', 'dark', 'light'] as const;
 type Theme = typeof themes[number];
@@ -189,6 +190,7 @@ function Workspace({ user, location }: { user: User; location: Location }) {
   const [search, setSearch] = useState('');
   const [visibility, setVisibility] = useState('all');
   const [creating, setCreating] = useState(false);
+  const [managingSessions, setManagingSessions] = useState(false);
   const repositoryQuery = useInfiniteQuery({
     queryKey: ['repositories', user.id], initialPageParam: 1, staleTime: 0, gcTime: 0, enabled: location.kind === 'home',
     queryFn: ({ pageParam, signal }) => repositoryClient.listRepositories({ page: { page: pageParam } }, { signal }),
@@ -196,18 +198,19 @@ function Workspace({ user, location }: { user: User; location: Location }) {
   });
   const repositories = repositoryQuery.isSuccess && (!repositoryQuery.isFetching || repositoryQuery.isFetchingNextPage) ? [...new Map(repositoryQuery.data.pages.flatMap((page) => page.repositories).map((repository) => [repository.id, repository])).values()] : [];
   const filtered = repositories.filter((repository) => `${repository.fullName} ${repository.description}`.toLowerCase().includes(search.toLowerCase().trim()) && (visibility === 'all' || repository.private === (visibility === 'private'))).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  async function signedOut() {
+    await client.cancelQueries();
+    client.setQueryData(['session'], null);
+    forgetPrivateQueries(client);
+  }
   const logout = useMutation({
     mutationFn: () => sessionClient.logout({}),
-    onSuccess: async () => {
-      await client.cancelQueries();
-      client.setQueryData(['session'], null);
-      forgetPrivateQueries(client);
-    },
+    onSuccess: signedOut,
   });
   return <div className="app-shell">
     <aside className="sidebar"><div className="sidebar-top"><Brand /><span className="alpha-tag">EARLY ACCESS</span></div>
       <div className="workspace-label"><span className="workspace-avatar">{user.login.slice(0, 1).toUpperCase()}</span><div><strong>{user.login}</strong><span>Personal workspace</span></div></div>
-      <nav aria-label="Workspace"><span className="nav-label">WORKSPACE</span><Link className="nav-item active" to="/"><BookOpen size={17} />Repositories<span>{location.kind === 'home' && repositoryQuery.isSuccess ? repositories.length : '—'}</span></Link><Link className="nav-item" to="/" hash="capabilities"><Layers2 size={17} />Capabilities</Link></nav>
+      <nav aria-label="Workspace"><span className="nav-label">WORKSPACE</span><Link className="nav-item active" to="/"><BookOpen size={17} />Repositories<span>{location.kind === 'home' && repositoryQuery.isSuccess ? repositories.length : '—'}</span></Link><Link className="nav-item" to="/" hash="capabilities"><Layers2 size={17} />Capabilities</Link><button className="nav-item sessions-nav" aria-haspopup="dialog" onClick={() => setManagingSessions(true)}><ShieldCheck size={17} />Sessions</button></nav>
       <div className="sidebar-bottom"><div className="forge-note"><GitBranch size={17} /><div><strong>Connected to Gitea</strong><span>Code stays on your forge.</span></div></div><div className="sidebar-controls"><ThemeSwitch /><button className="icon-button" aria-label="Sign out" title="Sign out" disabled={logout.isPending} onClick={() => logout.mutate()}><LogOut size={17} /></button></div><ErrorMessage error={logout.error} /></div>
     </aside>
     <div className="workspace-content"><header className="topbar"><span><span className="muted">Workspace</span><span className="breadcrumb-slash">/</span>{location.kind === 'repository' ? location.name : 'Repositories'}</span><span className="connection-pill"><span className="status-dot" /> Signed in</span></header>
@@ -222,7 +225,7 @@ function Workspace({ user, location }: { user: User; location: Location }) {
           {repositoryQuery.isSuccess ? <div className="list-footer"><span role="status">{filtered.length} of {repositories.length} loaded repositories{repositoryQuery.hasNextPage ? ' · Search applies to loaded results' : ''}</span>{repositoryQuery.hasNextPage ? <button className="text-button" disabled={repositoryQuery.isFetchingNextPage} onClick={() => void repositoryQuery.fetchNextPage()}>{repositoryQuery.isFetchingNextPage ? 'Loading…' : 'Load more'}<ArrowDown size={14} /></button> : <span>Sorted by last update</span>}</div> : null}
         </section><Capabilities /></>}<footer className="workspace-footer"><span>Made for the work ahead.</span><span>golf<span className="accent">.</span></span></footer>
       </main>
-    </div>{creating ? <CreateRepository onClose={() => setCreating(false)} /> : null}
+    </div>{creating ? <CreateRepository onClose={() => setCreating(false)} /> : null}{managingSessions ? <Suspense fallback={<p className="browser-loading" role="status">Opening sessions…</p>}><SessionManager userId={user.id} onClose={() => setManagingSessions(false)} onSignedOut={signedOut} /></Suspense> : null}
   </div>;
 }
 

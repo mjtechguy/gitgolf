@@ -694,6 +694,348 @@ func (x *GetSessionResponse) GetUser() *User {
 	return nil
 }
 
+type SessionInfo struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Non-credential decimal identifier, always scoped to the authenticated user.
+	Id        string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	CreatedAt string `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	ExpiresAt string `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	Current   bool   `protobuf:"varint,4,opt,name=current,proto3" json:"current,omitempty"`
+	// Current supported upstream credentials: pat or oauth. No token is returned.
+	CredentialKind string `protobuf:"bytes,5,opt,name=credential_kind,json=credentialKind,proto3" json:"credential_kind,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SessionInfo) Reset() {
+	*x = SessionInfo{}
+	mi := &file_golf_v1_golf_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SessionInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SessionInfo) ProtoMessage() {}
+
+func (x *SessionInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_golf_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SessionInfo.ProtoReflect.Descriptor instead.
+func (*SessionInfo) Descriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *SessionInfo) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SessionInfo) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *SessionInfo) GetExpiresAt() string {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return ""
+}
+
+func (x *SessionInfo) GetCurrent() bool {
+	if x != nil {
+		return x.Current
+	}
+	return false
+}
+
+func (x *SessionInfo) GetCredentialKind() string {
+	if x != nil {
+		return x.CredentialKind
+	}
+	return ""
+}
+
+type ListSessionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Page          *PageRequest           `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSessionsRequest) Reset() {
+	*x = ListSessionsRequest{}
+	mi := &file_golf_v1_golf_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSessionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSessionsRequest) ProtoMessage() {}
+
+func (x *ListSessionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_golf_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSessionsRequest.ProtoReflect.Descriptor instead.
+func (*ListSessionsRequest) Descriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ListSessionsRequest) GetPage() *PageRequest {
+	if x != nil {
+		return x.Page
+	}
+	return nil
+}
+
+type ListSessionsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sessions      []*SessionInfo         `protobuf:"bytes,1,rep,name=sessions,proto3" json:"sessions,omitempty"`
+	Page          *PageResponse          `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSessionsResponse) Reset() {
+	*x = ListSessionsResponse{}
+	mi := &file_golf_v1_golf_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSessionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSessionsResponse) ProtoMessage() {}
+
+func (x *ListSessionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_golf_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSessionsResponse.ProtoReflect.Descriptor instead.
+func (*ListSessionsResponse) Descriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ListSessionsResponse) GetSessions() []*SessionInfo {
+	if x != nil {
+		return x.Sessions
+	}
+	return nil
+}
+
+func (x *ListSessionsResponse) GetPage() *PageResponse {
+	if x != nil {
+		return x.Page
+	}
+	return nil
+}
+
+type RevokeSessionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeSessionRequest) Reset() {
+	*x = RevokeSessionRequest{}
+	mi := &file_golf_v1_golf_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeSessionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeSessionRequest) ProtoMessage() {}
+
+func (x *RevokeSessionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_golf_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeSessionRequest.ProtoReflect.Descriptor instead.
+func (*RevokeSessionRequest) Descriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *RevokeSessionRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+type RevokeSessionResponse struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	CurrentSessionRevoked bool                   `protobuf:"varint,1,opt,name=current_session_revoked,json=currentSessionRevoked,proto3" json:"current_session_revoked,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *RevokeSessionResponse) Reset() {
+	*x = RevokeSessionResponse{}
+	mi := &file_golf_v1_golf_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeSessionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeSessionResponse) ProtoMessage() {}
+
+func (x *RevokeSessionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_golf_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeSessionResponse.ProtoReflect.Descriptor instead.
+func (*RevokeSessionResponse) Descriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *RevokeSessionResponse) GetCurrentSessionRevoked() bool {
+	if x != nil {
+		return x.CurrentSessionRevoked
+	}
+	return false
+}
+
+type RevokeOtherSessionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeOtherSessionsRequest) Reset() {
+	*x = RevokeOtherSessionsRequest{}
+	mi := &file_golf_v1_golf_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeOtherSessionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeOtherSessionsRequest) ProtoMessage() {}
+
+func (x *RevokeOtherSessionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_golf_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeOtherSessionsRequest.ProtoReflect.Descriptor instead.
+func (*RevokeOtherSessionsRequest) Descriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{14}
+}
+
+type RevokeOtherSessionsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RevokedCount  uint64                 `protobuf:"varint,1,opt,name=revoked_count,json=revokedCount,proto3" json:"revoked_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeOtherSessionsResponse) Reset() {
+	*x = RevokeOtherSessionsResponse{}
+	mi := &file_golf_v1_golf_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeOtherSessionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeOtherSessionsResponse) ProtoMessage() {}
+
+func (x *RevokeOtherSessionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_golf_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeOtherSessionsResponse.ProtoReflect.Descriptor instead.
+func (*RevokeOtherSessionsResponse) Descriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *RevokeOtherSessionsResponse) GetRevokedCount() uint64 {
+	if x != nil {
+		return x.RevokedCount
+	}
+	return 0
+}
+
 type LogoutRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -702,7 +1044,7 @@ type LogoutRequest struct {
 
 func (x *LogoutRequest) Reset() {
 	*x = LogoutRequest{}
-	mi := &file_golf_v1_golf_proto_msgTypes[9]
+	mi := &file_golf_v1_golf_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -714,7 +1056,7 @@ func (x *LogoutRequest) String() string {
 func (*LogoutRequest) ProtoMessage() {}
 
 func (x *LogoutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[9]
+	mi := &file_golf_v1_golf_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -727,7 +1069,7 @@ func (x *LogoutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutRequest.ProtoReflect.Descriptor instead.
 func (*LogoutRequest) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{9}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{16}
 }
 
 type LogoutResponse struct {
@@ -738,7 +1080,7 @@ type LogoutResponse struct {
 
 func (x *LogoutResponse) Reset() {
 	*x = LogoutResponse{}
-	mi := &file_golf_v1_golf_proto_msgTypes[10]
+	mi := &file_golf_v1_golf_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -750,7 +1092,7 @@ func (x *LogoutResponse) String() string {
 func (*LogoutResponse) ProtoMessage() {}
 
 func (x *LogoutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[10]
+	mi := &file_golf_v1_golf_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -763,7 +1105,7 @@ func (x *LogoutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutResponse.ProtoReflect.Descriptor instead.
 func (*LogoutResponse) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{10}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{17}
 }
 
 type ListRepositoriesRequest struct {
@@ -775,7 +1117,7 @@ type ListRepositoriesRequest struct {
 
 func (x *ListRepositoriesRequest) Reset() {
 	*x = ListRepositoriesRequest{}
-	mi := &file_golf_v1_golf_proto_msgTypes[11]
+	mi := &file_golf_v1_golf_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -787,7 +1129,7 @@ func (x *ListRepositoriesRequest) String() string {
 func (*ListRepositoriesRequest) ProtoMessage() {}
 
 func (x *ListRepositoriesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[11]
+	mi := &file_golf_v1_golf_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -800,7 +1142,7 @@ func (x *ListRepositoriesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRepositoriesRequest.ProtoReflect.Descriptor instead.
 func (*ListRepositoriesRequest) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{11}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ListRepositoriesRequest) GetPage() *PageRequest {
@@ -820,7 +1162,7 @@ type ListRepositoriesResponse struct {
 
 func (x *ListRepositoriesResponse) Reset() {
 	*x = ListRepositoriesResponse{}
-	mi := &file_golf_v1_golf_proto_msgTypes[12]
+	mi := &file_golf_v1_golf_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -832,7 +1174,7 @@ func (x *ListRepositoriesResponse) String() string {
 func (*ListRepositoriesResponse) ProtoMessage() {}
 
 func (x *ListRepositoriesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[12]
+	mi := &file_golf_v1_golf_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -845,7 +1187,7 @@ func (x *ListRepositoriesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRepositoriesResponse.ProtoReflect.Descriptor instead.
 func (*ListRepositoriesResponse) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{12}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ListRepositoriesResponse) GetRepositories() []*Repository {
@@ -874,7 +1216,7 @@ type CreateRepositoryRequest struct {
 
 func (x *CreateRepositoryRequest) Reset() {
 	*x = CreateRepositoryRequest{}
-	mi := &file_golf_v1_golf_proto_msgTypes[13]
+	mi := &file_golf_v1_golf_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -886,7 +1228,7 @@ func (x *CreateRepositoryRequest) String() string {
 func (*CreateRepositoryRequest) ProtoMessage() {}
 
 func (x *CreateRepositoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[13]
+	mi := &file_golf_v1_golf_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -899,7 +1241,7 @@ func (x *CreateRepositoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRepositoryRequest.ProtoReflect.Descriptor instead.
 func (*CreateRepositoryRequest) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{13}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *CreateRepositoryRequest) GetName() string {
@@ -932,7 +1274,7 @@ type CreateRepositoryResponse struct {
 
 func (x *CreateRepositoryResponse) Reset() {
 	*x = CreateRepositoryResponse{}
-	mi := &file_golf_v1_golf_proto_msgTypes[14]
+	mi := &file_golf_v1_golf_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -944,7 +1286,7 @@ func (x *CreateRepositoryResponse) String() string {
 func (*CreateRepositoryResponse) ProtoMessage() {}
 
 func (x *CreateRepositoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[14]
+	mi := &file_golf_v1_golf_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -957,7 +1299,7 @@ func (x *CreateRepositoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRepositoryResponse.ProtoReflect.Descriptor instead.
 func (*CreateRepositoryResponse) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{14}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *CreateRepositoryResponse) GetRepository() *Repository {
@@ -976,7 +1318,7 @@ type GetRepositoryRequest struct {
 
 func (x *GetRepositoryRequest) Reset() {
 	*x = GetRepositoryRequest{}
-	mi := &file_golf_v1_golf_proto_msgTypes[15]
+	mi := &file_golf_v1_golf_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -988,7 +1330,7 @@ func (x *GetRepositoryRequest) String() string {
 func (*GetRepositoryRequest) ProtoMessage() {}
 
 func (x *GetRepositoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[15]
+	mi := &file_golf_v1_golf_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1001,7 +1343,7 @@ func (x *GetRepositoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRepositoryRequest.ProtoReflect.Descriptor instead.
 func (*GetRepositoryRequest) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{15}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GetRepositoryRequest) GetRepository() *RepositoryKey {
@@ -1020,7 +1362,7 @@ type GetRepositoryResponse struct {
 
 func (x *GetRepositoryResponse) Reset() {
 	*x = GetRepositoryResponse{}
-	mi := &file_golf_v1_golf_proto_msgTypes[16]
+	mi := &file_golf_v1_golf_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1032,7 +1374,7 @@ func (x *GetRepositoryResponse) String() string {
 func (*GetRepositoryResponse) ProtoMessage() {}
 
 func (x *GetRepositoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[16]
+	mi := &file_golf_v1_golf_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1045,7 +1387,7 @@ func (x *GetRepositoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRepositoryResponse.ProtoReflect.Descriptor instead.
 func (*GetRepositoryResponse) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{16}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *GetRepositoryResponse) GetRepository() *Repository {
@@ -1067,7 +1409,7 @@ type Branch struct {
 
 func (x *Branch) Reset() {
 	*x = Branch{}
-	mi := &file_golf_v1_golf_proto_msgTypes[17]
+	mi := &file_golf_v1_golf_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1079,7 +1421,7 @@ func (x *Branch) String() string {
 func (*Branch) ProtoMessage() {}
 
 func (x *Branch) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[17]
+	mi := &file_golf_v1_golf_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1092,7 +1434,7 @@ func (x *Branch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Branch.ProtoReflect.Descriptor instead.
 func (*Branch) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{17}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *Branch) GetName() string {
@@ -1126,7 +1468,7 @@ type ListBranchesRequest struct {
 
 func (x *ListBranchesRequest) Reset() {
 	*x = ListBranchesRequest{}
-	mi := &file_golf_v1_golf_proto_msgTypes[18]
+	mi := &file_golf_v1_golf_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1138,7 +1480,7 @@ func (x *ListBranchesRequest) String() string {
 func (*ListBranchesRequest) ProtoMessage() {}
 
 func (x *ListBranchesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[18]
+	mi := &file_golf_v1_golf_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1151,7 +1493,7 @@ func (x *ListBranchesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBranchesRequest.ProtoReflect.Descriptor instead.
 func (*ListBranchesRequest) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{18}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ListBranchesRequest) GetRepository() *RepositoryKey {
@@ -1178,7 +1520,7 @@ type ListBranchesResponse struct {
 
 func (x *ListBranchesResponse) Reset() {
 	*x = ListBranchesResponse{}
-	mi := &file_golf_v1_golf_proto_msgTypes[19]
+	mi := &file_golf_v1_golf_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1190,7 +1532,7 @@ func (x *ListBranchesResponse) String() string {
 func (*ListBranchesResponse) ProtoMessage() {}
 
 func (x *ListBranchesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[19]
+	mi := &file_golf_v1_golf_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1203,7 +1545,7 @@ func (x *ListBranchesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBranchesResponse.ProtoReflect.Descriptor instead.
 func (*ListBranchesResponse) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{19}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListBranchesResponse) GetBranches() []*Branch {
@@ -1232,7 +1574,7 @@ type Commit struct {
 
 func (x *Commit) Reset() {
 	*x = Commit{}
-	mi := &file_golf_v1_golf_proto_msgTypes[20]
+	mi := &file_golf_v1_golf_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1244,7 +1586,7 @@ func (x *Commit) String() string {
 func (*Commit) ProtoMessage() {}
 
 func (x *Commit) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[20]
+	mi := &file_golf_v1_golf_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1257,7 +1599,7 @@ func (x *Commit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Commit.ProtoReflect.Descriptor instead.
 func (*Commit) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{20}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *Commit) GetSha() string {
@@ -1299,7 +1641,7 @@ type ListCommitsRequest struct {
 
 func (x *ListCommitsRequest) Reset() {
 	*x = ListCommitsRequest{}
-	mi := &file_golf_v1_golf_proto_msgTypes[21]
+	mi := &file_golf_v1_golf_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1311,7 +1653,7 @@ func (x *ListCommitsRequest) String() string {
 func (*ListCommitsRequest) ProtoMessage() {}
 
 func (x *ListCommitsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[21]
+	mi := &file_golf_v1_golf_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1324,7 +1666,7 @@ func (x *ListCommitsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCommitsRequest.ProtoReflect.Descriptor instead.
 func (*ListCommitsRequest) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{21}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ListCommitsRequest) GetRepository() *RepositoryKey {
@@ -1358,7 +1700,7 @@ type ListCommitsResponse struct {
 
 func (x *ListCommitsResponse) Reset() {
 	*x = ListCommitsResponse{}
-	mi := &file_golf_v1_golf_proto_msgTypes[22]
+	mi := &file_golf_v1_golf_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1370,7 +1712,7 @@ func (x *ListCommitsResponse) String() string {
 func (*ListCommitsResponse) ProtoMessage() {}
 
 func (x *ListCommitsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[22]
+	mi := &file_golf_v1_golf_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1383,7 +1725,7 @@ func (x *ListCommitsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCommitsResponse.ProtoReflect.Descriptor instead.
 func (*ListCommitsResponse) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{22}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ListCommitsResponse) GetCommits() []*Commit {
@@ -1414,7 +1756,7 @@ type SourceEntry struct {
 
 func (x *SourceEntry) Reset() {
 	*x = SourceEntry{}
-	mi := &file_golf_v1_golf_proto_msgTypes[23]
+	mi := &file_golf_v1_golf_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1426,7 +1768,7 @@ func (x *SourceEntry) String() string {
 func (*SourceEntry) ProtoMessage() {}
 
 func (x *SourceEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[23]
+	mi := &file_golf_v1_golf_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1439,7 +1781,7 @@ func (x *SourceEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SourceEntry.ProtoReflect.Descriptor instead.
 func (*SourceEntry) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{23}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *SourceEntry) GetName() string {
@@ -1489,7 +1831,7 @@ type SourceFile struct {
 
 func (x *SourceFile) Reset() {
 	*x = SourceFile{}
-	mi := &file_golf_v1_golf_proto_msgTypes[24]
+	mi := &file_golf_v1_golf_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1501,7 +1843,7 @@ func (x *SourceFile) String() string {
 func (*SourceFile) ProtoMessage() {}
 
 func (x *SourceFile) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[24]
+	mi := &file_golf_v1_golf_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1514,7 +1856,7 @@ func (x *SourceFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SourceFile.ProtoReflect.Descriptor instead.
 func (*SourceFile) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{24}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *SourceFile) GetEntry() *SourceEntry {
@@ -1549,7 +1891,7 @@ type GetContentsRequest struct {
 
 func (x *GetContentsRequest) Reset() {
 	*x = GetContentsRequest{}
-	mi := &file_golf_v1_golf_proto_msgTypes[25]
+	mi := &file_golf_v1_golf_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1561,7 +1903,7 @@ func (x *GetContentsRequest) String() string {
 func (*GetContentsRequest) ProtoMessage() {}
 
 func (x *GetContentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[25]
+	mi := &file_golf_v1_golf_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1574,7 +1916,7 @@ func (x *GetContentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetContentsRequest.ProtoReflect.Descriptor instead.
 func (*GetContentsRequest) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{25}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GetContentsRequest) GetRepository() *RepositoryKey {
@@ -1611,7 +1953,7 @@ type GetContentsResponse struct {
 
 func (x *GetContentsResponse) Reset() {
 	*x = GetContentsResponse{}
-	mi := &file_golf_v1_golf_proto_msgTypes[26]
+	mi := &file_golf_v1_golf_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1623,7 +1965,7 @@ func (x *GetContentsResponse) String() string {
 func (*GetContentsResponse) ProtoMessage() {}
 
 func (x *GetContentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[26]
+	mi := &file_golf_v1_golf_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1636,7 +1978,7 @@ func (x *GetContentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetContentsResponse.ProtoReflect.Descriptor instead.
 func (*GetContentsResponse) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{26}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *GetContentsResponse) GetCommitId() string {
@@ -1692,7 +2034,7 @@ type Issue struct {
 
 func (x *Issue) Reset() {
 	*x = Issue{}
-	mi := &file_golf_v1_golf_proto_msgTypes[27]
+	mi := &file_golf_v1_golf_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1704,7 +2046,7 @@ func (x *Issue) String() string {
 func (*Issue) ProtoMessage() {}
 
 func (x *Issue) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[27]
+	mi := &file_golf_v1_golf_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1717,7 +2059,7 @@ func (x *Issue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Issue.ProtoReflect.Descriptor instead.
 func (*Issue) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{27}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *Issue) GetId() string {
@@ -1802,7 +2144,7 @@ type ListIssuesRequest struct {
 
 func (x *ListIssuesRequest) Reset() {
 	*x = ListIssuesRequest{}
-	mi := &file_golf_v1_golf_proto_msgTypes[28]
+	mi := &file_golf_v1_golf_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1814,7 +2156,7 @@ func (x *ListIssuesRequest) String() string {
 func (*ListIssuesRequest) ProtoMessage() {}
 
 func (x *ListIssuesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[28]
+	mi := &file_golf_v1_golf_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1827,7 +2169,7 @@ func (x *ListIssuesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIssuesRequest.ProtoReflect.Descriptor instead.
 func (*ListIssuesRequest) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{28}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ListIssuesRequest) GetRepository() *RepositoryKey {
@@ -1861,7 +2203,7 @@ type ListIssuesResponse struct {
 
 func (x *ListIssuesResponse) Reset() {
 	*x = ListIssuesResponse{}
-	mi := &file_golf_v1_golf_proto_msgTypes[29]
+	mi := &file_golf_v1_golf_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1873,7 +2215,7 @@ func (x *ListIssuesResponse) String() string {
 func (*ListIssuesResponse) ProtoMessage() {}
 
 func (x *ListIssuesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[29]
+	mi := &file_golf_v1_golf_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1886,7 +2228,7 @@ func (x *ListIssuesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIssuesResponse.ProtoReflect.Descriptor instead.
 func (*ListIssuesResponse) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{29}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ListIssuesResponse) GetIssues() []*Issue {
@@ -1913,7 +2255,7 @@ type GetIssueRequest struct {
 
 func (x *GetIssueRequest) Reset() {
 	*x = GetIssueRequest{}
-	mi := &file_golf_v1_golf_proto_msgTypes[30]
+	mi := &file_golf_v1_golf_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1925,7 +2267,7 @@ func (x *GetIssueRequest) String() string {
 func (*GetIssueRequest) ProtoMessage() {}
 
 func (x *GetIssueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[30]
+	mi := &file_golf_v1_golf_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1938,7 +2280,7 @@ func (x *GetIssueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetIssueRequest.ProtoReflect.Descriptor instead.
 func (*GetIssueRequest) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{30}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *GetIssueRequest) GetRepository() *RepositoryKey {
@@ -1964,7 +2306,7 @@ type GetIssueResponse struct {
 
 func (x *GetIssueResponse) Reset() {
 	*x = GetIssueResponse{}
-	mi := &file_golf_v1_golf_proto_msgTypes[31]
+	mi := &file_golf_v1_golf_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1976,7 +2318,7 @@ func (x *GetIssueResponse) String() string {
 func (*GetIssueResponse) ProtoMessage() {}
 
 func (x *GetIssueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[31]
+	mi := &file_golf_v1_golf_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1989,7 +2331,7 @@ func (x *GetIssueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetIssueResponse.ProtoReflect.Descriptor instead.
 func (*GetIssueResponse) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{31}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *GetIssueResponse) GetIssue() *Issue {
@@ -2011,7 +2353,7 @@ type Capability struct {
 
 func (x *Capability) Reset() {
 	*x = Capability{}
-	mi := &file_golf_v1_golf_proto_msgTypes[32]
+	mi := &file_golf_v1_golf_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2023,7 +2365,7 @@ func (x *Capability) String() string {
 func (*Capability) ProtoMessage() {}
 
 func (x *Capability) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[32]
+	mi := &file_golf_v1_golf_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2036,7 +2378,7 @@ func (x *Capability) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Capability.ProtoReflect.Descriptor instead.
 func (*Capability) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{32}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *Capability) GetId() string {
@@ -2075,7 +2417,7 @@ type ListCapabilitiesRequest struct {
 
 func (x *ListCapabilitiesRequest) Reset() {
 	*x = ListCapabilitiesRequest{}
-	mi := &file_golf_v1_golf_proto_msgTypes[33]
+	mi := &file_golf_v1_golf_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2087,7 +2429,7 @@ func (x *ListCapabilitiesRequest) String() string {
 func (*ListCapabilitiesRequest) ProtoMessage() {}
 
 func (x *ListCapabilitiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[33]
+	mi := &file_golf_v1_golf_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2100,7 +2442,7 @@ func (x *ListCapabilitiesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCapabilitiesRequest.ProtoReflect.Descriptor instead.
 func (*ListCapabilitiesRequest) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{33}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{40}
 }
 
 type ListCapabilitiesResponse struct {
@@ -2112,7 +2454,7 @@ type ListCapabilitiesResponse struct {
 
 func (x *ListCapabilitiesResponse) Reset() {
 	*x = ListCapabilitiesResponse{}
-	mi := &file_golf_v1_golf_proto_msgTypes[34]
+	mi := &file_golf_v1_golf_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2124,7 +2466,7 @@ func (x *ListCapabilitiesResponse) String() string {
 func (*ListCapabilitiesResponse) ProtoMessage() {}
 
 func (x *ListCapabilitiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[34]
+	mi := &file_golf_v1_golf_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2137,7 +2479,7 @@ func (x *ListCapabilitiesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCapabilitiesResponse.ProtoReflect.Descriptor instead.
 func (*ListCapabilitiesResponse) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{34}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *ListCapabilitiesResponse) GetCapabilities() []*Capability {
@@ -2155,7 +2497,7 @@ type GetAuthenticationOptionsRequest struct {
 
 func (x *GetAuthenticationOptionsRequest) Reset() {
 	*x = GetAuthenticationOptionsRequest{}
-	mi := &file_golf_v1_golf_proto_msgTypes[35]
+	mi := &file_golf_v1_golf_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2167,7 +2509,7 @@ func (x *GetAuthenticationOptionsRequest) String() string {
 func (*GetAuthenticationOptionsRequest) ProtoMessage() {}
 
 func (x *GetAuthenticationOptionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[35]
+	mi := &file_golf_v1_golf_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2180,7 +2522,7 @@ func (x *GetAuthenticationOptionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAuthenticationOptionsRequest.ProtoReflect.Descriptor instead.
 func (*GetAuthenticationOptionsRequest) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{35}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{42}
 }
 
 type GetAuthenticationOptionsResponse struct {
@@ -2194,7 +2536,7 @@ type GetAuthenticationOptionsResponse struct {
 
 func (x *GetAuthenticationOptionsResponse) Reset() {
 	*x = GetAuthenticationOptionsResponse{}
-	mi := &file_golf_v1_golf_proto_msgTypes[36]
+	mi := &file_golf_v1_golf_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2206,7 +2548,7 @@ func (x *GetAuthenticationOptionsResponse) String() string {
 func (*GetAuthenticationOptionsResponse) ProtoMessage() {}
 
 func (x *GetAuthenticationOptionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[36]
+	mi := &file_golf_v1_golf_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2219,7 +2561,7 @@ func (x *GetAuthenticationOptionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAuthenticationOptionsResponse.ProtoReflect.Descriptor instead.
 func (*GetAuthenticationOptionsResponse) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{36}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *GetAuthenticationOptionsResponse) GetGiteaOauthEnabled() bool {
@@ -2251,7 +2593,7 @@ type BeginGiteaOAuthRequest struct {
 
 func (x *BeginGiteaOAuthRequest) Reset() {
 	*x = BeginGiteaOAuthRequest{}
-	mi := &file_golf_v1_golf_proto_msgTypes[37]
+	mi := &file_golf_v1_golf_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2263,7 +2605,7 @@ func (x *BeginGiteaOAuthRequest) String() string {
 func (*BeginGiteaOAuthRequest) ProtoMessage() {}
 
 func (x *BeginGiteaOAuthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[37]
+	mi := &file_golf_v1_golf_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2276,7 +2618,7 @@ func (x *BeginGiteaOAuthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginGiteaOAuthRequest.ProtoReflect.Descriptor instead.
 func (*BeginGiteaOAuthRequest) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{37}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{44}
 }
 
 type BeginGiteaOAuthResponse struct {
@@ -2288,7 +2630,7 @@ type BeginGiteaOAuthResponse struct {
 
 func (x *BeginGiteaOAuthResponse) Reset() {
 	*x = BeginGiteaOAuthResponse{}
-	mi := &file_golf_v1_golf_proto_msgTypes[38]
+	mi := &file_golf_v1_golf_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2300,7 +2642,7 @@ func (x *BeginGiteaOAuthResponse) String() string {
 func (*BeginGiteaOAuthResponse) ProtoMessage() {}
 
 func (x *BeginGiteaOAuthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_golf_v1_golf_proto_msgTypes[38]
+	mi := &file_golf_v1_golf_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2313,7 +2655,7 @@ func (x *BeginGiteaOAuthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginGiteaOAuthResponse.ProtoReflect.Descriptor instead.
 func (*BeginGiteaOAuthResponse) Descriptor() ([]byte, []int) {
-	return file_golf_v1_golf_proto_rawDescGZIP(), []int{38}
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *BeginGiteaOAuthResponse) GetAuthorizationUrl() string {
@@ -2363,7 +2705,28 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x04user\x18\x01 \x01(\v2\r.golf.v1.UserR\x04user\"\x13\n" +
 	"\x11GetSessionRequest\"7\n" +
 	"\x12GetSessionResponse\x12!\n" +
-	"\x04user\x18\x01 \x01(\v2\r.golf.v1.UserR\x04user\"\x0f\n" +
+	"\x04user\x18\x01 \x01(\v2\r.golf.v1.UserR\x04user\"\x9e\x01\n" +
+	"\vSessionInfo\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x02 \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x03 \x01(\tR\texpiresAt\x12\x18\n" +
+	"\acurrent\x18\x04 \x01(\bR\acurrent\x12'\n" +
+	"\x0fcredential_kind\x18\x05 \x01(\tR\x0ecredentialKind\"?\n" +
+	"\x13ListSessionsRequest\x12(\n" +
+	"\x04page\x18\x01 \x01(\v2\x14.golf.v1.PageRequestR\x04page\"s\n" +
+	"\x14ListSessionsResponse\x120\n" +
+	"\bsessions\x18\x01 \x03(\v2\x14.golf.v1.SessionInfoR\bsessions\x12)\n" +
+	"\x04page\x18\x02 \x01(\v2\x15.golf.v1.PageResponseR\x04page\"5\n" +
+	"\x14RevokeSessionRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"O\n" +
+	"\x15RevokeSessionResponse\x126\n" +
+	"\x17current_session_revoked\x18\x01 \x01(\bR\x15currentSessionRevoked\"\x1c\n" +
+	"\x1aRevokeOtherSessionsRequest\"B\n" +
+	"\x1bRevokeOtherSessionsResponse\x12#\n" +
+	"\rrevoked_count\x18\x01 \x01(\x04R\frevokedCount\"\x0f\n" +
 	"\rLogoutRequest\"\x10\n" +
 	"\x0eLogoutResponse\"C\n" +
 	"\x17ListRepositoriesRequest\x12(\n" +
@@ -2506,13 +2869,16 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x19CAPABILITY_STATE_DISABLED\x10\x01\x12!\n" +
 	"\x1dCAPABILITY_STATE_UNCONFIGURED\x10\x02\x12\x1a\n" +
 	"\x16CAPABILITY_STATE_READY\x10\x03\x12\x1d\n" +
-	"\x19CAPABILITY_STATE_DEGRADED\x10\x042\xbb\x03\n" +
+	"\x19CAPABILITY_STATE_DEGRADED\x10\x042\xba\x05\n" +
 	"\x0eSessionService\x12o\n" +
 	"\x18GetAuthenticationOptions\x12(.golf.v1.GetAuthenticationOptionsRequest\x1a).golf.v1.GetAuthenticationOptionsResponse\x12T\n" +
 	"\x0fBeginGiteaOAuth\x12\x1f.golf.v1.BeginGiteaOAuthRequest\x1a .golf.v1.BeginGiteaOAuthResponse\x12`\n" +
 	"\x13LoginWithGiteaToken\x12#.golf.v1.LoginWithGiteaTokenRequest\x1a$.golf.v1.LoginWithGiteaTokenResponse\x12E\n" +
 	"\n" +
-	"GetSession\x12\x1a.golf.v1.GetSessionRequest\x1a\x1b.golf.v1.GetSessionResponse\x129\n" +
+	"GetSession\x12\x1a.golf.v1.GetSessionRequest\x1a\x1b.golf.v1.GetSessionResponse\x12K\n" +
+	"\fListSessions\x12\x1c.golf.v1.ListSessionsRequest\x1a\x1d.golf.v1.ListSessionsResponse\x12N\n" +
+	"\rRevokeSession\x12\x1d.golf.v1.RevokeSessionRequest\x1a\x1e.golf.v1.RevokeSessionResponse\x12`\n" +
+	"\x13RevokeOtherSessions\x12#.golf.v1.RevokeOtherSessionsRequest\x1a$.golf.v1.RevokeOtherSessionsResponse\x129\n" +
 	"\x06Logout\x12\x16.golf.v1.LogoutRequest\x1a\x17.golf.v1.LogoutResponse2\xfe\x04\n" +
 	"\x11RepositoryService\x12W\n" +
 	"\x10ListRepositories\x12 .golf.v1.ListRepositoriesRequest\x1a!.golf.v1.ListRepositoriesResponse\x12W\n" +
@@ -2540,7 +2906,7 @@ func file_golf_v1_golf_proto_rawDescGZIP() []byte {
 }
 
 var file_golf_v1_golf_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_golf_v1_golf_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
+var file_golf_v1_golf_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
 var file_golf_v1_golf_proto_goTypes = []any{
 	(SourceEntryType)(0),                     // 0: golf.v1.SourceEntryType
 	(IssueState)(0),                          // 1: golf.v1.IssueState
@@ -2554,104 +2920,120 @@ var file_golf_v1_golf_proto_goTypes = []any{
 	(*LoginWithGiteaTokenResponse)(nil),      // 9: golf.v1.LoginWithGiteaTokenResponse
 	(*GetSessionRequest)(nil),                // 10: golf.v1.GetSessionRequest
 	(*GetSessionResponse)(nil),               // 11: golf.v1.GetSessionResponse
-	(*LogoutRequest)(nil),                    // 12: golf.v1.LogoutRequest
-	(*LogoutResponse)(nil),                   // 13: golf.v1.LogoutResponse
-	(*ListRepositoriesRequest)(nil),          // 14: golf.v1.ListRepositoriesRequest
-	(*ListRepositoriesResponse)(nil),         // 15: golf.v1.ListRepositoriesResponse
-	(*CreateRepositoryRequest)(nil),          // 16: golf.v1.CreateRepositoryRequest
-	(*CreateRepositoryResponse)(nil),         // 17: golf.v1.CreateRepositoryResponse
-	(*GetRepositoryRequest)(nil),             // 18: golf.v1.GetRepositoryRequest
-	(*GetRepositoryResponse)(nil),            // 19: golf.v1.GetRepositoryResponse
-	(*Branch)(nil),                           // 20: golf.v1.Branch
-	(*ListBranchesRequest)(nil),              // 21: golf.v1.ListBranchesRequest
-	(*ListBranchesResponse)(nil),             // 22: golf.v1.ListBranchesResponse
-	(*Commit)(nil),                           // 23: golf.v1.Commit
-	(*ListCommitsRequest)(nil),               // 24: golf.v1.ListCommitsRequest
-	(*ListCommitsResponse)(nil),              // 25: golf.v1.ListCommitsResponse
-	(*SourceEntry)(nil),                      // 26: golf.v1.SourceEntry
-	(*SourceFile)(nil),                       // 27: golf.v1.SourceFile
-	(*GetContentsRequest)(nil),               // 28: golf.v1.GetContentsRequest
-	(*GetContentsResponse)(nil),              // 29: golf.v1.GetContentsResponse
-	(*Issue)(nil),                            // 30: golf.v1.Issue
-	(*ListIssuesRequest)(nil),                // 31: golf.v1.ListIssuesRequest
-	(*ListIssuesResponse)(nil),               // 32: golf.v1.ListIssuesResponse
-	(*GetIssueRequest)(nil),                  // 33: golf.v1.GetIssueRequest
-	(*GetIssueResponse)(nil),                 // 34: golf.v1.GetIssueResponse
-	(*Capability)(nil),                       // 35: golf.v1.Capability
-	(*ListCapabilitiesRequest)(nil),          // 36: golf.v1.ListCapabilitiesRequest
-	(*ListCapabilitiesResponse)(nil),         // 37: golf.v1.ListCapabilitiesResponse
-	(*GetAuthenticationOptionsRequest)(nil),  // 38: golf.v1.GetAuthenticationOptionsRequest
-	(*GetAuthenticationOptionsResponse)(nil), // 39: golf.v1.GetAuthenticationOptionsResponse
-	(*BeginGiteaOAuthRequest)(nil),           // 40: golf.v1.BeginGiteaOAuthRequest
-	(*BeginGiteaOAuthResponse)(nil),          // 41: golf.v1.BeginGiteaOAuthResponse
+	(*SessionInfo)(nil),                      // 12: golf.v1.SessionInfo
+	(*ListSessionsRequest)(nil),              // 13: golf.v1.ListSessionsRequest
+	(*ListSessionsResponse)(nil),             // 14: golf.v1.ListSessionsResponse
+	(*RevokeSessionRequest)(nil),             // 15: golf.v1.RevokeSessionRequest
+	(*RevokeSessionResponse)(nil),            // 16: golf.v1.RevokeSessionResponse
+	(*RevokeOtherSessionsRequest)(nil),       // 17: golf.v1.RevokeOtherSessionsRequest
+	(*RevokeOtherSessionsResponse)(nil),      // 18: golf.v1.RevokeOtherSessionsResponse
+	(*LogoutRequest)(nil),                    // 19: golf.v1.LogoutRequest
+	(*LogoutResponse)(nil),                   // 20: golf.v1.LogoutResponse
+	(*ListRepositoriesRequest)(nil),          // 21: golf.v1.ListRepositoriesRequest
+	(*ListRepositoriesResponse)(nil),         // 22: golf.v1.ListRepositoriesResponse
+	(*CreateRepositoryRequest)(nil),          // 23: golf.v1.CreateRepositoryRequest
+	(*CreateRepositoryResponse)(nil),         // 24: golf.v1.CreateRepositoryResponse
+	(*GetRepositoryRequest)(nil),             // 25: golf.v1.GetRepositoryRequest
+	(*GetRepositoryResponse)(nil),            // 26: golf.v1.GetRepositoryResponse
+	(*Branch)(nil),                           // 27: golf.v1.Branch
+	(*ListBranchesRequest)(nil),              // 28: golf.v1.ListBranchesRequest
+	(*ListBranchesResponse)(nil),             // 29: golf.v1.ListBranchesResponse
+	(*Commit)(nil),                           // 30: golf.v1.Commit
+	(*ListCommitsRequest)(nil),               // 31: golf.v1.ListCommitsRequest
+	(*ListCommitsResponse)(nil),              // 32: golf.v1.ListCommitsResponse
+	(*SourceEntry)(nil),                      // 33: golf.v1.SourceEntry
+	(*SourceFile)(nil),                       // 34: golf.v1.SourceFile
+	(*GetContentsRequest)(nil),               // 35: golf.v1.GetContentsRequest
+	(*GetContentsResponse)(nil),              // 36: golf.v1.GetContentsResponse
+	(*Issue)(nil),                            // 37: golf.v1.Issue
+	(*ListIssuesRequest)(nil),                // 38: golf.v1.ListIssuesRequest
+	(*ListIssuesResponse)(nil),               // 39: golf.v1.ListIssuesResponse
+	(*GetIssueRequest)(nil),                  // 40: golf.v1.GetIssueRequest
+	(*GetIssueResponse)(nil),                 // 41: golf.v1.GetIssueResponse
+	(*Capability)(nil),                       // 42: golf.v1.Capability
+	(*ListCapabilitiesRequest)(nil),          // 43: golf.v1.ListCapabilitiesRequest
+	(*ListCapabilitiesResponse)(nil),         // 44: golf.v1.ListCapabilitiesResponse
+	(*GetAuthenticationOptionsRequest)(nil),  // 45: golf.v1.GetAuthenticationOptionsRequest
+	(*GetAuthenticationOptionsResponse)(nil), // 46: golf.v1.GetAuthenticationOptionsResponse
+	(*BeginGiteaOAuthRequest)(nil),           // 47: golf.v1.BeginGiteaOAuthRequest
+	(*BeginGiteaOAuthResponse)(nil),          // 48: golf.v1.BeginGiteaOAuthResponse
 }
 var file_golf_v1_golf_proto_depIdxs = []int32{
 	3,  // 0: golf.v1.LoginWithGiteaTokenResponse.user:type_name -> golf.v1.User
 	3,  // 1: golf.v1.GetSessionResponse.user:type_name -> golf.v1.User
-	6,  // 2: golf.v1.ListRepositoriesRequest.page:type_name -> golf.v1.PageRequest
-	4,  // 3: golf.v1.ListRepositoriesResponse.repositories:type_name -> golf.v1.Repository
-	7,  // 4: golf.v1.ListRepositoriesResponse.page:type_name -> golf.v1.PageResponse
-	4,  // 5: golf.v1.CreateRepositoryResponse.repository:type_name -> golf.v1.Repository
-	5,  // 6: golf.v1.GetRepositoryRequest.repository:type_name -> golf.v1.RepositoryKey
-	4,  // 7: golf.v1.GetRepositoryResponse.repository:type_name -> golf.v1.Repository
-	5,  // 8: golf.v1.ListBranchesRequest.repository:type_name -> golf.v1.RepositoryKey
-	6,  // 9: golf.v1.ListBranchesRequest.page:type_name -> golf.v1.PageRequest
-	20, // 10: golf.v1.ListBranchesResponse.branches:type_name -> golf.v1.Branch
-	7,  // 11: golf.v1.ListBranchesResponse.page:type_name -> golf.v1.PageResponse
-	5,  // 12: golf.v1.ListCommitsRequest.repository:type_name -> golf.v1.RepositoryKey
-	6,  // 13: golf.v1.ListCommitsRequest.page:type_name -> golf.v1.PageRequest
-	23, // 14: golf.v1.ListCommitsResponse.commits:type_name -> golf.v1.Commit
-	7,  // 15: golf.v1.ListCommitsResponse.page:type_name -> golf.v1.PageResponse
-	0,  // 16: golf.v1.SourceEntry.type:type_name -> golf.v1.SourceEntryType
-	26, // 17: golf.v1.SourceFile.entry:type_name -> golf.v1.SourceEntry
-	5,  // 18: golf.v1.GetContentsRequest.repository:type_name -> golf.v1.RepositoryKey
-	0,  // 19: golf.v1.GetContentsResponse.kind:type_name -> golf.v1.SourceEntryType
-	26, // 20: golf.v1.GetContentsResponse.entries:type_name -> golf.v1.SourceEntry
-	27, // 21: golf.v1.GetContentsResponse.file:type_name -> golf.v1.SourceFile
-	1,  // 22: golf.v1.Issue.state:type_name -> golf.v1.IssueState
-	3,  // 23: golf.v1.Issue.user:type_name -> golf.v1.User
-	5,  // 24: golf.v1.ListIssuesRequest.repository:type_name -> golf.v1.RepositoryKey
-	1,  // 25: golf.v1.ListIssuesRequest.state:type_name -> golf.v1.IssueState
-	6,  // 26: golf.v1.ListIssuesRequest.page:type_name -> golf.v1.PageRequest
-	30, // 27: golf.v1.ListIssuesResponse.issues:type_name -> golf.v1.Issue
-	7,  // 28: golf.v1.ListIssuesResponse.page:type_name -> golf.v1.PageResponse
-	5,  // 29: golf.v1.GetIssueRequest.repository:type_name -> golf.v1.RepositoryKey
-	30, // 30: golf.v1.GetIssueResponse.issue:type_name -> golf.v1.Issue
-	2,  // 31: golf.v1.Capability.state:type_name -> golf.v1.CapabilityState
-	35, // 32: golf.v1.ListCapabilitiesResponse.capabilities:type_name -> golf.v1.Capability
-	38, // 33: golf.v1.SessionService.GetAuthenticationOptions:input_type -> golf.v1.GetAuthenticationOptionsRequest
-	40, // 34: golf.v1.SessionService.BeginGiteaOAuth:input_type -> golf.v1.BeginGiteaOAuthRequest
-	8,  // 35: golf.v1.SessionService.LoginWithGiteaToken:input_type -> golf.v1.LoginWithGiteaTokenRequest
-	10, // 36: golf.v1.SessionService.GetSession:input_type -> golf.v1.GetSessionRequest
-	12, // 37: golf.v1.SessionService.Logout:input_type -> golf.v1.LogoutRequest
-	14, // 38: golf.v1.RepositoryService.ListRepositories:input_type -> golf.v1.ListRepositoriesRequest
-	16, // 39: golf.v1.RepositoryService.CreateRepository:input_type -> golf.v1.CreateRepositoryRequest
-	18, // 40: golf.v1.RepositoryService.GetRepository:input_type -> golf.v1.GetRepositoryRequest
-	21, // 41: golf.v1.RepositoryService.ListBranches:input_type -> golf.v1.ListBranchesRequest
-	24, // 42: golf.v1.RepositoryService.ListCommits:input_type -> golf.v1.ListCommitsRequest
-	28, // 43: golf.v1.RepositoryService.GetContents:input_type -> golf.v1.GetContentsRequest
-	31, // 44: golf.v1.RepositoryService.ListIssues:input_type -> golf.v1.ListIssuesRequest
-	33, // 45: golf.v1.RepositoryService.GetIssue:input_type -> golf.v1.GetIssueRequest
-	36, // 46: golf.v1.CapabilityService.ListCapabilities:input_type -> golf.v1.ListCapabilitiesRequest
-	39, // 47: golf.v1.SessionService.GetAuthenticationOptions:output_type -> golf.v1.GetAuthenticationOptionsResponse
-	41, // 48: golf.v1.SessionService.BeginGiteaOAuth:output_type -> golf.v1.BeginGiteaOAuthResponse
-	9,  // 49: golf.v1.SessionService.LoginWithGiteaToken:output_type -> golf.v1.LoginWithGiteaTokenResponse
-	11, // 50: golf.v1.SessionService.GetSession:output_type -> golf.v1.GetSessionResponse
-	13, // 51: golf.v1.SessionService.Logout:output_type -> golf.v1.LogoutResponse
-	15, // 52: golf.v1.RepositoryService.ListRepositories:output_type -> golf.v1.ListRepositoriesResponse
-	17, // 53: golf.v1.RepositoryService.CreateRepository:output_type -> golf.v1.CreateRepositoryResponse
-	19, // 54: golf.v1.RepositoryService.GetRepository:output_type -> golf.v1.GetRepositoryResponse
-	22, // 55: golf.v1.RepositoryService.ListBranches:output_type -> golf.v1.ListBranchesResponse
-	25, // 56: golf.v1.RepositoryService.ListCommits:output_type -> golf.v1.ListCommitsResponse
-	29, // 57: golf.v1.RepositoryService.GetContents:output_type -> golf.v1.GetContentsResponse
-	32, // 58: golf.v1.RepositoryService.ListIssues:output_type -> golf.v1.ListIssuesResponse
-	34, // 59: golf.v1.RepositoryService.GetIssue:output_type -> golf.v1.GetIssueResponse
-	37, // 60: golf.v1.CapabilityService.ListCapabilities:output_type -> golf.v1.ListCapabilitiesResponse
-	47, // [47:61] is the sub-list for method output_type
-	33, // [33:47] is the sub-list for method input_type
-	33, // [33:33] is the sub-list for extension type_name
-	33, // [33:33] is the sub-list for extension extendee
-	0,  // [0:33] is the sub-list for field type_name
+	6,  // 2: golf.v1.ListSessionsRequest.page:type_name -> golf.v1.PageRequest
+	12, // 3: golf.v1.ListSessionsResponse.sessions:type_name -> golf.v1.SessionInfo
+	7,  // 4: golf.v1.ListSessionsResponse.page:type_name -> golf.v1.PageResponse
+	6,  // 5: golf.v1.ListRepositoriesRequest.page:type_name -> golf.v1.PageRequest
+	4,  // 6: golf.v1.ListRepositoriesResponse.repositories:type_name -> golf.v1.Repository
+	7,  // 7: golf.v1.ListRepositoriesResponse.page:type_name -> golf.v1.PageResponse
+	4,  // 8: golf.v1.CreateRepositoryResponse.repository:type_name -> golf.v1.Repository
+	5,  // 9: golf.v1.GetRepositoryRequest.repository:type_name -> golf.v1.RepositoryKey
+	4,  // 10: golf.v1.GetRepositoryResponse.repository:type_name -> golf.v1.Repository
+	5,  // 11: golf.v1.ListBranchesRequest.repository:type_name -> golf.v1.RepositoryKey
+	6,  // 12: golf.v1.ListBranchesRequest.page:type_name -> golf.v1.PageRequest
+	27, // 13: golf.v1.ListBranchesResponse.branches:type_name -> golf.v1.Branch
+	7,  // 14: golf.v1.ListBranchesResponse.page:type_name -> golf.v1.PageResponse
+	5,  // 15: golf.v1.ListCommitsRequest.repository:type_name -> golf.v1.RepositoryKey
+	6,  // 16: golf.v1.ListCommitsRequest.page:type_name -> golf.v1.PageRequest
+	30, // 17: golf.v1.ListCommitsResponse.commits:type_name -> golf.v1.Commit
+	7,  // 18: golf.v1.ListCommitsResponse.page:type_name -> golf.v1.PageResponse
+	0,  // 19: golf.v1.SourceEntry.type:type_name -> golf.v1.SourceEntryType
+	33, // 20: golf.v1.SourceFile.entry:type_name -> golf.v1.SourceEntry
+	5,  // 21: golf.v1.GetContentsRequest.repository:type_name -> golf.v1.RepositoryKey
+	0,  // 22: golf.v1.GetContentsResponse.kind:type_name -> golf.v1.SourceEntryType
+	33, // 23: golf.v1.GetContentsResponse.entries:type_name -> golf.v1.SourceEntry
+	34, // 24: golf.v1.GetContentsResponse.file:type_name -> golf.v1.SourceFile
+	1,  // 25: golf.v1.Issue.state:type_name -> golf.v1.IssueState
+	3,  // 26: golf.v1.Issue.user:type_name -> golf.v1.User
+	5,  // 27: golf.v1.ListIssuesRequest.repository:type_name -> golf.v1.RepositoryKey
+	1,  // 28: golf.v1.ListIssuesRequest.state:type_name -> golf.v1.IssueState
+	6,  // 29: golf.v1.ListIssuesRequest.page:type_name -> golf.v1.PageRequest
+	37, // 30: golf.v1.ListIssuesResponse.issues:type_name -> golf.v1.Issue
+	7,  // 31: golf.v1.ListIssuesResponse.page:type_name -> golf.v1.PageResponse
+	5,  // 32: golf.v1.GetIssueRequest.repository:type_name -> golf.v1.RepositoryKey
+	37, // 33: golf.v1.GetIssueResponse.issue:type_name -> golf.v1.Issue
+	2,  // 34: golf.v1.Capability.state:type_name -> golf.v1.CapabilityState
+	42, // 35: golf.v1.ListCapabilitiesResponse.capabilities:type_name -> golf.v1.Capability
+	45, // 36: golf.v1.SessionService.GetAuthenticationOptions:input_type -> golf.v1.GetAuthenticationOptionsRequest
+	47, // 37: golf.v1.SessionService.BeginGiteaOAuth:input_type -> golf.v1.BeginGiteaOAuthRequest
+	8,  // 38: golf.v1.SessionService.LoginWithGiteaToken:input_type -> golf.v1.LoginWithGiteaTokenRequest
+	10, // 39: golf.v1.SessionService.GetSession:input_type -> golf.v1.GetSessionRequest
+	13, // 40: golf.v1.SessionService.ListSessions:input_type -> golf.v1.ListSessionsRequest
+	15, // 41: golf.v1.SessionService.RevokeSession:input_type -> golf.v1.RevokeSessionRequest
+	17, // 42: golf.v1.SessionService.RevokeOtherSessions:input_type -> golf.v1.RevokeOtherSessionsRequest
+	19, // 43: golf.v1.SessionService.Logout:input_type -> golf.v1.LogoutRequest
+	21, // 44: golf.v1.RepositoryService.ListRepositories:input_type -> golf.v1.ListRepositoriesRequest
+	23, // 45: golf.v1.RepositoryService.CreateRepository:input_type -> golf.v1.CreateRepositoryRequest
+	25, // 46: golf.v1.RepositoryService.GetRepository:input_type -> golf.v1.GetRepositoryRequest
+	28, // 47: golf.v1.RepositoryService.ListBranches:input_type -> golf.v1.ListBranchesRequest
+	31, // 48: golf.v1.RepositoryService.ListCommits:input_type -> golf.v1.ListCommitsRequest
+	35, // 49: golf.v1.RepositoryService.GetContents:input_type -> golf.v1.GetContentsRequest
+	38, // 50: golf.v1.RepositoryService.ListIssues:input_type -> golf.v1.ListIssuesRequest
+	40, // 51: golf.v1.RepositoryService.GetIssue:input_type -> golf.v1.GetIssueRequest
+	43, // 52: golf.v1.CapabilityService.ListCapabilities:input_type -> golf.v1.ListCapabilitiesRequest
+	46, // 53: golf.v1.SessionService.GetAuthenticationOptions:output_type -> golf.v1.GetAuthenticationOptionsResponse
+	48, // 54: golf.v1.SessionService.BeginGiteaOAuth:output_type -> golf.v1.BeginGiteaOAuthResponse
+	9,  // 55: golf.v1.SessionService.LoginWithGiteaToken:output_type -> golf.v1.LoginWithGiteaTokenResponse
+	11, // 56: golf.v1.SessionService.GetSession:output_type -> golf.v1.GetSessionResponse
+	14, // 57: golf.v1.SessionService.ListSessions:output_type -> golf.v1.ListSessionsResponse
+	16, // 58: golf.v1.SessionService.RevokeSession:output_type -> golf.v1.RevokeSessionResponse
+	18, // 59: golf.v1.SessionService.RevokeOtherSessions:output_type -> golf.v1.RevokeOtherSessionsResponse
+	20, // 60: golf.v1.SessionService.Logout:output_type -> golf.v1.LogoutResponse
+	22, // 61: golf.v1.RepositoryService.ListRepositories:output_type -> golf.v1.ListRepositoriesResponse
+	24, // 62: golf.v1.RepositoryService.CreateRepository:output_type -> golf.v1.CreateRepositoryResponse
+	26, // 63: golf.v1.RepositoryService.GetRepository:output_type -> golf.v1.GetRepositoryResponse
+	29, // 64: golf.v1.RepositoryService.ListBranches:output_type -> golf.v1.ListBranchesResponse
+	32, // 65: golf.v1.RepositoryService.ListCommits:output_type -> golf.v1.ListCommitsResponse
+	36, // 66: golf.v1.RepositoryService.GetContents:output_type -> golf.v1.GetContentsResponse
+	39, // 67: golf.v1.RepositoryService.ListIssues:output_type -> golf.v1.ListIssuesResponse
+	41, // 68: golf.v1.RepositoryService.GetIssue:output_type -> golf.v1.GetIssueResponse
+	44, // 69: golf.v1.CapabilityService.ListCapabilities:output_type -> golf.v1.ListCapabilitiesResponse
+	53, // [53:70] is the sub-list for method output_type
+	36, // [36:53] is the sub-list for method input_type
+	36, // [36:36] is the sub-list for extension type_name
+	36, // [36:36] is the sub-list for extension extendee
+	0,  // [0:36] is the sub-list for field type_name
 }
 
 func init() { file_golf_v1_golf_proto_init() }
@@ -2659,15 +3041,15 @@ func file_golf_v1_golf_proto_init() {
 	if File_golf_v1_golf_proto != nil {
 		return
 	}
-	file_golf_v1_golf_proto_msgTypes[13].OneofWrappers = []any{}
-	file_golf_v1_golf_proto_msgTypes[24].OneofWrappers = []any{}
+	file_golf_v1_golf_proto_msgTypes[20].OneofWrappers = []any{}
+	file_golf_v1_golf_proto_msgTypes[31].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_golf_v1_golf_proto_rawDesc), len(file_golf_v1_golf_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   39,
+			NumMessages:   46,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

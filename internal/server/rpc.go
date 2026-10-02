@@ -65,6 +65,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		case golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
 			public = true
 		case golfv1connect.SessionServiceGetSessionProcedure,
+			golfv1connect.SessionServiceListSessionsProcedure, golfv1connect.SessionServiceRevokeSessionProcedure, golfv1connect.SessionServiceRevokeOtherSessionsProcedure,
 			golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure,
 			golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure,
 			golfv1connect.RepositoryServiceListIssuesProcedure, golfv1connect.RepositoryServiceGetIssueProcedure:
@@ -152,6 +153,49 @@ func (s *Server) Logout(ctx context.Context, req *connect.Request[golfv1.LogoutR
 	response := connect.NewResponse(&golfv1.LogoutResponse{})
 	response.Header().Add("Set-Cookie", s.sessionCookie("", time.Unix(1, 0), -1).String())
 	return response, nil
+}
+func (s *Server) ListSessions(ctx context.Context, req *connect.Request[golfv1.ListSessionsRequest]) (*connect.Response[golfv1.ListSessionsResponse], error) {
+	token, err := rpcToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, next, err := s.listSessions(ctx, cookieValue(req.Header()), token, pageFrom(req.Msg.Page))
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	response := &golfv1.ListSessionsResponse{Page: wirePage(next)}
+	for _, row := range rows {
+		response.Sessions = append(response.Sessions, &golfv1.SessionInfo{Id: strconv.FormatInt(row.SessionID, 10),
+			CreatedAt: row.CreatedAt.Format(time.RFC3339Nano), ExpiresAt: row.ExpiresAt.Format(time.RFC3339Nano),
+			Current: row.IsCurrent, CredentialKind: row.CredentialKind})
+	}
+	return connect.NewResponse(response), nil
+}
+func (s *Server) RevokeSession(ctx context.Context, req *connect.Request[golfv1.RevokeSessionRequest]) (*connect.Response[golfv1.RevokeSessionResponse], error) {
+	token, err := rpcToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	current, err := s.revokeSession(ctx, cookieValue(req.Header()), token, req.Msg.SessionId)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	response := connect.NewResponse(&golfv1.RevokeSessionResponse{CurrentSessionRevoked: current})
+	if current {
+		response.Header().Add("Set-Cookie", s.sessionCookie("", time.Unix(1, 0), -1).String())
+	}
+	return response, nil
+}
+func (s *Server) RevokeOtherSessions(ctx context.Context, req *connect.Request[golfv1.RevokeOtherSessionsRequest]) (*connect.Response[golfv1.RevokeOtherSessionsResponse], error) {
+	token, err := rpcToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	count, err := s.revokeOtherSessions(ctx, cookieValue(req.Header()), token)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return connect.NewResponse(&golfv1.RevokeOtherSessionsResponse{RevokedCount: count}), nil
 }
 func (s *Server) ListRepositories(ctx context.Context, req *connect.Request[golfv1.ListRepositoriesRequest]) (*connect.Response[golfv1.ListRepositoriesResponse], error) {
 	token, err := rpcToken(ctx)
