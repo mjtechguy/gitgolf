@@ -1,0 +1,25 @@
+# General repository settings
+
+This bounded slice uses supported native forge APIs through `RepositorySettingsService`. It does not implement CI enablement, branch protection, merge governance, visibility changes, runner policy or organization defaults. Golf UI/API settings must not imply those features are enforced.
+
+## Read and edit authority
+
+`GetRepositorySettings` accepts the current owner/name and returns the immutable repository and owner IDs, description, default branch, issues/wiki/pull-request feature flags, an observation revision and `can_edit`. The native read must succeed. Missing or malformed identity, feature flags or permission data is rejected rather than replaced with defaults. `can_edit` describes native repository administration on a nonarchived, nonmirror repository; it is not a grant of Golf instance administration, a credential scope upgrade or a protection-policy permission. Native token scopes remain independently enforced and can reject a save even for a repository administrator.
+
+`UpdateRepositorySettings` requires the immutable repository/owner IDs and the revision observed by the editor. Description, default branch and each feature flag are optional: omitted fields remain unchanged; empty description and `false` flags are explicit updates. At least one field is required. Description is valid UTF-8 of at most 2048 bytes, allowing tab/newline/carriage-return but rejecting other control characters. Branch selection uses the shared Git-ref validator (1024-byte maximum), with an actual native branch lookup before a changed default is written. A default branch cannot be invented by this endpoint.
+
+Both procedures require a browser session and exact Origin. Read-only API credentials are denied before decoding the body. The caller's encrypted native credential supplies the authority; Golf does not impersonate a forge administrator. Native `permissions.admin` is required for every save. Archived and mirrored repositories are read-only in this slice. The immutable session identity and local expiry/revocation are checked before and after provider work, with a fresh local-authority check immediately before the native PATCH. Native administration and settings identity are reread after branch lookup and before dispatch.
+
+## Stale edits and uncertain outcomes
+
+The revision hashes the observed identity and supported settings, including archived/mirror state. A changed repository/owner binding or revision is a failed precondition before dispatch. This is **stale-form detection, not atomic compare-and-swap**: the native PATCH API does not supply a qualified conditional-write primitive, and an independent native editor can race the interval between Golf's read and PATCH. This slice must not be used as enforcement for security-sensitive inherited policy. It does not close the plan's durable mutation journal or coordinated write-ownership requirements.
+
+Golf sends one allowlisted PATCH with only supplied fields, requires HTTP 200, validates the returned identity and requested values, then independently rereads the same repository with the same credential. A mismatched receipt/readback, lost response, revoked permission or session is not reported as success. The write may already have happened. Neither backend nor client automatically retries; the editor blocks repeat saves until the user refreshes and inspects the actual state. Cancellation cannot undo a native write that already completed. There is no native settings version lock or durable operation-status record in this slice.
+
+## Evidence
+
+`go test ./internal/server -run TestRepositorySettings` includes malformed input/provider projections, opaque IDs, explicit empty/false fields and authentication/Origin/bearer boundaries. `TestRepositorySettingsPostgres` additionally requires `GOLF_TEST_DATABASE_URL` and exercises real Golf session storage with a controlled provider: native admin denial, stale forms with no dispatched PATCH, slash default branch, a PATCH applied before response loss without retry, and session revocation before dispatch.
+
+`scripts/repository-settings-smoke.py` exercises the running Compose services with disposable owner/reader/outsider users and a private repository. It verifies the supported native field shapes, API saves and independent native readback, read-only collaborator denial, inaccessible private repositories, stale revisions/identities, nonexistent and slash branches, explicit false/empty values, Origin/bearer denial and logout denial. It purges all disposable users/repository data and does not alter the retained local administrator. This native proof cannot inject a lost native response; that case is covered separately by the controlled-provider PostgreSQL test. Recorded results belong in `docs/IMPLEMENTATION_STATUS.md`.
+
+Primary native API reference: [repository edit](https://docs.gitea.com/api/operations/repo-edit/). Qualification targets the pinned local native version; documentation alone is not evidence that every advertised option is supported.

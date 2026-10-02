@@ -9,11 +9,15 @@ These are infrastructure choices, not editions. AI is optional in Golf's core wo
 
 ## What works now
 
-This is a developer preview: Golf-owned local email-or-username/password sign-in, optional scoped Gitea browser OAuth and advanced per-user token bootstrap, encrypted PostgreSQL-backed sessions with account listing/revocation and own-account activity, member-scoped organization/team browsing, repository listing/creation, in-app source, commit history and native commit-diff browsing, ordinary issue creation/plain-text comments and pull-request/native-review reads, a JSON CLI and local stdio MCP tools, black/charcoal and light themes with a single toggle, capability reporting, and persistent Compose/Helm installations. Git writes use the native backend directly; own-account SSH keys can now be listed, added and removed in Golf.
+This is a developer preview: Golf-owned local email-or-username/password sign-in, optional scoped Gitea browser OAuth and advanced per-user token bootstrap, encrypted PostgreSQL-backed sessions with account listing/revocation and own-account activity, member-scoped organization/team browsing, repository listing/creation, in-app source, commit history and native commit-diff browsing, ordinary issue creation/plain-text comments and pull-request/native-review reads, a JSON CLI and local stdio MCP tools, black/charcoal and light themes with a single toggle, capability reporting, and persistent Compose/Helm installations. Git writes use the native backend directly; own-account SSH keys can now be listed, added and removed in Golf. Repository administrators can edit description, an existing default branch and issues/wiki/pull-request feature flags through an explicit full-page settings editor.
 
 Self-service local account lifecycle, external OIDC, organization/role administration, import/connections, PR/review mutations and merge policy, pipelines/runners, agent execution, Cloudflare integrations and protected previews/CD remain roadmap work. This is not complete v1 or a competition-ready entry. No repository CI is configured.
 
 Manage Git SSH access under **Your account → User settings → SSH keys**. Add the public `.pub` file from your machine, then use the repository's SSH clone URL. Account keys follow your repository permissions and stay active until removed. Golf passwords and read-only Golf API credentials are not direct HTTP Git credentials. See the [Git access contract](docs/GIT_ACCESS_CONTRACT.md); `make qualify-git` runs the current real Git/API/CLI/browser acceptance checks against the local Compose stack.
+
+Settings inventories cover personal, organization, repository and instance scopes, with explicit ready/read-only/planned states. **Your account → Instance settings** is visible only to explicitly enrolled Golf instance administrators; editable global configuration and organization administration remain unimplemented. See the [repository settings contract](docs/REPOSITORY_SETTINGS_CONTRACT.md).
+
+Pinned public GitHub/GitLab examples passed actual source/history/CLI/private-clone qualification; workflow files are preserved but not executed. The repeatable [qualification](docs/PUBLIC_REPOSITORY_QUALIFICATION.md) is source transfer into disposable repositories, not a product importer.
 
 ## Run locally
 

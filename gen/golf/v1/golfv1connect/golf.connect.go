@@ -27,6 +27,9 @@ const (
 	ApiCredentialServiceName = "golf.v1.ApiCredentialService"
 	// GitAccessServiceName is the fully-qualified name of the GitAccessService service.
 	GitAccessServiceName = "golf.v1.GitAccessService"
+	// RepositorySettingsServiceName is the fully-qualified name of the RepositorySettingsService
+	// service.
+	RepositorySettingsServiceName = "golf.v1.RepositorySettingsService"
 	// RepositoryServiceName is the fully-qualified name of the RepositoryService service.
 	RepositoryServiceName = "golf.v1.RepositoryService"
 	// OrganizationServiceName is the fully-qualified name of the OrganizationService service.
@@ -89,6 +92,12 @@ const (
 	// GitAccessServiceDeleteSSHKeyProcedure is the fully-qualified name of the GitAccessService's
 	// DeleteSSHKey RPC.
 	GitAccessServiceDeleteSSHKeyProcedure = "/golf.v1.GitAccessService/DeleteSSHKey"
+	// RepositorySettingsServiceGetRepositorySettingsProcedure is the fully-qualified name of the
+	// RepositorySettingsService's GetRepositorySettings RPC.
+	RepositorySettingsServiceGetRepositorySettingsProcedure = "/golf.v1.RepositorySettingsService/GetRepositorySettings"
+	// RepositorySettingsServiceUpdateRepositorySettingsProcedure is the fully-qualified name of the
+	// RepositorySettingsService's UpdateRepositorySettings RPC.
+	RepositorySettingsServiceUpdateRepositorySettingsProcedure = "/golf.v1.RepositorySettingsService/UpdateRepositorySettings"
 	// RepositoryServiceListRepositoriesProcedure is the fully-qualified name of the RepositoryService's
 	// ListRepositories RPC.
 	RepositoryServiceListRepositoriesProcedure = "/golf.v1.RepositoryService/ListRepositories"
@@ -686,6 +695,103 @@ func (UnimplementedGitAccessServiceHandler) AddSSHKey(context.Context, *connect.
 
 func (UnimplementedGitAccessServiceHandler) DeleteSSHKey(context.Context, *connect.Request[v1.DeleteSSHKeyRequest]) (*connect.Response[v1.DeleteSSHKeyResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.GitAccessService.DeleteSSHKey is not implemented"))
+}
+
+// RepositorySettingsServiceClient is a client for the golf.v1.RepositorySettingsService service.
+type RepositorySettingsServiceClient interface {
+	GetRepositorySettings(context.Context, *connect.Request[v1.GetRepositorySettingsRequest]) (*connect.Response[v1.GetRepositorySettingsResponse], error)
+	UpdateRepositorySettings(context.Context, *connect.Request[v1.UpdateRepositorySettingsRequest]) (*connect.Response[v1.UpdateRepositorySettingsResponse], error)
+}
+
+// NewRepositorySettingsServiceClient constructs a client for the golf.v1.RepositorySettingsService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRepositorySettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepositorySettingsServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	repositorySettingsServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositorySettingsService").Methods()
+	return &repositorySettingsServiceClient{
+		getRepositorySettings: connect.NewClient[v1.GetRepositorySettingsRequest, v1.GetRepositorySettingsResponse](
+			httpClient,
+			baseURL+RepositorySettingsServiceGetRepositorySettingsProcedure,
+			connect.WithSchema(repositorySettingsServiceMethods.ByName("GetRepositorySettings")),
+			connect.WithClientOptions(opts...),
+		),
+		updateRepositorySettings: connect.NewClient[v1.UpdateRepositorySettingsRequest, v1.UpdateRepositorySettingsResponse](
+			httpClient,
+			baseURL+RepositorySettingsServiceUpdateRepositorySettingsProcedure,
+			connect.WithSchema(repositorySettingsServiceMethods.ByName("UpdateRepositorySettings")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// repositorySettingsServiceClient implements RepositorySettingsServiceClient.
+type repositorySettingsServiceClient struct {
+	getRepositorySettings    *connect.Client[v1.GetRepositorySettingsRequest, v1.GetRepositorySettingsResponse]
+	updateRepositorySettings *connect.Client[v1.UpdateRepositorySettingsRequest, v1.UpdateRepositorySettingsResponse]
+}
+
+// GetRepositorySettings calls golf.v1.RepositorySettingsService.GetRepositorySettings.
+func (c *repositorySettingsServiceClient) GetRepositorySettings(ctx context.Context, req *connect.Request[v1.GetRepositorySettingsRequest]) (*connect.Response[v1.GetRepositorySettingsResponse], error) {
+	return c.getRepositorySettings.CallUnary(ctx, req)
+}
+
+// UpdateRepositorySettings calls golf.v1.RepositorySettingsService.UpdateRepositorySettings.
+func (c *repositorySettingsServiceClient) UpdateRepositorySettings(ctx context.Context, req *connect.Request[v1.UpdateRepositorySettingsRequest]) (*connect.Response[v1.UpdateRepositorySettingsResponse], error) {
+	return c.updateRepositorySettings.CallUnary(ctx, req)
+}
+
+// RepositorySettingsServiceHandler is an implementation of the golf.v1.RepositorySettingsService
+// service.
+type RepositorySettingsServiceHandler interface {
+	GetRepositorySettings(context.Context, *connect.Request[v1.GetRepositorySettingsRequest]) (*connect.Response[v1.GetRepositorySettingsResponse], error)
+	UpdateRepositorySettings(context.Context, *connect.Request[v1.UpdateRepositorySettingsRequest]) (*connect.Response[v1.UpdateRepositorySettingsResponse], error)
+}
+
+// NewRepositorySettingsServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRepositorySettingsServiceHandler(svc RepositorySettingsServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	repositorySettingsServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositorySettingsService").Methods()
+	repositorySettingsServiceGetRepositorySettingsHandler := connect.NewUnaryHandler(
+		RepositorySettingsServiceGetRepositorySettingsProcedure,
+		svc.GetRepositorySettings,
+		connect.WithSchema(repositorySettingsServiceMethods.ByName("GetRepositorySettings")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositorySettingsServiceUpdateRepositorySettingsHandler := connect.NewUnaryHandler(
+		RepositorySettingsServiceUpdateRepositorySettingsProcedure,
+		svc.UpdateRepositorySettings,
+		connect.WithSchema(repositorySettingsServiceMethods.ByName("UpdateRepositorySettings")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RepositorySettingsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RepositorySettingsServiceGetRepositorySettingsProcedure:
+			repositorySettingsServiceGetRepositorySettingsHandler.ServeHTTP(w, r)
+		case RepositorySettingsServiceUpdateRepositorySettingsProcedure:
+			repositorySettingsServiceUpdateRepositorySettingsHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRepositorySettingsServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRepositorySettingsServiceHandler struct{}
+
+func (UnimplementedRepositorySettingsServiceHandler) GetRepositorySettings(context.Context, *connect.Request[v1.GetRepositorySettingsRequest]) (*connect.Response[v1.GetRepositorySettingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositorySettingsService.GetRepositorySettings is not implemented"))
+}
+
+func (UnimplementedRepositorySettingsServiceHandler) UpdateRepositorySettings(context.Context, *connect.Request[v1.UpdateRepositorySettingsRequest]) (*connect.Response[v1.UpdateRepositorySettingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositorySettingsService.UpdateRepositorySettings is not implemented"))
 }
 
 // RepositoryServiceClient is a client for the golf.v1.RepositoryService service.

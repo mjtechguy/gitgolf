@@ -43,6 +43,8 @@ func rpcError(err error) error {
 	var input inputError
 	var upstream forgeError
 	switch {
+	case errors.Is(err, errRepositorySettingsConflict):
+		code, message = connect.CodeFailedPrecondition, "Repository settings changed. Refresh before editing again."
 	case errors.Is(err, errSSHKeyRejected):
 		code, message = connect.CodeFailedPrecondition, "The SSH key was rejected or already exists. Refresh your keys and check the public key before trying again."
 	case errors.Is(err, errLocalCredentials):

@@ -43,6 +43,17 @@ const sshKeysRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/account/ssh-keys',
   component: () => <App location={{ kind: 'ssh-keys' }} />,
 });
+const repositorySettingsRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/repositories/$owner/$name/settings',
+  beforeLoad: ({ params }) => { if (!params.owner || !params.name || /[\/\\]/.test(params.owner + params.name)) throw notFound(); },
+  component: RepositorySettingsPage,
+});
+const organizationSettingsRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/organizations/$organization/settings',
+  beforeLoad: ({ params }) => { if (!params.organization || /[\/\\]/.test(params.organization)) throw notFound(); },
+  component: OrganizationSettingsPage,
+});
+const instanceSettingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/settings', component: () => <App location={{ kind: 'instance-settings' }} /> });
 const organizationRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/organizations/$organization',
@@ -79,6 +90,14 @@ const repositoryRoute = createRoute({
   component: RepositoryPage,
 });
 
+function RepositorySettingsPage() {
+  const { owner, name } = repositorySettingsRoute.useParams();
+  return <App location={{ kind: 'repository-settings', owner, name }} />;
+}
+function OrganizationSettingsPage() {
+  const { organization } = organizationSettingsRoute.useParams();
+  return <App location={{ kind: 'organization-settings', organization }} />;
+}
 function RepositoryPage() {
   const params = repositoryRoute.useParams();
   const search = repositoryRoute.useSearch();
@@ -98,7 +117,7 @@ function OrganizationPage() {
 
 // Router owns navigation only. Private server data stays in the cancellable Query cache.
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([homeRoute, repositoryRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, sessionsRoute]),
+  routeTree: rootRoute.addChildren([homeRoute, repositoryRoute, repositorySettingsRoute, organizationSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, sessionsRoute]),
   defaultPreload: false,
   // Refs and paths are opaque strings, including names such as "1234" or "true".
   parseSearch: (search) => Object.fromEntries(new URLSearchParams(search)),

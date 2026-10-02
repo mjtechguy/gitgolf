@@ -479,9 +479,9 @@ GitLab rules, stage ordering, variable precedence, and failure propagation retai
 
 ### 7.4 Execution-engine reuse
 
-Pin GitLab Runner and implement the bounded coordinator compatibility endpoints it requires: registration/session authentication, job request/assignment, trace upload, job state updates, scoped Git fetch, artifact upload/download, and supported cache/ID-token behavior. Use Docker/Kubernetes executors where they fit and its custom-executor boundary for Cloudflare jobs.
+Pin GitLab Runner and implement the bounded coordinator compatibility endpoints it requires: registration/session authentication, job request/assignment, trace upload, job state updates, scoped Git fetch, artifact upload/download, and supported cache/ID-token behavior. Use Docker/Kubernetes executors where they fit. Treat a custom-executor adapter for Cloudflare jobs as a conditional feasibility option, not the selected long-term engine.
 
-Validate the exact transport and custom-executor lifecycle in Phase 0. Source availability does not make its coordinator interchangeable. Drop-in support for every GitHub/GitLab runner binary/version is outside v1. If an engine proof fails, its advertised support stays blocked and the task must resolve the failure before the applicable release gate.
+GitLab documents its Custom executor as maintenance-only (critical security fixes, no new features) and recommends actively maintained executors for new projects. Phase 0 must record an engine ADR comparing maintained Docker/Kubernetes paths with a bounded Cloudflare adapter, including ownership, upgrade and isolation costs. Validate the exact transport and any selected custom-executor lifecycle in Phase 0. Source availability does not make its coordinator interchangeable. Drop-in support for every GitHub/GitLab runner binary/version is outside v1. If an engine proof fails, its advertised support stays blocked and the task must resolve the failure before the applicable release gate.
 
 See [GitLab executors](https://docs.gitlab.com/runner/executors/), [custom executor](https://docs.gitlab.com/runner/executors/custom/), and [autoscaling](https://docs.gitlab.com/runner/runner_autoscale/).
 
@@ -1076,7 +1076,7 @@ Depends on: none. Outcome: verified feasibility boundaries and a concrete implem
 | P0.2 | Create full guide requirement register and required ADRs | Every applicable prescription has a task/check or explicit ADR. |
 | P0.3 | Define forge/job/runner/agent/deployment contracts and fixture schemas | Generated API types and minimal contract tests. |
 | P0.4 | Create Actions/GitLab corpus and exact supported-feature catalog | Positive and negative fixtures for each initial contract entry. |
-| P0.5 | Prove Actions runtime and pinned GitLab coordinator/custom executor | Real job, service, log/artifact, cancellation, and token smoke checks. |
+| P0.5 | Prove Actions runtime and pinned GitLab coordinator/executor ADR | Real job, service, log/artifact, cancellation, and token smoke checks. |
 | P0.6 | Qualify Cloudflare Sandbox/Containers/CI SDK and limits | Controlled live Linux build with resources/network/cleanup evidence. |
 | P0.7 | Prove five harness interfaces and supported auth/provider paths | Real structured execution/cancel check per harness; untested combinations blocked. |
 | P0.8 | Record shared Gitea v1 decision; qualify API/policy boundary, licensing and ownership | Pinned Gitea operation/identity inventory, protected-write and conditional-merge proof, dependency notices and ADRs; required unsupported paths block completion. |

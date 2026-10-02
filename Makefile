@@ -1,4 +1,4 @@
-.PHONY: setup dev build cli test test-integration check helm-check fmt vet web-check generate generate-check qualify-git up down
+.PHONY: setup dev build cli test test-integration check helm-check fmt vet web-check generate generate-check qualify-git qualify-settings qualify-public-repositories up down
 setup:
 	./scripts/init-env.sh
 dev: up
@@ -12,6 +12,10 @@ cli:
 qualify-git: cli
 	python3 scripts/smoke.py --cli bin/golf
 	python3 scripts/git-access-smoke.py
+qualify-settings:
+	python3 scripts/repository-settings-smoke.py
+qualify-public-repositories: cli
+	python3 scripts/public-repositories-smoke.py --image golf-golf:latest --cli bin/golf
 test:
 	go test ./...
 test-integration:

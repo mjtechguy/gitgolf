@@ -60,6 +60,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewAuditServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewApiCredentialServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewGitAccessServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewRepositorySettingsServiceHandler(s, options...))
 	return mux
 }
 
@@ -98,7 +99,8 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		switch procedure {
 		case golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLoginWithPasswordProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
 			public = true
-		case golfv1connect.GitAccessServiceListSSHKeysProcedure, golfv1connect.GitAccessServiceAddSSHKeyProcedure, golfv1connect.GitAccessServiceDeleteSSHKeyProcedure,
+		case golfv1connect.RepositorySettingsServiceGetRepositorySettingsProcedure, golfv1connect.RepositorySettingsServiceUpdateRepositorySettingsProcedure,
+			golfv1connect.GitAccessServiceListSSHKeysProcedure, golfv1connect.GitAccessServiceAddSSHKeyProcedure, golfv1connect.GitAccessServiceDeleteSSHKeyProcedure,
 			golfv1connect.AuditServiceListAuditEventsProcedure, golfv1connect.SessionServiceGetSessionProcedure,
 			golfv1connect.ApiCredentialServiceCreateApiCredentialProcedure, golfv1connect.ApiCredentialServiceListApiCredentialsProcedure, golfv1connect.ApiCredentialServiceRevokeApiCredentialProcedure,
 			golfv1connect.SessionServiceListSessionsProcedure, golfv1connect.SessionServiceRevokeSessionProcedure, golfv1connect.SessionServiceRevokeOtherSessionsProcedure,

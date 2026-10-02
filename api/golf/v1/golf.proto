@@ -90,6 +90,38 @@ message AddSSHKeyResponse { SSHKey key = 1; }
 message DeleteSSHKeyRequest { string key_id = 1; }
 message DeleteSSHKeyResponse {}
 
+// General repository metadata only; not protected policy or CI enablement.
+service RepositorySettingsService {
+  rpc GetRepositorySettings(GetRepositorySettingsRequest) returns (GetRepositorySettingsResponse);
+  rpc UpdateRepositorySettings(UpdateRepositorySettingsRequest) returns (UpdateRepositorySettingsResponse);
+}
+message RepositorySettings {
+  string repository_id = 1;
+  string owner_id = 2;
+  string description = 3;
+  string default_branch = 4;
+  bool has_issues = 5;
+  bool has_wiki = 6;
+  bool has_pull_requests = 7;
+  bool can_edit = 8;
+  // Observation fingerprint; native PATCH does not supply atomic CAS.
+  string revision = 9;
+}
+message GetRepositorySettingsRequest { RepositoryKey repository = 1; }
+message GetRepositorySettingsResponse { RepositorySettings settings = 1; }
+message UpdateRepositorySettingsRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string expected_revision = 4;
+  optional string description = 5;
+  optional string default_branch = 6;
+  optional bool has_issues = 7;
+  optional bool has_wiki = 8;
+  optional bool has_pull_requests = 9;
+}
+message UpdateRepositorySettingsResponse { RepositorySettings settings = 1; }
+
 service RepositoryService {
   rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse);
   rpc CreateRepository(CreateRepositoryRequest) returns (CreateRepositoryResponse);

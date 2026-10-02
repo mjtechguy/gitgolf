@@ -11,7 +11,7 @@ export type RepositorySearch = {
 export const defaultRepositorySearch: RepositorySearch = { view: 'source', ref: '', path: '', branch: '', state: 'open' };
 export type RepositoryLocation = RepositorySearch & { kind: 'repository'; owner: string; name: string };
 export type OrganizationLocation = { kind: 'organizations'; organization?: string; team?: string };
-export type Location = RepositoryLocation | OrganizationLocation | { kind: 'audit' } | { kind: 'api-credentials' } | { kind: 'ssh-keys' } | { kind: 'settings' } | { kind: 'sessions' } | { kind: 'home'; oauthFailed?: boolean } | { kind: 'missing' };
+export type Location = RepositoryLocation | OrganizationLocation | { kind: 'repository-settings'; owner: string; name: string } | { kind: 'organization-settings'; organization: string } | { kind: 'instance-settings' } | { kind: 'audit' } | { kind: 'api-credentials' } | { kind: 'ssh-keys' } | { kind: 'settings' } | { kind: 'sessions' } | { kind: 'home'; oauthFailed?: boolean } | { kind: 'missing' };
 export const isCommitID = (value: string) => /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value);
 
 export function organizationOptions({ organization, team }: { organization: string; team?: string }) {
