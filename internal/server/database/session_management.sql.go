@@ -77,7 +77,7 @@ func (q *Queries) ListManagedSessions(ctx context.Context, arg ListManagedSessio
 }
 
 const lockManagedSession = `-- name: LockManagedSession :one
-SELECT caller.session_id, caller.user_id, caller.expires_at
+SELECT caller.session_id, caller.user_id, caller.expires_at, caller.credential_kind
 FROM golf_sessions caller
 JOIN golf_users u ON u.id = caller.user_id
 WHERE caller.token_hash = $1
@@ -94,16 +94,22 @@ type LockManagedSessionParams struct {
 }
 
 type LockManagedSessionRow struct {
-	SessionID int64
-	UserID    int64
-	ExpiresAt time.Time
+	SessionID      int64
+	UserID         int64
+	ExpiresAt      time.Time
+	CredentialKind string
 }
 
 // Re-read and lock the caller after waiting for the identity lock.
 func (q *Queries) LockManagedSession(ctx context.Context, arg LockManagedSessionParams) (LockManagedSessionRow, error) {
 	row := q.db.QueryRowContext(ctx, lockManagedSession, arg.CallerTokenHash, arg.UserID, arg.ForgeURL)
 	var i LockManagedSessionRow
-	err := row.Scan(&i.SessionID, &i.UserID, &i.ExpiresAt)
+	err := row.Scan(
+		&i.SessionID,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.CredentialKind,
+	)
 	return i, err
 }
 

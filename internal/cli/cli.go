@@ -24,7 +24,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const help = `Golf — inspect repositories and organizations using your own permissions.
+const help = `Golf — inspect repositories, organizations and your account activity.
 
 Usage: golf [--url ORIGIN] [--token-stdin] COMMAND
 
@@ -44,6 +44,7 @@ Usage: golf [--url ORIGIN] [--token-stdin] COMMAND
   team view ORG TEAM_ID
   team members ORG TEAM_ID [--page N] [--limit N]
   team repos ORG TEAM_ID [--page N] [--limit N]
+  audit list [--limit N] [--before-id ID --snapshot-id ID]
 
 Success writes JSON: {"schema_version":"golf.cli.v1","data":...}.
 Exit codes: 0 success/help; 1 operation/authentication failure; 2 usage error.
@@ -53,6 +54,8 @@ GOLF_URL defaults to http://localhost:8080. Remote origins require HTTPS.
 Credentials/cookies are never saved. Each command signs in and signs out.
 Global flags precede the command; resource flags follow positional arguments.
 Organization reads need read:user and read:organization; code needs read:repository.
+Account activity needs read:user and records successful session lifecycle operations.
+Audit pagination preserves the first snapshot ID; each CLI call also records its own login/logout.
 `
 
 // Run writes results only after logout succeeds. Error text excludes credentials
@@ -170,6 +173,9 @@ type command struct {
 	path         string
 	state        golfv1.IssueState
 	number       uint32
+	auditLimit   uint32
+	beforeID     string
+	snapshotID   string
 }
 
 func parseCommand(args []string) (command, error) {
@@ -181,7 +187,7 @@ func parseCommand(args []string) (command, error) {
 	result.name = args[0] + " " + args[1]
 	rest := args[2:]
 	switch result.name {
-	case "repo list", "org list":
+	case "repo list", "org list", "audit list":
 	case "org view", "org teams", "team view", "team members", "team repos":
 		if len(rest) == 0 || !organizationName.MatchString(rest[0]) || rest[0] == "." || rest[0] == ".." {
 			return result, invalid
@@ -233,6 +239,11 @@ func parseCommand(args []string) (command, error) {
 	var ref, filePath, state string
 	page, limit := 1, 20
 	paginated := result.name == "repo list" || result.name == "repo branches" || result.name == "repo commits" || result.name == "issue list" || result.name == "pr list" || result.name == "pr reviews" || result.name == "org list" || result.name == "org teams" || result.name == "team members" || result.name == "team repos"
+	if result.name == "audit list" {
+		flags.IntVar(&limit, "limit", 20, "event limit")
+		flags.StringVar(&result.beforeID, "before-id", "", "exclusive event cursor")
+		flags.StringVar(&result.snapshotID, "snapshot-id", "", "initial account snapshot")
+	}
 	if paginated {
 		flags.IntVar(&page, "page", 1, "page number")
 		flags.IntVar(&limit, "limit", 20, "page size")
@@ -251,6 +262,23 @@ func parseCommand(args []string) (command, error) {
 	}
 	if len(flags.Args()) != 0 || page < 1 || page > 10000 || limit < 1 || limit > 100 || (state != "" && state != "open" && state != "closed" && state != "all") {
 		return result, invalid
+	}
+	if result.name == "audit list" {
+		for _, value := range []string{result.beforeID, result.snapshotID} {
+			if value == "" {
+				continue
+			}
+			id, err := strconv.ParseInt(value, 10, 64)
+			if err != nil || id <= 0 || strconv.FormatInt(id, 10) != value {
+				return result, invalid
+			}
+		}
+		before, _ := strconv.ParseInt(result.beforeID, 10, 64)
+		snapshot, _ := strconv.ParseInt(result.snapshotID, 10, 64)
+		if before > snapshot {
+			return result, invalid
+		}
+		result.auditLimit = uint32(limit)
 	}
 	if paginated {
 		result.page = &golfv1.PageRequest{Page: uint32(page), Limit: uint32(limit)}
@@ -293,7 +321,8 @@ func execute(ctx context.Context, origin string, command command, token string) 
 	}
 	repositories := golfv1connect.NewRepositoryServiceClient(client, origin+"/rpc", options...)
 	organizations := golfv1connect.NewOrganizationServiceClient(client, origin+"/rpc", options...)
-	message, err := command.read(ctx, repositories, organizations)
+	audit := golfv1connect.NewAuditServiceClient(client, origin+"/rpc", options...)
+	message, err := command.read(ctx, repositories, organizations, audit)
 	if err != nil {
 		return nil, operationError(err)
 	}
@@ -306,8 +335,14 @@ func operationError(err error) error {
 	return fmt.Errorf("Golf returned %s; check the origin, connection, token scopes and resource access", connect.CodeOf(err))
 }
 
-func (command command) read(ctx context.Context, client golfv1connect.RepositoryServiceClient, organizations golfv1connect.OrganizationServiceClient) (proto.Message, error) {
+func (command command) read(ctx context.Context, client golfv1connect.RepositoryServiceClient, organizations golfv1connect.OrganizationServiceClient, audit golfv1connect.AuditServiceClient) (proto.Message, error) {
 	switch command.name {
+	case "audit list":
+		response, err := audit.ListAuditEvents(ctx, connect.NewRequest(&golfv1.ListAuditEventsRequest{Limit: command.auditLimit, BeforeId: command.beforeID, SnapshotId: command.snapshotID}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
 	case "org list":
 		response, err := organizations.ListOrganizations(ctx, connect.NewRequest(&golfv1.ListOrganizationsRequest{Page: command.page}))
 		if err != nil {

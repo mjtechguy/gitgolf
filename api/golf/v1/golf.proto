@@ -42,6 +42,11 @@ service OrganizationService {
   rpc ListTeamRepositories(ListTeamRepositoriesRequest) returns (ListTeamRepositoriesResponse);
 }
 
+// Own-account successful session lifecycle. This is not a complete security audit.
+service AuditService {
+  rpc ListAuditEvents(ListAuditEventsRequest) returns (ListAuditEventsResponse);
+}
+
 service CapabilityService {
   rpc ListCapabilities(ListCapabilitiesRequest) returns (ListCapabilitiesResponse);
 }
@@ -404,4 +409,44 @@ message ListTeamRepositoriesRequest {
 message ListTeamRepositoriesResponse {
   repeated Repository repositories = 1;
   PageResponse page = 2;
+}
+
+// These actions describe committed local session changes, not provider writes.
+enum AuditAction {
+  AUDIT_ACTION_UNSPECIFIED = 0;
+  AUDIT_ACTION_SIGN_IN = 1;
+  AUDIT_ACTION_SIGN_OUT = 2;
+  AUDIT_ACTION_SESSION_REVOKED = 3;
+  AUDIT_ACTION_OTHER_SESSIONS_REVOKED = 4;
+  AUDIT_ACTION_SESSION_REPLACED = 5;
+}
+message AuditEvent {
+  string id = 1;
+  string occurred_at = 2;
+  AuditAction action = 3;
+  string actor_session_id = 4;
+  // Absent for bulk revocation; this identifier is never a cookie/credential.
+  string target_session_id = 5;
+  string credential_kind = 6;
+  uint64 revoked_count = 7;
+  // Random non-secret operation identifier; no cross-account identity linkage.
+  string operation_id = 8;
+  // Only SIGN_IN: the new session's absolute expiry, not an event retention date.
+  optional string expires_at = 9;
+}
+message ListAuditEventsRequest {
+  // Zero defaults to 20; maximum 100.
+  uint32 limit = 1;
+  // Canonical positive signed-int64 own-event ID. Requires snapshot_id; <= snapshot_id.
+  string before_id = 2;
+  // Omit to capture a new own-account upper bound. Reuse on following pages.
+  // Supplied values must identify an existing event in this account.
+  string snapshot_id = 3;
+}
+message ListAuditEventsResponse {
+  repeated AuditEvent events = 1;
+  // Last returned ID only when another page exists; otherwise empty.
+  string next_before_id = 2;
+  // Empty only for history without any events. No pre-migration history is invented.
+  string snapshot_id = 3;
 }

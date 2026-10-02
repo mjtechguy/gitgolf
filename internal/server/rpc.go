@@ -40,6 +40,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewRepositoryServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewOrganizationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewCapabilityServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewAuditServiceHandler(s, options...))
 	return mux
 }
 
@@ -65,7 +66,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		switch strings.TrimPrefix(r.URL.Path, "/rpc") {
 		case golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
 			public = true
-		case golfv1connect.SessionServiceGetSessionProcedure,
+		case golfv1connect.AuditServiceListAuditEventsProcedure, golfv1connect.SessionServiceGetSessionProcedure,
 			golfv1connect.SessionServiceListSessionsProcedure, golfv1connect.SessionServiceRevokeSessionProcedure, golfv1connect.SessionServiceRevokeOtherSessionsProcedure,
 			golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure,
 			golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure,
@@ -466,4 +467,33 @@ func (s *Server) ListPullRequestReviews(ctx context.Context, req *connect.Reques
 		return nil, rpcError(err)
 	}
 	return connect.NewResponse(&golfv1.ListPullRequestReviewsResponse{Reviews: rows, Page: wirePage(next)}), nil
+}
+
+func (s *Server) ListAuditEvents(ctx context.Context, req *connect.Request[golfv1.ListAuditEventsRequest]) (*connect.Response[golfv1.ListAuditEventsResponse], error) {
+	token, err := rpcToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, next, snapshot, err := s.listAuditEvents(ctx, cookieValue(req.Header()), token, req.Msg.Limit, req.Msg.BeforeId, req.Msg.SnapshotId)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	response := &golfv1.ListAuditEventsResponse{NextBeforeId: next, SnapshotId: snapshot}
+	for _, row := range rows {
+		action := golfv1.AuditAction(golfv1.AuditAction_value["AUDIT_ACTION_"+row.Action])
+		if action == golfv1.AuditAction_AUDIT_ACTION_UNSPECIFIED {
+			return nil, rpcError(errStorageUnavailable)
+		}
+		event := &golfv1.AuditEvent{Id: strconv.FormatInt(row.ID, 10), OccurredAt: row.OccurredAt.Format(time.RFC3339Nano), Action: action,
+			ActorSessionId: strconv.FormatInt(row.ActorSessionID, 10), CredentialKind: row.CredentialKind, RevokedCount: uint64(row.RevokedCount), OperationId: row.OperationID}
+		if row.TargetSessionID.Valid {
+			event.TargetSessionId = strconv.FormatInt(row.TargetSessionID.Int64, 10)
+		}
+		if row.ExpiresAt.Valid {
+			expiry := row.ExpiresAt.Time.Format(time.RFC3339Nano)
+			event.ExpiresAt = &expiry
+		}
+		response.Events = append(response.Events, event)
+	}
+	return connect.NewResponse(response), nil
 }

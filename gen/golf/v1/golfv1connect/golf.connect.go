@@ -27,6 +27,8 @@ const (
 	RepositoryServiceName = "golf.v1.RepositoryService"
 	// OrganizationServiceName is the fully-qualified name of the OrganizationService service.
 	OrganizationServiceName = "golf.v1.OrganizationService"
+	// AuditServiceName is the fully-qualified name of the AuditService service.
+	AuditServiceName = "golf.v1.AuditService"
 	// CapabilityServiceName is the fully-qualified name of the CapabilityService service.
 	CapabilityServiceName = "golf.v1.CapabilityService"
 )
@@ -113,6 +115,9 @@ const (
 	// OrganizationServiceListTeamRepositoriesProcedure is the fully-qualified name of the
 	// OrganizationService's ListTeamRepositories RPC.
 	OrganizationServiceListTeamRepositoriesProcedure = "/golf.v1.OrganizationService/ListTeamRepositories"
+	// AuditServiceListAuditEventsProcedure is the fully-qualified name of the AuditService's
+	// ListAuditEvents RPC.
+	AuditServiceListAuditEventsProcedure = "/golf.v1.AuditService/ListAuditEvents"
 	// CapabilityServiceListCapabilitiesProcedure is the fully-qualified name of the CapabilityService's
 	// ListCapabilities RPC.
 	CapabilityServiceListCapabilitiesProcedure = "/golf.v1.CapabilityService/ListCapabilities"
@@ -898,6 +903,76 @@ func (UnimplementedOrganizationServiceHandler) ListTeamMembers(context.Context, 
 
 func (UnimplementedOrganizationServiceHandler) ListTeamRepositories(context.Context, *connect.Request[v1.ListTeamRepositoriesRequest]) (*connect.Response[v1.ListTeamRepositoriesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationService.ListTeamRepositories is not implemented"))
+}
+
+// AuditServiceClient is a client for the golf.v1.AuditService service.
+type AuditServiceClient interface {
+	ListAuditEvents(context.Context, *connect.Request[v1.ListAuditEventsRequest]) (*connect.Response[v1.ListAuditEventsResponse], error)
+}
+
+// NewAuditServiceClient constructs a client for the golf.v1.AuditService service. By default, it
+// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
+// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
+// connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewAuditServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AuditServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	auditServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("AuditService").Methods()
+	return &auditServiceClient{
+		listAuditEvents: connect.NewClient[v1.ListAuditEventsRequest, v1.ListAuditEventsResponse](
+			httpClient,
+			baseURL+AuditServiceListAuditEventsProcedure,
+			connect.WithSchema(auditServiceMethods.ByName("ListAuditEvents")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// auditServiceClient implements AuditServiceClient.
+type auditServiceClient struct {
+	listAuditEvents *connect.Client[v1.ListAuditEventsRequest, v1.ListAuditEventsResponse]
+}
+
+// ListAuditEvents calls golf.v1.AuditService.ListAuditEvents.
+func (c *auditServiceClient) ListAuditEvents(ctx context.Context, req *connect.Request[v1.ListAuditEventsRequest]) (*connect.Response[v1.ListAuditEventsResponse], error) {
+	return c.listAuditEvents.CallUnary(ctx, req)
+}
+
+// AuditServiceHandler is an implementation of the golf.v1.AuditService service.
+type AuditServiceHandler interface {
+	ListAuditEvents(context.Context, *connect.Request[v1.ListAuditEventsRequest]) (*connect.Response[v1.ListAuditEventsResponse], error)
+}
+
+// NewAuditServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewAuditServiceHandler(svc AuditServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	auditServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("AuditService").Methods()
+	auditServiceListAuditEventsHandler := connect.NewUnaryHandler(
+		AuditServiceListAuditEventsProcedure,
+		svc.ListAuditEvents,
+		connect.WithSchema(auditServiceMethods.ByName("ListAuditEvents")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.AuditService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case AuditServiceListAuditEventsProcedure:
+			auditServiceListAuditEventsHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedAuditServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedAuditServiceHandler struct{}
+
+func (UnimplementedAuditServiceHandler) ListAuditEvents(context.Context, *connect.Request[v1.ListAuditEventsRequest]) (*connect.Response[v1.ListAuditEventsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AuditService.ListAuditEvents is not implemented"))
 }
 
 // CapabilityServiceClient is a client for the golf.v1.CapabilityService service.

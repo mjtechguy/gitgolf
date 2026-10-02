@@ -518,6 +518,9 @@ CREATE CONSTRAINT TRIGGER reject_session_delete AFTER DELETE ON golf_sessions DE
 	if err := f.db.QueryRow("SELECT count(*) FROM golf_sessions").Scan(&count); err != nil || count != 3 {
 		t.Fatal("commit failure did not restore every session", err)
 	}
+	if err := f.db.QueryRow("SELECT count(*) FROM golf_audit_events").Scan(&count); err != nil || count != 3 {
+		t.Fatal("commit failure retained a false successful audit event", err)
+	}
 }
 
 func TestSessionManagementMigrationPreservesCredentialsPostgres(t *testing.T) {
@@ -530,7 +533,7 @@ func TestSessionManagementMigrationPreservesCredentialsPostgres(t *testing.T) {
 	if _, err := provider.DownTo(ctx, 202610010001); err != nil {
 		t.Fatal(err)
 	}
-	pat, oauth := f.session(t, "alice", "pat"), f.session(t, "alice", "oauth")
+	pat, oauth := legacyManagementSession(t, f, "alice", "pat"), legacyManagementSession(t, f, "alice", "oauth")
 	type retained struct {
 		hash, encrypted  []byte
 		created, expires time.Time

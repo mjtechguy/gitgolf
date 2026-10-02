@@ -21,6 +21,11 @@ const organizationsRoute = createRoute({
   path: '/organizations',
   component: () => <App location={{ kind: 'organizations' }} />,
 });
+const auditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/audit',
+  component: () => <App location={{ kind: 'audit' }} />,
+});
 const organizationRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/organizations/$organization',
@@ -74,7 +79,7 @@ function OrganizationPage() {
 
 // Router owns navigation only. Private server data stays in the cancellable Query cache.
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([homeRoute, repositoryRoute, organizationsRoute, organizationRoute]),
+  routeTree: rootRoute.addChildren([homeRoute, repositoryRoute, organizationsRoute, organizationRoute, auditRoute]),
   defaultPreload: false,
   // Refs and paths are opaque strings, including names such as "1234" or "true".
   parseSearch: (search) => Object.fromEntries(new URLSearchParams(search)),

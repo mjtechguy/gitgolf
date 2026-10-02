@@ -16,9 +16,10 @@ import (
 //
 // All account operations lock the immutable Golf user first, then the caller
 // session. This serializes competing bulk revocations without each request
-// holding the session that its competitor needs to delete. Login also upserts
-// the user first; OAuth refresh/logout only lock sessions and never request this
-// user lock. A revoked/expired caller is rechecked after either lock wait.
+// holding the session that its competitor needs to delete. Login locks affected
+// accounts in sorted order; logout locks its account first. OAuth refresh only
+// locks sessions and never requests a user lock. A revoked/expired caller is
+// rechecked after either lock wait.
 func (s *Server) withManagedSession(ctx context.Context, value string, credential forgeCredential, operation func(*database.Queries, database.LockManagedSessionRow, []byte) error) error {
 	hash, err := sessionHash(value)
 	if err != nil {
@@ -120,7 +121,7 @@ func (s *Server) revokeSession(ctx context.Context, value string, credential for
 			return errResourceNotFound
 		}
 		current = caller.SessionID == id
-		return nil
+		return appendAudit(ctx, queries, database.AppendAuditEventParams{UserID: caller.UserID, Action: "SESSION_REVOKED", ActorSessionID: caller.SessionID, TargetSessionID: auditTarget(id), CredentialKind: caller.CredentialKind, RevokedCount: 1})
 	})
 	return current && err == nil, err
 }
@@ -135,7 +136,7 @@ func (s *Server) revokeOtherSessions(ctx context.Context, value string, credenti
 		if err != nil {
 			return errStorageUnavailable
 		}
-		return nil
+		return appendAudit(ctx, queries, database.AppendAuditEventParams{UserID: caller.UserID, Action: "OTHER_SESSIONS_REVOKED", ActorSessionID: caller.SessionID, CredentialKind: caller.CredentialKind, RevokedCount: count})
 	})
 	if err != nil {
 		return 0, err

@@ -140,6 +140,19 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 }
 
 .sessions-nav { background:transparent; border:0; width:100%; text-align:left; }
+.audit-list { list-style:none; margin:0; padding:0; }
+.audit-event { padding:23px 24px; border-bottom:1px solid var(--line); }
+.audit-event:last-child { border-bottom:0; }
+.audit-event-heading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; }
+.audit-event-heading h3 { font-size:14px; letter-spacing:0; }
+.audit-time { margin:9px 0 17px; font-size:11px; color:var(--muted); }
+.audit-event summary { cursor:pointer; font-size:11px; line-height:1.9; border-radius:3px; overflow-wrap:anywhere; }
+.audit-id { color:var(--muted); margin-left:7px; }
+.audit-metadata { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:15px 22px; font-size:11px; line-height:1.7; margin:20px 0 0; }
+.audit-metadata dt { color:var(--muted); }
+.audit-metadata dd { margin:2px 0 0; overflow-wrap:anywhere; }
+.audit-footer { border-top:1px solid var(--line); padding:15px 24px; margin:0; flex-wrap:wrap; }
+@media(max-width:720px) { .audit-event { padding:20px 15px; } .audit-metadata { grid-template-columns:1fr; } .audit-footer { padding-inline:15px; } .account-activity .browser-panel-heading { flex-wrap:wrap; gap:13px; } }
 .sessions-dialog { width:min(680px,calc(100vw - 32px)); }
 .sessions-dialog>p { line-height:1.7; }
 .session-toolbar { display:flex; align-items:center; justify-content:space-between; gap:14px; margin:23px 0 16px; }

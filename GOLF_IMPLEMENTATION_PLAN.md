@@ -2,7 +2,7 @@
 
 Status: product direction and implementation roadmap; completeness review and shared Gitea first-release decision incorporated on 2026-10-01. Provider proofs and implementation evidence remain required. Explicit defaults are engineering decisions that can be revisited through ADRs.
 
-Execution evidence: the [implementation ledger](docs/IMPLEMENTATION_STATUS.md) records the local developer preview, including bounded repository/source/history, issue and PR/native-review reads, member-scoped organization browsing and the JSON CLI. These increments do not mark an entire phase, v1 or the Cloudflare competition milestone complete.
+Execution evidence: the [implementation ledger](docs/IMPLEMENTATION_STATUS.md) records the local developer preview, including bounded repository/source/history, issue and PR/native-review reads, member-scoped organization browsing, own-account session activity and the JSON CLI. These increments do not mark an entire phase, v1 or the Cloudflare competition milestone complete.
 
 Prepared: 2026-10-01. Provider documentation and limits must be rechecked when implementing each integration.
 
@@ -907,6 +907,8 @@ Deployment admission verifies required signature/provenance, output digest, appr
 Test unsigned/untrusted/replaced artifact rejection, stale approval, altered image tag, compromised dependency source, and absence of production credentials in the build process.
 
 ### 14.4 Audit and retention
+
+Current bounded foundation: the [account audit contract](docs/ACCOUNT_AUDIT_CONTRACT.md) records five successful Golf session action classes transactionally, with own-account API/UI/CLI reads and stable keyset snapshots. Existing history is not backfilled; automatic expiry cleanup, OAuth refresh, credential-rejection deletion, failed attempts and provider writes are not events. SQL guards reject ordinary history edits but a database owner can alter them. Audit-aware writers must replace all older binaries before claiming an audited operating window; the single-service upgrade proof does not qualify mixed-version rolling audit continuity. This advances P1.3/P1.8/P5.5, without completing broader audit coverage, retention/export, outbox, jobs or recovery. Qualification is in the [implementation ledger](docs/IMPLEMENTATION_STATUS.md).
 
 Audit login/linking, membership/policy changes, connection grants/revocation, repository writes, automation authority, runner enrollment, credential access, deployment/DNS/resource operations, approvals, and recovery. Include actor/delegated agent, repository/environment, policy/config version, commit/output, operation ID, outcome, and timestamp.
 

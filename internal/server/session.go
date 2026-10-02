@@ -78,22 +78,59 @@ func (s *Server) createSession(ctx context.Context, user User, kind, payload, ol
 	}
 	defer tx.Rollback()
 	queries := database.New(s.db).WithTx(tx)
-	id, err := queries.UpsertUser(ctx, database.UpsertUserParams{ForgeURL: s.config.GiteaURL, ForgeUserID: user.ID, Login: user.Login, FullName: user.FullName, AvatarURL: user.AvatarURL})
-	if err == nil {
-		err = queries.CreateSession(ctx, database.CreateSessionParams{TokenHash: hash, UserID: id, EncryptedToken: s.seal(payload, hash), ExpiresAt: expires, CredentialKind: kind})
+	// The two account locks are sorted before any profile update, session lock
+	// or event-ID allocation. Opposite-direction cookie replacements cannot
+	// each hold the account their competitor needs. INSERT DO NOTHING avoids
+	// updating/locking an existing new account before this ordered step.
+	if err := queries.EnsureLoginUser(ctx, database.EnsureLoginUserParams{ForgeURL: s.config.GiteaURL, ForgeUserID: user.ID, Login: user.Login, FullName: user.FullName, AvatarURL: user.AvatarURL}); err != nil {
+		return loginResult{}, errStorageUnavailable
 	}
-	if err == nil {
-		err = queries.DeleteExpiredSessions(ctx)
-	}
-	if oldHash, hashErr := sessionHash(oldValue); err == nil && hashErr == nil {
-		err = queries.DeleteSession(ctx, oldHash)
-	}
-	if err == nil {
-		err = tx.Commit()
-	}
+	oldHash, _ := sessionHash(oldValue)
+	accounts, err := queries.LockLoginUsers(ctx, database.LockLoginUsersParams{ForgeURL: s.config.GiteaURL, ForgeUserID: user.ID, OldTokenHash: oldHash})
 	if err != nil {
 		return loginResult{}, errStorageUnavailable
 	}
+	id, err := queries.UpsertUser(ctx, database.UpsertUserParams{ForgeURL: s.config.GiteaURL, ForgeUserID: user.ID, Login: user.Login, FullName: user.FullName, AvatarURL: user.AvatarURL})
+	if err != nil {
+		return loginResult{}, errStorageUnavailable
+	}
+	operation, err := newAuditOperation()
+	if err != nil {
+		return loginResult{}, err
+	}
+	for _, account := range accounts {
+		if oldHash == nil {
+			break
+		}
+		old, err := queries.DeleteAuditedSession(ctx, database.DeleteAuditedSessionParams{TokenHash: oldHash, UserID: account.ID, ForgeURL: s.config.GiteaURL})
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return loginResult{}, errStorageUnavailable
+		}
+		oldOperation := operation
+		if account.ID != id {
+			oldOperation = ""
+		} // No cross-account operation correlation.
+		if err := appendAudit(ctx, queries, database.AppendAuditEventParams{UserID: account.ID, Action: "SESSION_REPLACED", ActorSessionID: old.SessionID, TargetSessionID: auditTarget(old.SessionID), CredentialKind: old.CredentialKind, RevokedCount: 1, OperationID: oldOperation}); err != nil {
+			return loginResult{}, err
+		}
+	}
+	sessionID, err := queries.CreateAuditedSession(ctx, database.CreateAuditedSessionParams{TokenHash: hash, UserID: id, EncryptedToken: s.seal(payload, hash), ExpiresAt: expires, CredentialKind: kind})
+	if err != nil {
+		return loginResult{}, errStorageUnavailable
+	}
+	if err := appendAudit(ctx, queries, database.AppendAuditEventParams{UserID: id, Action: "SIGN_IN", ActorSessionID: sessionID, TargetSessionID: auditTarget(sessionID), CredentialKind: kind, OperationID: operation, ExpiresAt: sql.NullTime{Time: expires, Valid: true}}); err != nil {
+		return loginResult{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return loginResult{}, errStorageUnavailable
+	}
+	// Cleanup has no lifecycle-event meaning and must not hold account locks
+	// while deleting expired rows belonging to unrelated accounts. A cleanup
+	// failure cannot turn an already committed sign-in into a false failure.
+	_ = database.New(s.db).DeleteExpiredSessions(ctx)
 	return loginResult{user, value, expires}, nil
 }
 func (s *Server) sessionCredential(ctx context.Context, value string) (forgeCredential, error) {
@@ -139,7 +176,30 @@ func (s *Server) logoutSession(ctx context.Context, value string) error {
 	if s.db == nil {
 		return errStorageUnavailable
 	}
-	if err := database.New(s.db).DeleteSession(ctx, hash); err != nil {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return errStorageUnavailable
+	}
+	defer tx.Rollback()
+	queries := database.New(s.db).WithTx(tx)
+	id, err := queries.LockLogoutUser(ctx, database.LockLogoutUserParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return errStorageUnavailable
+	}
+	old, err := queries.DeleteAuditedSession(ctx, database.DeleteAuditedSessionParams{TokenHash: hash, UserID: id, ForgeURL: s.config.GiteaURL})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return errStorageUnavailable
+	}
+	if err := appendAudit(ctx, queries, database.AppendAuditEventParams{UserID: id, Action: "SIGN_OUT", ActorSessionID: old.SessionID, TargetSessionID: auditTarget(old.SessionID), CredentialKind: old.CredentialKind, RevokedCount: 1}); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
 		return errStorageUnavailable
 	}
 	return nil

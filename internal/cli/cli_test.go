@@ -146,6 +146,10 @@ func TestCommandValidationBeforeAuthentication(t *testing.T) {
 		{"pr", "view", "alice/private", "+1"}, {"pr", "reviews", "alice/private", "2147483648"},
 		{"pr", "view", "alice/private", "1", "--page", "2"}, {"pr", "list", "alice/private", "--state", "merged"},
 		{"pr", "reviews", "alice/private", "1", "--state", "all"}, {"pr", "merge", "alice/private", "1"},
+		{"audit", "list", "--limit", "101"}, {"audit", "list", "--page", "2"},
+		{"audit", "list", "--before-id", "1"}, {"audit", "list", "--snapshot-id", "01"},
+		{"audit", "list", "--snapshot-id", "+1"}, {"audit", "list", "--snapshot-id", "9223372036854775808"},
+		{"audit", "list", "--before-id", "3", "--snapshot-id", "2"}, {"audit", "clear"},
 		{"issue", "list", "alice/private", "--state", "deleted"}, {"repo", "list", "--token", "do-not-echo-token"},
 		{"org", "view"}, {"org", "view", "."}, {"org", "view", ".."}, {"org", "view", "org/team"},
 		{"org", "view", "space org"}, {"org", "view", "org?token=do-not-echo-token"}, {"org", "view", "世界"},
@@ -211,13 +215,17 @@ func TestCancellationStillClosesSession(t *testing.T) {
 	}
 }
 
-func TestMembershipAndPullCommandsAndEphemeralSession(t *testing.T) {
+func TestAdditionalReadCommandsAndEphemeralSession(t *testing.T) {
 	const token = "fixture-organization-token"
 	const teamID = "9223372036854775807"
 	for _, command := range []struct {
 		args                                   []string
 		procedure, request, response, fragment string
 	}{
+		{[]string{"audit", "list", "--limit", "1", "--before-id", "9007199254740993", "--snapshot-id", "9223372036854775807"}, golfv1connect.AuditServiceListAuditEventsProcedure,
+			`{"limit":1,"beforeId":"9007199254740993","snapshotId":"9223372036854775807"}`, `{"events":[{"id":"9007199254740992","action":"AUDIT_ACTION_SIGN_IN","actorSessionId":"9007199254740993","credentialKind":"pat"}],"nextBeforeId":"9007199254740992","snapshotId":"9223372036854775807"}`, `"id":"9007199254740992"`},
+		{[]string{"audit", "list"}, golfv1connect.AuditServiceListAuditEventsProcedure,
+			`{"limit":20}`, `{}`, `"events":[]`},
 		{[]string{"pr", "list", "alice/private", "--state", "all", "--page", "2", "--limit", "1"}, golfv1connect.RepositoryServiceListPullRequestsProcedure,
 			`{"repository":{"owner":"alice","name":"private"},"state":"ISSUE_STATE_ALL","page":{"page":2,"limit":1}}`, `{"pullRequests":[{"id":"9007199254740993","number":7,"head":{"repositoryId":"9223372036854775807","retainedSnapshot":true}}],"page":{"nextPage":3}}`, `"retainedSnapshot":true`},
 		{[]string{"pr", "view", "alice/private", "2147483647"}, golfv1connect.RepositoryServiceGetPullRequestProcedure,

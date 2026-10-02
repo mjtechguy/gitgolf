@@ -9,7 +9,7 @@ These are infrastructure choices, not editions. AI is optional in Golf's core wo
 
 ## What works now
 
-This is a developer preview: optional scoped Gitea browser OAuth and per-user token bootstrap, encrypted PostgreSQL-backed sessions with account listing/revocation, member-scoped organization/team browsing, repository listing/creation, in-app source and commit browsing, read-only issues and pull requests/native reviews, a JSON CLI, black/charcoal and light/system themes, capability reporting, and persistent Compose/Helm installations. Git writes use Gitea directly.
+This is a developer preview: optional scoped Gitea browser OAuth and per-user token bootstrap, encrypted PostgreSQL-backed sessions with account listing/revocation and own-account activity, member-scoped organization/team browsing, repository listing/creation, in-app source and commit browsing, read-only issues and pull requests/native reviews, a JSON CLI, black/charcoal and light/system themes, capability reporting, and persistent Compose/Helm installations. Git writes use Gitea directly.
 
 Golf local/external OIDC identity, organization/role administration, import/connections, PR/review mutations and merge policy, pipelines/runners, agent execution, Cloudflare integrations and protected previews/CD remain roadmap work. This is not complete v1 or a competition-ready entry. No repository CI is configured.
 
@@ -38,6 +38,8 @@ docker compose exec gitea gitea --config /etc/gitea/app.ini admin user create \
 Store the printed password securely. Sign into Gitea and create a dedicated token under **Settings → Applications**, using the scopes described below. Paste that token into Golf, or configure browser OAuth below. Individual team members use their own accounts/tokens; never share a site administrator's token across users.
 
 Open **Sessions** in the workspace sidebar to list your active Golf sessions and revoke one, the current session, or all other sessions. Confirmation is required. Revocation removes Golf access on subsequent requests; provider PATs, OAuth consent and Git credentials remain separately managed. See [session management](docs/SESSION_MANAGEMENT.md).
+
+Open **Account activity** to inspect your recorded successful sign-ins, sign-outs and session revocations/replacements. Load more retains one history snapshot; Refresh starts a new one. Reads require only `read:user`. History starts with recording, has no invented pre-migration events, and excludes automatic expiry cleanup, OAuth refresh and failed attempts. See the [account audit contract](docs/ACCOUNT_AUDIT_CONTRACT.md) for event, migration and operator limits.
 
 ### Optional browser OAuth
 
@@ -109,13 +111,16 @@ make cli
 ./bin/golf team view ORGANIZATION TEAM_ID
 ./bin/golf team members ORGANIZATION TEAM_ID
 ./bin/golf team repos ORGANIZATION TEAM_ID --page 1 --limit 20
+./bin/golf audit list --limit 20
 ```
 
 Alternatively pipe one token from your secret manager to `./bin/golf --token-stdin repo list`. Credentials are accepted only through stdin or `GOLF_GITEA_TOKEN`, never a command-line token flag. Set `GOLF_URL` or global `--url` for another installation; remote origins require HTTPS. The CLI does not follow redirects or save credentials/cookies. It creates and deletes a temporary Golf session per command, including after an operation fails. Abrupt termination can leave that session until its normal server expiry.
 
 PR/review commands require `read:user` and `read:repository`; review flags remain provider observations. Organization/team commands require `read:user` and `read:organization`; repository source separately requires `read:repository`. Team IDs are canonical positive decimal strings, obtained from `org teams`. Empty collection pages can still have a `nextPage`.
 
-Success writes JSON with `schema_version: "golf.cli.v1"` and the API response in `data`. Pagination is explicit; follow `data.page.nextPage` with `--page`, up to `--limit 100`. Exit codes are 0 for success/help, 1 for operation/authentication/session-cleanup failure, and 2 for usage errors. Diagnostics go to stderr. Go and TypeScript clients now share the Protobuf/Connect contract. OAuth/device login, MCP and ACP remain future work.
+Account activity uses a separate keyset contract: `audit list --limit 20`, then `audit list --limit 20 --before-id BEFORE_ID --snapshot-id SNAPSHOT_ID` using exact `data.nextBeforeId` and `data.snapshotId` strings. Each CLI invocation records its own temporary sign-in/sign-out, so retain the first captured snapshot across continuation calls. These reads need only `read:user`; managed CLI OAuth remains unavailable.
+
+Success writes JSON with `schema_version: "golf.cli.v1"` and the API response in `data`. Repository, issue, PR, organization and team collection pagination is explicit; follow `data.page.nextPage` with `--page`, up to `--limit 100`. Activity uses the keyset cursors described above. Exit codes are 0 for success/help, 1 for operation/authentication/session-cleanup failure, and 2 for usage errors. Diagnostics go to stderr. Go and TypeScript clients now share the Protobuf/Connect contract. OAuth/device login, MCP and ACP remain future work.
 
 ## Local checks
 
@@ -131,6 +136,8 @@ python3 scripts/smoke.py --restart
 # Optional: include real CLI checks against the same stack.
 make cli
 python3 scripts/smoke.py --cli bin/golf
+# Own-account activity API/CLI and production-served browser checks.
+python3 scripts/audit-smoke.py --cli bin/golf
 # Actual PAT session management and production-served dialog checks.
 python3 scripts/sessions-smoke.py
 # Real membership-scoped organizations/teams and production browser checks.
@@ -150,6 +157,8 @@ python3 scripts/oauth-smoke.py --refresh
 ```
 
 The browser checks use contract fixtures. `scripts/smoke.py` exercises the real running Compose stack: isolated users/private repositories, cross-user denial, CSRF, real Git pushes, source snapshots/preview boundaries, issues/scope denial, optional CLI/restart/outage checks, revocation and logout. It removes its test Gitea users/repositories afterward. `--restart` briefly interrupts local Golf/Gitea; omit it to skip those service operations. Python 3 and Git are required; `--cli` accepts an already-built CLI executable.
+
+`scripts/audit-smoke.py` checks recorded session events, account privacy, cursor snapshots, ephemeral CLI cleanup and the production activity screen. Its optional `--upgrade` expects a running pre-audit service and an already-built new image; `--restart` briefly interrupts Golf. Provider users and active sessions are removed afterward, while immutable Golf identities/history remain. Drain all old writers before claiming an audited operating window; a mixed-version rolling fleet is not qualified. Automatic cleanup and provider changes are not a complete audit trail.
 
 `scripts/oauth-smoke.py` creates disposable users and a confidential provider application, enables OAuth with a private temporary override, and exercises actual browser login/consent. `--refresh` uses two real short-lived token cycles with concurrent requests and revocation. It restores the original Gitea token settings and disabled Golf OAuth, then purges its fixtures. It also checks all six member-scoped organization/team reads and OAuth session listing/current/bulk revocation using a separate account. It also obtains a real narrower legacy-equivalent grant, verifies that refresh and a new sign-in cannot expand it, then revokes that provider grant and verifies fresh consent enables organization access. This does not test a complete old-release binary upgrade. It requires OAuth to be disabled initially; it never edits `.env` or deletes volumes.
 

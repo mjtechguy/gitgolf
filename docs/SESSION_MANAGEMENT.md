@@ -34,6 +34,10 @@ Revoking Golf sessions does **not** revoke the Gitea PAT, OAuth consent, Gitea b
 
 Session queries are private, per-user, abortable and uncached after the dialog closes. Failed refresh/revocation hides prior rows. Current-session revocation and unauthenticated errors reuse the existing sign-out path to cancel/remove private queries. Theme selection is the only persisted browser preference involved; no credentials/session metadata are stored in localStorage.
 
+## Recorded account activity
+
+Open **Account activity** for the selected successful session events recorded by this installation. Covered sign-in, sign-out, individual/bulk revocation and replacement write an event in the same database transaction; history retains non-credential session IDs after removal. No pre-migration login history is fabricated. Automatic expiry cleanup, OAuth refresh and credential deletion after invalid grants/identity rejection remain unaudited, as do failed attempts. A missing/already-deleted logout cookie returns success without an event. See the [account audit contract](ACCOUNT_AUDIT_CONTRACT.md) for exact action metadata, snapshot pagination and append-only/upgrade limits.
+
 ## Verification
 
 The implementation ledger records real PostgreSQL migration/scoping/expiry/rollback/concurrency checks, generated-contract browser checks and the actual Compose checks:

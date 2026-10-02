@@ -11,7 +11,7 @@ FOR UPDATE OF u;
 
 -- Re-read and lock the caller after waiting for the identity lock.
 -- name: LockManagedSession :one
-SELECT caller.session_id, caller.user_id, caller.expires_at
+SELECT caller.session_id, caller.user_id, caller.expires_at, caller.credential_kind
 FROM golf_sessions caller
 JOIN golf_users u ON u.id = caller.user_id
 WHERE caller.token_hash = sqlc.arg(caller_token_hash)

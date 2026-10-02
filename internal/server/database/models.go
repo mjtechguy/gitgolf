@@ -5,8 +5,22 @@
 package database
 
 import (
+	"database/sql"
 	"time"
 )
+
+type GolfAuditEvent struct {
+	ID              int64
+	UserID          int64
+	OccurredAt      time.Time
+	Action          string
+	ActorSessionID  int64
+	TargetSessionID sql.NullInt64
+	CredentialKind  string
+	RevokedCount    int64
+	OperationID     string
+	ExpiresAt       sql.NullTime
+}
 
 type GolfOauthAttempt struct {
 	StateHash         []byte

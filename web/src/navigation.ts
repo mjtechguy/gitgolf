@@ -10,7 +10,7 @@ export type RepositorySearch = {
 export const defaultRepositorySearch: RepositorySearch = { view: 'source', ref: '', path: '', branch: '', state: 'open' };
 export type RepositoryLocation = RepositorySearch & { kind: 'repository'; owner: string; name: string };
 export type OrganizationLocation = { kind: 'organizations'; organization?: string; team?: string };
-export type Location = RepositoryLocation | OrganizationLocation | { kind: 'home'; oauthFailed?: boolean } | { kind: 'missing' };
+export type Location = RepositoryLocation | OrganizationLocation | { kind: 'audit' } | { kind: 'home'; oauthFailed?: boolean } | { kind: 'missing' };
 
 export function organizationOptions({ organization, team }: { organization: string; team?: string }) {
   return { to: '/organizations/$organization' as const, params: { organization }, search: { team }, activeOptions: { exact: true } };
