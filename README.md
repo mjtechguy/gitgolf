@@ -55,7 +55,7 @@ Run `docker compose up -d golf` to apply the configuration. Golf then offers **C
 
 The fixed callback uses single-use ten-minute state, a separate HttpOnly browser binding and S256 PKCE. Sessions retain their absolute twelve-hour expiry despite access-token refresh. Logout removes the Golf session; manage provider consent in Gitea. This is Gitea OAuth, not complete Golf local/OIDC account management, organization policy or CLI OAuth login. See [ADR 0003](docs/decisions/0003-gitea-oauth-and-session-refresh.md).
 
-**Token scopes (verified on Gitea 1.27.3):** use `read:user` plus `read:repository` to sign in and browse. Creating repositories additionally requires `write:user` plus `write:repository` (write includes read). Gitea applies both user and repository scopes to its `/user/repos` route; Golf preserves that authorization. Read-only tokens can browse but creation correctly returns a permission error.
+**Token scopes (verified on Gitea 1.27.3):** use `read:user` plus `read:repository` to sign in and browse. Creating repositories additionally requires `write:user` plus `write:repository` (write includes read). Gitea applies both user and repository scopes to its `/user/repos` route; Golf preserves that authorization. Read-only tokens can browse but creation is rejected; explicit-key requests return recorded rejection evidence, while legacy unkeyed calls retain permission errors.
 
 Add `read:organization` to browse your organizations and provider-visible teams; this scope does not grant membership. For an existing OAuth grant without it, revoke Golf’s grant in Gitea **Settings → Applications**, then sign in through Golf and approve the new scopes. Signing in again alone can reuse the narrower grant. Add `read:issue` to browse issues. Code browsing continues to work without issue scope; the issue panel reports the missing permission. Scopes never grant repository access the user does not already have.
 
@@ -81,9 +81,9 @@ Before activation, drain all old Golf writers and in-flight OAuth exchanges. Dat
 
 ## Offline backup and quarantined restore
 
-The [recovery guide](docs/RECOVERY.md) documents `scripts/recovery.py backup|verify|restore` for the canonical three-service Docker installation: PostgreSQL 18.4, Gitea 1.27.3 and Golf schema 202610020003. It captures native database dumps, both complete Gitea volumes and resolved runtime credentials/configuration into a private age-encrypted archive. A fresh restore requires the exact local image IDs, invalidates every restored Golf session/pending PKCE attempt and leaves Golf/Gitea stopped. Images are not included.
+The [recovery guide](docs/RECOVERY.md) documents `scripts/recovery.py backup|verify|restore` for the canonical three-service Docker installation: PostgreSQL 18.4, Gitea 1.27.3 and Golf schema 202610020004. It captures native database dumps, both complete Gitea volumes and resolved runtime credentials/configuration into a private age-encrypted archive. A fresh restore requires the exact local image IDs, invalidates every restored Golf session/pending PKCE attempt and leaves Golf/Gitea stopped. Images are not included.
 
-All writers must be stopped and drained before capture or restore; `--writers-drained` asserts that operator precondition and does not fence administrators. Accept only trusted operator backups, protect plaintext staging and restore configuration, and reconcile native/provider revocations, deletion decisions and outbound work before reopening. Real PostgreSQL safeguards, offline archive checks and the full native fresh-restore drill pass, including signed Git, hydrated LFS, attachments, protections, SSH/signing identity, fresh access and simultaneous whole-stack restart. The small fixture skips the minimum-size-cap negative case; this is not an 8 GiB or load qualification. This does not complete P1.6, qualify Kubernetes/external object stores or establish RPO/RTO targets. Backup age encryption does not change the application credential cipher.
+All writers must be stopped and drained before capture or restore; `--writers-drained` asserts that operator precondition and does not fence administrators. Accept only trusted operator backups, protect plaintext staging and restore configuration, and reconcile native/provider revocations, deletion decisions and outbound work before reopening. Real PostgreSQL safeguards, offline archive checks and the full native fresh-restore drill pass, including preserved creation-operation/event history, same-key inspection/replay without another create, signed Git, hydrated LFS, attachments, protections, SSH/signing identity, fresh access and simultaneous whole-stack restart. The small fixture skips the minimum-size-cap negative case; this is not an 8 GiB or load qualification. This does not complete P1.6, qualify Kubernetes/external object stores or establish RPO/RTO targets. Backup age encryption does not change the application credential cipher.
 
 ## Run on Kubernetes
 
@@ -103,6 +103,12 @@ In **Commits**, choose **View diff** to inspect an exact object and its first-pa
 
 The **Pull requests** tab lists open/closed/all PRs and opens plain-text detail with native Gitea reviews. List heads are labeled retained snapshots; detail refs are provider observations or explicit retained fallbacks. These labels, native merge records and review flags do not establish a live source branch, Golf approval eligibility or merge readiness. Pagination can advance from an empty review page because Gitea filters hidden pending reviews after counting. PR and review reads require `read:user` plus `read:repository`, without issue scope. See the [PR read contract](docs/PULL_REQUEST_READ_CONTRACT.md).
 
+## Durable repository creation
+
+The browser gives each creation request a stable key, immediately blocks duplicate submission events, and freezes its submitted details. It retains only the key, name and visibility in tab session storage scoped by browser origin and native Gitea user ID. Unresolved requests remain available for status inspection after closing the dialog or reloading the tab; they are never automatically recreated. Golf commits the operation before the native POST and never dispatches a repeated account/key again. A known rejection permits an explicit new request.
+
+The API adds optional `CreateRepository.idempotency_key` (a canonical lowercase UUID v4) and `GetRepositoryCreation`. Keyed responses carry explicit `SUCCEEDED`, `REJECTED` or `OUTCOME_UNKNOWN` evidence; HTTP 200 alone does not mean creation succeeded. Reusing a key with changed inputs fails. Current native access and repository ID are checked before returning repository metadata. Unkeyed callers retain legacy error behavior, with no deduplication across separate invocations. See [the operation contract](docs/REPOSITORY_CREATION_CONTRACT.md) for scope, ambiguity, storage and verification boundaries. Native success/rejection/restart, real browser acknowledgment loss and counted Gitea-response-loss checks pass; the latter stays unknown after retries and restart with exactly one observed provider POST. This is not a general outbox/job engine or exactly-once provider contract.
+
 ## Read-only CLI
 
 Requires the Go version in `go.mod`. `make cli` produces `bin/golf`; `make build` additionally produces the server as `bin/golf-server`.
@@ -113,6 +119,7 @@ make cli
 # Supply GOLF_GITEA_TOKEN through your shell's secret manager, not a literal in history.
 ./bin/golf repo list
 ./bin/golf repo view owner/repository
+./bin/golf repo creation 12345678-1234-4234-8234-123456789abc
 ./bin/golf repo branches owner/repository
 ./bin/golf repo commits owner/repository --ref feature/example
 ./bin/golf repo contents owner/repository --ref COMMIT_ID --path README.md
@@ -134,6 +141,8 @@ make cli
 Alternatively pipe one token from your secret manager to `./bin/golf --token-stdin repo list`. Credentials are accepted only through stdin or `GOLF_GITEA_TOKEN`, never a command-line token flag. Set `GOLF_URL` or global `--url` for another installation; remote origins require HTTPS. The CLI does not follow redirects or save credentials/cookies. It creates and deletes a temporary Golf session per command, including after an operation fails. Abrupt termination can leave that session until its normal server expiry.
 
 `commit diff` requires an exact lowercase 40- or 64-character hexadecimal SHA, accepts no branch/revision expressions or pagination, and returns JSON-escaped `data.rawDiff` plus commit/parent/base metadata and numeric `data.byteSize`. It uses the same `read:user,read:repository` scopes as source browsing; syntax acceptance does not qualify every forge object format.
+
+`repo creation` inspects your existing request key through the same scoped API. It only reads operation evidence, never creates/retries a repository. A successful historical record can lack repository metadata after access loss, rename, deletion or replacement. `OUTCOME_UNKNOWN` may include work still in flight.
 
 PR/review commands require `read:user` and `read:repository`; review flags remain provider observations. Organization/team commands require `read:user` and `read:organization`; repository source separately requires `read:repository`. Team IDs are canonical positive decimal strings, obtained from `org teams`. Empty collection pages can still have a `nextPage`.
 
@@ -163,6 +172,12 @@ python3 scripts/keyring-smoke.py
 python3 scripts/recovery-test.py
 # Isolated native backup/restore drill; supply a current locally built image.
 python3 scripts/recovery-smoke.py --image '<LOCAL_GOLF_IMAGE_TAG_OR_ID>'
+# Durable creation, native replay/privacy/restart and real browser response loss.
+python3 scripts/repository-creation-smoke.py --restart --cli bin/golf --browser
+# Provider-response loss uses a separate fresh database; preparation is in
+# docs/REPOSITORY_CREATION_CONTRACT.md, not the normal installation.
+python3 scripts/repository-creation-fault-smoke.py --server-binary bin/golf-server \
+  --database-url-file .tmp/creation-verification/database-url
 # Actual PAT session management and production-served dialog checks.
 python3 scripts/sessions-smoke.py
 # Real membership-scoped organizations/teams and production browser checks.

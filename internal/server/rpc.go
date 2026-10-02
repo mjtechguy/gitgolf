@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 	"github.com/mjtechguy/golf-git/gen/golf/v1/golfv1connect"
+	"github.com/mjtechguy/golf-git/internal/server/database"
 )
 
 type sessionTokenKey struct{}
@@ -68,7 +69,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			public = true
 		case golfv1connect.AuditServiceListAuditEventsProcedure, golfv1connect.SessionServiceGetSessionProcedure,
 			golfv1connect.SessionServiceListSessionsProcedure, golfv1connect.SessionServiceRevokeSessionProcedure, golfv1connect.SessionServiceRevokeOtherSessionsProcedure,
-			golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure,
+			golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryCreationProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure,
 			golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure,
 			golfv1connect.RepositoryServiceGetCommitDiffProcedure,
 			golfv1connect.RepositoryServiceListIssuesProcedure, golfv1connect.RepositoryServiceGetIssueProcedure,
@@ -219,16 +220,51 @@ func (s *Server) ListRepositories(ctx context.Context, req *connect.Request[golf
 	}
 	return connect.NewResponse(response), nil
 }
+func wireRepositoryCreation(record database.GolfRepositoryCreation) *golfv1.RepositoryCreation {
+	state := golfv1.RepositoryCreationState_REPOSITORY_CREATION_STATE_OUTCOME_UNKNOWN
+	switch record.State {
+	case "SUCCEEDED":
+		state = golfv1.RepositoryCreationState_REPOSITORY_CREATION_STATE_SUCCEEDED
+	case "REJECTED":
+		state = golfv1.RepositoryCreationState_REPOSITORY_CREATION_STATE_REJECTED
+	}
+	repositoryID := ""
+	if record.RepositoryID.Valid {
+		repositoryID = strconv.FormatInt(record.RepositoryID.Int64, 10)
+	}
+	return &golfv1.RepositoryCreation{Id: strconv.FormatInt(record.ID, 10), IdempotencyKey: record.IdempotencyKey,
+		State: state, RequestedName: record.RequestedName, Private: record.Private, CreatedAt: record.CreatedAt.Format(time.RFC3339Nano),
+		UpdatedAt: record.UpdatedAt.Format(time.RFC3339Nano), RepositoryId: repositoryID, FailureCode: record.FailureCode}
+}
 func (s *Server) CreateRepository(ctx context.Context, req *connect.Request[golfv1.CreateRepositoryRequest]) (*connect.Response[golfv1.CreateRepositoryResponse], error) {
 	token, err := rpcToken(ctx)
 	if err != nil {
 		return nil, err
 	}
-	repo, err := s.createRepository(ctx, token, req.Msg.Name, req.Msg.Description, req.Msg.Private)
+	creation, repo, err := s.createRepository(ctx, cookieValue(req.Header()), token, req.Msg.Name, req.Msg.Description, req.Msg.Private, req.Msg.IdempotencyKey)
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	return connect.NewResponse(&golfv1.CreateRepositoryResponse{Repository: wireRepository(repo)}), nil
+	response := &golfv1.CreateRepositoryResponse{Creation: wireRepositoryCreation(creation)}
+	if repo != nil {
+		response.Repository = wireRepository(*repo)
+	}
+	return connect.NewResponse(response), nil
+}
+func (s *Server) GetRepositoryCreation(ctx context.Context, req *connect.Request[golfv1.GetRepositoryCreationRequest]) (*connect.Response[golfv1.GetRepositoryCreationResponse], error) {
+	token, err := rpcToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	creation, repo, err := s.getRepositoryCreation(ctx, cookieValue(req.Header()), token, req.Msg.IdempotencyKey)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	response := &golfv1.GetRepositoryCreationResponse{Creation: wireRepositoryCreation(creation)}
+	if repo != nil {
+		response.Repository = wireRepository(*repo)
+	}
+	return connect.NewResponse(response), nil
 }
 func (s *Server) GetRepository(ctx context.Context, req *connect.Request[golfv1.GetRepositoryRequest]) (*connect.Response[golfv1.GetRepositoryResponse], error) {
 	token, err := rpcToken(ctx)

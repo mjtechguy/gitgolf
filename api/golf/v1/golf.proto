@@ -21,6 +21,7 @@ service SessionService {
 service RepositoryService {
   rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse);
   rpc CreateRepository(CreateRepositoryRequest) returns (CreateRepositoryResponse);
+  rpc GetRepositoryCreation(GetRepositoryCreationRequest) returns (GetRepositoryCreationResponse);
   rpc GetRepository(GetRepositoryRequest) returns (GetRepositoryResponse);
   rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse);
   rpc ListCommits(ListCommitsRequest) returns (ListCommitsResponse);
@@ -125,8 +126,40 @@ message CreateRepositoryRequest {
   string description = 2;
   // Presence is required: an omitted value must never silently create publicly.
   optional bool private = 3;
+  // Optional for compatibility. Supply one canonical UUID v4 for safe retries;
+  // the same account/key with different inputs is rejected. Keys do not expire.
+  string idempotency_key = 4;
 }
-message CreateRepositoryResponse { Repository repository = 1; }
+message CreateRepositoryResponse {
+  Repository repository = 1;
+  RepositoryCreation creation = 2;
+}
+enum RepositoryCreationState {
+  REPOSITORY_CREATION_STATE_UNSPECIFIED = 0;
+  REPOSITORY_CREATION_STATE_OUTCOME_UNKNOWN = 1;
+  REPOSITORY_CREATION_STATE_SUCCEEDED = 2;
+  REPOSITORY_CREATION_STATE_REJECTED = 3;
+}
+// Own-account operation evidence, not a repository access grant. An unknown
+// outcome can include in-flight work; no automatic provider retry is permitted.
+message RepositoryCreation {
+  string id = 1;
+  string idempotency_key = 2;
+  RepositoryCreationState state = 3;
+  string requested_name = 4;
+  bool private = 5;
+  string created_at = 6;
+  string updated_at = 7;
+  string repository_id = 8;
+  // Bounded category only; never provider response bodies or request secrets.
+  string failure_code = 9;
+}
+message GetRepositoryCreationRequest { string idempotency_key = 1; }
+message GetRepositoryCreationResponse {
+  RepositoryCreation creation = 1;
+  // Present only after a successful current provider read of the same ID.
+  Repository repository = 2;
+}
 message GetRepositoryRequest { RepositoryKey repository = 1; }
 message GetRepositoryResponse { Repository repository = 1; }
 

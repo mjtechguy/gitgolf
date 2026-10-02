@@ -140,6 +140,10 @@ func TestClientRejectsUnsafeOriginsRedirectsAndMalformedResponses(t *testing.T) 
 
 func TestCommandValidationBeforeAuthentication(t *testing.T) {
 	for _, args := range [][]string{
+		{"repo", "creation"}, {"repo", "creation", "12345678-1234-1234-8234-123456789abc"},
+		{"repo", "creation", "12345678-1234-4234-7234-123456789abc"},
+		{"repo", "creation", "12345678-1234-4234-8234-123456789ABC"},
+		{"repo", "creation", "12345678-1234-4234-8234-123456789abc", "--page", "2"},
 		{"repo", "view", "../private"}, {"repo", "list", "--limit", "101"}, {"issue", "view", "alice/private", "0"},
 		{"issue", "view", "alice/private", "2147483648"},
 		{"commit", "diff", "alice/private"}, {"commit", "diff", "alice/private", "main"},
@@ -230,6 +234,8 @@ func TestAdditionalReadCommandsAndEphemeralSession(t *testing.T) {
 		args                                   []string
 		procedure, request, response, fragment string
 	}{
+		{[]string{"repo", "creation", "12345678-1234-4234-8234-123456789abc"}, golfv1connect.RepositoryServiceGetRepositoryCreationProcedure,
+			`{"idempotencyKey":"12345678-1234-4234-8234-123456789abc"}`, `{"creation":{"id":"opaque-operation","state":"REPOSITORY_CREATION_STATE_OUTCOME_UNKNOWN","requestedName":"<script>plain</script>\u001b[31m"}}`, `"state":"REPOSITORY_CREATION_STATE_OUTCOME_UNKNOWN"`},
 		// An untrusted endpoint can send control text; the CLI must still escape it in JSON.
 		{[]string{"commit", "diff", "alice/private", strings.Repeat("a", 40)}, golfv1connect.RepositoryServiceGetCommitDiffProcedure,
 			`{"repository":{"owner":"alice","name":"private"},"commitId":"` + strings.Repeat("a", 40) + `"}`, `{"commit":{"sha":"` + strings.Repeat("a", 40) + `"},"base":"COMMIT_DIFF_BASE_ROOT","rawDiff":"<script>plain text</script>\u001b[31m","byteSize":32}`, `"base":"COMMIT_DIFF_BASE_ROOT"`},

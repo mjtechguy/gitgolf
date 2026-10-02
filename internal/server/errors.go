@@ -8,16 +8,17 @@ import (
 )
 
 var (
-	errOAuthClientRejected   = errors.New("OAuth application credentials rejected")
-	errOAuthDisabled         = errors.New("OAuth unavailable")
-	errInvalidForgeResponse  = errors.New("invalid forge response")
-	errForgeUnavailable      = errors.New("forge unavailable")
-	errEmptyRepository       = errors.New("repository has no commits")
-	errDiffTextUnsupported   = errors.New("commit diff cannot be represented as supported text")
-	errResourceNotFound      = errors.New("resource not found")
-	errUnauthenticated       = errors.New("session missing or expired")
-	errStorageUnavailable    = errors.New("session storage unavailable")
-	errCredentialUnavailable = errors.New("session credential unavailable")
+	errRepositoryCreationConflict = errors.New("repository creation key has different inputs")
+	errOAuthClientRejected        = errors.New("OAuth application credentials rejected")
+	errOAuthDisabled              = errors.New("OAuth unavailable")
+	errInvalidForgeResponse       = errors.New("invalid forge response")
+	errForgeUnavailable           = errors.New("forge unavailable")
+	errEmptyRepository            = errors.New("repository has no commits")
+	errDiffTextUnsupported        = errors.New("commit diff cannot be represented as supported text")
+	errResourceNotFound           = errors.New("resource not found")
+	errUnauthenticated            = errors.New("session missing or expired")
+	errStorageUnavailable         = errors.New("session storage unavailable")
+	errCredentialUnavailable      = errors.New("session credential unavailable")
 )
 
 type inputError string
@@ -35,6 +36,8 @@ func rpcError(err error) error {
 	var input inputError
 	var upstream forgeError
 	switch {
+	case errors.Is(err, errRepositoryCreationConflict):
+		code, message = connect.CodeFailedPrecondition, "This repository creation key is already bound to different inputs. Use its original inputs or a new key for a new operation."
 	case errors.As(err, &input):
 		code, message = connect.CodeInvalidArgument, string(input)
 	case errors.Is(err, errUnauthenticated):

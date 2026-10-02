@@ -4,9 +4,10 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { ArrowDown, ArrowRight, BookOpen, Building2, Check, CircleDot, Command, ExternalLink, GitBranch, History, KeyRound, Layers2, LoaderCircle, LockKeyhole, LogOut, Monitor, Moon, Plus, RefreshCw, Search, ShieldCheck, Sun, X } from 'lucide-react';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Link } from '@tanstack/react-router';
+import { create } from '@bufbuild/protobuf';
 import { capabilityClient, errorMessage, repositoryClient, repositoryLink, sessionClient } from './api';
-import { CapabilityState } from './gen/golf/v1/golf_pb';
-import type { Repository, User } from './gen/golf/v1/golf_pb';
+import { CapabilityState, CreateRepositoryRequestSchema, RepositoryCreationState } from './gen/golf/v1/golf_pb';
+import type { CreateRepositoryRequest, Repository, RepositoryCreation, User } from './gen/golf/v1/golf_pb';
 import { repositoryOptions } from './navigation';
 import type { Location } from './navigation';
 import { forgetPrivateQueries } from './queryClient';
@@ -125,36 +126,122 @@ function Login({ oauthFailed }: { oauthFailed: boolean }) {
   </div>;
 }
 
-function CreateRepository({ onClose }: { onClose: () => void }) {
+type PendingCreation = { key: string; name: string; private: boolean };
+const creationStoragePrefix = 'golf.repository-creation.';
+function creationStorageKey(userId: string) { return `${creationStoragePrefix}${window.location.origin}:${userId}`; }
+function clearOtherCreationIntents(userId?: string) {
+  try {
+    const keep = userId ? creationStorageKey(userId) : undefined;
+    for (const key of Object.keys(sessionStorage)) if (key.startsWith(creationStoragePrefix) && key !== keep) sessionStorage.removeItem(key);
+  } catch { /* Creation itself requires writable storage before sending. */ }
+}
+function pendingCreation(userId: string): PendingCreation | null {
+  try {
+    const value: unknown = JSON.parse(sessionStorage.getItem(creationStorageKey(userId)) || 'null');
+    if (value && typeof value === 'object' && 'key' in value && 'name' in value && 'private' in value &&
+        typeof value.key === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value.key) &&
+        typeof value.name === 'string' && value.name.length <= 100 && typeof value.private === 'boolean') {
+      return { key: value.key, name: value.name, private: value.private };
+    }
+  } catch { /* Never trust browser storage as operation evidence. */ }
+  return null;
+}
+
+function CreateRepository({ userId, initial, onPendingChange, onClose }: { userId: string; initial: PendingCreation | null; onPendingChange: (value: PendingCreation | null) => void; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
+  const statusButton = useRef<HTMLButtonElement>(null);
+  const frozen = useRef<CreateRepositoryRequest | null>(null);
+  const mounted = useRef(true);
   const client = useQueryClient();
-  const [name, setName] = useState('');
+  const [intent, setIntent] = useState(initial);
+  const [name, setName] = useState(initial?.name || '');
   const [description, setDescription] = useState('');
-  const [isPrivate, setPrivate] = useState(true);
+  const [isPrivate, setPrivate] = useState(initial?.private ?? true);
+  const [creation, setCreation] = useState<RepositoryCreation | null>(null);
+  const [localError, setLocalError] = useState<Error | null>(null);
+  const active = () => client.getQueryData<User | null>(['session'])?.id === userId;
+  async function observe(result: { creation?: RepositoryCreation; repository?: Repository }, key: string) {
+    if (!mounted.current || !active()) return;
+    if (!result.creation || result.creation.idempotencyKey !== key || result.creation.requestedName !== name.trim() || result.creation.private !== isPrivate) {
+      throw new ConnectError('The creation record does not match this request. Keep this request key and check its status.', Code.FailedPrecondition);
+    }
+    setCreation(result.creation);
+    if (result.creation.state === RepositoryCreationState.SUCCEEDED) {
+      try { sessionStorage.removeItem(creationStorageKey(userId)); } catch { /* A later status check can recover this terminal record. */ }
+      onPendingChange(null);
+      await client.invalidateQueries({ queryKey: ['repositories', userId] });
+      if (active() && result.repository && result.repository.id === result.creation.repositoryId) onClose();
+    }
+  }
   const mutation = useMutation({
-    mutationFn: () => repositoryClient.createRepository({ name: name.trim(), description: description.trim(), private: isPrivate }),
-    onSuccess: async () => {
-      await client.invalidateQueries({ queryKey: ['repositories'] });
-      onClose();
+    gcTime: 0, retry: false,
+    mutationFn: async (request: CreateRepositoryRequest) => {
+      const result = await repositoryClient.createRepository(request, { timeoutMs: 15_000 });
+      await observe(result, request.idempotencyKey);
     },
+    onMutate: () => { setCreation(null); setLocalError(null); },
+    onError: () => setCreation(null),
   });
-  useEffect(() => { dialog.current?.showModal(); nameInput.current?.focus(); }, []);
+  const status = useMutation({
+    gcTime: 0, retry: false,
+    mutationFn: async (key: string) => {
+      const result = await repositoryClient.getRepositoryCreation({ idempotencyKey: key }, { timeoutMs: 8_000 });
+      await observe(result, key);
+    },
+    onMutate: () => { setCreation(null); setLocalError(null); mutation.reset(); },
+    onError: () => setCreation(null),
+  });
+  const busy = mutation.isPending || status.isPending;
+  const rejected = creation?.state === RepositoryCreationState.REJECTED;
+  const succeeded = creation?.state === RepositoryCreationState.SUCCEEDED;
+  useEffect(() => { mounted.current = true; dialog.current?.showModal(); if (initial) statusButton.current?.focus(); else nameInput.current?.focus(); return () => { mounted.current = false; }; }, []);
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (name.trim() && !mutation.isPending) mutation.mutate();
+    if (!name.trim() || busy || intent || frozen.current) return;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(name.trim())) {
+      setLocalError(new Error('Use 1–100 letters, numbers, dots, underscores or hyphens, starting with a letter or number. No request was sent.'));
+      return;
+    }
+    const trimmedDescription = description.trim();
+    const descriptionBytes = new TextEncoder().encode(trimmedDescription);
+    if (new TextDecoder().decode(descriptionBytes) !== trimmedDescription) {
+      setLocalError(new Error('The description contains invalid Unicode. Replace the invalid text before creating the repository. No request was sent.'));
+      return;
+    }
+    if (descriptionBytes.byteLength > 2000) {
+      setLocalError(new Error('The description must fit within 2,000 UTF-8 bytes. Shorten it before creating the repository. No request was sent.'));
+      return;
+    }
+    try {
+      const request = create(CreateRepositoryRequestSchema, { name: name.trim(), description: trimmedDescription, private: isPrivate, idempotencyKey: crypto.randomUUID() });
+      const pending = { key: request.idempotencyKey, name: request.name, private: isPrivate };
+      sessionStorage.setItem(creationStorageKey(userId), JSON.stringify(pending));
+      frozen.current = request;
+      setIntent(pending); onPendingChange(pending);
+      mutation.mutate(request);
+    } catch {
+      setLocalError(new Error('Golf needs secure random IDs and writable tab session storage before starting creation. No request was sent.'));
+    }
   }
-  return <dialog ref={dialog} className="create-dialog" onClose={onClose} onCancel={(event) => { if (mutation.isPending) event.preventDefault(); }} aria-labelledby="create-title">
-    <div className="dialog-header"><span className="small-icon"><BookOpen size={21} /></span><button className="icon-button" aria-label="Close new repository form" disabled={mutation.isPending} onClick={onClose}><X size={19} /></button></div>
-    <h2 id="create-title">Start something new.</h2><p className="muted">Create a repository in your Gitea account.</p>
+  function newIntent() {
+    if (!rejected || busy) return;
+    try { sessionStorage.removeItem(creationStorageKey(userId)); } catch { /* The next submission must replace the stored intent successfully. */ }
+    frozen.current = null; setIntent(null); onPendingChange(null); setCreation(null); setLocalError(null); mutation.reset(); status.reset();
+    requestAnimationFrame(() => nameInput.current?.focus());
+  }
+  return <dialog ref={dialog} className="create-dialog" onClose={onClose} aria-labelledby="create-title">
+    <div className="dialog-header"><span className="small-icon"><BookOpen size={21} /></span><button className="icon-button" aria-label="Close new repository form" onClick={onClose}><X size={19} /></button></div>
+    <h2 id="create-title">{intent ? 'Repository creation.' : 'Start something new.'}</h2><p className="muted">{intent ? 'Track this creation request.' : 'Create a repository in your Gitea account.'}</p>
     <form onSubmit={submit}>
       <label htmlFor="repo-name">Repository name <span className="required">*</span></label>
-      <input ref={nameInput} id="repo-name" required maxLength={100} autoComplete="off" value={name} onChange={(event) => setName(event.target.value)} placeholder="my-next-project" disabled={mutation.isPending} />
+      <input ref={nameInput} id="repo-name" required maxLength={100} autoComplete="off" value={name} onChange={(event) => setName(event.target.value)} placeholder="my-next-project" disabled={Boolean(intent)} />
       <label htmlFor="repo-description">Description <span className="optional">optional</span></label>
-      <textarea id="repo-description" maxLength={2000} rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What are you building?" disabled={mutation.isPending} />
-      <label className="visibility-choice"><input type="checkbox" checked={isPrivate} onChange={(event) => setPrivate(event.target.checked)} disabled={mutation.isPending} /><LockKeyhole size={18} /><span><strong>Private repository</strong><small>{isPrivate ? 'Only you and people you authorize can access it.' : 'Public: code will be visible to everyone with access to your forge.'}</small></span></label>
-      <ErrorMessage error={mutation.error} />
-      <div className="dialog-actions"><button type="button" className="button secondary" disabled={mutation.isPending} onClick={onClose}>Cancel</button><button className="button primary" disabled={!name.trim() || mutation.isPending}>{mutation.isPending ? <LoaderCircle size={16} className="spin" /> : <Plus size={16} />}{mutation.isPending ? 'Creating…' : 'Create repository'}</button></div>
+      <textarea id="repo-description" maxLength={2000} rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What are you building?" disabled={Boolean(intent)} />
+      <label className="visibility-choice"><input type="checkbox" checked={isPrivate} onChange={(event) => setPrivate(event.target.checked)} disabled={Boolean(intent)} /><LockKeyhole size={18} /><span><strong>Private repository</strong><small>{isPrivate ? 'Only you and people you authorize can access it.' : 'Public: code will be visible to everyone with access to your forge.'}</small></span></label>
+      {intent ? <div className="creation-status" role="status"><p>{succeeded ? 'Creation succeeded, but Golf cannot currently confirm access to the repository. This record does not grant access.' : rejected ? 'Creation was rejected. You can explicitly start a new request and edit its details.' : busy ? 'Checking this creation request… Its outcome may still be unknown.' : 'Creation may still be running, or its outcome is unknown. Keep this request key; do not start a replacement request.'}</p><p className="field-help">Request key <code>{intent.key}</code></p>{!frozen.current ? <p className="field-help">The description was not saved. This resumed intent supports status checks only; it will never automatically resubmit.</p> : null}<p className="field-help">Closing this dialog does not cancel provider work. Only the request key, name and visibility are saved in this tab until sign-out.</p></div> : null}
+      <ErrorMessage error={localError || status.error || mutation.error} />
+      <div className="dialog-actions creation-actions"><button type="button" className="button secondary" onClick={onClose}>{intent ? 'Close' : 'Cancel'}</button>{intent ? <><button ref={statusButton} type="button" className="button secondary" disabled={busy} onClick={() => status.mutate(intent.key)}>{status.isPending ? 'Checking…' : 'Check status'}</button>{rejected ? <button type="button" className="button primary" onClick={newIntent}>Start a new request</button> : !succeeded && frozen.current ? <button type="button" className="button primary" disabled={busy} onClick={() => { status.reset(); mutation.mutate(frozen.current!); }}>{mutation.isPending ? 'Creating…' : 'Retry same request'}</button> : null}</> : <button className="button primary" disabled={!name.trim() || busy}><Plus size={16} />Create repository</button>}</div>
     </form>
   </dialog>;
 }
@@ -193,6 +280,7 @@ function Workspace({ user, location }: { user: User; location: Location }) {
   const [search, setSearch] = useState('');
   const [visibility, setVisibility] = useState('all');
   const [creating, setCreating] = useState(false);
+  const [pending, setPending] = useState(() => pendingCreation(user.id));
   const [managingSessions, setManagingSessions] = useState(false);
   const repositoryQuery = useInfiniteQuery({
     queryKey: ['repositories', user.id], initialPageParam: 1, staleTime: 0, gcTime: 0, enabled: location.kind === 'home',
@@ -202,6 +290,7 @@ function Workspace({ user, location }: { user: User; location: Location }) {
   const repositories = repositoryQuery.isSuccess && (!repositoryQuery.isFetching || repositoryQuery.isFetchingNextPage) ? [...new Map(repositoryQuery.data.pages.flatMap((page) => page.repositories).map((repository) => [repository.id, repository])).values()] : [];
   const filtered = repositories.filter((repository) => `${repository.fullName} ${repository.description}`.toLowerCase().includes(search.toLowerCase().trim()) && (visibility === 'all' || repository.private === (visibility === 'private'))).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   async function signedOut() {
+    clearOtherCreationIntents();
     await client.cancelQueries();
     client.setQueryData(['session'], null);
     forgetPrivateQueries(client);
@@ -218,17 +307,17 @@ function Workspace({ user, location }: { user: User; location: Location }) {
     </aside>
     <div className="workspace-content"><header className="topbar"><span><span className="muted">Workspace</span><span className="breadcrumb-slash">/</span>{location.kind === 'repository' ? location.name : location.kind === 'organizations' ? location.organization || 'Organizations' : location.kind === 'audit' ? 'Account activity' : 'Repositories'}</span><span className="connection-pill"><span className="status-dot" /> Signed in</span></header>
       <main id="main-content">{location.kind === 'audit' ? <Suspense fallback={<div className="browser-loading" role="status"><LoaderCircle size={20} className="spin" />Opening account activity…</div>}><AccountActivity userId={user.id} /></Suspense> : location.kind === 'organizations' ? <Suspense fallback={<div className="browser-loading" role="status"><LoaderCircle size={20} className="spin" />Opening organizations…</div>}><OrganizationBrowser location={location} userId={user.id} /></Suspense> : location.kind === 'repository' ? <Suspense fallback={<div className="browser-loading" role="status"><LoaderCircle size={20} className="spin" />Opening repository…</div>}><RepositoryBrowser key={`${location.owner}/${location.name}`} location={location} userId={user.id} /></Suspense> : location.kind === 'missing' ? <section className="empty-state"><h1>Page not found</h1><p>This Golf link does not match an available page.</p><Link className="button secondary" to="/">Back to repositories</Link></section> : <><section className="workspace-intro"><div><span className="eyebrow">YOUR NEXT COMMIT STARTS HERE</span><h1>Good to see you, {user.fullName || user.login}<span className="accent">.</span></h1><p>A little less friction. A little more building.</p></div><div className="intro-emblem" aria-hidden="true"><Command size={31} /></div></section>
-        <section className="repository-section" id="repositories" aria-labelledby="repositories-title"><div className="section-heading"><div className="title-count"><h2 id="repositories-title">Repositories</h2>{repositoryQuery.isSuccess ? <span className="count-badge">{repositories.length}{repositoryQuery.hasNextPage ? '+' : ''}</span> : null}</div><button className="button primary" onClick={() => setCreating(true)}><Plus size={16} />New repository</button></div>
+        <section className="repository-section" id="repositories" aria-labelledby="repositories-title"><div className="section-heading"><div className="title-count"><h2 id="repositories-title">Repositories</h2>{repositoryQuery.isSuccess ? <span className="count-badge">{repositories.length}{repositoryQuery.hasNextPage ? '+' : ''}</span> : null}</div><button className="button primary" onClick={() => setCreating(true)}><Plus size={16} />{pending ? 'Resume repository creation' : 'New repository'}</button></div>
           <p className="section-description">Your code, with room for what comes next. Open a repository to browse its source, commits and issues in Golf.</p>
           <div className="repository-toolbar"><div className="search-input"><Search size={17} /><input aria-label="Search loaded repositories" placeholder="Search repositories…" value={search} onChange={(event) => setSearch(event.target.value)} /></div><select aria-label="Repository visibility" value={visibility} onChange={(event) => setVisibility(event.target.value)}><option value="all">All visibility</option><option value="private">Private</option><option value="public">Public</option></select><button className="icon-button refresh" aria-label="Refresh repositories" disabled={repositoryQuery.isFetching} onClick={() => void repositoryQuery.refetch()}><RefreshCw size={17} className={repositoryQuery.isFetching ? 'spin' : ''} /></button></div>
           <ErrorMessage error={repositoryQuery.error} />
           <div className="repository-list" aria-busy={repositoryQuery.isFetching}>
-            {repositoryQuery.isError ? null : repositoryQuery.isPending || (repositoryQuery.isFetching && !repositoryQuery.isFetchingNextPage) ? <div className="empty-state" role="status"><LoaderCircle className="spin" size={24} /><h3>Finding your repositories…</h3></div> : filtered.length ? filtered.map((repository) => <RepositoryRow repository={repository} key={repository.id} />) : repositoryQuery.isSuccess ? <div className="empty-state"><BookOpen size={29} /><h3>{repositories.length ? 'No matching repositories' : 'A clean slate. A new beginning.'}</h3><p>{repositories.length ? 'Try a different search or visibility filter.' : 'Create your first repository to start building.'}</p>{!repositories.length ? <button className="button secondary" onClick={() => setCreating(true)}><Plus size={15} />Create a repository</button> : null}</div> : null}
+            {repositoryQuery.isError ? null : repositoryQuery.isPending || (repositoryQuery.isFetching && !repositoryQuery.isFetchingNextPage) ? <div className="empty-state" role="status"><LoaderCircle className="spin" size={24} /><h3>Finding your repositories…</h3></div> : filtered.length ? filtered.map((repository) => <RepositoryRow repository={repository} key={repository.id} />) : repositoryQuery.isSuccess ? <div className="empty-state"><BookOpen size={29} /><h3>{repositories.length ? 'No matching repositories' : 'A clean slate. A new beginning.'}</h3><p>{repositories.length ? 'Try a different search or visibility filter.' : 'Create your first repository to start building.'}</p>{!repositories.length ? <button className="button secondary" onClick={() => setCreating(true)}><Plus size={15} />{pending ? 'Resume pending request' : 'Create a repository'}</button> : null}</div> : null}
           </div>
           {repositoryQuery.isSuccess ? <div className="list-footer"><span role="status">{filtered.length} of {repositories.length} loaded repositories{repositoryQuery.hasNextPage ? ' · Search applies to loaded results' : ''}</span>{repositoryQuery.hasNextPage ? <button className="text-button" disabled={repositoryQuery.isFetchingNextPage} onClick={() => void repositoryQuery.fetchNextPage()}>{repositoryQuery.isFetchingNextPage ? 'Loading…' : 'Load more'}<ArrowDown size={14} /></button> : <span>Sorted by last update</span>}</div> : null}
         </section><Capabilities /></>}<footer className="workspace-footer"><span>Made for the work ahead.</span><span>golf<span className="accent">.</span></span></footer>
       </main>
-    </div>{creating ? <CreateRepository onClose={() => setCreating(false)} /> : null}{managingSessions ? <Suspense fallback={<p className="browser-loading" role="status">Opening sessions…</p>}><SessionManager userId={user.id} onClose={() => setManagingSessions(false)} onSignedOut={signedOut} /></Suspense> : null}
+    </div>{creating ? <CreateRepository userId={user.id} initial={pending} onPendingChange={setPending} onClose={() => setCreating(false)} /> : null}{managingSessions ? <Suspense fallback={<p className="browser-loading" role="status">Opening sessions…</p>}><SessionManager userId={user.id} onClose={() => setManagingSessions(false)} onSignedOut={signedOut} /></Suspense> : null}
   </div>;
 }
 
@@ -238,5 +327,6 @@ export function App({ location }: { location: Location }) {
     try { const response = await sessionClient.getSession({}, { signal }); if (!response.user) throw new ConnectError('The session response is missing its user.', Code.Internal); return response.user; }
     catch (error) { if (error instanceof ConnectError && error.code === Code.Unauthenticated) { forgetPrivateQueries(client); return null; } throw error; }
   } });
+  useEffect(() => { if (session.isSuccess) clearOtherCreationIntents(session.data?.id); }, [session.isSuccess, session.data?.id]);
   return <><a className="skip-link" href="#main-content">Skip to content</a>{session.isPending ? <main className="loading-screen" id="main-content"><Brand /><p role="status"><LoaderCircle size={18} className="spin" />Opening your workspace…</p></main> : session.error ? <main className="loading-screen" id="main-content"><Brand /><ErrorMessage error={session.error} /><button className="button secondary" onClick={() => void session.refetch()}>Try again</button></main> : session.data ? <Workspace key={session.data.id} user={session.data} location={location} /> : <Login oauthFailed={location.kind === 'home' && Boolean(location.oauthFailed)} />}</>;
 }

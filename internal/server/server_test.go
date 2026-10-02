@@ -180,6 +180,8 @@ func TestSessionAndRepositoryWithPostgres(t *testing.T) {
 		switch r.URL.Path {
 		case "/api/v1/user":
 			fmt.Fprint(w, `{"id":42,"login":"developer","full_name":"Developer","avatar_url":""}`)
+		case "/api/v1/repos/developer/example":
+			fmt.Fprint(w, `{"id":1,"name":"example","full_name":"developer/example","private":true}`)
 		case "/api/v1/user/repos":
 			if r.Method == "POST" {
 				var input struct {

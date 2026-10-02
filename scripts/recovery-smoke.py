@@ -29,6 +29,7 @@ import tarfile
 import tempfile
 import urllib.error
 import urllib.request
+import uuid
 
 sys.dont_write_bytecode = True
 import smoke
@@ -254,8 +255,10 @@ def main():
             owner_identity = smoke.rpc(owner, 'SessionService/GetSession')['user']
             smoke.rpc(smoke.client(), 'SessionService/BeginGiteaOAuth')
             assert sql('SELECT count(*) FROM golf_oauth_attempts;') == '1'
-            repository = smoke.rpc(owner, 'RepositoryService/CreateRepository',
-                                   {'name': 'recovery-private', 'private': True})['repository']
+            creation_request = {'name': 'recovery-private', 'private': True, 'idempotency_key': str(uuid.uuid4())}
+            created = smoke.rpc(owner, 'RepositoryService/CreateRepository', creation_request)
+            repository, creation = created['repository'], created['creation']
+            assert creation['state'] == 'REPOSITORY_CREATION_STATE_SUCCEEDED'
             full_name = repository['fullName']; key = {'owner': users[0], 'name': repository['name']}
             route = 'repos/'+full_name
             remote = smoke.GITEA+'/'+full_name+'.git'
@@ -333,7 +336,8 @@ def main():
                 smoke.rpc(session, 'SessionService/GetSession')
             history = {table: rows(table, order) for table, order in [
                 ('golf_users', 'id'), ('golf_audit_events', 'id'), ('golf_crypto_events', 'id'),
-                ('golf_encryption_keys', 'key_id'), ('golf_encryption_policy', 'singleton')]}
+                ('golf_encryption_keys', 'key_id'), ('golf_encryption_policy', 'singleton'),
+                ('golf_repository_creations', 'id'), ('golf_repository_creation_events', 'id')]}
             counts = int(sql('SELECT count(*) FROM golf_sessions;')), int(sql('SELECT count(*) FROM golf_oauth_attempts;'))
             assert counts == (4, 1)
             check('live writers cannot be bypassed by the operator drain assertion')
@@ -422,7 +426,8 @@ def main():
             assert sql('SELECT count(*) FROM golf_sessions;') == '0'
             assert sql('SELECT count(*) FROM golf_oauth_attempts;') == '0'
             for table, order in [('golf_users', 'id'), ('golf_audit_events', 'id'), ('golf_crypto_events', 'id'),
-                                 ('golf_encryption_keys', 'key_id'), ('golf_encryption_policy', 'singleton')]:
+                                 ('golf_encryption_keys', 'key_id'), ('golf_encryption_policy', 'singleton'),
+                ('golf_repository_creations', 'id'), ('golf_repository_creation_events', 'id')]:
                 assert rows(table, order) == history[table], 'Restored Golf history or key metadata differs'
             recovery_events = json.loads(rows('golf_recovery_events'))
             assert len(recovery_events) == 1
@@ -440,6 +445,15 @@ def main():
             smoke.rpc(outsider, 'SessionService/LoginWithGiteaToken', {'token': outsider_token})
             assert sql("SELECT count(*) FROM golf_sessions WHERE credential_key_id='next';") == '2'
             assert smoke.rpc(owner, 'RepositoryService/GetRepository', {'repository': key})['repository']['id'] == repository['id']
+            lookup = {'idempotency_key': creation_request['idempotency_key']}
+            observed = smoke.rpc(owner, 'RepositoryService/GetRepositoryCreation', lookup)
+            assert observed['creation'] == creation and observed['repository']['id'] == repository['id']
+            replay = smoke.rpc(owner, 'RepositoryService/CreateRepository', creation_request)
+            assert replay['creation'] == creation and replay['repository']['id'] == repository['id']
+            smoke.rpc(outsider, 'RepositoryService/GetRepositoryCreation', lookup, expected=404)
+            for table in ['golf_repository_creations', 'golf_repository_creation_events']:
+                assert rows(table, 'id') == history[table]
+            print('PASS: restored creation journal, scoped lookup and same-key replay preserve original evidence', flush=True)
             smoke.rpc(outsider, 'RepositoryService/GetRepository', {'repository': key}, expected=404)
             smoke.provider(outsider_token, 'GET', route, expected=404)
             assert git('ls-remote', '--heads', '--tags', remote) == refs

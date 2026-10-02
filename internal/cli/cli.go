@@ -30,6 +30,7 @@ Usage: golf [--url ORIGIN] [--token-stdin] COMMAND
 
   repo list [--page N] [--limit N]
   repo view OWNER/REPO
+  repo creation IDEMPOTENCY_KEY
   repo branches OWNER/REPO [--page N] [--limit N]
   repo commits OWNER/REPO [--ref REF] [--page N] [--limit N]
   repo contents OWNER/REPO [--ref REF] [--path PATH]
@@ -59,6 +60,8 @@ Account activity needs read:user and records successful session lifecycle operat
 Audit pagination preserves the first snapshot ID; each CLI call also records its own login/logout.
 Commit diffs require a full lowercase 40- or 64-character commit ID; branch aliases are not accepted.
 Diffs preserve bounded native Gitea text; merges compare only the first parent.
+Repository creation inspection needs a canonical UUID v4 key from a prior create request.
+It never creates or retries a repository; OUTCOME_UNKNOWN can include in-flight work.
 `
 
 // Run writes results only after logout succeeds. Error text excludes credentials
@@ -166,6 +169,7 @@ func parseOrigin(value string) (string, error) {
 
 var organizationName = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,100}$`)
 var commitID = regexp.MustCompile(`^(?:[a-f0-9]{40}|[a-f0-9]{64})$`)
+var creationKey = regexp.MustCompile(`^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$`)
 
 type command struct {
 	name         string
@@ -175,6 +179,7 @@ type command struct {
 	page         *golfv1.PageRequest
 	ref          string
 	commitID     string
+	creationKey  string
 	path         string
 	state        golfv1.IssueState
 	number       uint32
@@ -193,6 +198,11 @@ func parseCommand(args []string) (command, error) {
 	rest := args[2:]
 	switch result.name {
 	case "repo list", "org list", "audit list":
+	case "repo creation":
+		if len(rest) == 0 || !creationKey.MatchString(rest[0]) {
+			return result, invalid
+		}
+		result.creationKey, rest = rest[0], rest[1:]
 	case "org view", "org teams", "team view", "team members", "team repos":
 		if len(rest) == 0 || !organizationName.MatchString(rest[0]) || rest[0] == "." || rest[0] == ".." {
 			return result, invalid
@@ -349,6 +359,12 @@ func operationError(err error) error {
 
 func (command command) read(ctx context.Context, client golfv1connect.RepositoryServiceClient, organizations golfv1connect.OrganizationServiceClient, audit golfv1connect.AuditServiceClient) (proto.Message, error) {
 	switch command.name {
+	case "repo creation":
+		response, err := client.GetRepositoryCreation(ctx, connect.NewRequest(&golfv1.GetRepositoryCreationRequest{IdempotencyKey: command.creationKey}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
 	case "audit list":
 		response, err := audit.ListAuditEvents(ctx, connect.NewRequest(&golfv1.ListAuditEventsRequest{Limit: command.auditLimit, BeforeId: command.beforeID, SnapshotId: command.snapshotID}))
 		if err != nil {

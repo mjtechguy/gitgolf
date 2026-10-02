@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { BeginGiteaOAuthResponseSchema, GetAuthenticationOptionsResponseSchema, CapabilityState, CreateRepositoryRequestSchema, CreateRepositoryResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, LoginWithGiteaTokenRequestSchema, LoginWithGiteaTokenResponseSchema, LogoutResponseSchema, RepositorySchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
+import { BeginGiteaOAuthResponseSchema, GetAuthenticationOptionsResponseSchema, CapabilityState, RepositoryCreationState, CreateRepositoryRequestSchema, CreateRepositoryResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, LoginWithGiteaTokenRequestSchema, LoginWithGiteaTokenResponseSchema, LogoutResponseSchema, RepositorySchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
 import type { CreateRepositoryRequest } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
@@ -36,10 +36,11 @@ async function backend(page: Page, signedIn = true) {
     ] });
     if (path === '/rpc/golf.v1.RepositoryService/CreateRepository') {
       const input = state.created = request(route, CreateRepositoryRequestSchema);
-      if (state.rejectCreation) return reject(route, 'already_exists', 'A repository with this name already exists.');
+      const creation = { id: '1', idempotencyKey: input.idempotencyKey, requestedName: input.name, private: input.private, state: state.rejectCreation ? RepositoryCreationState.REJECTED : RepositoryCreationState.SUCCEEDED, repositoryId: state.rejectCreation ? '' : '3' };
+      if (state.rejectCreation) return respond(route, CreateRepositoryResponseSchema, { creation });
       const repository = create(RepositorySchema, { ...originalRepositories[0]!, name: input.name, description: input.description, private: input.private ?? true, id: '3', fullName: `alex/${input.name}`, htmlUrl: `https://forge.example/alex/${input.name}` });
       state.repositories.push(repository);
-      return respond(route, CreateRepositoryResponseSchema, { repository });
+      return respond(route, CreateRepositoryResponseSchema, { repository, creation });
     }
     if (path === '/rpc/golf.v1.RepositoryService/ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: state.repositories });
     return reject(route, 'not_found', 'Method not found.');
@@ -100,10 +101,13 @@ test('private creation keeps actionable errors, refreshes repositories and signs
   await expect(page.getByRole('checkbox', { name: 'Private repository' })).toBeChecked();
   state.rejectCreation = true;
   await page.getByRole('button', { name: 'Create repository', exact: true }).click();
-  await expect(page.getByRole('alert')).toHaveText('A repository with this name already exists.');
+  await expect(page.getByText('Creation was rejected.', { exact: false })).toBeVisible();
   expect(state.created).toMatchObject({ name: 'next-project', description: 'An idea worth building.', private: true });
   state.rejectCreation = false;
+  const rejectedKey = state.created!.idempotencyKey;
+  await page.getByRole('button', { name: 'Start a new request' }).click();
   await page.getByRole('button', { name: 'Create repository', exact: true }).click();
+  await expect.poll(() => state.created?.idempotencyKey).not.toBe(rejectedKey);
   await expect(page.getByRole('dialog')).not.toBeVisible();
   await expect(page.getByRole('heading', { name: 'alex/next-project' })).toBeVisible();
   await page.getByRole('button', { name: 'Sign out' }).click();

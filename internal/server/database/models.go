@@ -63,6 +63,28 @@ type GolfRecoveryEvent struct {
 	OauthAttemptsCount int64
 }
 
+type GolfRepositoryCreation struct {
+	ID                 int64
+	UserID             int64
+	IdempotencyKey     string
+	PayloadFingerprint []byte
+	RequestedName      string
+	Private            bool
+	State              string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	RepositoryID       sql.NullInt64
+	RepositoryFullName sql.NullString
+	FailureCode        string
+}
+
+type GolfRepositoryCreationEvent struct {
+	ID         int64
+	CreationID int64
+	OccurredAt time.Time
+	State      string
+}
+
 type GolfSession struct {
 	TokenHash       []byte
 	UserID          int64

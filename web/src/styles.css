@@ -248,3 +248,8 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
   .review-metadata>div:nth-child(2) { grid-column:1/-1; }
   .pull-list .pull-state { max-width:88px; }
 }
+
+.creation-status { margin-top:18px; padding:14px; border:1px solid var(--line); border-radius:8px; font-size:12px; line-height:1.7; overflow-wrap:anywhere; }
+.creation-status .field-help { margin:10px 0 0; }
+.creation-status code { font-size:11px; overflow-wrap:anywhere; }
+.creation-actions { flex-wrap:wrap; }

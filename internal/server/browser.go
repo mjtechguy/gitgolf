@@ -102,22 +102,6 @@ func (s *Server) listRepositories(ctx context.Context, token forgeCredential, pa
 	}
 	return repos, nextPage(headers, page), nil
 }
-func (s *Server) createRepository(ctx context.Context, token forgeCredential, name, description string, private *bool) (Repository, error) {
-	if !repositoryName.MatchString(name) || len(description) > 2000 || private == nil {
-		return Repository{}, invalid("Provide a 1–100 character repository name, description up to 2000 bytes, and explicit private boolean.")
-	}
-	input := struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		Private     bool   `json:"private"`
-	}{name, description, *private}
-	var repo Repository
-	_, err := s.forge(ctx, "POST", "/user/repos", token, input, &repo)
-	if err == nil && !validRepository(repo) {
-		err = errInvalidForgeResponse
-	}
-	return repo, err
-}
 func validRepository(repo Repository) bool {
 	return repo.ID > 0 && repo.Name != "" && repo.FullName != ""
 }

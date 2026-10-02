@@ -70,6 +70,9 @@ const (
 	// RepositoryServiceCreateRepositoryProcedure is the fully-qualified name of the RepositoryService's
 	// CreateRepository RPC.
 	RepositoryServiceCreateRepositoryProcedure = "/golf.v1.RepositoryService/CreateRepository"
+	// RepositoryServiceGetRepositoryCreationProcedure is the fully-qualified name of the
+	// RepositoryService's GetRepositoryCreation RPC.
+	RepositoryServiceGetRepositoryCreationProcedure = "/golf.v1.RepositoryService/GetRepositoryCreation"
 	// RepositoryServiceGetRepositoryProcedure is the fully-qualified name of the RepositoryService's
 	// GetRepository RPC.
 	RepositoryServiceGetRepositoryProcedure = "/golf.v1.RepositoryService/GetRepository"
@@ -382,6 +385,7 @@ func (UnimplementedSessionServiceHandler) Logout(context.Context, *connect.Reque
 type RepositoryServiceClient interface {
 	ListRepositories(context.Context, *connect.Request[v1.ListRepositoriesRequest]) (*connect.Response[v1.ListRepositoriesResponse], error)
 	CreateRepository(context.Context, *connect.Request[v1.CreateRepositoryRequest]) (*connect.Response[v1.CreateRepositoryResponse], error)
+	GetRepositoryCreation(context.Context, *connect.Request[v1.GetRepositoryCreationRequest]) (*connect.Response[v1.GetRepositoryCreationResponse], error)
 	GetRepository(context.Context, *connect.Request[v1.GetRepositoryRequest]) (*connect.Response[v1.GetRepositoryResponse], error)
 	ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error)
 	ListCommits(context.Context, *connect.Request[v1.ListCommitsRequest]) (*connect.Response[v1.ListCommitsResponse], error)
@@ -415,6 +419,12 @@ func NewRepositoryServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+RepositoryServiceCreateRepositoryProcedure,
 			connect.WithSchema(repositoryServiceMethods.ByName("CreateRepository")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryCreation: connect.NewClient[v1.GetRepositoryCreationRequest, v1.GetRepositoryCreationResponse](
+			httpClient,
+			baseURL+RepositoryServiceGetRepositoryCreationProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("GetRepositoryCreation")),
 			connect.WithClientOptions(opts...),
 		),
 		getRepository: connect.NewClient[v1.GetRepositoryRequest, v1.GetRepositoryResponse](
@@ -484,6 +494,7 @@ func NewRepositoryServiceClient(httpClient connect.HTTPClient, baseURL string, o
 type repositoryServiceClient struct {
 	listRepositories       *connect.Client[v1.ListRepositoriesRequest, v1.ListRepositoriesResponse]
 	createRepository       *connect.Client[v1.CreateRepositoryRequest, v1.CreateRepositoryResponse]
+	getRepositoryCreation  *connect.Client[v1.GetRepositoryCreationRequest, v1.GetRepositoryCreationResponse]
 	getRepository          *connect.Client[v1.GetRepositoryRequest, v1.GetRepositoryResponse]
 	listBranches           *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
 	listCommits            *connect.Client[v1.ListCommitsRequest, v1.ListCommitsResponse]
@@ -504,6 +515,11 @@ func (c *repositoryServiceClient) ListRepositories(ctx context.Context, req *con
 // CreateRepository calls golf.v1.RepositoryService.CreateRepository.
 func (c *repositoryServiceClient) CreateRepository(ctx context.Context, req *connect.Request[v1.CreateRepositoryRequest]) (*connect.Response[v1.CreateRepositoryResponse], error) {
 	return c.createRepository.CallUnary(ctx, req)
+}
+
+// GetRepositoryCreation calls golf.v1.RepositoryService.GetRepositoryCreation.
+func (c *repositoryServiceClient) GetRepositoryCreation(ctx context.Context, req *connect.Request[v1.GetRepositoryCreationRequest]) (*connect.Response[v1.GetRepositoryCreationResponse], error) {
+	return c.getRepositoryCreation.CallUnary(ctx, req)
 }
 
 // GetRepository calls golf.v1.RepositoryService.GetRepository.
@@ -560,6 +576,7 @@ func (c *repositoryServiceClient) ListPullRequestReviews(ctx context.Context, re
 type RepositoryServiceHandler interface {
 	ListRepositories(context.Context, *connect.Request[v1.ListRepositoriesRequest]) (*connect.Response[v1.ListRepositoriesResponse], error)
 	CreateRepository(context.Context, *connect.Request[v1.CreateRepositoryRequest]) (*connect.Response[v1.CreateRepositoryResponse], error)
+	GetRepositoryCreation(context.Context, *connect.Request[v1.GetRepositoryCreationRequest]) (*connect.Response[v1.GetRepositoryCreationResponse], error)
 	GetRepository(context.Context, *connect.Request[v1.GetRepositoryRequest]) (*connect.Response[v1.GetRepositoryResponse], error)
 	ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error)
 	ListCommits(context.Context, *connect.Request[v1.ListCommitsRequest]) (*connect.Response[v1.ListCommitsResponse], error)
@@ -589,6 +606,12 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 		RepositoryServiceCreateRepositoryProcedure,
 		svc.CreateRepository,
 		connect.WithSchema(repositoryServiceMethods.ByName("CreateRepository")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryServiceGetRepositoryCreationHandler := connect.NewUnaryHandler(
+		RepositoryServiceGetRepositoryCreationProcedure,
+		svc.GetRepositoryCreation,
+		connect.WithSchema(repositoryServiceMethods.ByName("GetRepositoryCreation")),
 		connect.WithHandlerOptions(opts...),
 	)
 	repositoryServiceGetRepositoryHandler := connect.NewUnaryHandler(
@@ -657,6 +680,8 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 			repositoryServiceListRepositoriesHandler.ServeHTTP(w, r)
 		case RepositoryServiceCreateRepositoryProcedure:
 			repositoryServiceCreateRepositoryHandler.ServeHTTP(w, r)
+		case RepositoryServiceGetRepositoryCreationProcedure:
+			repositoryServiceGetRepositoryCreationHandler.ServeHTTP(w, r)
 		case RepositoryServiceGetRepositoryProcedure:
 			repositoryServiceGetRepositoryHandler.ServeHTTP(w, r)
 		case RepositoryServiceListBranchesProcedure:
@@ -692,6 +717,10 @@ func (UnimplementedRepositoryServiceHandler) ListRepositories(context.Context, *
 
 func (UnimplementedRepositoryServiceHandler) CreateRepository(context.Context, *connect.Request[v1.CreateRepositoryRequest]) (*connect.Response[v1.CreateRepositoryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.CreateRepository is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) GetRepositoryCreation(context.Context, *connect.Request[v1.GetRepositoryCreationRequest]) (*connect.Response[v1.GetRepositoryCreationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.GetRepositoryCreation is not implemented"))
 }
 
 func (UnimplementedRepositoryServiceHandler) GetRepository(context.Context, *connect.Request[v1.GetRepositoryRequest]) (*connect.Response[v1.GetRepositoryResponse], error) {
