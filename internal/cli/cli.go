@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -23,7 +24,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const help = `Golf — inspect repositories using your own permissions.
+const help = `Golf — inspect repositories and organizations using your own permissions.
 
 Usage: golf [--url ORIGIN] [--token-stdin] COMMAND
 
@@ -34,6 +35,12 @@ Usage: golf [--url ORIGIN] [--token-stdin] COMMAND
   repo contents OWNER/REPO [--ref REF] [--path PATH]
   issue list OWNER/REPO [--state open|closed|all] [--page N] [--limit N]
   issue view OWNER/REPO NUMBER
+  org list [--page N] [--limit N]
+  org view ORG
+  org teams ORG [--page N] [--limit N]
+  team view ORG TEAM_ID
+  team members ORG TEAM_ID [--page N] [--limit N]
+  team repos ORG TEAM_ID [--page N] [--limit N]
 
 Success writes JSON: {"schema_version":"golf.cli.v1","data":...}.
 Exit codes: 0 success/help; 1 operation/authentication failure; 2 usage error.
@@ -41,7 +48,8 @@ Data uses the versioned API's Protobuf JSON format. No automatic pagination.
 Pass a Gitea token on stdin with --token-stdin, or set GOLF_GITEA_TOKEN.
 GOLF_URL defaults to http://localhost:8080. Remote origins require HTTPS.
 Credentials/cookies are never saved. Each command signs in and signs out.
-Global flags precede the command; resource flags follow OWNER/REPO.
+Global flags precede the command; resource flags follow positional arguments.
+Organization reads need read:user and read:organization; code needs read:repository.
 `
 
 // Run writes results only after logout succeeds. Error text excludes credentials
@@ -147,14 +155,18 @@ func parseOrigin(value string) (string, error) {
 	return u.Scheme + "://" + u.Host, nil
 }
 
+var organizationName = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,100}$`)
+
 type command struct {
-	name       string
-	repository *golfv1.RepositoryKey
-	page       *golfv1.PageRequest
-	ref        string
-	path       string
-	state      golfv1.IssueState
-	number     uint32
+	name         string
+	organization string
+	teamID       string
+	repository   *golfv1.RepositoryKey
+	page         *golfv1.PageRequest
+	ref          string
+	path         string
+	state        golfv1.IssueState
+	number       uint32
 }
 
 func parseCommand(args []string) (command, error) {
@@ -166,7 +178,24 @@ func parseCommand(args []string) (command, error) {
 	result.name = args[0] + " " + args[1]
 	rest := args[2:]
 	switch result.name {
-	case "repo list":
+	case "repo list", "org list":
+	case "org view", "org teams", "team view", "team members", "team repos":
+		if len(rest) == 0 || !organizationName.MatchString(rest[0]) || rest[0] == "." || rest[0] == ".." {
+			return result, invalid
+		}
+		result.organization = rest[0]
+		rest = rest[1:]
+		if args[0] == "team" {
+			if len(rest) == 0 {
+				return result, invalid
+			}
+			id, err := strconv.ParseInt(rest[0], 10, 64)
+			if err != nil || id <= 0 || strconv.FormatInt(id, 10) != rest[0] {
+				return result, invalid
+			}
+			result.teamID = rest[0]
+			rest = rest[1:]
+		}
 	case "repo view", "repo branches", "repo commits", "repo contents", "issue list", "issue view":
 		if len(rest) == 0 {
 			return result, invalid
@@ -200,7 +229,7 @@ func parseCommand(args []string) (command, error) {
 	flags.SetOutput(io.Discard)
 	var ref, filePath, state string
 	page, limit := 1, 20
-	paginated := result.name == "repo list" || result.name == "repo branches" || result.name == "repo commits" || result.name == "issue list"
+	paginated := result.name == "repo list" || result.name == "repo branches" || result.name == "repo commits" || result.name == "issue list" || result.name == "org list" || result.name == "org teams" || result.name == "team members" || result.name == "team repos"
 	if paginated {
 		flags.IntVar(&page, "page", 1, "page number")
 		flags.IntVar(&limit, "limit", 20, "page size")
@@ -260,7 +289,8 @@ func execute(ctx context.Context, origin string, command command, token string) 
 		return nil, errors.New("Golf did not establish a session")
 	}
 	repositories := golfv1connect.NewRepositoryServiceClient(client, origin+"/rpc", options...)
-	message, err := command.read(ctx, repositories)
+	organizations := golfv1connect.NewOrganizationServiceClient(client, origin+"/rpc", options...)
+	message, err := command.read(ctx, repositories, organizations)
 	if err != nil {
 		return nil, operationError(err)
 	}
@@ -273,8 +303,44 @@ func operationError(err error) error {
 	return fmt.Errorf("Golf returned %s; check the origin, connection, token scopes and resource access", connect.CodeOf(err))
 }
 
-func (command command) read(ctx context.Context, client golfv1connect.RepositoryServiceClient) (proto.Message, error) {
+func (command command) read(ctx context.Context, client golfv1connect.RepositoryServiceClient, organizations golfv1connect.OrganizationServiceClient) (proto.Message, error) {
 	switch command.name {
+	case "org list":
+		response, err := organizations.ListOrganizations(ctx, connect.NewRequest(&golfv1.ListOrganizationsRequest{Page: command.page}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "org view":
+		response, err := organizations.GetOrganization(ctx, connect.NewRequest(&golfv1.GetOrganizationRequest{Organization: command.organization}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "org teams":
+		response, err := organizations.ListTeams(ctx, connect.NewRequest(&golfv1.ListTeamsRequest{Organization: command.organization, Page: command.page}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "team view":
+		response, err := organizations.GetTeam(ctx, connect.NewRequest(&golfv1.GetTeamRequest{Organization: command.organization, TeamId: command.teamID}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "team members":
+		response, err := organizations.ListTeamMembers(ctx, connect.NewRequest(&golfv1.ListTeamMembersRequest{Organization: command.organization, TeamId: command.teamID, Page: command.page}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "team repos":
+		response, err := organizations.ListTeamRepositories(ctx, connect.NewRequest(&golfv1.ListTeamRepositoriesRequest{Organization: command.organization, TeamId: command.teamID, Page: command.page}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
 	case "repo list":
 		response, err := client.ListRepositories(ctx, connect.NewRequest(&golfv1.ListRepositoriesRequest{Page: command.page}))
 		if err != nil {

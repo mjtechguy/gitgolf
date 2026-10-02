@@ -81,6 +81,8 @@ The owner can edit or remove protection. Explicit emergency administration must 
 
 The expected-base lease form uses an explicit value (`--force-with-lease=refs/heads/main:<expected>`), not an implicit remote-tracking assumption. Despite the flag's name, the intended candidate update is a fast-forward; force-rewriting remains disabled. See the [official Git push documentation](https://git-scm.com/docs/git-push). The live fixture publishes a candidate with parents `[B,H1]` after the source branch changes to H2, and confirms H2 is not its ancestor. That is a counterexample to treating the base lease as a combined head/base predicate. This narrow primitive is not a drop-in implementation of Golf's full merge contract.
 
+The [proposed enforcement ADR](decisions/0004-protected-integration-enforcement.md) defines a fully mediated deployment candidate and the concrete P0.8-PUBLISH-1 fault harness. It remains proposed. The separate [local Git proof](../scripts/git-atomic-verify-smoke.py) confirms that unchanged source refspecs are omitted from atomic push commands; this is not a Gitea race qualification.
+
 ## Required follow-up gates
 
 | Plan gate | Required next evidence |

@@ -55,7 +55,7 @@ The fixed callback uses single-use ten-minute state, a separate HttpOnly browser
 
 **Token scopes (verified on Gitea 1.27.3):** use `read:user` plus `read:repository` to sign in and browse. Creating repositories additionally requires `write:user` plus `write:repository` (write includes read). Gitea applies both user and repository scopes to its `/user/repos` route; Golf preserves that authorization. Read-only tokens can browse but creation correctly returns a permission error.
 
-Add `read:organization` to browse your organizations and provider-visible teams; this scope does not grant membership. Existing OAuth grants without it need explicit re-consent. Add `read:issue` to browse issues. Code browsing continues to work without issue scope; the issue panel reports the missing permission. Scopes never grant repository access the user does not already have.
+Add `read:organization` to browse your organizations and provider-visible teams; this scope does not grant membership. For an existing OAuth grant without it, revoke Golf’s grant in Gitea **Settings → Applications**, then sign in through Golf and approve the new scopes. Signing in again alone can reuse the narrower grant. Add `read:issue` to browse issues. Code browsing continues to work without issue scope; the issue panel reports the missing permission. Scopes never grant repository access the user does not already have.
 
 The browser receives an opaque HttpOnly session cookie, not the upstream credential. The server stores only the session identifier's hash and an AES-GCM-encrypted Gitea token. Sessions expire after 12 hours. Token revocation is enforced by Gitea on subsequent calls. Local insecure cookies are explicitly allowed only on loopback origins; remote use requires HTTPS and secure cookies.
 
@@ -98,9 +98,17 @@ make cli
 ./bin/golf repo contents owner/repository --ref COMMIT_ID --path README.md
 ./bin/golf issue list owner/repository --state open
 ./bin/golf issue view owner/repository 1
+./bin/golf org list --limit 20
+./bin/golf org view ORGANIZATION
+./bin/golf org teams ORGANIZATION
+./bin/golf team view ORGANIZATION TEAM_ID
+./bin/golf team members ORGANIZATION TEAM_ID
+./bin/golf team repos ORGANIZATION TEAM_ID --page 1 --limit 20
 ```
 
 Alternatively pipe one token from your secret manager to `./bin/golf --token-stdin repo list`. Credentials are accepted only through stdin or `GOLF_GITEA_TOKEN`, never a command-line token flag. Set `GOLF_URL` or global `--url` for another installation; remote origins require HTTPS. The CLI does not follow redirects or save credentials/cookies. It creates and deletes a temporary Golf session per command, including after an operation fails. Abrupt termination can leave that session until its normal server expiry.
+
+Organization/team commands require `read:user` and `read:organization`; repository source separately requires `read:repository`. Team IDs are canonical positive decimal strings, obtained from `org teams`. Empty collection pages can still have a `nextPage`.
 
 Success writes JSON with `schema_version: "golf.cli.v1"` and the API response in `data`. Pagination is explicit; follow `data.page.nextPage` with `--page`, up to `--limit 100`. Exit codes are 0 for success/help, 1 for operation/authentication/session-cleanup failure, and 2 for usage errors. Diagnostics go to stderr. Go and TypeScript clients now share the Protobuf/Connect contract. OAuth/device login, MCP and ACP remain future work.
 
@@ -121,18 +129,20 @@ python3 scripts/smoke.py --cli bin/golf
 # Actual PAT session management and production-served dialog checks.
 python3 scripts/sessions-smoke.py
 # Real membership-scoped organizations/teams and production browser checks.
-python3 scripts/organizations-smoke.py
+python3 scripts/organizations-smoke.py --cli bin/golf
 # Isolated provider role contract; uses disposable PostgreSQL/Gitea on port 3016.
 python3 scripts/gitea-role-smoke.py
 # Characterize protected writes on disposable port 3018; exit 0 also records limitations.
 python3 scripts/gitea-protection-smoke.py
+# Local Git primitive: unchanged source refs are not verify-only locks.
+python3 scripts/git-atomic-verify-smoke.py
 # Optional browser OAuth and real rotating-refresh checks; briefly recreates services.
 python3 scripts/oauth-smoke.py --refresh
 ```
 
 The browser checks use contract fixtures. `scripts/smoke.py` exercises the real running Compose stack: isolated users/private repositories, cross-user denial, CSRF, real Git pushes, source snapshots/preview boundaries, issues/scope denial, optional CLI/restart/outage checks, revocation and logout. It removes its test Gitea users/repositories afterward. `--restart` briefly interrupts local Golf/Gitea; omit it to skip those service operations. Python 3 and Git are required; `--cli` accepts an already-built CLI executable.
 
-`scripts/oauth-smoke.py` creates disposable users and a confidential provider application, enables OAuth with a private temporary override, and exercises actual browser login/consent. `--refresh` uses two real short-lived token cycles with concurrent requests and revocation. It restores the original Gitea token settings and disabled Golf OAuth, then purges its fixtures. It also checks all six member-scoped organization/team reads and OAuth session listing/current/bulk revocation using a separate account. It requires OAuth to be disabled initially; it never edits `.env` or deletes volumes.
+`scripts/oauth-smoke.py` creates disposable users and a confidential provider application, enables OAuth with a private temporary override, and exercises actual browser login/consent. `--refresh` uses two real short-lived token cycles with concurrent requests and revocation. It restores the original Gitea token settings and disabled Golf OAuth, then purges its fixtures. It also checks all six member-scoped organization/team reads and OAuth session listing/current/bulk revocation using a separate account. It also obtains a real narrower legacy-equivalent grant, verifies that refresh and a new sign-in cannot expand it, then revokes that provider grant and verifies fresh consent enables organization access. This does not test a complete old-release binary upgrade. It requires OAuth to be disabled initially; it never edits `.env` or deletes volumes.
 
 The backend's database integration test runs when `GOLF_TEST_DATABASE_URL` points to a dedicated test PostgreSQL database. `make test-integration` requires it; without it, ordinary Go tests explicitly skip that integration case. Do not use a production database.
 

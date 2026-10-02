@@ -4,7 +4,10 @@
 Disposable ordinary users, organizations and repositories only. Credentials stay
 in memory; no database, configuration or .env edits. Never prints provider bodies.
 """
+import argparse
 import json
+import os
+from pathlib import Path
 import secrets
 import subprocess
 import sys
@@ -112,7 +115,28 @@ def call(session, procedure, data=None, expected=200):
     return rpc(session, 'OrganizationService/' + procedure, data or {}, expected=expected)
 
 
+def cli_call(binary, token, arguments, expected=0):
+    environment = {key: value for key, value in os.environ.items() if key != 'GOLF_GITEA_TOKEN'}
+    environment['GOLF_URL'] = GOLF
+    result = subprocess.run([str(binary), '--token-stdin', *arguments], input=token + '\n',
+        cwd=ROOT, env=environment, text=True, capture_output=True, timeout=30)
+    assert result.returncode == expected, 'CLI exit status mismatch; diagnostics withheld'
+    assert token not in result.stdout and token not in result.stderr, 'CLI exposed its credential'
+    if expected:
+        assert not result.stdout, 'Denied CLI operation emitted private data'
+        return None
+    envelope = json.loads(result.stdout)
+    assert envelope['schema_version'] == 'golf.cli.v1'
+    return envelope['data']
+
+
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--cli', type=Path, help='also qualify a built CLI (for example bin/golf)')
+    arguments = parser.parse_args()
+    binary = arguments.cli.resolve() if arguments.cli else None
+    if binary and not binary.is_file():
+        parser.error('--cli must name an existing binary; run make cli first')
     ready()
     prefix = 'golf-org-' + secrets.token_hex(5)
     users, organizations = [], []
@@ -192,6 +216,28 @@ def main():
         assert {row['id'] for row in first['repositories'] + second['repositories']} == set(repositories)
         print('PASS: team visibility, immutable organization binding, native unit metadata and member/repository reads', flush=True)
 
+        if binary:
+            before = {row['id'] for row in rpc(member['session'], 'SessionService/ListSessions')['sessions']}
+            listed = cli_call(binary, member['token'], ['org', 'list', '--limit', '1'])
+            assert [row['name'] for row in listed['organizations']] == [organization]
+            viewed = cli_call(binary, member['token'], ['org', 'view', organization])
+            assert viewed['organization']['visibility'] == 'ORGANIZATION_VISIBILITY_PRIVATE'
+            teams_cli = cli_call(binary, member['token'], ['org', 'teams', organization])
+            assert team_id in {row['id'] for row in teams_cli['teams']}
+            detail = cli_call(binary, member['token'], ['team', 'view', organization, team_id])
+            assert detail['team']['permission'] == 'TEAM_PERMISSION_NONE'
+            assert detail['team']['unitPermissions']['repo.code'] == 'TEAM_PERMISSION_READ'
+            assert [row['login'] for row in cli_call(binary, member['token'],
+                ['team', 'members', organization, team_id])['members']] == [member['name']]
+            one = cli_call(binary, member['token'], ['team', 'repos', organization, team_id, '--limit', '1'])
+            two = cli_call(binary, member['token'], ['team', 'repos', organization, team_id, '--limit', '1', '--page', '2'])
+            assert one['page']['nextPage'] == 2 and {row['id'] for row in one['repositories'] + two['repositories']} == set(repositories)
+            cli_call(binary, member['token'], ['team', 'view', organization, str(hidden['id'])], expected=1)
+            cli_call(binary, owner['token'], ['team', 'view', organization, str(other_team['id'])], expected=1)
+            cli_call(binary, member['token'], ['team', 'view', organization, '01'], expected=2)
+            assert {row['id'] for row in rpc(member['session'], 'SessionService/ListSessions')['sessions']} == before
+            print('PASS: six real CLI organization/team commands, string IDs, native unit JSON, pagination and denied-output/session cleanup', flush=True)
+
         for bad in ['0', '01', '-1', '9223372036854775808', '../1']:
             call(member['session'], 'GetTeam', {'organization': organization, 'teamId': bad}, expected=400)
         call(member['session'], 'GetOrganization', {'organization': '../org'}, expected=400)
@@ -202,6 +248,8 @@ def main():
         narrow = client()
         rpc(narrow, 'SessionService/LoginWithGiteaToken', {'token': narrow_token})
         call(narrow, 'ListOrganizations', expected=403)
+        if binary:
+            cli_call(binary, narrow_token, ['org', 'list'], expected=1)
         rpc(narrow, 'SessionService/Logout')
         print('PASS: malformed IDs/names/pagination, anonymous requests and missing organization scope are rejected', flush=True)
 
@@ -228,6 +276,10 @@ def main():
         ]:
             call(member['session'], procedure, data, expected=404)
         print('PASS: membership removal denies subsequent reads while the provider session still authenticates', flush=True)
+        if binary:
+            cli_call(binary, member['token'], ['org', 'view', organization], expected=1)
+            cli_call(binary, member['token'], ['team', 'members', organization, team_id], expected=1)
+            assert not cli_call(binary, member['token'], ['org', 'list'])['organizations']
         for actor in actors.values():
             rpc(actor['session'], 'SessionService/Logout')
     finally:

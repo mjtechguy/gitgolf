@@ -59,7 +59,7 @@ try {
     check(destination.origin === golf && destination.pathname === '/' && destination.search === '?auth_error=oauth_failed', 'Callback failure escaped the fixed destination');
     check(response.headers()['cache-control'] === 'no-store', 'Callback caching is not disabled');
   }
-  function validateAuthorization(value) {
+  function validateAuthorization(value, scopes = config.scopes) {
     const url = new URL(value);
     check(url.origin === gitea && url.pathname === '/login/oauth/authorize', 'Authorization destination mismatch');
     check(url.searchParams.get('client_id') === config.clientID, 'OAuth client mismatch');
@@ -68,13 +68,23 @@ try {
     check(/^[A-Za-z0-9_-]{43}$/.test(url.searchParams.get('code_challenge') ?? ''), 'Invalid PKCE challenge');
     check((url.searchParams.get('state') ?? '').length >= 32, 'OAuth state missing');
     check(!url.searchParams.has('client_secret') && !url.searchParams.has('code_verifier'), 'OAuth secret exposed in authorization URL');
-    check(url.searchParams.get('scope').split(' ').sort().join(' ') === config.scopes.slice().sort().join(' '), 'Unexpected OAuth scope grant');
+    check(url.searchParams.get('scope').split(' ').sort().join(' ') === scopes.slice().sort().join(' '), 'Unexpected OAuth scope grant');
     return url;
   }
-  async function login(context, credentials, approve = true) {
+  async function login(context, credentials, approve = true, scopes = config.scopes, expectConsent = true) {
     const loginStage = stage;
     const page = await context.newPage();
-    let callbackURL = '', authorizationURL = '';
+    let callbackURL = '', authorizationURL = '', reducedAuthorizationURL = '';
+    if (scopes !== config.scopes) {
+      // Deliberately obtain a real narrower provider grant equivalent to the
+      // pre-organization-scope release. State/PKCE/callback stay unchanged.
+      await page.route(gitea + '/login/oauth/authorize?**', async route => {
+        const url = validateAuthorization(route.request().url());
+        url.searchParams.set('scope', scopes.join(' '));
+        reducedAuthorizationURL = url.href;
+        await route.continue({ url: url.href });
+      });
+    }
     page.on('request', request => {
       if (request.url().startsWith(callback + '?')) callbackURL = request.url();
       if (request.url().startsWith(gitea + '/login/oauth/authorize?')) authorizationURL = request.url();
@@ -93,21 +103,30 @@ try {
     stage = loginStage + ': Gitea username/password form';
     await page.locator('#user_name').waitFor({ state: 'visible' });
     // Navigation can discard the prior document's response body in Chromium.
-    // Inspect the actual outgoing authorization request, without intercepting it.
-    validateAuthorization(authorizationURL);
+    // Inspect the outgoing request; only the explicit legacy-equivalent trial
+    // reduces its scopes, leaving all normal login assertions unchanged.
+    validateAuthorization(reducedAuthorizationURL || authorizationURL, scopes);
     await page.locator('#user_name').fill(credentials.name);
     await page.locator('#password').fill(credentials.password);
     stage = loginStage + ': Gitea submit password';
     await page.locator('form').filter({ has: page.locator('#user_name') }).locator('button').click();
-    stage = loginStage + ': Gitea consent form';
-    await page.locator('#authorize-app').waitFor({ state: 'visible' });
-    const consent = await page.locator('form[action$="/login/oauth/grant"] input[name="scope"]').inputValue();
-    check(consent.split(' ').sort().join(' ') === config.scopes.slice().sort().join(' '), 'Consent scope mismatch');
-    stage = loginStage + ': Gitea consent redirect';
-    await Promise.all([
-      page.waitForURL(url => url.origin === golf && url.pathname === '/'),
-      page.locator(approve ? '#authorize-app' : 'button[name="granted"][value="false"]').click(),
-    ]);
+    if (expectConsent) {
+      stage = loginStage + ': Gitea consent form';
+      await page.locator('#authorize-app').waitFor({ state: 'visible' });
+      const consent = await page.locator('form[action$="/login/oauth/grant"] input[name="scope"]').inputValue();
+      check(consent.split(' ').sort().join(' ') === scopes.slice().sort().join(' '), 'Consent scope mismatch');
+      stage = loginStage + ': Gitea consent redirect';
+      await Promise.all([
+        page.waitForURL(url => url.origin === golf && url.pathname === '/'),
+        page.locator(approve ? '#authorize-app' : 'button[name="granted"][value="false"]').click(),
+      ]);
+    } else {
+      // Pinned Gitea reuses a confidential client's existing grant without
+      // showing consent or expanding its scopes (oauth2_provider.go).
+      check(approve, 'Existing-grant trial cannot deny absent consent');
+      stage = loginStage + ': existing Gitea grant redirect without consent';
+      await page.waitForURL(url => url.origin === golf && url.pathname === '/');
+    }
     check(callbackURL, 'Browser did not use Golf OAuth callback');
     stage = loginStage + ': Golf session after callback';
     if (approve) {
@@ -125,6 +144,30 @@ try {
     // Prevent UI focus/refetch work from obscuring the deliberate expiry windows.
     await page.goto('about:blank');
     return { page, callbackURL };
+  }
+  async function revokeGrant(page, label) {
+    stage = label + ': settings page';
+    await page.goto(gitea + '/user/settings/applications');
+    stage = label + ': grant button';
+    const grantButton = page.locator('button[data-url^="/user/settings/applications/oauth2/' + config.applicationID + '/revoke/"]');
+    await grantButton.waitFor({ state: 'visible' });
+    const revokePath = await grantButton.getAttribute('data-url');
+    check(new RegExp('^/user/settings/applications/oauth2/' + config.applicationID + '/revoke/[0-9]+$').test(revokePath), 'Unexpected grant-revocation path');
+    stage = label + ': open confirmation';
+    await grantButton.click();
+    stage = label + ': confirmation button';
+    // Gitea clones the confirmation template and removes its ID before showing it.
+    const confirmGrant = page.locator('.ui.modal:visible').filter({ hasText: 'Revoke Access' }).locator('button.ok');
+    await confirmGrant.waitFor({ state: 'visible' });
+    stage = label + ': confirmation response';
+    const [revoked] = await Promise.all([
+      page.waitForResponse(response => new URL(response.url()).pathname === revokePath),
+      confirmGrant.click(),
+    ]);
+    check(revoked.status() === 200, 'Gitea did not revoke the user consent grant');
+    stage = label + ': removed grant';
+    await grantButton.waitFor({ state: 'hidden' });
+    await page.goto('about:blank');
   }
   browser = await chromium.launch({ headless: true });
   const options = { locale: 'en-US' };
@@ -236,28 +279,47 @@ try {
       console.log('PASS: concurrent Golf requests after expiry cycle ' + cycle + ' with rotating refresh tokens');
     }
   }
-  stage = 'Gitea user consent revocation: settings page';
-  await aliceLogin.page.goto(gitea + '/user/settings/applications');
-  stage = 'Gitea user consent revocation: grant button';
-  const grantButton = aliceLogin.page.locator('button[data-url^="/user/settings/applications/oauth2/' + config.applicationID + '/revoke/"]');
-  await grantButton.waitFor({ state: 'visible' });
-  const revokePath = await grantButton.getAttribute('data-url');
-  check(new RegExp('^/user/settings/applications/oauth2/' + config.applicationID + '/revoke/[0-9]+$').test(revokePath), 'Unexpected grant-revocation path');
-  stage = 'Gitea user consent revocation: open confirmation';
-  await grantButton.click();
-  stage = 'Gitea user consent revocation: confirmation button';
-  // Gitea clones the confirmation template and removes its ID before showing it.
-  const confirmGrant = aliceLogin.page.locator('.ui.modal:visible').filter({ hasText: 'Revoke Access' }).locator('button.ok');
-  await confirmGrant.waitFor({ state: 'visible' });
-  stage = 'Gitea user consent revocation: confirmation response';
-  const [revoked] = await Promise.all([
-    aliceLogin.page.waitForResponse(response => new URL(response.url()).pathname === revokePath),
-    confirmGrant.click(),
-  ]);
-  check(revoked.status() === 200, 'Gitea did not revoke the user consent grant');
-  stage = 'Gitea user consent revocation: removed grant';
-  await grantButton.waitFor({ state: 'hidden' });
-  await aliceLogin.page.goto('about:blank');
+  stage = 'legacy-equivalent narrower provider consent';
+  const legacy = await browser.newContext(options);
+  legacy.setDefaultTimeout(20000);
+  legacy.setDefaultNavigationTimeout(20000);
+  const oldScopes = config.scopes.filter(scope => scope !== 'read:organization');
+  await login(legacy, config.legacyUser, true, oldScopes);
+  await rpc(legacy, 'RepositoryService/ListRepositories');
+  await rpc(legacy, 'OrganizationService/ListOrganizations', {}, 403);
+  await rpc(legacy, 'OrganizationService/GetOrganization', { organization: config.legacyOrganization }, 403);
+  if (config.refresh) {
+    stage = 'legacy-equivalent grant after rotating refresh';
+    console.log('STEP: waiting 16 seconds to verify a narrower grant cannot expand on refresh');
+    await new Promise(resolve => setTimeout(resolve, 16000));
+    await rpc(legacy, 'SessionService/GetSession');
+    await rpc(legacy, 'OrganizationService/ListOrganizations', {}, 403);
+    await rpc(legacy, 'OrganizationService/GetOrganization', { organization: config.legacyOrganization }, 403);
+  }
+  stage = 'fresh sign-in with existing narrower grant';
+  const reused = await browser.newContext(options);
+  reused.setDefaultTimeout(20000);
+  reused.setDefaultNavigationTimeout(20000);
+  const reusedLogin = await login(reused, config.legacyUser, true, config.scopes, false);
+  await rpc(reused, 'RepositoryService/ListRepositories');
+  await rpc(reused, 'OrganizationService/ListOrganizations', {}, 403);
+  await rpc(reused, 'OrganizationService/GetOrganization', { organization: config.legacyOrganization }, 403);
+  console.log('PASS: requesting expanded scopes on fresh login reuses the existing narrower grant without consent or broader access');
+  await revokeGrant(reusedLogin.page, 'legacy grant revocation before expanded consent');
+  await rpc(reused, 'SessionService/Logout');
+  await reused.close();
+  stage = 'explicit re-consent after user grant revocation';
+  const renewed = await browser.newContext(options);
+  renewed.setDefaultTimeout(20000);
+  renewed.setDefaultNavigationTimeout(20000);
+  await login(renewed, config.legacyUser);
+  const renewedOrg = await rpc(renewed, 'OrganizationService/GetOrganization', { organization: config.legacyOrganization });
+  check(renewedOrg.organization.name === config.legacyOrganization, 'Explicit re-consent did not enable own organization reads');
+  await rpc(legacy, 'SessionService/Logout');
+  await rpc(renewed, 'SessionService/Logout');
+  await legacy.close(); await renewed.close();
+  console.log('PASS: real narrower consent stays limited through refresh and new login; explicit user grant revocation and fresh consent enable organization reads');
+  await revokeGrant(aliceLogin.page, 'Gitea user consent revocation');
   if (config.refresh) {
     console.log('STEP: waiting 16 seconds to test expiry after user consent revocation');
     await new Promise(resolve => setTimeout(resolve, 16000));
@@ -357,12 +419,13 @@ def main():
     original_settings = original_refresh_settings() if args.refresh else None
     users, app, changed = [], None, False
     organization = None
+    legacy_organization = None
     suffix = secrets.token_hex(4)
     with tempfile.TemporaryDirectory(prefix='golf-oauth-smoke-', dir='/tmp') as directory:
         path = Path(directory)
         os.chmod(path, 0o700)
         try:
-            for label in ('owner', 'alice', 'bob', 'session-control'):
+            for label in ('owner', 'alice', 'bob', 'session-control', 'legacy'):
                 name = 'golf-oauth-' + label + '-' + suffix
                 output = admin('create', '--username', name, '--email', name + '@example.invalid',
                                '--random-password', '--random-password-length', '32', '--must-change-password=false')
@@ -372,7 +435,7 @@ def main():
                 if not match:
                     raise RuntimeError('Could not capture generated test-user password')
                 user['password'] = match.group(1)
-            owner, alice, bob, session_user = users
+            owner, alice, bob, session_user, legacy_user = users
             app = request(client(), 'POST', GITEA + '/api/v1/user/applications/oauth2',
                           {'name': 'Golf OAuth smoke ' + suffix, 'redirect_uris': [GOLF + '/auth/gitea/callback'],
                            'confidential_client': True, 'skip_secondary_authorization': False},
@@ -384,6 +447,11 @@ def main():
                     {'username': organization_name, 'visibility': 'private'},
                     headers={'Authorization': basic(alice)}, expected=201)
             organization = organization_name
+            legacy_name = 'golf-oauth-legacy-org-' + suffix
+            request(client(), 'POST', GITEA + '/api/v1/orgs',
+                    {'username': legacy_name, 'visibility': 'private'},
+                    headers={'Authorization': basic(legacy_user)}, expected=201)
+            legacy_organization = legacy_name
             repository = 'oauth-private'
             request(client(), 'POST', GITEA + '/api/v1/user/repos',
                     {'name': repository, 'private': True, 'auto_init': True, 'readme': 'Default', 'default_branch': 'main'},
@@ -410,6 +478,7 @@ def main():
             browser_script.write_text(BROWSER_CHECK)
             browser_script.chmod(0o600)
             config = {'golf': GOLF, 'gitea': GITEA, 'alice': alice, 'bob': bob, 'sessionUser': session_user,
+                      'legacyUser': legacy_user, 'legacyOrganization': legacy_organization,
                       'ownerAuthorization': basic(owner), 'clientID': app['client_id'], 'applicationID': app['id'],
                       'scopes': ['write:user', 'write:repository', 'read:issue', 'read:organization'], 'repository': repository,
                       'revision': source['commit']['sha'], 'path': source_path, 'text': text,
@@ -453,6 +522,12 @@ def main():
                             headers={'Authorization': basic(users[1])}, expected=204)
                 except Exception:
                     cleanup_errors.append('temporary OAuth organization deletion failed')
+            if legacy_organization and len(users) > 4:
+                try:
+                    request(client(), 'DELETE', GITEA + '/api/v1/orgs/' + legacy_organization,
+                            headers={'Authorization': basic(users[4])}, expected=204)
+                except Exception:
+                    cleanup_errors.append('temporary legacy OAuth organization deletion failed')
             if app and users and 'password' in users[0]:
                 try:
                     delete_application(users[0], app['id'])

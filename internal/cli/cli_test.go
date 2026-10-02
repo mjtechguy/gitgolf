@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -142,6 +143,15 @@ func TestCommandValidationBeforeAuthentication(t *testing.T) {
 		{"repo", "view", "../private"}, {"repo", "list", "--limit", "101"}, {"issue", "view", "alice/private", "0"},
 		{"issue", "view", "alice/private", "2147483648"},
 		{"issue", "list", "alice/private", "--state", "deleted"}, {"repo", "list", "--token", "do-not-echo-token"},
+		{"org", "view"}, {"org", "view", "."}, {"org", "view", ".."}, {"org", "view", "org/team"},
+		{"org", "view", "space org"}, {"org", "view", "org?token=do-not-echo-token"}, {"org", "view", "世界"},
+		{"org", "view", strings.Repeat("a", 101)}, {"org", "view", "workshop", "extra"},
+		{"org", "view", "workshop", "--page", "1"}, {"org", "list", "--page", "0"}, {"org", "teams", "workshop", "--page", "10001"},
+		{"team", "members", "workshop", "2", "--limit", "0"}, {"team", "repos", "workshop", "2", "--limit", "101"},
+		{"team", "view", "workshop"}, {"team", "view", "workshop", "0"}, {"team", "view", "workshop", "-1"},
+		{"team", "view", "workshop", "+2"}, {"team", "view", "workshop", "02"}, {"team", "view", "workshop", "2 "},
+		{"team", "view", "workshop", "2/../3"}, {"team", "view", "workshop", "9223372036854775808"},
+		{"team", "view", "workshop", "2", "--page", "1"}, {"team", "create", "workshop", "2"},
 	} {
 		var out, diagnostic bytes.Buffer
 		code := Run(context.Background(), args, strings.NewReader(""), &out, &diagnostic, func(string) string { return "" })
@@ -194,5 +204,108 @@ func TestCancellationStillClosesSession(t *testing.T) {
 	defer s.Close()
 	if _, err := execute(ctx, s.URL, command{name: "repo list"}, "private-token"); err == nil || !cleaned.Load() {
 		t.Fatal("cancelled read did not clean up through an independent bounded context")
+	}
+}
+
+func TestOrganizationCommandsAndEphemeralSession(t *testing.T) {
+	const token = "fixture-organization-token"
+	const teamID = "9223372036854775807"
+	for _, command := range []struct {
+		args                                   []string
+		procedure, request, response, fragment string
+	}{
+		{[]string{"org", "list", "--page", "2", "--limit", "1"}, golfv1connect.OrganizationServiceListOrganizationsProcedure,
+			`{"page":{"page":2,"limit":1}}`, `{"organizations":[{"id":"9007199254740993","name":"workshop","visibility":"ORGANIZATION_VISIBILITY_PRIVATE"}],"page":{"nextPage":3}}`, `"id":"9007199254740993"`},
+		{[]string{"org", "view", "Workshop_2026.test-org"}, golfv1connect.OrganizationServiceGetOrganizationProcedure,
+			`{"organization":"Workshop_2026.test-org"}`, `{"organization":{"id":"9007199254740993","name":"Workshop_2026.test-org","visibility":"ORGANIZATION_VISIBILITY_LIMITED"}}`, `"visibility":"ORGANIZATION_VISIBILITY_LIMITED"`},
+		{[]string{"org", "teams", strings.Repeat("a", 100)}, golfv1connect.OrganizationServiceListTeamsProcedure,
+			`{"organization":"` + strings.Repeat("a", 100) + `","page":{"page":1,"limit":20}}`, `{"teams":[{"id":"9223372036854775807","permission":"TEAM_PERMISSION_NONE","unitPermissions":{"repo.code":"TEAM_PERMISSION_WRITE"},"visibility":"TEAM_VISIBILITY_PRIVATE"}]}`, `"repo.code":"TEAM_PERMISSION_WRITE"`},
+		{[]string{"team", "view", "workshop", teamID}, golfv1connect.OrganizationServiceGetTeamProcedure,
+			`{"organization":"workshop","teamId":"9223372036854775807"}`, `{"team":{"id":"9223372036854775807","permission":"TEAM_PERMISSION_NONE","visibility":"TEAM_VISIBILITY_LIMITED"}}`, `"id":"9223372036854775807"`},
+		{[]string{"team", "members", "workshop", teamID, "--page", "10000", "--limit", "100"}, golfv1connect.OrganizationServiceListTeamMembersProcedure,
+			`{"organization":"workshop","teamId":"9223372036854775807","page":{"page":10000,"limit":100}}`, `{"members":[{"id":"9007199254740993","login":"alice"}]}`, `"id":"9007199254740993"`},
+		{[]string{"team", "repos", "workshop", teamID, "--page", "2", "--limit", "1"}, golfv1connect.OrganizationServiceListTeamRepositoriesProcedure,
+			`{"organization":"workshop","teamId":"9223372036854775807","page":{"page":2,"limit":1}}`, `{"page":{"nextPage":3}}`, `"repositories":[]`},
+	} {
+		for _, failure := range []string{"", "denied", "logout"} {
+			t.Run(strings.Join(command.args[:2], "-")+"/"+failure, func(t *testing.T) {
+				var calls []string
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					calls = append(calls, r.URL.Path)
+					if r.Method != "POST" || r.Header.Get("Origin") != "http://"+r.Host || r.Header.Get("Connect-Protocol-Version") != "1" || r.URL.RawQuery != "" || r.Header.Get("Authorization") != "" {
+						t.Error("organization request bypassed the normal Connect transport boundary")
+					}
+					w.Header().Set("Content-Type", "application/json")
+					switch r.URL.Path {
+					case "/rpc" + golfv1connect.SessionServiceLoginWithGiteaTokenProcedure:
+						var input map[string]string
+						if json.NewDecoder(r.Body).Decode(&input) != nil || input["token"] != token {
+							t.Error("scoped token bootstrap changed")
+						}
+						http.SetCookie(w, &http.Cookie{Name: "golf_session", Value: "organization-session", Path: "/", HttpOnly: true})
+						fmt.Fprint(w, `{}`)
+					case "/rpc" + golfv1connect.SessionServiceLogoutProcedure:
+						if failure == "logout" {
+							w.WriteHeader(503)
+							fmt.Fprintf(w, `{"code":"unavailable","message":%q}`, token)
+							return
+						}
+						fmt.Fprint(w, `{}`)
+					case "/rpc" + command.procedure:
+						cookie, err := r.Cookie("golf_session")
+						if err != nil || cookie.Value != "organization-session" {
+							t.Error("organization request lost its temporary session")
+						}
+						var input, expected any
+						if json.NewDecoder(r.Body).Decode(&input) != nil || json.Unmarshal([]byte(command.request), &expected) != nil || !reflect.DeepEqual(input, expected) {
+							t.Error("wrong generated organization request or numeric team ID")
+						}
+						if failure == "denied" {
+							w.WriteHeader(403)
+							fmt.Fprintf(w, `{"code":"permission_denied","message":%q}`, token+" private-membership-data")
+							return
+						}
+						fmt.Fprint(w, command.response)
+					default:
+						t.Error("unexpected RPC or automatic pagination")
+						w.WriteHeader(404)
+					}
+				}))
+				defer server.Close()
+				var out, diagnostic bytes.Buffer
+				args := append([]string{"--url", server.URL, "--token-stdin"}, command.args...)
+				code := Run(context.Background(), args, strings.NewReader(token+"\n"), &out, &diagnostic, func(string) string { return "" })
+				if failure != "" {
+					if code != 1 || out.Len() != 0 {
+						t.Fatal("denial or failed logout produced successful private output")
+					}
+					if failure == "denied" && !strings.Contains(diagnostic.String(), "permission_denied") {
+						t.Fatal("typed denial was lost")
+					}
+				} else {
+					var envelope struct {
+						Schema string          `json:"schema_version"`
+						Data   json.RawMessage `json:"data"`
+					}
+					if code != 0 || diagnostic.Len() != 0 || json.Unmarshal(out.Bytes(), &envelope) != nil || envelope.Schema != "golf.cli.v1" {
+						t.Fatal("invalid command result envelope")
+					}
+					var compact bytes.Buffer
+					if json.Compact(&compact, envelope.Data) != nil || !strings.Contains(compact.String(), command.fragment) {
+						t.Fatal("native metadata/defaults or decimal ID precision lost")
+					}
+					if command.procedure == golfv1connect.OrganizationServiceListTeamRepositoriesProcedure && !strings.Contains(compact.String(), `"nextPage":3`) {
+						t.Fatal("empty intermediate page lost continuation")
+					}
+				}
+				if strings.Contains(out.String()+diagnostic.String(), token) || strings.Contains(diagnostic.String(), "private-membership-data") {
+					t.Fatal("remote error leaked credential or private data")
+				}
+				want := []string{"/rpc" + golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, "/rpc" + command.procedure, "/rpc" + golfv1connect.SessionServiceLogoutProcedure}
+				if !reflect.DeepEqual(calls, want) {
+					t.Fatal("organization read did not use exactly one temporary session and page")
+				}
+			})
+		}
 	}
 }
