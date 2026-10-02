@@ -1,11 +1,14 @@
-.PHONY: setup dev build test test-integration check fmt vet web-check up down
+.PHONY: setup dev build cli test test-integration check fmt vet web-check up down
 setup:
 	./scripts/init-env.sh
 dev: up
 build:
-	go build -o bin/golf ./cmd/golf
+	go build -o bin/golf-server ./cmd/golf
+	go build -o bin/golf ./cmd/golfctl
 	npm --prefix web ci
 	npm --prefix web run build
+cli:
+	go build -o bin/golf ./cmd/golfctl
 test:
 	go test ./...
 test-integration:

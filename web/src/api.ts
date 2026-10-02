@@ -10,6 +10,21 @@ export type Repository = {
   updated_at: string;
 };
 export type RepositoryPage = { repositories: Repository[]; next_page?: number };
+export type RepositoryDetail = Repository & { empty: boolean; clone_url: string; ssh_url: string };
+export type Branch = { name: string; commit_id: string; protected: boolean };
+export type BranchPage = { branches: Branch[]; next_page?: number };
+export type Commit = { sha: string; message: string; author_name: string; authored_at: string };
+export type CommitPage = { commits: Commit[]; next_page?: number };
+export type SourceEntry = { name: string; path: string; type: 'dir' | 'file' | 'symlink' | 'submodule'; sha: string; size: number };
+export type Source = {
+  commit_id: string;
+  path: string;
+  kind: 'directory' | 'file' | 'symlink' | 'submodule';
+  entries?: SourceEntry[];
+  file?: SourceEntry & { content?: string; preview_reason?: string };
+};
+export type Issue = { id: number; number: number; title: string; body: string; state: string; user: User; comments: number; created_at: string; updated_at: string; html_url: string };
+export type IssuePage = { issues: Issue[]; next_page?: number };
 export type Capability = { id: string; label: string; state: string; reason: string };
 
 export class ApiError extends Error {
@@ -24,9 +39,11 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     response = await fetch(path, {
       ...options,
       credentials: 'same-origin',
+      cache: 'no-store',
       headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error;
     throw new ApiError(0, 'Golf could not be reached. Check your connection and try again.');
   }
   const body: unknown = response.status === 204 ? undefined : await response.json().catch(() => undefined);

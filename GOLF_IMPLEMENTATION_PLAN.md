@@ -2,6 +2,8 @@
 
 Status: product direction and implementation roadmap; completeness review and shared Gitea first-release decision incorporated on 2026-10-01. Provider proofs and implementation evidence remain required. Explicit defaults are engineering decisions that can be revisited through ADRs.
 
+Execution evidence: the [implementation ledger](docs/IMPLEMENTATION_STATUS.md) records the local developer preview, including the bounded repository/source/history/read-only issue browser and JSON CLI. These increments do not mark an entire phase, v1 or the Cloudflare competition milestone complete.
+
 Prepared: 2026-10-01. Provider documentation and limits must be rechecked when implementing each integration.
 
 Historical reference: [original planning conversation](docs/archive/plan-conversation-2026-10-01.md). That conversation contains claims about a previous build that are not verified by this checkout.

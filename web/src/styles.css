@@ -12,3 +12,112 @@
 @media(max-width:720px) { .login-page { padding:23px; } .login-main { grid-template-columns:1fr; gap:33px; padding:42px 0; max-width:450px; margin:auto; width:100%; } .login-story h1 { font-size:44px; } .login-story>p { max-width:none; font-size:13px; } .story-art,.story-footer { display:none; } .login-card { max-width:none; } .login-footer { font-size:9px; } .app-shell { display:block; } .sidebar { position:static; height:auto; width:100%; padding:17px 20px 10px; border-right:0; border-bottom:1px solid var(--line); display:grid; grid-template-columns:1fr auto; gap:10px; } .sidebar-top { padding:0; } .sidebar-top .brand { font-size:27px; } .sidebar-top .brand img { width:29px; height:29px; } .alpha-tag,.workspace-label,.nav-label,.forge-note { display:none; } .sidebar nav { display:flex; grid-column:1/-1; gap:6px; grid-row:2; } .nav-item { padding:8px 10px; font-size:11px; } .nav-item>span { margin-left:4px; } .sidebar-bottom { grid-column:2; grid-row:1; margin:0; } .sidebar-controls { gap:10px; } .topbar { height:48px; padding:0 21px; font-size:10px; } .workspace-content main { padding:30px 21px 0; } .workspace-intro { padding-bottom:27px; } .workspace-intro h1 { font-size:28px; line-height:1.25; } .eyebrow { font-size:8px; } .repository-section { margin-top:26px; } .section-heading h2 { font-size:18px; } .button { font-size:11px; padding:9px 11px; min-height:37px; } .section-description { font-size:10px; } .repository-toolbar { gap:7px; flex-wrap:wrap; } .search-input { min-width:170px; } .repository-toolbar select { width:112px; } .repository-row { padding:19px 15px; gap:11px; } .repository-icon { width:30px; height:30px; } .repository-icon svg { width:17px; } .repository-heading h3 { font-size:12px; } .open-repository { display:none; } .repository-meta { font-size:9px; gap:9px; } .list-footer { align-items:flex-start; font-size:8px; } .capabilities-section { margin-top:35px; } .outline-badge { font-size:8px; } }
 @media(max-width:400px) { .refresh { width:33px; } .repository-toolbar select { width:105px; } .search-input { min-width:150px; } .repository-row { padding-inline:12px; } .repository-icon { display:none; } .workspace-content main { padding-inline:16px; } }
 @media(prefers-reduced-motion:reduce) { :root { scroll-behavior:auto; } .spin { animation:none; } }
+
+/* Repository browsing uses the same neutral surfaces in both color themes. */
+summary { cursor:pointer; }
+summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--accent); outline-offset:4px; }
+.repository-back { margin-bottom:25px; }
+.repository-intro { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; }
+.repository-intro>div:first-child { min-width:0; }
+.repository-intro h1 { display:flex; align-items:center; flex-wrap:wrap; gap:12px; font-size:30px; margin:13px 0 12px; overflow-wrap:anywhere; }
+.repository-intro h1>svg { color:var(--muted); }
+.repository-intro p { font-size:13px; line-height:1.7; color:var(--muted); overflow-wrap:anywhere; }
+.repository-intro .visibility { letter-spacing:0; font-weight:400; }
+.repository-tabs { display:flex; gap:23px; border-bottom:1px solid var(--line); margin:28px 0 22px; }
+.repository-tabs a { display:flex; align-items:center; gap:7px; padding:13px 1px; border-bottom:2px solid transparent; color:var(--muted); font-size:13px; }
+.repository-tabs a[aria-current="page"] { color:var(--accent); border-color:var(--accent); }
+.ref-controls { display:flex; align-items:center; flex-wrap:wrap; gap:13px; margin:0 0 20px; }
+.ref-controls>.field-help { margin:0; }
+.commit-pin { display:inline-flex; align-items:center; gap:6px; color:var(--muted); font:11px ui-monospace,monospace; }
+.branch-refresh { margin-left:auto; min-height:34px; }
+.branch-picker { position:relative; max-width:100%; }
+.branch-picker>summary { display:flex; align-items:center; gap:8px; padding:10px 12px; border:1px solid var(--line-strong); background:var(--panel); border-radius:7px; font-size:12px; list-style:none; }
+.branch-picker>summary::-webkit-details-marker { display:none; }
+.branch-picker>summary>span { overflow-wrap:anywhere; max-width:320px; }
+.branch-picker[open]>summary>svg:last-child { transform:rotate(90deg); }
+.branch-options { position:absolute; top:calc(100% + 8px); left:0; z-index:5; width:min(350px,calc(100vw - 42px)); max-height:430px; overflow:auto; padding:17px; background:var(--panel); border:1px solid var(--line-strong); border-radius:9px; box-shadow:var(--shadow); }
+.branch-options>strong { font-size:12px; }
+.branch-options>.field-help { margin:8px 0 12px; }
+.branch-options ul { margin:0 0 10px; padding:0; list-style:none; }
+.branch-options li>a { display:flex; align-items:center; gap:10px; min-height:48px; padding:9px; border-radius:5px; font-size:12px; }
+.branch-options li>a:hover { background:var(--hover); }
+.branch-options li>a>span { min-width:0; flex:1; overflow-wrap:anywhere; }
+.branch-options small { display:block; color:var(--muted); margin-top:5px; font:10px ui-monospace,monospace; }
+.browser-panel { border:1px solid var(--line); border-radius:10px; background:var(--panel); overflow:hidden; }
+.browser-panel-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:15px 20px; border-bottom:1px solid var(--line); }
+.browser-panel-heading h2 { font-size:16px; }
+.panel-actions { display:flex; align-items:center; gap:8px; }
+.panel-actions select { width:auto; font-size:12px; padding:8px 10px; }
+.browser-loading { display:flex; justify-content:center; align-items:center; gap:10px; min-height:145px; color:var(--muted); font-size:12px; padding:25px; }
+.panel-error { padding:8px 20px 22px; }
+.branch-options .panel-error { padding:0; }
+.panel-error .error { margin:12px 0; }
+.source-breadcrumbs { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:16px 20px; border-bottom:1px solid var(--line); font:12px ui-monospace,monospace; overflow-wrap:anywhere; }
+.source-breadcrumbs>span { display:contents; }
+.source-breadcrumbs svg { color:var(--muted); }
+.source-breadcrumbs a[aria-current="page"] { color:var(--muted); }
+.source-tree,.commit-list,.issue-list { list-style:none; padding:0; margin:0; }
+.source-tree>li>a { display:grid; grid-template-columns:20px minmax(0,1fr) 85px 75px 14px; gap:12px; align-items:center; min-height:49px; padding:12px 20px; border-bottom:1px solid var(--line); font-size:12px; }
+.source-tree>li>a:hover { background:var(--hover); }
+.source-tree>li>a>svg:first-child { color:var(--muted); }
+.source-name { overflow-wrap:anywhere; }
+.source-tree .entry-type,.source-tree>li>a>span:nth-last-child(2) { color:var(--muted); font-size:10px; }
+.source-tree>li>a>svg:last-child { color:var(--muted); }
+.panel-footnote { margin:0; padding:14px 20px; color:var(--muted); font-size:10px; line-height:1.7; overflow-wrap:anywhere; }
+.file-meta { display:flex; flex-wrap:wrap; align-items:center; gap:18px; padding:13px 20px; font-size:10px; color:var(--muted); border-bottom:1px solid var(--line); }
+.file-meta>span { display:flex; align-items:center; gap:7px; }
+.source-preview { margin:0; padding:22px; overflow:auto; max-height:650px; min-height:130px; background:var(--bg); font:12px/1.85 ui-monospace,SFMono-Regular,Consolas,monospace; tab-size:4; }
+.source-preview code { font:inherit; }
+.preview-unavailable { padding:40px 24px; text-align:center; display:flex; align-items:center; flex-direction:column; gap:13px; }
+.preview-unavailable>svg { color:var(--muted); }
+.preview-unavailable h3 { font-size:18px; }
+.preview-unavailable p { font-size:12px; line-height:1.8; max-width:580px; overflow-wrap:anywhere; }
+.commit-list>li,.issue-list>li { display:flex; align-items:flex-start; gap:13px; padding:22px 20px; border-bottom:1px solid var(--line); }
+.commit-list>li>svg,.issue-list>li>svg { margin-top:3px; color:var(--accent); }
+.commit-list>li>div,.issue-list>li>div { min-width:0; flex:1; }
+.commit-list h3,.issue-list h3 { font-size:13px; line-height:1.6; letter-spacing:-.01em; overflow-wrap:anywhere; }
+.commit-list p,.issue-list p { font-size:10px; color:var(--muted); line-height:1.7; margin-top:7px; overflow-wrap:anywhere; }
+.sha-link { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line-strong); border-radius:5px; padding:6px 8px; font:10px ui-monospace,monospace; white-space:nowrap; }
+.commit-message { margin-top:10px; font-size:11px; }
+.commit-message summary { color:var(--muted); }
+.commit-message pre { margin:10px 0 0; padding:12px; background:var(--raised); border-radius:5px; white-space:pre-wrap; overflow-wrap:anywhere; font:11px/1.8 ui-monospace,monospace; }
+.browser-panel>.list-footer { margin:0; padding:16px 20px; }
+.issue-help { border-bottom:1px solid var(--line); }
+.issue-state { display:inline-flex; align-items:center; gap:5px; color:var(--accent); border:1px solid var(--line-strong); border-radius:20px; padding:4px 8px; font-size:10px; white-space:nowrap; text-transform:capitalize; }
+.issue-state.closed { color:var(--muted); }
+.issue-title { padding:25px 24px; }
+.issue-title h2 { font-size:23px; line-height:1.5; margin:12px 0 9px; overflow-wrap:anywhere; }
+.issue-title>p { font-size:11px; line-height:1.8; }
+.issue-body { margin:0 24px; padding:22px; border:1px solid var(--line); border-radius:7px; background:var(--bg); white-space:pre-wrap; overflow-wrap:anywhere; max-height:650px; overflow:auto; font:12px/1.85 ui-monospace,monospace; }
+.issue-footer { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:19px 24px 5px; color:var(--muted); font-size:10px; }
+.clone-address { display:flex; align-items:center; flex-direction:column; gap:8px; padding:10px; max-width:100%; }
+.clone-address>span { font-size:10px; }
+.clone-address code { font-size:11px; overflow-wrap:anywhere; color:var(--text); }
+.repository-browser>.empty-state { line-height:1.7; }
+.repository-browser>.empty-state h2 { color:var(--text); font-size:22px; }
+@media(max-width:720px) {
+  .repository-intro { flex-direction:column; gap:14px; }
+  .repository-intro h1 { font-size:26px; }
+  .repository-intro p { font-size:12px; }
+  .repository-tabs { gap:22px; margin-top:18px; }
+  .repository-tabs a { font-size:12px; }
+  .branch-picker>summary>span { max-width:210px; }
+  .branch-refresh { margin-left:0; }
+  .browser-panel-heading,.source-breadcrumbs { padding-inline:15px; }
+  .source-tree>li>a { grid-template-columns:18px minmax(0,1fr) 48px 12px; gap:9px; padding-inline:15px; }
+  .source-tree .entry-type { display:none; }
+  .file-meta { padding-inline:15px; gap:11px; }
+  .source-preview { padding:16px; font-size:11px; }
+  .commit-list>li { flex-wrap:wrap; padding:18px 15px; gap:10px; }
+  .commit-list>li>div { flex-basis:calc(100% - 30px); }
+  .commit-list .sha-link { margin-left:30px; }
+  .issue-list>li { padding:18px 15px; gap:9px; }
+  .issue-list>li>svg { display:none; }
+  .issue-title { padding:20px 16px; }
+  .issue-title h2 { font-size:21px; }
+  .issue-body { margin-inline:15px; padding:15px; font-size:11px; }
+  .issue-footer { padding-inline:16px; }
+  .panel-footnote { padding-inline:15px; }
+  .topbar>span:first-child { min-width:0; overflow-wrap:anywhere; }
+  .topbar .connection-pill { flex-shrink:0; margin-left:15px; }
+}

@@ -9,7 +9,7 @@ These are infrastructure choices, not editions. AI is optional in Golf's core wo
 
 ## What works now
 
-This is an initial developer slice: per-user Gitea-token sign-in, encrypted PostgreSQL-backed sessions, real repository listing and creation, black/charcoal and light/system themes, capability reporting, and a persistent local Compose stack. Git operations use Gitea directly.
+This is a developer preview: per-user Gitea-token sign-in, encrypted PostgreSQL-backed sessions, repository listing/creation, in-app source and commit browsing, read-only issues, a JSON CLI, black/charcoal and light/system themes, capability reporting, and a persistent local Compose stack. Git writes use Gitea directly.
 
 OAuth, organizations/roles, import/connections, review/merge policy, pipelines/runners, agent execution, Cloudflare integrations, protected previews/CD and Kubernetes packaging remain roadmap work. This is not complete v1 or a competition-ready entry. No repository CI is configured.
 
@@ -39,6 +39,8 @@ Store the printed password securely. Sign into Gitea and create a dedicated toke
 
 **Token scopes (verified on Gitea 1.27.3):** use `read:user` plus `read:repository` to sign in and browse. Creating repositories additionally requires `write:user` plus `write:repository` (write includes read). Gitea applies both user and repository scopes to its `/user/repos` route; Golf preserves that authorization. Read-only tokens can browse but creation correctly returns a permission error.
 
+Add `read:issue` to browse issues. Code browsing continues to work without issue scope; the issue panel reports the missing permission. Scopes never grant repository access the user does not already have.
+
 The browser receives an opaque HttpOnly session cookie, not the upstream credential. The server stores only the session identifier's hash and an AES-GCM-encrypted Gitea token. Sessions expire after 12 hours. Token revocation is enforced by Gitea on subsequent calls. Local insecure cookies are explicitly allowed only on loopback origins; remote use requires HTTPS and secure cookies.
 
 Secrets are generated once into ignored `.env`. Keep that file and `GOLF_ENCRYPTION_KEY` secure. The database initializes two independent databases/roles, one for Golf and one for Gitea. Changing `.env` passwords later does not rotate existing PostgreSQL roles. Do not delete `.env` while retaining volumes and expect a fresh credential set to work.
@@ -51,6 +53,35 @@ docker compose down      # remove containers/network; retain named volumes
 
 Do not add `--volumes` unless intentionally erasing this installation. Backup/recovery automation and a production deployment profile are not yet qualified. Preserve both databases, Gitea repository/configuration volumes and encryption keys together. Local ports bind only to loopback; this Compose file is a development installation.
 
+## Browse code and issues
+
+Open a repository in Golf to explore its branches, commit history and source tree. File/folder navigation stays at an exact commit, so a concurrent push cannot silently change the snapshot you are inspecting. Refresh or select a branch again to observe a new head. The commit view can open historical snapshots. Empty repositories display push guidance; after the first push, Gitea may need a moment to finish processing before refresh shows the source.
+
+Files are rendered as plain text up to 256 KiB. Binary/control content, large files, symlinks, submodules and LFS objects show metadata and an explanation instead. Golf does not execute source HTML, follow source links or fetch submodule targets. Directories above 1,000 entries or upstream responses above 2 MiB fail visibly; this preview does not claim unlimited monorepo browsing.
+
+The Issues tab lists open/closed issues and reads issue bodies as plain text. Issue editing, comments, rendered Markdown, diffs, blame and reviews remain future work. Gitea remains the sole source of collaboration data. See the [browser contract](docs/REPOSITORY_BROWSER_CONTRACT.md) for endpoints and bounds.
+
+## Read-only CLI
+
+Requires the Go version in `go.mod`. `make cli` produces `bin/golf`; `make build` additionally produces the server as `bin/golf-server`.
+
+```sh
+make cli
+./bin/golf --help
+# Supply GOLF_GITEA_TOKEN through your shell's secret manager, not a literal in history.
+./bin/golf repo list
+./bin/golf repo view owner/repository
+./bin/golf repo branches owner/repository
+./bin/golf repo commits owner/repository --ref feature/example
+./bin/golf repo contents owner/repository --ref COMMIT_ID --path README.md
+./bin/golf issue list owner/repository --state open
+./bin/golf issue view owner/repository 1
+```
+
+Alternatively pipe one token from your secret manager to `./bin/golf --token-stdin repo list`. Credentials are accepted only through stdin or `GOLF_GITEA_TOKEN`, never a command-line token flag. Set `GOLF_URL` or global `--url` for another installation; remote origins require HTTPS. The CLI does not follow redirects or save credentials/cookies. It creates and deletes a temporary Golf session per command, including after an operation fails. Abrupt termination can leave that session until its normal server expiry.
+
+Success writes JSON with `schema_version: "golf.cli.v0"` and the API response in `data`. Pagination is explicit; follow `data.next_page` with `--page`, up to `--limit 100`. Exit codes are 0 for success/help, 1 for operation/authentication/session-cleanup failure, and 2 for usage errors. Diagnostics go to stderr. This bootstrap interface is not the planned stable generated API, OAuth/device login, MCP or ACP.
+
 ## Local checks
 
 ```sh
@@ -60,9 +91,12 @@ make check
 go test -race ./...
 npm --prefix web test
 python3 scripts/smoke.py --restart
+# Optional: include real CLI checks against the same stack.
+make cli
+python3 scripts/smoke.py --cli bin/golf
 ```
 
-The browser checks use contract fixtures. `scripts/smoke.py` exercises the real running Compose stack: creates isolated users and a private repository, checks cross-user denial and CSRF rejection, pushes a real Git commit, checks restart/outage behavior, revokes a token, signs out, then removes its test Gitea users/repositories. `--restart` briefly interrupts local Golf/Gitea; omit it to skip those service operations. Python 3 and Git are required.
+The browser checks use contract fixtures. `scripts/smoke.py` exercises the real running Compose stack: isolated users/private repositories, cross-user denial, CSRF, real Git pushes, source snapshots/preview boundaries, issues/scope denial, optional CLI/restart/outage checks, revocation and logout. It removes its test Gitea users/repositories afterward. `--restart` briefly interrupts local Golf/Gitea; omit it to skip those service operations. Python 3 and Git are required; `--cli` accepts an already-built CLI executable.
 
 The backend's database integration test runs when `GOLF_TEST_DATABASE_URL` points to a dedicated test PostgreSQL database. `make test-integration` requires it; without it, ordinary Go tests explicitly skip that integration case. Do not use a production database.
 

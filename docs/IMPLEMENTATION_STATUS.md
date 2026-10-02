@@ -4,7 +4,11 @@ Updated: 2026-10-01. This ledger records evidence for the [implementation plan](
 
 ## Current delivery
 
-The initial developer slice is implemented: a Go API and React application backed by separate Golf/Gitea PostgreSQL databases, per-user Gitea credentials, encrypted persistent sessions, authorized repository list/create, black/charcoal/light/system themes, live health checks and local Compose installation. Gitea owns Git and collaboration data; Golf does not write Gitea's database or repository files.
+The developer preview is implemented: a Go API and React application backed by separate Golf/Gitea PostgreSQL databases, per-user Gitea credentials, encrypted persistent sessions, authorized repository list/create, repository/branch/history/source browsing, read-only issues, a read-only JSON CLI, black/charcoal/light/system themes, live health checks and local Compose installation. Gitea owns Git and collaboration data; Golf does not write Gitea's database or repository files.
+
+The [repository browser increment](REPOSITORY_BROWSER_CONTRACT.md) resolves branches to immutable commits before traversing folders/files. It previews bounded ordinary UTF-8 text, leaves binary/large/LFS/symlink/submodule content as metadata, and distinguishes empty repositories from provider failures. Browser navigation supports deep links/history and clears private query data on authentication changes. Issue bodies are plain text; issue/comment mutations, rendered Markdown, diffs, blame and review flows remain future work.
+
+`make cli` builds `bin/golf`. It reads through the same per-user API using an ephemeral bootstrap session, closes the session after each command, and emits the documented `golf.cli.v0` JSON envelope. It has no stored-credential or OAuth/device flow, stable generated client, mutation commands, MCP or ACP. Normal cancellation closes the session; cancellation while reading a token also unblocks stdin. Abrupt process termination remains bounded by server session expiry.
 
 Marketing and docs have independent private repositories: [golf-website](https://github.com/mjtechguy/golf-website) (Astro) and [golf-docs](https://github.com/mjtechguy/golf-docs) (Docusaurus/MDX). Both have static production builds and manual Cloudflare configuration. No live Cloudflare site or product service has been deployed by this work. No repository CI workflows were added.
 
@@ -16,19 +20,20 @@ The two infrastructure tracks remain distinct choices over shared product policy
 
 | Check | Observed outcome | Boundary |
 | --- | --- | --- |
-| `make check` | Go formatting/vet/tests and frontend typecheck pass | Database integration is explicitly skipped unless its isolated DSN is supplied. |
-| `go test -race ./... -count=1` with isolated PostgreSQL | Pass: migration, encrypted sessions, identity persistence, per-user upstream credentials, create, logout and revocation | Real PostgreSQL 18.4; Gitea HTTP fixture for this test. Disposable DB removed afterward. |
+| `make check` | Go formatting/vet/tests (server and CLI) and frontend typecheck pass | Database integration is explicitly skipped unless its isolated DSN is supplied. |
+| `go test -race ./internal/server/... -count=1` with isolated PostgreSQL | Pass: migration, encrypted sessions, identity persistence, per-user credentials, create/read/logout/revocation, pinned source, preview/input/response bounds and issue/PR separation | Real PostgreSQL 18.4; Gitea HTTP fixtures for these tests. Disposable DB removed afterward. |
+| `go test -race ./internal/cli -count=1` and `make cli` | Pass: origin/TLS/redirect boundaries, stdin credentials, URL encoding, JSON/schema/output safety, denial, bounds, cleanup failures and cancellation during reads/token input | HTTP fixtures here; real CLI source read and invalid token are also checked by the Compose smoke. |
 | `npm --prefix web run build` | TypeScript and Vite production build pass | Browser bundle only; provider behavior checked separately. |
-| `npm --prefix web test` | Four Playwright checks pass | Contract fixtures: token login/failure/no browser credential storage, filters/safe links/themes/mobile, private create errors/refresh/logout, expiry clears private content. |
+| `npm --prefix web test` | Eleven Playwright checks pass | Contract fixtures: existing auth/create/list plus branches/pagination/stale-head reselection, slash and hex refs, pinned path/history/reload, plain-text XSS boundaries, preview limits, commits, issue filtering/scopes, empty/bounded errors, private-cache denial/expiry/logout, keyboard and mobile. |
 | `docker compose up -d --build` | Go/React image builds; PostgreSQL/Gitea/Golf start; `/readyz` returns both dependencies ready | Local loopback development profile, not production/HA/Kubernetes. |
-| Production-served browser check | Real sign-in and private repository creation render successfully, with no browser runtime errors; charcoal screenshot inspected | Real local Compose backend, ephemeral test user removed. |
-| `python3 scripts/smoke.py --restart` | Pass: real Gitea sign-in/create/list, unauthenticated and other-user denial, origin rejection, Git push/ref readback, persistent session/repository after restart, Gitea outage reporting, token revocation and logout | Real pinned Gitea 1.27.3 and PostgreSQL 18.4; temporary test users/repos removed. |
+| Production-served browser check | Real authorized repository source resolves/pins a commit and renders, issue HTML stays plain text, dark/light/mobile work, sign-out removes private content; no runtime errors | Real local Compose backend and temporary supported-API fixture setup; test user/repository removed. Prior real sign-in/create evidence also retained. |
+| `python3 scripts/smoke.py --restart --cli bin/golf` | Pass: real sessions/create/list/Git push, empty state, Unicode/space paths, slash refs, binary/LFS/symlink/gitlink/size boundaries, 1,001-entry refusal, exact 256 KiB acceptance, immutable source after a push, pagination, issues vs PRs, direct private denial, scope errors, CLI JSON, persistence/outage, revocation/logout | Real pinned Gitea 1.27.3 and PostgreSQL 18.4; temporary test users/repos removed. No live Cloudflare resources. |
 | Website `check`, `build`, `check:links`, `deploy:check`, browser smoke | Pass: 22 static routes, links/fragments/metadata, local Workers routing/404/headers, env/canonical configuration, dark/light desktop/mobile, site search/catalog/explorers/navigation | 21 content pages plus 404, four guides, 38-entry integration catalog and glossary. Fixed port4325; no live provider deployment. |
 | Docs `check`, `build`, `check:build`, Wrangler dry-run and browser/version drill | Pass: strict links, dark/light desktop/mobile navigation, disposable latest/next/older snapshots and selector, agent-readable version index, static deployment bundle and local Workers asset routes/404/headers; dependency audit zero findings | Only development docs are committed; disposable snapshots removed. Real release required before version publication. |
 
-The real provider check established Gitea's minimum scope combination: browsing uses `read:user,read:repository`; repository creation uses `write:user,write:repository`. Both route scopes are required by Gitea 1.27.3. UI and setup instructions expose that distinction; an insufficient token correctly receives a denied operation.
+The real provider check established Gitea's minimum scope combination: code browsing uses `read:user,read:repository`; repository creation uses `write:user,write:repository`; issues additionally use `read:issue`. Gitea 1.27.3 requires both user/repository scopes on the user repository route. UI and setup instructions expose these distinctions; insufficient tokens correctly receive denied operations rather than silently receiving broader credentials.
 
-The Git transport check uses `git push` and `git ls-remote` to compare the exact commit. A separate immediate branch-detail API probe returned a Gitea 500 during initial push processing; that route is not exposed by Golf's current UI. Qualify its readiness/error behavior before adding branch browsing. Do not count current repository listing as proof of every Gitea API path.
+The Git transport check uses `git push` and `git ls-remote` to compare the exact commit. The previous immediate branch-detail API 500 was reproduced while Gitea's initial-push metadata remained `empty: true`; it became healthy after initialization completed. Golf now checks that metadata before branch enumeration, and the smoke uses a bounded initialization wait. Empty state is explicit; unrelated provider failures still fail visibly. This qualifies the new read operations, not every Gitea API or write policy.
 
 ## Initial decisions and limits
 
@@ -44,18 +49,19 @@ The Compose installation uses separate database roles, a non-root Golf runtime a
 | --- | --- | --- |
 | P0.1 | Initial layout, private repos, local checks and ledger implemented | Broader contract/version inventories grow with supported features. |
 | P0.2 | Full dated [guide source register](TECHNOLOGY_GUIDE_REGISTER.md): 81 grouped prescriptions, all chapters and ADRs reviewed | Review/accept pending ADR dispositions and executable acceptance obligations; complete implementation conformance at the relevant milestones. |
-| P0.8 | Shared Gitea decision and basic API integration verified | Protected-write/conditional-merge proof, full API ownership/license/recovery qualification. |
+| P0.8 | Shared Gitea decision plus scoped repository/source/history/issues read inventory verified | Protected-write/conditional-merge proof, full API ownership/license/recovery qualification. |
 | P0.3 / P1.1 | Narrow auth/repository REST contract and real DB migration verified | Planned generated Connect clients/contracts and wider schema. |
-| P1.2 / P1.8 | Per-user token session slice verified | OAuth/OIDC, org/team roles, service/Git credentials, MFA/recovery and account lifecycle. |
-| P1.4 | Real-data repository UI and themes verified | Issue/review/pipeline/task/deployment surfaces as their backends exist. |
+| P1.2 / P1.8 | Per-user token sessions and ephemeral read-only CLI bootstrap verified | OAuth/OIDC/device flow, org/team roles, service/Git credentials, MFA/recovery and account lifecycle. |
+| P1.4 | Real-data repository/source/history/read-only issue UI, themes, URL navigation and private-cache lifecycle verified | Generated/typed routing foundation, issue mutations, review/pipeline/task/deployment surfaces. |
 | P1.5 | Local Compose verified | Helm/Kubernetes install, production profiles and provider capability qualification. |
-| P2.1 / P2.2 | List/create through scoped Gitea APIs verified | Full Git/collaboration surface and review flows. |
+| P2.1 / P2.2 | List/create and read-only repository/branch/history/source/issue UI/API through scoped Gitea verified | Full Git/collaboration surface, organization authorization, comments/mutations/diffs/blame/reviews and protected workflows. |
+| P5.5 | Narrow development JSON CLI reads share the existing API/auth path | Stable generated interfaces, full CLI, MCP, ACP, managed authentication, policy/audit and execution lifecycle. |
 | W1 / W2 / W4 | Separate static site implementations and local builds/dry-runs | Actual public origins, deployment, full feature guides and release operations. |
 | W3 / W5 | Version policy, source ownership and public-content rules documented | First real product release, generated-contract import and continuing maintenance. |
 
 ## Next work and release gates
 
-1. Resolve the guide register’s pending ADRs and Gitea policy qualification, then extend useful identity/repository/collaboration behavior. Never enforce a Golf restriction solely in the UI while other Gitea writes bypass it.
+1. Advance versioned generated API/identity foundations and resolve the guide register’s pending ADRs and Gitea protected-write/conditional-merge qualification before adding protected collaboration writes. The bounded read-only browser/CLI extension does not close those gates. Never enforce a Golf restriction solely in the UI while other Gitea writes bypass it.
 2. For the **Cloudflare competition track**, pull forward the smallest real Worker/Artifacts task flow: scoped forks, two overlapping supported agents, cancellation, exact-commit test evidence, comparison and conflict-aware integration. Follow the [requirements/evidence matrix](COMPETITION_READINESS.md); a static website or provider logo is not proof.
 3. For the **portable track**, package the same core for Kubernetes and qualify local/customer execution. Keep all required core behavior usable without Cloudflare or inference; optional backends can be selected individually.
 4. Qualify Actions/GitLab engine subsets and five harness/auth combinations using actual positive/negative lifecycle checks. No adapter placeholders may report ready.

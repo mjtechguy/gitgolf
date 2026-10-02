@@ -28,9 +28,16 @@ type Repository struct {
 	HTMLURL       string    `json:"html_url"`
 	DefaultBranch string    `json:"default_branch"`
 	UpdatedAt     time.Time `json:"updated_at"`
+	Empty         bool      `json:"empty"`
+	CloneURL      string    `json:"clone_url"`
+	SSHURL        string    `json:"ssh_url"`
 }
 
 type forgeError struct{ status int }
+
+const maxForgeResponse = 2 << 20
+
+var errForgeResponseTooLarge = errors.New("forge response exceeds the size limit")
 
 func (e forgeError) Error() string { return fmt.Sprintf("forge returned HTTP %d", e.status) }
 
@@ -63,7 +70,17 @@ func (s *Server) forge(ctx context.Context, method, path, token string, input, o
 		return nil, forgeError{res.StatusCode}
 	}
 	if output != nil {
-		if err := json.NewDecoder(io.LimitReader(res.Body, 2<<20)).Decode(output); err != nil {
+		if res.ContentLength > maxForgeResponse {
+			return nil, errForgeResponseTooLarge
+		}
+		data, err := io.ReadAll(io.LimitReader(res.Body, maxForgeResponse+1))
+		if err != nil {
+			return nil, errors.New("invalid forge response")
+		}
+		if len(data) > maxForgeResponse {
+			return nil, errForgeResponseTooLarge
+		}
+		if err := json.Unmarshal(data, output); err != nil {
 			return nil, errors.New("invalid forge response")
 		}
 	}

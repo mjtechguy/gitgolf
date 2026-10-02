@@ -127,9 +127,8 @@ func TestCredentialEnvelopeAndRedirect(t *testing.T) {
 	}
 }
 
-// This test uses a real PostgreSQL schema and only substitutes the external
-// Gitea HTTP boundary. The separate end-to-end smoke check uses real Gitea.
-func TestSessionAndRepositoryWithPostgres(t *testing.T) {
+func testDatabase(t *testing.T) *sql.DB {
+	t.Helper()
 	dsn := os.Getenv("GOLF_TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("set GOLF_TEST_DATABASE_URL for real PostgreSQL integration")
@@ -139,7 +138,7 @@ func TestSessionAndRepositoryWithPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	admin := stdlib.OpenDB(*config)
-	defer admin.Close()
+	t.Cleanup(func() { admin.Close() })
 	random := make([]byte, 8)
 	if _, err := rand.Read(random); err != nil {
 		t.Fatal(err)
@@ -148,15 +147,22 @@ func TestSessionAndRepositoryWithPostgres(t *testing.T) {
 	if _, err := admin.Exec(`CREATE SCHEMA ` + schema); err != nil {
 		t.Fatal(err)
 	}
-	defer admin.Exec(`DROP SCHEMA ` + schema + ` CASCADE`)
+	t.Cleanup(func() { admin.Exec(`DROP SCHEMA ` + schema + ` CASCADE`) })
 	config.RuntimeParams["search_path"] = schema
 	registered := stdlib.RegisterConnConfig(config)
-	defer stdlib.UnregisterConnConfig(registered)
+	t.Cleanup(func() { stdlib.UnregisterConnConfig(registered) })
 	db, err := database.Open(context.Background(), registered)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	t.Cleanup(func() { db.Close() })
+	return db
+}
+
+// This test uses a real PostgreSQL schema and only substitutes the external
+// Gitea HTTP boundary. The separate end-to-end smoke check uses real Gitea.
+func TestSessionAndRepositoryWithPostgres(t *testing.T) {
+	db := testDatabase(t)
 	var revoked atomic.Bool
 	forge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

@@ -86,6 +86,12 @@ func New(config Config, db *sql.DB) (*Server, error) {
 		r.Delete("/session", s.logout)
 		r.Get("/repositories", s.repositories)
 		r.Post("/repositories", s.createRepository)
+		r.Get("/repositories/{owner}/{repo}", s.repository)
+		r.Get("/repositories/{owner}/{repo}/branches", s.branches)
+		r.Get("/repositories/{owner}/{repo}/commits", s.commits)
+		r.Get("/repositories/{owner}/{repo}/contents", s.contents)
+		r.Get("/repositories/{owner}/{repo}/issues", s.issues)
+		r.Get("/repositories/{owner}/{repo}/issues/{number}", s.issue)
 		r.NotFound(func(w http.ResponseWriter, r *http.Request) { problem(w, 404, "not_found", "API route not found.") })
 	})
 	if config.WebDir != "" {
@@ -175,6 +181,10 @@ func problem(w http.ResponseWriter, status int, code, message string) {
 }
 
 func (s *Server) forgeProblem(w http.ResponseWriter, err error) {
+	if errors.Is(err, errForgeResponseTooLarge) {
+		problem(w, 502, "forge_response_too_large", "Gitea's response exceeds this browser's size limit. Open the resource in Gitea.")
+		return
+	}
 	var upstream forgeError
 	if errors.As(err, &upstream) {
 		switch upstream.status {
@@ -183,6 +193,9 @@ func (s *Server) forgeProblem(w http.ResponseWriter, err error) {
 			return
 		case 403:
 			problem(w, 403, "forge_forbidden", "Gitea denied this operation. Check token scopes and repository access.")
+			return
+		case 404:
+			problem(w, 404, "not_found", "This resource does not exist or is not accessible.")
 			return
 		case 409, 422:
 			problem(w, 409, "forge_conflict", "Gitea could not create this repository. Check its name and your permissions.")
@@ -214,7 +227,7 @@ func (s *Server) readiness(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 	respond(w, 200, map[string]any{"capabilities": []map[string]string{
-		{"id": "repositories", "label": "Gitea repositories", "state": "configured", "reason": "Repository listing and creation use your Gitea permissions. Check readiness for live dependency health."},
+		{"id": "repositories", "label": "Gitea repositories", "state": "configured", "reason": "Repository listing, creation, code browsing and read-only issues use your Gitea permissions. Issues require read:issue scope. Check readiness for live dependency health."},
 		{"id": "cloudflare", "label": "Cloudflare integration", "state": "disabled", "reason": "Planned; not implemented in this initial slice."},
 		{"id": "pipelines", "label": "Pipeline execution", "state": "disabled", "reason": "Planned; no CI runner or pipeline execution is implemented."},
 		{"id": "agents", "label": "Coding agents", "state": "disabled", "reason": "Optional; not implemented in this initial slice."},
