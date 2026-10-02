@@ -18,12 +18,13 @@ func ValidRecoveryBackupID(value string) bool { return recoveryBackupID.MatchStr
 // RecoveryResult contains committed operator metadata, never session identifiers
 // or credentials. The actor is the PostgreSQL role, not a claimed Golf user.
 type RecoveryResult struct {
-	BackupID           string    `json:"backup_id"`
-	OperationID        string    `json:"operation_id"`
-	OccurredAt         time.Time `json:"occurred_at"`
-	Actor              string    `json:"actor"`
-	SessionsCount      uint64    `json:"sessions_count"`
-	OAuthAttemptsCount uint64    `json:"oauth_attempts_count"`
+	BackupID                   string    `json:"backup_id"`
+	OperationID                string    `json:"operation_id"`
+	OccurredAt                 time.Time `json:"occurred_at"`
+	Actor                      string    `json:"actor"`
+	SessionsCount              uint64    `json:"sessions_count"`
+	OAuthAttemptsCount         uint64    `json:"oauth_attempts_count"`
+	LocalAccountsDisabledCount uint64    `json:"local_accounts_disabled_count"`
 }
 
 // InvalidateRestoredSessions requires ALL writers to be stopped and drained.
@@ -64,7 +65,16 @@ func InvalidateRestoredSessions(ctx context.Context, db *sql.DB, backupID string
 	if err != nil {
 		return fail()
 	}
-	event, err := queries.AppendRecoveryEvent(ctx, database.AppendRecoveryEventParams{BackupID: backupID, OperationID: operation, SessionsCount: sessions, OauthAttemptsCount: attempts})
+	locals, err := queries.DisableRecoveryLocalAccounts(ctx)
+	if err != nil {
+		return fail()
+	}
+	for _, account := range locals {
+		if err := queries.AppendLocalAccountEvent(ctx, database.AppendLocalAccountEventParams{AccountID: account.ID, OperationID: operation, Action: "RECOVERY_DISABLED", CredentialVersion: account.CredentialVersion}); err != nil {
+			return fail()
+		}
+	}
+	event, err := queries.AppendRecoveryEvent(ctx, database.AppendRecoveryEventParams{BackupID: backupID, OperationID: operation, SessionsCount: sessions, OauthAttemptsCount: attempts, LocalAccountsDisabledCount: int64(len(locals))})
 	if err != nil {
 		return fail()
 	}
@@ -73,5 +83,5 @@ func InvalidateRestoredSessions(ctx context.Context, db *sql.DB, backupID string
 		// counts; the operator must inspect recovery history before retrying.
 		return fail()
 	}
-	return RecoveryResult{BackupID: event.BackupID, OperationID: event.OperationID, OccurredAt: event.OccurredAt.UTC(), Actor: event.Actor, SessionsCount: uint64(event.SessionsCount), OAuthAttemptsCount: uint64(event.OauthAttemptsCount)}, nil
+	return RecoveryResult{BackupID: event.BackupID, OperationID: event.OperationID, OccurredAt: event.OccurredAt.UTC(), Actor: event.Actor, SessionsCount: uint64(event.SessionsCount), OAuthAttemptsCount: uint64(event.OauthAttemptsCount), LocalAccountsDisabledCount: uint64(event.LocalAccountsDisabledCount)}, nil
 }

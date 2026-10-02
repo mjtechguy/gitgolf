@@ -49,6 +49,9 @@ const (
 	// SessionServiceBeginGiteaOAuthProcedure is the fully-qualified name of the SessionService's
 	// BeginGiteaOAuth RPC.
 	SessionServiceBeginGiteaOAuthProcedure = "/golf.v1.SessionService/BeginGiteaOAuth"
+	// SessionServiceLoginWithPasswordProcedure is the fully-qualified name of the SessionService's
+	// LoginWithPassword RPC.
+	SessionServiceLoginWithPasswordProcedure = "/golf.v1.SessionService/LoginWithPassword"
 	// SessionServiceLoginWithGiteaTokenProcedure is the fully-qualified name of the SessionService's
 	// LoginWithGiteaToken RPC.
 	SessionServiceLoginWithGiteaTokenProcedure = "/golf.v1.SessionService/LoginWithGiteaToken"
@@ -156,6 +159,7 @@ const (
 type SessionServiceClient interface {
 	GetAuthenticationOptions(context.Context, *connect.Request[v1.GetAuthenticationOptionsRequest]) (*connect.Response[v1.GetAuthenticationOptionsResponse], error)
 	BeginGiteaOAuth(context.Context, *connect.Request[v1.BeginGiteaOAuthRequest]) (*connect.Response[v1.BeginGiteaOAuthResponse], error)
+	LoginWithPassword(context.Context, *connect.Request[v1.LoginWithPasswordRequest]) (*connect.Response[v1.LoginWithPasswordResponse], error)
 	LoginWithGiteaToken(context.Context, *connect.Request[v1.LoginWithGiteaTokenRequest]) (*connect.Response[v1.LoginWithGiteaTokenResponse], error)
 	GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
 	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
@@ -185,6 +189,12 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+SessionServiceBeginGiteaOAuthProcedure,
 			connect.WithSchema(sessionServiceMethods.ByName("BeginGiteaOAuth")),
+			connect.WithClientOptions(opts...),
+		),
+		loginWithPassword: connect.NewClient[v1.LoginWithPasswordRequest, v1.LoginWithPasswordResponse](
+			httpClient,
+			baseURL+SessionServiceLoginWithPasswordProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("LoginWithPassword")),
 			connect.WithClientOptions(opts...),
 		),
 		loginWithGiteaToken: connect.NewClient[v1.LoginWithGiteaTokenRequest, v1.LoginWithGiteaTokenResponse](
@@ -230,6 +240,7 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 type sessionServiceClient struct {
 	getAuthenticationOptions *connect.Client[v1.GetAuthenticationOptionsRequest, v1.GetAuthenticationOptionsResponse]
 	beginGiteaOAuth          *connect.Client[v1.BeginGiteaOAuthRequest, v1.BeginGiteaOAuthResponse]
+	loginWithPassword        *connect.Client[v1.LoginWithPasswordRequest, v1.LoginWithPasswordResponse]
 	loginWithGiteaToken      *connect.Client[v1.LoginWithGiteaTokenRequest, v1.LoginWithGiteaTokenResponse]
 	getSession               *connect.Client[v1.GetSessionRequest, v1.GetSessionResponse]
 	listSessions             *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
@@ -246,6 +257,11 @@ func (c *sessionServiceClient) GetAuthenticationOptions(ctx context.Context, req
 // BeginGiteaOAuth calls golf.v1.SessionService.BeginGiteaOAuth.
 func (c *sessionServiceClient) BeginGiteaOAuth(ctx context.Context, req *connect.Request[v1.BeginGiteaOAuthRequest]) (*connect.Response[v1.BeginGiteaOAuthResponse], error) {
 	return c.beginGiteaOAuth.CallUnary(ctx, req)
+}
+
+// LoginWithPassword calls golf.v1.SessionService.LoginWithPassword.
+func (c *sessionServiceClient) LoginWithPassword(ctx context.Context, req *connect.Request[v1.LoginWithPasswordRequest]) (*connect.Response[v1.LoginWithPasswordResponse], error) {
+	return c.loginWithPassword.CallUnary(ctx, req)
 }
 
 // LoginWithGiteaToken calls golf.v1.SessionService.LoginWithGiteaToken.
@@ -282,6 +298,7 @@ func (c *sessionServiceClient) Logout(ctx context.Context, req *connect.Request[
 type SessionServiceHandler interface {
 	GetAuthenticationOptions(context.Context, *connect.Request[v1.GetAuthenticationOptionsRequest]) (*connect.Response[v1.GetAuthenticationOptionsResponse], error)
 	BeginGiteaOAuth(context.Context, *connect.Request[v1.BeginGiteaOAuthRequest]) (*connect.Response[v1.BeginGiteaOAuthResponse], error)
+	LoginWithPassword(context.Context, *connect.Request[v1.LoginWithPasswordRequest]) (*connect.Response[v1.LoginWithPasswordResponse], error)
 	LoginWithGiteaToken(context.Context, *connect.Request[v1.LoginWithGiteaTokenRequest]) (*connect.Response[v1.LoginWithGiteaTokenResponse], error)
 	GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
 	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
@@ -307,6 +324,12 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		SessionServiceBeginGiteaOAuthProcedure,
 		svc.BeginGiteaOAuth,
 		connect.WithSchema(sessionServiceMethods.ByName("BeginGiteaOAuth")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceLoginWithPasswordHandler := connect.NewUnaryHandler(
+		SessionServiceLoginWithPasswordProcedure,
+		svc.LoginWithPassword,
+		connect.WithSchema(sessionServiceMethods.ByName("LoginWithPassword")),
 		connect.WithHandlerOptions(opts...),
 	)
 	sessionServiceLoginWithGiteaTokenHandler := connect.NewUnaryHandler(
@@ -351,6 +374,8 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 			sessionServiceGetAuthenticationOptionsHandler.ServeHTTP(w, r)
 		case SessionServiceBeginGiteaOAuthProcedure:
 			sessionServiceBeginGiteaOAuthHandler.ServeHTTP(w, r)
+		case SessionServiceLoginWithPasswordProcedure:
+			sessionServiceLoginWithPasswordHandler.ServeHTTP(w, r)
 		case SessionServiceLoginWithGiteaTokenProcedure:
 			sessionServiceLoginWithGiteaTokenHandler.ServeHTTP(w, r)
 		case SessionServiceGetSessionProcedure:
@@ -378,6 +403,10 @@ func (UnimplementedSessionServiceHandler) GetAuthenticationOptions(context.Conte
 
 func (UnimplementedSessionServiceHandler) BeginGiteaOAuth(context.Context, *connect.Request[v1.BeginGiteaOAuthRequest]) (*connect.Response[v1.BeginGiteaOAuthResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.SessionService.BeginGiteaOAuth is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) LoginWithPassword(context.Context, *connect.Request[v1.LoginWithPasswordRequest]) (*connect.Response[v1.LoginWithPasswordResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.SessionService.LoginWithPassword is not implemented"))
 }
 
 func (UnimplementedSessionServiceHandler) LoginWithGiteaToken(context.Context, *connect.Request[v1.LoginWithGiteaTokenRequest]) (*connect.Response[v1.LoginWithGiteaTokenResponse], error) {

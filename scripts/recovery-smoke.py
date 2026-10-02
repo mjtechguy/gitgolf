@@ -167,6 +167,15 @@ def main():
                 assert result['schema_version'] == 'golf.keys.v1' and result['state'] == state
                 return result['result']
 
+            def local_operator(action, payload, success=True):
+                output = compose('run', '--rm', '--no-deps', '-T', 'golf', 'local-account', action,
+                                 input=json.dumps(payload), success=success)
+                assert not any(value in output for value in forbidden), 'Local account operator exposed a credential'
+                result = json.loads(output)
+                assert result['schema_version'] == 'golf.local-account.v1'
+                assert result['state'] == ('complete' if success else 'failed')
+                return result.get('result')
+
             def recovery(action, *arguments, success=True):
                 process = subprocess.run([sys.executable, str(ROOT/'scripts/recovery.py'), action, *arguments],
                                          cwd=ROOT, env=env, capture_output=True, timeout=360)
@@ -264,6 +273,18 @@ def main():
             assert revoked_api['credential']['revokedAt']
             bearer_rpc(api_issued[0]['token'], 'SessionService/GetSession', expected=401)
             owner_token, outsider_token = tokens
+            check('independent local passwords and a disabled account before capture')
+            local_names = ['recovery-local-'+secrets.token_hex(5) for _ in range(2)]
+            local_passwords = ['Recovery Golf password '+secrets.token_urlsafe(24) for _ in local_names]
+            forbidden.extend(local_passwords)
+            for index in range(2):
+                local_operator('create', {'username': local_names[index], 'email': local_names[index]+'@example.invalid', 'password': local_passwords[index],
+                    'forge_token': tokens[index], 'is_instance_admin': index == 0})
+            local_session = smoke.client(); sessions.append(local_session)
+            local_user = smoke.rpc(local_session, 'SessionService/LoginWithPassword',
+                {'username': local_names[0], 'password': local_passwords[0]})['user']
+            assert local_user['isInstanceAdmin']
+            local_operator('disable', {'username': local_names[1]})
             extra = smoke.client(); sessions.append(extra)
             smoke.rpc(extra, 'SessionService/LoginWithGiteaToken', {'token': owner_token})
             owner_identity = smoke.rpc(owner, 'SessionService/GetSession')['user']
@@ -367,6 +388,8 @@ def main():
             smoke.rpc(new, 'SessionService/LoginWithGiteaToken', {'token': owner_token})
             assert sql("SELECT count(DISTINCT credential_key_id) FROM golf_sessions;") == '2'
             assert sql("SELECT credential_key_id FROM golf_oauth_attempts;") == 'legacy'
+            local_usage = operator('status')['keys']
+            assert sum(row.get('local_accounts', 0) for row in local_usage) == 2
             for session in sessions:
                 smoke.rpc(session, 'SessionService/GetSession')
             history = {table: rows(table, order) for table, order in [
@@ -375,8 +398,11 @@ def main():
                 ('golf_repository_creations', 'id'), ('golf_repository_creation_events', 'id'),
                 ('golf_api_credentials', 'id'), ('golf_api_credential_events', 'id'),
                 ('golf_issue_mutations', 'id'), ('golf_issue_mutation_events', 'id')]}
+            local_accounts = json.loads(rows('golf_local_accounts'))
+            local_events = json.loads(rows('golf_local_account_events'))
+            assert len(local_accounts) == 2 and sum(row['disabled_at'] is not None for row in local_accounts) == 1
             counts = int(sql('SELECT count(*) FROM golf_sessions;')), int(sql('SELECT count(*) FROM golf_oauth_attempts;'))
-            assert counts == (4, 1)
+            assert counts == (5, 1)
             check('live writers cannot be bypassed by the operator drain assertion')
             for service in ['golf', 'gitea']:
                 assert json.loads(run('docker', 'inspect', container(service)))[0]['State']['Running']
@@ -455,6 +481,7 @@ def main():
             restored = recovery('restore', *verify_args, '--project', target, '--directory', str(restore_dir), '--writers-drained')
             assert restored['backup_id'] == backup_id
             assert (restored['sessions_count'], restored['oauth_attempts_count']) == counts
+            assert restored['local_accounts_disabled_count'] == 2
             active_config, active_project = Path(restored['compose_file']), target
             assert active_config == restore_dir/'compose.json'
             assert marker_value() == 'literal-$recovery-marker'
@@ -473,12 +500,29 @@ def main():
             event = recovery_events[0]
             assert event['backup_id'] == backup_id and event['actor'] == 'golf'
             assert (event['sessions_count'], event['oauth_attempts_count']) == counts
+            assert event['local_accounts_disabled_count'] == 2
+            restored_accounts = json.loads(rows('golf_local_accounts'))
+            assert len(restored_accounts) == len(local_accounts)
+            for previous, actual in zip(local_accounts, restored_accounts):
+                assert actual['disabled_at'] is not None
+                assert actual['credential_version'] == previous['credential_version'] + 1
+                assert {key: value for key, value in actual.items() if key not in ('disabled_at', 'credential_version')} == {
+                    key: value for key, value in previous.items() if key not in ('disabled_at', 'credential_version')}
+            restored_local_events = json.loads(rows('golf_local_account_events'))
+            assert restored_local_events[:len(local_events)] == local_events
+            local_recovery_events = restored_local_events[len(local_events):]
+            assert len(local_recovery_events) == 2 and all(row['action'] == 'RECOVERY_DISABLED' for row in local_recovery_events)
+            assert {row['operation_id'] for row in local_recovery_events} == {event['operation_id']}
             assert operator('status')['active_key_id'] == 'next'
+            assert sum(row.get('local_accounts', 0) for row in operator('status')['keys']) == 2
             print('PASS: quarantine, exact invalidation ledger, preserved identity/audit/crypto history and key registry', flush=True)
             check('reopen only the disposable target and verify private restored data')
             compose('start', 'gitea', 'golf'); ready()
             for session in sessions:
                 smoke.rpc(session, 'SessionService/GetSession', expected=401)
+            for index in range(2):
+                smoke.rpc(smoke.client(), 'SessionService/LoginWithPassword',
+                    {'username': local_names[index], 'password': local_passwords[index]}, expected=401)
             owner, outsider = smoke.client(), smoke.client()
             assert smoke.rpc(owner, 'SessionService/LoginWithGiteaToken', {'token': owner_token})['user'] == owner_identity
             smoke.rpc(outsider, 'SessionService/LoginWithGiteaToken', {'token': outsider_token})
@@ -495,6 +539,24 @@ def main():
             for issued in api_issued:
                 bearer_rpc(issued['token'], 'SessionService/GetSession', expected=401)
             print('PASS: restored API credential metadata/events retained; old delegation stays denied after fresh sign-in', flush=True)
+            check('restored local accounts require explicit current-authority re-enablement')
+            restored_password = 'Reconciled Golf password '+secrets.token_urlsafe(24)
+            forbidden.append(restored_password)
+            local_operator('reset-password', {'username': local_names[0], 'password': restored_password})
+            smoke.rpc(smoke.client(), 'SessionService/LoginWithPassword',
+                {'username': local_names[0], 'password': restored_password}, expected=401)
+            local_operator('enable', {'username': local_names[0], 'password': restored_password,
+                'forge_token': outsider_token}, success=False)
+            smoke.rpc(smoke.client(), 'SessionService/LoginWithPassword',
+                {'username': local_names[0], 'password': restored_password}, expected=401)
+            local_operator('enable', {'username': local_names[0], 'password': restored_password,
+                'forge_token': owner_token})
+            fresh_local = smoke.client()
+            assert smoke.rpc(fresh_local, 'SessionService/LoginWithPassword',
+                {'username': local_names[0], 'password': restored_password})['user'] == local_user
+            assert smoke.rpc(fresh_local, 'RepositoryService/GetRepository', {'repository': key})['repository']['id'] == repository['id']
+            smoke.rpc(fresh_local, 'SessionService/Logout')
+            print('PASS: all restored local accounts disabled/version-fenced; password-only reset cannot enable, fresh immutable mapping required', flush=True)
             assert smoke.rpc(owner, 'RepositoryService/GetRepository', {'repository': key})['repository']['id'] == repository['id']
             lookup = {'idempotency_key': creation_request['idempotency_key']}
             observed = smoke.rpc(owner, 'RepositoryService/GetRepositoryCreation', lookup)

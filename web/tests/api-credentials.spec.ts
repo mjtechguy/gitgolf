@@ -258,6 +258,7 @@ for (const transition of ['navigation', 'sign out', 'expiry'] as const) {
     } else if (transition === 'sign out') {
       await page.getByRole('button', { name: 'Sign out', exact: true }).click();
       await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
+      await page.getByText('Advanced token sign-in', { exact: true }).click();
       await page.getByLabel('Gitea access token', { exact: true }).fill('fixture-token');
       await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
     } else {
@@ -279,6 +280,7 @@ test('account switch and empty list do not retain the previous account metadata'
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   state.user = create(UserSchema, { id: '9007199254740900', login: 'other', fullName: 'Other' });
   state.credentials = [];
+  await page.getByText('Advanced token sign-in', { exact: true }).click();
   await page.getByLabel('Gitea access token', { exact: true }).fill('other-token');
   await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'No API credentials', exact: true })).toBeVisible();

@@ -11,25 +11,27 @@ import (
 )
 
 const appendRecoveryEvent = `-- name: AppendRecoveryEvent :one
-INSERT INTO golf_recovery_events (backup_id, operation_id, sessions_count, oauth_attempts_count)
-VALUES ($1, $2, $3, $4)
-RETURNING backup_id, operation_id, occurred_at, actor, sessions_count, oauth_attempts_count
+INSERT INTO golf_recovery_events (backup_id, operation_id, sessions_count, oauth_attempts_count, local_accounts_disabled_count)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING backup_id, operation_id, occurred_at, actor, sessions_count, oauth_attempts_count, local_accounts_disabled_count
 `
 
 type AppendRecoveryEventParams struct {
-	BackupID           string
-	OperationID        string
-	SessionsCount      int64
-	OauthAttemptsCount int64
+	BackupID                   string
+	OperationID                string
+	SessionsCount              int64
+	OauthAttemptsCount         int64
+	LocalAccountsDisabledCount int64
 }
 
 type AppendRecoveryEventRow struct {
-	BackupID           string
-	OperationID        string
-	OccurredAt         time.Time
-	Actor              string
-	SessionsCount      int64
-	OauthAttemptsCount int64
+	BackupID                   string
+	OperationID                string
+	OccurredAt                 time.Time
+	Actor                      string
+	SessionsCount              int64
+	OauthAttemptsCount         int64
+	LocalAccountsDisabledCount int64
 }
 
 // Actor/time come from PostgreSQL, never a caller-supplied Golf identity.
@@ -39,6 +41,7 @@ func (q *Queries) AppendRecoveryEvent(ctx context.Context, arg AppendRecoveryEve
 		arg.OperationID,
 		arg.SessionsCount,
 		arg.OauthAttemptsCount,
+		arg.LocalAccountsDisabledCount,
 	)
 	var i AppendRecoveryEventRow
 	err := row.Scan(
@@ -48,6 +51,7 @@ func (q *Queries) AppendRecoveryEvent(ctx context.Context, arg AppendRecoveryEve
 		&i.Actor,
 		&i.SessionsCount,
 		&i.OauthAttemptsCount,
+		&i.LocalAccountsDisabledCount,
 	)
 	return i, err
 }
@@ -78,7 +82,7 @@ func (q *Queries) DeleteRecoverySessions(ctx context.Context) (int64, error) {
 }
 
 const lockRecoveryCredentials = `-- name: LockRecoveryCredentials :exec
-LOCK TABLE golf_sessions, golf_oauth_attempts IN ACCESS EXCLUSIVE MODE
+LOCK TABLE golf_sessions, golf_oauth_attempts, golf_local_accounts IN ACCESS EXCLUSIVE MODE
 `
 
 // Drained writers are an operator prerequisite. These locks protect this one

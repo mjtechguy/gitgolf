@@ -47,6 +47,7 @@ try {
   page.on('pageerror', () => errors.push('browser error'));
   stage('real token sign-in and account navigation');
   await page.goto(`${golf.origin}/account/api-credentials`);
+  await page.getByText('Advanced token sign-in', { exact: true }).click();
   await page.getByLabel('Gitea access token', { exact: true }).fill(pat);
   await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
   await page.getByRole('heading', { name: 'No API credentials', exact: true }).waitFor();

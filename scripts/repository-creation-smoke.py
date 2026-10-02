@@ -46,6 +46,7 @@ try {
  const headers={Origin:config.golf,'Connect-Protocol-Version':'1','Content-Type':'application/json'};
  const stored=()=>page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('golf.repository-creation.')));
  stage='actual sign-in';await page.goto(config.golf);
+ await page.getByText('Advanced token sign-in', { exact: true }).click();
  await page.getByLabel('Gitea access token',{exact:true}).fill(config.token);
  await page.getByRole('button',{name:'Continue to workspace',exact:true}).click();
  await page.getByRole('button',{name:'New repository',exact:true}).click();
@@ -108,7 +109,7 @@ try {
  check(response.status()===200);const current=(await response.json()).sessions.find(row=>row.current);check(current);
  const revoked=await context.request.post(config.golf+'/rpc/golf.v1.SessionService/RevokeSession',{headers,data:{sessionId:current.id}});
  check(revoked.status()===200);await page.getByRole('button',{name:'Check status',exact:true}).click();
- await page.getByLabel('Gitea access token',{exact:true}).waitFor();check((await stored()).length===0);
+ await page.getByText('Advanced token sign-in',{exact:true}).waitFor();check((await stored()).length===0);
  check(await page.locator('.creation-status').count()===0);check(errors.length===0);
  console.log('PASS: actual creation with lost browser acknowledgment, reload/status-only recovery, native rejection/new key, themes/mobile/keyboard and revoked-session privacy');
 } catch {console.error('Creation browser failed at '+stage+'; diagnostics withheld');process.exitCode=1;}

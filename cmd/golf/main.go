@@ -34,6 +34,13 @@ func run() error {
 
 func runCommand(ctx context.Context, args []string, output io.Writer, logger zerolog.Logger) error {
 	if len(args) > 0 {
+		if args[0] == "local-account" {
+			options, err := parseLocalAccountCommand(args)
+			if err != nil {
+				return err
+			}
+			return runLocalAccount(ctx, options, os.Stdin, output)
+		}
 		if args[0] == "recovery" {
 			options, err := parseRecoveryCommand(args)
 			if err != nil {

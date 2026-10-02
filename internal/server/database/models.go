@@ -52,6 +52,7 @@ type GolfCryptoEvent struct {
 	KeyID              string
 	SessionsCount      int64
 	OauthAttemptsCount int64
+	LocalAccountsCount int64
 }
 
 type GolfEncryptionKey struct {
@@ -97,6 +98,38 @@ type GolfIssueMutationEvent struct {
 	ObservedNumber   int64
 }
 
+type GolfLocalAccount struct {
+	ID                  int64
+	UserID              int64
+	Username            string
+	PasswordHash        string
+	EncryptedForgeToken []byte
+	CredentialBinding   []byte
+	CredentialKeyID     string
+	CredentialVersion   int64
+	IsInstanceAdmin     bool
+	DisabledAt          sql.NullTime
+	CreatedAt           time.Time
+	Email               sql.NullString
+}
+
+type GolfLocalAccountEvent struct {
+	ID                int64
+	AccountID         int64
+	OccurredAt        time.Time
+	Actor             string
+	OperationID       string
+	Action            string
+	CredentialVersion int64
+	SessionsRevoked   int64
+}
+
+type GolfLocalLoginLimit struct {
+	Bucket   int16
+	Attempts int32
+	ResetsAt time.Time
+}
+
 type GolfOauthAttempt struct {
 	StateHash         []byte
 	BindingHash       []byte
@@ -106,13 +139,14 @@ type GolfOauthAttempt struct {
 }
 
 type GolfRecoveryEvent struct {
-	ID                 int64
-	BackupID           string
-	OperationID        string
-	OccurredAt         time.Time
-	Actor              string
-	SessionsCount      int64
-	OauthAttemptsCount int64
+	ID                         int64
+	BackupID                   string
+	OperationID                string
+	OccurredAt                 time.Time
+	Actor                      string
+	SessionsCount              int64
+	OauthAttemptsCount         int64
+	LocalAccountsDisabledCount int64
 }
 
 type GolfRepositoryCreation struct {
@@ -138,14 +172,16 @@ type GolfRepositoryCreationEvent struct {
 }
 
 type GolfSession struct {
-	TokenHash       []byte
-	UserID          int64
-	EncryptedToken  []byte
-	ExpiresAt       time.Time
-	CreatedAt       time.Time
-	CredentialKind  string
-	SessionID       int64
-	CredentialKeyID string
+	TokenHash              []byte
+	UserID                 int64
+	EncryptedToken         []byte
+	ExpiresAt              time.Time
+	CreatedAt              time.Time
+	CredentialKind         string
+	SessionID              int64
+	CredentialKeyID        string
+	LocalAccountID         sql.NullInt64
+	LocalCredentialVersion sql.NullInt64
 }
 
 type GolfUser struct {

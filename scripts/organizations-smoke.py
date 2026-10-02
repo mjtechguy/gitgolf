@@ -33,6 +33,7 @@ try {
   const errors = []; page.on('pageerror', () => errors.push('runtime error'));
   stage = 'actual sign-in';
   await page.goto(config.golf);
+  await page.getByText('Advanced token sign-in', { exact: true }).click();
   await page.getByLabel('Gitea access token', { exact: true }).fill(config.memberToken);
   await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
   await page.getByRole('link', { name: 'Organizations', exact: true }).click();
@@ -72,7 +73,7 @@ try {
   check(await page.getByRole('heading', { name: config.member, exact: true }).count() === 0);
   check(await page.locator('.unit-permissions').count() === 0);
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
-  await page.getByLabel('Gitea access token', { exact: true }).waitFor();
+  await page.getByText('Advanced token sign-in', { exact: true }).waitFor();
   check(errors.length === 0);
   console.log('PASS: production-served organization/team navigation, dark/light/mobile, source links and membership-revocation cleanup');
 } catch {

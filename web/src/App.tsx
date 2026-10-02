@@ -62,11 +62,27 @@ const scopeLabels: Record<string, string> = {
 function Login({ oauthFailed }: { oauthFailed: boolean }) {
   const client = useQueryClient();
   const [token, setToken] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [passwordPending, setPasswordPending] = useState(false);
+  const [passwordError, setPasswordError] = useState<Error | null>(null);
+  const passwordAttempt = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const clear = () => { setPassword(''); setToken(''); passwordAttempt.current?.abort(); };
+    window.addEventListener('pagehide', clear);
+    return () => { window.removeEventListener('pagehide', clear); passwordAttempt.current?.abort(); };
+  }, []);
   const options = useQuery({
     queryKey: ['authentication-options'], staleTime: 0, gcTime: 0,
     queryFn: ({ signal }) => sessionClient.getAuthenticationOptions({}, { signal, timeoutMs: 8_000 }),
   });
+  const passwordAvailable = options.isSuccess && !options.isFetching && options.data.localPasswordEnabled;
   const oauthAvailable = options.isSuccess && !options.isFetching && options.data.giteaOauthEnabled;
+  async function signedIn() {
+    setPassword(''); setToken('');
+    forgetPrivateQueries(client);
+    await client.invalidateQueries({ queryKey: ['session'] });
+  }
   const oauth = useMutation({
     gcTime: 0,
     mutationFn: async () => {
@@ -81,22 +97,38 @@ function Login({ oauthFailed }: { oauthFailed: boolean }) {
   const mutation = useMutation({
     gcTime: 0,
     mutationFn: (value: string) => sessionClient.loginWithGiteaToken({ token: value }),
-    onSuccess: async () => {
-      setToken('');
-      forgetPrivateQueries(client);
-      await client.invalidateQueries({ queryKey: ['session'] });
-    },
+    onSuccess: signedIn,
   });
+  const busy = passwordPending || mutation.isPending || redirecting;
+  async function submitPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!passwordAvailable || busy || passwordAttempt.current || !username.trim() || !password) return;
+    // Keep the credential out of mutation/query caches and clear the input before waiting.
+    const request = { username: username.trim(), password };
+    const controller = new AbortController();
+    passwordAttempt.current = controller;
+    setPassword(''); setToken(''); setPasswordError(null); setPasswordPending(true);
+    try {
+      await sessionClient.loginWithPassword(request, { signal: controller.signal, timeoutMs: 15_000 });
+      await signedIn();
+    } catch (error) {
+      if (!controller.signal.aborted) setPasswordError(new Error(error instanceof ConnectError && error.code === Code.ResourceExhausted ? 'Too many sign-in attempts. Wait a few minutes and try again.' : error instanceof ConnectError && error.code === Code.Unavailable ? 'Sign-in is temporarily unavailable. Try again later.' : 'Sign-in could not be completed. Check your Golf email or username and password and try again.'));
+    } finally {
+      request.password = '';
+      passwordAttempt.current = null;
+      setPasswordPending(false);
+    }
+  }
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (token.trim() && !mutation.isPending && !redirecting) mutation.mutate(token.trim());
+    if (token.trim() && !busy && !passwordAttempt.current) { setPassword(''); setPasswordError(null); mutation.mutate(token.trim()); }
   }
   const tokenForm = <form onSubmit={submit}>
     <label htmlFor="access-token">Gitea access token</label>
-    <input id="access-token" type="password" autoComplete="off" spellCheck={false} required value={token} onChange={(event) => setToken(event.target.value)} placeholder="Enter your scoped access token" aria-describedby="token-help" disabled={mutation.isPending || redirecting} />
+    <input id="access-token" type="password" autoComplete="off" spellCheck={false} required value={token} onChange={(event) => setToken(event.target.value)} placeholder="Enter your scoped access token" aria-describedby="token-help" disabled={busy} />
     <p className="field-help" id="token-help">Create a token in Gitea → Settings → Applications. To browse, select read:user and read:repository. Reading issues and comments also requires read:issue; creating issues and posting comments requires write:issue. Organizations require read:organization. To create repositories, select write:user and write:repository.</p>
     <ErrorMessage error={mutation.error} />
-    <button className={`button ${oauthAvailable ? 'secondary' : 'primary'} full`} disabled={!token.trim() || mutation.isPending || redirecting}>{mutation.isPending ? <LoaderCircle size={17} className="spin" /> : null}{mutation.isPending ? 'Connecting…' : 'Continue to workspace'}{!mutation.isPending ? <ArrowRight size={17} /> : null}</button>
+    <button className="button secondary full" disabled={!token.trim() || busy}>{mutation.isPending ? <LoaderCircle size={17} className="spin" /> : null}{mutation.isPending ? 'Connecting…' : 'Continue to workspace'}{!mutation.isPending ? <ArrowRight size={17} /> : null}</button>
   </form>;
   return <div className="login-page">
     <header className="login-header"><Brand /><ThemeSwitch /></header>
@@ -111,16 +143,25 @@ function Login({ oauthFailed }: { oauthFailed: boolean }) {
       <section className="login-card" aria-labelledby="login-title">
         <span className="small-icon"><KeyRound size={21} /></span>
         <h2 id="login-title">Welcome to Golf</h2>
-        <p>Sign in to your connected Gitea instance.</p>
+        <p>Sign in with your Golf account.</p>
         {oauthFailed ? <p className="error" role="alert">Gitea sign-in could not be completed. Please try again or use an access token.</p> : null}
-        {options.isPending || options.isFetching ? <p className="auth-options-status" role="status"><LoaderCircle className="spin" size={14} />Checking sign-in options…</p> : options.isError ? <div className="auth-options-error"><p className="error" role="alert">Sign-in options could not be loaded. You can still use an access token.</p><button className="text-button" onClick={() => void options.refetch()}>Retry sign-in options</button></div> : !oauthAvailable ? <p className="auth-options-status">OAuth sign-in is not available for this installation. Use a scoped access token below.</p> : null}
+        {options.isPending || options.isFetching ? <p className="auth-options-status" role="status"><LoaderCircle className="spin" size={14} />Checking sign-in options…</p> : options.isError ? <div className="auth-options-error"><p className="error" role="alert">Sign-in options could not be loaded. You can still use an access token.</p><button className="text-button" onClick={() => void options.refetch()}>Retry sign-in options</button></div> : !passwordAvailable ? <p className="auth-options-status">Golf password sign-in is not enabled for this installation. Use an available sign-in option below.</p> : null}
+        <form onSubmit={submitPassword} aria-label="Golf account sign-in">
+          <label htmlFor="golf-username">Email or username</label>
+          <input id="golf-username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={username} onChange={(event) => setUsername(event.target.value)} disabled={!passwordAvailable || busy} />
+          <label htmlFor="golf-password">Password</label>
+          <input id="golf-password" name="password" type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} aria-describedby="password-help" disabled={!passwordAvailable || busy} />
+          <p className="field-help" id="password-help">Use the Golf account enrolled by your installation operator.</p>
+          <ErrorMessage error={passwordError} />
+          <button className="button primary full" disabled={!passwordAvailable || !username.trim() || !password || busy}>{passwordPending ? <LoaderCircle size={17} className="spin" /> : <ArrowRight size={17} />}{passwordPending ? 'Signing in…' : 'Sign in'}</button>
+        </form>
         {oauthAvailable ? <section className="oauth-section" aria-label="Gitea sign-in">
           <p className="oauth-provider">Continue through {options.data.providerLabel || 'Gitea'}. Your Gitea password stays with your provider.</p>
           <div className="oauth-permissions" id="oauth-permissions"><h3>Requested permissions</h3><p>Golf requests these scopes within your existing Gitea access.</p>{options.data.scopes.length ? <ul>{options.data.scopes.map((scope) => <li key={scope}><code>{scope}</code>{scopeLabels[scope] ? <span>{scopeLabels[scope]}</span> : null}</li>)}</ul> : <p>No additional scopes were listed by this installation.</p>}</div>
           <ErrorMessage error={oauth.error} />
-          <button className="button primary full" disabled={mutation.isPending || redirecting} aria-describedby="oauth-permissions" onClick={() => { setToken(''); oauth.mutate(); }}>{redirecting ? <LoaderCircle className="spin" size={17} /> : <GitBranch size={17} />}{redirecting ? 'Continuing to Gitea…' : 'Continue with Gitea'}{!redirecting ? <ArrowRight size={17} /> : null}</button>
+          <button className="button secondary full" disabled={busy} aria-describedby="oauth-permissions" onClick={() => { if (passwordAttempt.current) return; setPassword(''); setToken(''); setPasswordError(null); oauth.mutate(); }}>{redirecting ? <LoaderCircle className="spin" size={17} /> : <GitBranch size={17} />}{redirecting ? 'Continuing to Gitea…' : 'Continue with Gitea'}{!redirecting ? <ArrowRight size={17} /> : null}</button>
         </section> : null}
-        {oauthAvailable ? <details className="token-signin"><summary>Use a Gitea access token instead</summary>{tokenForm}</details> : tokenForm}
+        <details className="token-signin"><summary>Advanced token sign-in</summary>{tokenForm}</details>
         <div className="login-note"><LockKeyhole size={15} /><span>Golf stores provider credentials on the server. They are never saved in browser storage.</span></div>
       </section>
     </main>
@@ -304,7 +345,7 @@ function Workspace({ user, location }: { user: User; location: Location }) {
   });
   return <div className="app-shell">
     <aside className="sidebar"><div className="sidebar-top"><Brand /><span className="alpha-tag">EARLY ACCESS</span></div>
-      <div className="workspace-label"><span className="workspace-avatar">{user.login.slice(0, 1).toUpperCase()}</span><div><strong>{user.login}</strong><span>Personal workspace</span></div></div>
+      <div className="workspace-label"><span className="workspace-avatar">{user.login.slice(0, 1).toUpperCase()}</span><div><strong>{user.login}</strong><span>{user.isInstanceAdmin ? 'Instance administrator' : 'Personal workspace'}</span></div></div>
       <nav aria-label="Workspace"><span className="nav-label">WORKSPACE</span><Link className={`nav-item ${location.kind === 'home' || location.kind === 'repository' ? 'active' : ''}`} to="/" activeOptions={{ exact: true }}><BookOpen size={17} />Repositories<span>{location.kind === 'home' && repositoryQuery.isSuccess ? repositories.length : '—'}</span></Link><Link className={`nav-item ${location.kind === 'organizations' ? 'active' : ''}`} to="/organizations"><Building2 size={17} />Organizations</Link><Link className={`nav-item ${location.kind === 'audit' ? 'active' : ''}`} to="/audit"><History size={17} />Account activity</Link><Link className={`nav-item ${location.kind === 'api-credentials' ? 'active' : ''}`} to="/account/api-credentials"><KeyRound size={17} />API credentials</Link><Link className="nav-item" to="/" hash="capabilities"><Layers2 size={17} />Capabilities</Link><button className="nav-item sessions-nav" aria-haspopup="dialog" onClick={() => setManagingSessions(true)}><ShieldCheck size={17} />Sessions</button></nav>
       <div className="sidebar-bottom"><div className="forge-note"><GitBranch size={17} /><div><strong>Connected to Gitea</strong><span>Code stays on your forge.</span></div></div><div className="sidebar-controls"><ThemeSwitch /><button className="icon-button" aria-label="Sign out" title="Sign out" disabled={logout.isPending} onClick={() => logout.mutate()}><LogOut size={17} /></button></div><ErrorMessage error={logout.error} /></div>
     </aside>

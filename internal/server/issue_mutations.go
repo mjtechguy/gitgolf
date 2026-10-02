@@ -347,7 +347,7 @@ func (s *Server) CreateIssue(ctx context.Context, req *connect.Request[golfv1.Cr
 		return nil, rpcError(err)
 	}
 	key := keyFrom(req.Msg.Repository)
-	result, err := s.createIssueMutation(ctx, cookieValue(req.Header()), token, req.Msg.IdempotencyKey, issueMutationInput{Kind: "CREATE_ISSUE", Owner: key.Owner, Repository: key.Name, RepositoryID: id, Title: req.Msg.Title, Body: req.Msg.Body})
+	result, err := s.createIssueMutation(ctx, s.cookieValue(req.Header()), token, req.Msg.IdempotencyKey, issueMutationInput{Kind: "CREATE_ISSUE", Owner: key.Owner, Repository: key.Name, RepositoryID: id, Title: req.Msg.Title, Body: req.Msg.Body})
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -368,7 +368,7 @@ func (s *Server) CreateIssueComment(ctx context.Context, req *connect.Request[go
 		return nil, rpcError(err)
 	}
 	key := keyFrom(req.Msg.Repository)
-	result, err := s.createIssueMutation(ctx, cookieValue(req.Header()), token, req.Msg.IdempotencyKey, issueMutationInput{Kind: "CREATE_COMMENT", Owner: key.Owner, Repository: key.Name, RepositoryID: repoID, IssueID: issueID, Number: req.Msg.Number, Body: req.Msg.Body})
+	result, err := s.createIssueMutation(ctx, s.cookieValue(req.Header()), token, req.Msg.IdempotencyKey, issueMutationInput{Kind: "CREATE_COMMENT", Owner: key.Owner, Repository: key.Name, RepositoryID: repoID, IssueID: issueID, Number: req.Msg.Number, Body: req.Msg.Body})
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -380,7 +380,7 @@ func (s *Server) GetIssueMutation(ctx context.Context, req *connect.Request[golf
 	if err != nil {
 		return nil, err
 	}
-	result, err := s.getIssueMutation(ctx, cookieValue(req.Header()), token, req.Msg.IdempotencyKey)
+	result, err := s.getIssueMutation(ctx, s.cookieValue(req.Header()), token, req.Msg.IdempotencyKey)
 	if err != nil {
 		return nil, rpcError(err)
 	}

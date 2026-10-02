@@ -321,7 +321,7 @@ def backup(args, stage):
     schema = run(['docker', 'exec', pg, 'psql', '-U', 'postgres', '-d', 'golf', '-Atc',
                   'SELECT max(version_id) FROM goose_db_version WHERE is_applied;']).decode().strip()
     require(pg_version == 'postgres (PostgreSQL) 18.4' and forge_version.startswith('gitea version 1.27.3 ') and
-            schema == '202610020006')
+            schema == '202610020008')
     write(stage/'compose.json', json.dumps(config).encode())
     write(stage/'postgres-init.sh', initializer)
     for name in ['golf', 'gitea']:
@@ -380,7 +380,7 @@ def verified(args, stage):
             set(manifest['files']) == FILES and set(manifest['images']) == {'postgres', 'gitea', 'golf'})
     require(manifest['versions']['postgres'] == 'postgres (PostgreSQL) 18.4' and
             manifest['versions']['gitea'].startswith('gitea version 1.27.3 ') and
-            manifest['versions']['golf_schema'] == '202610020006')
+            manifest['versions']['golf_schema'] == '202610020008')
     for name in FILES:
         require(manifest['files'][name] == {'bytes': (stage/name).stat().st_size, 'sha256': digest(stage/name)})
     require(sum(row['bytes'] for row in manifest['files'].values()) <= args.max_bytes)
@@ -448,7 +448,8 @@ def restore(args, stage, manifest):
                     if row['Config']['Labels'].get('com.docker.compose.service') in {'golf', 'gitea'}))
     return {'backup_id': manifest['backup_id'], 'compose_file': str(args.directory/'compose.json'),
             'sessions_count': recovery['result']['sessions_count'],
-            'oauth_attempts_count': recovery['result']['oauth_attempts_count']}
+            'oauth_attempts_count': recovery['result']['oauth_attempts_count'],
+            'local_accounts_disabled_count': recovery['result']['local_accounts_disabled_count']}
 
 
 def main():

@@ -29,6 +29,7 @@ try {
  browser = await chromium.launch(); context = await browser.newContext({viewport:{width:1440,height:1000}});
  const page = await context.newPage(); const errors=[]; page.on('pageerror',()=>errors.push(true));
  stage='sign in'; await page.goto(config.golf);
+ await page.getByText('Advanced token sign-in', { exact: true }).click();
  await page.getByLabel('Gitea access token',{exact:true}).fill(config.token);
  await page.getByRole('button',{name:'Continue to workspace',exact:true}).click();
  await page.getByRole('link',{name:'Organizations',exact:true}).waitFor();

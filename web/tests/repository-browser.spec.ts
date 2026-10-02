@@ -221,6 +221,7 @@ test('permission denial hides cached source through retries; expiry and sign-out
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   await expect(page.getByText('PRIVATE_SOURCE', { exact: false })).toHaveCount(0);
   state.metadataStatus = 404;
+  await page.getByText('Advanced token sign-in', { exact: true }).click();
   await page.getByLabel('Gitea access token').fill('another-session-token');
   await page.getByRole('button', { name: 'Continue to workspace' }).click();
   await expect(page.getByRole('alert')).toHaveText('Repository not found or inaccessible.');

@@ -88,6 +88,7 @@ SELECT s.encrypted_token, s.credential_kind, u.forge_user_id, s.expires_at, s.cr
 FROM golf_sessions s
 JOIN golf_users u ON u.id = s.user_id
 WHERE s.token_hash = $1 AND s.expires_at > clock_timestamp() AND u.forge_url = $2
+AND (s.local_account_id IS NULL OR EXISTS (SELECT 1 FROM golf_local_accounts a WHERE a.id=s.local_account_id AND a.user_id=s.user_id AND a.credential_version=s.local_credential_version AND a.disabled_at IS NULL))
 `
 
 type GetSessionCredentialParams struct {
@@ -121,6 +122,7 @@ SELECT s.encrypted_token, s.credential_kind, u.forge_user_id, s.expires_at, s.cr
 FROM golf_sessions s
 JOIN golf_users u ON u.id = s.user_id
 WHERE s.token_hash = $1 AND s.expires_at > clock_timestamp() AND u.forge_url = $2
+AND (s.local_account_id IS NULL OR EXISTS (SELECT 1 FROM golf_local_accounts a WHERE a.id=s.local_account_id AND a.user_id=s.user_id AND a.credential_version=s.local_credential_version AND a.disabled_at IS NULL))
 FOR UPDATE OF s
 `
 

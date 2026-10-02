@@ -12,13 +12,17 @@ import (
 	"time"
 )
 
-type forgeCredential struct{ Kind, Token string }
+type forgeCredential struct {
+	Kind, Token string
+	Local       bool
+}
 
 type User struct {
-	ID        int64  `json:"id"`
-	Login     string `json:"login"`
-	FullName  string `json:"full_name"`
-	AvatarURL string `json:"avatar_url"`
+	IsInstanceAdmin bool   `json:"-"`
+	ID              int64  `json:"id"`
+	Login           string `json:"login"`
+	FullName        string `json:"full_name"`
+	AvatarURL       string `json:"avatar_url"`
 }
 
 type Repository struct {

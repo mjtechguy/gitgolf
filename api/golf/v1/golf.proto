@@ -6,10 +6,11 @@ option go_package = "github.com/mjtechguy/golf-git/gen/golf/v1;golfv1";
 
 // Shared API for human and machine clients. Cookie authentication uses the same
 // effective upstream permissions for every operation. Bootstrap token login is
-// explicitly named; local/OIDC and machine credential lifecycles follow later.
+// explicitly named; local passwords are Golf-owned and mapped to existing forge identities.
 service SessionService {
   rpc GetAuthenticationOptions(GetAuthenticationOptionsRequest) returns (GetAuthenticationOptionsResponse);
   rpc BeginGiteaOAuth(BeginGiteaOAuthRequest) returns (BeginGiteaOAuthResponse);
+  rpc LoginWithPassword(LoginWithPasswordRequest) returns (LoginWithPasswordResponse);
   rpc LoginWithGiteaToken(LoginWithGiteaTokenRequest) returns (LoginWithGiteaTokenResponse);
   rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
   rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
@@ -103,6 +104,8 @@ message User {
   string login = 2;
   string full_name = 3;
   string avatar_url = 4;
+  // Golf instance role; only populated for a verified local-password session.
+  bool is_instance_admin = 5;
 }
 
 message Repository {
@@ -135,6 +138,11 @@ message PageResponse {
   uint32 next_page = 1;
 }
 
+message LoginWithPasswordRequest {
+  string username = 1;
+  string password = 2;
+}
+message LoginWithPasswordResponse { User user = 1; }
 message LoginWithGiteaTokenRequest { string token = 1; }
 message LoginWithGiteaTokenResponse { User user = 1; }
 message GetSessionRequest {}
@@ -145,7 +153,7 @@ message SessionInfo {
   string created_at = 2;
   string expires_at = 3;
   bool current = 4;
-  // Current supported upstream credentials: pat or oauth. No token is returned.
+  // Current supported sign-in kinds: pat, oauth or local. No token is returned.
   string credential_kind = 5;
 }
 message ListSessionsRequest { PageRequest page = 1; }
@@ -511,6 +519,7 @@ message GetAuthenticationOptionsResponse {
   bool gitea_oauth_enabled = 1;
   string provider_label = 2;
   repeated string scopes = 3;
+  bool local_password_enabled = 4;
 }
 message BeginGiteaOAuthRequest {}
 message BeginGiteaOAuthResponse { string authorization_url = 1; }

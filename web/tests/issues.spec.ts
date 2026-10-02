@@ -272,11 +272,12 @@ test('expired session, sign-out and account switch clear pending private conveni
   await expect(dialog.getByRole('button', { name: 'Check request status' })).toBeEnabled();
   state.errors.GetIssueMutation = 'unauthenticated';
   await dialog.getByRole('button', { name: 'Check request status' }).click();
-  await expect(page.getByLabel('Gitea access token')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   await expect.poll(() => stored(page)).toEqual([]);
   await page.evaluate(() => sessionStorage.setItem('golf.issue-intent.other-origin:other-user:999:new', '{"key":"stale"}'));
   delete state.errors.GetIssueMutation;
   state.user = create(UserSchema, { id: '22', login: 'other' });
+  await page.getByText('Advanced token sign-in', { exact: true }).click();
   await page.getByLabel('Gitea access token').fill('fixture');
   await page.getByRole('button', { name: 'Continue to workspace' }).click();
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();

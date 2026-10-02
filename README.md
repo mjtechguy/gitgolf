@@ -9,9 +9,9 @@ These are infrastructure choices, not editions. AI is optional in Golf's core wo
 
 ## What works now
 
-This is a developer preview: optional scoped Gitea browser OAuth and per-user token bootstrap, encrypted PostgreSQL-backed sessions with account listing/revocation and own-account activity, member-scoped organization/team browsing, repository listing/creation, in-app source, commit history and native commit-diff browsing, ordinary issue creation/plain-text comments and pull-request/native-review reads, a JSON CLI and local stdio MCP tools, black/charcoal and light/system themes, capability reporting, and persistent Compose/Helm installations. Git writes use Gitea directly.
+This is a developer preview: Golf-owned local email-or-username/password sign-in, optional scoped Gitea browser OAuth and advanced per-user token bootstrap, encrypted PostgreSQL-backed sessions with account listing/revocation and own-account activity, member-scoped organization/team browsing, repository listing/creation, in-app source, commit history and native commit-diff browsing, ordinary issue creation/plain-text comments and pull-request/native-review reads, a JSON CLI and local stdio MCP tools, black/charcoal and light/system themes, capability reporting, and persistent Compose/Helm installations. Git writes use Gitea directly.
 
-Golf local/external OIDC identity, organization/role administration, import/connections, PR/review mutations and merge policy, pipelines/runners, agent execution, Cloudflare integrations and protected previews/CD remain roadmap work. This is not complete v1 or a competition-ready entry. No repository CI is configured.
+Self-service local account lifecycle, external OIDC, organization/role administration, import/connections, PR/review mutations and merge policy, pipelines/runners, agent execution, Cloudflare integrations and protected previews/CD remain roadmap work. This is not complete v1 or a competition-ready entry. No repository CI is configured.
 
 ## Run locally
 
@@ -35,7 +35,27 @@ docker compose exec gitea gitea --config /etc/gitea/app.ini admin user create \
   --random-password --must-change-password=false
 ```
 
-Store the printed password securely. Sign into Gitea and create a dedicated token under **Settings → Applications**, using the scopes described below. Paste that token into Golf, or configure browser OAuth below. Individual team members use their own accounts/tokens; never share a site administrator's token across users.
+Store the printed **native Gitea** password securely. Sign into Gitea and create a dedicated scoped token under **Settings → Applications**, using the scopes below. This is the forge identity/credential setup; it is not your Golf password.
+
+Enroll the corresponding **Golf account** with the server operator command. Create a private, ignored JSON file through your editor or secret manager; never put real credentials in shell arguments or committed examples. Its exact create shape is:
+
+```json
+{
+  "username": "golf-owner",
+  "email": "owner@example.com",
+  "password": "REPLACE_WITH_A_UNIQUE_GOLF_PASSWORD",
+  "forge_token": "REPLACE_WITH_THIS_USERS_SCOPED_GITEA_TOKEN",
+  "is_instance_admin": true
+}
+```
+
+Use a unique password of at least 15 characters. Restrict the input file to mode0600, then pipe it to the container:
+
+```sh
+docker compose exec -T golf golf local-account create < .tmp/local-account/enrollment.json
+```
+
+Open Golf and sign in with **Email or username** and **Password**. Golf hashes its own password and keeps the mapped forge token encrypted on the server; the Golf password is never sent to Gitea. Local administrator enrollment records a Golf instance role; the broader administration UI and organization policy are still planned. Public registration is unavailable. Operators can explicitly reset, disable or re-enable accounts; see [local authentication](docs/LOCAL_AUTHENTICATION.md). Individual users need their own mapping and scopes; never share an administrator token across users. **Advanced token sign-in** remains available for development tooling, and OAuth is optional.
 
 Open **Sessions** in the workspace sidebar to list your active Golf sessions and revoke one, the current session, or all other sessions. Confirmation is required. Revocation removes Golf access on subsequent requests; provider PATs, OAuth consent and Git credentials remain separately managed. See [session management](docs/SESSION_MANAGEMENT.md).
 
@@ -51,15 +71,15 @@ GITEA_OAUTH_CLIENT_ID=your-registered-client-id
 GITEA_OAUTH_CLIENT_SECRET=your-registered-client-secret
 ```
 
-Run `docker compose up -d golf` to apply the configuration. Golf then offers **Continue with Gitea**; login and consent occur at your configured forge. Golf requests `write:user`, `write:repository`, `read:issue` and `read:organization`, including broader upstream repository/user write authority for repository creation. Use a restricted personal token when read-only access is desired. The browser receives only a Golf session cookie; access and refresh credentials remain encrypted on the server. OAuth configuration is optional, not a Cloudflare requirement.
+Run `docker compose up -d golf` to apply the configuration. Golf then offers **Continue with Gitea**; login and consent occur at your configured forge. Golf requests `write:user`, `write:repository`, `write:issue` and `read:organization`, including broader upstream repository/user write authority for repository creation. Use a restricted personal token when read-only access is desired. The browser receives only a Golf session cookie; access and refresh credentials remain encrypted on the server. OAuth configuration is optional, not a Cloudflare requirement.
 
-The fixed callback uses single-use ten-minute state, a separate HttpOnly browser binding and S256 PKCE. Sessions retain their absolute twelve-hour expiry despite access-token refresh. Logout removes the Golf session; manage provider consent in Gitea. This is Gitea OAuth, not complete Golf local/OIDC account management, organization policy or CLI OAuth login. See [ADR 0003](docs/decisions/0003-gitea-oauth-and-session-refresh.md).
+The fixed callback uses single-use ten-minute state, a separate HttpOnly browser binding and S256 PKCE. Sessions retain their absolute twelve-hour expiry despite access-token refresh. Logout removes the Golf session; manage provider consent in Gitea. This is Gitea OAuth, not complete self-service account management or external OIDC, organization policy or CLI OAuth login. See [ADR 0003](docs/decisions/0003-gitea-oauth-and-session-refresh.md).
 
 **Token scopes (verified on Gitea 1.27.3):** use `read:user` plus `read:repository` to sign in and browse. Creating repositories additionally requires `write:user` plus `write:repository` (write includes read). Gitea applies both user and repository scopes to its `/user/repos` route; Golf preserves that authorization. Read-only tokens can browse but creation is rejected; explicit-key requests return recorded rejection evidence, while legacy unkeyed calls retain permission errors.
 
 Add `read:organization` to browse your organizations and provider-visible teams; this scope does not grant membership. For an existing OAuth grant without it, revoke Golf’s grant in Gitea **Settings → Applications**, then sign in through Golf and approve the new scopes. Signing in again alone can reuse the narrower grant. Add `read:issue` to browse issues. Code browsing continues to work without issue scope; the issue panel reports the missing permission. Scopes never grant repository access the user does not already have.
 
-The browser receives an opaque HttpOnly session cookie, not the upstream credential. The server stores only the session identifier's hash and an AES-GCM-encrypted Gitea token. Sessions expire after 12 hours. Token revocation is enforced by Gitea on subsequent calls. Local insecure cookies are explicitly allowed only on loopback origins; remote use requires HTTPS and secure cookies.
+The browser receives an opaque HttpOnly session cookie, not the upstream credential. The server stores only the session identifier's hash and an AES-GCM-encrypted Gitea token. Sessions persist across backend restarts and expire after 12 hours. HTTPS uses a host-only `__Host-golf_session` cookie with Secure, HttpOnly and SameSite=Lax; loopback development uses `golf_session`. Password reset/disable invalidates local-password sessions; saved cookies and their delegated API credentials then fail. Token revocation is enforced by Gitea on subsequent calls. Local insecure cookies are explicitly allowed only on loopback origins; remote use requires HTTPS and secure cookies.
 
 Secrets are generated once into ignored `.env`. Keep that file and all configured encryption keys secure. The original `GOLF_ENCRYPTION_KEY` remains supported as the `legacy` key; do not replace its bytes under the same label. The database initializes two independent databases/roles, one for Golf and one for Gitea. Changing `.env` passwords later does not rotate existing PostgreSQL roles. Do not delete `.env` while retaining volumes and expect a fresh credential set to work.
 
@@ -73,15 +93,15 @@ Do not add `--volumes` unless intentionally erasing this installation. Preserve 
 
 ## Credential key operations
 
-The [keyring contract](docs/CREDENTIAL_KEYRING.md) documents `GOLF_ENCRYPTION_KEYS` (a JSON map of labels to base64 32-byte keys) and `GOLF_ACTIVE_ENCRYPTION_KEY`, alongside the compatible single-key variable. Registered labels are permanently bound to their material. Every stored session and pending OAuth verifier must retain its read key, including expired records.
+The [keyring contract](docs/CREDENTIAL_KEYRING.md) documents `GOLF_ENCRYPTION_KEYS` (a JSON map of labels to base64 32-byte keys) and `GOLF_ACTIVE_ENCRYPTION_KEY`, alongside the compatible single-key variable. Registered labels are permanently bound to their material. Every stored session, pending OAuth verifier and persistent local-account forge credential must retain its read key, including expired records and disabled accounts.
 
 Operator commands live in the server binary, separately from the read-only user CLI. Supply the Golf database/key environment securely, then use `./bin/golf-server keys status`, `keys activate`, `keys rotate --batch-size 100 --max-batches 10`, or `keys retirement-check --key-id legacy`. The container equivalent is `docker compose run --rm --no-deps golf keys status` with an already-built image and available database. Even status can apply migrations and register legacy metadata; partial rotation can exit zero, so inspect its JSON state/counts.
 
-Before activation, drain all old Golf writers and in-flight OAuth exchanges. Database fencing cannot reverse an issuer's completed refresh, and transparent rolling cutover is not supported. Retirement requires zero uses in both credential tables and does not erase secrets or old backup keys. Targeted database and old-binary PAT/pending-verifier checks pass; live OAuth exchange across activation and wider rollout/recovery qualification remain open. This does not complete P1.3 or add KMS/age/FIPS support.
+Before activation, drain all old Golf writers and in-flight OAuth exchanges. Database fencing cannot reverse an issuer's completed refresh, and transparent rolling cutover is not supported. Retirement requires zero uses across all three credential families and does not erase secrets or old backup keys. Targeted database and old-binary PAT/pending-verifier checks pass; live OAuth exchange across activation and wider rollout/recovery qualification remain open. This does not complete P1.3 or add KMS/age/FIPS support.
 
 ## Offline backup and quarantined restore
 
-The [recovery guide](docs/RECOVERY.md) documents `scripts/recovery.py backup|verify|restore` for the canonical three-service Docker installation: PostgreSQL 18.4, Gitea 1.27.3 and Golf schema 202610020005. It captures native database dumps, both complete Gitea volumes and resolved runtime credentials/configuration into a private age-encrypted archive. A fresh restore requires the exact local image IDs, invalidates every restored Golf session/pending PKCE attempt and leaves Golf/Gitea stopped. Images are not included.
+The [recovery guide](docs/RECOVERY.md) documents `scripts/recovery.py backup|verify|restore` for the canonical three-service Docker installation: PostgreSQL 18.4, Gitea 1.27.3 and Golf schema 202610020007. It captures native database dumps, both complete Gitea volumes and resolved runtime credentials/configuration into a private age-encrypted archive. A fresh restore requires the exact local image IDs, invalidates every restored Golf session/pending PKCE attempt and disables all restored local accounts and leaves Golf/Gitea stopped. Images are not included.
 
 All writers must be stopped and drained before capture or restore; `--writers-drained` asserts that operator precondition and does not fence administrators. Accept only trusted operator backups, protect plaintext staging and restore configuration, and reconcile native/provider revocations, deletion decisions and outbound work before reopening. Real PostgreSQL safeguards, offline archive checks and the full native fresh-restore drill pass, including preserved creation-operation/event history, same-key inspection/replay without another create, signed Git, hydrated LFS, attachments, protections, SSH/signing identity, fresh access and simultaneous whole-stack restart. The small fixture skips the minimum-size-cap negative case; this is not an 8 GiB or load qualification. This does not complete P1.6, qualify Kubernetes/external object stores or establish RPO/RTO targets. Backup age encryption does not change the application credential cipher.
 

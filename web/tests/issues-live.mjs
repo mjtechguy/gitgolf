@@ -49,6 +49,7 @@ try {
   const pending = () => page.evaluate(() => Object.entries(sessionStorage).filter(([key]) => key.startsWith('golf.issue-intent.')));
   stage('native sign-in, issue creation, immutable target and literal body');
   await page.goto(golf.origin + listPath);
+  await page.getByText('Advanced token sign-in', { exact: true }).click();
   await page.getByLabel('Gitea access token', { exact: true }).fill(pat);
   await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
   await page.getByRole('button', { name: 'New issue', exact: true }).waitFor();

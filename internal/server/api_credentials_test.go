@@ -68,7 +68,7 @@ func TestApiCredentialBoundary(t *testing.T) {
 	}
 	token := apiTokenPrefix + base64.RawURLEncoding.EncodeToString(make([]byte, 32))
 	for _, procedure := range []string{golfv1connect.ApiCredentialServiceCreateApiCredentialProcedure, golfv1connect.ApiCredentialServiceListApiCredentialsProcedure, golfv1connect.ApiCredentialServiceRevokeApiCredentialProcedure,
-		golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.SessionServiceGetAuthenticationOptionsProcedure,
+		golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLoginWithPasswordProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.SessionServiceGetAuthenticationOptionsProcedure,
 		golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceListSessionsProcedure, golfv1connect.SessionServiceRevokeSessionProcedure,
 		golfv1connect.SessionServiceRevokeOtherSessionsProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure, "/golf.v1.FutureService/Read"} {
 		response := apiRequest(s, token, procedure, "{malformed")
@@ -529,7 +529,7 @@ func TestApiCredentialMigrationExpiryRecoveryPostgres(t *testing.T) {
 	}
 	pat, oauth := f.session(t, "alice", "pat"), f.session(t, "alice", "oauth")
 	var before, after []byte
-	query := `SELECT coalesce(json_agg(s ORDER BY session_id)::text,'[]') FROM golf_sessions s`
+	query := `SELECT coalesce(json_agg(to_jsonb(s) - 'local_account_id' - 'local_credential_version' ORDER BY session_id)::text,'[]') FROM golf_sessions s`
 	if err := f.db.QueryRow(query).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
@@ -538,6 +538,10 @@ func TestApiCredentialMigrationExpiryRecoveryPostgres(t *testing.T) {
 	}
 	if err := f.db.QueryRow(query).Scan(&after); err != nil || !bytes.Equal(before, after) {
 		t.Fatal("migration changed old sessions", err)
+	}
+	var linked int
+	if err := f.db.QueryRow("SELECT count(*) FROM golf_sessions WHERE local_account_id IS NOT NULL OR local_credential_version IS NOT NULL").Scan(&linked); err != nil || linked != 0 {
+		t.Fatal("migration linked historical sessions to local credentials", err)
 	}
 	var count int
 	if err := f.db.QueryRow("SELECT count(*) FROM golf_api_credential_events").Scan(&count); err != nil || count != 0 {

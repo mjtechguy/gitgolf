@@ -29,6 +29,7 @@ try {
  browser=await chromium.launch();context=await browser.newContext({viewport:{width:1440,height:1000}});
  const page=await context.newPage();const errors=[];page.on('pageerror',()=>errors.push(true));
  stage='sign in';await page.goto(config.golf);
+ await page.getByText('Advanced token sign-in', { exact: true }).click();
  await page.getByLabel('Gitea access token',{exact:true}).fill(config.token);
  await page.getByRole('button',{name:'Continue to workspace',exact:true}).click();
  await page.getByRole('link',{name:'Account activity',exact:true}).click();
@@ -53,7 +54,7 @@ try {
  {headers:{Origin:config.golf,'Connect-Protocol-Version':'1','Content-Type':'application/json'},data:{sessionId:current.id}});
  check(revoked.status()===200);
  await page.getByRole('button',{name:'Refresh activity',exact:true}).click();
- await page.getByLabel('Gitea access token',{exact:true}).waitFor();check(await page.locator('.audit-event').count()===0);check(errors.length===0);
+ await page.getByText('Advanced token sign-in',{exact:true}).waitFor();check(await page.locator('.audit-event').count()===0);check(errors.length===0);
  console.log('PASS: production account activity, snapshot pagination, details, deep links, dark/light/mobile and revoked-session cleanup');
 } catch {console.error('Audit browser failed at '+stage+'; sensitive diagnostics withheld');process.exitCode=1;}
 finally {

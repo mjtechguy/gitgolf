@@ -37,11 +37,13 @@ UPDATE golf_encryption_policy SET active_key_id = $1 WHERE singleton;
 SELECT pg_advisory_xact_lock(74191526730202002);
 
 -- name: CountCredentialKeys :many
-SELECT credential_key_id, sum(session_count)::bigint AS sessions, sum(attempt_count)::bigint AS oauth_attempts
+SELECT credential_key_id, sum(session_count)::bigint AS sessions, sum(attempt_count)::bigint AS oauth_attempts, sum(local_count)::bigint AS local_accounts
 FROM (
-    SELECT credential_key_id, count(*) AS session_count, 0::bigint AS attempt_count FROM golf_sessions GROUP BY credential_key_id
+    SELECT credential_key_id, count(*) AS session_count, 0::bigint AS attempt_count, 0::bigint AS local_count FROM golf_sessions GROUP BY credential_key_id
     UNION ALL
-    SELECT credential_key_id, 0::bigint, count(*) FROM golf_oauth_attempts GROUP BY credential_key_id
+    SELECT credential_key_id, 0::bigint, count(*), 0::bigint FROM golf_oauth_attempts GROUP BY credential_key_id
+    UNION ALL
+    SELECT credential_key_id, 0::bigint, 0::bigint, count(*) FROM golf_local_accounts GROUP BY credential_key_id
 ) counts
 GROUP BY credential_key_id ORDER BY credential_key_id;
 
@@ -63,8 +65,8 @@ FOR UPDATE SKIP LOCKED;
 UPDATE golf_oauth_attempts SET encrypted_verifier = $2, credential_key_id = $3 WHERE state_hash = $1;
 
 -- name: AppendCryptoEvent :exec
-INSERT INTO golf_crypto_events (operation_id, action, key_id, sessions_count, oauth_attempts_count)
-VALUES ($1, $2, $3, $4, $5);
+INSERT INTO golf_crypto_events (operation_id, action, key_id, sessions_count, oauth_attempts_count, local_accounts_count)
+VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: GetKeyFingerprint :one
 SELECT fingerprint FROM golf_encryption_keys WHERE key_id = $1;

@@ -37,7 +37,7 @@ function EventTime({ value }: { value: string }) {
 
 function EventRow({ event }: { event: AuditEvent }) {
   return <li className="audit-event">
-    <div className="audit-event-heading"><h3>{actionLabels[event.action] || 'Session event'}</h3><span className="visibility">{event.credentialKind === 'oauth' ? 'Gitea OAuth' : event.credentialKind === 'pat' ? 'Gitea access token' : 'Golf session'}</span></div>
+    <div className="audit-event-heading"><h3>{actionLabels[event.action] || 'Session event'}</h3><span className="visibility">{event.credentialKind === 'oauth' ? 'Gitea OAuth' : event.credentialKind === 'pat' ? 'Gitea access token' : event.credentialKind === 'local' ? 'Golf password' : 'Golf session'}</span></div>
     <p className="audit-time"><EventTime value={event.occurredAt} /></p>
     <details><summary>Event details <span className="audit-id">{event.id}</span></summary><dl className="audit-metadata">
       <div><dt>Event ID</dt><dd><code>{event.id}</code></dd></div>

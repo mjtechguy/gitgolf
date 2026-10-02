@@ -8,6 +8,8 @@ import (
 )
 
 var (
+	errLocalCredentials           = errors.New("local credentials rejected")
+	errLocalRateLimited           = errors.New("local login rate limit")
 	errIssueTargetChanged         = errors.New("issue target identity changed")
 	errIssueMutationConflict      = errors.New("issue mutation key has different inputs")
 	errApiCredentialReadOnly      = errors.New("API credential procedure denied")
@@ -40,6 +42,10 @@ func rpcError(err error) error {
 	var input inputError
 	var upstream forgeError
 	switch {
+	case errors.Is(err, errLocalCredentials):
+		code, message = connect.CodeUnauthenticated, "Sign-in could not be completed. Check your Golf username and password and try again."
+	case errors.Is(err, errLocalRateLimited):
+		code, message = connect.CodeResourceExhausted, "Too many sign-in attempts. Wait before trying again."
 	case errors.Is(err, errIssueTargetChanged):
 		code, message = connect.CodeFailedPrecondition, "The repository or issue identity changed. Refresh the discussion before continuing."
 	case errors.Is(err, errIssueMutationConflict):

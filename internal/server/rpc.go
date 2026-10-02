@@ -23,12 +23,22 @@ func rpcToken(ctx context.Context) (forgeCredential, error) {
 	}
 	return token, nil
 }
-func cookieValue(header http.Header) string {
-	cookie, err := (&http.Request{Header: header}).Cookie(cookieName)
-	if err != nil {
+func (s *Server) cookieValue(header http.Header) string {
+	name := cookieName
+	if !s.config.AllowInsecureCookies {
+		name = "__Host-golf_session"
+	}
+	value, count := "", 0
+	for _, cookie := range (&http.Request{Header: header}).Cookies() {
+		if cookie.Name == name {
+			value = cookie.Value
+			count++
+		}
+	}
+	if count != 1 {
 		return ""
 	}
-	return cookie.Value
+	return value
 }
 
 func (s *Server) rpcHandler() http.Handler {
@@ -85,7 +95,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		}
 		public := false
 		switch procedure {
-		case golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
+		case golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLoginWithPasswordProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
 			public = true
 		case golfv1connect.AuditServiceListAuditEventsProcedure, golfv1connect.SessionServiceGetSessionProcedure,
 			golfv1connect.ApiCredentialServiceCreateApiCredentialProcedure, golfv1connect.ApiCredentialServiceListApiCredentialsProcedure, golfv1connect.ApiCredentialServiceRevokeApiCredentialProcedure,
@@ -104,7 +114,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			return
 		}
 		if !public {
-			token, err := s.sessionCredential(r.Context(), cookieValue(r.Header))
+			token, err := s.sessionCredential(r.Context(), s.cookieValue(r.Header))
 			if err != nil {
 				fail(rpcError(err))
 				return
@@ -122,7 +132,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 	})
 }
 func wireUser(user User) *golfv1.User {
-	return &golfv1.User{Id: strconv.FormatInt(user.ID, 10), Login: user.Login, FullName: user.FullName, AvatarUrl: user.AvatarURL}
+	return &golfv1.User{Id: strconv.FormatInt(user.ID, 10), Login: user.Login, FullName: user.FullName, AvatarUrl: user.AvatarURL, IsInstanceAdmin: user.IsInstanceAdmin}
 }
 func wireRepository(repo Repository) *golfv1.Repository {
 	updated := ""
@@ -162,8 +172,17 @@ func wireIssue(issue Issue) *golfv1.Issue {
 	}
 	return &golfv1.Issue{Id: strconv.FormatInt(issue.ID, 10), Number: uint32(issue.Number), Title: issue.Title, Body: issue.Body, State: state, User: wireUser(issue.User), Comments: uint32(issue.Comments), CreatedAt: issue.CreatedAt, UpdatedAt: issue.UpdatedAt, HtmlUrl: issue.HTMLURL}
 }
+func (s *Server) LoginWithPassword(ctx context.Context, req *connect.Request[golfv1.LoginWithPasswordRequest]) (*connect.Response[golfv1.LoginWithPasswordResponse], error) {
+	result, err := s.loginLocalSession(ctx, req.Msg.Username, req.Msg.Password, s.cookieValue(req.Header()))
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	response := connect.NewResponse(&golfv1.LoginWithPasswordResponse{User: wireUser(result.User)})
+	response.Header().Add("Set-Cookie", s.sessionCookie(result.Value, result.Expires, int(sessionLifetime.Seconds())).String())
+	return response, nil
+}
 func (s *Server) LoginWithGiteaToken(ctx context.Context, req *connect.Request[golfv1.LoginWithGiteaTokenRequest]) (*connect.Response[golfv1.LoginWithGiteaTokenResponse], error) {
-	result, err := s.loginSession(ctx, req.Msg.Token, cookieValue(req.Header()))
+	result, err := s.loginSession(ctx, req.Msg.Token, s.cookieValue(req.Header()))
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -171,7 +190,7 @@ func (s *Server) LoginWithGiteaToken(ctx context.Context, req *connect.Request[g
 	response.Header().Add("Set-Cookie", s.sessionCookie(result.Value, result.Expires, int(sessionLifetime.Seconds())).String())
 	return response, nil
 }
-func (s *Server) GetSession(ctx context.Context, _ *connect.Request[golfv1.GetSessionRequest]) (*connect.Response[golfv1.GetSessionResponse], error) {
+func (s *Server) GetSession(ctx context.Context, req *connect.Request[golfv1.GetSessionRequest]) (*connect.Response[golfv1.GetSessionResponse], error) {
 	token, err := rpcToken(ctx)
 	if err != nil {
 		return nil, err
@@ -180,10 +199,14 @@ func (s *Server) GetSession(ctx context.Context, _ *connect.Request[golfv1.GetSe
 	if err != nil {
 		return nil, rpcError(err)
 	}
+	user, err = s.localSessionUser(ctx, s.cookieValue(req.Header()), user)
+	if err != nil {
+		return nil, rpcError(err)
+	}
 	return connect.NewResponse(&golfv1.GetSessionResponse{User: wireUser(user)}), nil
 }
 func (s *Server) Logout(ctx context.Context, req *connect.Request[golfv1.LogoutRequest]) (*connect.Response[golfv1.LogoutResponse], error) {
-	if err := s.logoutSession(ctx, cookieValue(req.Header())); err != nil {
+	if err := s.logoutSession(ctx, s.cookieValue(req.Header())); err != nil {
 		return nil, rpcError(err)
 	}
 	response := connect.NewResponse(&golfv1.LogoutResponse{})
@@ -195,7 +218,7 @@ func (s *Server) ListSessions(ctx context.Context, req *connect.Request[golfv1.L
 	if err != nil {
 		return nil, err
 	}
-	rows, next, err := s.listSessions(ctx, cookieValue(req.Header()), token, pageFrom(req.Msg.Page))
+	rows, next, err := s.listSessions(ctx, s.cookieValue(req.Header()), token, pageFrom(req.Msg.Page))
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -212,7 +235,7 @@ func (s *Server) RevokeSession(ctx context.Context, req *connect.Request[golfv1.
 	if err != nil {
 		return nil, err
 	}
-	current, err := s.revokeSession(ctx, cookieValue(req.Header()), token, req.Msg.SessionId)
+	current, err := s.revokeSession(ctx, s.cookieValue(req.Header()), token, req.Msg.SessionId)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -227,7 +250,7 @@ func (s *Server) RevokeOtherSessions(ctx context.Context, req *connect.Request[g
 	if err != nil {
 		return nil, err
 	}
-	count, err := s.revokeOtherSessions(ctx, cookieValue(req.Header()), token)
+	count, err := s.revokeOtherSessions(ctx, s.cookieValue(req.Header()), token)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -269,7 +292,7 @@ func (s *Server) CreateRepository(ctx context.Context, req *connect.Request[golf
 	if err != nil {
 		return nil, err
 	}
-	creation, repo, err := s.createRepository(ctx, cookieValue(req.Header()), token, req.Msg.Name, req.Msg.Description, req.Msg.Private, req.Msg.IdempotencyKey)
+	creation, repo, err := s.createRepository(ctx, s.cookieValue(req.Header()), token, req.Msg.Name, req.Msg.Description, req.Msg.Private, req.Msg.IdempotencyKey)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -284,7 +307,7 @@ func (s *Server) GetRepositoryCreation(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, err
 	}
-	creation, repo, err := s.getRepositoryCreation(ctx, cookieValue(req.Header()), token, req.Msg.IdempotencyKey)
+	creation, repo, err := s.getRepositoryCreation(ctx, s.cookieValue(req.Header()), token, req.Msg.IdempotencyKey)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -340,7 +363,7 @@ func (s *Server) GetCommitDiff(ctx context.Context, req *connect.Request[golfv1.
 	if err != nil {
 		return nil, err
 	}
-	result, err := s.getCommitDiff(ctx, cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), req.Msg.CommitId)
+	result, err := s.getCommitDiff(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), req.Msg.CommitId)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -433,7 +456,7 @@ func (s *Server) ListOrganizations(ctx context.Context, req *connect.Request[gol
 	if err != nil {
 		return nil, err
 	}
-	rows, next, err := s.listOrganizations(ctx, cookieValue(req.Header()), token, pageFrom(req.Msg.Page))
+	rows, next, err := s.listOrganizations(ctx, s.cookieValue(req.Header()), token, pageFrom(req.Msg.Page))
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -448,7 +471,7 @@ func (s *Server) GetOrganization(ctx context.Context, req *connect.Request[golfv
 	if err != nil {
 		return nil, err
 	}
-	org, err := s.getOrganization(ctx, cookieValue(req.Header()), token, req.Msg.Organization)
+	org, err := s.getOrganization(ctx, s.cookieValue(req.Header()), token, req.Msg.Organization)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -459,7 +482,7 @@ func (s *Server) ListTeams(ctx context.Context, req *connect.Request[golfv1.List
 	if err != nil {
 		return nil, err
 	}
-	rows, next, err := s.listOrganizationTeams(ctx, cookieValue(req.Header()), token, req.Msg.Organization, pageFrom(req.Msg.Page))
+	rows, next, err := s.listOrganizationTeams(ctx, s.cookieValue(req.Header()), token, req.Msg.Organization, pageFrom(req.Msg.Page))
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -474,7 +497,7 @@ func (s *Server) GetTeam(ctx context.Context, req *connect.Request[golfv1.GetTea
 	if err != nil {
 		return nil, err
 	}
-	team, err := s.getOrganizationTeam(ctx, cookieValue(req.Header()), token, req.Msg.Organization, req.Msg.TeamId)
+	team, err := s.getOrganizationTeam(ctx, s.cookieValue(req.Header()), token, req.Msg.Organization, req.Msg.TeamId)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -485,7 +508,7 @@ func (s *Server) ListTeamMembers(ctx context.Context, req *connect.Request[golfv
 	if err != nil {
 		return nil, err
 	}
-	rows, next, err := s.listOrganizationTeamMembers(ctx, cookieValue(req.Header()), token, req.Msg.Organization, req.Msg.TeamId, pageFrom(req.Msg.Page))
+	rows, next, err := s.listOrganizationTeamMembers(ctx, s.cookieValue(req.Header()), token, req.Msg.Organization, req.Msg.TeamId, pageFrom(req.Msg.Page))
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -500,7 +523,7 @@ func (s *Server) ListTeamRepositories(ctx context.Context, req *connect.Request[
 	if err != nil {
 		return nil, err
 	}
-	rows, next, err := s.listOrganizationTeamRepositories(ctx, cookieValue(req.Header()), token, req.Msg.Organization, req.Msg.TeamId, pageFrom(req.Msg.Page))
+	rows, next, err := s.listOrganizationTeamRepositories(ctx, s.cookieValue(req.Header()), token, req.Msg.Organization, req.Msg.TeamId, pageFrom(req.Msg.Page))
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -516,7 +539,7 @@ func (s *Server) ListPullRequests(ctx context.Context, req *connect.Request[golf
 	if err != nil {
 		return nil, err
 	}
-	rows, next, err := s.listPullRequests(ctx, cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), req.Msg.State, pageFrom(req.Msg.Page))
+	rows, next, err := s.listPullRequests(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), req.Msg.State, pageFrom(req.Msg.Page))
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -527,7 +550,7 @@ func (s *Server) GetPullRequest(ctx context.Context, req *connect.Request[golfv1
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.getPullRequest(ctx, cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), req.Msg.Number)
+	row, err := s.getPullRequest(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), req.Msg.Number)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -538,7 +561,7 @@ func (s *Server) ListPullRequestReviews(ctx context.Context, req *connect.Reques
 	if err != nil {
 		return nil, err
 	}
-	rows, next, err := s.listPullRequestReviews(ctx, cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), req.Msg.Number, pageFrom(req.Msg.Page))
+	rows, next, err := s.listPullRequestReviews(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), req.Msg.Number, pageFrom(req.Msg.Page))
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -550,7 +573,7 @@ func (s *Server) ListAuditEvents(ctx context.Context, req *connect.Request[golfv
 	if err != nil {
 		return nil, err
 	}
-	rows, next, snapshot, err := s.listAuditEvents(ctx, cookieValue(req.Header()), token, req.Msg.Limit, req.Msg.BeforeId, req.Msg.SnapshotId)
+	rows, next, snapshot, err := s.listAuditEvents(ctx, s.cookieValue(req.Header()), token, req.Msg.Limit, req.Msg.BeforeId, req.Msg.SnapshotId)
 	if err != nil {
 		return nil, rpcError(err)
 	}

@@ -182,6 +182,7 @@ test('sign-out aborts pending history and another sign-in never reuses it', asyn
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   await expect(page.locator('.audit-event')).toHaveCount(0);
   state.events = []; state.barrier = undefined; release();
+  await page.getByText('Advanced token sign-in', { exact: true }).click();
   await page.getByLabel('Gitea access token').fill('fixture-only-token');
   await page.getByRole('button', { name: 'Continue to workspace' }).click();
   await expect(page.getByRole('heading', { name: 'No recorded account activity' })).toBeVisible();

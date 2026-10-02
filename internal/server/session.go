@@ -26,7 +26,11 @@ func sessionHash(value string) ([]byte, error) {
 	return hash[:], nil
 }
 func (s *Server) sessionCookie(value string, expires time.Time, maxAge int) *http.Cookie {
-	return &http.Cookie{Name: cookieName, Value: value, Path: "/", HttpOnly: true, Secure: !s.config.AllowInsecureCookies, SameSite: http.SameSiteLaxMode, Expires: expires, MaxAge: maxAge}
+	name := cookieName
+	if !s.config.AllowInsecureCookies {
+		name = "__Host-golf_session"
+	}
+	return &http.Cookie{Name: name, Value: value, Path: "/", HttpOnly: true, Secure: !s.config.AllowInsecureCookies, SameSite: http.SameSiteLaxMode, Expires: expires, MaxAge: maxAge}
 }
 
 type loginResult struct {
@@ -47,6 +51,9 @@ func (s *Server) loginSession(ctx context.Context, token, oldValue string) (logi
 }
 
 func (s *Server) createSession(ctx context.Context, user User, kind, payload, oldValue string) (loginResult, error) {
+	return s.createSessionBound(ctx, user, kind, payload, oldValue, nil)
+}
+func (s *Server) createSessionBound(ctx context.Context, user User, kind, payload, oldValue string, local *localLoginBinding) (loginResult, error) {
 	random := make([]byte, 32)
 	if _, err := rand.Read(random); err != nil {
 		return loginResult{}, err
@@ -79,6 +86,19 @@ func (s *Server) createSession(ctx context.Context, user User, kind, payload, ol
 	if err != nil {
 		return loginResult{}, errStorageUnavailable
 	}
+	if local != nil {
+		account, err := queries.LockLocalAccount(ctx, database.LockLocalAccountParams{ID: local.accountID, UserID: id})
+		if errors.Is(err, sql.ErrNoRows) {
+			return loginResult{}, errLocalCredentials
+		}
+		if err != nil {
+			return loginResult{}, errStorageUnavailable
+		}
+		if local.userID != id || account.DisabledAt.Valid || account.CredentialVersion != local.version {
+			return loginResult{}, errLocalCredentials
+		}
+		user.IsInstanceAdmin = account.IsInstanceAdmin
+	}
 	operation, err := newAuditOperation()
 	if err != nil {
 		return loginResult{}, err
@@ -106,7 +126,12 @@ func (s *Server) createSession(ctx context.Context, user User, kind, payload, ol
 	if err != nil {
 		return loginResult{}, err
 	}
-	sessionID, err := queries.CreateKeyedSession(ctx, database.CreateKeyedSessionParams{TokenHash: hash, UserID: id, EncryptedToken: encrypted, ExpiresAt: expires, CredentialKind: kind, CredentialKeyID: keyID})
+	var sessionID int64
+	if local == nil {
+		sessionID, err = queries.CreateKeyedSession(ctx, database.CreateKeyedSessionParams{TokenHash: hash, UserID: id, EncryptedToken: encrypted, ExpiresAt: expires, CredentialKind: kind, CredentialKeyID: keyID})
+	} else {
+		sessionID, err = queries.CreateLocalSession(ctx, database.CreateLocalSessionParams{TokenHash: hash, UserID: id, EncryptedToken: encrypted, ExpiresAt: expires, CredentialKeyID: keyID, LocalAccountID: sql.NullInt64{Int64: local.accountID, Valid: true}, LocalCredentialVersion: sql.NullInt64{Int64: local.version, Valid: true}})
+	}
 	if err != nil {
 		return loginResult{}, errStorageUnavailable
 	}
@@ -142,11 +167,11 @@ func (s *Server) sessionCredential(ctx context.Context, value string) (forgeCred
 		return forgeCredential{}, errCredentialUnavailable
 	}
 	switch row.CredentialKind {
-	case "pat":
+	case "pat", "local":
 		if !row.ExpiresAt.After(time.Now()) {
 			return forgeCredential{}, errUnauthenticated
 		}
-		return forgeCredential{Kind: "pat", Token: payload}, nil
+		return forgeCredential{Kind: "pat", Token: payload, Local: row.CredentialKind == "local"}, nil
 	case "oauth":
 		credential, err := s.oauthCredential(ctx, hash, payload)
 		if !row.ExpiresAt.After(time.Now()) {

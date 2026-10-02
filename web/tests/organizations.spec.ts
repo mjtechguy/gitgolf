@@ -172,6 +172,7 @@ test('private organization views do not survive sign-out and a different user', 
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   state.login = 'bob';
+  await page.getByText('Advanced token sign-in', { exact: true }).click();
   await page.getByLabel('Gitea access token').fill('bob-fixture-token');
   await page.getByRole('button', { name: 'Continue to workspace' }).click();
   await expect(page.getByRole('alert')).toHaveText('Organization or team not found or inaccessible.');

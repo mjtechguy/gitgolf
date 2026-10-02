@@ -267,6 +267,8 @@ Current shared-core discussion increment: [ordinary issue/comment writes](docs/I
 
 OSS includes local invite-only accounts, configurable OIDC login, organizations, teams, and safe bootstrap. Bootstrap issues a one-time administrator enrollment credential; it is invalidated after enrollment. No public default password. Local password storage uses a reviewed password-hashing implementation; hardened profiles may require external federation instead.
 
+Prioritize genuine Golf username/password sign-in for the local developer installation; a native Gitea token input is advanced bootstrap tooling, not the primary product login. The [local authentication contract](docs/LOCAL_AUTHENTICATION.md) defines operator-enrolled Golf password verifiers, independently scoped immutable forge mappings and database-backed opaque sessions. Passwords use Argon2id with reviewed fixed parameters; do not forward Golf passwords to Gitea or store them as reversible ciphertext. HTTPS cookies are host-only `__Host-` cookies with Secure, HttpOnly, SameSite and persistent expiry; local HTTP is explicitly limited to loopback. Backend restarts do not invalidate unexpired sessions; password reset/disable, explicit logout/revocation and expiry do. Bound login attempts across replicas and password-hash concurrency, and deny account/role claims from native JSON. Recovery disables restored local accounts until deliberate re-enrollment with a fresh password and validated immutable forge credential. Self-service recovery, MFA, step-up, external OIDC and a complete instance-admin management surface remain separately qualified tasks. Use [OWASP password storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) and [session management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) as review inputs, not an automatic certification.
+
 Login with GitHub/GitLab is separate from authorizing a repository connection. Matching an email alone cannot merge identities or grant organization membership. Account linking requires proof of control of both accounts.
 
 Map Golf accounts and groups to Gitea identities; evaluate Gitea permissions for writes and sensitive reads. Do not mint an unrestricted administrator token for every product operation.
@@ -1524,3 +1526,8 @@ These extend P1.4/P8.7; assign implementation/review owners in the execution led
 | W5 | Publication and maintenance quality | No credential/private-content leaks or unsupported claims; accessible layout, source/version navigation and documented support/edit policy. |
 
 The bootstrap can establish W1/W2 and local W4 evidence while live hosting, full feature documentation and generation integration remain outstanding. Record exact evidence in each README and the product ledger.
+
+
+### Local email login increment (2026-10-02)
+
+Golf-owned password login accepts an operator-enrolled unique email or username. Both aliases share account throttling and the existing opaque HttpOnly session model. Schema008 preserves prior mappings and adds optional email aliases; operator `set-email` advances the credential version and revokes local sessions/dependent delegations. Provider profile emails do not link identities. Email ownership verification, self-service change with step-up/reverification, notification of changes, recovery tokens and enterprise identity lifecycle remain required before public enrollment.

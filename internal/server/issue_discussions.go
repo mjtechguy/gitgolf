@@ -189,7 +189,7 @@ func (s *Server) ListIssueComments(ctx context.Context, req *connect.Request[gol
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	rows, next, err := s.listIssueComments(ctx, cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), repoID, issueID, req.Msg.Number, pageFrom(req.Msg.Page))
+	rows, next, err := s.listIssueComments(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), repoID, issueID, req.Msg.Number, pageFrom(req.Msg.Page))
 	if err != nil {
 		return nil, rpcError(err)
 	}

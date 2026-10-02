@@ -47,6 +47,7 @@ try {
   page.on('pageerror', () => errors.push('runtime error'));
   stage = 'actual token sign-in form';
   await page.goto(config.golf);
+  await page.getByText('Advanced token sign-in', { exact: true }).click();
   await page.getByLabel('Gitea access token', { exact: true }).fill(config.token);
   await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
   await page.getByRole('button', { name: 'Sessions', exact: true }).waitFor();
@@ -80,7 +81,7 @@ try {
   stage = 'current-session revocation and private UI removal';
   await dialog.getByRole('button', { name: 'Revoke current session', exact: true }).click();
   await dialog.getByRole('button', { name: 'Confirm revoke session', exact: true }).click();
-  await page.getByLabel('Gitea access token', { exact: true }).waitFor();
+  await page.getByText('Advanced token sign-in', { exact: true }).waitFor();
   check(await page.locator('.session-row').count() === 0, 'Private session rows survived sign-out');
   await call(context, 'GetSession', {}, 401);
   check(!(await context.cookies(config.golf)).some(cookie => cookie.name === 'golf_session'), 'Current session cookie survived revocation');

@@ -315,6 +315,9 @@ FROM generate_series(1,10000) n`, userID, []byte("inert metadata fixture")); err
 	if _, err := f.db.Exec("DELETE FROM golf_sessions WHERE session_id=(SELECT min(session_id) FROM golf_sessions WHERE token_hash<>$1)", hash); err != nil {
 		t.Fatal(err)
 	}
+	// A new request prevents net/http cookie-jar additions from accumulating
+	// in the reused request header and tripping the duplicate-cookie guard.
+	page = connect.NewRequest(&golfv1.ListSessionsRequest{Page: &golfv1.PageRequest{Page: 10000, Limit: 1}})
 	response, err := client.ListSessions(context.Background(), page)
 	if err != nil || len(response.Msg.Sessions) != 1 || response.Msg.Page.NextPage != 0 {
 		t.Fatal("exact page ceiling should remain readable", err)

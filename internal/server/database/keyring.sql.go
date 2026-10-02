@@ -11,8 +11,8 @@ import (
 )
 
 const appendCryptoEvent = `-- name: AppendCryptoEvent :exec
-INSERT INTO golf_crypto_events (operation_id, action, key_id, sessions_count, oauth_attempts_count)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO golf_crypto_events (operation_id, action, key_id, sessions_count, oauth_attempts_count, local_accounts_count)
+VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 type AppendCryptoEventParams struct {
@@ -21,6 +21,7 @@ type AppendCryptoEventParams struct {
 	KeyID              string
 	SessionsCount      int64
 	OauthAttemptsCount int64
+	LocalAccountsCount int64
 }
 
 func (q *Queries) AppendCryptoEvent(ctx context.Context, arg AppendCryptoEventParams) error {
@@ -30,6 +31,7 @@ func (q *Queries) AppendCryptoEvent(ctx context.Context, arg AppendCryptoEventPa
 		arg.KeyID,
 		arg.SessionsCount,
 		arg.OauthAttemptsCount,
+		arg.LocalAccountsCount,
 	)
 	return err
 }
@@ -106,11 +108,13 @@ func (q *Queries) BootstrapLegacySessions(ctx context.Context, afterID int64) ([
 }
 
 const countCredentialKeys = `-- name: CountCredentialKeys :many
-SELECT credential_key_id, sum(session_count)::bigint AS sessions, sum(attempt_count)::bigint AS oauth_attempts
+SELECT credential_key_id, sum(session_count)::bigint AS sessions, sum(attempt_count)::bigint AS oauth_attempts, sum(local_count)::bigint AS local_accounts
 FROM (
-    SELECT credential_key_id, count(*) AS session_count, 0::bigint AS attempt_count FROM golf_sessions GROUP BY credential_key_id
+    SELECT credential_key_id, count(*) AS session_count, 0::bigint AS attempt_count, 0::bigint AS local_count FROM golf_sessions GROUP BY credential_key_id
     UNION ALL
-    SELECT credential_key_id, 0::bigint, count(*) FROM golf_oauth_attempts GROUP BY credential_key_id
+    SELECT credential_key_id, 0::bigint, count(*), 0::bigint FROM golf_oauth_attempts GROUP BY credential_key_id
+    UNION ALL
+    SELECT credential_key_id, 0::bigint, 0::bigint, count(*) FROM golf_local_accounts GROUP BY credential_key_id
 ) counts
 GROUP BY credential_key_id ORDER BY credential_key_id
 `
@@ -119,6 +123,7 @@ type CountCredentialKeysRow struct {
 	CredentialKeyID string
 	Sessions        int64
 	OauthAttempts   int64
+	LocalAccounts   int64
 }
 
 func (q *Queries) CountCredentialKeys(ctx context.Context) ([]CountCredentialKeysRow, error) {
@@ -130,7 +135,12 @@ func (q *Queries) CountCredentialKeys(ctx context.Context) ([]CountCredentialKey
 	var items []CountCredentialKeysRow
 	for rows.Next() {
 		var i CountCredentialKeysRow
-		if err := rows.Scan(&i.CredentialKeyID, &i.Sessions, &i.OauthAttempts); err != nil {
+		if err := rows.Scan(
+			&i.CredentialKeyID,
+			&i.Sessions,
+			&i.OauthAttempts,
+			&i.LocalAccounts,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

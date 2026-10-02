@@ -337,3 +337,9 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
   .credential-row>div { flex-basis:100%; }
   .credential-metadata { grid-template-columns:1fr; }
 }
+
+/* Keep optional sign-in content inside its panel without re-centering the page. */
+@media (min-width:721px) {
+  .login-main { align-items:start; }
+  .login-card { max-height:max(400px, calc(100dvh - 300px)); overflow-y:auto; scrollbar-gutter:stable; }
+}

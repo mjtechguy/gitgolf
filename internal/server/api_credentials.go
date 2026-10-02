@@ -136,6 +136,18 @@ func (s *Server) apiReadInterceptor(next connect.UnaryFunc) connect.UnaryFunc {
 				return nil, rpcError(err)
 			}
 		}
+		if err == nil {
+			credential, credentialErr := rpcToken(ctx)
+			if credentialErr == nil && credential.Local && !acknowledgesCurrentSessionRevocation(request, response) {
+				user, currentErr := s.currentUser(ctx, credential)
+				if currentErr != nil {
+					return nil, rpcError(currentErr)
+				}
+				if _, currentErr = s.localSessionUser(ctx, s.cookieValue(request.Header()), user); currentErr != nil {
+					return nil, rpcError(currentErr)
+				}
+			}
+		}
 		return response, err
 	}
 }
@@ -197,7 +209,7 @@ func (s *Server) CreateApiCredential(ctx context.Context, req *connect.Request[g
 	token := apiTokenPrefix + base64.RawURLEncoding.EncodeToString(random[:])
 	tokenHash, _ := apiTokenHash(token)
 	var result *golfv1.ApiCredential
-	err = s.withManagedSession(ctx, cookieValue(req.Header()), credential, func(queries *database.Queries, caller database.LockManagedSessionRow, hash []byte) error {
+	err = s.withManagedSession(ctx, s.cookieValue(req.Header()), credential, func(queries *database.Queries, caller database.LockManagedSessionRow, hash []byte) error {
 		count, err := queries.CountActiveApiCredentials(ctx, database.CountActiveApiCredentialsParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL})
 		if err != nil {
 			return errStorageUnavailable
@@ -238,7 +250,7 @@ func (s *Server) ListApiCredentials(ctx context.Context, req *connect.Request[go
 		return nil, rpcError(err)
 	}
 	result := &golfv1.ListApiCredentialsResponse{Page: wirePage(0)}
-	err = s.withManagedSession(ctx, cookieValue(req.Header()), credential, func(queries *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
+	err = s.withManagedSession(ctx, s.cookieValue(req.Header()), credential, func(queries *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
 		rows, err := queries.ListApiCredentials(ctx, database.ListApiCredentialsParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, RowLimit: int32(limit + 1), RowOffset: int32((page - 1) * limit)})
 		if err != nil {
 			return errStorageUnavailable
@@ -274,7 +286,7 @@ func (s *Server) RevokeApiCredential(ctx context.Context, req *connect.Request[g
 		return nil, rpcError(invalid("Credential ID must be a positive decimal identifier."))
 	}
 	var result *golfv1.ApiCredential
-	err = s.withManagedSession(ctx, cookieValue(req.Header()), credential, func(queries *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
+	err = s.withManagedSession(ctx, s.cookieValue(req.Header()), credential, func(queries *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
 		count, err := queries.RevokeApiCredential(ctx, database.RevokeApiCredentialParams{ID: id, UserID: caller.UserID, ForgeURL: s.config.GiteaURL})
 		if err != nil {
 			return errStorageUnavailable
@@ -298,4 +310,14 @@ func (s *Server) RevokeApiCredential(ctx context.Context, req *connect.Request[g
 		return nil, rpcError(err)
 	}
 	return connect.NewResponse(&golfv1.RevokeApiCredentialResponse{Credential: result}), nil
+}
+
+// Only the typed current-session revocation acknowledgment intentionally has no
+// surviving caller. Other successful reads must recheck their local authority.
+func acknowledgesCurrentSessionRevocation(request connect.AnyRequest, response connect.AnyResponse) bool {
+	if request.Spec().Procedure != golfv1connect.SessionServiceRevokeSessionProcedure {
+		return false
+	}
+	reply, ok := response.(*connect.Response[golfv1.RevokeSessionResponse])
+	return ok && reply.Msg.CurrentSessionRevoked
 }

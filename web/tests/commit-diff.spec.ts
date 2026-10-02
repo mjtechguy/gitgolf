@@ -173,6 +173,7 @@ test('sign-out cancels a pending diff and a fresh login cannot reuse its private
   await aborted;
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   state.barrier = undefined; state.failure = 'permission_denied'; release();
+  await page.getByText('Advanced token sign-in', { exact: true }).click();
   await page.getByLabel('Gitea access token').fill('fixture-only-token');
   await page.getByRole('button', { name: 'Continue to workspace' }).click();
   await expect(page.getByRole('alert')).toHaveText('Diff unavailable: permission_denied.');

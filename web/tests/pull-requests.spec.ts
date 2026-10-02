@@ -188,6 +188,7 @@ test('expired sessions and logout discard pull and review data, including naviga
   await expect(page.getByText('PRIVATE PULL', { exact: false })).toHaveCount(0);
   await expect(page.getByText('PRIVATE REVIEW', { exact: false })).toHaveCount(0);
   state.detailStatus = 404;
+  await page.getByText('Advanced token sign-in', { exact: true }).click();
   await page.getByLabel('Gitea access token').fill('second-session-token');
   await page.getByRole('button', { name: 'Continue to workspace' }).click();
   await expect(page.getByRole('alert')).toHaveText('Pull request not found or inaccessible.');
