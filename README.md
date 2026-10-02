@@ -235,3 +235,7 @@ All repositories currently require access. Website/docs builds and Cloudflare dr
 The [Gitea identity/role qualification](docs/GITEA_IDENTITY_ROLE_QUALIFICATION.md) records actual per-unit grants and alternate-path limitations. Golf organization role administration is still unimplemented; Gitea issue-read allows reporting/commenting, and repository admin includes deletion. Those grants cannot silently stand in for strict viewer or constrained maintainer roles.
 
 Open **Organizations** to browse memberships, native team/unit settings, members and assigned repositories with typed deep links. See the [organization browser contract](docs/ORGANIZATION_BROWSER_CONTRACT.md). Protected integration remains gated by the [actual write/merge qualification](docs/GITEA_PROTECTED_WRITE_QUALIFICATION.md); native status names, review counts and a Golf queue mutex cannot substitute for exact authorized candidate evidence.
+
+## Optional observability
+
+Golf records correlated JSON request logs and can export bounded API/Gitea/PostgreSQL traces and private Prometheus metrics. Metrics use a separate authenticated listener; export is disabled by default. See the [configuration and privacy contract](docs/OBSERVABILITY.md) and [local monitoring overlay](deploy/observability/README.md). Job/runner instrumentation and production operational qualification remain open.

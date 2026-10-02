@@ -77,7 +77,9 @@ func TestStartupDelayedPostgres(t *testing.T) {
 		}
 		return dial(ctx, network, address)
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	// This positive case includes native migrations and their shared advisory
+	// lock under the full race suite; short cancellation is tested separately.
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	db, err := Open(ctx, startupDSN(t, config))
 	if err != nil {

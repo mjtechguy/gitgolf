@@ -91,7 +91,18 @@ render(merge(BASE, {"postgresql": {"enabled": False}, "gitea": {"database": {"ho
 controller = {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "ingress-nginx"}}}
 ingress = merge(BASE, {"ingress": {"enabled": True, "className": "nginx", "tlsSecret": "existing-golf-tls"}, "networkPolicy": {"ingressFrom": [controller]}})
 assert "kind: Ingress\n" in render(ingress)
+metrics = render(merge(BASE, {"observability": {"metrics": {"enabled": True, "ingressFrom": [peer]}}}))
+assert "key: GOLF_METRICS_TOKEN" in find(metrics, "Deployment", "check-golf")
+assert "port: 9090" in find(metrics, "Service", "check-golf")
+assert "port: 9090" in find(metrics, "NetworkPolicy", "check-golf")
+assert "GOLF_METRICS_TOKEN" not in core
+assert "port: 9090" not in find(core, "Service", "check-golf")
+render(merge(BASE, {"observability": {"tracing": {"endpoint": "http://collector:4318", "insecure": True}}, "networkPolicy": {"externalEgress": [{"to": [peer], "ports": [{"port": 4318}]}]}}))
 negative = [
+    merge(BASE, {"observability": {"tracing": {"sampleRatio": 1.1}}}),
+    merge(BASE, {"observability": {"tracing": {"endpoint": "http://collector:4318"}}}),
+    merge(BASE, {"observability": {"tracing": {"endpoint": "https://user:secret@collector"}}}),
+    merge(BASE, {"observability": {"tracing": {"endpoint": "https://collector"}}}),
     {},
     merge(BASE, {"existingSecret": ""}),
     merge(BASE, {"publicURL": ""}),

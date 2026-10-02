@@ -10,8 +10,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"github.com/pressly/goose/v3/lock"
 )
@@ -26,6 +27,22 @@ func Open(ctx context.Context, dsn string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	return openDatabase(ctx, db)
+}
+
+// OpenWithTracer installs per-connection instrumentation without changing the
+// operator/test Open path or using a global pgx driver configuration.
+func OpenWithTracer(ctx context.Context, dsn string, tracer pgx.QueryTracer) (*sql.DB, error) {
+	config, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		return nil, err
+	}
+	config.Tracer = tracer
+	return openDatabase(ctx, stdlib.OpenDB(*config))
+}
+
+func openDatabase(ctx context.Context, db *sql.DB) (*sql.DB, error) {
+	var err error
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
 	if err = waitForConnection(ctx, db); err != nil {

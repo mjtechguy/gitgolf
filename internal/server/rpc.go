@@ -34,7 +34,12 @@ func cookieValue(header http.Header) string {
 func (s *Server) rpcHandler() http.Handler {
 	options := []connect.HandlerOption{
 		connect.WithReadMaxBytes(16 << 10), connect.WithSendMaxBytes(16 << 20), connect.WithRequireConnectProtocolHeader(),
-		connect.WithRecover(func(context.Context, connect.Spec, http.Header, any) error { return rpcError(errors.New("RPC panic")) }),
+		connect.WithRecover(func(_ context.Context, _ connect.Spec, _ http.Header, value any) error {
+			if value == http.ErrAbortHandler {
+				panic(http.ErrAbortHandler)
+			}
+			return rpcError(errors.New("RPC panic"))
+		}),
 	}
 	mux := http.NewServeMux()
 	mux.Handle(golfv1connect.NewSessionServiceHandler(s, options...))

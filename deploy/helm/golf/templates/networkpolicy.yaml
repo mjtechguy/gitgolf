@@ -12,10 +12,16 @@ spec:
       {{- include "golf.selector" . | nindent 6 }}
       app.kubernetes.io/component: golf
   policyTypes: [Ingress, Egress]
-  {{- if .Values.networkPolicy.ingressFrom }}
+  {{- if or .Values.networkPolicy.ingressFrom (and .Values.observability.metrics.enabled .Values.observability.metrics.ingressFrom) }}
   ingress:
+    {{- if .Values.networkPolicy.ingressFrom }}
     - from: {{ toYaml .Values.networkPolicy.ingressFrom | nindent 8 }}
       ports: [{protocol: TCP, port: 8080}]
+    {{- end }}
+    {{- if and .Values.observability.metrics.enabled .Values.observability.metrics.ingressFrom }}
+    - from: {{ toYaml .Values.observability.metrics.ingressFrom | nindent 8 }}
+      ports: [{protocol: TCP, port: 9090}]
+    {{- end }}
   {{- else }}
   ingress: []
   {{- end }}

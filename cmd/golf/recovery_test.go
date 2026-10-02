@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/rs/zerolog"
 	"io"
-	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -37,7 +37,7 @@ func TestRecoveryCommandRequiresOnlyDatabaseAndSanitizesFailure(t *testing.T) {
 	operatorEnvironment(t)
 	t.Setenv("GOLF_ENCRYPTION_KEY", "invalid-private-key-value")
 	t.Setenv("GOLF_PUBLIC_URL", "invalid-http-configuration")
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := zerolog.New(io.Discard)
 	id := strings.Repeat("d", 32)
 	for _, dsn := range []string{"", "invalid:private-database-password"} {
 		t.Setenv("DATABASE_URL", dsn)

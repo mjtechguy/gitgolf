@@ -32,3 +32,9 @@
 {{- if and .Values.postgresql.enabled .Values.gitea.enabled (or (ne .Values.gitea.database.name "gitea") (ne .Values.gitea.database.user "gitea")) -}}{{ fail "bundled PostgreSQL initializes Gitea database/name as gitea; use those fixed roles" }}{{- end -}}
 {{- if and .Values.gitea.enabled .Values.gitea.image.tag (ne .Values.gitea.image.tag "1.27.3-rootless") -}}{{ fail "bundled Gitea requires qualified rootless tag 1.27.3-rootless or its pinned digest" }}{{- end -}}
 {{- if and .Values.postgresql.enabled .Values.postgresql.image.tag (ne .Values.postgresql.image.tag "18.4-alpine3.24") -}}{{ fail "bundled PostgreSQL requires qualified Alpine tag 18.4-alpine3.24 or its pinned digest" }}{{- end -}}
+
+{{- with .Values.observability.tracing.endpoint -}}
+  {{- if not (regexMatch "^https?://[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?(/[^?#@]*)?$" .) -}}{{ fail "tracing.endpoint requires HTTP(S) without credentials, query or fragment" }}{{- end -}}
+  {{- if and (hasPrefix "http://" .) (not $.Values.observability.tracing.insecure) -}}{{ fail "HTTP tracing requires explicit tracing.insecure" }}{{- end -}}
+  {{- if and $.Values.networkPolicy.enabled (empty $.Values.networkPolicy.externalEgress) -}}{{ fail "tracing requires explicit networkPolicy.externalEgress for the collector" }}{{- end -}}
+{{- end -}}

@@ -504,6 +504,57 @@
         "externalEgress",
         "dnsNamespace"
       ]
+    },
+    "observability": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "ingressFrom": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          },
+          "required": [
+            "enabled",
+            "ingressFrom"
+          ]
+        },
+        "tracing": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "endpoint": {
+              "type": "string"
+            },
+            "insecure": {
+              "type": "boolean"
+            },
+            "sampleRatio": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "required": [
+            "endpoint",
+            "insecure",
+            "sampleRatio"
+          ]
+        }
+      },
+      "required": [
+        "metrics",
+        "tracing"
+      ]
     }
   },
   "required": [

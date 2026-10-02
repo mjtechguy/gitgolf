@@ -12,6 +12,9 @@ spec:
     app.kubernetes.io/component: golf
   ports:
     - {name: http, port: 8080, targetPort: http}
+    {{- if .Values.observability.metrics.enabled }}
+    - {name: metrics, port: 9090, targetPort: metrics}
+    {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -55,6 +58,9 @@ spec:
             {{- include "golf.containerSecurity" . | nindent 12 }}
           ports:
             - {name: http, containerPort: 8080}
+            {{- if .Values.observability.metrics.enabled }}
+            - {name: metrics, containerPort: 9090}
+            {{- end }}
           env:
             - {name: GOLF_LISTEN_ADDR, value: ":8080"}
             - {name: GOLF_WEB_DIR, value: /app/web/dist}
@@ -82,6 +88,20 @@ spec:
               valueFrom:
                 secretKeyRef: {name: {{ $.Values.existingSecret | quote }}, key: {{ $key }}}
             {{- end }}
+            {{- end }}
+            {{- if .Values.observability.metrics.enabled }}
+            - {name: GOLF_METRICS_ADDR, value: ":9090"}
+            - name: GOLF_METRICS_TOKEN
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.existingSecret | quote }}, key: GOLF_METRICS_TOKEN}
+            {{- end }}
+            {{- if .Values.observability.tracing.endpoint }}
+            - name: GOLF_OTLP_HTTP_ENDPOINT
+              value: {{ .Values.observability.tracing.endpoint | quote }}
+            - name: GOLF_OTLP_INSECURE
+              value: {{ .Values.observability.tracing.insecure | quote }}
+            - name: GOLF_TRACE_SAMPLE_RATIO
+              value: {{ .Values.observability.tracing.sampleRatio | quote }}
             {{- end }}
           startupProbe:
             httpGet: {path: /healthz, port: http}

@@ -1,0 +1,11 @@
+apiVersion: 1
+providers:
+  - name: Golf local
+    orgId: 1
+    folder: Golf
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards

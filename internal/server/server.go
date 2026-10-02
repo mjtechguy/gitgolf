@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/mjtechguy/golf-git/internal/telemetry"
 )
 
 type Config struct {
@@ -22,6 +23,7 @@ type Config struct {
 	GiteaPublicURL, GiteaOAuthClientID, GiteaOAuthClientSecret string
 	AllowInsecureCookies                                       bool
 	WebDir                                                     string
+	Telemetry                                                  *telemetry.Runtime
 }
 type Server struct {
 	config  Config
@@ -68,9 +70,11 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	config.GiteaURL = strings.TrimRight(config.GiteaURL, "/")
 	s := &Server{config: config, db: db, keyring: keyring, client: &http.Client{Timeout: 10 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	if config.Telemetry != nil {
+		s.client.Transport = config.Telemetry.HTTPTransport(http.DefaultTransport)
+	}
 
 	r := chi.NewRouter()
-	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(15 * time.Second))
 	r.Use(s.security)
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) { respond(w, 200, map[string]string{"status": "ok"}) })
@@ -82,8 +86,10 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	// Removed application REST paths are never served as SPA documents.
 	r.Handle("/api", http.NotFoundHandler())
 	r.Handle("/api/*", http.NotFoundHandler())
+	webEnabled := false
 	if config.WebDir != "" {
 		if root, err := os.OpenRoot(config.WebDir); err == nil {
+			webEnabled = true
 			files := root.FS()
 			fileServer := http.FileServerFS(files)
 			r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
@@ -112,7 +118,7 @@ func New(config Config, db *sql.DB) (*Server, error) {
 		}
 	}
 	r.NotFound(http.NotFound)
-	s.handler = r
+	s.handler = s.observeHTTP(r, webEnabled)
 	return s, nil
 }
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handler.ServeHTTP(w, r) }

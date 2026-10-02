@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log/slog"
+	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/mjtechguy/golf-git/internal/server"
 	"github.com/mjtechguy/golf-git/internal/server/database"
+	"github.com/mjtechguy/golf-git/internal/telemetry"
+	"github.com/rs/zerolog"
 )
 
 func env(name, fallback string) string {
@@ -23,14 +26,13 @@ func env(name, fallback string) string {
 }
 
 func run() error {
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	slog.SetDefault(logger)
+	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	return runCommand(ctx, os.Args[1:], os.Stdout, logger)
 }
 
-func runCommand(ctx context.Context, args []string, output io.Writer, logger *slog.Logger) error {
+func runCommand(ctx context.Context, args []string, output io.Writer, logger zerolog.Logger) error {
 	if len(args) > 0 {
 		if args[0] == "recovery" {
 			options, err := parseRecoveryCommand(args)
@@ -59,7 +61,7 @@ func serverConfig() server.Config {
 	}
 }
 
-func serve(ctx context.Context, logger *slog.Logger) error {
+func serve(ctx context.Context, logger zerolog.Logger) error {
 	if os.Getenv("DATABASE_URL") == "" {
 		return errors.New("DATABASE_URL is required")
 	}
@@ -70,8 +72,24 @@ func serve(ctx context.Context, logger *slog.Logger) error {
 	if _, err := server.New(validationConfig, nil); err != nil {
 		return err
 	}
+	observability, metricsAddress, metricsToken, err := observabilityConfig(logger)
+	if err != nil {
+		return err
+	}
+	runtime, err := telemetry.New(ctx, observability)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if runtime.Shutdown(shutdown) != nil {
+			logger.Error().Msg("telemetry shutdown failed")
+		}
+	}()
+	config.Telemetry = runtime
 	startup, cancel := context.WithTimeout(ctx, 60*time.Second)
-	db, err := database.Open(startup, os.Getenv("DATABASE_URL"))
+	db, err := database.OpenWithTracer(startup, os.Getenv("DATABASE_URL"), runtime)
 	cancel()
 	if err != nil {
 		return errors.New("database connection or migration failed; verify database availability and schema permissions")
@@ -81,26 +99,66 @@ func serve(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	httpServer := &http.Server{Addr: env("GOLF_LISTEN_ADDR", ":8080"), Handler: app, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
-	finished := make(chan error, 1)
-	go func() { finished <- httpServer.ListenAndServe() }()
-	logger.Info("Golf listening", "address", httpServer.Addr)
+	httpServer := newHTTPServer(env("GOLF_LISTEN_ADDR", ":8080"), app, logger)
+	// Bind every enabled listener before starting any of them. An occupied
+	// metrics port cannot leave an otherwise running application behind.
+	public, err := net.Listen("tcp", httpServer.Addr)
+	if err != nil {
+		return errors.New("application listener unavailable")
+	}
+	defer public.Close()
+	servers := []*http.Server{httpServer}
+	listeners := []net.Listener{public}
+	if metricsAddress != "" {
+		private, err := net.Listen("tcp", metricsAddress)
+		if err != nil {
+			return errors.New("metrics listener unavailable")
+		}
+		defer private.Close()
+		servers = append(servers, newHTTPServer(metricsAddress, privateMetrics(runtime.MetricsHandler(), metricsToken), logger))
+		listeners = append(listeners, private)
+	}
+	finished := make(chan error, len(servers))
+	for i, srv := range servers {
+		go func() { finished <- srv.Serve(listeners[i]) }()
+	}
+	logger.Info().Bool("metrics_enabled", metricsAddress != "").Msg("Golf listening")
+	var serveError error
 	select {
 	case err := <-finished:
 		if !errors.Is(err, http.ErrServerClosed) {
-			return err
+			serveError = errors.New("HTTP listener failed")
 		}
 	case <-ctx.Done():
-		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		return httpServer.Shutdown(shutdown)
 	}
-	return nil
+	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for _, srv := range servers {
+		if err := srv.Shutdown(shutdown); err != nil {
+			_ = srv.Close()
+			serveError = errors.New("HTTP shutdown failed")
+		}
+	}
+	return serveError
+}
+
+func newHTTPServer(address string, handler http.Handler, logger zerolog.Logger) *http.Server {
+	return &http.Server{Addr: address, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10, ErrorLog: log.New(safeHTTPLog{logger}, "", 0)}
+}
+
+// net/http's default panic and TLS diagnostics can contain caller-supplied
+// values. Keep its exceptional diagnostics bounded too.
+type safeHTTPLog struct{ logger zerolog.Logger }
+
+func (w safeHTTPLog) Write(p []byte) (int, error) {
+	w.logger.Error().Msg("HTTP transport error")
+	return len(p), nil
 }
 
 func main() {
 	if err := run(); err != nil {
-		slog.Error("Golf stopped", "error", err.Error())
+		logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
+		logger.Error().Str("error", err.Error()).Msg("Golf stopped")
 		os.Exit(1)
 	}
 }

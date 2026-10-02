@@ -165,3 +165,9 @@ HELM=/path/to/helm python3 deploy/helm/golf/check.py
 ```
 
 This runs strict lint, bundled/external/OAuth/ingress/multiple-Golf render checks, invalid-configuration tests, and initializer source-consistency checks without credentials, a Kubernetes context, or cluster mutations. The repository's isolated Kubernetes smoke script supplies the separate real installation, session/repository persistence and network-policy evidence. No repository CI is installed.
+
+## Optional observability
+
+Enable `observability.metrics.enabled` only after adding `GOLF_METRICS_TOKEN` to the precreated Secret. It must contain 32–256 printable ASCII bytes without spaces. The chart exposes a separate ClusterIP port 9090; `observability.metrics.ingressFrom` grants only the named scraper peers when NetworkPolicy is enabled. Empty peers deny scraping. Authenticate with a single bearer header and never add this port to public ingress.
+
+For an external OTLP/HTTP collector set `observability.tracing.endpoint`, `sampleRatio` (0–1), and `insecure` only for explicit plaintext HTTP. Add collector-specific `networkPolicy.externalEgress`. No collector/operator CRDs are required or installed. See [telemetry configuration](../../../docs/OBSERVABILITY.md). Chart rendering is verified separately from live cluster scraping/export.

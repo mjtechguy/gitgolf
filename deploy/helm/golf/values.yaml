@@ -86,3 +86,14 @@ networkPolicy:
   # Full egress rules required for external Gitea/PostgreSQL with policy enabled.
   externalEgress: []
   dnsNamespace: kube-system
+
+observability:
+  metrics:
+    enabled: false
+    # Precreated Secret needs GOLF_METRICS_TOKEN (32–256 printable bytes).
+    ingressFrom: []
+  tracing:
+    # Empty disables export. Configure externalEgress for the collector.
+    endpoint: ""
+    insecure: false
+    sampleRatio: 0.1

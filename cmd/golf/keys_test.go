@@ -6,8 +6,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"github.com/rs/zerolog"
 	"io"
-	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -70,7 +70,7 @@ func TestKeyCommandValidatesBeforeDatabaseAndHidesConfiguration(t *testing.T) {
 	const secret = "test-only-database-and-key-secret"
 	t.Setenv("DATABASE_URL", "invalid:"+secret)
 	t.Setenv("GOLF_ENCRYPTION_KEY", secret)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := zerolog.New(io.Discard)
 	var output bytes.Buffer
 	err := runCommand(context.Background(), []string{"keys", "status", "--password", secret}, &output, logger)
 	if err == nil || err.Error() != keyUsage || output.Len() != 0 {
