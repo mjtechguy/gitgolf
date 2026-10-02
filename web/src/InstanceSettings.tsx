@@ -8,6 +8,10 @@ import { DataTable } from './DataTable';
 import type { DataTableColumn } from './DataTable';
 import type { LocalAccountInfo } from './gen/golf/v1/golf_pb';
 import { DateLabel, Loading, More, PanelError, privateQuery } from './RepositoryUI';
+import { OrganizationCreationPolicyPanel } from './OrganizationCreationPolicyPanel';
+import { InfrastructureConnections } from './InfrastructureConnections';
+import { ExecutionPolicyPanel } from './ExecutionPolicyPanel';
+import { ExecutionScope } from './gen/golf/v1/golf_pb';
 import { SettingsInventory } from './AccountSettings';
 
 const columns: DataTableColumn<LocalAccountInfo>[] = [
@@ -30,7 +34,7 @@ function DisableEditor({ account, pending, onSubmit, onCancel }: { account: Loca
   </form>;
 }
 
-export function InstanceSettings({ userId, signingOut, view = 'accounts' }: { userId: string; signingOut: boolean; view?: 'overview' | 'accounts' }) {
+export function InstanceSettings({ userId, signingOut, view = 'accounts' }: { userId: string; signingOut: boolean; view?: 'overview' | 'accounts' | 'execution' | 'organizations' | 'infrastructure' }) {
   const [target, setTarget] = useState<LocalAccountInfo>();
   const [pending, setPending] = useState(false);
   const [uncertain, setUncertain] = useState(false);
@@ -60,9 +64,9 @@ export function InstanceSettings({ userId, signingOut, view = 'accounts' }: { us
     finally { password = ''; if (controller.current === request) controller.current = null; if (active.current) setPending(false); }
   }
   const accountColumns: DataTableColumn<LocalAccountInfo>[] = [...columns, { id: 'actions', header: 'Action', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => row.original.isInstanceAdmin ? <span className="muted">Protected administrator</span> : row.original.disabled ? <span className="muted">Operator recovery</span> : <button className="text-button" disabled={pending || uncertain || signingOut || Boolean(target)} onClick={() => { setTarget(row.original); setNotice(''); }}>Disable local sign-in</button> }];
-  return <div className="account-layout"><nav className="account-navigation" aria-label="Instance administration"><span className="eyebrow">GLOBAL ADMINISTRATION</span><Link to="/admin" activeOptions={{ exact: true }}>Overview</Link><Link to="/admin/settings" activeOptions={{ exact: true }}>Local accounts</Link><Link to="/status">System capabilities</Link></nav><div className="account-content"><section aria-labelledby="instance-settings-title">
-    <header className="repository-intro"><div><span className="eyebrow">INSTALLATION ADMINISTRATION</span><h1 id="instance-settings-title"><ShieldCheck size={29} />Instance settings</h1><p>Golf account administration is separate from organization and repository ownership.</p></div></header>
-    {view === 'overview' ? <SettingsInventory scope="instance" /> : <section className="browser-panel credential-list-panel" aria-labelledby="instance-accounts-title">
+  return <div className="account-layout"><nav className="account-navigation" aria-label="Instance administration"><span className="eyebrow">GLOBAL ADMINISTRATION</span><Link to="/admin" activeOptions={{ exact: true }}>Overview</Link><Link to="/admin/settings" activeOptions={{ exact: true }}>Local accounts</Link><Link to="/admin/execution" activeOptions={{ exact: true }}>Execution policy</Link><Link to="/admin/organizations" activeOptions={{ exact: true }}>Organization creation</Link><Link to="/admin/settings/infrastructure" activeOptions={{ exact: true }}>Infrastructure</Link><Link to="/status">System capabilities</Link></nav><div className="account-content"><section aria-labelledby="instance-settings-title">
+    <header className="repository-intro"><div><span className="eyebrow">INSTALLATION ADMINISTRATION</span><h1 id="instance-settings-title"><ShieldCheck size={29} />Admin portal</h1><p>Golf account administration is separate from organization and repository ownership.</p></div></header>
+    {view === 'infrastructure' ? <InfrastructureConnections userId={userId} signingOut={signingOut} /> : view === 'overview' ? <SettingsInventory scope="instance" /> : view === 'execution' ? <ExecutionPolicyPanel key={`${userId}/instance`} userId={userId} signingOut={signingOut} scope={ExecutionScope.INSTANCE} /> : view === 'organizations' ? <OrganizationCreationPolicyPanel key={`${userId}/organization-creation`} userId={userId} signingOut={signingOut} /> : <section className="browser-panel credential-list-panel" aria-labelledby="instance-accounts-title">
       <div className="browser-panel-heading"><h2 id="instance-accounts-title">Local accounts</h2><button className="button secondary" disabled={query.isFetching || pending || signingOut} onClick={() => void refresh()}><RefreshCw size={15} />Refresh local accounts</button></div>
       {notice && !signingOut ? <p className="panel-footnote" role={uncertain ? 'alert' : 'status'}>{notice}</p> : null}
       {query.error ? <PanelError error={query.error} retry={() => void refresh()} /> : loading ? <Loading label="Verifying instance administration…" /> : <>{target ? <DisableEditor key={`${target.id}/${target.credentialVersion}`} account={target} pending={pending} onSubmit={disable} onCancel={() => setTarget(undefined)} /> : null}<DataTable data={accounts} columns={accountColumns} getRowId={account => account.id} label="Local accounts" /><div className="list-footer"><span>{accounts.length} loaded</span><More hasMore={Boolean(query.hasNextPage)} loading={query.isFetchingNextPage || pending || Boolean(target)} load={() => void query.fetchNextPage()} label="accounts" /></div></>}

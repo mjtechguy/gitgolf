@@ -1,0 +1,32 @@
+# Upstream rustfs/rustfs tag 1.0.0, helm/rustfs. Separate release/lifecycle.
+# Qualification/development only: standalone storage does not provide HA.
+fullnameOverride: rustfs
+image:
+  rustfs: {repository: rustfs/rustfs, tag: '1.0.0', pullPolicy: IfNotPresent}
+  initImage: {repository: busybox, tag: '1.37.0', pullPolicy: IfNotPresent}
+mode:
+  standalone: {enabled: true, strategy: {type: Recreate}}
+  distributed: {enabled: false}
+replicaCount: 1
+secret:
+  existingSecret: rustfs-auth
+  allowInsecureDefaults: false
+storageclass:
+  name: local-path # Replace explicitly with your CSI class.
+  dataStorageSize: 2Gi
+  logStorageSize: 1Gi
+ingress: {enabled: false}
+resources:
+  requests: {cpu: 100m, memory: 256Mi}
+  limits: {cpu: '1', memory: 1Gi}
+extraEnv:
+  - {name: RUSTFS_TLS_PATH, value: /opt/tls}
+extraVolumes:
+  - name: server-tls
+    secret: {secretName: rustfs-tls}
+extraVolumeMounts:
+  - {name: server-tls, mountPath: /opt/tls, readOnly: true}
+livenessProbe:
+  httpGet: {path: /health, port: 9000, scheme: HTTPS}
+readinessProbe:
+  httpGet: {path: /health/ready, port: endpoint, scheme: HTTPS}

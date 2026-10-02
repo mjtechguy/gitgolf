@@ -1,0 +1,38 @@
+# Portable object storage defaults to RustFS. Independently configured profiles
+# may activate AWS S3/R2 or another qualified S3 endpoint through the Admin portal.
+services:
+  rustfs:
+    image: rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff
+    environment:
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ENABLE: 'false'
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:?Run scripts/init-storage-env.py}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:?Run scripts/init-storage-env.py}
+      RUSTFS_OBS_LOG_DIRECTORY: /logs
+    volumes:
+      - rustfs-data:/data
+    tmpfs:
+      - /logs:uid=10001,gid=10001,size=67108864,mode=0750
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, http://localhost:9000/health]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+  golf:
+    environment:
+      GOLF_OBJECT_ENDPOINT: http://rustfs:9000
+      GOLF_OBJECT_BUCKET: golf-ci
+      GOLF_OBJECT_REGION: us-east-1
+      GOLF_OBJECT_PREFIX: golf
+      GOLF_OBJECT_PATH_STYLE: 'true'
+      GOLF_OBJECT_ALLOW_HTTP: 'true'
+      GOLF_OBJECT_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:?Run scripts/init-storage-env.py}
+      GOLF_OBJECT_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:?Run scripts/init-storage-env.py}
+    depends_on:
+      rustfs:
+        condition: service_healthy
+volumes:
+  rustfs-data:

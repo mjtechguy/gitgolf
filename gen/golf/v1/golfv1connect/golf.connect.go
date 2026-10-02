@@ -46,6 +46,16 @@ const (
 	RepositoryAccessServiceName = "golf.v1.RepositoryAccessService"
 	// WorkflowServiceName is the fully-qualified name of the WorkflowService service.
 	WorkflowServiceName = "golf.v1.WorkflowService"
+	// ExecutionPolicyServiceName is the fully-qualified name of the ExecutionPolicyService service.
+	ExecutionPolicyServiceName = "golf.v1.ExecutionPolicyService"
+	// WorkflowRunServiceName is the fully-qualified name of the WorkflowRunService service.
+	WorkflowRunServiceName = "golf.v1.WorkflowRunService"
+	// OrganizationCreationServiceName is the fully-qualified name of the OrganizationCreationService
+	// service.
+	OrganizationCreationServiceName = "golf.v1.OrganizationCreationService"
+	// InfrastructureConnectionServiceName is the fully-qualified name of the
+	// InfrastructureConnectionService service.
+	InfrastructureConnectionServiceName = "golf.v1.InfrastructureConnectionService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -217,6 +227,48 @@ const (
 	// WorkflowServiceInspectWorkflowsProcedure is the fully-qualified name of the WorkflowService's
 	// InspectWorkflows RPC.
 	WorkflowServiceInspectWorkflowsProcedure = "/golf.v1.WorkflowService/InspectWorkflows"
+	// ExecutionPolicyServiceGetExecutionPolicyProcedure is the fully-qualified name of the
+	// ExecutionPolicyService's GetExecutionPolicy RPC.
+	ExecutionPolicyServiceGetExecutionPolicyProcedure = "/golf.v1.ExecutionPolicyService/GetExecutionPolicy"
+	// ExecutionPolicyServiceUpdateExecutionPolicyProcedure is the fully-qualified name of the
+	// ExecutionPolicyService's UpdateExecutionPolicy RPC.
+	ExecutionPolicyServiceUpdateExecutionPolicyProcedure = "/golf.v1.ExecutionPolicyService/UpdateExecutionPolicy"
+	// WorkflowRunServiceDispatchWorkflowProcedure is the fully-qualified name of the
+	// WorkflowRunService's DispatchWorkflow RPC.
+	WorkflowRunServiceDispatchWorkflowProcedure = "/golf.v1.WorkflowRunService/DispatchWorkflow"
+	// WorkflowRunServiceGetWorkflowRunProcedure is the fully-qualified name of the WorkflowRunService's
+	// GetWorkflowRun RPC.
+	WorkflowRunServiceGetWorkflowRunProcedure = "/golf.v1.WorkflowRunService/GetWorkflowRun"
+	// WorkflowRunServiceListWorkflowRunsProcedure is the fully-qualified name of the
+	// WorkflowRunService's ListWorkflowRuns RPC.
+	WorkflowRunServiceListWorkflowRunsProcedure = "/golf.v1.WorkflowRunService/ListWorkflowRuns"
+	// WorkflowRunServiceCancelWorkflowRunProcedure is the fully-qualified name of the
+	// WorkflowRunService's CancelWorkflowRun RPC.
+	WorkflowRunServiceCancelWorkflowRunProcedure = "/golf.v1.WorkflowRunService/CancelWorkflowRun"
+	// WorkflowRunServiceGetWorkflowRunLogsProcedure is the fully-qualified name of the
+	// WorkflowRunService's GetWorkflowRunLogs RPC.
+	WorkflowRunServiceGetWorkflowRunLogsProcedure = "/golf.v1.WorkflowRunService/GetWorkflowRunLogs"
+	// OrganizationCreationServiceGetOrganizationCreationPolicyProcedure is the fully-qualified name of
+	// the OrganizationCreationService's GetOrganizationCreationPolicy RPC.
+	OrganizationCreationServiceGetOrganizationCreationPolicyProcedure = "/golf.v1.OrganizationCreationService/GetOrganizationCreationPolicy"
+	// OrganizationCreationServiceUpdateOrganizationCreationPolicyProcedure is the fully-qualified name
+	// of the OrganizationCreationService's UpdateOrganizationCreationPolicy RPC.
+	OrganizationCreationServiceUpdateOrganizationCreationPolicyProcedure = "/golf.v1.OrganizationCreationService/UpdateOrganizationCreationPolicy"
+	// OrganizationCreationServiceCreateOrganizationProcedure is the fully-qualified name of the
+	// OrganizationCreationService's CreateOrganization RPC.
+	OrganizationCreationServiceCreateOrganizationProcedure = "/golf.v1.OrganizationCreationService/CreateOrganization"
+	// InfrastructureConnectionServiceListInfrastructureConnectionsProcedure is the fully-qualified name
+	// of the InfrastructureConnectionService's ListInfrastructureConnections RPC.
+	InfrastructureConnectionServiceListInfrastructureConnectionsProcedure = "/golf.v1.InfrastructureConnectionService/ListInfrastructureConnections"
+	// InfrastructureConnectionServiceSaveInfrastructureConnectionProcedure is the fully-qualified name
+	// of the InfrastructureConnectionService's SaveInfrastructureConnection RPC.
+	InfrastructureConnectionServiceSaveInfrastructureConnectionProcedure = "/golf.v1.InfrastructureConnectionService/SaveInfrastructureConnection"
+	// InfrastructureConnectionServiceTestInfrastructureConnectionProcedure is the fully-qualified name
+	// of the InfrastructureConnectionService's TestInfrastructureConnection RPC.
+	InfrastructureConnectionServiceTestInfrastructureConnectionProcedure = "/golf.v1.InfrastructureConnectionService/TestInfrastructureConnection"
+	// InfrastructureConnectionServiceActivateInfrastructureConnectionProcedure is the fully-qualified
+	// name of the InfrastructureConnectionService's ActivateInfrastructureConnection RPC.
+	InfrastructureConnectionServiceActivateInfrastructureConnectionProcedure = "/golf.v1.InfrastructureConnectionService/ActivateInfrastructureConnection"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -2153,4 +2205,554 @@ type UnimplementedWorkflowServiceHandler struct{}
 
 func (UnimplementedWorkflowServiceHandler) InspectWorkflows(context.Context, *connect.Request[v1.InspectWorkflowsRequest]) (*connect.Response[v1.InspectWorkflowsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.WorkflowService.InspectWorkflows is not implemented"))
+}
+
+// ExecutionPolicyServiceClient is a client for the golf.v1.ExecutionPolicyService service.
+type ExecutionPolicyServiceClient interface {
+	GetExecutionPolicy(context.Context, *connect.Request[v1.GetExecutionPolicyRequest]) (*connect.Response[v1.GetExecutionPolicyResponse], error)
+	UpdateExecutionPolicy(context.Context, *connect.Request[v1.UpdateExecutionPolicyRequest]) (*connect.Response[v1.UpdateExecutionPolicyResponse], error)
+}
+
+// NewExecutionPolicyServiceClient constructs a client for the golf.v1.ExecutionPolicyService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewExecutionPolicyServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ExecutionPolicyServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	executionPolicyServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("ExecutionPolicyService").Methods()
+	return &executionPolicyServiceClient{
+		getExecutionPolicy: connect.NewClient[v1.GetExecutionPolicyRequest, v1.GetExecutionPolicyResponse](
+			httpClient,
+			baseURL+ExecutionPolicyServiceGetExecutionPolicyProcedure,
+			connect.WithSchema(executionPolicyServiceMethods.ByName("GetExecutionPolicy")),
+			connect.WithClientOptions(opts...),
+		),
+		updateExecutionPolicy: connect.NewClient[v1.UpdateExecutionPolicyRequest, v1.UpdateExecutionPolicyResponse](
+			httpClient,
+			baseURL+ExecutionPolicyServiceUpdateExecutionPolicyProcedure,
+			connect.WithSchema(executionPolicyServiceMethods.ByName("UpdateExecutionPolicy")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// executionPolicyServiceClient implements ExecutionPolicyServiceClient.
+type executionPolicyServiceClient struct {
+	getExecutionPolicy    *connect.Client[v1.GetExecutionPolicyRequest, v1.GetExecutionPolicyResponse]
+	updateExecutionPolicy *connect.Client[v1.UpdateExecutionPolicyRequest, v1.UpdateExecutionPolicyResponse]
+}
+
+// GetExecutionPolicy calls golf.v1.ExecutionPolicyService.GetExecutionPolicy.
+func (c *executionPolicyServiceClient) GetExecutionPolicy(ctx context.Context, req *connect.Request[v1.GetExecutionPolicyRequest]) (*connect.Response[v1.GetExecutionPolicyResponse], error) {
+	return c.getExecutionPolicy.CallUnary(ctx, req)
+}
+
+// UpdateExecutionPolicy calls golf.v1.ExecutionPolicyService.UpdateExecutionPolicy.
+func (c *executionPolicyServiceClient) UpdateExecutionPolicy(ctx context.Context, req *connect.Request[v1.UpdateExecutionPolicyRequest]) (*connect.Response[v1.UpdateExecutionPolicyResponse], error) {
+	return c.updateExecutionPolicy.CallUnary(ctx, req)
+}
+
+// ExecutionPolicyServiceHandler is an implementation of the golf.v1.ExecutionPolicyService service.
+type ExecutionPolicyServiceHandler interface {
+	GetExecutionPolicy(context.Context, *connect.Request[v1.GetExecutionPolicyRequest]) (*connect.Response[v1.GetExecutionPolicyResponse], error)
+	UpdateExecutionPolicy(context.Context, *connect.Request[v1.UpdateExecutionPolicyRequest]) (*connect.Response[v1.UpdateExecutionPolicyResponse], error)
+}
+
+// NewExecutionPolicyServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewExecutionPolicyServiceHandler(svc ExecutionPolicyServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	executionPolicyServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("ExecutionPolicyService").Methods()
+	executionPolicyServiceGetExecutionPolicyHandler := connect.NewUnaryHandler(
+		ExecutionPolicyServiceGetExecutionPolicyProcedure,
+		svc.GetExecutionPolicy,
+		connect.WithSchema(executionPolicyServiceMethods.ByName("GetExecutionPolicy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	executionPolicyServiceUpdateExecutionPolicyHandler := connect.NewUnaryHandler(
+		ExecutionPolicyServiceUpdateExecutionPolicyProcedure,
+		svc.UpdateExecutionPolicy,
+		connect.WithSchema(executionPolicyServiceMethods.ByName("UpdateExecutionPolicy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.ExecutionPolicyService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case ExecutionPolicyServiceGetExecutionPolicyProcedure:
+			executionPolicyServiceGetExecutionPolicyHandler.ServeHTTP(w, r)
+		case ExecutionPolicyServiceUpdateExecutionPolicyProcedure:
+			executionPolicyServiceUpdateExecutionPolicyHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedExecutionPolicyServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedExecutionPolicyServiceHandler struct{}
+
+func (UnimplementedExecutionPolicyServiceHandler) GetExecutionPolicy(context.Context, *connect.Request[v1.GetExecutionPolicyRequest]) (*connect.Response[v1.GetExecutionPolicyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ExecutionPolicyService.GetExecutionPolicy is not implemented"))
+}
+
+func (UnimplementedExecutionPolicyServiceHandler) UpdateExecutionPolicy(context.Context, *connect.Request[v1.UpdateExecutionPolicyRequest]) (*connect.Response[v1.UpdateExecutionPolicyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ExecutionPolicyService.UpdateExecutionPolicy is not implemented"))
+}
+
+// WorkflowRunServiceClient is a client for the golf.v1.WorkflowRunService service.
+type WorkflowRunServiceClient interface {
+	DispatchWorkflow(context.Context, *connect.Request[v1.DispatchWorkflowRequest]) (*connect.Response[v1.DispatchWorkflowResponse], error)
+	GetWorkflowRun(context.Context, *connect.Request[v1.GetWorkflowRunRequest]) (*connect.Response[v1.GetWorkflowRunResponse], error)
+	ListWorkflowRuns(context.Context, *connect.Request[v1.ListWorkflowRunsRequest]) (*connect.Response[v1.ListWorkflowRunsResponse], error)
+	CancelWorkflowRun(context.Context, *connect.Request[v1.CancelWorkflowRunRequest]) (*connect.Response[v1.CancelWorkflowRunResponse], error)
+	GetWorkflowRunLogs(context.Context, *connect.Request[v1.GetWorkflowRunLogsRequest]) (*connect.Response[v1.GetWorkflowRunLogsResponse], error)
+}
+
+// NewWorkflowRunServiceClient constructs a client for the golf.v1.WorkflowRunService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewWorkflowRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) WorkflowRunServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	workflowRunServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("WorkflowRunService").Methods()
+	return &workflowRunServiceClient{
+		dispatchWorkflow: connect.NewClient[v1.DispatchWorkflowRequest, v1.DispatchWorkflowResponse](
+			httpClient,
+			baseURL+WorkflowRunServiceDispatchWorkflowProcedure,
+			connect.WithSchema(workflowRunServiceMethods.ByName("DispatchWorkflow")),
+			connect.WithClientOptions(opts...),
+		),
+		getWorkflowRun: connect.NewClient[v1.GetWorkflowRunRequest, v1.GetWorkflowRunResponse](
+			httpClient,
+			baseURL+WorkflowRunServiceGetWorkflowRunProcedure,
+			connect.WithSchema(workflowRunServiceMethods.ByName("GetWorkflowRun")),
+			connect.WithClientOptions(opts...),
+		),
+		listWorkflowRuns: connect.NewClient[v1.ListWorkflowRunsRequest, v1.ListWorkflowRunsResponse](
+			httpClient,
+			baseURL+WorkflowRunServiceListWorkflowRunsProcedure,
+			connect.WithSchema(workflowRunServiceMethods.ByName("ListWorkflowRuns")),
+			connect.WithClientOptions(opts...),
+		),
+		cancelWorkflowRun: connect.NewClient[v1.CancelWorkflowRunRequest, v1.CancelWorkflowRunResponse](
+			httpClient,
+			baseURL+WorkflowRunServiceCancelWorkflowRunProcedure,
+			connect.WithSchema(workflowRunServiceMethods.ByName("CancelWorkflowRun")),
+			connect.WithClientOptions(opts...),
+		),
+		getWorkflowRunLogs: connect.NewClient[v1.GetWorkflowRunLogsRequest, v1.GetWorkflowRunLogsResponse](
+			httpClient,
+			baseURL+WorkflowRunServiceGetWorkflowRunLogsProcedure,
+			connect.WithSchema(workflowRunServiceMethods.ByName("GetWorkflowRunLogs")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// workflowRunServiceClient implements WorkflowRunServiceClient.
+type workflowRunServiceClient struct {
+	dispatchWorkflow   *connect.Client[v1.DispatchWorkflowRequest, v1.DispatchWorkflowResponse]
+	getWorkflowRun     *connect.Client[v1.GetWorkflowRunRequest, v1.GetWorkflowRunResponse]
+	listWorkflowRuns   *connect.Client[v1.ListWorkflowRunsRequest, v1.ListWorkflowRunsResponse]
+	cancelWorkflowRun  *connect.Client[v1.CancelWorkflowRunRequest, v1.CancelWorkflowRunResponse]
+	getWorkflowRunLogs *connect.Client[v1.GetWorkflowRunLogsRequest, v1.GetWorkflowRunLogsResponse]
+}
+
+// DispatchWorkflow calls golf.v1.WorkflowRunService.DispatchWorkflow.
+func (c *workflowRunServiceClient) DispatchWorkflow(ctx context.Context, req *connect.Request[v1.DispatchWorkflowRequest]) (*connect.Response[v1.DispatchWorkflowResponse], error) {
+	return c.dispatchWorkflow.CallUnary(ctx, req)
+}
+
+// GetWorkflowRun calls golf.v1.WorkflowRunService.GetWorkflowRun.
+func (c *workflowRunServiceClient) GetWorkflowRun(ctx context.Context, req *connect.Request[v1.GetWorkflowRunRequest]) (*connect.Response[v1.GetWorkflowRunResponse], error) {
+	return c.getWorkflowRun.CallUnary(ctx, req)
+}
+
+// ListWorkflowRuns calls golf.v1.WorkflowRunService.ListWorkflowRuns.
+func (c *workflowRunServiceClient) ListWorkflowRuns(ctx context.Context, req *connect.Request[v1.ListWorkflowRunsRequest]) (*connect.Response[v1.ListWorkflowRunsResponse], error) {
+	return c.listWorkflowRuns.CallUnary(ctx, req)
+}
+
+// CancelWorkflowRun calls golf.v1.WorkflowRunService.CancelWorkflowRun.
+func (c *workflowRunServiceClient) CancelWorkflowRun(ctx context.Context, req *connect.Request[v1.CancelWorkflowRunRequest]) (*connect.Response[v1.CancelWorkflowRunResponse], error) {
+	return c.cancelWorkflowRun.CallUnary(ctx, req)
+}
+
+// GetWorkflowRunLogs calls golf.v1.WorkflowRunService.GetWorkflowRunLogs.
+func (c *workflowRunServiceClient) GetWorkflowRunLogs(ctx context.Context, req *connect.Request[v1.GetWorkflowRunLogsRequest]) (*connect.Response[v1.GetWorkflowRunLogsResponse], error) {
+	return c.getWorkflowRunLogs.CallUnary(ctx, req)
+}
+
+// WorkflowRunServiceHandler is an implementation of the golf.v1.WorkflowRunService service.
+type WorkflowRunServiceHandler interface {
+	DispatchWorkflow(context.Context, *connect.Request[v1.DispatchWorkflowRequest]) (*connect.Response[v1.DispatchWorkflowResponse], error)
+	GetWorkflowRun(context.Context, *connect.Request[v1.GetWorkflowRunRequest]) (*connect.Response[v1.GetWorkflowRunResponse], error)
+	ListWorkflowRuns(context.Context, *connect.Request[v1.ListWorkflowRunsRequest]) (*connect.Response[v1.ListWorkflowRunsResponse], error)
+	CancelWorkflowRun(context.Context, *connect.Request[v1.CancelWorkflowRunRequest]) (*connect.Response[v1.CancelWorkflowRunResponse], error)
+	GetWorkflowRunLogs(context.Context, *connect.Request[v1.GetWorkflowRunLogsRequest]) (*connect.Response[v1.GetWorkflowRunLogsResponse], error)
+}
+
+// NewWorkflowRunServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewWorkflowRunServiceHandler(svc WorkflowRunServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	workflowRunServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("WorkflowRunService").Methods()
+	workflowRunServiceDispatchWorkflowHandler := connect.NewUnaryHandler(
+		WorkflowRunServiceDispatchWorkflowProcedure,
+		svc.DispatchWorkflow,
+		connect.WithSchema(workflowRunServiceMethods.ByName("DispatchWorkflow")),
+		connect.WithHandlerOptions(opts...),
+	)
+	workflowRunServiceGetWorkflowRunHandler := connect.NewUnaryHandler(
+		WorkflowRunServiceGetWorkflowRunProcedure,
+		svc.GetWorkflowRun,
+		connect.WithSchema(workflowRunServiceMethods.ByName("GetWorkflowRun")),
+		connect.WithHandlerOptions(opts...),
+	)
+	workflowRunServiceListWorkflowRunsHandler := connect.NewUnaryHandler(
+		WorkflowRunServiceListWorkflowRunsProcedure,
+		svc.ListWorkflowRuns,
+		connect.WithSchema(workflowRunServiceMethods.ByName("ListWorkflowRuns")),
+		connect.WithHandlerOptions(opts...),
+	)
+	workflowRunServiceCancelWorkflowRunHandler := connect.NewUnaryHandler(
+		WorkflowRunServiceCancelWorkflowRunProcedure,
+		svc.CancelWorkflowRun,
+		connect.WithSchema(workflowRunServiceMethods.ByName("CancelWorkflowRun")),
+		connect.WithHandlerOptions(opts...),
+	)
+	workflowRunServiceGetWorkflowRunLogsHandler := connect.NewUnaryHandler(
+		WorkflowRunServiceGetWorkflowRunLogsProcedure,
+		svc.GetWorkflowRunLogs,
+		connect.WithSchema(workflowRunServiceMethods.ByName("GetWorkflowRunLogs")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.WorkflowRunService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case WorkflowRunServiceDispatchWorkflowProcedure:
+			workflowRunServiceDispatchWorkflowHandler.ServeHTTP(w, r)
+		case WorkflowRunServiceGetWorkflowRunProcedure:
+			workflowRunServiceGetWorkflowRunHandler.ServeHTTP(w, r)
+		case WorkflowRunServiceListWorkflowRunsProcedure:
+			workflowRunServiceListWorkflowRunsHandler.ServeHTTP(w, r)
+		case WorkflowRunServiceCancelWorkflowRunProcedure:
+			workflowRunServiceCancelWorkflowRunHandler.ServeHTTP(w, r)
+		case WorkflowRunServiceGetWorkflowRunLogsProcedure:
+			workflowRunServiceGetWorkflowRunLogsHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedWorkflowRunServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedWorkflowRunServiceHandler struct{}
+
+func (UnimplementedWorkflowRunServiceHandler) DispatchWorkflow(context.Context, *connect.Request[v1.DispatchWorkflowRequest]) (*connect.Response[v1.DispatchWorkflowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.WorkflowRunService.DispatchWorkflow is not implemented"))
+}
+
+func (UnimplementedWorkflowRunServiceHandler) GetWorkflowRun(context.Context, *connect.Request[v1.GetWorkflowRunRequest]) (*connect.Response[v1.GetWorkflowRunResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.WorkflowRunService.GetWorkflowRun is not implemented"))
+}
+
+func (UnimplementedWorkflowRunServiceHandler) ListWorkflowRuns(context.Context, *connect.Request[v1.ListWorkflowRunsRequest]) (*connect.Response[v1.ListWorkflowRunsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.WorkflowRunService.ListWorkflowRuns is not implemented"))
+}
+
+func (UnimplementedWorkflowRunServiceHandler) CancelWorkflowRun(context.Context, *connect.Request[v1.CancelWorkflowRunRequest]) (*connect.Response[v1.CancelWorkflowRunResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.WorkflowRunService.CancelWorkflowRun is not implemented"))
+}
+
+func (UnimplementedWorkflowRunServiceHandler) GetWorkflowRunLogs(context.Context, *connect.Request[v1.GetWorkflowRunLogsRequest]) (*connect.Response[v1.GetWorkflowRunLogsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.WorkflowRunService.GetWorkflowRunLogs is not implemented"))
+}
+
+// OrganizationCreationServiceClient is a client for the golf.v1.OrganizationCreationService
+// service.
+type OrganizationCreationServiceClient interface {
+	GetOrganizationCreationPolicy(context.Context, *connect.Request[v1.GetOrganizationCreationPolicyRequest]) (*connect.Response[v1.GetOrganizationCreationPolicyResponse], error)
+	UpdateOrganizationCreationPolicy(context.Context, *connect.Request[v1.UpdateOrganizationCreationPolicyRequest]) (*connect.Response[v1.UpdateOrganizationCreationPolicyResponse], error)
+	CreateOrganization(context.Context, *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error)
+}
+
+// NewOrganizationCreationServiceClient constructs a client for the
+// golf.v1.OrganizationCreationService service. By default, it uses the Connect protocol with the
+// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
+// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewOrganizationCreationServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) OrganizationCreationServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	organizationCreationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("OrganizationCreationService").Methods()
+	return &organizationCreationServiceClient{
+		getOrganizationCreationPolicy: connect.NewClient[v1.GetOrganizationCreationPolicyRequest, v1.GetOrganizationCreationPolicyResponse](
+			httpClient,
+			baseURL+OrganizationCreationServiceGetOrganizationCreationPolicyProcedure,
+			connect.WithSchema(organizationCreationServiceMethods.ByName("GetOrganizationCreationPolicy")),
+			connect.WithClientOptions(opts...),
+		),
+		updateOrganizationCreationPolicy: connect.NewClient[v1.UpdateOrganizationCreationPolicyRequest, v1.UpdateOrganizationCreationPolicyResponse](
+			httpClient,
+			baseURL+OrganizationCreationServiceUpdateOrganizationCreationPolicyProcedure,
+			connect.WithSchema(organizationCreationServiceMethods.ByName("UpdateOrganizationCreationPolicy")),
+			connect.WithClientOptions(opts...),
+		),
+		createOrganization: connect.NewClient[v1.CreateOrganizationRequest, v1.CreateOrganizationResponse](
+			httpClient,
+			baseURL+OrganizationCreationServiceCreateOrganizationProcedure,
+			connect.WithSchema(organizationCreationServiceMethods.ByName("CreateOrganization")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// organizationCreationServiceClient implements OrganizationCreationServiceClient.
+type organizationCreationServiceClient struct {
+	getOrganizationCreationPolicy    *connect.Client[v1.GetOrganizationCreationPolicyRequest, v1.GetOrganizationCreationPolicyResponse]
+	updateOrganizationCreationPolicy *connect.Client[v1.UpdateOrganizationCreationPolicyRequest, v1.UpdateOrganizationCreationPolicyResponse]
+	createOrganization               *connect.Client[v1.CreateOrganizationRequest, v1.CreateOrganizationResponse]
+}
+
+// GetOrganizationCreationPolicy calls
+// golf.v1.OrganizationCreationService.GetOrganizationCreationPolicy.
+func (c *organizationCreationServiceClient) GetOrganizationCreationPolicy(ctx context.Context, req *connect.Request[v1.GetOrganizationCreationPolicyRequest]) (*connect.Response[v1.GetOrganizationCreationPolicyResponse], error) {
+	return c.getOrganizationCreationPolicy.CallUnary(ctx, req)
+}
+
+// UpdateOrganizationCreationPolicy calls
+// golf.v1.OrganizationCreationService.UpdateOrganizationCreationPolicy.
+func (c *organizationCreationServiceClient) UpdateOrganizationCreationPolicy(ctx context.Context, req *connect.Request[v1.UpdateOrganizationCreationPolicyRequest]) (*connect.Response[v1.UpdateOrganizationCreationPolicyResponse], error) {
+	return c.updateOrganizationCreationPolicy.CallUnary(ctx, req)
+}
+
+// CreateOrganization calls golf.v1.OrganizationCreationService.CreateOrganization.
+func (c *organizationCreationServiceClient) CreateOrganization(ctx context.Context, req *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error) {
+	return c.createOrganization.CallUnary(ctx, req)
+}
+
+// OrganizationCreationServiceHandler is an implementation of the
+// golf.v1.OrganizationCreationService service.
+type OrganizationCreationServiceHandler interface {
+	GetOrganizationCreationPolicy(context.Context, *connect.Request[v1.GetOrganizationCreationPolicyRequest]) (*connect.Response[v1.GetOrganizationCreationPolicyResponse], error)
+	UpdateOrganizationCreationPolicy(context.Context, *connect.Request[v1.UpdateOrganizationCreationPolicyRequest]) (*connect.Response[v1.UpdateOrganizationCreationPolicyResponse], error)
+	CreateOrganization(context.Context, *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error)
+}
+
+// NewOrganizationCreationServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewOrganizationCreationServiceHandler(svc OrganizationCreationServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	organizationCreationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("OrganizationCreationService").Methods()
+	organizationCreationServiceGetOrganizationCreationPolicyHandler := connect.NewUnaryHandler(
+		OrganizationCreationServiceGetOrganizationCreationPolicyProcedure,
+		svc.GetOrganizationCreationPolicy,
+		connect.WithSchema(organizationCreationServiceMethods.ByName("GetOrganizationCreationPolicy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationCreationServiceUpdateOrganizationCreationPolicyHandler := connect.NewUnaryHandler(
+		OrganizationCreationServiceUpdateOrganizationCreationPolicyProcedure,
+		svc.UpdateOrganizationCreationPolicy,
+		connect.WithSchema(organizationCreationServiceMethods.ByName("UpdateOrganizationCreationPolicy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationCreationServiceCreateOrganizationHandler := connect.NewUnaryHandler(
+		OrganizationCreationServiceCreateOrganizationProcedure,
+		svc.CreateOrganization,
+		connect.WithSchema(organizationCreationServiceMethods.ByName("CreateOrganization")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.OrganizationCreationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case OrganizationCreationServiceGetOrganizationCreationPolicyProcedure:
+			organizationCreationServiceGetOrganizationCreationPolicyHandler.ServeHTTP(w, r)
+		case OrganizationCreationServiceUpdateOrganizationCreationPolicyProcedure:
+			organizationCreationServiceUpdateOrganizationCreationPolicyHandler.ServeHTTP(w, r)
+		case OrganizationCreationServiceCreateOrganizationProcedure:
+			organizationCreationServiceCreateOrganizationHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedOrganizationCreationServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedOrganizationCreationServiceHandler struct{}
+
+func (UnimplementedOrganizationCreationServiceHandler) GetOrganizationCreationPolicy(context.Context, *connect.Request[v1.GetOrganizationCreationPolicyRequest]) (*connect.Response[v1.GetOrganizationCreationPolicyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationCreationService.GetOrganizationCreationPolicy is not implemented"))
+}
+
+func (UnimplementedOrganizationCreationServiceHandler) UpdateOrganizationCreationPolicy(context.Context, *connect.Request[v1.UpdateOrganizationCreationPolicyRequest]) (*connect.Response[v1.UpdateOrganizationCreationPolicyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationCreationService.UpdateOrganizationCreationPolicy is not implemented"))
+}
+
+func (UnimplementedOrganizationCreationServiceHandler) CreateOrganization(context.Context, *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationCreationService.CreateOrganization is not implemented"))
+}
+
+// InfrastructureConnectionServiceClient is a client for the golf.v1.InfrastructureConnectionService
+// service.
+type InfrastructureConnectionServiceClient interface {
+	ListInfrastructureConnections(context.Context, *connect.Request[v1.ListInfrastructureConnectionsRequest]) (*connect.Response[v1.ListInfrastructureConnectionsResponse], error)
+	SaveInfrastructureConnection(context.Context, *connect.Request[v1.SaveInfrastructureConnectionRequest]) (*connect.Response[v1.SaveInfrastructureConnectionResponse], error)
+	TestInfrastructureConnection(context.Context, *connect.Request[v1.TestInfrastructureConnectionRequest]) (*connect.Response[v1.TestInfrastructureConnectionResponse], error)
+	ActivateInfrastructureConnection(context.Context, *connect.Request[v1.ActivateInfrastructureConnectionRequest]) (*connect.Response[v1.ActivateInfrastructureConnectionResponse], error)
+}
+
+// NewInfrastructureConnectionServiceClient constructs a client for the
+// golf.v1.InfrastructureConnectionService service. By default, it uses the Connect protocol with
+// the binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use
+// the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewInfrastructureConnectionServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) InfrastructureConnectionServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	infrastructureConnectionServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("InfrastructureConnectionService").Methods()
+	return &infrastructureConnectionServiceClient{
+		listInfrastructureConnections: connect.NewClient[v1.ListInfrastructureConnectionsRequest, v1.ListInfrastructureConnectionsResponse](
+			httpClient,
+			baseURL+InfrastructureConnectionServiceListInfrastructureConnectionsProcedure,
+			connect.WithSchema(infrastructureConnectionServiceMethods.ByName("ListInfrastructureConnections")),
+			connect.WithClientOptions(opts...),
+		),
+		saveInfrastructureConnection: connect.NewClient[v1.SaveInfrastructureConnectionRequest, v1.SaveInfrastructureConnectionResponse](
+			httpClient,
+			baseURL+InfrastructureConnectionServiceSaveInfrastructureConnectionProcedure,
+			connect.WithSchema(infrastructureConnectionServiceMethods.ByName("SaveInfrastructureConnection")),
+			connect.WithClientOptions(opts...),
+		),
+		testInfrastructureConnection: connect.NewClient[v1.TestInfrastructureConnectionRequest, v1.TestInfrastructureConnectionResponse](
+			httpClient,
+			baseURL+InfrastructureConnectionServiceTestInfrastructureConnectionProcedure,
+			connect.WithSchema(infrastructureConnectionServiceMethods.ByName("TestInfrastructureConnection")),
+			connect.WithClientOptions(opts...),
+		),
+		activateInfrastructureConnection: connect.NewClient[v1.ActivateInfrastructureConnectionRequest, v1.ActivateInfrastructureConnectionResponse](
+			httpClient,
+			baseURL+InfrastructureConnectionServiceActivateInfrastructureConnectionProcedure,
+			connect.WithSchema(infrastructureConnectionServiceMethods.ByName("ActivateInfrastructureConnection")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// infrastructureConnectionServiceClient implements InfrastructureConnectionServiceClient.
+type infrastructureConnectionServiceClient struct {
+	listInfrastructureConnections    *connect.Client[v1.ListInfrastructureConnectionsRequest, v1.ListInfrastructureConnectionsResponse]
+	saveInfrastructureConnection     *connect.Client[v1.SaveInfrastructureConnectionRequest, v1.SaveInfrastructureConnectionResponse]
+	testInfrastructureConnection     *connect.Client[v1.TestInfrastructureConnectionRequest, v1.TestInfrastructureConnectionResponse]
+	activateInfrastructureConnection *connect.Client[v1.ActivateInfrastructureConnectionRequest, v1.ActivateInfrastructureConnectionResponse]
+}
+
+// ListInfrastructureConnections calls
+// golf.v1.InfrastructureConnectionService.ListInfrastructureConnections.
+func (c *infrastructureConnectionServiceClient) ListInfrastructureConnections(ctx context.Context, req *connect.Request[v1.ListInfrastructureConnectionsRequest]) (*connect.Response[v1.ListInfrastructureConnectionsResponse], error) {
+	return c.listInfrastructureConnections.CallUnary(ctx, req)
+}
+
+// SaveInfrastructureConnection calls
+// golf.v1.InfrastructureConnectionService.SaveInfrastructureConnection.
+func (c *infrastructureConnectionServiceClient) SaveInfrastructureConnection(ctx context.Context, req *connect.Request[v1.SaveInfrastructureConnectionRequest]) (*connect.Response[v1.SaveInfrastructureConnectionResponse], error) {
+	return c.saveInfrastructureConnection.CallUnary(ctx, req)
+}
+
+// TestInfrastructureConnection calls
+// golf.v1.InfrastructureConnectionService.TestInfrastructureConnection.
+func (c *infrastructureConnectionServiceClient) TestInfrastructureConnection(ctx context.Context, req *connect.Request[v1.TestInfrastructureConnectionRequest]) (*connect.Response[v1.TestInfrastructureConnectionResponse], error) {
+	return c.testInfrastructureConnection.CallUnary(ctx, req)
+}
+
+// ActivateInfrastructureConnection calls
+// golf.v1.InfrastructureConnectionService.ActivateInfrastructureConnection.
+func (c *infrastructureConnectionServiceClient) ActivateInfrastructureConnection(ctx context.Context, req *connect.Request[v1.ActivateInfrastructureConnectionRequest]) (*connect.Response[v1.ActivateInfrastructureConnectionResponse], error) {
+	return c.activateInfrastructureConnection.CallUnary(ctx, req)
+}
+
+// InfrastructureConnectionServiceHandler is an implementation of the
+// golf.v1.InfrastructureConnectionService service.
+type InfrastructureConnectionServiceHandler interface {
+	ListInfrastructureConnections(context.Context, *connect.Request[v1.ListInfrastructureConnectionsRequest]) (*connect.Response[v1.ListInfrastructureConnectionsResponse], error)
+	SaveInfrastructureConnection(context.Context, *connect.Request[v1.SaveInfrastructureConnectionRequest]) (*connect.Response[v1.SaveInfrastructureConnectionResponse], error)
+	TestInfrastructureConnection(context.Context, *connect.Request[v1.TestInfrastructureConnectionRequest]) (*connect.Response[v1.TestInfrastructureConnectionResponse], error)
+	ActivateInfrastructureConnection(context.Context, *connect.Request[v1.ActivateInfrastructureConnectionRequest]) (*connect.Response[v1.ActivateInfrastructureConnectionResponse], error)
+}
+
+// NewInfrastructureConnectionServiceHandler builds an HTTP handler from the service implementation.
+// It returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewInfrastructureConnectionServiceHandler(svc InfrastructureConnectionServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	infrastructureConnectionServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("InfrastructureConnectionService").Methods()
+	infrastructureConnectionServiceListInfrastructureConnectionsHandler := connect.NewUnaryHandler(
+		InfrastructureConnectionServiceListInfrastructureConnectionsProcedure,
+		svc.ListInfrastructureConnections,
+		connect.WithSchema(infrastructureConnectionServiceMethods.ByName("ListInfrastructureConnections")),
+		connect.WithHandlerOptions(opts...),
+	)
+	infrastructureConnectionServiceSaveInfrastructureConnectionHandler := connect.NewUnaryHandler(
+		InfrastructureConnectionServiceSaveInfrastructureConnectionProcedure,
+		svc.SaveInfrastructureConnection,
+		connect.WithSchema(infrastructureConnectionServiceMethods.ByName("SaveInfrastructureConnection")),
+		connect.WithHandlerOptions(opts...),
+	)
+	infrastructureConnectionServiceTestInfrastructureConnectionHandler := connect.NewUnaryHandler(
+		InfrastructureConnectionServiceTestInfrastructureConnectionProcedure,
+		svc.TestInfrastructureConnection,
+		connect.WithSchema(infrastructureConnectionServiceMethods.ByName("TestInfrastructureConnection")),
+		connect.WithHandlerOptions(opts...),
+	)
+	infrastructureConnectionServiceActivateInfrastructureConnectionHandler := connect.NewUnaryHandler(
+		InfrastructureConnectionServiceActivateInfrastructureConnectionProcedure,
+		svc.ActivateInfrastructureConnection,
+		connect.WithSchema(infrastructureConnectionServiceMethods.ByName("ActivateInfrastructureConnection")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.InfrastructureConnectionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case InfrastructureConnectionServiceListInfrastructureConnectionsProcedure:
+			infrastructureConnectionServiceListInfrastructureConnectionsHandler.ServeHTTP(w, r)
+		case InfrastructureConnectionServiceSaveInfrastructureConnectionProcedure:
+			infrastructureConnectionServiceSaveInfrastructureConnectionHandler.ServeHTTP(w, r)
+		case InfrastructureConnectionServiceTestInfrastructureConnectionProcedure:
+			infrastructureConnectionServiceTestInfrastructureConnectionHandler.ServeHTTP(w, r)
+		case InfrastructureConnectionServiceActivateInfrastructureConnectionProcedure:
+			infrastructureConnectionServiceActivateInfrastructureConnectionHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedInfrastructureConnectionServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedInfrastructureConnectionServiceHandler struct{}
+
+func (UnimplementedInfrastructureConnectionServiceHandler) ListInfrastructureConnections(context.Context, *connect.Request[v1.ListInfrastructureConnectionsRequest]) (*connect.Response[v1.ListInfrastructureConnectionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InfrastructureConnectionService.ListInfrastructureConnections is not implemented"))
+}
+
+func (UnimplementedInfrastructureConnectionServiceHandler) SaveInfrastructureConnection(context.Context, *connect.Request[v1.SaveInfrastructureConnectionRequest]) (*connect.Response[v1.SaveInfrastructureConnectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InfrastructureConnectionService.SaveInfrastructureConnection is not implemented"))
+}
+
+func (UnimplementedInfrastructureConnectionServiceHandler) TestInfrastructureConnection(context.Context, *connect.Request[v1.TestInfrastructureConnectionRequest]) (*connect.Response[v1.TestInfrastructureConnectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InfrastructureConnectionService.TestInfrastructureConnection is not implemented"))
+}
+
+func (UnimplementedInfrastructureConnectionServiceHandler) ActivateInfrastructureConnection(context.Context, *connect.Request[v1.ActivateInfrastructureConnectionRequest]) (*connect.Response[v1.ActivateInfrastructureConnectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InfrastructureConnectionService.ActivateInfrastructureConnection is not implemented"))
 }

@@ -6,8 +6,18 @@ package database
 
 import (
 	"database/sql"
+	"encoding/json"
 	"time"
+
+	"github.com/google/uuid"
 )
+
+type GolfActiveObjectConnection struct {
+	Singleton bool
+	ProfileID uuid.NullUUID
+	Version   sql.NullInt64
+	Revision  int64
+}
 
 type GolfApiCredential struct {
 	ID              int64
@@ -44,15 +54,16 @@ type GolfAuditEvent struct {
 }
 
 type GolfCryptoEvent struct {
-	ID                 int64
-	OccurredAt         time.Time
-	Actor              string
-	OperationID        string
-	Action             string
-	KeyID              string
-	SessionsCount      int64
-	OauthAttemptsCount int64
-	LocalAccountsCount int64
+	ID                             int64
+	OccurredAt                     time.Time
+	Actor                          string
+	OperationID                    string
+	Action                         string
+	KeyID                          string
+	SessionsCount                  int64
+	OauthAttemptsCount             int64
+	LocalAccountsCount             int64
+	InfrastructureConnectionsCount int64
 }
 
 type GolfEncryptionKey struct {
@@ -65,6 +76,79 @@ type GolfEncryptionKey struct {
 type GolfEncryptionPolicy struct {
 	Singleton   bool
 	ActiveKeyID string
+}
+
+type GolfExecutionPolicy struct {
+	ForgeURL              string
+	Scope                 string
+	ScopeID               string
+	OwnerID               int64
+	Mode                  string
+	ManualDispatchEnabled bool
+	AllowAllWorkflows     bool
+	Revision              int64
+	RevocationEpoch       int64
+	UpdatedAt             time.Time
+}
+
+type GolfExecutionPolicyEvent struct {
+	ID                      int64
+	ForgeURL                string
+	Scope                   string
+	ScopeID                 string
+	Revision                int64
+	RevocationEpoch         int64
+	ActorUserID             int64
+	ActorSessionID          int64
+	Action                  string
+	Mode                    string
+	ManualDispatchEnabled   bool
+	AllowAllWorkflows       bool
+	SelectedRepositoryCount int32
+	WorkflowCount           int32
+	CreatedAt               time.Time
+}
+
+type GolfExecutionPolicyRepository struct {
+	ForgeURL     string
+	Scope        string
+	ScopeID      string
+	RepositoryID int64
+	OwnerID      int64
+}
+
+type GolfExecutionPolicyWorkflow struct {
+	ForgeURL     string
+	Scope        string
+	ScopeID      string
+	WorkflowPath string
+}
+
+type GolfInfrastructureActivationEvent struct {
+	Revision       int64
+	ProfileID      uuid.UUID
+	Version        int64
+	ActorUserID    int64
+	ActorSessionID int64
+	OccurredAt     time.Time
+}
+
+type GolfInfrastructureConnection struct {
+	ID             uuid.UUID
+	CurrentVersion int64
+	CreatedAt      time.Time
+}
+
+type GolfInfrastructureConnectionVersion struct {
+	ProfileID           uuid.UUID
+	Version             int64
+	Config              json.RawMessage
+	EncryptedCredential []byte
+	CredentialBinding   []byte
+	CredentialKeyID     string
+	ActorUserID         int64
+	ActorSessionID      int64
+	CreatedAt           time.Time
 }
 
 type GolfIssueMutation struct {
@@ -140,6 +224,30 @@ type GolfOauthAttempt struct {
 	CredentialKeyID   string
 }
 
+type GolfOrganizationCreationPolicy struct {
+	ForgeURL        string
+	Mode            string
+	Revision        int64
+	RevocationEpoch int64
+}
+
+type GolfOrganizationCreationPolicyEvent struct {
+	ID                int64
+	ForgeURL          string
+	Revision          int64
+	RevocationEpoch   int64
+	ActorUserID       int64
+	ActorSessionID    int64
+	Mode              string
+	SelectedUserCount int32
+	CreatedAt         time.Time
+}
+
+type GolfOrganizationCreationSelection struct {
+	ForgeURL string
+	UserID   int64
+}
+
 type GolfRecoveryEvent struct {
 	ID                         int64
 	BackupID                   string
@@ -173,6 +281,12 @@ type GolfRepositoryCreationEvent struct {
 	State      string
 }
 
+type GolfRunnerPresence struct {
+	ForgeURL string
+	RunnerID string
+	LastSeen time.Time
+}
+
 type GolfSession struct {
 	TokenHash              []byte
 	UserID                 int64
@@ -193,4 +307,52 @@ type GolfUser struct {
 	Login       string
 	FullName    string
 	AvatarURL   string
+}
+
+type GolfWorkflowRun struct {
+	ID                   uuid.UUID
+	ForgeURL             string
+	RepositoryID         int64
+	OwnerID              int64
+	RepositoryOwner      string
+	RepositoryName       string
+	OrganizationOwned    bool
+	UserID               int64
+	SessionHash          []byte
+	CommitID             string
+	WorkflowPath         string
+	BlobID               string
+	Format               int32
+	Plan                 json.RawMessage
+	SourceArchive        []byte
+	SourceSha256         string
+	PolicyEpochs         json.RawMessage
+	IdempotencyKey       uuid.UUID
+	InputHash            []byte
+	State                string
+	Version              int64
+	CreatedAt            time.Time
+	StartedAt            sql.NullTime
+	FinishedAt           sql.NullTime
+	ExitCode             sql.NullInt32
+	Reason               string
+	RunnerID             string
+	AttemptID            string
+	LeaseTokenHash       []byte
+	LeaseExpiresAt       sql.NullTime
+	CancelRequested      bool
+	LogsTruncated        bool
+	LogBytes             int64
+	LogSequence          int64
+	SourceStorage        string
+	SourceKey            string
+	SourceFingerprint    string
+	SourceProfileID      uuid.NullUUID
+	SourceProfileVersion sql.NullInt64
+}
+
+type GolfWorkflowRunLog struct {
+	RunID    uuid.UUID
+	Sequence int64
+	Text     string
 }

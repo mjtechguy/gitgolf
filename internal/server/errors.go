@@ -43,6 +43,22 @@ func rpcError(err error) error {
 	var input inputError
 	var upstream forgeError
 	switch {
+	case errors.Is(err, errInfrastructureConflict):
+		code, message = connect.CodeFailedPrecondition, "Infrastructure connection changed or its source binding is unavailable. Refresh and review before continuing."
+	case errors.Is(err, errOrganizationCreationPolicyConflict):
+		code, message = connect.CodeFailedPrecondition, "Organization creation policy changed. Refresh before continuing."
+	case errors.Is(err, errWorkflowRunConflict):
+		code, message = connect.CodeFailedPrecondition, "Workflow run intent or version changed. Inspect the recorded run before continuing."
+	case errors.Is(err, errWorkflowPolicyDenied):
+		code, message = connect.CodePermissionDenied, "Manual workflow execution is disabled by the applicable execution policy."
+	case errors.Is(err, errWorkflowSource):
+		code, message = connect.CodeFailedPrecondition, "Repository source is outside the bounded safe source archive catalog."
+	case errors.Is(err, errWorkflowExecutionUnsupported):
+		code, message = connect.CodeFailedPrecondition, "Workflow is outside the bounded manual Linux shell catalog."
+	case errors.Is(err, errRunnerUnavailable):
+		code, message = connect.CodeFailedPrecondition, "No operator-enrolled worker image supports this workflow. Ask your instance administrator to configure a worker and approved image."
+	case errors.Is(err, errExecutionPolicyConflict):
+		code, message = connect.CodeFailedPrecondition, "Execution policy or authority changed. Refresh and review it before continuing."
 	case errors.Is(err, errAdminAccountConflict):
 		code, message = connect.CodeFailedPrecondition, "The account state changed. Refresh and inspect it before continuing."
 	case errors.Is(err, errPasswordConfirmation):

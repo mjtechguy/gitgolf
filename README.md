@@ -269,3 +269,20 @@ Open **Organizations** to browse memberships, native team/unit settings, members
 Golf records correlated JSON request logs and can export bounded API/Gitea/PostgreSQL traces and private Prometheus metrics. Metrics use a separate authenticated listener; export is disabled by default. See the [configuration and privacy contract](docs/OBSERVABILITY.md) and [local monitoring overlay](deploy/observability/README.md). Job/runner instrumentation and production operational qualification remain open.
 
 Issue discussion creation uses `write:issue` with current user/repository scopes and UUID-backed intents. An unknown result is inspected rather than resent; native address races remain a qualification limit. CLI/MCP expose21 read tools, including comment pages and own-operation status, with no new write commands. See [discussion boundaries](docs/ISSUE_DISCUSSION_CONTRACT.md).
+
+### Local CI and RustFS development profile
+
+The development stack can run the bounded manual shell pipeline catalog with local PostgreSQL, RustFS and an isolated Docker worker. This is not full Actions/GitLab engine compatibility. Initialize private credentials once, then use all three Compose files consistently:
+
+```sh
+python3 scripts/init-ci-env.py
+python3 scripts/init-storage-env.py
+docker compose --env-file .env --env-file .env.ci --env-file .env.storage \
+  -f compose.yaml -f compose.ci.yaml -f compose.storage.yaml up -d --build rustfs golf
+docker compose --env-file .env --env-file .env.ci --env-file .env.storage \
+  -f compose.yaml -f compose.ci.yaml -f compose.storage.yaml exec -T golf golf objectstore initialize
+docker compose --env-file .env --env-file .env.ci --env-file .env.storage \
+  -f compose.yaml -f compose.ci.yaml -f compose.storage.yaml up -d --build runner
+```
+
+Use **Admin portal → Infrastructure** for encrypted connection profiles and storage activation. Database profiles can be saved/tested; switching live databases remains an operator cutover. Development data is disposable. **Execution policy** defaults to deny: enable only the repositories and literal workflow paths you intend to run, at every required scope. The local worker daemon is privileged trusted infrastructure; untrusted jobs do not receive its socket or credentials. See the [runner contract](docs/RUNNER_ISOLATION_CONTRACT.md) and [pipeline compatibility](docs/PIPELINE_EXECUTION_COMPATIBILITY.md).

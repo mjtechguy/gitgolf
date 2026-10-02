@@ -1,0 +1,52 @@
+# Manual Linux shell pipeline catalog
+
+Golf's initial execution compiler accepts a bounded subset of GitHub Actions and GitLab CI source. Its catalog is `golf.workflow.shell.v1`. This is a **Golf shell execution subset**, not GitHub hosted-runner equivalence, `act` compatibility, or GitLab Runner/coordinator compatibility. A compiler test, a Docker executor test and a fully authorized/recoverable product run are separate qualification levels; consult the [implementation ledger](IMPLEMENTATION_STATUS.md) for the currently proven runtime.
+
+The portable Docker Compose path is the first executor target. Kubernetes, scalable runner pools and Cloudflare execution require their own adapters, isolation and recovery evidence. Cloudflare and AI are optional. Golf's own repository still has no CI workflows.
+
+## Compilation and source boundary
+
+`compileWorkflowExecution(format, data)` accepts the exact verified workflow bytes and returns a private `workflowExecutionPlan`, or a static `failed_precondition` error with no partial plan and no source excerpt. The existing `workflowInspector` remains the single YAML safety/field-catalog validator; compilation first requires a fully accepted inspection and then extracts commands from those same bytes. Unsupported fields are denied rather than ignored. Public inspection responses contain only bounded job/event metadata and fixed diagnostics; command text stays internal to the admitted execution plan.
+
+Existing 64-KiB UTF-8/file, depth-32, 4,096-node and single-document restrictions apply. Aliases/anchors, explicit tags, merge keys, duplicate/non-string mapping keys, unsupported controls and Actions expressions are rejected. Compilation adds a 50-step/script-item limit and an explicit Linux runner-label allowlist. Image approval, actor/repository policy, exact repository/commit/blob binding, source-credential issuance and job admission are separate server responsibilities; successful compilation grants none of them.
+
+The first source workspace is an ordinary-source snapshot from an exact native archive, not a full Git checkout. `.git` metadata/history, submodule checkout, LFS hydration, hooks and provider credential helpers are unsupported. Source must not become a host path, mount instruction, runner authority or secret request. Admission and extraction must reject unsafe archive entries and withhold provider credentials from the job. A later Git workspace adapter needs separate exact-commit, credentials, LFS/submodule and cleanup qualification.
+
+## Accepted configuration
+
+| Format | Accepted shape | Execution interpretation |
+| --- | --- | --- |
+| GitHub Actions | Optional literal workflow/job/step names; input-free `on: workflow_dispatch` or its empty mapping form; exactly one job; literal `runs-on` in `linux`, `ubuntu-latest`, `ubuntu-22.04`, `ubuntu-24.04`; 1–50 ordered steps with only optional `name`, nonempty `run` and optional literal `shell: sh`/`bash`. | A manually authorized Golf run. Each step has its own shell process in the shared job workspace. First nonzero step stops the job; unsupported failure/conditional/parallel behavior is denied. A runner label resolves through the trusted operator catalog; it does not recreate a GitHub-hosted image. |
+| GitLab CI | Exactly one visible job; optional one-stage `stages` list and matching job `stage` (default `test`); literal `image` with lowercase SHA-256 digest; `script` as a nonempty string or flat list of 1–50 nonempty strings. | One shared `sh` script preserves variables, functions and working-directory changes between list items. Items retain their decoded scalar text and order, separated by newlines. Golf's fail-fast shell contract applies; no GitLab event/rule/coordinator evaluation is implied. The full image reference must match the operator-approved image. |
+
+Includes/actions, reusable workflows, templates/inheritance, hidden jobs, inputs, expressions, environments/variables/secrets, permissions, services, conditions, `continue-on-error`, matrices/dependencies, caches/artifacts, custom working directories, before/after scripts and unknown fields are outside this catalog. Unsupported provider configuration can still be shown by the read-only inspector; it cannot produce an execution plan. A GitLab digest-shaped image is neither fetched nor trusted by the compiler. A literal Linux label is not execution permission.
+
+## Shell and failure semantics
+
+Actions steps remain independent shell processes. The default marker must use Bash with `-e` when available, otherwise `sh -e`; explicit Bash uses `--noprofile --norc -e -o pipefail`, while explicit `sh` uses `-e`. The executor must not concatenate Actions steps, flatten the omitted-shell distinction or silently fall back when explicit Bash is unavailable. The job workspace persists between steps; shell-local exports do not. These flags follow [GitHub's documented shell contract](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepsshell).
+
+GitLab source compiles to one shared shell script. Golf uses `sh -e` and stops after its first observed shell failure. Native Runner script generation, Bash-specific behavior, predefined variables and its known multiline-command failure quirks are not reproduced. Shell `-e` itself has conditional/pipeline exceptions; this is not a shell parser that proves every individual command succeeded. A script can intentionally handle failure, and final process status remains the executor's result. [GitLab documents script-item and multiline failure behavior](https://docs.gitlab.com/ci/yaml/script/).
+
+Only an isolated executor may invoke these scripts. The API server/compiler never invokes source commands on the host. Bounded output, timeout/cancel, immutable image selection, per-attempt workspace, no host Docker socket/privileged mounts, resource limits, credential isolation, admitted-attempt fencing and cleanup remain required runtime contracts. Initial network isolation also excludes dependency downloads and outbound deployments; those cannot silently become available because source asks for them.
+
+## Engine decision and next compatibility milestones
+
+Decision for this catalog: use the existing safe source inspector plus a small explicit shell plan to qualify the first isolated, manually admitted job. Do not turn this into a second general Actions/GitLab interpreter. Provider graphs, variable precedence, conditions, action resolution, secret/OIDC issuance and runner protocols have distinct semantics and need maintained engines or carefully bounded, tested adapters.
+
+For Actions expansion, evaluate a pinned maintained `act` component against the compatibility corpus. `act` maps runner labels to container images; its default images do not establish GitHub-hosted environment equivalence. Test actions, expressions, event/input context, services, cache/artifact behavior and failures before expanding the catalog. [Official act runner/image documentation](https://nektosact.com/usage/runners.html), [maintained act source](https://github.com/nektos/act).
+
+For actual GitLab Runner compatibility, implement and qualify its real coordinator authentication, job request, trace and status exchange using a pinned maintained Runner with Docker first, then Kubernetes/scalable adapters. A generic Docker shell process consuming `.gitlab-ci.yml` is not that protocol. Docker, Kubernetes and autoscaling executors remain active choices; Custom and Shell executors are maintenance-only, so a Cloudflare Custom-executor investigation cannot be treated as the default supported architecture. [GitLab executor status](https://docs.gitlab.com/runner/executors/), [Docker executor contract](https://docs.gitlab.com/runner/executors/docker/).
+
+Expansion gates, in order:
+
+1. Prove an actual admitted exact-commit run with independent owner/admin eligibility, immutable actor/source/image binding and disabled-by-default repository selection; no imported schedules activate automatically.
+2. Prove success/nonzero exit, exact shell distinctions, timeout/cancel, worker death, restart, lost acknowledgment, stale attempt rejection, bounded logs and isolated cleanup. Add trustworthy result provenance; a normal green badge is not protected-merge authority.
+3. Qualify full Git workspaces, per-attempt least-privilege source credentials and explicit network policy before dependency checkout/downloads. Add artifacts/caches only with verified object identities, isolation, expiration and poisoning boundaries.
+4. Pin maintained engine components and expand one supported catalog entry at a time with real-provider conformance fixtures. Keep unsupported constructs denied and feature availability tied to actual enforcement.
+5. Qualify runner groups, queues, capacity/autoscaling, Kubernetes and eligible Cloudflare resources, then secrets/OIDC, protected environments/previews and production CD. These require independent authority and destination proofs.
+
+This compiler does not complete P4, all Compose CI, GitHub/GitLab parity or either track's scalable runner release gate. The [workflow inspection contract](WORKFLOW_CONFIGURATION_CONTRACT.md), [pipeline plan](../GOLF_IMPLEMENTATION_PLAN.md#7-actions-and-gitlab-pipeline-compatibility) and product ledger retain the broader acceptance criteria.
+
+## Runnable compiler evidence
+
+`go test ./internal/server -run '^TestCompileWorkflowExecution' -count=1` checks exact decoded command text, ordered independent Actions steps, omitted/explicit shell distinction, GitLab shared-shell preservation, image/stage metadata, public inspection redaction and whole-input denial for unsupported policy/events/actions/includes/inheritance, unsafe YAML/encoding, non-Linux labels and step bounds. These tests compile source without executing a host command. Executor, persistence/admission, real PostgreSQL and actual Docker/native browser checks are recorded separately when run.

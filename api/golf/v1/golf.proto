@@ -900,3 +900,195 @@ message DisableLocalAccountResponse {
   uint64 sessions_revoked = 2;
   string operation_id = 3;
 }
+
+// Browser-managed execution ceilings. Unset scopes deny execution.
+service ExecutionPolicyService {
+  rpc GetExecutionPolicy(GetExecutionPolicyRequest) returns (GetExecutionPolicyResponse);
+  rpc UpdateExecutionPolicy(UpdateExecutionPolicyRequest) returns (UpdateExecutionPolicyResponse);
+}
+enum ExecutionScope {
+  EXECUTION_SCOPE_UNSPECIFIED = 0;
+  EXECUTION_SCOPE_INSTANCE = 1;
+  EXECUTION_SCOPE_ORGANIZATION = 2;
+  EXECUTION_SCOPE_REPOSITORY = 3;
+}
+enum ExecutionMode {
+  EXECUTION_MODE_UNSPECIFIED = 0;
+  EXECUTION_MODE_DISABLED = 1;
+  EXECUTION_MODE_ALL = 2;
+  EXECUTION_MODE_SELECTED = 3;
+}
+message ExecutionPolicy {
+  ExecutionScope scope = 1;
+  string scope_id = 2;
+  string owner_id = 3;
+  ExecutionMode mode = 4;
+  repeated string selected_repository_ids = 5;
+  bool manual_dispatch_enabled = 6;
+  bool allow_all_workflows = 7;
+  repeated string workflow_paths = 8;
+  string revision = 9;
+  string revocation_epoch = 10;
+  bool can_edit = 11;
+  string authority_revision = 12;
+}
+message GetExecutionPolicyRequest {
+  ExecutionScope scope = 1;
+  string organization = 2;
+  RepositoryKey repository = 3;
+}
+message GetExecutionPolicyResponse { ExecutionPolicy policy = 1; }
+message UpdateExecutionPolicyRequest {
+  ExecutionScope scope = 1;
+  string organization = 2;
+  RepositoryKey repository = 3;
+  string scope_id = 4;
+  string expected_revision = 5;
+  string expected_authority_revision = 6;
+  ExecutionMode mode = 7;
+  repeated string selected_repository_ids = 8;
+  bool manual_dispatch_enabled = 9;
+  bool allow_all_workflows = 10;
+  repeated string workflow_paths = 11;
+}
+message UpdateExecutionPolicyResponse { ExecutionPolicy policy = 1; }
+
+// Golf execution results are distinct from native required-check eligibility.
+service WorkflowRunService {
+  rpc DispatchWorkflow(DispatchWorkflowRequest) returns (DispatchWorkflowResponse);
+  rpc GetWorkflowRun(GetWorkflowRunRequest) returns (GetWorkflowRunResponse);
+  rpc ListWorkflowRuns(ListWorkflowRunsRequest) returns (ListWorkflowRunsResponse);
+  rpc CancelWorkflowRun(CancelWorkflowRunRequest) returns (CancelWorkflowRunResponse);
+  rpc GetWorkflowRunLogs(GetWorkflowRunLogsRequest) returns (GetWorkflowRunLogsResponse);
+}
+enum WorkflowRunState {
+  WORKFLOW_RUN_STATE_UNSPECIFIED = 0;
+  WORKFLOW_RUN_STATE_QUEUED = 1;
+  WORKFLOW_RUN_STATE_RUNNING = 2;
+  WORKFLOW_RUN_STATE_SUCCEEDED = 3;
+  WORKFLOW_RUN_STATE_FAILED = 4;
+  WORKFLOW_RUN_STATE_CANCELLED = 5;
+  WORKFLOW_RUN_STATE_TIMED_OUT = 6;
+  WORKFLOW_RUN_STATE_LOST = 7;
+}
+message WorkflowRun {
+  string id = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string commit_id = 4;
+  string workflow_path = 5;
+  string workflow_blob_id = 6;
+  WorkflowFormat format = 7;
+  WorkflowRunState state = 8;
+  string version = 9;
+  string created_at = 10;
+  optional string started_at = 11;
+  optional string finished_at = 12;
+  optional int32 exit_code = 13;
+  string reason = 14;
+  string runner_id = 15;
+  string source_sha256 = 16;
+  bool logs_truncated = 17;
+  bool can_cancel = 18;
+}
+message DispatchWorkflowRequest { RepositoryKey repository = 1; string ref = 2; string workflow_path = 3; string idempotency_key = 4; }
+message DispatchWorkflowResponse { WorkflowRun run = 1; }
+message GetWorkflowRunRequest { string run_id = 1; }
+message GetWorkflowRunResponse { WorkflowRun run = 1; }
+message ListWorkflowRunsRequest { RepositoryKey repository = 1; PageRequest page = 2; }
+message ListWorkflowRunsResponse { repeated WorkflowRun runs = 1; PageResponse page = 2; }
+message CancelWorkflowRunRequest { string run_id = 1; string expected_version = 2; }
+message CancelWorkflowRunResponse { WorkflowRun run = 1; }
+message WorkflowRunLog { uint64 sequence = 1; string text = 2; }
+message GetWorkflowRunLogsRequest { string run_id = 1; uint64 after_sequence = 2; }
+message GetWorkflowRunLogsResponse { repeated WorkflowRunLog logs = 1; bool has_more = 2; bool truncated = 3; }
+
+// Golf API ceiling; independently exposed native APIs remain separate.
+service OrganizationCreationService {
+ rpc GetOrganizationCreationPolicy(GetOrganizationCreationPolicyRequest) returns (GetOrganizationCreationPolicyResponse);
+ rpc UpdateOrganizationCreationPolicy(UpdateOrganizationCreationPolicyRequest) returns (UpdateOrganizationCreationPolicyResponse);
+ rpc CreateOrganization(CreateOrganizationRequest) returns (CreateOrganizationResponse);
+}
+enum OrganizationCreationMode {
+ ORGANIZATION_CREATION_MODE_UNSPECIFIED = 0;
+ ORGANIZATION_CREATION_MODE_ADMINISTRATORS_ONLY = 1;
+ ORGANIZATION_CREATION_MODE_SELECTED_USERS = 2;
+ ORGANIZATION_CREATION_MODE_ALL_USERS = 3;
+}
+message OrganizationCreationPolicy {
+ OrganizationCreationMode mode = 1;
+ repeated string selected_golf_user_ids = 2;
+ string revision = 3;
+ string revocation_epoch = 4;
+ bool can_edit = 5;
+ // Golf policy permission to request creation, not native permission proof.
+ bool can_create = 6;
+ string enforcement_scope = 7;
+ bool native_authority_known = 8;
+}
+message GetOrganizationCreationPolicyRequest {}
+message GetOrganizationCreationPolicyResponse { OrganizationCreationPolicy policy = 1; }
+message UpdateOrganizationCreationPolicyRequest {
+ string expected_revision = 1;
+ OrganizationCreationMode mode = 2;
+ repeated string selected_golf_user_ids = 3;
+}
+message UpdateOrganizationCreationPolicyResponse { OrganizationCreationPolicy policy = 1; }
+message CreateOrganizationRequest {
+ string username = 1;
+ string full_name = 2;
+ string description = 3;
+ string visibility = 4;
+ string expected_policy_revision = 5;
+}
+message CreateOrganizationResponse { Organization organization = 1; }
+
+// Installation connection profiles are saved desired configurations. Saving or
+// testing never switches a live database pool or activates an object consumer.
+service InfrastructureConnectionService {
+ rpc ListInfrastructureConnections(ListInfrastructureConnectionsRequest) returns (ListInfrastructureConnectionsResponse);
+ rpc SaveInfrastructureConnection(SaveInfrastructureConnectionRequest) returns (SaveInfrastructureConnectionResponse);
+ rpc TestInfrastructureConnection(TestInfrastructureConnectionRequest) returns (TestInfrastructureConnectionResponse);
+ rpc ActivateInfrastructureConnection(ActivateInfrastructureConnectionRequest) returns (ActivateInfrastructureConnectionResponse);
+}
+message InfrastructureConnection {
+ string id = 1;
+ string version = 2;
+ string label = 3;
+ string kind = 4;
+ string database_role = 5;
+ string backend = 6;
+ string endpoint = 7;
+ string region = 8;
+ string bucket = 9;
+ bool path_style = 10;
+ string tls_mode = 11;
+ string database_name = 12;
+ string database_user = 13;
+ bool has_credential = 14;
+ string activation_state = 15;
+ string prefix = 16;
+ bool allow_insecure = 17;
+ string created_at = 18;
+}
+message InfrastructureConnectionCredential {
+ string database_password = 1;
+ string access_key_id = 2;
+ string secret_access_key = 3;
+ string session_token = 4;
+}
+message ListInfrastructureConnectionsRequest { PageRequest page = 1; }
+message ListInfrastructureConnectionsResponse { repeated InfrastructureConnection connections = 1; PageResponse page = 2; string active_revision = 3; string active_connection_id = 4; string active_connection_version = 5; repeated InfrastructureConnection deployment_defaults = 6; }
+message SaveInfrastructureConnectionRequest {
+ InfrastructureConnection connection = 1;
+ string expected_version = 2;
+ optional InfrastructureConnectionCredential credential = 3;
+ bool retain_credential = 4;
+ string password_confirmation = 5;
+}
+message SaveInfrastructureConnectionResponse { InfrastructureConnection connection = 1; }
+message TestInfrastructureConnectionRequest { string id = 1; string expected_version = 2; string password_confirmation = 3; }
+message TestInfrastructureConnectionResponse { bool accessible = 1; string result_code = 2; string checked_at = 3; string qualification_scope = 4; }
+
+message ActivateInfrastructureConnectionRequest { string id = 1; string expected_version = 2; string password_confirmation = 3; string expected_active_revision = 4; }
+message ActivateInfrastructureConnectionResponse { InfrastructureConnection connection = 1; string active_revision = 2; }

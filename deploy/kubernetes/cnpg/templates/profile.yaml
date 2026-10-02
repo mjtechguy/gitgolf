@@ -1,0 +1,147 @@
+{{- $name := required "clusterName is required" .Values.clusterName -}}
+{{- if not (regexMatch "^[a-z][a-z0-9-]{0,61}[a-z0-9]$" $name) -}}{{ fail "clusterName must be a DNS label (2-63 characters)" }}{{- end -}}
+{{- if lt (int .Values.instances) 3 -}}{{ fail "Production CNPG requires at least three instances" }}{{- end -}}
+{{- $_ := required "storage.storageClass must explicitly select your CSI class" .Values.storage.storageClass -}}
+{{- $_ := required "golfAuthSecret must reference a precreated basic-auth Secret" .Values.golfAuthSecret -}}
+{{- $_ := required "giteaAuthSecret must reference a separate precreated basic-auth Secret" .Values.giteaAuthSecret -}}
+{{- if eq .Values.golfAuthSecret .Values.giteaAuthSecret -}}{{ fail "Golf and Gitea require distinct auth Secrets" }}{{- end -}}
+{{- if or (not (hasPrefix "ghcr.io/cloudnative-pg/postgresql:" .Values.imageName)) (hasSuffix ":latest" .Values.imageName) -}}{{ fail "An explicitly pinned CNPG PostgreSQL operand image is required" }}{{- end -}}
+{{- if .Values.backup.enabled -}}
+{{- $_ := required "backup.destinationPath must be a dedicated S3 prefix" .Values.backup.destinationPath -}}
+{{- if not (regexMatch "^s3://[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]/[a-zA-Z0-9][a-zA-Z0-9._/-]*/$" .Values.backup.destinationPath) -}}{{ fail "backup.destinationPath requires s3://bucket/dedicated-prefix/" }}{{- end -}}
+{{- $_ := required "backup.existingSecret must reference existing object-store credentials" .Values.backup.existingSecret -}}
+{{- if and .Values.backup.endpointURL (not (regexMatch "^https://[a-zA-Z0-9][a-zA-Z0-9.-]*(:[0-9]+)?/?$" .Values.backup.endpointURL)) -}}{{ fail "backup.endpointURL must be HTTPS without credentials/path/query" }}{{- end -}}
+{{- if not (regexMatch "^[1-9][0-9]*[dwm]$" .Values.backup.retentionPolicy) -}}{{ fail "backup.retentionPolicy must be a positive Barman recovery window" }}{{- end -}}
+{{- end -}}
+{{- if .Values.recovery.enabled -}}
+{{- $_ := required "recovery.sourceObjectStore is required" .Values.recovery.sourceObjectStore -}}
+{{- $_ := required "recovery.sourceServerName is required" .Values.recovery.sourceServerName -}}
+{{- if eq .Values.recovery.sourceServerName $name -}}{{ fail "Recovery must use a fresh cluster name" }}{{- end -}}
+{{- end }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ $name }}
+  labels: {app.kubernetes.io/part-of: golf, app.kubernetes.io/component: postgres}
+spec:
+  imageName: {{ .Values.imageName | quote }}
+  instances: {{ .Values.instances }}
+  enableSuperuserAccess: false
+  storage:
+    size: {{ .Values.storage.size | quote }}
+    storageClass: {{ .Values.storage.storageClass | quote }}
+  resources: {{ toYaml .Values.resources | nindent 4 }}
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+    topologyKey: kubernetes.io/hostname
+  postgresql:
+    synchronous:
+      method: any
+      number: 1
+      dataDurability: required
+    parameters:
+      max_connections: '200'
+      password_encryption: scram-sha-256
+      archive_timeout: 60s
+    # Cross-database native application connections are rejected; CNPG's
+    # required local/replication rules remain under operator ownership.
+    pg_hba:
+      - hostssl golf golf all scram-sha-256
+      - hostssl gitea gitea all scram-sha-256
+      - host all golf all reject
+      - host all gitea all reject
+  {{- if .Values.recovery.enabled }}
+  bootstrap:
+    recovery:
+      source: source
+      {{- if .Values.recovery.targetTime }}
+      recoveryTarget:
+        targetTime: {{ .Values.recovery.targetTime | quote }}
+      {{- end }}
+  externalClusters:
+    - name: source
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: {{ .Values.recovery.sourceObjectStore | quote }}
+          serverName: {{ .Values.recovery.sourceServerName | quote }}
+  {{- else }}
+  bootstrap:
+    initdb:
+      database: golf
+      owner: golf
+      secret:
+        name: {{ .Values.golfAuthSecret | quote }}
+      dataChecksums: true
+  {{- end }}
+  managed:
+    roles:
+      - name: gitea
+        ensure: present
+        login: true
+        superuser: false
+        createdb: false
+        createrole: false
+        replication: false
+        bypassrls: false
+        connectionLimit: 60
+        passwordSecret:
+          name: {{ .Values.giteaAuthSecret | quote }}
+  {{- if .Values.backup.enabled }}
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: {{ .Values.backup.objectStoreName | quote }}
+        serverName: {{ $name | quote }}
+  {{- end }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: {{ $name }}-gitea
+spec:
+  name: gitea
+  owner: gitea
+  cluster: {name: {{ $name }}}
+  databaseReclaimPolicy: retain
+  ensure: present
+{{- if .Values.backup.enabled }}
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: {{ .Values.backup.objectStoreName }}
+spec:
+  retentionPolicy: {{ .Values.backup.retentionPolicy | quote }}
+  configuration:
+    destinationPath: {{ .Values.backup.destinationPath | quote }}
+    {{- if .Values.backup.endpointURL }}
+    endpointURL: {{ .Values.backup.endpointURL | quote }}
+    {{- end }}
+    {{- if .Values.backup.endpointCASecret }}
+    endpointCA: {name: {{ .Values.backup.endpointCASecret | quote }}, key: {{ .Values.backup.endpointCAKey | quote }}}
+    {{- end }}
+    s3Credentials:
+      accessKeyId: {name: {{ .Values.backup.existingSecret | quote }}, key: {{ .Values.backup.accessKeyIdKey | quote }}}
+      secretAccessKey: {name: {{ .Values.backup.existingSecret | quote }}, key: {{ .Values.backup.secretAccessKeyKey | quote }}}
+      region: {name: {{ .Values.backup.existingSecret | quote }}, key: {{ .Values.backup.regionKey | quote }}}
+    wal: {compression: gzip, maxParallel: 2}
+    data: {compression: gzip, jobs: 2}
+  instanceSidecarConfiguration:
+    retentionPolicyIntervalSeconds: 1800
+    resources: {{ toYaml .Values.backup.sidecarResources | nindent 6 }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ $name }}-daily
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  immediate: false
+  backupOwnerReference: self
+  cluster: {name: {{ $name }}}
+  method: plugin
+  pluginConfiguration: {name: barman-cloud.cloudnative-pg.io}
+{{- end }}

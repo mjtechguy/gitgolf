@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -60,6 +61,10 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewInstanceAdminServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryAccessServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewWorkflowServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewExecutionPolicyServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewOrganizationCreationServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewInfrastructureConnectionServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewWorkflowRunServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewCapabilityServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewAuditServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewApiCredentialServiceHandler(s, options...))
@@ -103,7 +108,11 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		switch procedure {
 		case golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLoginWithPasswordProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
 			public = true
-		case golfv1connect.InstanceAdminServiceDisableLocalAccountProcedure, golfv1connect.WorkflowServiceInspectWorkflowsProcedure,
+		case golfv1connect.InfrastructureConnectionServiceListInfrastructureConnectionsProcedure, golfv1connect.InfrastructureConnectionServiceSaveInfrastructureConnectionProcedure, golfv1connect.InfrastructureConnectionServiceTestInfrastructureConnectionProcedure, golfv1connect.InfrastructureConnectionServiceActivateInfrastructureConnectionProcedure,
+			golfv1connect.OrganizationCreationServiceGetOrganizationCreationPolicyProcedure, golfv1connect.OrganizationCreationServiceUpdateOrganizationCreationPolicyProcedure, golfv1connect.OrganizationCreationServiceCreateOrganizationProcedure,
+			golfv1connect.ExecutionPolicyServiceGetExecutionPolicyProcedure, golfv1connect.ExecutionPolicyServiceUpdateExecutionPolicyProcedure,
+			golfv1connect.WorkflowRunServiceDispatchWorkflowProcedure, golfv1connect.WorkflowRunServiceGetWorkflowRunProcedure, golfv1connect.WorkflowRunServiceListWorkflowRunsProcedure, golfv1connect.WorkflowRunServiceCancelWorkflowRunProcedure, golfv1connect.WorkflowRunServiceGetWorkflowRunLogsProcedure,
+			golfv1connect.InstanceAdminServiceDisableLocalAccountProcedure, golfv1connect.WorkflowServiceInspectWorkflowsProcedure,
 			golfv1connect.RepositoryAccessServiceGetRepositoryAccessProcedure, golfv1connect.RepositoryAccessServiceListRepositoryCollaboratorsProcedure, golfv1connect.RepositoryAccessServiceResolveRepositoryCollaboratorProcedure, golfv1connect.RepositoryAccessServiceSetRepositoryCollaboratorProcedure, golfv1connect.RepositoryAccessServiceRemoveRepositoryCollaboratorProcedure,
 			golfv1connect.InstanceAdminServiceListLocalAccountsProcedure, golfv1connect.OrganizationAdminServiceGetTeamAdministrationProcedure, golfv1connect.OrganizationAdminServiceResolveTeamMemberProcedure, golfv1connect.OrganizationAdminServiceAddTeamMemberProcedure, golfv1connect.OrganizationAdminServiceRemoveTeamMemberProcedure,
 			golfv1connect.RepositorySettingsServiceGetRepositorySettingsProcedure, golfv1connect.RepositorySettingsServiceUpdateRepositorySettingsProcedure,
@@ -441,7 +450,21 @@ func (s *Server) ListCapabilities(ctx context.Context, _ *connect.Request[golfv1
 		state, reason = golfv1.CapabilityState_CAPABILITY_STATE_DEGRADED, "A required service is unavailable. Check system health before using repositories."
 	}
 	capabilities := []*golfv1.Capability{{Id: "repositories", Label: "Repositories", State: state, Reason: reason}}
-	for _, entry := range []struct{ id, label string }{{"cloudflare", "Cloudflare integration"}, {"pipelines", "Pipeline execution"}, {"agents", "Coding agents"}, {"deployments", "Protected previews and deployment"}} {
+	pipelineState, pipelineReason := golfv1.CapabilityState_CAPABILITY_STATE_DISABLED, "Manual Docker shell execution requires an enrolled worker; higher-level policies default to deny."
+	if len(s.runnerKeys) > 0 {
+		pipelineState, pipelineReason = golfv1.CapabilityState_CAPABILITY_STATE_DEGRADED, "Manual Docker shell execution is configured; no currently enrolled worker heartbeat is confirmed."
+		ids := []string{}
+		for id := range s.runnerKeys {
+			ids = append(ids, id)
+		}
+		encoded, _ := json.Marshal(ids)
+		var alive bool
+		if s.db != nil && ready && s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_runner_presence WHERE forge_url=$1 AND last_seen>clock_timestamp()-interval '15 seconds' AND runner_id IN (SELECT jsonb_array_elements_text($2::jsonb)))`, s.config.GiteaURL, string(encoded)).Scan(&alive) == nil && alive {
+			pipelineState, pipelineReason = golfv1.CapabilityState_CAPABILITY_STATE_READY, "An enrolled Docker worker is polling. Only the bounded manual shell catalog is available; exact repository/workflow policies govern each run. Provider engine parity and trusted merge checks remain unavailable."
+		}
+	}
+	capabilities = append(capabilities, &golfv1.Capability{Id: "pipelines", Label: "Manual shell pipelines", State: pipelineState, Reason: pipelineReason})
+	for _, entry := range []struct{ id, label string }{{"cloudflare", "Cloudflare integration"}, {"agents", "Coding agents"}, {"deployments", "Protected previews and deployment"}} {
 		capabilities = append(capabilities, &golfv1.Capability{Id: entry.id, Label: entry.label, State: golfv1.CapabilityState_CAPABILITY_STATE_DISABLED, Reason: "Planned; not implemented. No operation is available."})
 	}
 	return connect.NewResponse(&golfv1.ListCapabilitiesResponse{Capabilities: capabilities}), nil

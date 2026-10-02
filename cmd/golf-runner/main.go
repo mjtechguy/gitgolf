@@ -1,0 +1,380 @@
+// golf-runner is an operator process for a dedicated Docker host. Its enrollment
+// and attempt credentials stay in this process, never in an untrusted container.
+package main
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"sync/atomic"
+	"syscall"
+	"time"
+	"unicode/utf8"
+
+	"github.com/mjtechguy/golf-git/internal/runner"
+)
+
+const sourceLimit = 16 << 20
+const logLimit = 256 << 10
+
+var safeID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+var attemptID = regexp.MustCompile(`^[a-f0-9]{32}$`)
+var hashID = regexp.MustCompile(`^[a-f0-9]{64}$`)
+var commitID = regexp.MustCompile(`^(?:[a-f0-9]{40}|[a-f0-9]{64})$`)
+var errTransport = errors.New("runner coordinator request failed")
+var errUnauthorized = errors.New("runner enrollment is not authorized")
+var errOutputBound = errors.New("normalized output exceeds its bound")
+
+type coordinator struct {
+	origin, id, key string
+	client          *http.Client
+}
+type assignment struct {
+	RunID        string `json:"runId"`
+	AttemptID    string `json:"attemptId"`
+	AttemptToken string `json:"attemptToken"`
+	JobID        string `json:"jobId"`
+	ImageDigest  string `json:"imageDigest"`
+	CommitID     string `json:"commitId"`
+	SourceSHA256 string `json:"sourceSha256"`
+	Steps        []struct {
+		Name  string
+		Run   string
+		Shell string
+	} `json:"steps"`
+	TimeoutSeconds int `json:"timeoutSeconds"`
+	LeaseSeconds   int `json:"leaseSeconds"`
+}
+type finish struct {
+	ExitCode            int  `json:"exitCode"`
+	TimedOut            bool `json:"timedOut"`
+	Cancelled           bool `json:"cancelled"`
+	InfrastructureError bool `json:"infrastructureError"`
+	LogsTruncated       bool `json:"logsTruncated"`
+}
+
+func tokenOK(s string) bool {
+	return len(s) >= 32 && len(s) <= 1024 && !strings.ContainsAny(s, "\r\n\t ")
+}
+func coordinatorURL(value string) (string, error) {
+	u, err := url.Parse(value)
+	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" || (u.Path != "" && u.Path != "/") || u.RawPath != "" {
+		return "", errTransport
+	}
+	host := u.Hostname()
+	if u.Scheme != "https" && (u.Scheme != "http" || (host != "localhost" && host != "127.0.0.1" && host != "::1")) {
+		return "", errTransport
+	}
+	u.Path = ""
+	return u.String(), nil
+}
+func (c *coordinator) request(ctx context.Context, method, route, attemptToken string, body any) (*http.Response, error) {
+	var input io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return nil, errTransport
+		}
+		input = bytes.NewReader(data)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.origin+route, input)
+	if err != nil {
+		return nil, errTransport
+	}
+	req.Header.Set("Authorization", "Bearer "+c.key)
+	req.Header.Set("Golf-Runner-ID", c.id)
+	req.Header.Set("Accept", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if attemptToken != "" {
+		req.Header.Set("Golf-Attempt-Token", attemptToken)
+	}
+	response, err := c.client.Do(req)
+	if err != nil {
+		return nil, errTransport
+	}
+	return response, nil
+}
+func (c *coordinator) post(ctx context.Context, a assignment, action string, body any) error {
+	response, err := c.request(ctx, http.MethodPost, "/internal/ci/attempt/"+a.AttemptID+"/"+action, a.AttemptToken, body)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		return errTransport
+	}
+	return nil
+}
+func (c *coordinator) poll(ctx context.Context) (*assignment, error) {
+	response, err := c.request(ctx, http.MethodPost, "/internal/ci/poll", "", struct{}{})
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusNoContent {
+		return nil, nil
+	}
+	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
+		return nil, errUnauthorized
+	}
+	if response.StatusCode != http.StatusOK {
+		return nil, errTransport
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, 256<<10+1))
+	if err != nil || len(data) > 256<<10 {
+		return nil, errTransport
+	}
+	var a assignment
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&a) != nil || decoder.Decode(new(any)) != io.EOF || !safeID.MatchString(a.RunID) || !attemptID.MatchString(a.AttemptID) || !tokenOK(a.AttemptToken) || !commitID.MatchString(a.CommitID) || !hashID.MatchString(a.SourceSHA256) || a.TimeoutSeconds < 1 || a.TimeoutSeconds > 900 || a.LeaseSeconds < 30 || a.LeaseSeconds > 300 || len(a.Steps) < 1 || len(a.Steps) > 50 {
+		return nil, errTransport
+	}
+	return &a, nil
+}
+func (c *coordinator) source(ctx context.Context, a assignment, directory string) (string, error) {
+	response, err := c.request(ctx, http.MethodGet, "/internal/ci/attempt/"+a.AttemptID+"/source", a.AttemptToken, nil)
+	if err != nil {
+		return "", err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK || response.ContentLength > sourceLimit {
+		return "", errTransport
+	}
+	file, err := os.OpenFile(filepath.Join(directory, "source.tar"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		return "", errTransport
+	}
+	digest := sha256.New()
+	size, copyErr := io.Copy(io.MultiWriter(file, digest), io.LimitReader(response.Body, sourceLimit+1))
+	closeErr := file.Close()
+	expected, _ := hex.DecodeString(a.SourceSHA256)
+	if copyErr != nil || closeErr != nil || size > sourceLimit || subtle.ConstantTimeCompare(digest.Sum(nil), expected) != 1 {
+		return "", errTransport
+	}
+	return file.Name(), nil
+}
+
+// Each stream retains only its incomplete UTF-8 suffix. Invalid bytes become
+// replacement characters; chunks sent to the API end at rune boundaries.
+type logForwarder struct {
+	c        *coordinator
+	a        assignment
+	sequence int
+	total    int
+	pending  map[string][]byte
+}
+
+func (l *logForwarder) send(ctx context.Context, text string) error {
+	if text == "" {
+		return nil
+	}
+	if l.total+len(text) > logLimit {
+		return errOutputBound
+	}
+	next := l.sequence + 1
+	if err := l.c.post(ctx, l.a, "logs", struct {
+		Sequence int    `json:"sequence"`
+		Text     string `json:"text"`
+	}{next, text}); err != nil {
+		return err
+	}
+	l.sequence = next
+	l.total += len(text)
+	return nil
+}
+func (l *logForwarder) write(ctx context.Context, chunk runner.LogChunk, final bool) error {
+	if l.pending == nil {
+		l.pending = map[string][]byte{}
+	}
+	data := append(l.pending[chunk.Stream], chunk.Data...)
+	var output strings.Builder
+	for len(data) > 0 {
+		if !utf8.FullRune(data) && !final {
+			break
+		}
+		value, size := utf8.DecodeRune(data)
+		if !utf8.FullRune(data) {
+			value, size = utf8.RuneError, len(data)
+		}
+		if value == 0 {
+			value = utf8.RuneError
+		}
+		width := utf8.RuneLen(value)
+		if output.Len()+width > 4<<10 {
+			if err := l.send(ctx, output.String()); err != nil {
+				return err
+			}
+			output.Reset()
+		}
+		output.WriteRune(value)
+		data = data[size:]
+	}
+	l.pending[chunk.Stream] = append([]byte(nil), data...)
+	return l.send(ctx, output.String())
+}
+func (c *coordinator) execute(parent context.Context, e *runner.Executor, a assignment) bool {
+	ctx, cancel := context.WithTimeout(parent, time.Duration(a.TimeoutSeconds)*time.Second)
+	defer cancel()
+	var heartbeatFailed atomic.Bool
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := c.post(ctx, a, "heartbeat", struct{}{}); err != nil {
+					if ctx.Err() == nil {
+						heartbeatFailed.Store(true)
+						cancel()
+					}
+					return
+				}
+			}
+		}
+	}()
+	result := finish{ExitCode: 255}
+	directory, err := os.MkdirTemp("", "golf-runner-")
+	if err == nil {
+		defer os.RemoveAll(directory)
+	}
+	var source string
+	if err == nil {
+		source, err = c.source(ctx, a, directory)
+	}
+	forward := logForwarder{c: c, a: a}
+	var outputBound atomic.Bool
+	if err == nil {
+		job := runner.Job{AttemptID: a.AttemptID, JobID: a.JobID, SourceCommit: a.CommitID, ImageDigest: a.ImageDigest, Timeout: time.Duration(a.TimeoutSeconds) * time.Second, SourceArchivePath: source}
+		for _, step := range a.Steps {
+			job.Steps = append(job.Steps, runner.Step{Script: step.Run, Shell: step.Shell})
+		}
+		var execution runner.Result
+		execution, err = e.Execute(ctx, job, func(ctx context.Context, chunk runner.LogChunk) error {
+			err := forward.write(ctx, chunk, false)
+			if errors.Is(err, errOutputBound) {
+				outputBound.Store(true)
+			}
+			return err
+		})
+		result = finish{ExitCode: execution.ExitCode, TimedOut: execution.TimedOut, Cancelled: execution.Cancelled, LogsTruncated: execution.LogsTruncated || outputBound.Load()}
+		if err == nil && ctx.Err() == nil {
+			for _, stream := range []string{"stdout", "stderr"} {
+				if flushErr := forward.write(ctx, runner.LogChunk{Stream: stream}, true); flushErr != nil {
+					err = flushErr
+					result.LogsTruncated = result.LogsTruncated || errors.Is(flushErr, errOutputBound)
+					break
+				}
+			}
+		}
+	}
+	result.TimedOut = result.TimedOut || errors.Is(ctx.Err(), context.DeadlineExceeded)
+	result.Cancelled = result.Cancelled || parent.Err() != nil || heartbeatFailed.Load()
+	result.InfrastructureError = err != nil || heartbeatFailed.Load()
+	if result.ExitCode < 0 || result.ExitCode > 255 {
+		result.ExitCode = 255
+	}
+	cancel()
+	<-done
+	finalCtx, stop := context.WithTimeout(context.Background(), 8*time.Second)
+	defer stop()
+	state := "finished"
+	if c.post(finalCtx, a, "finish", result) != nil {
+		state = "result_unconfirmed"
+	}
+	report(a, state)
+	return !errors.Is(err, runner.ErrCleanup)
+}
+func report(a assignment, state string) {
+	_ = json.NewEncoder(os.Stdout).Encode(struct {
+		RunID     string `json:"runId"`
+		AttemptID string `json:"attemptId"`
+		State     string `json:"state"`
+	}{a.RunID, a.AttemptID, state})
+}
+func run(ctx context.Context) error {
+	origin, err := coordinatorURL(os.Getenv("GOLF_RUNNER_URL"))
+	if err != nil {
+		return err
+	}
+	id, key := os.Getenv("GOLF_RUNNER_ID"), os.Getenv("GOLF_RUNNER_KEY")
+	if !safeID.MatchString(id) || !tokenOK(key) {
+		return errTransport
+	}
+	var images []string
+	if json.Unmarshal([]byte(os.Getenv("GOLF_RUNNER_APPROVED_IMAGES")), &images) != nil {
+		return errTransport
+	}
+	executor, err := runner.New(runner.Config{WorkerID: id, DockerBinary: os.Getenv("GOLF_RUNNER_DOCKER_BINARY"), ApprovedImages: images})
+	if err != nil {
+		return err
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	defer transport.CloseIdleConnections()
+	c := &coordinator{origin: origin, id: id, key: key, client: &http.Client{Transport: transport, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	if len(os.Args) > 1 {
+		if len(os.Args) != 2 || os.Args[1] != "recover" {
+			return errTransport
+		}
+		response, err := c.request(ctx, http.MethodPost, "/internal/ci/recover", "", struct{}{})
+		if err != nil {
+			return err
+		}
+		response.Body.Close()
+		if response.StatusCode != http.StatusNoContent {
+			return errTransport
+		}
+		if err := executor.CleanupWorker(ctx); err != nil {
+			return err
+		}
+		report(assignment{}, "recovered")
+		return nil
+	}
+	for ctx.Err() == nil {
+		a, err := c.poll(ctx)
+		if errors.Is(err, errUnauthorized) {
+			return err
+		}
+		if err == nil && a != nil {
+			report(*a, "assigned")
+			if !c.execute(ctx, executor, *a) {
+				return runner.ErrCleanup
+			}
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(2 * time.Second):
+		}
+	}
+	return nil
+}
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := run(ctx); err != nil {
+		fmt.Fprintln(os.Stderr, "Golf runner could not start or its enrollment was denied; check operator configuration.")
+		os.Exit(1)
+	}
+}

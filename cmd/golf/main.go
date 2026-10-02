@@ -7,11 +7,13 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/mjtechguy/golf-git/internal/objectstore"
 	"github.com/mjtechguy/golf-git/internal/server"
 	"github.com/mjtechguy/golf-git/internal/server/database"
 	"github.com/mjtechguy/golf-git/internal/telemetry"
@@ -34,6 +36,9 @@ func run() error {
 
 func runCommand(ctx context.Context, args []string, output io.Writer, logger zerolog.Logger) error {
 	if len(args) > 0 {
+		if args[0] == "objectstore" {
+			return initializeObjectStore(ctx, args, output)
+		}
 		if args[0] == "local-account" {
 			options, err := parseLocalAccountCommand(args)
 			if err != nil {
@@ -58,7 +63,15 @@ func runCommand(ctx context.Context, args []string, output io.Writer, logger zer
 }
 
 func serverConfig() server.Config {
+	databaseEndpoint, databaseTLS := "", ""
+	if parsed, err := url.Parse(os.Getenv("DATABASE_URL")); err == nil {
+		databaseEndpoint = parsed.Host
+		databaseTLS = parsed.Query().Get("sslmode")
+	}
 	return server.Config{
+		DatabaseEndpoint: databaseEndpoint, DatabaseTLSMode: databaseTLS, NativeDatabaseEndpoint: os.Getenv("GOLF_NATIVE_DATABASE_ENDPOINT"),
+		ObjectStoreConfig: objectstore.Config{Endpoint: os.Getenv("GOLF_OBJECT_ENDPOINT"), Bucket: os.Getenv("GOLF_OBJECT_BUCKET"), Region: env("GOLF_OBJECT_REGION", "us-east-1"), Prefix: os.Getenv("GOLF_OBJECT_PREFIX"), AccessKeyID: os.Getenv("GOLF_OBJECT_ACCESS_KEY_ID"), SecretAccessKey: os.Getenv("GOLF_OBJECT_SECRET_ACCESS_KEY"), SessionToken: os.Getenv("GOLF_OBJECT_SESSION_TOKEN"), PathStyle: os.Getenv("GOLF_OBJECT_PATH_STYLE") == "true", AllowHTTP: os.Getenv("GOLF_OBJECT_ALLOW_HTTP") == "true"},
+		RunnerKeysJSON:    os.Getenv("GOLF_RUNNER_KEYS"), RunnerImagesJSON: os.Getenv("GOLF_RUNNER_IMAGES"),
 		PublicURL: env("GOLF_PUBLIC_URL", "http://localhost:8080"), GiteaURL: env("GITEA_URL", "http://gitea:3000"),
 		GiteaPublicURL: os.Getenv("GITEA_PUBLIC_URL"), GiteaOAuthClientID: os.Getenv("GITEA_OAUTH_CLIENT_ID"),
 		GiteaOAuthClientSecret: os.Getenv("GITEA_OAUTH_CLIENT_SECRET"),

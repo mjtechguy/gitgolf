@@ -58,6 +58,8 @@ Golf must also enhance repositories that remain on GitHub or GitLab. Direct migr
 
 The Cloudflare competition applies only to the Cloudflare-focused track. The portable track must remain fully runnable in Docker Compose or Kubernetes with no Cloudflare account; operators can select individual Cloudflare-compatible backends and mix them with local or other providers.
 
+Deployment defaults are local PostgreSQL and RustFS object storage for Compose/Kubernetes. Database and object-storage choices are independent: Compose may use AWS S3, EKS may use managed PostgreSQL, and either may use R2. The Admin portal exposes encrypted, versioned connection profiles, current deployment defaults and connection tests. Activating object storage binds new CI sources to that exact profile version; prior sources retain their original address. Database profiles are staged for operator cutover, since changing a connection does not move data. Development installations are disposable and may be reset rather than migrated. Kubernetes uses an independently installed CNPG/Barman profile; Valkey is optional and is added only with a measured consumer. See [ADR-0007](docs/decisions/0007-postgresql-platform-and-optional-valkey.md) and [object storage contract](docs/OBJECT_STORAGE_CONTRACT.md).
+
 These are infrastructure tracks, not separate products or editions. Use the same frontend, API contracts, domain rules, and permissions. A portable installation may use R2 or Workers AI without enabling every Cloudflare product.
 
 ### 1.3 Settled decisions

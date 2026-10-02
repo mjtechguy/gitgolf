@@ -1,0 +1,12 @@
+FROM golang:1.27.1-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+COPY cmd/golf-runner ./cmd/golf-runner
+COPY internal/runner ./internal/runner
+RUN CGO_ENABLED=0 go build -trimpath -o /golf-runner ./cmd/golf-runner
+
+FROM alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0
+RUN apk add --no-cache ca-certificates docker-cli=29.5.2-r0 && addgroup -g 1000 golf && adduser -D -u 1000 -G golf golf
+COPY --from=build /golf-runner /usr/local/bin/golf-runner
+USER 1000:1000
+ENTRYPOINT ["/usr/local/bin/golf-runner"]

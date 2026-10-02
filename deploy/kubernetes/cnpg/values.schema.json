@@ -1,0 +1,109 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "clusterName": {
+      "type": "string"
+    },
+    "imageName": {
+      "type": "string"
+    },
+    "instances": {
+      "type": "integer",
+      "minimum": 3
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "size": {
+          "type": "string",
+          "minLength": 1
+        },
+        "storageClass": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "size",
+        "storageClass"
+      ]
+    },
+    "resources": {
+      "type": "object"
+    },
+    "golfAuthSecret": {
+      "type": "string",
+      "minLength": 1
+    },
+    "giteaAuthSecret": {
+      "type": "string",
+      "minLength": 1
+    },
+    "backup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "objectStoreName": {
+          "type": "string"
+        },
+        "destinationPath": {
+          "type": "string"
+        },
+        "endpointURL": {
+          "type": "string"
+        },
+        "endpointCASecret": {
+          "type": "string"
+        },
+        "endpointCAKey": {
+          "type": "string"
+        },
+        "existingSecret": {
+          "type": "string"
+        },
+        "accessKeyIdKey": {
+          "type": "string"
+        },
+        "secretAccessKeyKey": {
+          "type": "string"
+        },
+        "regionKey": {
+          "type": "string"
+        },
+        "retentionPolicy": {
+          "type": "string"
+        },
+        "schedule": {
+          "type": "string"
+        },
+        "sidecarResources": {
+          "type": "object"
+        }
+      }
+    },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "sourceObjectStore": {
+          "type": "string"
+        },
+        "sourceServerName": {
+          "type": "string"
+        },
+        "targetTime": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

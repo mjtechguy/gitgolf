@@ -398,7 +398,7 @@ func (s *Server) InspectWorkflows(ctx context.Context, req *connect.Request[golf
 	if !validRef(req.Msg.Ref) {
 		return nil, rpcError(invalid("Select a branch, tag or full commit ID, not a revision expression."))
 	}
-	result := &golfv1.InspectWorkflowsResponse{CatalogVersion: workflowCatalog, ExecutionAvailable: false}
+	result := &golfv1.InspectWorkflowsResponse{CatalogVersion: workflowCatalog, ExecutionAvailable: len(s.runnerKeys) > 0 && len(s.runnerImages) > 0}
 	err = s.withRepositoryRead(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), func(base string, repo Repository) error {
 		if repo.Empty {
 			return errEmptyRepository

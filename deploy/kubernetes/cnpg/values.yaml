@@ -1,0 +1,37 @@
+# Operators/CRDs are installed and upgraded separately by the platform owner.
+clusterName: golf-db
+imageName: ghcr.io/cloudnative-pg/postgresql:18.6-standard-trixie@sha256:f89a40f4d74aa6e0900917eaf6299b125a6382eb02fd4ee5d46f55bcbf7e5726
+instances: 3
+storage:
+  size: 50Gi
+  storageClass: ''
+resources:
+  requests: {cpu: 500m, memory: 512Mi}
+  limits: {cpu: '2', memory: 2Gi}
+golfAuthSecret: ''
+giteaAuthSecret: ''
+# Same namespace basic-auth Secrets: username=golf/gitea and password.
+# Keep this DB lifecycle independent of the application Helm release.
+backup:
+  enabled: true
+  objectStoreName: golf-backups
+  destinationPath: ''
+  endpointURL: ''
+  # Optional CA Secret for a private HTTPS object-store endpoint.
+  endpointCASecret: ''
+  endpointCAKey: ca.crt
+  existingSecret: ''
+  accessKeyIdKey: ACCESS_KEY_ID
+  secretAccessKeyKey: ACCESS_SECRET_KEY
+  regionKey: REGION
+  retentionPolicy: 30d
+  schedule: '0 0 2 * * *'
+  sidecarResources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: '1', memory: 512Mi}
+recovery:
+  enabled: false
+  # A new cluster name, source ObjectStore and original Barman server namespace.
+  sourceObjectStore: ''
+  sourceServerName: ''
+  targetTime: ''

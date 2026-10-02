@@ -57,6 +57,12 @@ func InvalidateRestoredSessions(ctx context.Context, db *sql.DB, backupID string
 	if err := queries.LockRecoveryCredentials(ctx); err != nil {
 		return fail()
 	}
+	if _, err := tx.ExecContext(ctx, `LOCK TABLE golf_workflow_runs IN ACCESS EXCLUSIVE MODE`); err != nil {
+		return fail()
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='cancelled',version=version+1,finished_at=clock_timestamp(),reason='Restored instance quarantined; no automatic replay.',lease_token_hash=NULL WHERE state IN ('queued','running')`); err != nil {
+		return fail()
+	}
 	sessions, err := queries.DeleteRecoverySessions(ctx)
 	if err != nil {
 		return fail()

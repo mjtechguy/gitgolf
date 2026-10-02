@@ -1,0 +1,64 @@
+# Opt-in local shell-CI qualification. The privileged daemon is a trusted local
+# worker host, never an untrusted job container. Production pools use dedicated
+# hosts/VMs; this profile does not claim a hardened hostile-tenant VM boundary.
+services:
+  golf:
+    environment:
+      GOLF_RUNNER_KEYS: ${GOLF_RUNNER_KEYS:?Run scripts/init-ci-env.py}
+      GOLF_RUNNER_IMAGES: ${GOLF_RUNNER_IMAGES:?Run scripts/init-ci-env.py}
+  runner-daemon:
+    image: docker:29.8.1-dind@sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: /certs
+      DOCKER_TLS_SAN: DNS:runner-daemon
+    volumes:
+      - runner-daemon-data:/var/lib/docker
+      - runner-client-certs:/certs/client
+    healthcheck:
+      test: [CMD, docker, info]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+  runner-image-init:
+    image: docker:29.8.1-dind@sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0
+    entrypoint: [docker]
+    command: [pull, '${GOLF_RUNNER_JOB_IMAGE:?Run scripts/init-ci-env.py}']
+    environment:
+      DOCKER_HOST: tcp://runner-daemon:2376
+      DOCKER_TLS_VERIFY: '1'
+      DOCKER_CERT_PATH: /certs/client
+    volumes:
+      - runner-client-certs:/certs/client:ro
+    depends_on:
+      runner-daemon:
+        condition: service_healthy
+  runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.runner
+    # Loopback HTTP is confined to the Golf service's network namespace.
+    network_mode: service:golf
+    environment:
+      GOLF_RUNNER_URL: http://127.0.0.1:8080
+      GOLF_RUNNER_ID: local-docker
+      GOLF_RUNNER_KEY: ${GOLF_RUNNER_KEY:?Run scripts/init-ci-env.py}
+      GOLF_RUNNER_APPROVED_IMAGES: ${GOLF_RUNNER_APPROVED_IMAGES:?Run scripts/init-ci-env.py}
+      DOCKER_HOST: tcp://runner-daemon:2376
+      DOCKER_TLS_VERIFY: '1'
+      DOCKER_CERT_PATH: /certs/client
+    volumes:
+      - runner-client-certs:/certs/client:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=33554432,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      golf:
+        condition: service_started
+      runner-image-init:
+        condition: service_completed_successfully
+volumes:
+  runner-daemon-data:
+  runner-client-certs:

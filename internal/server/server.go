@@ -14,23 +14,31 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/mjtechguy/golf-git/internal/objectstore"
 	"github.com/mjtechguy/golf-git/internal/telemetry"
 )
 
 type Config struct {
+	ObjectStoreConfig                                          objectstore.Config
+	DatabaseEndpoint, DatabaseTLSMode, NativeDatabaseEndpoint  string
 	PublicURL, GiteaURL, EncryptionKey                         string
 	EncryptionKeysJSON, EncryptionActiveKeyID                  string
 	GiteaPublicURL, GiteaOAuthClientID, GiteaOAuthClientSecret string
 	AllowInsecureCookies                                       bool
 	WebDir                                                     string
+	RunnerKeysJSON, RunnerImagesJSON                           string
 	Telemetry                                                  *telemetry.Runtime
 }
 type Server struct {
-	config  Config
-	db      *sql.DB
-	keyring *Keyring
-	client  *http.Client
-	handler http.Handler
+	config                        Config
+	db                            *sql.DB
+	keyring                       *Keyring
+	client                        *http.Client
+	handler                       http.Handler
+	runnerKeys                    map[string][32]byte
+	runnerImages                  map[string]string
+	defaultObjectStore            *objectstore.Store
+	defaultObjectStoreFingerprint string
 }
 
 func New(config Config, db *sql.DB) (*Server, error) {
@@ -74,12 +82,24 @@ func New(config Config, db *sql.DB) (*Server, error) {
 		s.client.Transport = config.Telemetry.HTTPTransport(http.DefaultTransport)
 	}
 
+	if err := s.configureObjectStore(context.Background()); err != nil {
+		return nil, err
+	}
+	if err := s.configureRunners(); err != nil {
+		return nil, err
+	}
 	r := chi.NewRouter()
 	r.Use(middleware.Timeout(15 * time.Second))
 	r.Use(s.security)
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) { respond(w, 200, map[string]string{"status": "ok"}) })
 	r.Get("/readyz", s.readiness)
 	r.Get("/auth/gitea/callback", s.oauthCallback)
+	r.Post("/internal/ci/poll", s.runnerPoll)
+	r.Post("/internal/ci/recover", s.runnerRecover)
+	r.Post("/internal/ci/attempt/{id}/heartbeat", s.runnerAttempt)
+	r.Post("/internal/ci/attempt/{id}/logs", s.runnerAttempt)
+	r.Post("/internal/ci/attempt/{id}/finish", s.runnerAttempt)
+	r.Get("/internal/ci/attempt/{id}/source", s.runnerAttempt)
 	rpc := s.rpcBoundary(http.StripPrefix("/rpc", s.rpcHandler()))
 	r.Handle("/rpc", rpc)
 	r.Handle("/rpc/*", rpc)
@@ -128,7 +148,7 @@ func (s *Server) security(next http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-		if r.URL.Path == "/rpc" || strings.HasPrefix(r.URL.Path, "/rpc/") || strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/auth/") {
+		if r.URL.Path == "/rpc" || strings.HasPrefix(r.URL.Path, "/rpc/") || strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/internal/ci/") {
 			w.Header().Set("Cache-Control", "no-store")
 			w.Header().Set("Referrer-Policy", "no-referrer")
 		}

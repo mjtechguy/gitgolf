@@ -1,9 +1,10 @@
 import { useId } from 'react';
 import type { ReactNode } from 'react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Link } from '@tanstack/react-router';
 import { ArrowDown, ArrowLeft, Building2, LoaderCircle, RefreshCw, Users } from 'lucide-react';
+import { OrganizationCreate } from './OrganizationCreate';
 import { errorMessage, organizationClient } from './api';
 import { OrganizationVisibility, TeamPermission, TeamVisibility } from './gen/golf/v1/golf_pb';
 import type { PageResponse } from './gen/golf/v1/golf_pb';
@@ -48,8 +49,9 @@ function PagedPanel<T extends { id: string }>({ title, queryKey, load, render, e
 }
 
 function OrganizationList({ userId }: { userId: string }) {
-  return <><header className="repository-intro"><div><span className="eyebrow">YOUR FORGE MEMBERSHIPS</span><h1><Building2 size={29} />Organizations</h1><p>Read-only access to your organizations and visible teams.</p></div></header>
-    <p className="organization-guidance">Browsing requires the additional <code>read:organization</code> scope. Organization administration and Golf roles are not available here.</p>
+  const client = useQueryClient();
+  return <><header className="repository-intro"><div><span className="eyebrow">YOUR FORGE MEMBERSHIPS</span><h1><Building2 size={29} />Organizations</h1><p>Your organizations, repositories and team access.</p></div></header>
+    <OrganizationCreate key={userId} userId={userId} signingOut={false} onCreated={async () => { await client.invalidateQueries({ queryKey: ['organizations', userId] }); }} />
     <PagedPanel title="Your organizations" queryKey={['organizations', userId]} empty="No organization memberships returned."
       load={async (page, signal) => { const response = await organizationClient.listOrganizations({ page: { page, limit: 20 } }, { signal, timeoutMs: 8_000 }); return { items: response.organizations, page: response.page }; }}
       render={(organization) => <><div className="organization-row-title"><h3><Link {...organizationOptions({ organization: organization.name })}>{organization.name}</Link></h3><span className="visibility">{OrganizationVisibility[organization.visibility]?.toLowerCase() || 'unknown'}</span></div>{organization.fullName ? <p>{organization.fullName}</p> : null}<p>{organization.description || 'No description provided.'}</p></>} />

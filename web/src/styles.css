@@ -311,7 +311,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .credential-form-content label { display:block; margin:16px 0 7px; font-size:.875rem; }
 .credential-form-content label:first-child { margin-top:0; }
 .credential-form-content .field-help { margin:9px 0 0; font-size:.8125rem; overflow-wrap:anywhere; }
-.credential-form-content input,.credential-form-content select,.credential-form-content textarea { width:100%; }
+.credential-form-content input:not([type="checkbox"]),.credential-form-content select,.credential-form-content textarea { width:100%; }
 .credential-form-content select { max-width:280px; }
 .credential-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:20px; }
 .credential-actions button { white-space:normal; }

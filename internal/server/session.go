@@ -152,6 +152,11 @@ func (s *Server) sessionCredential(ctx context.Context, value string) (forgeCred
 	if err != nil {
 		return forgeCredential{}, err
 	}
+	return s.sessionCredentialHash(ctx, hash)
+}
+
+// The trusted scheduler resolves an existing session; no credential reaches a job.
+func (s *Server) sessionCredentialHash(ctx context.Context, hash []byte) (forgeCredential, error) {
 	if s.db == nil {
 		return forgeCredential{}, errStorageUnavailable
 	}

@@ -16,6 +16,7 @@ import (
 
 const sessionDomain = "session"
 const oauthAttemptDomain = "oauth-attempt"
+const infrastructureConnectionDomain = "infrastructure_connection"
 
 var keyIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 var errKeyConfiguration = errors.New("Encryption key configuration is invalid.")
@@ -108,10 +109,10 @@ func ParseKeyring(legacyKeyBase64, keysJSON, activeKeyID string) (*Keyring, erro
 }
 
 func keyAAD(id, domain string, binding []byte) ([]byte, error) {
-	if domain != sessionDomain && domain != oauthAttemptDomain && domain != localAccountDomain || len(binding) != 32 {
+	if domain != sessionDomain && domain != oauthAttemptDomain && domain != localAccountDomain && domain != infrastructureConnectionDomain || len(binding) != 32 {
 		return nil, errCredentialUnavailable
 	}
-	if id == "legacy" && domain != localAccountDomain {
+	if id == "legacy" && (domain == sessionDomain || domain == oauthAttemptDomain) {
 		return binding, nil
 	}
 	return append([]byte("golf:credential:v1\x00"+domain+"\x00"+id+"\x00"), binding...), nil

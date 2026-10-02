@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, InspectWorkflowsRequestSchema, InspectWorkflowsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, WorkflowConfigurationSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
+import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, InspectWorkflowsRequestSchema, InspectWorkflowsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ExecutionScope, ExecutionMode, GetExecutionPolicyResponseSchema, ListWorkflowRunsResponseSchema, WorkflowConfigurationSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 const path = '/repositories/alex/private/settings/workflows';
@@ -14,6 +14,8 @@ async function backend(page: Page) {
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Your session ended.');
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '9007199254740993', login: 'alex' } });
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'GetExecutionPolicy') return respond(route, GetExecutionPolicyResponseSchema, { policy: { scope: ExecutionScope.REPOSITORY, scopeId: '9007199254740997', ownerId: '9007199254740993', mode: ExecutionMode.DISABLED, revision: '0', revocationEpoch: '0', authorityRevision: 'd'.repeat(64) } });
+    if (method === 'ListWorkflowRuns') return respond(route, ListWorkflowRunsResponseSchema, {});
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, {});
     if (method === 'InspectWorkflows') {
       state.requests.push(request(route, InspectWorkflowsRequestSchema));
@@ -36,7 +38,7 @@ test('workflow inventory pins source links, exposes keyboard details and renders
   await page.emulateMedia({ colorScheme: 'dark' });
   const state = await backend(page); await open(page);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await expect(page.getByText('Execution unavailable.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Manual execution requires every applicable execution policy', { exact: false })).toBeVisible();
   await expect(page.getByText('Inspection subset checked', { exact: true })).toBeVisible();
   const source = page.getByRole('link', { name: manual.path, exact: true });
   const url = new URL((await source.getAttribute('href'))!, 'http://127.0.0.1:4179');
@@ -44,12 +46,12 @@ test('workflow inventory pins source links, exposes keyboard details and renders
   const details = page.locator('summary').filter({ hasText: `Inspect ${manual.path}` });
   await details.focus(); await page.keyboard.press('Enter');
   await expect(page.getByText('<img src=x onerror=alert(1)>', { exact: true })).toBeVisible();
-  await expect(page.getByRole('table').locator('img')).toHaveCount(0);
+  await expect(page.getByRole('table', { name: 'Workflow configurations', exact: true }).locator('img')).toHaveCount(0);
   await page.locator('summary').filter({ hasText: 'Inspect .gitlab-ci.yml' }).click();
   await expect(page.getByText('Line 3:2 ·', { exact: true })).toBeVisible();
   await expect(page.getByText('Remote includes are not fetched.', { exact: false })).toBeVisible();
   const search = page.getByRole('searchbox', { name: 'Search loaded Workflow configurations', exact: true });
-  await search.fill('GitLab CI'); await expect(page.getByRole('table').locator('tbody tr[data-row-id]')).toHaveCount(1);
+  await search.fill('GitLab CI'); await expect(page.getByRole('table', { name: 'Workflow configurations', exact: true }).locator('tbody tr[data-row-id]')).toHaveCount(1);
   await search.fill(''); await page.screenshot({ path: testInfo.outputPath('workflow-dark.png'), fullPage: true });
   await page.reload(); await expect(page.getByRole('heading', { name: 'Workflow configuration', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();

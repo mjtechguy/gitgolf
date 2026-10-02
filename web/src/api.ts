@@ -1,6 +1,6 @@
 import { createClient, ConnectError } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
-import { WorkflowService, RepositoryAccessService, InstanceAdminService, OrganizationAdminService, RepositorySettingsService, GitAccessService, ApiCredentialService, AuditService, CapabilityService, OrganizationService, RepositoryService, SessionService } from './gen/golf/v1/golf_pb';
+import { InfrastructureConnectionService, OrganizationCreationService, ExecutionPolicyService, WorkflowRunService, WorkflowService, RepositoryAccessService, InstanceAdminService, OrganizationAdminService, RepositorySettingsService, GitAccessService, ApiCredentialService, AuditService, CapabilityService, OrganizationService, RepositoryService, SessionService } from './gen/golf/v1/golf_pb';
 
 const transport = createConnectTransport({
   baseUrl: '/rpc',
@@ -8,6 +8,10 @@ const transport = createConnectTransport({
   fetch: (input, init) => fetch(input, { ...init, credentials: 'same-origin', cache: 'no-store' }),
 });
 
+export const infrastructureConnectionClient = createClient(InfrastructureConnectionService, transport);
+export const organizationCreationApi = createClient(OrganizationCreationService, transport);
+export const executionPolicyApi = createClient(ExecutionPolicyService, transport);
+export const workflowRunClient = createClient(WorkflowRunService, transport);
 export const workflowClient = createClient(WorkflowService, transport);
 export const repositoryAccessClient = createClient(RepositoryAccessService, transport);
 export const instanceAdminClient = createClient(InstanceAdminService, transport);

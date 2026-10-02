@@ -1,0 +1,216 @@
+#!/usr/bin/env python3
+"""Real disposable Compose shell-CI proof; never modifies the retained installation.
+
+Requires locally built Golf/runner images. It exercises both workflow formats,
+policy denial/revocation, durable queues across restart and runner cleanup.
+--objects additionally provisions private RustFS storage and qualifies persisted
+S3 source bindings without retaining source archives in PostgreSQL.
+No hosted-engine, artifact/cache/secret or trusted-merge compatibility is claimed.
+"""
+import argparse
+import base64
+import importlib.util
+import json
+import os
+from pathlib import Path
+import secrets
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
+
+sys.dont_write_bytecode = True
+import smoke
+ROOT = Path(__file__).resolve().parents[1]
+spec = importlib.util.spec_from_file_location('observe_helpers', ROOT/'scripts/observability-smoke.py')
+helpers = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(helpers)
+IMAGE = 'alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0'
+STAGE = 'prerequisites'
+
+def stage(value):
+    global STAGE
+    STAGE = value
+    print('CHECK: '+value, flush=True)
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--image', required=True)
+    parser.add_argument('--runner-image', required=True)
+    parser.add_argument('--objects', action='store_true', help='qualify private RustFS-backed CI sources using the storage overlay')
+    args = parser.parse_args()
+    environment = {key:value for key,value in os.environ.items() if not key.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','RUSTFS_','AWS_')) and key!='DATABASE_URL'}
+    def run(*command, payload=None, timeout=180):
+        result = subprocess.run(command, input=None if payload is None else json.dumps(payload).encode(), cwd=ROOT, env=environment, capture_output=True, timeout=timeout)
+        assert result.returncode == 0, 'Private subprocess failed; diagnostics withheld'
+        return result.stdout.decode()
+    core = json.loads(run('docker','image','inspect',args.image))[0]['Id']
+    worker = json.loads(run('docker','image','inspect',args.runner_image))[0]['Id']
+    print('Golf image: '+core, flush=True)
+    print('Runner image: '+worker, flush=True)
+    project = 'golf-ci-proof-'+secrets.token_hex(5)
+    golf_port, native_port = helpers.free_ports(2)
+    previous = smoke.GOLF, smoke.GITEA
+    smoke.GOLF, smoke.GITEA = f'http://127.0.0.1:{golf_port}', f'http://127.0.0.1:{native_port}'
+    with tempfile.TemporaryDirectory(prefix=project+'-') as temporary:
+        directory = Path(temporary); directory.chmod(0o700)
+        key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=')
+        values = {name:secrets.token_hex(24) for name in ['POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD']}
+        values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(), GOLF_PUBLIC_URL=smoke.GOLF,
+            GOLF_RUNNER_KEY=key,GOLF_RUNNER_KEYS=json.dumps({'local-docker':key}),GOLF_RUNNER_IMAGES=json.dumps({'linux':IMAGE}),GOLF_RUNNER_JOB_IMAGE=IMAGE,GOLF_RUNNER_APPROVED_IMAGES=json.dumps([IMAGE]))
+        if args.objects:
+            values.update(RUSTFS_ACCESS_KEY='golf-proof-'+secrets.token_hex(12), RUSTFS_SECRET_KEY=secrets.token_hex(32))
+        env_file, override = directory/'core.env',directory/'proof.yaml'
+        helpers.private_write(env_file, ''.join(name+"='"+value+"'\n" for name,value in values.items()))
+        helpers.private_write(override, f'''services:
+  golf:
+    image: {core}
+    pull_policy: never
+    ports: !override ["127.0.0.1:{golf_port}:8080"]
+  gitea:
+    environment:
+      GITEA__server__ROOT_URL: {smoke.GITEA}/
+    ports: !override ["127.0.0.1:{native_port}:3000"]
+  runner:
+    image: {worker}
+    pull_policy: never
+''')
+        compose = ['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(ROOT/'compose.yaml'),'-f',str(ROOT/'compose.ci.yaml')]
+        if args.objects:
+            compose += ['-f',str(ROOT/'compose.storage.yaml')]
+        compose += ['-f',str(override)]
+        def command(*arguments, **kwargs): return run(*compose,*arguments,**kwargs)
+        def admin(*arguments): return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*arguments).strip()
+        def rpc(method,body=None,expected=200,code=None): return smoke.rpc(session,method,body,expected=expected,code=code)
+        def wait_run(identifier,state=None):
+            deadline=time.monotonic()+90
+            while time.monotonic()<deadline:
+                item=rpc('WorkflowRunService/GetWorkflowRun',{'runId':identifier})['run']
+                if state and item['state']==state: return item
+                if not state and item['state'] not in ['WORKFLOW_RUN_STATE_QUEUED','WORKFLOW_RUN_STATE_RUNNING']: return item
+                time.sleep(.5)
+            raise AssertionError('Run did not reach expected state')
+        def policy(scope,repository=None):
+            request={'scope':'EXECUTION_SCOPE_'+scope}
+            if repository:request['repository']=repository
+            return rpc('ExecutionPolicyService/GetExecutionPolicy',request)['policy']
+        def update(scope,old,enabled,repository=None):
+            request={'scope':'EXECUTION_SCOPE_'+scope,'scopeId':old['scopeId'],'expectedRevision':old.get('revision','0'),'expectedAuthorityRevision':old['authorityRevision'],
+                'mode':'EXECUTION_MODE_ALL' if enabled else 'EXECUTION_MODE_DISABLED','manualDispatchEnabled':enabled,'allowAllWorkflows':enabled}
+            if repository:request['repository']=repository
+            return rpc('ExecutionPolicyService/UpdateExecutionPolicy',request)['policy']
+        def dispatch(file,key=None):return rpc('WorkflowRunService/DispatchWorkflow',{'repository':repository,'workflowPath':file,'idempotencyKey':key or str(uuid.uuid4())})['run']
+        def object_source(identifier):
+            assert str(uuid.UUID(identifier)) == identifier, 'Invalid source run identity'
+            query = ("SELECT json_build_object('storage',source_storage,'key',source_key,'sha',source_sha256,"
+                     "'fingerprint',source_fingerprint,'archiveAbsent',source_archive IS NULL,"
+                     "'profileAbsent',source_profile_id IS NULL AND source_profile_version IS NULL) "
+                     "FROM golf_workflow_runs WHERE id='"+identifier+"'::uuid")
+            record = json.loads(command('exec','-T','postgres','psql','-U','postgres','-d','golf','-v','ON_ERROR_STOP=1','-Atc',query))
+            assert record['storage'] == 'env_s3' and record['archiveAbsent'] and record['profileAbsent'], 'Source was not exclusively bound to operator S3 storage'
+            assert len(record['sha']) == 64 and all(c in '0123456789abcdef' for c in record['sha'])
+            assert record['key'] == 'ci-sources/'+record['sha']+'.tar'
+            assert len(record['fingerprint']) == 64 and all(c in '0123456789abcdef' for c in record['fingerprint'])
+            return record
+        def storage_ready():
+            command('exec','-T','rustfs','curl','--fail','--silent','--output','/dev/null','http://localhost:9000/health',timeout=10)
+            return True
+        started=False
+        try:
+            stage('fresh portable core and enrolled worker configuration; policies default deny')
+            started=True
+            command('up','-d','--no-build','--wait','--wait-timeout','120','postgres','gitea','golf')
+            smoke.ready()
+            if args.objects:
+                stage('private RustFS health and explicit bucket provisioning')
+                helpers.until(storage_ready,timeout=45)
+                provisioned = command('exec','-T','golf','golf','objectstore','initialize')
+                assert 'verification passed' in provisioned, 'Object bucket write/read initialization did not complete'
+            name='ci-'+secrets.token_hex(5)
+            admin('create','--username',name,'--email',name+'@example.invalid','--random-password','--must-change-password=false')
+            token=admin('generate-access-token','--username',name,'--token-name',project,'--scopes','write:user,write:organization,write:repository,write:issue','--raw')
+            password='Golf pipeline proof '+secrets.token_urlsafe(24)
+            command('exec','-T','golf','golf','local-account','create',payload={'username':name,'email':name+'@example.invalid','password':password,'forge_token':token,'is_instance_admin':True})
+            session=smoke.client()
+            rpc('SessionService/LoginWithPassword',{'username':name+'@example.invalid','password':password})
+            native=smoke.provider(token,'POST','user/repos',{'name':'pipeline-proof','private':True,'auto_init':True},expected=201)
+            repository={'owner':name,'name':'pipeline-proof'}
+            base='repos/'+name+'/pipeline-proof'
+            files={
+              '.github/workflows/actions.yml': 'name: Actions proof\non: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: |\n          test "$(id -u)" = 1000\n          test -f README.md\n          printf "actions proof\\n"\n',
+              '.gitlab-ci.yml': 'proof:\n  image: '+IMAGE+'\n  script:\n    - value=shared\n    - test "$value" = shared\n    - test -f README.md\n    - printf "gitlab proof\\n"\n',
+              '.github/workflows/failure.yml': 'on: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: exit 7\n      - run: printf "must not execute\\n"\n',
+              '.github/workflows/slow.yml': 'on: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: sleep 60\n',
+            }
+            for file,content in files.items():smoke.provider(token,'POST',base+'/contents/'+file,{'content':base64.b64encode(content.encode()).decode(),'message':'Add controlled pipeline fixture'},expected=201)
+            rpc('WorkflowRunService/DispatchWorkflow',{'repository':repository,'workflowPath':'.github/workflows/actions.yml','idempotencyKey':str(uuid.uuid4())},expected=403)
+            instance=update('INSTANCE',policy('INSTANCE'),True)
+            repo_policy=update('REPOSITORY',policy('REPOSITORY',repository),True,repository)
+            stage('durable exact-commit queues survive core restart; idempotency retains original run')
+            intent=str(uuid.uuid4());actions=dispatch('.github/workflows/actions.yml',intent)
+            assert actions['state']=='WORKFLOW_RUN_STATE_QUEUED'
+            if args.objects:
+                original_source = object_source(actions['id'])
+                stage('queued S3 source binding survives RustFS and Golf restart with no database archive copy')
+                command('restart','rustfs')
+                helpers.until(storage_ready,timeout=45)
+            command('restart','golf');smoke.ready()
+            if args.objects:
+                assert object_source(actions['id']) == original_source, 'Restart changed the source storage binding'
+            assert dispatch('.github/workflows/actions.yml',intent)['id']==actions['id']
+            stage('dedicated TLS Docker daemon executes Actions and GitLab source snapshots')
+            command('up','-d','--no-build','runner',timeout=240)
+            action_result=wait_run(actions['id'])
+            if action_result['state']!='WORKFLOW_RUN_STATE_SUCCEEDED':
+                print('Actions terminal state: '+action_result['state']+'; reason: '+action_result.get('reason',''),flush=True)
+                print(command('logs','--no-log-prefix','runner'),flush=True)
+            assert action_result['state']=='WORKFLOW_RUN_STATE_SUCCEEDED'
+            logs=rpc('WorkflowRunService/GetWorkflowRunLogs',{'runId':actions['id']})
+            assert 'actions proof' in ''.join(row['text'] for row in logs.get('logs',[]))
+            gitlab=dispatch('.gitlab-ci.yml');assert wait_run(gitlab['id'])['state']=='WORKFLOW_RUN_STATE_SUCCEEDED'
+            assert 'gitlab proof' in ''.join(row['text'] for row in rpc('WorkflowRunService/GetWorkflowRunLogs',{'runId':gitlab['id']}).get('logs',[]))
+            failure=dispatch('.github/workflows/failure.yml');failed=wait_run(failure['id']);assert failed['state']=='WORKFLOW_RUN_STATE_FAILED' and failed['exitCode']==7
+            assert 'must not execute' not in ''.join(row['text'] for row in rpc('WorkflowRunService/GetWorkflowRunLogs',{'runId':failure['id']}).get('logs',[]))
+            stage('running cancellation and policy revocation fence worker results')
+            slow=dispatch('.github/workflows/slow.yml');running=wait_run(slow['id'],'WORKFLOW_RUN_STATE_RUNNING')
+            cancelled=rpc('WorkflowRunService/CancelWorkflowRun',{'runId':slow['id'],'expectedVersion':running['version']})['run'];assert cancelled['state']=='WORKFLOW_RUN_STATE_CANCELLED'
+            time.sleep(11)
+            revoked=dispatch('.github/workflows/slow.yml');wait_run(revoked['id'],'WORKFLOW_RUN_STATE_RUNNING')
+            repo_policy=update('REPOSITORY',repo_policy,False,repository)
+            assert wait_run(revoked['id'])['state']=='WORKFLOW_RUN_STATE_CANCELLED'
+            rpc('WorkflowRunService/DispatchWorkflow',{'repository':repository,'workflowPath':'.gitlab-ci.yml','idempotencyKey':str(uuid.uuid4())},expected=403)
+            if args.objects:
+                stage('all actual Actions and GitLab jobs retain verified S3 locators and no PostgreSQL source bytes')
+                for item in [actions,gitlab,failure,slow,revoked]:
+                    object_source(item['id'])
+                assert object_source(actions['id']) == original_source
+                query = "SELECT count(*) FROM golf_workflow_runs WHERE source_storage<>'env_s3' OR source_archive IS NOT NULL"
+                assert command('exec','-T','postgres','psql','-U','postgres','-d','golf','-v','ON_ERROR_STOP=1','-Atc',query).strip() == '0'
+            stage('no attempt containers or source volumes retained after terminal runs')
+            time.sleep(2)
+            command('stop','runner')
+            assert not command('exec','-T','runner-daemon','docker','ps','-aq','--filter','label=io.golf.runner.managed=true').strip()
+            assert not command('exec','-T','runner-daemon','docker','volume','ls','-q','--filter','label=io.golf.runner.managed=true').strip()
+            print('PASS: real Compose Actions/GitLab shell jobs, persistence, denial, failures, cancellation and cleanup.',flush=True)
+            if args.objects:
+                print('PASS: private RustFS source upload/read, durable env_s3 bindings, restart persistence and NULL PostgreSQL source archives.',flush=True)
+        except Exception:
+            if started:
+                try:
+                    print('Image preparation: '+command('logs','--no-log-prefix','runner-image-init'),flush=True)
+                    print('Worker states: '+command('logs','--no-log-prefix','runner'),flush=True)
+                except Exception:pass
+            raise
+        finally:
+            smoke.GOLF,smoke.GITEA=previous
+            if started:
+                command('down','--volumes','--remove-orphans',timeout=180)
+                for arguments in [('ps','-aq'),('volume','ls','-q'),('network','ls','-q')]:assert not run('docker',*arguments,'--filter','label=com.docker.compose.project='+project).strip()
+                print('Disposable CI project cleaned up.',flush=True)
+
+if __name__=='__main__':
+    try:main()
+    except Exception as error:
+        print('FAIL at '+STAGE+': '+type(error).__name__+'; private diagnostics withheld',file=sys.stderr)
+        raise SystemExit(1)
