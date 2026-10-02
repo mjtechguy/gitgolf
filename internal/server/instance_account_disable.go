@@ -15,8 +15,8 @@ import (
 var errAdminAccountConflict = errors.New("local account changed")
 var errPasswordConfirmation = errors.New("password confirmation rejected")
 
-// Browser administration deliberately excludes all administrator accounts and
-// reactivation. Operator recovery requires fresh credentials, not a toggle.
+// Browser lifecycle actions protect administrator accounts. Re-enabling an
+// ordinary account separately requires fresh matching credentials, not a toggle.
 func (s *Server) DisableLocalAccount(ctx context.Context, req *connect.Request[golfv1.DisableLocalAccountRequest]) (*connect.Response[golfv1.DisableLocalAccountResponse], error) {
 	credential, err := rpcToken(ctx)
 	if err != nil {

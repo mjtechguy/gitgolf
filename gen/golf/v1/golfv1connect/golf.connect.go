@@ -58,6 +58,8 @@ const (
 	InfrastructureConnectionServiceName = "golf.v1.InfrastructureConnectionService"
 	// ProfileServiceName is the fully-qualified name of the ProfileService service.
 	ProfileServiceName = "golf.v1.ProfileService"
+	// AccountSecurityServiceName is the fully-qualified name of the AccountSecurityService service.
+	AccountSecurityServiceName = "golf.v1.AccountSecurityService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -199,6 +201,15 @@ const (
 	// OrganizationAdminServiceRemoveTeamMemberProcedure is the fully-qualified name of the
 	// OrganizationAdminService's RemoveTeamMember RPC.
 	OrganizationAdminServiceRemoveTeamMemberProcedure = "/golf.v1.OrganizationAdminService/RemoveTeamMember"
+	// InstanceAdminServiceEnrollRegularLocalAccountProcedure is the fully-qualified name of the
+	// InstanceAdminService's EnrollRegularLocalAccount RPC.
+	InstanceAdminServiceEnrollRegularLocalAccountProcedure = "/golf.v1.InstanceAdminService/EnrollRegularLocalAccount"
+	// InstanceAdminServiceResetRegularLocalPasswordProcedure is the fully-qualified name of the
+	// InstanceAdminService's ResetRegularLocalPassword RPC.
+	InstanceAdminServiceResetRegularLocalPasswordProcedure = "/golf.v1.InstanceAdminService/ResetRegularLocalPassword"
+	// InstanceAdminServiceEnableRegularLocalAccountProcedure is the fully-qualified name of the
+	// InstanceAdminService's EnableRegularLocalAccount RPC.
+	InstanceAdminServiceEnableRegularLocalAccountProcedure = "/golf.v1.InstanceAdminService/EnableRegularLocalAccount"
 	// InstanceAdminServiceDisableLocalAccountProcedure is the fully-qualified name of the
 	// InstanceAdminService's DisableLocalAccount RPC.
 	InstanceAdminServiceDisableLocalAccountProcedure = "/golf.v1.InstanceAdminService/DisableLocalAccount"
@@ -277,6 +288,15 @@ const (
 	// ProfileServiceUpdateProfileProcedure is the fully-qualified name of the ProfileService's
 	// UpdateProfile RPC.
 	ProfileServiceUpdateProfileProcedure = "/golf.v1.ProfileService/UpdateProfile"
+	// AccountSecurityServiceGetAccountSecurityProcedure is the fully-qualified name of the
+	// AccountSecurityService's GetAccountSecurity RPC.
+	AccountSecurityServiceGetAccountSecurityProcedure = "/golf.v1.AccountSecurityService/GetAccountSecurity"
+	// AccountSecurityServiceChangeOwnPasswordProcedure is the fully-qualified name of the
+	// AccountSecurityService's ChangeOwnPassword RPC.
+	AccountSecurityServiceChangeOwnPasswordProcedure = "/golf.v1.AccountSecurityService/ChangeOwnPassword"
+	// AccountSecurityServiceChangeOwnLoginEmailProcedure is the fully-qualified name of the
+	// AccountSecurityService's ChangeOwnLoginEmail RPC.
+	AccountSecurityServiceChangeOwnLoginEmailProcedure = "/golf.v1.AccountSecurityService/ChangeOwnLoginEmail"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -1735,6 +1755,9 @@ func (UnimplementedOrganizationAdminServiceHandler) RemoveTeamMember(context.Con
 
 // InstanceAdminServiceClient is a client for the golf.v1.InstanceAdminService service.
 type InstanceAdminServiceClient interface {
+	EnrollRegularLocalAccount(context.Context, *connect.Request[v1.EnrollRegularLocalAccountRequest]) (*connect.Response[v1.EnrollRegularLocalAccountResponse], error)
+	ResetRegularLocalPassword(context.Context, *connect.Request[v1.ResetRegularLocalPasswordRequest]) (*connect.Response[v1.ResetRegularLocalPasswordResponse], error)
+	EnableRegularLocalAccount(context.Context, *connect.Request[v1.EnableRegularLocalAccountRequest]) (*connect.Response[v1.EnableRegularLocalAccountResponse], error)
 	DisableLocalAccount(context.Context, *connect.Request[v1.DisableLocalAccountRequest]) (*connect.Response[v1.DisableLocalAccountResponse], error)
 	ListLocalAccounts(context.Context, *connect.Request[v1.ListLocalAccountsRequest]) (*connect.Response[v1.ListLocalAccountsResponse], error)
 }
@@ -1750,6 +1773,24 @@ func NewInstanceAdminServiceClient(httpClient connect.HTTPClient, baseURL string
 	baseURL = strings.TrimRight(baseURL, "/")
 	instanceAdminServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("InstanceAdminService").Methods()
 	return &instanceAdminServiceClient{
+		enrollRegularLocalAccount: connect.NewClient[v1.EnrollRegularLocalAccountRequest, v1.EnrollRegularLocalAccountResponse](
+			httpClient,
+			baseURL+InstanceAdminServiceEnrollRegularLocalAccountProcedure,
+			connect.WithSchema(instanceAdminServiceMethods.ByName("EnrollRegularLocalAccount")),
+			connect.WithClientOptions(opts...),
+		),
+		resetRegularLocalPassword: connect.NewClient[v1.ResetRegularLocalPasswordRequest, v1.ResetRegularLocalPasswordResponse](
+			httpClient,
+			baseURL+InstanceAdminServiceResetRegularLocalPasswordProcedure,
+			connect.WithSchema(instanceAdminServiceMethods.ByName("ResetRegularLocalPassword")),
+			connect.WithClientOptions(opts...),
+		),
+		enableRegularLocalAccount: connect.NewClient[v1.EnableRegularLocalAccountRequest, v1.EnableRegularLocalAccountResponse](
+			httpClient,
+			baseURL+InstanceAdminServiceEnableRegularLocalAccountProcedure,
+			connect.WithSchema(instanceAdminServiceMethods.ByName("EnableRegularLocalAccount")),
+			connect.WithClientOptions(opts...),
+		),
 		disableLocalAccount: connect.NewClient[v1.DisableLocalAccountRequest, v1.DisableLocalAccountResponse](
 			httpClient,
 			baseURL+InstanceAdminServiceDisableLocalAccountProcedure,
@@ -1767,8 +1808,26 @@ func NewInstanceAdminServiceClient(httpClient connect.HTTPClient, baseURL string
 
 // instanceAdminServiceClient implements InstanceAdminServiceClient.
 type instanceAdminServiceClient struct {
-	disableLocalAccount *connect.Client[v1.DisableLocalAccountRequest, v1.DisableLocalAccountResponse]
-	listLocalAccounts   *connect.Client[v1.ListLocalAccountsRequest, v1.ListLocalAccountsResponse]
+	enrollRegularLocalAccount *connect.Client[v1.EnrollRegularLocalAccountRequest, v1.EnrollRegularLocalAccountResponse]
+	resetRegularLocalPassword *connect.Client[v1.ResetRegularLocalPasswordRequest, v1.ResetRegularLocalPasswordResponse]
+	enableRegularLocalAccount *connect.Client[v1.EnableRegularLocalAccountRequest, v1.EnableRegularLocalAccountResponse]
+	disableLocalAccount       *connect.Client[v1.DisableLocalAccountRequest, v1.DisableLocalAccountResponse]
+	listLocalAccounts         *connect.Client[v1.ListLocalAccountsRequest, v1.ListLocalAccountsResponse]
+}
+
+// EnrollRegularLocalAccount calls golf.v1.InstanceAdminService.EnrollRegularLocalAccount.
+func (c *instanceAdminServiceClient) EnrollRegularLocalAccount(ctx context.Context, req *connect.Request[v1.EnrollRegularLocalAccountRequest]) (*connect.Response[v1.EnrollRegularLocalAccountResponse], error) {
+	return c.enrollRegularLocalAccount.CallUnary(ctx, req)
+}
+
+// ResetRegularLocalPassword calls golf.v1.InstanceAdminService.ResetRegularLocalPassword.
+func (c *instanceAdminServiceClient) ResetRegularLocalPassword(ctx context.Context, req *connect.Request[v1.ResetRegularLocalPasswordRequest]) (*connect.Response[v1.ResetRegularLocalPasswordResponse], error) {
+	return c.resetRegularLocalPassword.CallUnary(ctx, req)
+}
+
+// EnableRegularLocalAccount calls golf.v1.InstanceAdminService.EnableRegularLocalAccount.
+func (c *instanceAdminServiceClient) EnableRegularLocalAccount(ctx context.Context, req *connect.Request[v1.EnableRegularLocalAccountRequest]) (*connect.Response[v1.EnableRegularLocalAccountResponse], error) {
+	return c.enableRegularLocalAccount.CallUnary(ctx, req)
 }
 
 // DisableLocalAccount calls golf.v1.InstanceAdminService.DisableLocalAccount.
@@ -1783,6 +1842,9 @@ func (c *instanceAdminServiceClient) ListLocalAccounts(ctx context.Context, req 
 
 // InstanceAdminServiceHandler is an implementation of the golf.v1.InstanceAdminService service.
 type InstanceAdminServiceHandler interface {
+	EnrollRegularLocalAccount(context.Context, *connect.Request[v1.EnrollRegularLocalAccountRequest]) (*connect.Response[v1.EnrollRegularLocalAccountResponse], error)
+	ResetRegularLocalPassword(context.Context, *connect.Request[v1.ResetRegularLocalPasswordRequest]) (*connect.Response[v1.ResetRegularLocalPasswordResponse], error)
+	EnableRegularLocalAccount(context.Context, *connect.Request[v1.EnableRegularLocalAccountRequest]) (*connect.Response[v1.EnableRegularLocalAccountResponse], error)
 	DisableLocalAccount(context.Context, *connect.Request[v1.DisableLocalAccountRequest]) (*connect.Response[v1.DisableLocalAccountResponse], error)
 	ListLocalAccounts(context.Context, *connect.Request[v1.ListLocalAccountsRequest]) (*connect.Response[v1.ListLocalAccountsResponse], error)
 }
@@ -1794,6 +1856,24 @@ type InstanceAdminServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewInstanceAdminServiceHandler(svc InstanceAdminServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	instanceAdminServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("InstanceAdminService").Methods()
+	instanceAdminServiceEnrollRegularLocalAccountHandler := connect.NewUnaryHandler(
+		InstanceAdminServiceEnrollRegularLocalAccountProcedure,
+		svc.EnrollRegularLocalAccount,
+		connect.WithSchema(instanceAdminServiceMethods.ByName("EnrollRegularLocalAccount")),
+		connect.WithHandlerOptions(opts...),
+	)
+	instanceAdminServiceResetRegularLocalPasswordHandler := connect.NewUnaryHandler(
+		InstanceAdminServiceResetRegularLocalPasswordProcedure,
+		svc.ResetRegularLocalPassword,
+		connect.WithSchema(instanceAdminServiceMethods.ByName("ResetRegularLocalPassword")),
+		connect.WithHandlerOptions(opts...),
+	)
+	instanceAdminServiceEnableRegularLocalAccountHandler := connect.NewUnaryHandler(
+		InstanceAdminServiceEnableRegularLocalAccountProcedure,
+		svc.EnableRegularLocalAccount,
+		connect.WithSchema(instanceAdminServiceMethods.ByName("EnableRegularLocalAccount")),
+		connect.WithHandlerOptions(opts...),
+	)
 	instanceAdminServiceDisableLocalAccountHandler := connect.NewUnaryHandler(
 		InstanceAdminServiceDisableLocalAccountProcedure,
 		svc.DisableLocalAccount,
@@ -1808,6 +1888,12 @@ func NewInstanceAdminServiceHandler(svc InstanceAdminServiceHandler, opts ...con
 	)
 	return "/golf.v1.InstanceAdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case InstanceAdminServiceEnrollRegularLocalAccountProcedure:
+			instanceAdminServiceEnrollRegularLocalAccountHandler.ServeHTTP(w, r)
+		case InstanceAdminServiceResetRegularLocalPasswordProcedure:
+			instanceAdminServiceResetRegularLocalPasswordHandler.ServeHTTP(w, r)
+		case InstanceAdminServiceEnableRegularLocalAccountProcedure:
+			instanceAdminServiceEnableRegularLocalAccountHandler.ServeHTTP(w, r)
 		case InstanceAdminServiceDisableLocalAccountProcedure:
 			instanceAdminServiceDisableLocalAccountHandler.ServeHTTP(w, r)
 		case InstanceAdminServiceListLocalAccountsProcedure:
@@ -1820,6 +1906,18 @@ func NewInstanceAdminServiceHandler(svc InstanceAdminServiceHandler, opts ...con
 
 // UnimplementedInstanceAdminServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedInstanceAdminServiceHandler struct{}
+
+func (UnimplementedInstanceAdminServiceHandler) EnrollRegularLocalAccount(context.Context, *connect.Request[v1.EnrollRegularLocalAccountRequest]) (*connect.Response[v1.EnrollRegularLocalAccountResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InstanceAdminService.EnrollRegularLocalAccount is not implemented"))
+}
+
+func (UnimplementedInstanceAdminServiceHandler) ResetRegularLocalPassword(context.Context, *connect.Request[v1.ResetRegularLocalPasswordRequest]) (*connect.Response[v1.ResetRegularLocalPasswordResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InstanceAdminService.ResetRegularLocalPassword is not implemented"))
+}
+
+func (UnimplementedInstanceAdminServiceHandler) EnableRegularLocalAccount(context.Context, *connect.Request[v1.EnableRegularLocalAccountRequest]) (*connect.Response[v1.EnableRegularLocalAccountResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InstanceAdminService.EnableRegularLocalAccount is not implemented"))
+}
 
 func (UnimplementedInstanceAdminServiceHandler) DisableLocalAccount(context.Context, *connect.Request[v1.DisableLocalAccountRequest]) (*connect.Response[v1.DisableLocalAccountResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InstanceAdminService.DisableLocalAccount is not implemented"))
@@ -2859,4 +2957,126 @@ func (UnimplementedProfileServiceHandler) GetProfile(context.Context, *connect.R
 
 func (UnimplementedProfileServiceHandler) UpdateProfile(context.Context, *connect.Request[v1.UpdateProfileRequest]) (*connect.Response[v1.UpdateProfileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ProfileService.UpdateProfile is not implemented"))
+}
+
+// AccountSecurityServiceClient is a client for the golf.v1.AccountSecurityService service.
+type AccountSecurityServiceClient interface {
+	GetAccountSecurity(context.Context, *connect.Request[v1.GetAccountSecurityRequest]) (*connect.Response[v1.GetAccountSecurityResponse], error)
+	ChangeOwnPassword(context.Context, *connect.Request[v1.ChangeOwnPasswordRequest]) (*connect.Response[v1.ChangeOwnPasswordResponse], error)
+	ChangeOwnLoginEmail(context.Context, *connect.Request[v1.ChangeOwnLoginEmailRequest]) (*connect.Response[v1.ChangeOwnLoginEmailResponse], error)
+}
+
+// NewAccountSecurityServiceClient constructs a client for the golf.v1.AccountSecurityService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewAccountSecurityServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AccountSecurityServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	accountSecurityServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("AccountSecurityService").Methods()
+	return &accountSecurityServiceClient{
+		getAccountSecurity: connect.NewClient[v1.GetAccountSecurityRequest, v1.GetAccountSecurityResponse](
+			httpClient,
+			baseURL+AccountSecurityServiceGetAccountSecurityProcedure,
+			connect.WithSchema(accountSecurityServiceMethods.ByName("GetAccountSecurity")),
+			connect.WithClientOptions(opts...),
+		),
+		changeOwnPassword: connect.NewClient[v1.ChangeOwnPasswordRequest, v1.ChangeOwnPasswordResponse](
+			httpClient,
+			baseURL+AccountSecurityServiceChangeOwnPasswordProcedure,
+			connect.WithSchema(accountSecurityServiceMethods.ByName("ChangeOwnPassword")),
+			connect.WithClientOptions(opts...),
+		),
+		changeOwnLoginEmail: connect.NewClient[v1.ChangeOwnLoginEmailRequest, v1.ChangeOwnLoginEmailResponse](
+			httpClient,
+			baseURL+AccountSecurityServiceChangeOwnLoginEmailProcedure,
+			connect.WithSchema(accountSecurityServiceMethods.ByName("ChangeOwnLoginEmail")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// accountSecurityServiceClient implements AccountSecurityServiceClient.
+type accountSecurityServiceClient struct {
+	getAccountSecurity  *connect.Client[v1.GetAccountSecurityRequest, v1.GetAccountSecurityResponse]
+	changeOwnPassword   *connect.Client[v1.ChangeOwnPasswordRequest, v1.ChangeOwnPasswordResponse]
+	changeOwnLoginEmail *connect.Client[v1.ChangeOwnLoginEmailRequest, v1.ChangeOwnLoginEmailResponse]
+}
+
+// GetAccountSecurity calls golf.v1.AccountSecurityService.GetAccountSecurity.
+func (c *accountSecurityServiceClient) GetAccountSecurity(ctx context.Context, req *connect.Request[v1.GetAccountSecurityRequest]) (*connect.Response[v1.GetAccountSecurityResponse], error) {
+	return c.getAccountSecurity.CallUnary(ctx, req)
+}
+
+// ChangeOwnPassword calls golf.v1.AccountSecurityService.ChangeOwnPassword.
+func (c *accountSecurityServiceClient) ChangeOwnPassword(ctx context.Context, req *connect.Request[v1.ChangeOwnPasswordRequest]) (*connect.Response[v1.ChangeOwnPasswordResponse], error) {
+	return c.changeOwnPassword.CallUnary(ctx, req)
+}
+
+// ChangeOwnLoginEmail calls golf.v1.AccountSecurityService.ChangeOwnLoginEmail.
+func (c *accountSecurityServiceClient) ChangeOwnLoginEmail(ctx context.Context, req *connect.Request[v1.ChangeOwnLoginEmailRequest]) (*connect.Response[v1.ChangeOwnLoginEmailResponse], error) {
+	return c.changeOwnLoginEmail.CallUnary(ctx, req)
+}
+
+// AccountSecurityServiceHandler is an implementation of the golf.v1.AccountSecurityService service.
+type AccountSecurityServiceHandler interface {
+	GetAccountSecurity(context.Context, *connect.Request[v1.GetAccountSecurityRequest]) (*connect.Response[v1.GetAccountSecurityResponse], error)
+	ChangeOwnPassword(context.Context, *connect.Request[v1.ChangeOwnPasswordRequest]) (*connect.Response[v1.ChangeOwnPasswordResponse], error)
+	ChangeOwnLoginEmail(context.Context, *connect.Request[v1.ChangeOwnLoginEmailRequest]) (*connect.Response[v1.ChangeOwnLoginEmailResponse], error)
+}
+
+// NewAccountSecurityServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewAccountSecurityServiceHandler(svc AccountSecurityServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	accountSecurityServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("AccountSecurityService").Methods()
+	accountSecurityServiceGetAccountSecurityHandler := connect.NewUnaryHandler(
+		AccountSecurityServiceGetAccountSecurityProcedure,
+		svc.GetAccountSecurity,
+		connect.WithSchema(accountSecurityServiceMethods.ByName("GetAccountSecurity")),
+		connect.WithHandlerOptions(opts...),
+	)
+	accountSecurityServiceChangeOwnPasswordHandler := connect.NewUnaryHandler(
+		AccountSecurityServiceChangeOwnPasswordProcedure,
+		svc.ChangeOwnPassword,
+		connect.WithSchema(accountSecurityServiceMethods.ByName("ChangeOwnPassword")),
+		connect.WithHandlerOptions(opts...),
+	)
+	accountSecurityServiceChangeOwnLoginEmailHandler := connect.NewUnaryHandler(
+		AccountSecurityServiceChangeOwnLoginEmailProcedure,
+		svc.ChangeOwnLoginEmail,
+		connect.WithSchema(accountSecurityServiceMethods.ByName("ChangeOwnLoginEmail")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.AccountSecurityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case AccountSecurityServiceGetAccountSecurityProcedure:
+			accountSecurityServiceGetAccountSecurityHandler.ServeHTTP(w, r)
+		case AccountSecurityServiceChangeOwnPasswordProcedure:
+			accountSecurityServiceChangeOwnPasswordHandler.ServeHTTP(w, r)
+		case AccountSecurityServiceChangeOwnLoginEmailProcedure:
+			accountSecurityServiceChangeOwnLoginEmailHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedAccountSecurityServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedAccountSecurityServiceHandler struct{}
+
+func (UnimplementedAccountSecurityServiceHandler) GetAccountSecurity(context.Context, *connect.Request[v1.GetAccountSecurityRequest]) (*connect.Response[v1.GetAccountSecurityResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AccountSecurityService.GetAccountSecurity is not implemented"))
+}
+
+func (UnimplementedAccountSecurityServiceHandler) ChangeOwnPassword(context.Context, *connect.Request[v1.ChangeOwnPasswordRequest]) (*connect.Response[v1.ChangeOwnPasswordResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AccountSecurityService.ChangeOwnPassword is not implemented"))
+}
+
+func (UnimplementedAccountSecurityServiceHandler) ChangeOwnLoginEmail(context.Context, *connect.Request[v1.ChangeOwnLoginEmailRequest]) (*connect.Response[v1.ChangeOwnLoginEmailResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AccountSecurityService.ChangeOwnLoginEmail is not implemented"))
 }

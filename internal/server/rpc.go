@@ -56,6 +56,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle(golfv1connect.NewSessionServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewProfileServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewAccountSecurityServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewOrganizationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewOrganizationAdminServiceHandler(s, options...))
@@ -109,7 +110,9 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		switch procedure {
 		case golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLoginWithPasswordProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
 			public = true
-		case golfv1connect.ProfileServiceGetProfileProcedure, golfv1connect.ProfileServiceUpdateProfileProcedure,
+		case golfv1connect.AccountSecurityServiceGetAccountSecurityProcedure, golfv1connect.AccountSecurityServiceChangeOwnPasswordProcedure, golfv1connect.AccountSecurityServiceChangeOwnLoginEmailProcedure,
+			golfv1connect.InstanceAdminServiceEnrollRegularLocalAccountProcedure, golfv1connect.InstanceAdminServiceResetRegularLocalPasswordProcedure, golfv1connect.InstanceAdminServiceEnableRegularLocalAccountProcedure,
+			golfv1connect.ProfileServiceGetProfileProcedure, golfv1connect.ProfileServiceUpdateProfileProcedure,
 			golfv1connect.InfrastructureConnectionServiceListInfrastructureConnectionsProcedure, golfv1connect.InfrastructureConnectionServiceSaveInfrastructureConnectionProcedure, golfv1connect.InfrastructureConnectionServiceTestInfrastructureConnectionProcedure, golfv1connect.InfrastructureConnectionServiceActivateInfrastructureConnectionProcedure,
 			golfv1connect.OrganizationCreationServiceGetOrganizationCreationPolicyProcedure, golfv1connect.OrganizationCreationServiceUpdateOrganizationCreationPolicyProcedure, golfv1connect.OrganizationCreationServiceCreateOrganizationProcedure,
 			golfv1connect.ExecutionPolicyServiceGetExecutionPolicyProcedure, golfv1connect.ExecutionPolicyServiceUpdateExecutionPolicyProcedure,

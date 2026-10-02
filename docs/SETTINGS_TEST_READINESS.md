@@ -6,18 +6,18 @@ Golf settings must show current values, offer explicit New/Edit actions, enforce
 
 | Scope | Working controls | Qualification boundary |
 | --- | --- | --- |
-| Personal | Sessions/revocation, SSH keys, issue/comment writes, repository creation, read-only API credentials, appearance, public display name/bio/location/website | Own account only; API credentials do not authorize Git or writes. Username/email/password/avatar management remain separate. |
+| Personal | Sessions/revocation, SSH keys, issue/comment writes, repository creation, read-only API credentials, appearance, public display name/bio/location/website | Own account only; API credentials do not authorize Git or writes. Own password and unverified login-alias changes require current-password confirmation and revoke local sessions. Username/avatar/verified email/recovery remain separate. |
 | Repository | Description, existing default branch, issue/wiki/PR flags, direct existing-user collaborator grants, workflow selection and supported manual run/cancel | Native permission required. Invitations, organization/team grants, protections, full workflow engines and deploy keys are not covered. |
 | Organization | Existing-user membership in ordinary teams, repository/workflow execution ceilings | Owner-team administration, full role/grant editing and invitations remain open. |
-| Instance | Disable ordinary enrolled password accounts, organization-creation policy, execution ceilings, encrypted infrastructure profiles/tests/object-source activation | Enrollment/reset/reactivation and database cutover are still operator actions. Cloudflare/AWS account qualification is separate. |
+| Instance | Enroll/reset/disable/re-enable ordinary enrolled password accounts, organization-creation policy, execution ceilings, encrypted infrastructure profiles/tests/object-source activation | Ordinary existing-identity enrollment/reset/reactivation are password-confirmed browser actions. Administrator roles and database cutover remain operator actions. Cloudflare/AWS account qualification is separate. |
 
 ## Next editable settings, in order
 
 | Priority | Controls to implement | Required real test |
 | --- | --- | --- |
 | 1 (implemented public fields) | Public profile display name, bio, location and website; avatar/privacy controls remain open | Edit own profile; verify persisted values in a new session; deny another user's target; stale form and dropped receipt remain explicit. |
-| 2 | Change password, enrolled login email, verified email flow and recovery | Current-password confirmation; unique email; coordinated login/native mappings; revoke old sessions; old login/password fail and new values succeed. Email verification needs actual delivery. |
-| 3 | Admin user enrollment, reset, re-enable and role lifecycle | Ordinary and administrator protections; prevent last-admin lockout; exact actor/target attribution; ordinary user cannot administer anyone. |
+| 2 (implemented password/login alias) | Own password and unique enrolled login alias; verified email flow and recovery remain open | Current-password confirmation; immutable native identity; version CAS; revoke local sessions and their delegated credentials; old password/alias fail and new values succeed. Native email/password and independent Git credentials stay separate. Verification needs actual delivery. |
+| 3 (implemented ordinary lifecycle) | Admin enrollment of existing native identities, reset and credential-confirmed re-enable; native provisioning/role lifecycle remain open | Current admin password; ordinary-only targets; exact version/actor/target history; independent native credential validation; deny self/admin targets. All administrator roles remain protected; future role changes need last-admin and break-glass qualification. |
 | 4 | Organization general settings, members/invitations, teams and repository grants | Owner/admin/member/outside-user matrix, final-owner protection, invitation acceptance/expiry and permission loss during writes. |
 | 5 | Repository visibility/archive/transfer/delete and branch/review rules | Explicit confirmations, source/destination authority, credential/clone behavior, URL changes and Git/API enforcement. A settings editor alone does not establish protection. |
 | 6 | CI pool enrollment/drain/revocation, repo eligibility, variables/secrets, quotas and retention | Actual job access, inherited ceilings, credential non-disclosure, fork denial/approval, expired worker rejection and resource cleanup. |

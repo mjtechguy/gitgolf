@@ -1,4 +1,4 @@
-.PHONY: setup dev build cli test test-integration check helm-check fmt vet web-check generate generate-check qualify-git qualify-settings qualify-organization-admin qualify-public-repositories qualify-repository-access qualify-workflow-inspection qualify-instance-admin up down
+.PHONY: setup dev build cli test test-integration check helm-check fmt vet web-check generate generate-check qualify-git qualify-settings qualify-organization-admin qualify-public-repositories qualify-repository-access qualify-workflow-inspection qualify-instance-admin qualify-account-security up down
 setup:
 	./scripts/init-env.sh
 dev: up
@@ -22,6 +22,8 @@ qualify-workflow-inspection:
 	python3 scripts/workflow-config-smoke.py
 qualify-instance-admin:
 	python3 scripts/instance-account-disable-smoke.py --image golf-golf:latest
+qualify-account-security:
+	python3 scripts/account-lifecycle-smoke.py --image golf-golf:latest
 qualify-public-repositories: cli
 	python3 scripts/public-repositories-smoke.py --image golf-golf:latest --cli bin/golf
 test:

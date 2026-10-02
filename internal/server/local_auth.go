@@ -252,8 +252,9 @@ func (s *Server) localSessionUser(ctx context.Context, value string, user User) 
 	return user, nil
 }
 
-// ManageLocalAccount is an operator-only entry point: no HTTP handler exposes
-// enrollment, reset, disable or enable. Native passwords are never accepted.
+// ManageLocalAccount is the operator entry point. Browser lifecycle handlers
+// separately enforce actor confirmation and target revisions; native passwords
+// are never accepted.
 func ManageLocalAccount(ctx context.Context, db *sql.DB, keys *Keyring, forgeURL, action string, input LocalAccountInput) (LocalAccountResult, error) {
 	bad := errors.New("Local account input is invalid; use a canonical username and a 15-character minimum password of at most 1024 UTF-8 bytes.")
 	if !localUsername.MatchString(input.Username) {

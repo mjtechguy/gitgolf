@@ -39,7 +39,9 @@ test('personal coverage distinguishes supported settings from missing enforcemen
   await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(11);
   await page.getByRole('searchbox', { name: 'Search loaded Personal settings', exact: true }).fill('MFA');
   await expect(table.getByText('Passwords, recovery and MFA', { exact: true })).toBeVisible();
-  await expect(table.getByText('Not configurable yet', { exact: true })).toBeVisible();
+  await expect(table.getByText('Partial', { exact: true })).toBeVisible();
+  await expect(table.getByText(/MFA, passkeys, verified email and recovery remain planned/)).toBeVisible();
+  await expect(table.getByRole('link', { name: 'Open', exact: true })).toHaveAttribute('href', '/account/security');
   await expect(table.getByRole('button')).toHaveCount(3);
 });
 

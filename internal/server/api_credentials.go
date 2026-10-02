@@ -315,9 +315,34 @@ func (s *Server) RevokeApiCredential(ctx context.Context, req *connect.Request[g
 // Only the typed current-session revocation acknowledgment intentionally has no
 // surviving caller. Other successful reads must recheck their local authority.
 func acknowledgesCurrentSessionRevocation(request connect.AnyRequest, response connect.AnyResponse) bool {
-	if request.Spec().Procedure != golfv1connect.SessionServiceRevokeSessionProcedure {
+	if request == nil || response == nil {
 		return false
 	}
-	reply, ok := response.(*connect.Response[golfv1.RevokeSessionResponse])
-	return ok && reply.Msg.CurrentSessionRevoked
+	// These successful local mutations intentionally delete the caller's
+	// session. Only their narrow, verified receipts may bypass postflight.
+	credentialReceipt := func(before, after, operation string, revoked uint64, requiresLogin bool) bool {
+		version, err := discussionID(before)
+		if err != nil || version == 1<<63-1 || after != strconv.FormatInt(version+1, 10) || !requiresLogin || revoked == 0 {
+			return false
+		}
+		id, err := base64.RawURLEncoding.DecodeString(operation)
+		return err == nil && len(id) == 24 && base64.RawURLEncoding.EncodeToString(id) == operation
+	}
+	switch request.Spec().Procedure {
+	case golfv1connect.SessionServiceRevokeSessionProcedure:
+		reply, ok := response.(*connect.Response[golfv1.RevokeSessionResponse])
+		return ok && reply != nil && reply.Msg != nil && reply.Msg.CurrentSessionRevoked
+	case golfv1connect.AccountSecurityServiceChangeOwnPasswordProcedure:
+		input, inputOK := request.(*connect.Request[golfv1.ChangeOwnPasswordRequest])
+		reply, replyOK := response.(*connect.Response[golfv1.ChangeOwnPasswordResponse])
+		return inputOK && replyOK && input != nil && input.Msg != nil && reply != nil && reply.Msg != nil &&
+			credentialReceipt(input.Msg.ExpectedCredentialVersion, reply.Msg.CredentialVersion, reply.Msg.OperationId, reply.Msg.SessionsRevoked, reply.Msg.RequiresLogin)
+	case golfv1connect.AccountSecurityServiceChangeOwnLoginEmailProcedure:
+		input, inputOK := request.(*connect.Request[golfv1.ChangeOwnLoginEmailRequest])
+		reply, replyOK := response.(*connect.Response[golfv1.ChangeOwnLoginEmailResponse])
+		return inputOK && replyOK && input != nil && input.Msg != nil && reply != nil && reply.Msg != nil &&
+			credentialReceipt(input.Msg.ExpectedCredentialVersion, reply.Msg.CredentialVersion, reply.Msg.OperationId, reply.Msg.SessionsRevoked, reply.Msg.RequiresLogin)
+	default:
+		return false
+	}
 }

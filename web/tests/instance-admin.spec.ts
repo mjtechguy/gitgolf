@@ -48,7 +48,7 @@ test('instance inventory preserves exact IDs, loaded search, paging and protecte
   expect(state.reads.at(-1)).toBe(2);
   expect(state.reads.slice(0, -1).every(number => number === 1)).toBe(true);
   await expect(page.locator('input:not([type=search]),textarea,select:not(.data-table-page-size)')).toHaveCount(0);
-  await expect(page.getByText(/Enrollment, reset and recovery still use operator commands/)).toBeVisible();
+  await expect(page.getByText(/Administrators can enroll existing Git identities and reset, enable or disable ordinary local accounts/)).toBeVisible();
   await page.setViewportSize({ width: 320, height: 760 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

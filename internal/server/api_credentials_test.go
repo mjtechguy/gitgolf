@@ -583,3 +583,73 @@ func TestApiCredentialMigrationExpiryRecoveryPostgres(t *testing.T) {
 		}
 	}
 }
+
+// Exercise real Connect routing so the procedure spec is supplied by the
+// handler, rather than manufacturing an unexported spec in a unit test.
+func TestSelfCredentialAcknowledgmentRouting(t *testing.T) {
+	var checks atomic.Int64
+	forge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		checks.Add(1)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer forge.Close()
+	s, err := New(testConfig(forge.URL), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation := base64.RawURLEncoding.EncodeToString(make([]byte, 24))
+	for _, method := range []string{"password", "email"} {
+		for _, tc := range []struct {
+			name, before, after, operation string
+			count                          uint64
+			requiresLogin, otherRoute      bool
+			accepted                       bool
+		}{
+			{name: "verified receipt", before: "1", after: "2", operation: operation, count: 1, requiresLogin: true, accepted: true},
+			{name: "wrong version", before: "1", after: "3", operation: operation, count: 1, requiresLogin: true},
+			{name: "zero revoked sessions", before: "1", after: "2", operation: operation, requiresLogin: true},
+			{name: "missing operation", before: "1", after: "2", count: 1, requiresLogin: true},
+			{name: "wrong operation length", before: "1", after: "2", operation: "AA", count: 1, requiresLogin: true},
+			{name: "noncanonical operation", before: "1", after: "2", operation: operation + "=", count: 1, requiresLogin: true},
+			{name: "login not required", before: "1", after: "2", operation: operation, count: 1},
+			{name: "noncanonical input version", before: "01", after: "2", operation: operation, count: 1, requiresLogin: true},
+			{name: "version overflow", before: "9223372036854775807", after: "9223372036854775808", operation: operation, count: 1, requiresLogin: true},
+			{name: "different route", before: "1", after: "2", operation: operation, count: 1, requiresLogin: true, otherRoute: true},
+		} {
+			t.Run(method+"/"+tc.name, func(t *testing.T) {
+				procedure := golfv1connect.AccountSecurityServiceChangeOwnPasswordProcedure
+				if method == "email" {
+					procedure = golfv1connect.AccountSecurityServiceChangeOwnLoginEmailProcedure
+				}
+				if tc.otherRoute {
+					procedure = "/golf.v1.FutureService/Read"
+				}
+				option := connect.WithInterceptors(connect.UnaryInterceptorFunc(s.apiReadInterceptor))
+				var handler http.Handler
+				if method == "password" {
+					handler = connect.NewUnaryHandler(procedure, func(context.Context, *connect.Request[golfv1.ChangeOwnPasswordRequest]) (*connect.Response[golfv1.ChangeOwnPasswordResponse], error) {
+						return connect.NewResponse(&golfv1.ChangeOwnPasswordResponse{CredentialVersion: tc.after, OperationId: tc.operation, SessionsRevoked: tc.count, RequiresLogin: tc.requiresLogin}), nil
+					}, option)
+				} else {
+					handler = connect.NewUnaryHandler(procedure, func(context.Context, *connect.Request[golfv1.ChangeOwnLoginEmailRequest]) (*connect.Response[golfv1.ChangeOwnLoginEmailResponse], error) {
+						return connect.NewResponse(&golfv1.ChangeOwnLoginEmailResponse{CredentialVersion: tc.after, OperationId: tc.operation, SessionsRevoked: tc.count, RequiresLogin: tc.requiresLogin}), nil
+					}, option)
+				}
+				request := httptest.NewRequest(http.MethodPost, procedure, strings.NewReader(`{"expectedCredentialVersion":"`+tc.before+`"}`))
+				request.Header.Set("Content-Type", "application/json")
+				request.Header.Set("Connect-Protocol-Version", "1")
+				request = request.WithContext(context.WithValue(request.Context(), sessionTokenKey{}, forgeCredential{Token: "revoked-fixture-credential", Kind: "pat", Local: true}))
+				prior := checks.Load()
+				response := httptest.NewRecorder()
+				handler.ServeHTTP(response, request)
+				if tc.accepted {
+					if response.Code != http.StatusOK || checks.Load() != prior {
+						t.Fatalf("verified acknowledgment failed: status %d native checks %d", response.Code, checks.Load()-prior)
+					}
+				} else if response.Code != http.StatusUnauthorized || checks.Load() != prior+1 {
+					t.Fatalf("invalid acknowledgment bypassed authority: status %d native checks %d", response.Code, checks.Load()-prior)
+				}
+			})
+		}
+	}
+}

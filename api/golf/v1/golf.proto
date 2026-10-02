@@ -164,6 +164,9 @@ service OrganizationAdminService {
 // Explicitly enrolled Golf administrator reads. Native site administration is
 // not an instance-role grant. Credential material is never returned.
 service InstanceAdminService {
+  rpc EnrollRegularLocalAccount(EnrollRegularLocalAccountRequest) returns (EnrollRegularLocalAccountResponse);
+  rpc ResetRegularLocalPassword(ResetRegularLocalPasswordRequest) returns (ResetRegularLocalPasswordResponse);
+  rpc EnableRegularLocalAccount(EnableRegularLocalAccountRequest) returns (EnableRegularLocalAccountResponse);
   rpc DisableLocalAccount(DisableLocalAccountRequest) returns (DisableLocalAccountResponse);
   rpc ListLocalAccounts(ListLocalAccountsRequest) returns (ListLocalAccountsResponse);
 }
@@ -1120,3 +1123,84 @@ message UpdateProfileRequest {
  optional string website = 6;
 }
 message UpdateProfileResponse { Profile profile = 1; }
+
+// Local Golf login credentials; email aliases are not verified mail identities.
+service AccountSecurityService {
+ rpc GetAccountSecurity(GetAccountSecurityRequest) returns (GetAccountSecurityResponse);
+ rpc ChangeOwnPassword(ChangeOwnPasswordRequest) returns (ChangeOwnPasswordResponse);
+ rpc ChangeOwnLoginEmail(ChangeOwnLoginEmailRequest) returns (ChangeOwnLoginEmailResponse);
+}
+message AccountSecurity {
+ string user_id = 1;
+ string account_id = 2;
+ string username = 3;
+ string login_email = 4;
+ string credential_version = 5;
+ bool can_manage = 6;
+}
+message GetAccountSecurityRequest {}
+message GetAccountSecurityResponse { AccountSecurity security = 1; }
+message ChangeOwnPasswordRequest {
+ string account_id = 1;
+ string user_id = 2;
+ string expected_credential_version = 3;
+ string password_confirmation = 4;
+ string new_password = 5;
+}
+message ChangeOwnLoginEmailRequest {
+ string account_id = 1;
+ string user_id = 2;
+ string expected_credential_version = 3;
+ string password_confirmation = 4;
+ string login_email = 5;
+}
+message ChangeOwnPasswordResponse {
+ string credential_version = 1;
+ uint64 sessions_revoked = 2;
+ string operation_id = 3;
+ bool requires_login = 4;
+}
+message ChangeOwnLoginEmailResponse {
+ string credential_version = 1;
+ uint64 sessions_revoked = 2;
+ string operation_id = 3;
+ bool requires_login = 4;
+}
+
+// Password-confirmed administration of ordinary, existing Git identities only.
+message EnrollRegularLocalAccountRequest {
+ string username = 1;
+ string email = 2;
+ string password = 3;
+ string forge_token = 4;
+ string expected_native_user_id = 5;
+ string password_confirmation = 6;
+}
+message EnrollRegularLocalAccountResponse {
+ LocalAccountInfo account = 1;
+ uint64 sessions_revoked = 2;
+ string operation_id = 3;
+}
+message ResetRegularLocalPasswordRequest {
+ string account_id = 1;
+ string expected_credential_version = 2;
+ string password = 3;
+ string password_confirmation = 4;
+}
+message ResetRegularLocalPasswordResponse {
+ LocalAccountInfo account = 1;
+ uint64 sessions_revoked = 2;
+ string operation_id = 3;
+}
+message EnableRegularLocalAccountRequest {
+ string account_id = 1;
+ string expected_credential_version = 2;
+ string password = 3;
+ string forge_token = 4;
+ string password_confirmation = 5;
+}
+message EnableRegularLocalAccountResponse {
+ LocalAccountInfo account = 1;
+ uint64 sessions_revoked = 2;
+ string operation_id = 3;
+}

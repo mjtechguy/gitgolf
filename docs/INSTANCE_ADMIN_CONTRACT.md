@@ -1,6 +1,6 @@
 # Golf instance account inventory
 
-`InstanceAdminService.ListLocalAccounts` is a read-only inventory of operator-enrolled Golf password accounts for the configured forge. It includes enabled and disabled local accounts. It does not list every native Gitea user, administer organizations, or provide account enrollment, suspension, reactivation, password reset or role changes.
+`InstanceAdminService.ListLocalAccounts` is a read-only inventory of enrolled Golf password accounts for the configured forge. It includes enabled and disabled local accounts. This read method does not list every native user or mutate accounts. Separate password-confirmed [ordinary-account lifecycle](INSTANCE_ACCOUNT_LIFECYCLE_CONTRACT.md) and [disable](INSTANCE_ACCOUNT_DISABLE_CONTRACT.md) methods support enrollment/reset/re-enable/disable. Role changes remain operator-managed.
 
 ## Authority and transport
 
@@ -30,13 +30,11 @@ The SQL projection excludes password hashes, encrypted provider credentials, enc
 
 `disabled` describes local password login only. Existing independent PAT/OAuth sessions, native sessions, Git keys and provider credentials are separate authorities. Disabled rows remain in credential-key inventory. See [local authentication](LOCAL_AUTHENTICATION.md) for the enforced lifecycle and [recovery](RECOVERY.md) for restored-account quarantine.
 
-## Why lifecycle mutations remain separate
+## Separate lifecycle authorization
 
-The existing operator `ManageLocalAccount` helper is not a browser authorization API. It already provides immutable native binding, credential-version increments, local-session deletion and a same-transaction append-only account event. Its actor is the PostgreSQL role, not an authenticated browser administrator. It has no browser password confirmation, target-version compare-and-set or last-enabled-administrator guard.
+The operator `ManageLocalAccount` helper is not a browser authorization API. The newer [ordinary-account lifecycle](INSTANCE_ACCOUNT_LIFECYCLE_CONTRACT.md) and [disable](INSTANCE_ACCOUNT_DISABLE_CONTRACT.md) handlers provide caller password confirmation/throttling, post-wait authority checks, exact target revisions and transactional actor history. Inventory access alone cannot authorize those writes.
 
-`disabled_at` also covers recovery quarantine. Operator enable deliberately requires a new password and a freshly validated mapped provider credential. Reusing it as a browser toggle, or simply clearing the timestamp, would bypass that re-enrollment boundary. A future browser lifecycle must explicitly distinguish reversible administrative suspension from operator/security/recovery disable, or retain the existing fresh-credential re-enablement requirement.
-
-Before adding mutations, qualify caller password confirmation and throttling, revalidation after KDF/provider/lock waits, actor-bound audit with atomic rollback, target-version conflict handling, and a shared transaction lock/guard for the last enabled administrator. Operator and browser writers need a consistent lock order and an explicit break-glass policy. Test concurrent administrators disabling one another, self-targeting, reset/revoke races, restore quarantine and dependent-session revocation. None of these mutation guarantees is claimed by this inventory.
+`disabled_at` also covers recovery quarantine. Browser re-enablement retains the fresh-password and freshly verified matching provider-credential requirement; it is not a toggle. All administrator targets remain excluded. Last-administrator role changes, security-policy recovery distinctions and browser break-glass remain separate gates; this inventory provides none of those guarantees.
 
 ## Verification
 

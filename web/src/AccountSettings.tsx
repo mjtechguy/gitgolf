@@ -13,6 +13,7 @@ import { Loading, PanelError, privateQuery } from './RepositoryUI';
 export function AccountLayout({ children }: { children: ReactNode }) {
   return <div className="account-layout"><nav className="account-navigation" aria-label="Account settings"><span className="eyebrow">PERSONAL SETTINGS</span>
     <Link to="/account/settings" activeOptions={{ exact:true }}><UserRound size={18} />Profile</Link>
+    <Link to="/account/security" activeOptions={{ exact:true }}><ShieldCheck size={18} />Sign-in and security</Link>
     <Link to="/account/sessions" activeOptions={{ exact:true }}><ShieldCheck size={18} />Sessions</Link>
     <Link to="/account/ssh-keys" activeOptions={{ exact:true }}><KeyRound size={18} />SSH keys</Link>
     <Link to="/account/api-credentials" activeOptions={{ exact:true }}><KeyRound size={18} />API credentials</Link>
@@ -37,11 +38,11 @@ export function AccountSettings({ user, signingOut }: { user: User; signingOut: 
 }
 
 export type SettingsScope = 'personal' | 'organization' | 'repository' | 'instance';
-type SettingEntry = { id: string; section: string; state: 'Ready' | 'Partial' | 'Read only' | 'Planned'; detail: string; task: string; to?: '/account/sessions' | '/account/ssh-keys' | '/account/api-credentials' | '/audit' | '/' | '/organizations' | '/status' | '/admin/execution' | '/admin/organizations' | '/admin/settings/infrastructure' | '/admin/settings'; hash?: string };
+type SettingEntry = { id: string; section: string; state: 'Ready' | 'Partial' | 'Read only' | 'Planned'; detail: string; task: string; to?: '/account/security' | '/account/sessions' | '/account/ssh-keys' | '/account/api-credentials' | '/audit' | '/' | '/organizations' | '/status' | '/admin/execution' | '/admin/organizations' | '/admin/settings/infrastructure' | '/admin/settings'; hash?: string };
 const inventory: Record<SettingsScope, SettingEntry[]> = {
   personal: [
-    { id: 'profile', section: 'Profile and email', state: 'Partial', detail: 'Supported public profile fields have an explicit editor above. Username and sign-in email changes are not available yet; email verification and changes still need implementation.', task: 'P1.3 / G1' },
-    { id: 'authentication', section: 'Passwords, recovery and MFA', state: 'Planned', detail: 'Password sign-in works; self-service password changes, recovery, MFA, passkeys and step-up need verified credential lifecycle and recovery safeguards.', task: 'P1.3' },
+    { id: 'profile', section: 'Profile and email', state: 'Partial', detail: 'Edit public profile fields above. Golf sign-in email changes have a separate security page; username changes, mailbox verification and recovery remain planned.', task: 'P1.3 / G1' },
+    { id: 'authentication', section: 'Passwords, recovery and MFA', state: 'Partial', detail: 'Change your Golf password or unverified login alias after current-password confirmation. Saving revokes all local password sessions and dependent API credentials. MFA, passkeys, verified email and recovery remain planned.', task: 'P1.3', to: '/account/security' },
     { id: 'sessions', section: 'Browser sessions', state: 'Ready', detail: 'List active sessions and revoke one or all others. This does not revoke native Git keys or provider grants.', task: 'P1.3', to: '/account/sessions' },
     { id: 'keys', section: 'SSH keys', state: 'Ready', detail: 'Manage persistent native account SSH keys. Signing-key management and scoped/expiring agent Git credentials are still planned.', task: 'P1.8 / P5.5', to: '/account/ssh-keys' },
     { id: 'signing', section: 'Signing keys', state: 'Planned', detail: 'Signing-key enrollment and revocation need dedicated supported APIs and signature/trust qualification; SSH authentication keys are managed separately.', task: 'P1.8 / P2.3' },
@@ -77,7 +78,7 @@ const inventory: Record<SettingsScope, SettingEntry[]> = {
     { id: 'danger', section: 'Archive, transfer and deletion', state: 'Planned', detail: 'Destructive administration is not exposed yet; ownership recovery, confirmation, target binding and audit must precede these controls.', task: 'P1.5 / P2.3' },
   ],
   instance: [
-    { id: 'enrollment', section: 'Enrollment, identity and SSO', state: 'Partial', detail: 'Enrolled local accounts have a dedicated administration inventory. Instance administrators can disable ordinary local password sign-in after password confirmation; enrollment, reset, re-enable, email changes, external OIDC and MFA remain operator-managed or planned.', task: 'P1.3', to: '/admin/settings' },
+    { id: 'enrollment', section: 'Enrollment, identity and SSO', state: 'Partial', detail: 'Enrolled local accounts have a dedicated administration inventory. Instance administrators can enroll existing Git identities and reset, enable or disable ordinary local accounts after password confirmation. Self-service password and login-email changes have a security page; external OIDC, MFA and native account provisioning remain planned.', task: 'P1.3', to: '/admin/settings' },
     { id: 'health', section: 'System health and capabilities', state: 'Ready', detail: 'Inspect currently qualified capability states. Readiness reports dependencies; it is not an infrastructure configuration editor.', task: 'P1.1 / P1.2', to: '/status' },
     { id: 'infrastructure', section: 'Infrastructure connections', state: 'Ready', detail: 'Save and test versioned PostgreSQL and RustFS/S3/R2 connections. Activate private CI source storage after verification. Database changes require an operator migration and cutover; runner pools remain operator-managed.', task: 'P1 / P4 / P6', to: '/admin/settings/infrastructure' },
     { id: 'policy', section: 'Execution policy ceilings', state: 'Ready', detail: 'Default-deny instance, organization and repository ceilings govern manual shell jobs. Exact repository/workflow selections, compare-and-swap revisions and revocation epochs fence admission and worker results.', task: 'G2 / G3', to: '/admin/execution' },
