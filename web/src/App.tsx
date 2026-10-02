@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDown, ArrowRight, BookOpen, Building2, Check, CircleDot, Command, ExternalLink, GitBranch, History, KeyRound, Layers2, LoaderCircle, LockKeyhole, LogOut, Monitor, Moon, Plus, RefreshCw, Search, ShieldCheck, Sun, X } from 'lucide-react';
 import { Code, ConnectError } from '@connectrpc/connect';
-import { Link } from '@tanstack/react-router';
+import { Link, useLocation } from '@tanstack/react-router';
 import { create } from '@bufbuild/protobuf';
 import { capabilityClient, errorMessage, repositoryClient, repositoryLink, sessionClient } from './api';
 import { CapabilityState, CreateRepositoryRequestSchema, RepositoryCreationState } from './gen/golf/v1/golf_pb';
@@ -320,6 +320,7 @@ function Capabilities() {
 }
 
 function Workspace({ user, location }: { user: User; location: Location }) {
+  const hash = useLocation({ select: (current) => current.hash });
   const client = useQueryClient();
   const [search, setSearch] = useState('');
   const [visibility, setVisibility] = useState('all');
@@ -346,7 +347,7 @@ function Workspace({ user, location }: { user: User; location: Location }) {
   return <div className="app-shell">
     <aside className="sidebar"><div className="sidebar-top"><Brand /><span className="alpha-tag">EARLY ACCESS</span></div>
       <div className="workspace-label"><span className="workspace-avatar">{user.login.slice(0, 1).toUpperCase()}</span><div><strong>{user.login}</strong><span>{user.isInstanceAdmin ? 'Instance administrator' : 'Personal workspace'}</span></div></div>
-      <nav aria-label="Workspace"><span className="nav-label">WORKSPACE</span><Link className={`nav-item ${location.kind === 'home' || location.kind === 'repository' ? 'active' : ''}`} to="/" activeOptions={{ exact: true }}><BookOpen size={17} />Repositories<span>{location.kind === 'home' && repositoryQuery.isSuccess ? repositories.length : '—'}</span></Link><Link className={`nav-item ${location.kind === 'organizations' ? 'active' : ''}`} to="/organizations"><Building2 size={17} />Organizations</Link><Link className={`nav-item ${location.kind === 'audit' ? 'active' : ''}`} to="/audit"><History size={17} />Account activity</Link><Link className={`nav-item ${location.kind === 'api-credentials' ? 'active' : ''}`} to="/account/api-credentials"><KeyRound size={17} />API credentials</Link><Link className="nav-item" to="/" hash="capabilities"><Layers2 size={17} />Capabilities</Link><button className="nav-item sessions-nav" aria-haspopup="dialog" onClick={() => setManagingSessions(true)}><ShieldCheck size={17} />Sessions</button></nav>
+      <nav aria-label="Workspace"><span className="nav-label">WORKSPACE</span><Link className={`nav-item ${(location.kind === 'home' && hash !== 'capabilities') || location.kind === 'repository' ? 'active' : ''}`} to="/" activeOptions={{ exact: true, includeHash: true }}><BookOpen size={17} />Repositories<span>{location.kind === 'home' && repositoryQuery.isSuccess ? repositories.length : '—'}</span></Link><Link className={`nav-item ${location.kind === 'organizations' ? 'active' : ''}`} to="/organizations"><Building2 size={17} />Organizations</Link><Link className={`nav-item ${location.kind === 'audit' ? 'active' : ''}`} to="/audit"><History size={17} />Account activity</Link><Link className={`nav-item ${location.kind === 'api-credentials' ? 'active' : ''}`} to="/account/api-credentials"><KeyRound size={17} />API credentials</Link><Link className="nav-item" to="/" hash="capabilities" activeOptions={{ exact: true, includeHash: true }}><Layers2 size={17} />Capabilities</Link><button className="nav-item sessions-nav" aria-haspopup="dialog" onClick={() => setManagingSessions(true)}><ShieldCheck size={17} />Sessions</button></nav>
       <div className="sidebar-bottom"><div className="forge-note"><GitBranch size={17} /><div><strong>Connected to Gitea</strong><span>Code stays on your forge.</span></div></div><div className="sidebar-controls"><ThemeSwitch /><button className="icon-button" aria-label="Sign out" title="Sign out" disabled={logout.isPending} onClick={() => logout.mutate()}><LogOut size={17} /></button></div><ErrorMessage error={logout.error} /></div>
     </aside>
     <div className="workspace-content"><header className="topbar"><span><span className="muted">Workspace</span><span className="breadcrumb-slash">/</span>{location.kind === 'repository' ? location.name : location.kind === 'organizations' ? location.organization || 'Organizations' : location.kind === 'audit' ? 'Account activity' : location.kind === 'api-credentials' ? 'API credentials' : 'Repositories'}</span><span className="connection-pill"><span className="status-dot" /> Signed in</span></header>

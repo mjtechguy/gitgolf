@@ -350,3 +350,27 @@ test('opening optional token sign-in preserves the desktop page layout', async (
   expect(await page.locator('.login-footer').boundingBox()).toEqual(footer);
   expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(height);
 });
+
+
+test('sidebar distinguishes repositories from the capabilities anchor', async ({ page }) => {
+  await backend(page);
+  await page.goto('/');
+  const nav = page.getByRole('navigation', { name: 'Workspace', exact: true });
+  const repositories = nav.getByRole('link', { name: /^Repositories/ });
+  const capabilities = nav.getByRole('link', { name: 'Capabilities', exact: true });
+  await expect(repositories).toHaveClass(/active/);
+  await expect(capabilities).not.toHaveClass(/active/);
+  await expect(capabilities).not.toHaveAttribute('aria-current', 'page');
+  await capabilities.click();
+  await expect(page).toHaveURL(/#capabilities$/);
+  await expect(capabilities).toHaveClass(/active/);
+  await expect(repositories).not.toHaveClass(/active/);
+  await expect(repositories).not.toHaveAttribute('aria-current', 'page');
+  await repositories.click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(repositories).toHaveClass(/active/);
+  await expect(capabilities).not.toHaveClass(/active/);
+  await page.goBack();
+  await expect(capabilities).toHaveClass(/active/);
+  await expect(repositories).not.toHaveClass(/active/);
+});
