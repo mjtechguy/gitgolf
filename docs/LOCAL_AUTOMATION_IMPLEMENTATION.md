@@ -1,6 +1,6 @@
 # Durable push automation and local coding agents
 
-Design review: 2026-10-02. This document specifies the next portable implementation; it does not claim automatic dispatch or any Golf coding-harness adapter is implemented. [Implementation status](IMPLEMENTATION_STATUS.md) remains the qualification ledger. The in-progress native HMAC webhook intake and durable delivery deduplication are separate work: accepting an event must never imply permission to execute it.
+Design review: 2026-10-02. This document specifies the next portable implementation; it does not claim automatic dispatch or any Golf coding-harness adapter is implemented. [Implementation status](IMPLEMENTATION_STATUS.md) remains the qualification ledger. Native HMAC webhook intake and durable delivery deduplication are qualified separately. Schema020 adds automatic run-origin and shared worker fences, but has no materializer/public automatic enqueue path yet: accepting an event must never imply permission to execute it.
 
 ## Current boundary and reuse
 
@@ -9,8 +9,8 @@ The reviewed paths are `internal/server/workflow_runs.go`, `runner_transport.go`
 | Existing behavior | Consequence for the next increment |
 | --- | --- |
 | `DispatchWorkflow`, `withWorkflowRepository`, and `workflowTransaction` authenticate a current browser cookie and lock its Golf user/session. | Preserve manual dispatch; never manufacture a browser session for a push event. |
-| Run rows require `user_id` and a 32-byte `session_hash`; idempotency is user/key scoped. | Add an explicit automatic authority origin, rather than putting a service token digest into `session_hash`. |
-| `runnerRunAuthority` opens that source session, verifies current native identity and repository write/admin authority. `runnerPolicyFence` locks the source session and compares policy epochs. | Both checks need a narrowly typed automation variant; changing enqueue alone will fail or bypass necessary revocation fences. |
+| Schema020 adds mutually exclusive manual/session and push/grant/event run origins, with immutable authority bindings and distinct idempotency namespaces. | A materializer must atomically create only a matching grant/event/commit/path run; no fake session hash. |
+| Shared runner authority/fences now branch explicitly between a live manual browser session and the independently encrypted automatic grant; automatic fences lock sponsor/grant/credential and compare push epochs. | Materialization and native push-to-executor proof remain required before enabling automatic execution. |
 | Policy ceilings now have independent default-disabled manual/push switches and an explicit event-aware helper; every required scope must allow the event. | Automatic scheduler integration must use the push helper and pinned stamps. A switch alone does not implement automatic work. See [execution policy contract](EXECUTION_POLICY_CONTRACT.md). |
 | Actions inspection/compiler admits input-free `workflow_dispatch` and the bounded branch-push subset; GitLab execution is a bounded script subset. | The push subset is implemented. Dispatcher integration must preserve the documented trigger matching; unsupported syntax stays blocked. |
 | Normalized source is bound to exact commit/blob/SHA-256 and optionally an immutable object-store profile version. Jobs receive no forge credential. | Reuse for initial automatic shell CI without introducing Git or model access. |

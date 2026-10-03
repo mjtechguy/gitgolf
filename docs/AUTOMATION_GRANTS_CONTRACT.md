@@ -1,6 +1,6 @@
 # Repository automation grants
 
-This increment stores explicit personal delegation for future unattended work. A grant does **not** execute pushes: materialization, automatic run origins, runner admission/result fences and their end-to-end proof remain unavailable. [Implementation status](IMPLEMENTATION_STATUS.md) records exact qualified revisions.
+This increment stores explicit personal delegation for future unattended work. A grant does **not** execute pushes: materialization and native push-to-executor qualification remain unavailable. Schema020 implements explicit run origins and shared grant-bound worker/result fences; that prerequisite does not turn a saved grant into an executing pipeline. [Implementation status](IMPLEMENTATION_STATUS.md) records exact qualified revisions.
 
 ## Authority and scope
 
@@ -20,7 +20,7 @@ Create carries a canonical UUIDv4 idempotency key. The exact request digest (inc
 
 Creation/revocation lock the current Golf caller/session and require a current source session before commit. Source browser logout does not revoke an already committed grant. Revoke requires exact current revision, increments revision/revocation epoch and appends the actor event in the same transaction. Repeated revoke at the current disabled revision is a no-op; a stale revision fails. Audit insertion failure rolls back the lifecycle change. The supplied native PAT itself is not revoked by Golf grant revocation.
 
-Local sponsor disable permanently revokes enabled grants and records SPONSOR_DISABLED in the same local transaction. A PAT session cannot create new grants for a disabled local sponsor. Re-enable never resurrects old grants. Password changes and ordinary logout affect sessions independently. The explicit stopped-writer recovery primitive revokes **all** restored enabled grants, including PAT/OAuth-only sponsors, and records RECOVERY_REVOKED; this database proof does not certify schema019 whole-stack backup/fresh restore. Recovery scripts retain their older schema allowlist until that larger proof passes.
+Local sponsor disable permanently revokes enabled grants and records SPONSOR_DISABLED in the same local transaction. A PAT session cannot create new grants for a disabled local sponsor. Re-enable never resurrects old grants. Password changes and ordinary logout affect sessions independently. The explicit stopped-writer recovery primitive revokes **all** restored enabled grants, including PAT/OAuth-only sponsors, and records RECOVERY_REVOKED; canonical schema019 three-service backup/fresh restore is qualified separately. Schema020 automatic-origin recovery and RustFS/worker topology recovery remain unqualified; the recovery script deliberately rejects schema020 until its full drill passes.
 
 ## Encryption and key lifecycle
 

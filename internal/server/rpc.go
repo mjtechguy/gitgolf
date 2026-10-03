@@ -480,7 +480,7 @@ func (s *Server) ListCapabilities(ctx context.Context, _ *connect.Request[golfv1
 	}
 	capabilities = append(capabilities, &golfv1.Capability{Id: "events.native", Label: "Native push event intake", State: eventState, Reason: eventReason})
 	for _, entry := range []struct{ id, label, reason string }{
-		{"pipelines.automatic", "Automatic pipelines", "Durable automation grants and push policies are implemented. Event-to-run materialization and grant-bound runner admission are not implemented; manual worker readiness does not enable push execution."},
+		{"pipelines.automatic", "Automatic pipelines", "Durable grants, push policies and grant-bound worker fences are implemented. Event-to-run materialization and native push-to-executor qualification are not complete; manual worker readiness does not enable push execution."},
 		{"webhooks.outbound", "Outbound webhooks and Slack notifications", "Planned. Event subscriptions, protected destinations, durable delivery history and retries are not implemented."},
 		{"email.outbound", "Outbound email", "Planned. Configurable SMTP/API delivery, verified addresses and notification preferences are not implemented."},
 		{"email.inbound", "Inbound email", "Planned. Authorized email-to-comment, issue and task routing is not implemented."},

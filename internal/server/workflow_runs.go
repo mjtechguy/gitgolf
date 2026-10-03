@@ -35,41 +35,44 @@ var errWorkflowPolicyDenied = errors.New("manual workflow execution is disabled 
 
 // No command/source payload is loaded by status/list/log queries.
 type workflowRunRecord struct {
-	SourceStorage, SourceKey, SourceFingerprint string
-	SourceProfileID                             sql.NullString
-	SourceProfileVersion                        sql.NullInt64
-	ID, ForgeURL                                string
-	RepositoryID, OwnerID                       int64
-	RepositoryOwner, RepositoryName             string
-	OrganizationOwned                           bool
-	UserID                                      int64
-	SessionHash                                 []byte
-	CommitID, WorkflowPath, BlobID              string
-	Format                                      int32
-	Plan, SourceArchive                         []byte
-	PolicyEpochs                                []byte
-	IdempotencyKey                              string
-	InputHash                                   []byte
-	State                                       string
-	Version                                     int64
-	CreatedAt                                   time.Time
-	StartedAt, FinishedAt                       sql.NullTime
-	ExitCode                                    sql.NullInt32
-	Reason, RunnerID, AttemptID                 string
-	LeaseTokenHash                              []byte
-	LeaseExpiresAt                              sql.NullTime
-	CancelRequested, LogsTruncated              bool
-	SourceSHA256                                string
-	LogBytes, LogSequence                       int64
+	SourceStorage, SourceKey, SourceFingerprint                                                   string
+	SourceProfileID                                                                               sql.NullString
+	SourceProfileVersion                                                                          sql.NullInt64
+	ID, ForgeURL                                                                                  string
+	RepositoryID, OwnerID                                                                         int64
+	RepositoryOwner, RepositoryName                                                               string
+	OrganizationOwned                                                                             bool
+	UserID                                                                                        int64
+	SessionHash                                                                                   []byte
+	Origin, EventRef                                                                              string
+	AutomationGrantID                                                                             sql.NullString
+	AutomationGrantRevision, AutomationGrantEpoch, AutomationCredentialVersion, RepositoryEventID sql.NullInt64
+	CommitID, WorkflowPath, BlobID                                                                string
+	Format                                                                                        int32
+	Plan, SourceArchive                                                                           []byte
+	PolicyEpochs                                                                                  []byte
+	IdempotencyKey                                                                                string
+	InputHash                                                                                     []byte
+	State                                                                                         string
+	Version                                                                                       int64
+	CreatedAt                                                                                     time.Time
+	StartedAt, FinishedAt                                                                         sql.NullTime
+	ExitCode                                                                                      sql.NullInt32
+	Reason, RunnerID, AttemptID                                                                   string
+	LeaseTokenHash                                                                                []byte
+	LeaseExpiresAt                                                                                sql.NullTime
+	CancelRequested, LogsTruncated                                                                bool
+	SourceSHA256                                                                                  string
+	LogBytes, LogSequence                                                                         int64
 }
 
-const workflowRunColumns = `id::text,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,policy_epochs,idempotency_key::text,input_hash,state,version,created_at,started_at,finished_at,exit_code,reason,runner_id,attempt_id,lease_token_hash,lease_expires_at,cancel_requested,logs_truncated,source_sha256,log_bytes,log_sequence,source_storage,source_key,source_fingerprint,source_profile_id::text,source_profile_version`
+const workflowRunColumns = `id::text,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,policy_epochs,idempotency_key::text,input_hash,state,version,created_at,started_at,finished_at,exit_code,reason,runner_id,attempt_id,lease_token_hash,lease_expires_at,cancel_requested,logs_truncated,source_sha256,log_bytes,log_sequence,source_storage,source_key,source_fingerprint,source_profile_id::text,source_profile_version,origin,automation_grant_id::text,automation_grant_revision,automation_grant_epoch,automation_credential_version,repository_event_id,event_ref`
 
 type workflowRunScanner interface{ Scan(...any) error }
 
 func scanWorkflowRun(row workflowRunScanner) (workflowRunRecord, error) {
 	var r workflowRunRecord
-	err := row.Scan(&r.ID, &r.ForgeURL, &r.RepositoryID, &r.OwnerID, &r.RepositoryOwner, &r.RepositoryName, &r.OrganizationOwned, &r.UserID, &r.SessionHash, &r.CommitID, &r.WorkflowPath, &r.BlobID, &r.Format, &r.PolicyEpochs, &r.IdempotencyKey, &r.InputHash, &r.State, &r.Version, &r.CreatedAt, &r.StartedAt, &r.FinishedAt, &r.ExitCode, &r.Reason, &r.RunnerID, &r.AttemptID, &r.LeaseTokenHash, &r.LeaseExpiresAt, &r.CancelRequested, &r.LogsTruncated, &r.SourceSHA256, &r.LogBytes, &r.LogSequence, &r.SourceStorage, &r.SourceKey, &r.SourceFingerprint, &r.SourceProfileID, &r.SourceProfileVersion)
+	err := row.Scan(&r.ID, &r.ForgeURL, &r.RepositoryID, &r.OwnerID, &r.RepositoryOwner, &r.RepositoryName, &r.OrganizationOwned, &r.UserID, &r.SessionHash, &r.CommitID, &r.WorkflowPath, &r.BlobID, &r.Format, &r.PolicyEpochs, &r.IdempotencyKey, &r.InputHash, &r.State, &r.Version, &r.CreatedAt, &r.StartedAt, &r.FinishedAt, &r.ExitCode, &r.Reason, &r.RunnerID, &r.AttemptID, &r.LeaseTokenHash, &r.LeaseExpiresAt, &r.CancelRequested, &r.LogsTruncated, &r.SourceSHA256, &r.LogBytes, &r.LogSequence, &r.SourceStorage, &r.SourceKey, &r.SourceFingerprint, &r.SourceProfileID, &r.SourceProfileVersion, &r.Origin, &r.AutomationGrantID, &r.AutomationGrantRevision, &r.AutomationGrantEpoch, &r.AutomationCredentialVersion, &r.RepositoryEventID, &r.EventRef)
 	return r, err
 }
 func (s *Server) loadWorkflowRun(ctx context.Context, id string) (workflowRunRecord, error) {
@@ -459,7 +462,7 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 		}
 		existing := false
 		e := s.workflowTransaction(ctx, s.cookieValue(req.Header()), user.ID, func(tx *sql.Tx, actor database.LockManagedSessionRow, _ []byte) error {
-			r, e := scanWorkflowRun(tx.QueryRowContext(ctx, "SELECT "+workflowRunColumns+" FROM golf_workflow_runs WHERE forge_url=$1 AND user_id=$2 AND idempotency_key=$3", s.config.GiteaURL, actor.UserID, m.IdempotencyKey))
+			r, e := scanWorkflowRun(tx.QueryRowContext(ctx, "SELECT "+workflowRunColumns+" FROM golf_workflow_runs WHERE forge_url=$1 AND user_id=$2 AND origin='manual' AND idempotency_key=$3", s.config.GiteaURL, actor.UserID, m.IdempotencyKey))
 			if e == nil {
 				if !bytes.Equal(r.InputHash, inputHash) {
 					return errWorkflowRunConflict
@@ -530,11 +533,11 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 			if e != nil {
 				return errStorageUnavailable
 			}
-			_, e = tx.ExecContext(ctx, `INSERT INTO golf_workflow_runs(id,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,plan,source_archive,source_sha256,policy_epochs,idempotency_key,input_hash,source_storage,source_key,source_fingerprint,source_profile_id,source_profile_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) ON CONFLICT(forge_url,user_id,idempotency_key) DO NOTHING`, id, s.config.GiteaURL, repoID, ownerID, key.Owner, key.Name, access.OrganizationOwned, actor.UserID, hash, commit, m.WorkflowPath, blob, int32(plan.Format), planJSON, sourceBinding.Archive, hex.EncodeToString(sum[:]), epochs, m.IdempotencyKey, inputHash, sourceBinding.Storage, sourceBinding.Key, sourceBinding.Fingerprint, sourceBinding.ProfileID, sourceBinding.ProfileVersion)
+			_, e = tx.ExecContext(ctx, `INSERT INTO golf_workflow_runs(id,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,plan,source_archive,source_sha256,policy_epochs,idempotency_key,input_hash,source_storage,source_key,source_fingerprint,source_profile_id,source_profile_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) ON CONFLICT(forge_url,user_id,origin,idempotency_key) DO NOTHING`, id, s.config.GiteaURL, repoID, ownerID, key.Owner, key.Name, access.OrganizationOwned, actor.UserID, hash, commit, m.WorkflowPath, blob, int32(plan.Format), planJSON, sourceBinding.Archive, hex.EncodeToString(sum[:]), epochs, m.IdempotencyKey, inputHash, sourceBinding.Storage, sourceBinding.Key, sourceBinding.Fingerprint, sourceBinding.ProfileID, sourceBinding.ProfileVersion)
 			if e != nil {
 				return errStorageUnavailable
 			}
-			result, e = scanWorkflowRun(tx.QueryRowContext(ctx, "SELECT "+workflowRunColumns+" FROM golf_workflow_runs WHERE forge_url=$1 AND user_id=$2 AND idempotency_key=$3", s.config.GiteaURL, actor.UserID, m.IdempotencyKey))
+			result, e = scanWorkflowRun(tx.QueryRowContext(ctx, "SELECT "+workflowRunColumns+" FROM golf_workflow_runs WHERE forge_url=$1 AND user_id=$2 AND origin='manual' AND idempotency_key=$3", s.config.GiteaURL, actor.UserID, m.IdempotencyKey))
 			if e != nil {
 				return errStorageUnavailable
 			}

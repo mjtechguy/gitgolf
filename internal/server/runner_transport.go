@@ -101,13 +101,29 @@ func runnerFail(w http.ResponseWriter, status int) {
 // Provider checks run before SQL locks. The later identity/session/policy fence
 // serializes Golf revocations; independent provider edits cannot be made atomic.
 func (s *Server) runnerRunAuthority(ctx context.Context, run workflowRunRecord) error {
+	if s.db == nil {
+		return errStorageUnavailable
+	}
+	if run.Origin == "push" {
+		grant, token, err := s.automationRunCredential(ctx, run)
+		if err != nil {
+			return err
+		}
+		return s.verifyAutomationDelegation(ctx, grant, token)
+	}
+	if run.Origin != "manual" {
+		return errUnauthenticated
+	}
 	token, err := s.sessionCredentialHash(ctx, run.SessionHash)
 	if err != nil {
 		return err
 	}
 	row, err := database.New(s.db).GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: run.SessionHash, ForgeURL: s.config.GiteaURL})
+	if errors.Is(err, sql.ErrNoRows) {
+		return errUnauthenticated
+	}
 	if err != nil {
-		return err
+		return errStorageUnavailable
 	}
 	caller, err := s.currentUser(ctx, token)
 	if err != nil {
@@ -141,15 +157,37 @@ func (s *Server) runnerRunAuthority(ctx context.Context, run workflowRunRecord) 
 	return nil
 }
 func (s *Server) runnerPolicyFence(ctx context.Context, tx *sql.Tx, run workflowRunRecord) error {
-	q := database.New(s.db).WithTx(tx)
-	actor, err := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: run.SessionHash, ForgeURL: s.config.GiteaURL})
-	if err != nil || actor.ID != run.UserID {
+	// ponytail: inherited policy row locks serialize admission; qualify shared
+	// locks after measuring contention, preserving revocation/result fencing.
+	event := "manual"
+	if run.Origin == "push" {
+		if err := s.lockAutomationRunAuthority(ctx, tx, run); err != nil {
+			return err
+		}
+		event = "push"
+	} else if run.Origin == "manual" {
+		q := database.New(s.db).WithTx(tx)
+		actor, err := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: run.SessionHash, ForgeURL: s.config.GiteaURL})
+		if errors.Is(err, sql.ErrNoRows) {
+			return errUnauthenticated
+		}
+		if err != nil {
+			return errStorageUnavailable
+		}
+		if actor.ID != run.UserID {
+			return errUnauthenticated
+		}
+		_, err = q.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: run.SessionHash, ForgeURL: s.config.GiteaURL})
+		if errors.Is(err, sql.ErrNoRows) {
+			return errUnauthenticated
+		}
+		if err != nil {
+			return errStorageUnavailable
+		}
+	} else {
 		return errUnauthenticated
 	}
-	if _, err = q.LockSessionCredential(ctx, database.LockSessionCredentialParams{TokenHash: run.SessionHash, ForgeURL: s.config.GiteaURL}); err != nil {
-		return errUnauthenticated
-	}
-	policy, err := s.readEffectiveExecutionPolicy(ctx, tx, run.RepositoryID, run.OwnerID, run.OrganizationOwned, run.WorkflowPath)
+	policy, err := s.readEffectiveExecutionPolicyForEvent(ctx, tx, run.RepositoryID, run.OwnerID, run.OrganizationOwned, event, run.WorkflowPath)
 	if err != nil {
 		return err
 	}
@@ -213,7 +251,7 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 	if err = s.runnerPolicyFence(ctx, tx, run); err != nil {
 		tx.Rollback()
 		if errors.Is(err, errExecutionPolicyConflict) || errors.Is(err, errUnauthenticated) {
-			s.rejectQueuedRun(ctx, run.ID, "Execution policy or dispatch session changed.")
+			s.rejectQueuedRun(ctx, run.ID, "Execution policy or dispatch authority changed.")
 			w.WriteHeader(204)
 		} else {
 			runnerFail(w, 503)
@@ -324,7 +362,12 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err = s.runnerRunAuthority(ctx, run); err != nil {
-			runnerFail(w, 403)
+			if isRunnerAuthorityDenied(err) || errors.Is(err, errUnauthenticated) || errors.Is(err, errResourceNotFound) {
+				s.cancelRunnerAttempt(ctx, run.ID, "Dispatch authority was revoked.")
+				runnerFail(w, 403)
+			} else {
+				runnerFail(w, 503)
+			}
 			return
 		}
 	}
@@ -336,8 +379,12 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 	if err = s.runnerPolicyFence(ctx, tx, run); err != nil {
 		tx.Rollback()
-		s.cancelRunnerAttempt(ctx, run.ID, "Execution policy or dispatch session changed.")
-		runnerFail(w, 403)
+		if errors.Is(err, errExecutionPolicyConflict) || errors.Is(err, errUnauthenticated) {
+			s.cancelRunnerAttempt(ctx, run.ID, "Execution policy or dispatch authority changed.")
+			runnerFail(w, 403)
+		} else {
+			runnerFail(w, 503)
+		}
 		return
 	}
 	var state string

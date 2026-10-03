@@ -56,6 +56,14 @@ Actions `run` steps execute in separate shell processes in the same working dire
 
 Output forwarding preserves complete UTF-8 across raw chunk boundaries, replaces invalid bytes/NUL, and sends at most 4 KiB text per request so JSON escaping stays within the coordinator body limit. A separate 256 KiB normalized-text ceiling prevents encoding expansion from bypassing storage bounds. Source code is never executed through a host shell; all Docker CLI invocations use fixed executable/argument arrays.
 
+## Manual and automatic authority origins
+
+Schema020 retains the current live browser-session binding for `manual` runs and adds a mutually exclusive `push` origin with no session hash. A push row binds an immutable grant/revision/revocation epoch/credential version, authenticated event, exact ref/commit/workflow and sponsor audit subject. Database checks/triggers reject mixed or mismatched origins, pre-grant receipts and deleted commits; event/grant/path uniqueness does not include the grant revision. Manual intent replay queries use only the manual namespace.
+
+Polling, source, heartbeat, logs and finish share current native identity/repository checks and a transaction fence. Push fencing locks sponsor user → grant → credential → instance/organization/repository policies → run, using database-clock expiry and pinned push policy epochs. Browser logout does not revoke the separately delegated grant. Grant revoke/expiry, local sponsor disable, native denial/owner change and policy changes deny queued work or cancel a leased attempt and reject its result. Temporary database/provider failure reports unavailable without falsely converting it into revocation or success; the normal lease/worker shutdown rules still bound an outage. No credential is added to the assignment or source.
+
+These origin/fence paths are PostgreSQL-qualified prerequisites. No event materializer or public automatic enqueue path is present, and automatic capability/grant execution stays unavailable. The actual Docker executor's manual qualification does not certify a native push-to-Docker flow. Source schema020 requires a coordinated stopped-writer upgrade; older binaries' manual conflict target is incompatible with the new origin namespace. Do not mix serving versions or enable automatic dispatch during an old/new rollout. Schema020 automatic-origin backup/fresh restore remains a separate gate; the current recovery allowlist deliberately refuses it.
+
 ## Cancellation, cleanup and explicit crash recovery
 
 Normal completion, context cancellation, SIGTERM, timeout, output overflow and log-delivery failure remove the job container and fresh volume with a bounded independent cleanup context. Cleanup validates Golf managed, worker, attempt and random ownership labels before deletion; container IDs are immutable. **Cleanup failure stops the worker**, even if the job itself finished. Inspect and recover before reusing that enrollment/host.
