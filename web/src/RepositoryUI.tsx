@@ -9,6 +9,12 @@ export const privateQuery = { staleTime: 0, gcTime: 0 };
 export const nextPage = (response: { page?: PageResponse }) => response.page?.nextPage || undefined;
 export const shortSHA = (value: string) => value.slice(0, 12);
 
+export function fitDisclosure(menu:HTMLDetailsElement,selector:string) {
+ menu.classList.remove('opens-up');
+ const popup=menu.querySelector<HTMLElement>(selector);
+ if(menu.open&&popup&&popup.getBoundingClientRect().bottom>innerHeight&&menu.getBoundingClientRect().top>=popup.offsetHeight)menu.classList.add('opens-up');
+}
+
 export function CopyButton({ text, label }: { text: string; label: string }) {
   const [status, setStatus] = useState('');
   const mounted = useRef(false);

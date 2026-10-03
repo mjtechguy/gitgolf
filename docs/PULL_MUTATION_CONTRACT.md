@@ -32,7 +32,7 @@ Explicit title/description icons and draft/ready/close/reopen actions open the s
 
 Tab storage retains only origin/account/repository/PR IDs, number, field, operation kind and UUID key. Reload resumes status inspection without resending or restoring text. Navigation aborts local response handling, not native work. A matching confirmed result clears the key; unknown, mismatched or inaccessible results keep it. Sign-out/account changes clear convenience records. No settings modal or default bare form is added.
 
-Creation is currently API-qualified; the full-page branch/fork comparison and New PR composition UI remains required. General compare reads, human reviews/inline threads, metadata/assignees/CODEOWNERS, notifications, merge/squash/rebase and P0.8 enforcement remain full requirements.
+Creation is now exposed through the full-page branch/fork comparison and explicit New PR editor, with independently authorized source reads and pinned commits. [Comparison contract](REPOSITORY_COMPARISON_CONTRACT.md) records preview limits, private live cleanup and metadata-only resumption. Human reviews/inline threads, metadata/assignees/CODEOWNERS, notifications, richer comparisons, merge/squash/rebase and P0.8 enforcement remain full requirements.
 
 ## Persistence and recovery
 

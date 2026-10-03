@@ -104,7 +104,7 @@ func TestApiCredentialBoundary(t *testing.T) {
 			t.Fatal("origin boundary lost")
 		}
 	}
-	// Exactly twenty-seven allowlisted methods: the generated descriptor catches any
+	// Exactly twenty-eight allowlisted methods: the generated descriptor catches any
 	// accidental broadening when a new procedure is later added to a service.
 	count := 0
 	services := golfv1.File_golf_v1_golf_proto.Services()
@@ -116,8 +116,11 @@ func TestApiCredentialBoundary(t *testing.T) {
 			}
 		}
 	}
-	if count != 27 {
+	if count != 28 {
 		t.Fatal("unexpected bearer allowlist size", count)
+	}
+	if !apiReadProcedure(golfv1connect.RepositoryServiceGetRepositoryComparisonProcedure) || apiReadProcedure(golfv1connect.RepositoryServiceCreatePullRequestProcedure) {
+		t.Fatal("comparison read versus PR write delegation boundary lost")
 	}
 	for _, invalid := range []string{token + "=", token[:len(token)-1] + "B", strings.TrimPrefix(token, apiTokenPrefix), " " + token} {
 		if _, err := apiTokenHash(invalid); err == nil {
@@ -520,11 +523,15 @@ func TestApiCredentialOAuthSharedRefreshPostgres(t *testing.T) {
 
 func TestApiCredentialMigrationExpiryRecoveryPostgres(t *testing.T) {
 	f := newManagementFixture(t)
+	// Start from the historical schema and migrate forward. The latest PR
+	// journal intentionally refuses downgrade; this test must not cross it.
+	f.db = testDatabase(t)
+	f.s.db = f.db
 	provider, err := goose.NewProvider(goose.DialectPostgres, f.db, os.DirFS("database/migrations"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := provider.DownTo(t.Context(), 202610020004); err != nil {
+	if _, err := provider.UpTo(t.Context(), 202610020004); err != nil {
 		t.Fatal(err)
 	}
 	pat, oauth := f.session(t, "alice", "pat"), f.session(t, "alice", "oauth")

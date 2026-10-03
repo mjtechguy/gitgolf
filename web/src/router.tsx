@@ -93,8 +93,9 @@ const validateRepositorySearch = (search: Record<string, unknown>): RepositorySe
     const issue = search.issue === undefined ? undefined : Number(search.issue);
     const pull = search.pull === undefined ? undefined : typeof search.pull === 'number' ? search.pull : typeof search.pull === 'string' && /^[1-9][0-9]*$/.test(search.pull) ? Number(search.pull) : NaN;
     return {
-      view: search.view === 'commits' || search.view === 'issues' || search.view === 'pulls' || search.view === 'actions' ? search.view : 'source',
+      view: search.view === 'commits' || search.view === 'issues' || search.view === 'pulls' || search.view === 'actions' || search.view === 'compare' ? search.view : 'source',
       ref: typeof search.ref === 'string' ? search.ref : '', path: typeof search.path === 'string' ? search.path : '',
+      base:typeof search.base==='string'?search.base:undefined,head:typeof search.head==='string'?search.head:undefined,sourceOwner:typeof search.sourceOwner==='string'?search.sourceOwner:undefined,sourceName:typeof search.sourceName==='string'?search.sourceName:undefined,
       branch: typeof search.branch === 'string' ? search.branch : '',
       state: search.state === 'closed' || search.state === 'all' ? search.state : 'open', issue, pull,
       pullView: search.pullView === 'files' || search.pullView === 'commits' || search.pullView === 'checks' ? search.pullView : undefined,
@@ -135,6 +136,7 @@ function canonicalLocation(owner:string,name:string,tail:string,search:Repositor
     if(path.split('/').some(p=>p==='.'||p==='..')||/[\\\u0000-\u001f]/.test(path)) throw notFound();
     return {...location,view:'source' as const,ref:item,path};
   }
+  if(tail==='compare')return {...location,view:'compare' as const};
   if(parts[0]==='commit'&&parts.length===2&&isCommitID(item)) return {...location,view:'commits' as const,commit:item};
   if(parts[0]==='issues'&&parts.length<=2) {
     if(parts.length===1)return {...location,view:'issues' as const,issue:undefined};

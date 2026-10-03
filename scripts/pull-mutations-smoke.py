@@ -27,6 +27,16 @@ try {
  const headers={Origin:config.golf,'Connect-Protocol-Version':'1','Content-Type':'application/json'};
  stage='sign-in';const auth=await context.request.post(config.golf+'/rpc/golf.v1.SessionService/LoginWithGiteaToken',{headers,data:{token:config.token}});check(auth.status()===200);
  const page=await context.newPage(),errors=[];page.on('pageerror',()=>errors.push(true));
+ stage='compare renamed fork';const search=new URLSearchParams({base:config.baseBranch,head:'feature/browser',sourceOwner:config.sourceOwner,sourceName:config.sourceName});await page.goto(config.golf+'/'+config.repository+'/compare?'+search);await page.getByRole('button',{name:'Compare',exact:true}).click();await page.locator('.diff-file').waitFor();
+ for(const theme of ['dark','light'])for(const width of [1280,390]) {
+  stage='compare '+theme+' '+width;await page.setViewportSize({width,height:900});const toggle=page.getByRole('button',{name:'Switch to '+theme+' theme',exact:true});if(await toggle.count())await toggle.click();check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:join(config.screenshots,'native-pr-compare-'+theme+'-'+width+'.png'),fullPage:true});
+ }
+ stage='create browser PR';await page.getByRole('button',{name:'Open pull request',exact:true}).click();await page.getByLabel('Pull request title',{exact:true}).fill('Browser-created proposal');await page.getByLabel('Description, Markdown',{exact:true}).fill('## Browser-created description');await page.getByLabel('Pull request readiness',{exact:true}).selectOption('draft');await page.getByRole('button',{name:'Preview Markdown',exact:true}).click();await page.getByRole('heading',{name:'Browser-created description',exact:true}).waitFor();await page.getByRole('button',{name:'Create draft pull request',exact:true}).click();await page.waitForURL(/\/pull\/[1-9][0-9]*$/);await page.getByRole('heading',{name:/Browser-created proposal/}).waitFor();
+ const createdNumber=Number(new URL(page.url()).pathname.split('/').at(-1));const created=await context.request.post(config.golf+'/rpc/golf.v1.RepositoryService/GetPullRequest',{headers,data:{repository:{owner:config.repository.split('/')[0],name:config.repository.split('/')[1]},number:createdNumber}});check(created.status()===200);const createdPull=(await created.json()).pullRequest;check(createdPull.draft===true&&createdPull.head.repositoryId===config.sourceId&&createdPull.head.ref==='feature/browser'&&createdPull.body==='## Browser-created description');
+ stage='source private draft';await page.goto(config.golf+'/'+config.repository+'/compare?'+search);await page.getByRole('button',{name:'Compare',exact:true}).click();await page.locator('.diff-file').waitFor();await page.getByRole('button',{name:'Open pull request',exact:true}).click();await page.getByLabel('Description, Markdown',{exact:true}).fill('PRIVATE_UNSENT_SOURCE_DRAFT');
+ const sourcePath=config.gitea+'/api/v1/repos/'+config.sourceOwner+'/'+config.sourceName+'/collaborators/'+config.actor;const deniedSource=await context.request.delete(sourcePath,{headers:{Authorization:'token '+config.sourceToken}});check(deniedSource.status()===204);await page.getByLabel('Description, Markdown',{exact:true}).waitFor({state:'detached',timeout:20000});check(!await page.locator('body').innerText().then(t=>t.includes('PRIVATE_UNSENT_SOURCE_DRAFT')));check(await page.locator('.diff-file').count()===0);const restoredSource=await context.request.put(sourcePath,{headers:{Authorization:'token '+config.sourceToken},data:{permission:'read'}});check(restoredSource.status()===204);
+ console.log('PASS: live independently revoked source-fork access removes comparison and unsent PR draft');
+ console.log('PASS: actual renamed-fork compare/commits/files and explicit Markdown/draft PR creation; both themes and widths');
  stage='open PR';await page.goto(config.golf+'/'+config.repository+'/pull/'+config.number);await page.getByRole('button',{name:'Edit pull request title',exact:true}).waitFor();
  stage='title edit';await page.getByRole('button',{name:'Edit pull request title',exact:true}).click();await page.getByLabel('Pull request title',{exact:true}).fill('Browser-qualified proposal');await page.getByRole('button',{name:'Save changes',exact:true}).click();await page.getByRole('heading',{name:'Browser-qualified proposal #'+config.number,exact:true}).waitFor();
  for(const theme of ['dark','light'])for(const width of [1280,390]) {
@@ -80,13 +90,26 @@ def main():
         def branch(token, route, name):
             provider(token, 'POST', route+'/branches', {'new_branch_name':name}, expected=201)
             provider(token, 'POST', route+'/contents/'+name.replace('/','-')+'.txt', {'branch':name,'message':'Qualification change','content':base64.b64encode(b'qualification\n').decode()}, expected=201)
-        branch(author['token'], fork_path, 'feature/fork'); branch(owner['token'], path, 'feature/local'); branch(owner['token'], path, 'feature/reader')
+        branch(author['token'], fork_path, 'feature/fork'); branch(author['token'], fork_path, 'feature/browser'); branch(owner['token'], path, 'feature/local'); branch(owner['token'], path, 'feature/reader')
         def request(source, branch_name, draft=False, title='Qualification proposal'):
             base = provider(owner['token'],'GET',path+'/branches/'+repo['default_branch'])['commit']['id']
             head = provider(source['token'],'GET',source['route']+'/branches/'+branch_name)['commit']['id']
             return {'repository':key,'repositoryId':str(repo['id']),'sourceRepository':source['key'],'sourceRepositoryId':str(source['id']), 'baseBranch':repo['default_branch'],'headBranch':branch_name,'baseCommitId':base,'headCommitId':head,'title':title,'body':'Original description','draft':draft,'idempotencyKey':str(uuid.uuid4())}
         local = {**owner, 'id':repo['id'],'key':key,'route':path}
         fork_source = {**author,'id':fork['id'],'key':{'owner':author['name'],'name':fork['name']},'route':fork_path}
+        def compare(actor, payload):
+            selection={k:payload[k] for k in ['repository','repositoryId','sourceRepository','sourceRepositoryId','baseBranch','headBranch','baseCommitId','headCommitId']}
+            result=rpc(actor['session'],'RepositoryService/GetRepositoryComparison',{'selection':selection})
+            assert result['selection']==selection and len(result['commits'])>=1
+            assert result['byteSize']==len(result['rawDiff'].encode('utf-8')) and 'diff --git' in result['rawDiff']
+            return selection
+        fork_selection=compare(author,request(fork_source,'feature/fork'))
+        local_selection=compare(owner,request(local,'feature/local'))
+        rpc(reader['session'],'RepositoryService/GetRepositoryComparison',{'selection':fork_selection},expected=404)
+        rpc(outsider['session'],'RepositoryService/GetRepositoryComparison',{'selection':local_selection},expected=404)
+        rpc(author['session'],'RepositoryService/GetRepositoryComparison',{'selection':{**fork_selection,'headCommitId':'f'*40}},expected=400,code='failed_precondition')
+        rpc(author['session'],'RepositoryService/GetRepositoryComparison',{'selection':fork_selection},headers={'Origin':'https://other.invalid'},expected=403)
+        print('PASS: actual exact same-repo/renamed-private-fork comparisons; native commits/diff; source/outsider denial; stale-head and Origin boundaries',flush=True)
         def create(actor, payload):
             result = rpc(actor['session'],'RepositoryService/CreatePullRequest',payload)
             assert result['mutation']['state']=='ISSUE_MUTATION_STATE_SUCCEEDED', result['mutation'].get('failureCode','unknown')
@@ -137,9 +160,10 @@ def main():
         print('PASS: actual native PR API creation/lifecycle, permissions, source selection, replay and boundaries',flush=True)
         # Separate browser PAT includes issue reads for the discussion surface;
         # the API qualification above deliberately omitted issue scope.
-        browser_token=admin('generate-access-token','--username',author['name'],'--token-name',prefix+'-browser','--scopes','write:user,write:repository,read:issue','--raw')
+        provider(author['token'],'PUT',fork_path+'/collaborators/'+writer['name'],{'permission':'read'},expected=204)
+        browser_token=admin('generate-access-token','--username',writer['name'],'--token-name',prefix+'-browser','--scopes','write:user,write:repository,read:issue','--raw')
         screenshots=ROOT/'.tmp/github-visual-audit/pull-mutations';screenshots.mkdir(parents=True,exist_ok=True)
-        result=subprocess.run(['node','--input-type=module','-e',BROWSER],input=json.dumps({'golf':GOLF,'gitea':GITEA,'token':browser_token,'ownerToken':owner['token'],'actor':author['name'],'repository':full,'number':pull['number'],'screenshots':str(screenshots)}),text=True,cwd=ROOT,capture_output=True,timeout=120)
+        result=subprocess.run(['node','--input-type=module','-e',BROWSER],input=json.dumps({'golf':GOLF,'gitea':GITEA,'token':browser_token,'ownerToken':owner['token'],'actor':writer['name'],'repository':full,'number':pull['number'],'baseBranch':repo['default_branch'],'sourceOwner':author['name'],'sourceName':fork['name'],'sourceId':str(fork['id']),'sourceToken':author['token'],'screenshots':str(screenshots)}),text=True,cwd=ROOT,capture_output=True,timeout=120)
         print(result.stdout, end='',flush=True)
         if result.returncode:
             print(result.stderr, end='',file=sys.stderr);raise RuntimeError('Native PR browser failed (private diagnostics withheld)')

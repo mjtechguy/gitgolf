@@ -1,6 +1,6 @@
 // Tab convenience data only. Private discussion text and credentials never go
 // into storage; the server remains authoritative for every outcome lookup.
-export type IssueIntent = { key: string; kind: 'issue' | 'comment' | 'update' | 'pull-update'; editField?: 'title' | 'body' | 'close' | 'reopen' | 'draft' | 'ready'; repositoryId: string; issueId: string; pullRequestId?: string; number: number };
+export type IssueIntent = { key: string; kind: 'issue' | 'comment' | 'update' | 'pull-update' | 'pull'; editField?: 'title' | 'body' | 'close' | 'reopen' | 'draft' | 'ready'; repositoryId: string; issueId: string; pullRequestId?: string; number: number };
 const prefix = 'golf.issue-intent.';
 const validID = (value: string) => /^[1-9][0-9]{0,18}$/.test(value) && BigInt(value) <= 9223372036854775807n;
 export function issueIntentKey(userId: string, repositoryId: string, issueId = '') {

@@ -133,6 +133,7 @@ service RepositoryService {
   rpc ListPullRequestCommits(ListPullRequestCommitsRequest) returns (ListPullRequestCommitsResponse);
   rpc ListPullRequestChecks(ListPullRequestChecksRequest) returns (ListPullRequestChecksResponse);
   rpc GetPullRequestDiff(GetPullRequestDiffRequest) returns (GetPullRequestDiffResponse);
+  rpc GetRepositoryComparison(GetRepositoryComparisonRequest) returns (GetRepositoryComparisonResponse);
   rpc GetRepositoryImage(GetRepositoryImageRequest) returns (GetRepositoryImageResponse);
   rpc GetContents(GetContentsRequest) returns (GetContentsResponse);
   rpc ListIssues(ListIssuesRequest) returns (ListIssuesResponse);
@@ -1709,6 +1710,24 @@ message CreatePullRequestRequest {
  string idempotency_key = 12;
 }
 message CreatePullRequestResponse { IssueMutation mutation = 1; PullRequest pull_request = 2; }
+// Caller-authorized named branches and exact displayed objects; not native CAS.
+message RepositoryComparisonSelection {
+ RepositoryKey repository = 1;
+ string repository_id = 2;
+ RepositoryKey source_repository = 3;
+ string source_repository_id = 4;
+ string base_branch = 5;
+ string head_branch = 6;
+ string base_commit_id = 7;
+ string head_commit_id = 8;
+}
+message GetRepositoryComparisonRequest { RepositoryComparisonSelection selection = 1; }
+message GetRepositoryComparisonResponse {
+ RepositoryComparisonSelection selection = 1;
+ repeated Commit commits = 2;
+ string raw_diff = 3;
+ uint32 byte_size = 4;
+}
 message UpdatePullRequestRequest {
  RepositoryKey repository = 1;
  string repository_id = 2;

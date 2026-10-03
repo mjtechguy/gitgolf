@@ -1,5 +1,5 @@
 export type RepositorySearch = {
-  view: 'source' | 'commits' | 'issues' | 'pulls' | 'actions';
+  view: 'source' | 'commits' | 'issues' | 'pulls' | 'actions' | 'compare';
   ref: string;
   path: string;
   branch: string;
@@ -10,6 +10,10 @@ export type RepositorySearch = {
   commit?: string;
   run?: string;
   step?: number;
+  base?: string;
+  head?: string;
+  sourceOwner?: string;
+  sourceName?: string;
 };
 export const defaultRepositorySearch: RepositorySearch = { view: 'source', ref: '', path: '', branch: '', state: 'open' };
 export type RepositoryLocation = RepositorySearch & { kind: 'repository'; owner: string; name: string };
@@ -32,10 +36,13 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
     commit: next.view === 'commits' ? next.commit : undefined,
     run: next.view === 'actions' ? next.run : undefined,
     step: next.view === 'actions' && next.run ? next.step : undefined,
+    base:next.view==='compare'?next.base:undefined,head:next.view==='compare'?next.head:undefined,
+    sourceOwner:next.view==='compare'?next.sourceOwner:undefined,sourceName:next.view==='compare'?next.sourceName:undefined,
   };
   const params = {owner:next.owner,name:next.name};
   let path = '';
-  if(next.view==='issues') path=next.issue?`issues/${next.issue}`:'issues';
+  if(next.view==='compare')path='compare';
+  else if(next.view==='issues') path=next.issue?`issues/${next.issue}`:'issues';
   else if(next.view==='pulls') path=next.pull?`pull/${next.pull}${next.pullView&&next.pullView!=='conversation'?'/'+next.pullView:''}`:'pulls';
   else if(next.view==='actions') path=next.run?`actions/runs/${next.run}`:'actions';
   else if(next.view==='commits') path=next.commit?`commit/${next.commit}`:'commits';

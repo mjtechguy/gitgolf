@@ -449,14 +449,16 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .workspace-switcher-dropdown { left:0; right:auto; width:300px; max-width:calc(100vw - 32px); max-height:70dvh; overflow:auto; }
 @media(max-width:1000px) { .workspace-heading { gap:14px; } .workspace-switcher > button { max-width:190px; } }
 @media(max-width:720px) {
-  .topbar { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; padding:16px; }
+  .topbar { position:relative; display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:8px; padding:10px 16px; }
   .workspace-heading { display:contents; }
   .workspace-heading > .brand { grid-column:1; grid-row:1; font-size:1.5rem; }
-  .topbar-controls { grid-column:2; grid-row:1; }
-  .workspace-switcher { grid-column:1; grid-row:2; }
+  .topbar-controls { grid-column:3; grid-row:1; }
+  .workspace-switcher { position:static; grid-column:2; grid-row:1; }
   .workspace-switcher > button { max-width:100%; width:100%; padding-inline:8px; }
-  .workspace-navigation { grid-column:2; grid-row:2; gap:12px; font-size:.8125rem; }
+  .workspace-switcher-dropdown { top:calc(100% + 4px); left:16px; right:16px; width:auto; max-width:none; }
+  .workspace-navigation { display:none; }
 }
+@media(max-width:380px) { .workspace-switcher > button span { display:none; } .workspace-switcher > button { justify-content:center; } }
 
 .capability-groups { display:grid; gap:28px; margin-top:24px; }
 .capability-groups .section-description { margin-bottom:14px; }
@@ -819,3 +821,37 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 /* Inventory labels use table spacing, rather than editor-field margins. */
 .data-table-toolbar label,.data-table-pagination label { margin:0; }
 .data-table-pagination .data-table-scope { margin:0; }
+
+/* Shared compare workspace uses the repository controls and discussion editor. */
+.repository-comparison { min-width:0; }
+.repository-comparison .discussion-summary h2 { margin:0; font-size:1.5rem; }
+.repository-comparison .discussion-summary > .field-help { margin:6px 0 12px; }
+.comparison-selectors { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:12px 0; border-bottom:1px solid var(--line); }
+.comparison-selectors > .muted { font-size:.8125rem; overflow-wrap:anywhere; }
+.branch-options li > button { display:flex; align-items:center; gap:8px; width:100%; padding:9px 10px; min-height:36px; text-align:left; background:transparent; border:0; color:var(--text); font:inherit; }
+.branch-options li > button:hover { background:var(--hover); }
+.branch-options li > button > span { flex:1; min-width:0; overflow-wrap:anywhere; }
+.branch-options li > button small { display:block; color:var(--muted); font-size:.75rem; }
+.comparison-result-heading { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:16px 0; }
+.comparison-result-heading > span:first-child { display:inline-flex; align-items:center; gap:8px; }
+.comparison-result-heading .button { margin-left:auto; }
+.compare-source-picker > summary > span { overflow-wrap:anywhere; }
+.compare-source-picker .branch-options input { min-width:0; width:100%; }
+.comparison-selectors [aria-disabled="true"] { opacity:.5; cursor:default; }
+@media(max-width:720px) { .comparison-selectors .branch-options { max-width:calc(100vw - 32px); } .comparison-selectors .ref-picker { max-width:100%; } .branch-options li > button { min-height:44px; } .comparison-result-heading .button { margin-left:0; } }
+.comparison-selectors { position:relative; }
+.comparison-side { position:relative; display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-width:0; }
+.comparison-side > .muted { font-size:.8125rem; overflow-wrap:anywhere; }
+.comparison-side > .ref-picker { position:static; }
+.comparison-side .branch-options { max-height:min(430px,calc(50vh - 32px)); }
+.ref-picker.opens-up > .branch-options { top:auto; bottom:calc(100% + 8px); }
+@media(max-width:720px) {
+ .workspace-breadcrumbs { margin-bottom:10px; font-size:.8125rem; }
+ .comparison-selectors { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:8px; }
+ .comparison-side { grid-column:1/-1; display:grid; grid-template-columns:minmax(0,1fr) auto; width:100%; gap:8px; }
+ .comparison-side > .ref-picker { min-width:0; max-width:100%; }
+ .comparison-side > .ref-picker > summary > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+ .comparison-selectors > svg { display:none; }
+ .comparison-selectors > .button { grid-column:1; justify-self:start; }
+ .comparison-result-heading { gap:8px; padding:12px 0; }
+}
