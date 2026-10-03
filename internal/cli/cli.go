@@ -35,7 +35,7 @@ Usage: golf [--url ORIGIN] [--token-stdin | --api-token-stdin] COMMAND
   repo view OWNER/REPO
   repo creation IDEMPOTENCY_KEY
   repo branches OWNER/REPO [--page N] [--limit N]
-  repo commits OWNER/REPO [--ref REF] [--page N] [--limit N]
+  repo commits OWNER/REPO [--ref REF] [--path PATH] [--page N] [--limit N]
   repo contents OWNER/REPO [--ref REF] [--path PATH]
   commit diff OWNER/REPO SHA
   issue list OWNER/REPO [--state open|closed|all] [--page N] [--limit N]
@@ -307,7 +307,7 @@ func parseCommand(args []string) (command, error) {
 	if result.name == "repo commits" || result.name == "repo contents" {
 		flags.StringVar(&ref, "ref", "", "branch or commit")
 	}
-	if result.name == "repo contents" {
+	if result.name == "repo contents" || result.name == "repo commits" {
 		flags.StringVar(&filePath, "path", "", "repository-relative file or directory")
 	}
 	if result.name == "issue list" || result.name == "pr list" {
@@ -340,6 +340,9 @@ func parseCommand(args []string) (command, error) {
 		result.page = &golfv1.PageRequest{Page: uint32(page), Limit: uint32(limit)}
 	}
 	if !gitinput.ValidRef(ref) || !gitinput.ValidSourcePath(filePath) {
+		return result, invalid
+	}
+	if result.name == "repo commits" && filePath != "" && !commitID.MatchString(ref) {
 		return result, invalid
 	}
 	result.ref, result.path = ref, filePath
@@ -483,7 +486,18 @@ func (command command) read(ctx context.Context, client golfv1connect.Repository
 		}
 		return response.Msg, nil
 	case "repo commits":
-		response, err := client.ListCommits(ctx, connect.NewRequest(&golfv1.ListCommitsRequest{Repository: command.repository, Page: command.page, Ref: command.ref}))
+		input := &golfv1.ListCommitsRequest{Repository: command.repository, Page: command.page, Ref: command.ref, Path: command.path}
+		if command.path != "" {
+			metadata, err := client.GetRepository(ctx, connect.NewRequest(&golfv1.GetRepositoryRequest{Repository: command.repository}))
+			if err != nil {
+				return nil, err
+			}
+			if metadata.Msg.Repository == nil || metadata.Msg.Repository.Id == "" {
+				return nil, errors.New("repository identity unavailable")
+			}
+			input.RepositoryId = metadata.Msg.Repository.Id
+		}
+		response, err := client.ListCommits(ctx, connect.NewRequest(input))
 		if err != nil {
 			return nil, err
 		}

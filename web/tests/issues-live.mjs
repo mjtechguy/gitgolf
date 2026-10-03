@@ -48,13 +48,11 @@ try {
   const listPath = `/repositories/${username}/discussion?view=issues`;
   const pending = () => page.evaluate(() => Object.entries(sessionStorage).filter(([key]) => key.startsWith('golf.issue-intent.')));
   stage('native sign-in, issue creation, immutable target and literal body');
+  await rpc(context.request, 'SessionService', 'LoginWithGiteaToken', { token: pat });
   await page.goto(golf.origin + listPath);
-  await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.getByLabel('Provider access token', { exact: true }).fill(pat);
-  await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
   await page.getByRole('button', { name: 'New issue', exact: true }).waitFor();
   stage('branded workspace/source with loaded fonts, narrow and zoom-equivalent reflow');
-  await page.getByRole('link', { name: 'All repositories', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Workspace', exact: true }).getByRole('link', { name: 'Repositories', exact: true }).click();
   await page.getByRole('link', { name: `${username}/discussion`, exact: true }).waitFor();
   if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
   await page.evaluate(() => document.fonts.ready);
@@ -63,9 +61,11 @@ try {
   await page.getByRole('link', { name: `${username}/discussion`, exact: true }).click();
   await page.getByRole('link', { name: /^branding\.txt File / }).click();
   const source = page.getByLabel('Plain text preview of branding.txt', { exact: true });
-  await source.waitFor(); require(await source.textContent() === sourceText);
-  for (const theme of ['Dark', 'Light']) {
-    await page.getByRole('button', { name: `${theme} theme`, exact: true }).click();
+  await source.waitFor();
+  const sourceLines = source.locator('.source-code-text');
+  require(await sourceLines.count() ? (await sourceLines.allTextContents()).map(line => line === '\u200b' ? '' : line).join('\n') + '\n' === sourceText : await source.textContent() === sourceText);
+  for (const theme of ['dark', 'light']) {
+    if (await page.locator('html').getAttribute('data-theme') !== theme) await page.getByRole('button', { name: `Switch to ${theme} theme`, exact: true }).click();
     await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); window.scrollTo({ top: 0, behavior: 'instant' }); });
     await page.screenshot({ path: `${artifacts}/native-source-${theme.toLowerCase()}.png`, fullPage: true });
   }
@@ -88,8 +88,10 @@ try {
   const first = await createdIssueResponse.json();
   require(first.mutation.state === 'ISSUE_MUTATION_STATE_SUCCEEDED' && first.mutation.repositoryId === String(repo.id));
   require(first.issue.id === first.mutation.issueId && first.issue.number === first.mutation.number);
-  await page.getByLabel('Issue body, plain text', { exact: true }).waitFor();
-  require(await page.getByLabel('Issue body, plain text', { exact: true }).textContent() === body);
+  await page.getByLabel('Issue body, rendered Markdown', { exact: true }).waitFor();
+  require(first.issue.body === body);
+  require((await page.getByLabel('Issue body, rendered Markdown', { exact: true }).textContent()).includes('PRIVATE native issue'));
+  require(await page.getByLabel('Issue body, rendered Markdown', { exact: true }).locator('img,script').count() === 0);
   require(await pending().then((rows) => rows.length) === 0);
   require(await page.locator('.issue-body img').count() === 0);
 
@@ -102,7 +104,7 @@ try {
   await page.getByRole('button', { name: 'Refresh comments', exact: true }).click();
   await page.getByRole('heading', { name: 'No comments in the loaded pages.', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Load more comments', exact: true }).click();
-  await page.getByLabel(`Comment ${own.id}, plain text`, { exact: true }).waitFor();
+  await page.getByLabel(`Comment ${own.id}, rendered Markdown`, { exact: true }).waitFor();
   require(await page.locator('.issue-comment b').count() === 0);
 
   stage('real comment write with lost browser acknowledgment and lookup-only reload');
@@ -148,14 +150,14 @@ try {
   await page.getByRole('button', { name: 'Create issue', exact: true }).click();
   await page.getByRole('alert').waitFor(); require(createCalls === 1 && lostIssue.issue.id === lostIssue.mutation.issueId);
   await page.unroute('**/golf.v1.RepositoryService/CreateIssue');
-  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.reload();
   await page.getByRole('button', { name: 'Resume issue request', exact: true }).click();
   require(await page.getByLabel('Issue title', { exact: true }).inputValue() === '');
   require(await page.getByLabel('Description, plain text', { exact: true }).inputValue() === '');
   await page.getByRole('button', { name: 'Check request status', exact: true }).click();
-  await page.getByLabel('Issue body, plain text', { exact: true }).waitFor();
-  require(page.url().endsWith(`issue=${lostIssue.issue.number}`));
+  await page.getByLabel('Issue body, rendered Markdown', { exact: true }).waitFor();
+  require(new URL(page.url()).pathname.endsWith(`/issues/${lostIssue.issue.number}`));
   require(createCalls === 1);
   const actualIssues = await native.get(`${repoPath}/issues`); require(actualIssues.status() === 200);
   require((await actualIssues.json()).filter((issue) => issue.title === 'Lost issue acknowledgment').length === 1);
@@ -163,7 +165,7 @@ try {
   stage('charcoal desktop, light mobile, reload/deep link and literal discussion');
   await page.goto(golf.origin + listPath + `&issue=${first.issue.number}`);
   await page.getByRole('button', { name: 'Load more comments', exact: true }).click();
-  await page.getByLabel(`Comment ${lostComment.comment.id}, plain text`, { exact: true }).waitFor();
+  await page.getByLabel(`Comment ${lostComment.comment.id}, rendered Markdown`, { exact: true }).waitFor();
   if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
   await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); window.scrollTo({ top: 0, behavior: 'instant' }); });
   await page.screenshot({ path: `${artifacts}/native-dark.png`, fullPage: true });
@@ -188,7 +190,7 @@ try {
   await page.getByRole('button', { name: 'Check request status', exact: true }).click();
   await page.getByRole('heading', { name: 'Welcome to Golf', exact: true }).waitFor();
   require(await pending().then((rows) => rows.length) === 0);
-  require(await page.locator('.issue-body,.issue-comment').count() === 0);
+  require(await page.locator('.discussion-description,.issue-comment').count() === 0);
   require(errors.length === 0);
   console.log('PASS: native issue/comment writes, filtered comment pages, lost acknowledgments without repost, literal text, dark/light mobile and revoked-session cleanup');
 } catch (error) {

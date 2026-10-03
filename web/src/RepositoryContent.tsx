@@ -12,10 +12,13 @@ import { sourceLanguage } from './sourceLanguage';
 
 export const isMarkdownPath = (path:string) => /\.(md|markdown|mdown)$/i.test(path);
 const Syntax=lazy(()=>import('./SyntaxTokens'));
+const SourceCode=lazy(()=>import('./SourceCode'));
 function Tokens({text,language}:{text:string;language:string}) {return language?<Suspense fallback={text}><Syntax text={text} language={language}/></Suspense>:text;}
 export function CodePreview({ text, path, label }: {text:string;path:string;label?:string}) {
  const language=sourceLanguage(path);
- return <div className="code-block"><CopyButton text={text} label={`Copy source of ${path}`}/><pre className="source-preview code-preview" tabIndex={0} aria-label={label||`Source of ${path}`}><code><Tokens text={text || '(Empty text file)'} language={language}/></code></pre></div>;
+ const title=label||`Source of ${path}`;
+ const plain=<pre className="source-preview code-preview" tabIndex={0} aria-label={title}><code><Tokens text={text || '(Empty text file)'} language={language}/></code></pre>;
+ return <div className="code-block"><CopyButton text={text} label={`Copy source of ${path}`}/>{text&&text.split('\n').length<=12000?<Suspense fallback={plain}><SourceCode text={text} language={language} label={title}/></Suspense>:plain}</div>;
 }
 const nodeText=(node:RootContent):string=>node.type==='text'?node.value:node.type==='element'?node.children.map(nodeText).join(''):'';
 // Resolve relative document links within the same repository/immutable snapshot.

@@ -41,7 +41,7 @@ The adapter pins the [official Go SDK v1.8.0](https://github.com/modelcontextpro
 | `golf_repo_view` | `repository` | None |
 | `golf_repo_creation` | `idempotency_key` | None |
 | `golf_repo_branches` | `repository` | `page`, `limit` |
-| `golf_repo_commits` | `repository` | `ref`, `page`, `limit` |
+| `golf_repo_commits` | `repository` | `ref`, `path`, `page`, `limit` |
 | `golf_repo_contents` | `repository` | `ref`, `path` |
 | `golf_commit_diff` | `repository`, `commit_id` | None |
 | `golf_issue_list` | `repository` | `state`, `page`, `limit` |
@@ -62,6 +62,8 @@ The adapter pins the [official Go SDK v1.8.0](https://github.com/modelcontextpro
 `repository` is `OWNER/REPO`. `page` defaults to 1 and accepts 1–10,000; `limit` defaults to 20 and accepts 1–100. `number` is a positive issue/PR number within the CLI's signed 32-bit bound. These three fields are JSON integers. `state` accepts `open`, `closed` or `all`, defaulting to `open`.
 
 Team and audit cursor IDs are canonical positive signed-64-bit decimal **strings**, not JSON numbers. `idempotency_key` is a lowercase canonical UUID v4 from a previous repository or issue/comment creation request. `commit_id` is an exact lowercase 40- or 64-character hexadecimal object ID. Object-ID syntax support does not qualify every forge object format. The adapter bounds `ref` to 1,024 bytes, `path` to 4,096 bytes and other strings to 2,048 bytes before the existing CLI/API validation. Do not convert IDs through floating-point numbers.
+
+`golf_repo_commits` optionally selects literal file/directory history with `path`. A nonempty path requires `ref` to be a full lowercase40/64-character commit ID, not a branch alias. The adapter resolves the current native repository ID within that authorized call and passes it to `ListCommits`; successful results include the exact repository ID, commit and path selection receipt. Spaces, Unicode, wildcard characters and leading colons remain literal. Traversal/control/invalid-ref inputs are rejected, and history does not follow previous names across renames. Golf adapts the native fixed history span to requested page/limit; callers still follow Golf's `nextPage`. This extends one existing read tool and leaves the fixed21-tool catalogue and mutation allowlist unchanged. [Exact contract](PATH_HISTORY_CONTRACT.md). Current native/stdio evidence and final integrated runtime qualification belong in the [ledger](IMPLEMENTATION_STATUS.md).
 
 Collections require explicit pagination. Follow `data.page.nextPage`, including when an authorized filtered page is empty. For activity, preserve the first `data.snapshotId` and use the exact `data.nextBeforeId` on subsequent calls; `before_id` requires a snapshot and cannot exceed it. Every PAT continuation call adds its own session events, but the captured snapshot retains the API's stable traversal boundary. Refresh by starting without cursors.
 

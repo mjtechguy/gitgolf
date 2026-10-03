@@ -351,3 +351,48 @@ func TestAdditionalReadCommandsAndEphemeralSession(t *testing.T) {
 		}
 	}
 }
+
+func TestPathHistoryIdentityAndLiteralInput(t *testing.T) {
+	ref, path := strings.Repeat("a", 40), "src/[literal]* 世界.ts"
+	for _, args := range [][]string{{"repo", "commits", "alice/private", "--path", path}, {"repo", "commits", "alice/private", "--path", path, "--ref", "main"}, {"repo", "commits", "alice/private", "--path", "../other", "--ref", ref}} {
+		if _, err := parseCommand(args); err == nil {
+			t.Fatal("accepted unpinned/unsafe history")
+		}
+	}
+	var calls []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+		calls = append(calls, method)
+		w.Header().Set("Content-Type", "application/json")
+		switch method {
+		case "LoginWithGiteaToken":
+			http.SetCookie(w, &http.Cookie{Name: "golf_session", Value: "opaque", Path: "/", HttpOnly: true})
+			fmt.Fprint(w, `{"user":{"id":"1"}}`)
+		case "GetRepository":
+			fmt.Fprint(w, `{"repository":{"id":"9007199254740993"}}`)
+		case "ListCommits":
+			var input struct {
+				Ref, Path, RepositoryId string
+				Page                    struct{ Page, Limit uint32 }
+			}
+			if json.NewDecoder(r.Body).Decode(&input) != nil || input.Ref != ref || input.Path != path || input.RepositoryId != "9007199254740993" || input.Page.Page != 2 || input.Page.Limit != 20 {
+				t.Error("lost exact history identity/input")
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"commitId": ref, "path": path, "repositoryId": input.RepositoryId, "commits": []any{}})
+		case "Logout":
+			fmt.Fprint(w, `{}`)
+		default:
+			t.Error("unexpected procedure", method)
+		}
+	}))
+	defer upstream.Close()
+	var out, diagnostics bytes.Buffer
+	code := Run(context.Background(), []string{"--url", upstream.URL, "--token-stdin", "repo", "commits", "alice/private", "--ref", ref, "--path", path, "--page", "2"}, strings.NewReader("private-token\n"), &out, &diagnostics, func(string) string { return "" })
+	var envelope struct{ Data struct{ RepositoryId string } }
+	if code != 0 || json.Unmarshal(out.Bytes(), &envelope) != nil || envelope.Data.RepositoryId != "9007199254740993" || strings.Contains(out.String()+diagnostics.String(), "private-token") {
+		t.Fatal("history CLI failed", code)
+	}
+	if strings.Join(calls, ",") != "LoginWithGiteaToken,GetRepository,ListCommits,Logout" {
+		t.Fatal("history identity/session cleanup", calls)
+	}
+}

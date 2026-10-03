@@ -5,6 +5,7 @@ export type RepositorySearch = {
   branch: string;
   state: 'open' | 'closed' | 'all';
   issue?: number;
+  issueNew?: boolean;
   pull?: number;
   pullView?: 'conversation' | 'commits' | 'checks' | 'files';
   commit?: string;
@@ -14,6 +15,7 @@ export type RepositorySearch = {
   head?: string;
   sourceOwner?: string;
   sourceName?: string;
+  historyPath?: string;
 };
 export const defaultRepositorySearch: RepositorySearch = { view: 'source', ref: '', path: '', branch: '', state: 'open' };
 export type RepositoryLocation = RepositorySearch & { kind: 'repository'; owner: string; name: string };
@@ -31,6 +33,7 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
   const search: RepositorySearch = {
     view: next.view, ref: next.ref, path: next.view === 'source' ? next.path : '', branch: next.branch,
     state: next.state, issue: next.view === 'issues' ? next.issue : undefined,
+    issueNew:next.view==='issues'&&!next.issue?next.issueNew:undefined,
     pull: next.view === 'pulls' ? next.pull : undefined,
     pullView: next.view === 'pulls' && next.pull ? next.pullView : undefined,
     commit: next.view === 'commits' ? next.commit : undefined,
@@ -38,14 +41,15 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
     step: next.view === 'actions' && next.run ? next.step : undefined,
     base:next.view==='compare'?next.base:undefined,head:next.view==='compare'?next.head:undefined,
     sourceOwner:next.view==='compare'?next.sourceOwner:undefined,sourceName:next.view==='compare'?next.sourceName:undefined,
+    historyPath:next.view==='commits'&&!next.commit?next.historyPath:undefined,
   };
   const params = {owner:next.owner,name:next.name};
   let path = '';
   if(next.view==='compare')path='compare';
-  else if(next.view==='issues') path=next.issue?`issues/${next.issue}`:'issues';
+  else if(next.view==='issues') path=next.issueNew&&!next.issue?'issues/new':next.issue?`issues/${next.issue}`:'issues';
   else if(next.view==='pulls') path=next.pull?`pull/${next.pull}${next.pullView&&next.pullView!=='conversation'?'/'+next.pullView:''}`:'pulls';
   else if(next.view==='actions') path=next.run?`actions/runs/${next.run}`:'actions';
-  else if(next.view==='commits') path=next.commit?`commit/${next.commit}`:'commits';
+  else if(next.view==='commits') path=next.commit?`commit/${next.commit}`:next.historyPath&&isCommitID(next.ref)?`commits/${next.ref}/${next.historyPath}`:'commits';
   else if(isCommitID(next.ref)) path=`${sourceKind==='file'?'blob':'tree'}/${next.ref}${next.path?`/${next.path}`:''}`;
   return {to:'/$owner/$name/$' as const,params:{...params,_splat:path},search,activeOptions:{exact:true}};
 }

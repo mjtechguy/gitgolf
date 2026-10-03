@@ -4283,10 +4283,14 @@ func (x *Commit) GetAuthoredAt() string {
 }
 
 type ListCommitsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Repository    *RepositoryKey         `protobuf:"bytes,1,opt,name=repository,proto3" json:"repository,omitempty"`
-	Ref           string                 `protobuf:"bytes,2,opt,name=ref,proto3" json:"ref,omitempty"`
-	Page          *PageRequest           `protobuf:"bytes,3,opt,name=page,proto3" json:"page,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Repository *RepositoryKey         `protobuf:"bytes,1,opt,name=repository,proto3" json:"repository,omitempty"`
+	Ref        string                 `protobuf:"bytes,2,opt,name=ref,proto3" json:"ref,omitempty"`
+	Page       *PageRequest           `protobuf:"bytes,3,opt,name=page,proto3" json:"page,omitempty"`
+	// Optional literal repository-relative file/directory path. Requires a full
+	// lowercase immutable ref and current canonical native repository_id.
+	Path          string `protobuf:"bytes,4,opt,name=path,proto3" json:"path,omitempty"`
+	RepositoryId  string `protobuf:"bytes,5,opt,name=repository_id,json=repositoryId,proto3" json:"repository_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4342,10 +4346,28 @@ func (x *ListCommitsRequest) GetPage() *PageRequest {
 	return nil
 }
 
+func (x *ListCommitsRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *ListCommitsRequest) GetRepositoryId() string {
+	if x != nil {
+		return x.RepositoryId
+	}
+	return ""
+}
+
 type ListCommitsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Commits       []*Commit              `protobuf:"bytes,1,rep,name=commits,proto3" json:"commits,omitempty"`
-	Page          *PageResponse          `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Commits []*Commit              `protobuf:"bytes,1,rep,name=commits,proto3" json:"commits,omitempty"`
+	Page    *PageResponse          `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
+	// Selection receipt populated only for path-filtered history.
+	CommitId      string `protobuf:"bytes,3,opt,name=commit_id,json=commitId,proto3" json:"commit_id,omitempty"`
+	Path          string `protobuf:"bytes,4,opt,name=path,proto3" json:"path,omitempty"`
+	RepositoryId  string `protobuf:"bytes,5,opt,name=repository_id,json=repositoryId,proto3" json:"repository_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4392,6 +4414,27 @@ func (x *ListCommitsResponse) GetPage() *PageResponse {
 		return x.Page
 	}
 	return nil
+}
+
+func (x *ListCommitsResponse) GetCommitId() string {
+	if x != nil {
+		return x.CommitId
+	}
+	return ""
+}
+
+func (x *ListCommitsResponse) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *ListCommitsResponse) GetRepositoryId() string {
+	if x != nil {
+		return x.RepositoryId
+	}
+	return ""
 }
 
 type GetCommitDiffRequest struct {
@@ -19626,16 +19669,21 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\vauthor_name\x18\x03 \x01(\tR\n" +
 	"authorName\x12\x1f\n" +
 	"\vauthored_at\x18\x04 \x01(\tR\n" +
-	"authoredAt\"\x88\x01\n" +
+	"authoredAt\"\xc1\x01\n" +
 	"\x12ListCommitsRequest\x126\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x16.golf.v1.RepositoryKeyR\n" +
 	"repository\x12\x10\n" +
 	"\x03ref\x18\x02 \x01(\tR\x03ref\x12(\n" +
-	"\x04page\x18\x03 \x01(\v2\x14.golf.v1.PageRequestR\x04page\"k\n" +
+	"\x04page\x18\x03 \x01(\v2\x14.golf.v1.PageRequestR\x04page\x12\x12\n" +
+	"\x04path\x18\x04 \x01(\tR\x04path\x12#\n" +
+	"\rrepository_id\x18\x05 \x01(\tR\frepositoryId\"\xc1\x01\n" +
 	"\x13ListCommitsResponse\x12)\n" +
 	"\acommits\x18\x01 \x03(\v2\x0f.golf.v1.CommitR\acommits\x12)\n" +
-	"\x04page\x18\x02 \x01(\v2\x15.golf.v1.PageResponseR\x04page\"k\n" +
+	"\x04page\x18\x02 \x01(\v2\x15.golf.v1.PageResponseR\x04page\x12\x1b\n" +
+	"\tcommit_id\x18\x03 \x01(\tR\bcommitId\x12\x12\n" +
+	"\x04path\x18\x04 \x01(\tR\x04path\x12#\n" +
+	"\rrepository_id\x18\x05 \x01(\tR\frepositoryId\"k\n" +
 	"\x14GetCommitDiffRequest\x126\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x16.golf.v1.RepositoryKeyR\n" +

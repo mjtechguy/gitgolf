@@ -153,6 +153,8 @@ func TestMCPInputAndLaunchBoundary(t *testing.T) {
 		{"golf_repo_view", `{"repository":"a/b?token=secret"}`},
 		{"golf_repo_contents", `{"repository":"a/b","path":"../private"}`},
 		{"golf_repo_contents", `{"repository":"a/b","ref":"main~1"}`},
+		{"golf_repo_commits", `{"repository":"a/b","path":"src/a.ts","ref":"main"}`},
+		{"golf_repo_commits", `{"repository":"a/b","path":"../other","ref":"` + strings.Repeat("a", 40) + `"}`},
 		{"golf_repo_contents", `{"repository":"a/b","path":"a\\b"}`},
 	} {
 		for _, tool := range mcpReads {

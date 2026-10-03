@@ -6,11 +6,11 @@ References captured in a separate signed-out browser at 1280 × 720: [Flask repo
 
 | Reference observation | Shared Golf implementation | Remaining work |
 | --- | --- | --- |
-| Roughly 41px code rows, compact borders and headers | 40px minimum source rows, 8px vertical padding, 16px panel padding and 20px section gaps | Last commit/date per path, tags and file finder |
+| Roughly 41px code rows, compact borders and headers | Shared compact source rows with independently linked latest-change title/date, loaded only for visible rows | Tags, repository-wide file finder and larger source virtualization |
 | Readable 14px UI / 16px documentation, 32/24/20px document headings | Shared application and Markdown typography, list markers, striped tables, bounded code and compact conversation spacing | Complete README outline, richer embedded media and document formats |
 | Repository/file breadcrumbs and contextual tabs | Shared workspace breadcrumbs and source directory breadcrumbs; Code/Issues/PRs/Actions/Settings tabs | Owner profile routes and full capability-aware navigation |
-| Meaningful issue, PR, commit and file paths | Canonical owner/repo paths; issue and PR numbers in path; `/pull/N/files`, `/commit/SHA`, immutable `/tree/SHA/path` and `/blob/SHA/file` | Branch-name URLs and canonical settings paths |
-| Explicit PR branch comparison and file actions | Compact PR state/title, base/head comparison, unified/split diff, collapse, Viewed, search and line anchors | Commits/checks tabs, full metadata editing, human reviews, trusted checks and protected merges |
+| Meaningful issue, PR, commit and file paths | Canonical owner/repo paths; issue and PR numbers in path; `/pull/N/files`, `/commit/SHA`, immutable `/tree/SHA/path` and `/blob/SHA/file`, literal `/commits/FULLSHA/PATH` history and source line fragments | Branch-name source URLs and canonical settings paths |
+| Explicit PR branch comparison and file actions | Compact PR state/title, base/head comparison, unified/split diff, collapse, Viewed, search, line anchors and selection-bound native Commits/Checks tabs | Full metadata editing, human reviews, trusted checks and protected merges |
 | HTML logo blocks and source image sizing | Sanitized HTML/alignment; managed image bytes and shared dimension rules | Arbitrary image-host policy, WebP/AVIF, attachments and authenticated remote assets |
 
 Legacy `/repositories/owner/repo` query links still open. New paths retain branch/filter context; immutable source IDs avoid ambiguous slash refs. Invalid commit IDs, numbers and path traversal fail before repository reads. Browser back/forward/reload and legacy links are tested.
@@ -37,3 +37,14 @@ All private fixtures are owned by local `golf-admin`; upstream code and workflow
 First-push metadata can lag and native default-branch metadata must match the pushed main branch. Qualification uses supported native branch configuration and bounded read retries, without replaying creation or direct database/repository changes. Temporary Git credentials are revoked after qualification.
 
 The subsequent [GitHub visual audit](GITHUB_VISUAL_AUDIT.md) expands the reference set and records shared work headers, About/discussion metadata columns, loaded-list search/sort and run-first Actions. [Live activity](REPOSITORY_ACTIVITY_CONTRACT.md) describes the current private invalidation stream and its limits.
+
+
+## Contextual source and issue composition (2026-10-03)
+
+The current integrated source adds a contextual Files navigator on non-root views, numbered syntax-coloured text with line/range permalinks, literal pinned file/directory history, an explicit source-actions menu and latest-change title/date in directory rows. Shared global CSS and existing date/copy primitives retain compact Golf branding. Mobile Files starts collapsed above the source rather than consuming permanent workspace width. [Navigator contract](SOURCE_NAVIGATOR_CONTRACT.md), [row metadata contract](SOURCE_ENTRY_COMMIT_CONTRACT.md) and [history/actions contract](PATH_HISTORY_CONTRACT.md) define exact bounds and authorization limits.
+
+Files filtering covers loaded expanded folders only. Closed siblings are not recursively fetched. Latest-change reads start only for visible rows, with at most three directory-row RPC promises per browser instance; requesting one displayed commit can still read a provider-fixed history page internally. Missing or mismatched metadata displays unavailable instead of an invented author/date. Numbered preview is bounded to12000 LF-split parts; empty/larger previews retain plain text. Exact UTF-8 preview download is an attachment Blob, not an authenticated active-HTML raw route. Blame, rename-following history, tags, generic native downloads, source mutations and full-repository file search remain required.
+
+New issue composition is now an explicit full-page `/OWNER/REPOSITORY/issues/new` editor with Write/Preview, Cancel and dirty-draft departure confirmation. It reuses the existing TanStack discussion composer and durable issue request journal rather than introducing another mutation engine. Permission loss and uncertain outcome handling retain their existing contract. Ordinary single-field issue/PR edits remain contextual editors; human reviews and metadata operations remain requirements.
+
+These are implemented integration changes. Final combined served-image qualification and matched captures must be recorded in the [implementation ledger](IMPLEMENTATION_STATUS.md) before calling this complete in a running installation. Existing prior screenshots retain their own provenance. Protected integration and latest-schema033 recovery remain separate unresolved gates.

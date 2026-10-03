@@ -330,10 +330,18 @@ message ListCommitsRequest {
   RepositoryKey repository = 1;
   string ref = 2;
   PageRequest page = 3;
+  // Optional literal repository-relative file/directory path. Requires a full
+  // lowercase immutable ref and current canonical native repository_id.
+  string path = 4;
+  string repository_id = 5;
 }
 message ListCommitsResponse {
   repeated Commit commits = 1;
   PageResponse page = 2;
+  // Selection receipt populated only for path-filtered history.
+  string commit_id = 3;
+  string path = 4;
+  string repository_id = 5;
 }
 
 enum CommitDiffBase {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { FocusEvent, KeyboardEvent, ReactNode } from 'react';
 import { ArrowDown, Check, Copy, LoaderCircle, RefreshCw } from 'lucide-react';
 import type { PageResponse } from './gen/golf/v1/golf_pb';
@@ -8,6 +8,18 @@ import { errorMessage } from './api';
 export const privateQuery = { staleTime: 0, gcTime: 0 };
 export const nextPage = (response: { page?: PageResponse }) => response.page?.nextPage || undefined;
 export const shortSHA = (value: string) => value.slice(0, 12);
+
+function fragmentSubscription(update:()=>void) {
+ window.addEventListener('hashchange',update);window.addEventListener('popstate',update);
+ return ()=>{window.removeEventListener('hashchange',update);window.removeEventListener('popstate',update);};
+}
+export const useFragment=()=>useSyncExternalStore(fragmentSubscription,()=>window.location.hash,()=>'');
+
+export function downloadText(text:string,name:string) {
+ const url=URL.createObjectURL(new Blob([text],{type:'application/octet-stream'}));
+ const link=document.createElement('a');link.href=url;link.download=name;link.click();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
 
 export function fitDisclosure(menu:HTMLDetailsElement,selector:string) {
  menu.classList.remove('opens-up');

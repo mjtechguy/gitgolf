@@ -97,6 +97,8 @@ const validateRepositorySearch = (search: Record<string, unknown>): RepositorySe
       ref: typeof search.ref === 'string' ? search.ref : '', path: typeof search.path === 'string' ? search.path : '',
       base:typeof search.base==='string'?search.base:undefined,head:typeof search.head==='string'?search.head:undefined,sourceOwner:typeof search.sourceOwner==='string'?search.sourceOwner:undefined,sourceName:typeof search.sourceName==='string'?search.sourceName:undefined,
       branch: typeof search.branch === 'string' ? search.branch : '',
+      historyPath:typeof search.historyPath==='string'?search.historyPath:undefined,
+      issueNew:search.issueNew===true?true:undefined,
       state: search.state === 'closed' || search.state === 'all' ? search.state : 'open', issue, pull,
       pullView: search.pullView === 'files' || search.pullView === 'commits' || search.pullView === 'checks' ? search.pullView : undefined,
       commit: search.commit === undefined ? undefined : typeof search.commit === 'string' ? search.commit : '',
@@ -137,10 +139,16 @@ function canonicalLocation(owner:string,name:string,tail:string,search:Repositor
     return {...location,view:'source' as const,ref:item,path};
   }
   if(tail==='compare')return {...location,view:'compare' as const};
+  if(parts[0]==='commits'&&parts.length>=3&&isCommitID(item)) {
+    const historyPath=parts.slice(2).join('/');
+    if(!historyPath||historyPath.split('/').some(p=>!p||p==='.'||p==='..')||/[\\\u0000-\u001f]/.test(historyPath))throw notFound();
+    return {...location,view:'commits' as const,ref:item,historyPath,commit:undefined};
+  }
   if(parts[0]==='commit'&&parts.length===2&&isCommitID(item)) return {...location,view:'commits' as const,commit:item};
+  if(tail==='issues/new')return {...location,view:'issues' as const,issue:undefined,issueNew:true};
   if(parts[0]==='issues'&&parts.length<=2) {
-    if(parts.length===1)return {...location,view:'issues' as const,issue:undefined};
-    if(/^[1-9][0-9]*$/.test(item)&&Number(parts[1])<=0x7fffffff)return {...location,view:'issues' as const,issue:Number(parts[1])};
+    if(parts.length===1)return {...location,view:'issues' as const,issue:undefined,issueNew:undefined};
+    if(/^[1-9][0-9]*$/.test(item)&&Number(parts[1])<=0x7fffffff)return {...location,view:'issues' as const,issue:Number(parts[1]),issueNew:undefined};
   }
   if(parts[0]==='pull'&&parts.length>=2&&parts.length<=3&&/^[1-9][0-9]*$/.test(item)&&Number(parts[1])<=0x7fffffff&&(!parts[2]||['files','commits','checks'].includes(parts[2]))) return {...location,view:'pulls' as const,pull:Number(parts[1]),pullView:parts[2] as RepositorySearch['pullView']};
   if(parts[0]==='actions'&&parts[1]==='runs'&&parts.length===3&&isRunID(parts[2]||''))return {...location,view:'actions' as const,run:parts[2]};
@@ -149,7 +157,7 @@ function canonicalLocation(owner:string,name:string,tail:string,search:Repositor
 }
 const canonicalRepositoryPageRoute=createRoute({getParentRoute:()=>rootRoute,path:'/$owner/$name/$',validateSearch:validateRepositorySearch,
   beforeLoad:({params,search})=>{canonicalLocation(params.owner,params.name,params._splat||'',search);},
-  search:{middlewares:[({search,next})=>{const clean:Partial<RepositorySearch>={...next(search)};delete clean.view;delete clean.path;delete clean.issue;delete clean.pull;delete clean.pullView;delete clean.commit;delete clean.run;return clean as RepositorySearch;},stripSearchParams(defaultRepositorySearch)]},
+  search:{middlewares:[({search,next})=>{const clean:Partial<RepositorySearch>={...next(search)};delete clean.view;delete clean.path;delete clean.issue;delete clean.pull;delete clean.pullView;delete clean.commit;delete clean.run;delete clean.historyPath;delete clean.issueNew;return clean as RepositorySearch;},stripSearchParams(defaultRepositorySearch)]},
   component:()=>{const p=canonicalRepositoryPageRoute.useParams();return <App location={canonicalLocation(p.owner,p.name,p._splat||'',canonicalRepositoryPageRoute.useSearch())}/>;}});
 
 function RepositorySettingsPage() {

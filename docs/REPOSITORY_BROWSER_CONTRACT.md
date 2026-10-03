@@ -10,7 +10,7 @@ Contract: [`api/golf/v1/golf.proto`](../api/golf/v1/golf.proto). Every procedure
 | --- | --- |
 | GetRepository | `{repository:{owner,name}}` → `{repository}` |
 | ListBranches | repository and optional `{page:{page,limit}}` → `{branches,page:{nextPage}}` |
-| ListCommits | repository, optional ref/page → `{commits,page}` |
+| ListCommits | repository, optional ref/page; optional literal `path` requires full ref and `repositoryId` → `{commits,page,commitId,path,repositoryId}`; path selection receipt is empty for ordinary history |
 | GetCommitDiff | repository and exact lowercase `commitId` → commit/parents/base, bounded `rawDiff` and numeric `byteSize`; see the [diff contract](COMMIT_DIFF_CONTRACT.md) |
 | GetPullRequestDiff | repository, PR number and selected full lowercase base/head IDs → bounded native merge-base diff; changed base/head/PR binding or post-wait access is refused |
 | GetRepositoryImage | repository, immutable commit/document path and literal image reference → bounded image bytes/media type; current private access is checked before and after delivery |
@@ -45,4 +45,15 @@ Read-only API qualification is separate from P0.8's protected-write/conditional-
 
 ## Current presentation and image delivery (2026-10-03)
 
-The source RPC remains bounded text. The shared UI now renders Markdown/GFM and sanitized HTML, with heading anchors, relative snapshot links and lazy syntax highlighting. Scripts, event handlers, frames and arbitrary style declarations are removed. README images use `GetRepositoryImage`, not browser requests to the source host. See [presentation contract and visual comparison](REPOSITORY_PRESENTATION.md) for formats, source binding, external-host limits and URL compatibility. This supersedes the initial plain-text presentation statements above; it does not add issue edits, review writes or merges.
+The source RPC remains bounded text. The shared UI now renders Markdown/GFM and sanitized HTML, with heading anchors, relative snapshot links and lazy syntax highlighting. Scripts, event handlers, frames and arbitrary style declarations are removed. README images use `GetRepositoryImage`, not browser requests to the source host. See [presentation contract and visual comparison](REPOSITORY_PRESENTATION.md) for formats, source binding, external-host limits and URL compatibility. This supersedes the initial plain-text presentation statements above. Later issue/PR writes have their own [discussion](ISSUE_DISCUSSION_CONTRACT.md) and [PR mutation](PULL_MUTATION_CONTRACT.md) contracts; source presentation does not itself authorize them or protected merges.
+
+
+## Current contextual source, literal history and issue editor (2026-10-03)
+
+Optional literal-path history extends the existing `ListCommits` read without adding a write or changing ordinary unfiltered history. A path request binds the full lowercase40/64-character snapshot and current positive native repository ID; the response echoes both plus the literal path. Golf adapts the pinned native endpoint's fixed page span to its own1–100-row pages and refuses invalid totals, inconsistent spans/metadata or a mismatched identity. Wildcard/Unicode/leading-colon names use explicit literal pathspecs. Directories include descendants; earlier names are not followed across renames. [Exact API/CLI/MCP and pagination contract](PATH_HISTORY_CONTRACT.md).
+
+Canonical source views now have bounded numbered syntax, line/range fragments, exact-path/permalink copy, preview-text attachment download and contextual History. Non-root views mount a lazy Files navigator after the main source succeeds. Shared directory rows independently request the latest literal-path change only while visible, with a three-RPC browser admission cap. These reads retain in-memory account/repository/snapshot query isolation and private access cleanup. [Navigator](SOURCE_NAVIGATOR_CONTRACT.md) and [row metadata](SOURCE_ENTRY_COMMIT_CONTRACT.md) describe their bounds. `GetContents` still has no expected native repository-ID argument or native identity receipt; a frontend query key cannot create that server fence. No atomic permission/ref snapshot is claimed.
+
+New issue composition opens `/OWNER/REPOSITORY/issues/new`, with shared Write/Preview Markdown, cancellation and dirty-draft departure confirmation. Existing current-access checks and owner-scoped frozen request/status handling remain authoritative under the [discussion mutation contract](ISSUE_DISCUSSION_CONTRACT.md). Reload inspects a request outcome; it never reposts automatically. Human reviews, blame, tags, source mutations, generic raw/binary downloads and protected merge/squash/rebase remain requirements.
+
+The integrated code and browser fixtures do not establish deployment. Record final served-image/native qualification in [implementation status](IMPLEMENTATION_STATUS.md); P0.8 and latest-schema033 recovery remain unresolved.

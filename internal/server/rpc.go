@@ -382,11 +382,24 @@ func (s *Server) ListCommits(ctx context.Context, req *connect.Request[golfv1.Li
 	if err != nil {
 		return nil, err
 	}
-	rows, next, err := s.listCommits(ctx, token, keyFrom(req.Msg.Repository), req.Msg.Ref, pageFrom(req.Msg.Page))
+	var rows []forgeCommit
+	var next uint32
+	if req.Msg.Path != "" {
+		var id int64
+		id, err = discussionID(req.Msg.RepositoryId)
+		if err == nil {
+			rows, next, err = s.listPathCommits(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), id, req.Msg.Ref, req.Msg.Path, pageFrom(req.Msg.Page))
+		}
+	} else {
+		rows, next, err = s.listCommits(ctx, token, keyFrom(req.Msg.Repository), req.Msg.Ref, pageFrom(req.Msg.Page))
+	}
 	if err != nil {
 		return nil, rpcError(err)
 	}
 	response := &golfv1.ListCommitsResponse{Page: wirePage(next)}
+	if req.Msg.Path != "" {
+		response.CommitId, response.Path, response.RepositoryId = req.Msg.Ref, req.Msg.Path, req.Msg.RepositoryId
+	}
 	for _, row := range rows {
 		response.Commits = append(response.Commits, &golfv1.Commit{Sha: row.SHA, Message: row.Commit.Message, AuthorName: row.Commit.Author.Name, AuthoredAt: row.Commit.Author.Date})
 	}

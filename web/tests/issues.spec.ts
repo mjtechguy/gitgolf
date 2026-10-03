@@ -95,7 +95,8 @@ const stored = (page: Page) => page.evaluate(() => Object.entries(sessionStorage
 async function newIssue(page: Page) {
   await page.goto(listURL);
   await page.getByRole('button', { name: 'New issue', exact: true }).click();
-  return page.getByRole('dialog', { name: 'New issue', exact: true });
+  await expect(page).toHaveURL(/issues\/new$/);
+  return page.getByRole('region', { name: 'New issue', exact: true });
 }
 
 test('creates a plain-text issue once with immutable target IDs and follows its typed detail link', async ({ page }) => {
@@ -130,8 +131,8 @@ test('unknown creation closes and reloads with metadata only, and resumes status
   expect(rows).toHaveLength(1);
   expect(rows[0]![0]).toContain(`:${user.id}:${repository.id}:new`);
   expect(JSON.parse(rows[0]![1])).toEqual({ key, kind: 'issue', repositoryId: repository.id, issueId: '', number: 0 });
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: 'Resume issue request' })).toBeFocused();
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Resume issue request' })).toBeVisible();
   await page.reload();
   await page.getByRole('button', { name: 'Resume issue request' }).click();
   await expect(page.getByLabel('Issue title')).toHaveValue('');
@@ -324,17 +325,19 @@ test('target IDs namespace resumed requests and prevent reuse for a replaced rep
   expect(state.posts).toHaveLength(1);
 });
 
-test('issue dialog and discussion remain keyboard usable in charcoal and light mobile layouts', async ({ page }) => {
+test('issue creation page and discussion remain keyboard usable in charcoal and light mobile layouts', async ({ page }) => {
   await backend(page);
   await page.addInitScript(() => localStorage.setItem('golf.theme', 'dark'));
   const errors: string[] = []; page.on('pageerror', (error) => errors.push(error.message));
   const dialog = await newIssue(page);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await dialog.getByLabel('Issue title').focus(); await page.keyboard.press('Tab');
-  await expect(dialog.getByLabel('Description, plain text')).toBeFocused();
-  await page.screenshot({ path: 'test-results/issues-dialog-dark.png', fullPage: true });
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: 'New issue', exact: true })).toBeFocused();
+  await expect(dialog.getByRole('button', { name: 'Write', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab'); await expect(dialog.getByRole('button', { name: 'Preview Markdown', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab'); await expect(dialog.getByLabel('Description, plain text')).toBeFocused();
+  await page.screenshot({ path: 'test-results/issues-create-dark.png', fullPage: true });
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'New issue', exact: true })).toBeVisible();
   await page.goto(detailURL);
   if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });

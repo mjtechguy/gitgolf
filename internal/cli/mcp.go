@@ -32,7 +32,7 @@ var mcpReads = []mcpRead{
 	{"golf_repo_view", "Read current repository metadata and native permissions.", "repo view", []string{"repository"}, nil},
 	{"golf_repo_creation", "Inspect your recorded creation intent. Unknown/rejected is not creation success. Never redispatches.", "repo creation", []string{"idempotency_key"}, nil},
 	{"golf_repo_branches", "List branches; select an exact commit for stable later reads.", "repo branches", []string{"repository"}, []string{"page", "limit"}},
-	{"golf_repo_commits", "List native commit history at a branch or immutable commit.", "repo commits", []string{"repository"}, []string{"ref", "page", "limit"}},
+	{"golf_repo_commits", "List native commit history; optional path requires a full immutable ref and returns exact path history pages.", "repo commits", []string{"repository"}, []string{"ref", "path", "page", "limit"}},
 	{"golf_repo_contents", "Read bounded source at ref/path. Follow returned commitId for stable traversal; non-text files return metadata.", "repo contents", []string{"repository"}, []string{"ref", "path"}},
 	{"golf_commit_diff", "Read bounded raw native diff at a full exact commit ID. Roots/first-parent merges are labeled; no completeness or merge-readiness claim.", "commit diff", []string{"repository", "commit_id"}, nil},
 	{"golf_issue_list", "List issues with explicit state and pagination.", "issue list", []string{"repository"}, []string{"state", "page", "limit"}},

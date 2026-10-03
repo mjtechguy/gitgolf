@@ -28,7 +28,7 @@ const entries = [
 ];
 
 async function backend(page: Page) {
-  const state = { readme: '# PRIVATE README\n<script>window.executed=true</script>\n<a href="javascript:alert(1)">Untrusted</a>\n', featureHead: feature, signedIn: true, empty: false, metadataStatus: 200, sourceStatus: 200, issueStatus: 200, sourceWait: undefined as Promise<void> | undefined, methods: [] as string[], sourceRequests: [] as GetContentsRequest[] };
+  const state = { readme: '# PRIVATE README\n<script>window.executed=true</script>\n<a href="javascript:alert(1)">Untrusted</a>\n', featureHead: feature, signedIn: true, empty: false, metadataStatus: 200, sourceStatus: 200, sourceText:'export const PRIVATE_SOURCE = true;\n',historyBinding:true, historyStatus:200,historyRequests:[] as ReturnType<typeof request<typeof ListCommitsRequestSchema>>[], issueStatus: 200, sourceWait: undefined as Promise<void> | undefined, methods: [] as string[], sourceRequests: [] as GetContentsRequest[] };
   await page.route('**/rpc/**', async (route) => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1)!;
     state.methods.push(method);
@@ -54,7 +54,7 @@ async function backend(page: Page) {
       const sourcePath = input.path;
       if (!sourcePath) return respond(route, GetContentsResponseSchema, { commitId, kind: SourceEntryType.DIRECTORY, entries });
       if (sourcePath === 'src') return respond(route, GetContentsResponseSchema, { commitId, path: sourcePath, kind: SourceEntryType.DIRECTORY, entries: [{ name: 'index.ts', path: 'src/index.ts', type: SourceEntryType.FILE, sha: head, size: 40n }] });
-      if (sourcePath === 'src/index.ts') return respond(route, GetContentsResponseSchema, { commitId, path: sourcePath, kind: SourceEntryType.FILE, file: { entry: { name: 'index.ts', path: sourcePath, type: SourceEntryType.FILE, sha: head, size: 40n }, content: 'export const PRIVATE_SOURCE = true;\n' } });
+      if (sourcePath === 'src/index.ts') return respond(route, GetContentsResponseSchema, { commitId, path: sourcePath, kind: SourceEntryType.FILE, file: { entry: { name: 'index.ts', path: sourcePath, type: SourceEntryType.FILE, sha: head, size: 40n }, content: state.sourceText } });
       const entry = entries.find((item) => item.path === sourcePath);
       if (!entry) return error(404, 'Source not found or inaccessible.');
       const reasons: Record<string, string> = { 'binary.png': 'Binary content cannot be previewed.', 'large.txt': 'File exceeds the 256 KiB preview limit.', 'pointer.lfs': 'Git LFS content is not fetched.', link: 'Symlink targets are not followed.', module: 'Submodule repositories are not followed.', 'huge.bin': 'File exceeds the 256 KiB preview limit.' };
@@ -62,6 +62,7 @@ async function backend(page: Page) {
     }
     if (method === 'ListCommits') {
       const input = request(route, ListCommitsRequestSchema);
+      if(input.path){state.historyRequests.push(input);if(state.historyStatus!==200)return error(state.historyStatus,'History not found or inaccessible.');return respond(route,ListCommitsResponseSchema,{path:state.historyBinding?input.path:'another.txt',commitId:input.ref,repositoryId:input.repositoryId,commits:[{sha:head,message:'Exact file change',authorName:'Alex',authoredAt:'2026-10-01T12:00:00Z'}]});}
       const sha = input.ref === feature ? feature : head;
       return respond(route, ListCommitsResponseSchema, input.page?.page === 2 ? { commits: [{ sha: older, message: 'Initial repository', authorName: 'Alex', authoredAt: '2026-09-30T12:00:00Z' }] } : { commits: [{ sha, message: 'Improve keyboard navigation\n\nKeep focus visible everywhere.', authorName: 'Alex', authoredAt: '2026-10-01T12:00:00Z' }], page: { nextPage: 2 } });
     }
@@ -345,13 +346,20 @@ test('repository branding keeps loaded fonts, legible text and reflow at 320px a
       await expect(page.getByRole('button', { name: 'Post comment', exact: true })).toBeEnabled();
       await page.getByRole('link', { name: 'All open issues', exact: true }).click();
       await page.getByRole('button', { name: 'New issue', exact: true }).click();
-      const dialog = page.getByRole('dialog', { name: 'New issue', exact: true });
+      const dialog = page.getByRole('region', { name: 'New issue', exact: true });
+      await expect(dialog).toBeVisible();
       expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth && element.getBoundingClientRect().width <= innerWidth)).toBe(true);
       await dialog.getByLabel('Issue title', { exact: true }).focus();
       await page.keyboard.press('Tab');
+      await expect(dialog.getByRole('button', { name: 'Write', exact: true })).toBeFocused();
+      await page.keyboard.press('Tab');
+      await expect(dialog.getByRole('button', { name: 'Preview Markdown', exact: true })).toBeFocused();
+      await page.keyboard.press('Tab');
       await expect(dialog.getByLabel('Description, plain text', { exact: true })).toBeFocused();
       await page.keyboard.press('Escape');
-      await expect(page.getByRole('button', { name: 'New issue', exact: true })).toBeFocused();
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+      await expect(page.getByRole('button', { name: 'New issue', exact: true })).toBeVisible();
     }
   }
 });
@@ -451,4 +459,34 @@ test('clone protocol and shared source copy use exact text and handle unavailabl
  await page.evaluate(() => { navigator.clipboard.writeText = async () => { throw new Error('denied'); }; });
  await page.getByRole('button',{name:'Copy source of empty.txt'}).click();
  await expect(page.getByRole('status').filter({hasText:'Copy unavailable.'})).toBeAttached();
+});
+
+for(const theme of ['dark','light'])for(const width of [1280,390])test(`source lines/actions and literal path history ${theme} ${width}`,async({page,context})=>{
+ const state=await backend(page);state.sourceText='export const PRIVATE_SOURCE = "<script>window.executed=true</script>";\r\n\r\n/* a multiline\r\n   comment */\r\n';
+ await context.grantPermissions(['clipboard-read','clipboard-write']);await page.setViewportSize({width,height:900});await page.goto(`/alex/design-system/blob/${head}/src/index.ts#L2-L4`);
+ const toggle=page.getByRole('button',{name:`Switch to ${theme} theme`,exact:true});if(await toggle.count())await toggle.click();
+ await expect(page.locator('.numbered-source tr')).toHaveCount(4);await expect(page.locator('.source-line-selected')).toHaveCount(3);await expect(page.locator('.source-code-text script,.source-code-text img')).toHaveCount(0);
+ expect(await page.evaluate(()=>Boolean((window as typeof window & {executed?:boolean}).executed))).toBe(false);
+ await expect(page.locator('#L3 .hljs-comment')).toContainText('/* a multiline');await expect(page.locator('#L4 .hljs-comment')).toContainText('comment */');
+ await page.getByRole('link',{name:'Line 1',exact:true}).click();await page.getByRole('link',{name:'Line 3',exact:true}).click({modifiers:['Shift']});await expect(page).toHaveURL(/#L1-L3$/);await expect(page.locator('.source-line-selected')).toHaveCount(3);
+ await page.getByRole('link',{name:'Line 4',exact:true}).click();await page.getByRole('link',{name:'Line 2',exact:true}).click({modifiers:['Shift']});await expect(page).toHaveURL(/#L2-L4$/);await page.getByRole('link',{name:'Line 3',exact:true}).click({modifiers:['Shift']});await expect(page).toHaveURL(/#L3-L4$/);await page.getByRole('link',{name:'Line 1',exact:true}).click();await page.getByRole('link',{name:'Line 3',exact:true}).click({modifiers:['Shift']});
+ await page.getByLabel('Source actions',{exact:true}).click();const bounds=await page.locator('.source-action-options').boundingBox();expect(bounds).toBeTruthy();expect(bounds!.x).toBeGreaterThanOrEqual(0);expect(bounds!.x+bounds!.width).toBeLessThanOrEqual(width);
+ await page.getByLabel('Copy source permalink',{exact:true}).click();const link=await page.evaluate(()=>navigator.clipboard.readText());expect(new URL(link).pathname).toBe(`/alex/design-system/blob/${head}/src/index.ts`);expect(new URL(link).hash).toBe('#L1-L3');
+ await page.getByLabel('Copy repository path',{exact:true}).click();expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe('src/index.ts');
+ const downloading=page.waitForEvent('download');await page.getByRole('button',{name:'Download text',exact:true}).click();const download=await downloading;expect(download.suggestedFilename()).toBe('index.ts');const stream=await download.createReadStream();const chunks:Buffer[]=[];for await(const chunk of stream!)chunks.push(chunk);expect(Buffer.concat(chunks).toString('utf8')).toBe(state.sourceText);
+ await page.getByLabel('Source actions',{exact:true}).press('Escape');await expect(page.getByLabel('Source actions',{exact:true})).toBeFocused();await expect(page.locator('.source-action-menu')).not.toHaveAttribute('open','');
+ await page.getByRole('link',{name:'History',exact:true}).click();await expect(page).toHaveURL(new RegExp(`/commits/${head}/src/index.ts`));await expect(page.getByRole('link',{name:'Exact file change',exact:true})).toBeVisible();expect(state.historyRequests.at(-1)?.path).toBe('src/index.ts');expect(state.historyRequests.at(-1)?.repositoryId).toBe(repository.id);expect(state.historyRequests.at(-1)?.ref).toBe(head);await expect(page.locator('.branch-picker')).toHaveCount(0);
+ await page.reload();await expect(page.getByRole('link',{name:'Exact file change',exact:true})).toBeVisible();await page.getByRole('link',{name:'Back to source',exact:true}).click();await expect(page.locator('.numbered-source tr')).toHaveCount(4);
+ await page.getByRole('link',{name:'History',exact:true}).click();await page.getByRole('navigation',{name:'Repository',exact:true}).getByRole('link',{name:'Commits',exact:true}).click();await expect(page.getByRole('link',{name:'Improve keyboard navigation',exact:true})).toBeVisible();expect(new URL(page.url()).pathname).toBe('/alex/design-system/commits');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('path history rejects mismatched binding and denied source hides its actions',async({page})=>{
+ const state=await backend(page);state.historyBinding=false;await page.goto(`/alex/design-system/commits/${head}/src/index.ts`);await expect(page.getByRole('alert')).toContainText('returned history does not match');await expect(page.getByRole('link',{name:'Exact file change',exact:true})).toHaveCount(0);
+ state.historyBinding=true;state.historyStatus=404;await page.getByRole('button',{name:'Try again',exact:true}).click();await expect(page.getByRole('alert')).toContainText('History not found');state.sourceStatus=403;await page.goto(`/alex/design-system/blob/${head}/src/index.ts`);await expect(page.getByRole('alert')).toContainText('permission');await expect(page.getByLabel('Source actions',{exact:true})).toHaveCount(0);await expect(page.getByRole('link',{name:'History',exact:true})).toHaveCount(0);
+});
+
+test('invalid line fragments and empty/large preview limits',async({page})=>{
+ const state=await backend(page);state.sourceText='one\ntwo\n';await page.goto(`/alex/design-system/blob/${head}/src/index.ts#L1-L999`);await expect(page.locator('.numbered-source tr')).toHaveCount(2);await expect(page.locator('.source-line-selected')).toHaveCount(0);
+ state.sourceText='\n'.repeat(12001);await page.getByLabel('Refresh source',{exact:true}).click();await expect(page.locator('.code-preview')).toBeVisible();await expect(page.locator('.numbered-source')).toHaveCount(0);
+ await page.goto(`/alex/design-system/blob/${head}/empty.txt`);await expect(page.getByLabel('Plain text preview of empty.txt')).toContainText('(Empty text file)');await page.getByLabel('Source actions',{exact:true}).click();await expect(page.getByRole('button',{name:'Download text',exact:true})).toBeEnabled();await page.goto(`/alex/design-system/blob/${head}/binary.png`);await page.getByLabel('Source actions',{exact:true}).click();await expect(page.getByRole('button',{name:'Download text',exact:true})).toBeDisabled();
 });

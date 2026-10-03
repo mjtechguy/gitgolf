@@ -61,5 +61,5 @@ test('archived or mirrored repository retains administrator grant inventory/revo
 
 test('enabled admission receipt remains conditional and clears the editor', async ({ page }) => {
  const state = await backend(page); state.receiptState = 'requires_push_admission'; await page.goto(path); const form = await editor(page); await form.getByRole('button', { name: 'Create automation grant', exact: true }).click();
- await expect(panel(page).getByRole('status')).toHaveText('Automation grant created. Pushes still require current policy, native activity and worker admission.'); await expect(panel(page).getByRole('form')).toHaveCount(0); expect(state.writes).toHaveLength(1);
+ await expect(panel(page).getByRole('status').filter({ hasText: 'Automation grant created.' })).toHaveText('Automation grant created. Pushes still require current policy, native activity and worker admission.'); await expect(panel(page).getByRole('form')).toHaveCount(0); expect(state.writes).toHaveLength(1);
 });

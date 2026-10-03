@@ -102,3 +102,7 @@ local-agents-up: local-up
 	docker build -f Dockerfile.codex -t golf-codex-task:0.160.0 .
 	python3 scripts/init-agent-env.py
 	$(MAKE) local-up
+
+.PHONY: qualify-path-history
+qualify-path-history: cli
+	python3 scripts/path-history-smoke.py
