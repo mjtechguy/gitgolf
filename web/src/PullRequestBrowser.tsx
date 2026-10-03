@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from 'react';
+import { PullReviewDraftWorkspace } from './PullReviewDraft';
 import { PullReviewComposer } from './PullReviewComposer';
 import { PullReviewComments } from './PullReviewComments';
 import { readReviewIntent, reviewIntentKey } from './reviewIntents';
@@ -70,7 +71,7 @@ function PullDiscussion(props:Props){
 }
 function PullFiles(props: Props & { pull: PullRequest; onReview:()=>void }) {
   const { pull, repositoryKey, queryKey, location, repositoryId, onReview }=props;
-  const [commentsOpen,setCommentsOpen]=useState(false);const commentsId=useId();
+  const [commentsOpen,setCommentsOpen]=useState(false);const [draftOpen,setDraftOpen]=useState(false);const lastDiff=useRef('');const commentsId=useId();
   const base = pull.base?.commitId || '', head = pull.head?.commitId || '', mergeBase = pull.mergeBaseCommitId;
   const query = useQuery({ ...privateQuery, queryKey: [...queryKey, 'pull-diff', repositoryId, pull.id, location.pull, base, mergeBase, head],
     queryFn: async ({signal}) => {
@@ -80,8 +81,10 @@ function PullFiles(props: Props & { pull: PullRequest; onReview:()=>void }) {
       if(result.byteSize > 512*1024 || new TextEncoder().encode(result.rawDiff).byteLength !== result.byteSize) throw new ConnectError('The PR diff exceeds its supported text bounds.',Code.ResourceExhausted);
       return result;
     }});
+  if(query.isSuccess&&!query.isFetching)lastDiff.current=query.data.rawDiff;
   return <section className="browser-panel" aria-label="Pull request diff">
-    {query.isError ? <PanelError error={query.error} retry={()=>void query.refetch()}/> : !query.isSuccess || query.isFetching ? <Loading label="Reading changed files…"/> : <><DiffViewer key={`${String(queryKey[1])}-${repositoryId}-${pull.id}-${base}-${mergeBase}-${head}`} text={query.data.rawDiff} snapshotId={`${mergeBase}-${head}`} toolbarAction={<><button type="button" className="button secondary" aria-expanded={commentsOpen} aria-controls={commentsId} onClick={()=>setCommentsOpen(value=>!value)}><MessageSquare size={15} aria-hidden="true"/>{commentsOpen?'Hide':'Show'} review comments</button><button className="button secondary" data-review-trigger onClick={onReview}>Review changes</button><button className="icon-button manual-refresh" aria-label="Refresh PR diff" disabled={query.isFetching} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button></>}/><p className="panel-footnote">Old side <code title={mergeBase}>{shortSHA(mergeBase)}</code> · Head <code title={head}>{shortSHA(head)}</code>{base!==mergeBase?<> · Base branch tip <code title={base}>{shortSHA(base)}</code></>:null} · {query.data.byteSize.toLocaleString()} bytes. Viewed markers belong to this browser session and snapshot. This observation does not establish merge readiness.</p><div id={commentsId}>{commentsOpen?<section className="pull-files-comments" aria-label="Files changed comments"><Reviews {...props} reviewActionLabel="Review changes from comments"/><PullDiscussion {...props}/></section>:null}</div></>}
+    {query.isError ? <PanelError error={query.error} retry={()=>void query.refetch()}/> : !query.isSuccess || query.isFetching ? <Loading label="Reading changed files…"/> : <>{!draftOpen?<DiffViewer key={`${String(queryKey[1])}-${repositoryId}-${pull.id}-${base}-${mergeBase}-${head}`} text={query.data.rawDiff} snapshotId={`${mergeBase}-${head}`} toolbarAction={<><button type="button" className="button secondary" aria-expanded={commentsOpen} aria-controls={commentsId} onClick={()=>setCommentsOpen(value=>!value)}><MessageSquare size={15} aria-hidden="true"/>{commentsOpen?'Hide':'Show'} review comments</button><button className="button secondary" data-private-draft-trigger onClick={()=>setDraftOpen(true)}>Private draft</button><button className="button secondary" data-review-trigger onClick={onReview}>Review changes</button><button className="icon-button manual-refresh" aria-label="Refresh PR diff" disabled={query.isFetching} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button></>}/>:null}<p className="panel-footnote">Old side <code title={mergeBase}>{shortSHA(mergeBase)}</code> · Head <code title={head}>{shortSHA(head)}</code>{base!==mergeBase?<> · Base branch tip <code title={base}>{shortSHA(base)}</code></>:null} · {query.data.byteSize.toLocaleString()} bytes. Viewed markers belong to this browser session and snapshot. This observation does not establish merge readiness.</p><div id={commentsId}>{commentsOpen?<section className="pull-files-comments" aria-label="Files changed comments"><Reviews {...props} reviewActionLabel="Review changes from comments"/><PullDiscussion {...props}/></section>:null}</div></>}
+    {draftOpen&&!query.isError?<PullReviewDraftWorkspace key={`${props.userId}-${repositoryId}-${pull.id}`} repository={repositoryKey} repositoryId={repositoryId} userId={props.userId} pull={pull} text={query.isSuccess?query.data.rawDiff:lastDiff.current} blocked={query.isFetching} onClose={()=>{setDraftOpen(false);requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('[data-private-draft-trigger]')?.focus());}}/>:null}
   </section>;
 }
 function PullDetail(props: Props) {

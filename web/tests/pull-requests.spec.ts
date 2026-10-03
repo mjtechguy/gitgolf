@@ -480,14 +480,18 @@ test('all four PR tabs remain keyboard visible and compact in charcoal/light mob
 });
 
 const intentRows=(page:Page)=>page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('golf.issue-intent.')));
-for(const field of ['title','body','draft','ready','close','reopen'] as const) {
- test(`PR ${field} sends one field with independent PR identity and frozen revision`,async({page})=>{
+for(const width of [1280,390])for(const field of ['title','body','draft','ready','close','reopen'] as const) {
+ test(`PR ${field} at ${width}px sends one field with independent PR identity and frozen revision`,async({page})=>{
+  await page.setViewportSize({width,height:900});
   const state=await backend(page);state.pull.draft=field==='ready';if(field==='reopen')state.pull.state=IssueState.CLOSED;
   await page.goto('/alex/design-system/pull/12');
   await expect(page.getByLabel('Pull request title',{exact:true})).toHaveCount(0);
   const trigger=field==='title'?'Edit pull request title':field==='body'?'Edit pull request description':field==='draft'?'Convert to draft':field==='ready'?'Ready for review':field==='close'?'Close pull request':'Reopen pull request';
+  if(width<=720)await page.getByLabel('More pull request actions',{exact:true}).click();
   await page.getByRole('button',{name:trigger,exact:true}).click();
+  if(width<=720)await expect(page.locator('.pull-action-menu')).not.toHaveAttribute('open');
   const editor=page.getByRole('region',{name:field==='title'?'Edit title':field==='body'?'Edit description':trigger,exact:true});
+  await expect(editor.locator('xpath=ancestor::details')).toHaveCount(0);
   if(field==='title')await editor.getByLabel('Pull request title',{exact:true}).fill(' Edited proposal ');
   if(field==='body'){await page.getByRole('button',{name:'Add a comment',exact:true}).click();await editor.getByLabel('Description, Markdown',{exact:true}).fill('');await expect(page.getByLabel('Comment, plain text',{exact:true})).toHaveValue('');}
   let release!:()=>void;state.updateWait=new Promise<void>(resolve=>release=resolve);
@@ -525,7 +529,7 @@ test('PR merged/unverified lifecycle is disabled, editors are explicit, and both
  const state=await backend(page);await page.goto('/alex/design-system/pull/13');await expect(page.getByRole('button',{name:'Reopen pull request',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'Convert to draft',exact:true})).toBeDisabled();
  await page.goto('/alex/design-system/pull/12');state.pull.revision='';await page.getByRole('button',{name:'Refresh pull request',exact:true}).click();await expect(page.getByRole('button',{name:'Edit pull request title',exact:true})).toBeDisabled();
  state.pull.revision=pull.revision;await page.getByRole('button',{name:'Refresh pull request',exact:true}).click();await expect(page.getByRole('button',{name:'Edit pull request description',exact:true})).toBeEnabled();await page.setViewportSize({width:390,height:844});
- for(const theme of ['dark','light']){if(await page.locator('html').getAttribute('data-theme')!==theme)await page.getByRole('button',{name:`Switch to ${theme} theme`,exact:true}).click();await page.getByRole('button',{name:'Edit pull request description',exact:true}).click();await expect(page.getByLabel('Description, Markdown',{exact:true})).toBeFocused();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/pr-edit-mobile-${theme}.png`,fullPage:true});await page.getByRole('button',{name:'Close editor',exact:true}).click();}
+ for(const theme of ['dark','light']){if(await page.locator('html').getAttribute('data-theme')!==theme)await page.getByRole('button',{name:`Switch to ${theme} theme`,exact:true}).click();await page.getByLabel('More pull request actions',{exact:true}).click();await page.getByRole('button',{name:'Edit pull request description',exact:true}).click();await expect(page.getByLabel('Description, Markdown',{exact:true})).toBeFocused();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/pr-edit-mobile-${theme}.png`,fullPage:true});await page.getByRole('button',{name:'Close editor',exact:true}).click();await expect(page.getByLabel('More pull request actions',{exact:true})).toBeFocused();}
  expect(state.updates).toHaveLength(0);
 });
 
@@ -543,4 +547,17 @@ test('diff disclosures fit mobile viewports, return keyboard focus, and close sa
  }
  await page.getByLabel('Diff settings',{exact:true}).click();await page.getByLabel('Wrap lines',{exact:true}).focus();
  await page.setViewportSize({width:1280,height:900});await expect(page.locator('.diff-options[open]')).toHaveCount(0);await expect(page.getByLabel('Diff settings',{exact:true})).toBeFocused();
+});
+
+
+test('mobile PR action disclosure dismisses without dispatch and private editors clear on access loss',async({page})=>{
+ await page.setViewportSize({width:390,height:900});const state=await backend(page);await page.goto('/alex/design-system/pull/12');
+ const summary=page.getByLabel('More pull request actions',{exact:true});const menu=page.locator('.pull-action-menu');
+ await expect(page.getByRole('button',{name:'Edit pull request title',exact:true})).toHaveCount(0);
+ await summary.focus();await summary.press('Enter');await expect(menu).toHaveAttribute('open','');
+ await page.getByRole('button',{name:'Edit pull request title',exact:true}).focus();await page.keyboard.press('Escape');await expect(menu).not.toHaveAttribute('open');await expect(summary).toBeFocused();
+ await summary.click();await page.getByRole('link',{name:'All open pull requests',exact:true}).focus();await expect(menu).not.toHaveAttribute('open');expect(state.updates).toHaveLength(0);
+ await summary.click();await page.getByRole('button',{name:'Edit pull request title',exact:true}).click();await page.getByLabel('Pull request title',{exact:true}).fill('PRIVATE_MOBILE_UNSENT');
+ state.metadataStatus=404;await page.getByRole('button',{name:'Refresh repository access',exact:true}).click();await expect(page.getByRole('alert')).toHaveText('Repository not found or inaccessible.');
+ await expect(menu).toHaveCount(0);await expect(page.getByLabel('Pull request title',{exact:true})).toHaveCount(0);expect(await page.locator('body').innerText()).not.toContain('PRIVATE_MOBILE_UNSENT');expect(state.updates).toHaveLength(0);
 });

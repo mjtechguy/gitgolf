@@ -126,3 +126,42 @@ for (const theme of ['light', 'dark']) test(`directory change metadata fits mobi
   await expect(entry(page).locator('time')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 });
+
+
+for (const theme of ['dark', 'light']) for (const width of [320, 390, 1280, 1920, 2560]) {
+  test(`repository work surface uses available width and bounds long filenames at ${width}px ${theme}`, async ({ page }) => {
+    await fixture(page);
+    const path = 'a-very-long-literal-filename-' + 'detail-'.repeat(27) + '.ts';
+    await page.route('**/rpc/golf.v1.RepositoryService/GetContents', async route => respond(route, GetContentsResponseSchema, {
+      commitId: ref, path: '', kind: SourceEntryType.DIRECTORY,
+      entries: [{ name: path, path, type: SourceEntryType.FILE, sha: ref, size: 10n }],
+    }));
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`/alex/entry-history/tree/${ref}`);
+    await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
+    await expect(entry(page, path).getByRole('link')).toBeVisible();
+    const sourceLink = page.locator('.source-tree>li>a');
+    await expect(sourceLink).toHaveAttribute('title', path);
+    await expect(sourceLink).toHaveAccessibleName(`${path} File 10 B`);
+    const measurements = await page.evaluate(() => {
+      const main = document.querySelector('main')!;
+      const row = document.querySelector('.source-tree>li')!;
+      const link = row.querySelector('a')!;
+      const name = row.querySelector('.source-name')!;
+      return { pageWidth: document.documentElement.scrollWidth, main: main.getBoundingClientRect().width,
+        row: row.getBoundingClientRect().height, firstRow: row.getBoundingClientRect().top,
+        target: link.getBoundingClientRect().height, bodyFont: parseFloat(getComputedStyle(document.body).fontSize),
+        nameFont: parseFloat(getComputedStyle(name).fontSize), ellipsis: getComputedStyle(name).textOverflow };
+    });
+    expect(measurements.pageWidth).toBe(width);
+    expect(measurements.main).toBe(width);
+    expect(measurements.bodyFont).toBeGreaterThanOrEqual(14);
+    expect(measurements.nameFont).toBeGreaterThanOrEqual(14);
+    expect(measurements.ellipsis).toBe('ellipsis');
+    if (width > 720) { expect(measurements.row).toBeLessThanOrEqual(44); expect(measurements.firstRow).toBeLessThan(330); }
+    else expect(measurements.target).toBeGreaterThanOrEqual(44);
+    await expect(entry(page, path).locator('time')).toBeVisible();
+    await sourceLink.focus(); await expect(sourceLink).toBeFocused();
+    await page.screenshot({ path: `test-results/repository-density-${theme}-${width}.png` });
+  });
+}

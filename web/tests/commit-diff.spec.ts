@@ -324,3 +324,28 @@ test('prototype-named unknown files retain literal source without breaking the d
  await expect(page.locator('.diff-file')).toHaveCount(2);await expect(page.locator('.diff-code code')).toHaveText(['<img src=x onerror=window.executed=true>','const value = 1;']);
  await expect(page.locator('.diff-code [class^=hljs],.diff-code img')).toHaveCount(0);await expect(page.getByLabel('Unified diff, plain text')).toHaveText(state.raw);expect(errors).toEqual([]);
 });
+
+
+for (const theme of ['dark', 'light']) for (const width of [320, 390]) {
+ test(`mobile ${theme} ${width}px opens code before the optional tree and preserves a chosen display`, async ({ page }) => {
+  const state = await backend(page); state.raw = filePatch('example.ts'); await page.setViewportSize({ width, height: 900 });
+  await page.goto(diffURL(head)); await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
+  const toggle = page.getByRole('button', { name: 'Show file tree', exact: true });
+  await expect(toggle).toBeVisible(); await expect(page.locator('.diff-files')).toHaveCount(0);
+  await expect(page.locator('.diff-lines')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+  const first = await page.locator('.diff-lines').first().boundingBox(); expect(first!.y).toBeLessThan(900);
+  for (const control of ['Show file tree', 'Unified', 'Split']) {
+   const target = page.getByRole('button', { name: control, exact: true });
+   expect((await target.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  }
+  await page.screenshot({ path: `test-results/diff-density-${theme}-${width}.png` });
+  await toggle.click(); await expect(page.getByLabel('Filter changed files', { exact: true })).toBeVisible();
+  await page.reload(); await expect(page.getByRole('button', { name: 'Hide file tree', exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 1920, height: 1000 });
+  await expect(page.getByLabel('Filter changed files', { exact: true })).toBeVisible();
+  const toolbar = page.locator('.diff-toolbar'); await expect(toolbar.locator('.diff-controls')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1920);
+  await page.screenshot({ path: `test-results/diff-density-${theme}-${width}-wide.png` });
+ });
+}

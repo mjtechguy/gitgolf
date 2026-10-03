@@ -54,7 +54,7 @@ export function PullReviewComposer({repositoryKey,repositoryId,userId,pull,block
  const rejected=record?.state===IssueMutationState.REJECTED;
  return <section className="browser-panel pull-review-composer" aria-label="Review changes">
   <div className="browser-panel-heading"><h2><GitPullRequest size={17}/>Review changes</h2><button type="button" className="icon-button" aria-label="Close review editor" title="Close review editor" onClick={close}><X size={17}/></button></div>
-  <div className="issue-edit-content"><p className="field-help">Reviewing commit <code>{intent?.headCommitId||original.current.head?.commitId}</code>. Overall reviews publish immediately; inline draft reviews are not available yet.</p>
+  <div className="issue-edit-content"><p className="field-help">Reviewing commit <code>{intent?.headCommitId||original.current.head?.commitId}</code>. Overall reviews publish immediately. Saved private drafts are separate and are not included.</p>
    {changed&&!intent?<p className="session-notice" role="status">This pull request changed while you were writing. Your original draft is preserved. Review the current selection before submitting.</p>:null}
    {!verifiedSelection&&!intent?<p className="field-help" role="status">The current pull request selection could not be verified. Review submission is unavailable.</p>:null}
    {blocked?<p className="field-help" role="status">Checking current pull request access…</p>:null}
