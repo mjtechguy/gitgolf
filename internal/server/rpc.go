@@ -138,7 +138,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure,
 			golfv1connect.RepositoryServiceGetCommitDiffProcedure, golfv1connect.RepositoryServiceGetPullRequestDiffProcedure, golfv1connect.RepositoryServiceGetRepositoryImageProcedure,
 			golfv1connect.RepositoryServiceListIssuesProcedure, golfv1connect.RepositoryServiceGetIssueProcedure,
-			golfv1connect.RepositoryServiceGetPullRequestDiscussionProcedure, golfv1connect.RepositoryServiceListIssueCommentsProcedure, golfv1connect.RepositoryServiceGetIssueMutationProcedure, golfv1connect.RepositoryServiceCreateIssueProcedure, golfv1connect.RepositoryServiceCreateIssueCommentProcedure,
+			golfv1connect.RepositoryServiceGetPullRequestDiscussionProcedure, golfv1connect.RepositoryServiceListIssueCommentsProcedure, golfv1connect.RepositoryServiceGetIssueMutationProcedure, golfv1connect.RepositoryServiceCreateIssueProcedure, golfv1connect.RepositoryServiceCreateIssueCommentProcedure, golfv1connect.RepositoryServiceUpdateIssueProcedure,
 			golfv1connect.RepositoryServiceListPullRequestsProcedure, golfv1connect.RepositoryServiceGetPullRequestProcedure, golfv1connect.RepositoryServiceListPullRequestReviewsProcedure,
 			golfv1connect.OrganizationServiceListOrganizationsProcedure, golfv1connect.OrganizationServiceGetOrganizationProcedure,
 			golfv1connect.OrganizationServiceListTeamsProcedure, golfv1connect.OrganizationServiceGetTeamProcedure,
@@ -204,7 +204,7 @@ func wireIssue(issue Issue) *golfv1.Issue {
 	if issue.State == "closed" {
 		state = golfv1.IssueState_ISSUE_STATE_CLOSED
 	}
-	return &golfv1.Issue{Id: strconv.FormatInt(issue.ID, 10), Number: uint32(issue.Number), Title: issue.Title, Body: issue.Body, State: state, User: wireUser(issue.User), Comments: uint32(issue.Comments), CreatedAt: issue.CreatedAt, UpdatedAt: issue.UpdatedAt, HtmlUrl: issue.HTMLURL}
+	return &golfv1.Issue{Id: strconv.FormatInt(issue.ID, 10), Number: uint32(issue.Number), Title: issue.Title, Body: issue.Body, State: state, User: wireUser(issue.User), Comments: uint32(issue.Comments), CreatedAt: issue.CreatedAt, UpdatedAt: issue.UpdatedAt, HtmlUrl: issue.HTMLURL, Revision: issueRevision(issue)}
 }
 func (s *Server) LoginWithPassword(ctx context.Context, req *connect.Request[golfv1.LoginWithPasswordRequest]) (*connect.Response[golfv1.LoginWithPasswordResponse], error) {
 	result, err := s.loginLocalSession(ctx, req.Msg.Username, req.Msg.Password, s.cookieValue(req.Header()))

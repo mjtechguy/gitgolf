@@ -89,3 +89,9 @@ Issue and PR comments use the same compact author/date header and safe Markdown 
 | Merge | Actual protected merge/squash/rebase/check readiness and outcomes after P0.8 native enforcement is resolved. Race/bypass/lost-response proof remains required; visual similarity is insufficient. |
 
 Each follow-up advances the existing GX tasks. The main objective remains full applicable repository/collaboration/automation parity in Golf branding; this visual increment does not complete it.
+
+### Ordinary issue actions follow-up
+
+The latest served issue captures now include real named title/description edit icons and close/reopen actions. Title, body and lifecycle use separate explicit intents and the existing durable journal. The title editor’s first screenshot was294px tall on desktop; the final permission disclosure and shared Save/Close row reduce it to260px (mobile368px→281px), retaining readable text and focus. Four additional desktop/mobile dark/light editor captures appear in the interactive gallery as **Golf-only** evidence; public GitHub write controls were not captured. Existing normal issue screenshots/control snapshots were refreshed. The gallery now has56 Golf captures alongside24 public GitHub references.
+
+Real native Compose and actual Golf browser tests establish ordinary issue actions; they do not establish labels/assignment/timeline/PR mutation parity, atomic title/state writes or P0.8 protected merge authority. The [discussion contract](ISSUE_DISCUSSION_CONTRACT.md#edit-close-and-reopen-ordinary-issues) and implementation ledger retain those boundaries. Do not present offered actions as an already verified per-action permission indicator.

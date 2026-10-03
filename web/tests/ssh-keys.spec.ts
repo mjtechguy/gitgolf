@@ -51,7 +51,7 @@ test('key removal preserves exact IDs and requires confirmation', async ({ page 
   expect(state.removed).toEqual([]);
   await page.getByRole('button', { name:'Remove My laptop', exact:true }).click();
   await page.getByRole('button', { name:'Confirm remove key', exact:true }).click();
-  await expect(page.getByRole('status')).toHaveText('SSH key removed.');
+  await expect(page.getByRole('status').filter({ hasText: /^SSH key removed\.$/ })).toHaveText('SSH key removed.');
   expect(state.removed).toEqual(['9007199254740993']);
   await expect(page.getByRole('cell', { name:'My laptop Account Git access', exact:true })).toHaveCount(0);
 });

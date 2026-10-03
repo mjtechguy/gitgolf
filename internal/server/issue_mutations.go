@@ -30,6 +30,11 @@ type issueMutationInput struct {
 	Number       uint32 `json:"number"`
 	Title        string `json:"title"`
 	Body         string `json:"body"`
+	// Appended optional fields preserve all existing create/comment fingerprints.
+	EditTitle        *string `json:"edit_title,omitempty"`
+	EditBody         *string `json:"edit_body,omitempty"`
+	EditState        string  `json:"edit_state,omitempty"`
+	ExpectedRevision string  `json:"expected_revision,omitempty"`
 }
 
 func (input issueMutationInput) validate(key string) error {
@@ -42,6 +47,9 @@ func (input issueMutationInput) validate(key string) error {
 	if input.RepositoryID <= 0 || !discussionText(input.Body, 6000) {
 		return invalid("Provide a positive repository ID and UTF-8 body up to 6000 bytes, without controls other than tab or newlines.")
 	}
+	if input.Kind != "UPDATE_ISSUE" && (input.EditTitle != nil || input.EditBody != nil || input.EditState != "" || input.ExpectedRevision != "") {
+		return invalid("Edit fields require an issue update.")
+	}
 	switch input.Kind {
 	case "CREATE_ISSUE":
 		if input.PullRequest || input.Title == "" || strings.TrimSpace(input.Title) != input.Title || !discussionText(input.Title, 255) || strings.IndexFunc(input.Title, unicode.IsControl) >= 0 || input.IssueID != 0 || input.Number != 0 {
@@ -51,6 +59,8 @@ func (input issueMutationInput) validate(key string) error {
 		if input.Title != "" || strings.TrimSpace(input.Body) == "" || input.IssueID <= 0 || input.Number == 0 || input.Number > 2147483647 {
 			return invalid("Provide an issue ID, issue number 1–2147483647 and nonempty comment body.")
 		}
+	case "UPDATE_ISSUE":
+		return input.validateUpdate()
 	default:
 		return invalid("Issue mutation kind is unsupported.")
 	}
@@ -129,7 +139,7 @@ func issueMutationRejection(err error) string {
 	var upstream forgeError
 	if errors.As(err, &upstream) {
 		switch upstream.status {
-		case 400, 401, 403, 404, 409, 422, 423:
+		case 400, 401, 403, 404, 409, 412, 422, 423:
 			return "provider_http_" + strconv.Itoa(upstream.status)
 		}
 	}
@@ -218,7 +228,14 @@ func (s *Server) createIssueMutation(ctx context.Context, session string, token 
 	}
 	if dispatch {
 		state, failure := "", ""
-		repo, _, _, preflightErr := s.observeIssueMutationTarget(ctx, session, token, record)
+		repo, before, _, preflightErr := s.observeIssueMutationTarget(ctx, session, token, record)
+		if preflightErr == nil && input.Kind == "UPDATE_ISSUE" {
+			if before == nil || issueRevision(*before) != input.ExpectedRevision {
+				preflightErr = errIssueRevisionChanged
+			} else if input.matchesUpdate(*before) {
+				preflightErr = errIssueUnchanged
+			}
+		}
 		if preflightErr == nil {
 			// Recheck the source after the preflight provider waits, immediately
 			// before dispatch. This does not fence subsequent native changes.
@@ -229,6 +246,12 @@ func (s *Server) createIssueMutation(ctx context.Context, session string, token 
 			if errors.Is(preflightErr, errIssueTargetChanged) {
 				failure = "target_changed"
 			}
+			if errors.Is(preflightErr, errIssueRevisionChanged) {
+				failure = "revision_changed"
+			}
+			if errors.Is(preflightErr, errIssueUnchanged) {
+				failure = "unchanged"
+			}
 			if failure == "" {
 				failure = "preflight_unavailable"
 			}
@@ -236,7 +259,13 @@ func (s *Server) createIssueMutation(ctx context.Context, session string, token 
 			base, _ := repositoryPath(repositoryKey{record.RepositoryOwner, record.RepositoryName})
 			var providerErr error
 			candidate := record
-			if input.Kind == "CREATE_ISSUE" {
+			if input.Kind == "UPDATE_ISSUE" {
+				var receipt discussionIssue
+				_, providerErr = s.forgeJSON(ctx, http.MethodPatch, base+issueSuffix(record.IssueNumber), token, input.nativeUpdate(*before), &receipt, http.StatusCreated)
+				if providerErr == nil && (!validDiscussionIssue(receipt, repo, input.Number) || receipt.ID != input.IssueID || receipt.User.ID != before.User.ID || receipt.isPullRequest() || !input.matchesUpdate(receipt.Issue) || receipt.ContentVersion == nil) {
+					providerErr = errInvalidForgeResponse
+				}
+			} else if input.Kind == "CREATE_ISSUE" {
 				var receipt discussionIssue
 				_, providerErr = s.forgeJSON(ctx, http.MethodPost, base+"/issues", token, struct {
 					Title string `json:"title"`
@@ -279,7 +308,7 @@ func (s *Server) createIssueMutation(ctx context.Context, session string, token 
 				}
 				// A successful receipt without current ID-bound observation remains
 				// UNKNOWN. Never adopt a same-text/same-name object or retry POST.
-				if _, _, _, err := s.observeIssueMutationTarget(ctx, session, token, candidate); err == nil {
+				if _, after, _, err := s.observeIssueMutationTarget(ctx, session, token, candidate); err == nil && (input.Kind != "UPDATE_ISSUE" || after != nil && input.matchesUpdate(*after)) {
 					record, state = candidate, "SUCCEEDED"
 				}
 			}

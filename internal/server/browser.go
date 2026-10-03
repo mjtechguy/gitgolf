@@ -332,16 +332,17 @@ func (s *Server) getContents(ctx context.Context, token forgeCredential, key rep
 }
 
 type Issue struct {
-	ID        int64  `json:"id"`
-	Number    int64  `json:"number"`
-	Title     string `json:"title"`
-	Body      string `json:"body"`
-	State     string `json:"state"`
-	User      User   `json:"user"`
-	Comments  int64  `json:"comments"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
-	HTMLURL   string `json:"html_url"`
+	ContentVersion *int64 `json:"content_version"`
+	ID             int64  `json:"id"`
+	Number         int64  `json:"number"`
+	Title          string `json:"title"`
+	Body           string `json:"body"`
+	State          string `json:"state"`
+	User           User   `json:"user"`
+	Comments       int64  `json:"comments"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
+	HTMLURL        string `json:"html_url"`
 }
 type forgeIssue struct {
 	Issue
@@ -352,7 +353,7 @@ func (issue forgeIssue) isPullRequest() bool {
 	return len(issue.PullRequest) != 0 && string(issue.PullRequest) != "null"
 }
 func validIssue(issue Issue) bool {
-	return issue.ID > 0 && issue.Number > 0 && issue.Number <= 2147483647 && (issue.State == "open" || issue.State == "closed") && issue.Comments >= 0 && issue.Comments <= 4294967295
+	return issue.ID > 0 && issue.Number > 0 && issue.Number <= 2147483647 && (issue.State == "open" || issue.State == "closed") && issue.Comments >= 0 && issue.Comments <= 4294967295 && (issue.ContentVersion == nil || *issue.ContentVersion >= 0)
 }
 func (s *Server) listIssues(ctx context.Context, token forgeCredential, key repositoryKey, state string, paging pageRequest) ([]Issue, uint32, error) {
 	base, err := repositoryPath(key)

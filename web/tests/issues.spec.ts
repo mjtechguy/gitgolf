@@ -2,19 +2,19 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import {
-  CreateIssueRequestSchema, CreateIssueResponseSchema, CreateIssueCommentRequestSchema, CreateIssueCommentResponseSchema,
+  UpdateIssueRequestSchema, UpdateIssueResponseSchema, CreateIssueRequestSchema, CreateIssueResponseSchema, CreateIssueCommentRequestSchema, CreateIssueCommentResponseSchema,
   GetAuthenticationOptionsResponseSchema, GetIssueMutationRequestSchema, GetIssueMutationResponseSchema, GetIssueResponseSchema,
   GetRepositoryResponseSchema, GetSessionResponseSchema, IssueCommentSchema, IssueMutationKind, IssueMutationSchema, IssueMutationState,
   IssueSchema, IssueState, ListCapabilitiesResponseSchema, ListIssueCommentsRequestSchema, ListIssueCommentsResponseSchema,
   ListIssuesResponseSchema, ListRepositoriesResponseSchema, LoginWithGiteaTokenResponseSchema, LogoutResponseSchema, RepositorySchema, UserSchema,
 } from '../src/gen/golf/v1/golf_pb';
-import type { CreateIssueRequest, CreateIssueCommentRequest, IssueMutation } from '../src/gen/golf/v1/golf_pb';
+import type { CreateIssueRequest, CreateIssueCommentRequest, UpdateIssueRequest, IssueMutation } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 const user = create(UserSchema, { id: '9007199254740993', login: 'alex' });
 const repository = create(RepositorySchema, { id: '9007199254740995', name: 'project', fullName: 'alex/project', private: true, empty: true });
 const repoKey = { owner: 'alex', name: 'project' };
-const issue = create(IssueSchema, { id: '9007199254740997', number: 12, title: 'Private discussion', body: 'PRIVATE_BODY <script>alert(1)</script>', state: IssueState.OPEN, user, createdAt: '2026-10-02T12:00:00Z', updatedAt: '2026-10-02T12:00:00Z' });
+const issue = create(IssueSchema, { id: '9007199254740997', number: 12, title: 'Private discussion', body: 'PRIVATE_BODY <script>alert(1)</script>', state: IssueState.OPEN, user, createdAt: '2026-10-02T12:00:00Z', updatedAt: '2026-10-02T12:00:00Z', revision: 'a'.repeat(64) });
 const comment = create(IssueCommentSchema, { id: '9007199254740998', user, body: '<img src=x onerror="window.executed=true">\n[unsafe](javascript:alert(1))', createdAt: '2026-10-02T12:00:00Z', updatedAt: '2026-10-02T12:00:00Z', htmlUrl: 'javascript:alert(1)' });
 const listURL = '/repositories/alex/project?view=issues';
 const detailURL = `${listURL}&issue=12`;
@@ -24,7 +24,7 @@ async function backend(page: Page) {
   const state = {
     user, signedIn: true, repoId: repository.id, issueId: issue.id, issue: { ...issue }, comments: [comment],
     emptyFirst: false, unknown: false, drop: false, rejected: false, missingObject: false, mismatch: false,
-    creates: [] as CreateIssueRequest[], posts: [] as CreateIssueCommentRequest[], inspections: [] as string[], pages: [] as number[],
+    updates: [] as UpdateIssueRequest[], updateFailure: '', creates: [] as CreateIssueRequest[], posts: [] as CreateIssueCommentRequest[], inspections: [] as string[], pages: [] as number[],
     records: new Map<string, IssueMutation>(), errors: {} as Record<string, Failure>, barrier: undefined as Promise<void> | undefined,
   };
   await page.route('**/rpc/**', async (route) => {
@@ -46,6 +46,19 @@ async function backend(page: Page) {
       expect(input.issueId).toBe(state.issueId); expect(input.number).toBe(12); expect(input.page?.limit).toBe(20);
       const number = input.page?.page || 1; state.pages.push(number);
       return respond(route, ListIssueCommentsResponseSchema, state.emptyFirst && number === 1 ? { page: { nextPage: 2 } } : { comments: state.comments });
+    }
+    if (method === 'UpdateIssue') {
+      const input = request(route, UpdateIssueRequestSchema); state.updates.push(input);
+      const mutation = create(IssueMutationSchema, {
+        id: '9007199254740999', idempotencyKey: input.idempotencyKey, repository: repoKey, repositoryId: input.repositoryId,
+        kind: IssueMutationKind.UPDATE_ISSUE, state: state.updateFailure ? IssueMutationState.REJECTED : state.unknown ? IssueMutationState.OUTCOME_UNKNOWN : IssueMutationState.SUCCEEDED,
+        issueId: state.issueId, number: 12, failureCode: state.updateFailure,
+      });
+      state.records.set(input.idempotencyKey, mutation);
+      if (!state.updateFailure) state.issue = { ...state.issue, ...(input.title !== undefined ? { title: input.title } : {}), ...(input.body !== undefined ? { body: input.body } : {}), ...(input.state !== IssueState.UNSPECIFIED ? { state: input.state } : {}), revision: 'b'.repeat(64) };
+      if (state.barrier) await state.barrier;
+      if (state.drop) return route.abort('failed');
+      return respond(route, UpdateIssueResponseSchema, { mutation: state.mismatch ? { ...mutation, issueId: '9999' } : mutation, issue: mutation.state === IssueMutationState.SUCCEEDED && !state.missingObject ? state.issue : undefined });
     }
     if (method === 'CreateIssue' || method === 'CreateIssueComment') {
       const isComment = method === 'CreateIssueComment';
@@ -72,7 +85,7 @@ async function backend(page: Page) {
       const mutation = state.records.get(key);
       if (!mutation) return reject(route, 'not_found', 'No matching outcome record is available.');
       const visible = mutation.state === IssueMutationState.SUCCEEDED && !state.missingObject;
-      return respond(route, GetIssueMutationResponseSchema, { mutation: state.mismatch ? { ...mutation, issueId: '9999' } : mutation, issue: visible && mutation.kind === IssueMutationKind.CREATE_ISSUE ? state.issue : undefined, comment: visible && mutation.kind === IssueMutationKind.CREATE_COMMENT ? state.comments[0] : undefined });
+      return respond(route, GetIssueMutationResponseSchema, { mutation: state.mismatch ? { ...mutation, issueId: '9999' } : mutation, issue: visible && mutation.kind !== IssueMutationKind.CREATE_COMMENT ? state.issue : undefined, comment: visible && mutation.kind === IssueMutationKind.CREATE_COMMENT ? state.comments[0] : undefined });
     }
     return reject(route, 'not_found', 'Unknown fixture RPC.');
   });
@@ -344,4 +357,119 @@ test('discussion opens an editor only on request and closing discards the draft'
   await page.getByRole('button', { name: 'Add a comment', exact: true }).click();
   await expect(page.getByLabel('Comment, plain text', { exact: true })).toHaveValue('');
   expect(state.posts).toHaveLength(0);
+});
+
+for (const field of ['title', 'body', 'close', 'reopen'] as const) {
+  test(`issue ${field} action sends only one field with the displayed revision and native IDs`, async ({ page }) => {
+    const state = await backend(page);
+    if (field === 'reopen') state.issue.state = IssueState.CLOSED;
+    await page.goto(detailURL);
+    await expect(page.getByLabel('Issue title', { exact: true })).toHaveCount(0);
+    const trigger = field === 'title' ? 'Edit issue title' : field === 'body' ? 'Edit issue description' : field === 'close' ? 'Close issue' : 'Reopen issue';
+    await page.getByRole('button', { name: trigger, exact: true }).click();
+    const editor = page.getByRole('region', { name: field === 'title' ? 'Edit issue title' : field === 'body' ? 'Edit issue description' : 'Confirm issue state', exact: true });
+    if (field === 'title') await editor.getByLabel('Issue title', { exact: true }).fill(' Edited title ');
+    if (field === 'body') {
+      await page.getByRole('button', { name: 'Add a comment', exact: true }).click();
+      await editor.getByLabel('Description, Markdown', { exact: true }).fill('');
+      // The description and comment editor must never share label IDs.
+      expect(await page.locator('#issue-edit-body-input').count()).toBe(1);
+      await expect(page.getByLabel('Comment, plain text', { exact: true })).toHaveValue('');
+    }
+    let release!: () => void; state.barrier = new Promise<void>((resolve) => { release = resolve; });
+    await editor.locator('form').evaluate((form: HTMLFormElement) => { form.requestSubmit(); form.requestSubmit(); });
+    await expect.poll(() => state.updates.length).toBe(1);
+    const input = state.updates[0]!;
+    expect(input).toMatchObject({ repository: repoKey, repositoryId: repository.id, issueId: issue.id, number: issue.number, expectedRevision: issue.revision });
+    expect(input.title).toBe(field === 'title' ? 'Edited title' : undefined);
+    expect(input.body).toBe(field === 'body' ? '' : undefined);
+    expect(input.state).toBe(field === 'close' ? IssueState.CLOSED : field === 'reopen' ? IssueState.OPEN : IssueState.UNSPECIFIED);
+    const saved = await stored(page); expect(saved).toHaveLength(1);
+    expect(JSON.parse(saved[0]![1])).toEqual({ key: input.idempotencyKey, kind: 'update', repositoryId: repository.id, issueId: issue.id, number: issue.number, editField: field });
+    release(); await expect(editor).toHaveCount(0); expect(await stored(page)).toEqual([]);
+    if (field === 'title') await expect(page.getByRole('heading', { name: /Edited title #12/ })).toBeVisible();
+    if (field === 'body') await expect(page.getByLabel('Issue body, rendered Markdown')).toContainText('No description provided.');
+    if (field === 'close') await expect(page.getByRole('button', { name: 'Reopen issue', exact: true })).toBeEnabled();
+    if (field === 'reopen') await expect(page.getByRole('button', { name: 'Close issue', exact: true })).toBeEnabled();
+  });
+}
+
+test('issue edit cancellation discards private text and stale forms require an explicit fresh review', async ({ page }) => {
+  const state = await backend(page); await page.goto(detailURL);
+  await page.getByRole('button', { name: 'Edit issue title', exact: true }).click();
+  await page.getByLabel('Issue title', { exact: true }).fill('PRIVATE_UNSENT');
+  await page.getByRole('button', { name: 'Close editor', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Edit issue title', exact: true })).toBeFocused();
+  await page.getByRole('button', { name: 'Edit issue title', exact: true }).click();
+  await expect(page.getByLabel('Issue title', { exact: true })).toHaveValue(issue.title);
+  await page.getByLabel('Issue title', { exact: true }).fill('PRIVATE_STALE');
+  state.issue = { ...state.issue, title: 'Concurrent title', revision: 'c'.repeat(64) };
+  await page.getByRole('button', { name: 'Refresh issue', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /Concurrent title #12/ })).toBeVisible();
+  await expect(page.getByLabel('Issue title', { exact: true })).toHaveValue('PRIVATE_STALE');
+  state.updateFailure = 'revision_changed';
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByText(/changed before this request was sent/)).toBeVisible();
+  expect(state.updates[0]!.expectedRevision).toBe(issue.revision);
+  await page.getByRole('button', { name: 'Review current issue', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Edit issue title', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Edit issue title', exact: true }).click();
+  await expect(page.getByLabel('Issue title', { exact: true })).toHaveValue('Concurrent title');
+  state.updateFailure = '';
+  await page.getByLabel('Issue title', { exact: true }).fill('Fresh review');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /Fresh review #12/ })).toBeVisible();
+  expect(state.updates[1]!.expectedRevision).toBe('c'.repeat(64));
+  expect(state.updates[1]!.idempotencyKey).not.toBe(state.updates[0]!.idempotencyKey);
+});
+
+test('lost issue-edit acknowledgement reloads with metadata only and never sends another PATCH', async ({ page }) => {
+  const state = await backend(page); state.drop = true; await page.goto(detailURL);
+  await page.getByRole('button', { name: 'Edit issue description', exact: true }).click();
+  await page.getByLabel('Description, Markdown', { exact: true }).fill('PRIVATE_CHANGED_BODY');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  const key = state.updates[0]!.idempotencyKey;
+  expect(JSON.stringify(await stored(page))).not.toContain('PRIVATE_CHANGED_BODY');
+  await page.reload();
+  await expect(page.getByText('This resumed request supports status checks only.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Check request status', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Edit issue description', exact: true })).toHaveCount(0);
+  expect(state.updates).toHaveLength(1); expect(state.inspections).toEqual([key]); expect(await stored(page)).toEqual([]);
+});
+
+for (const mode of ['unknown', 'mismatch', 'missingObject'] as const) {
+  test(`issue edit ${mode} keeps its key without enabling another write`, async ({ page }) => {
+    const state = await backend(page); state[mode] = true; await page.goto(detailURL);
+    await page.getByRole('button', { name: 'Close issue', exact: true }).click();
+    await page.getByRole('region', { name: 'Confirm issue state' }).getByRole('button', { name: 'Close issue', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Check request status', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Check request status', exact: true }).click();
+    expect(state.updates).toHaveLength(1); expect(await stored(page)).toHaveLength(1);
+    await expect(page.getByRole('button', { name: 'Review current issue', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Close editor', exact: true }).click();
+    await page.getByRole('button', { name: 'Resume issue change', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Check request status', exact: true })).toBeEnabled();
+    await page.getByLabel('Your account', { exact: true }).click();
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await expect.poll(() => stored(page)).toEqual([]);
+  });
+}
+
+test('missing native revision disables issue writes, and mobile editors stay compact in both themes', async ({ page }) => {
+  const state = await backend(page); state.issue.revision = ''; await page.goto(detailURL);
+  await expect(page.getByRole('button', { name: 'Edit issue title', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Close issue', exact: true })).toBeDisabled();
+  expect(state.updates).toEqual([]);
+  state.issue.revision = issue.revision; await page.getByRole('button', { name: 'Refresh issue', exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const theme of ['dark', 'light']) {
+    if (await page.locator('html').getAttribute('data-theme') !== theme) await page.getByRole('button', { name: `Switch to ${theme} theme`, exact: true }).click();
+    await page.getByRole('button', { name: 'Edit issue description', exact: true }).click();
+    await expect(page.getByLabel('Description, Markdown', { exact: true })).toBeFocused();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `test-results/issue-edit-mobile-${theme}.png`, fullPage: true });
+    await page.getByRole('button', { name: 'Close editor', exact: true }).click();
+  }
 });

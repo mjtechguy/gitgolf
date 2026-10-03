@@ -30,6 +30,9 @@ build:
 	npm --prefix web run build
 cli:
 	go build -o bin/golf ./cmd/golfctl
+.PHONY: qualify-issue-updates
+qualify-issue-updates:
+	python3 scripts/issue-updates-smoke.py
 qualify-git: cli
 	python3 scripts/smoke.py --cli bin/golf
 	python3 scripts/git-access-smoke.py

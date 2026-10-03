@@ -23,18 +23,21 @@ import (
 )
 
 type discussionFixture struct {
-	s          *Server
-	db         *sql.DB
-	mu         sync.Mutex
-	repo       Repository
-	issues     map[int64]discussionIssue
-	comments   map[int64]forgeIssueComment
-	posts      atomic.Int32
-	postStatus atomic.Int32
-	readStatus atomic.Int32
-	userMode   atomic.Int32
-	postHook   func(http.ResponseWriter, *http.Request, any) bool
-	listHook   func(http.ResponseWriter, []forgeIssueComment) bool
+	s           *Server
+	db          *sql.DB
+	mu          sync.Mutex
+	repo        Repository
+	issues      map[int64]discussionIssue
+	comments    map[int64]forgeIssueComment
+	posts       atomic.Int32
+	patches     atomic.Int32
+	patchStatus atomic.Int32
+	patchHook   func(http.ResponseWriter, *http.Request, discussionIssue) bool
+	postStatus  atomic.Int32
+	readStatus  atomic.Int32
+	userMode    atomic.Int32
+	postHook    func(http.ResponseWriter, *http.Request, any) bool
+	listHook    func(http.ResponseWriter, []forgeIssueComment) bool
 }
 
 func newDiscussionFixture(t *testing.T) *discussionFixture {
@@ -77,6 +80,61 @@ func newDiscussionFixture(t *testing.T) *discussionFixture {
 		path := strings.TrimPrefix(r.URL.Path, "/api/v1/repos/alice/example/issues")
 		if path == r.URL.Path {
 			w.WriteHeader(404)
+			return
+		}
+		if r.Method == "PATCH" {
+			f.patches.Add(1)
+			var reserved int
+			if err := f.db.QueryRow("SELECT count(*) FROM golf_issue_mutations m JOIN golf_issue_mutation_events e ON e.mutation_id=m.id WHERE m.kind='UPDATE_ISSUE' AND m.state='OUTCOME_UNKNOWN' AND e.phase='RESERVED'").Scan(&reserved); err != nil || reserved == 0 {
+				t.Error("PATCH lacked a committed update reservation", err)
+			}
+			if status := f.patchStatus.Load(); status != 0 {
+				w.WriteHeader(int(status))
+				return
+			}
+			var input struct {
+				Title   *string `json:"title"`
+				Body    *string `json:"body"`
+				State   *string `json:"state"`
+				Version *int64  `json:"content_version"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+				t.Error(err)
+				w.WriteHeader(400)
+				return
+			}
+			number, _ := strconv.ParseInt(strings.TrimPrefix(path, "/"), 10, 64)
+			f.mu.Lock()
+			row, ok := f.issues[number]
+			if !ok {
+				f.mu.Unlock()
+				w.WriteHeader(404)
+				return
+			}
+			if input.Version == nil || row.ContentVersion == nil || *input.Version != *row.ContentVersion {
+				f.mu.Unlock()
+				w.WriteHeader(409)
+				return
+			}
+			if input.Title != nil {
+				row.Title = *input.Title
+			}
+			if input.Body != nil {
+				row.Body = *input.Body
+				version := *row.ContentVersion + 1
+				row.ContentVersion = &version
+			}
+			if input.State != nil {
+				row.State = *input.State
+			}
+			row.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+			f.issues[number] = row
+			f.mu.Unlock()
+			if f.patchHook != nil && f.patchHook(w, r, row) {
+				return
+			}
+			w.WriteHeader(201)
+			_ = json.NewEncoder(w).Encode(row)
 			return
 		}
 		if r.Method == "POST" {
@@ -176,6 +234,8 @@ func newDiscussionFixture(t *testing.T) *discussionFixture {
 func (f *discussionFixture) issue(id, number int64, title, body string) discussionIssue {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	row := discussionIssue{forgeIssue: forgeIssue{Issue: Issue{ID: id, Number: number, Title: title, Body: body, State: "open", User: User{ID: 7, Login: "alice"}, CreatedAt: now, UpdatedAt: now, HTMLURL: f.repo.HTMLURL + issueSuffix(number)}}}
+	version := int64(0)
+	row.ContentVersion = &version
 	row.Repository = &struct {
 		ID int64 `json:"id"`
 	}{f.repo.ID}
