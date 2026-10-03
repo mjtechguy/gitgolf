@@ -103,7 +103,7 @@ export function PullReviewDraftPublication({ target, userId, draft, targetGenera
   }
   if (!opened) return <><button className="button secondary" disabled={!draft || blocked || busy || !targetGeneration} onClick={() => void open()}><Send size={15} aria-hidden="true"/>Publish saved review</button>{error ? <p className="error" role="alert">{errorMessage(error)}</p> : null}</>;
   const phase = record?.phase;
-  return <section className="browser-panel pull-review-composer" aria-label="Saved review publication">
+  return <section className="browser-panel" aria-label="Saved review publication">
     <div className="browser-panel-heading"><h3><Send size={16} aria-hidden="true"/>Publish saved review</h3>{!intent && !invalid ? <button className="icon-button" aria-label="Close saved review publication" title="Close saved review publication" onClick={() => { setOpened(false); frozen.current = null; }}><X size={16}/></button> : null}</div>
     <div className="issue-edit-content">
       {dirty ? <p className="session-notice">Your unsaved working notes remain separate. This action publishes only the saved version shown here.</p> : null}
