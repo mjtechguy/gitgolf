@@ -21,7 +21,7 @@ import (
 )
 
 type Config struct {
-	CodexBinary                                                string
+	ClaudeBinary, OpenCodeBinary, CodexBinary                  string
 	PushCIEnabled                                              bool
 	ObjectStoreConfig                                          objectstore.Config
 	DatabaseEndpoint, DatabaseTLSMode, NativeDatabaseEndpoint  string

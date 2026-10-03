@@ -34,11 +34,11 @@ for (const isInstanceAdmin of [false, true]) test(`status setup respects adminis
   await expect(platform.getByRole('link', { name: 'Manage repositories', exact: true })).toHaveAttribute('href', '/');
   await expect(page.getByRole('link', { name: 'Manage connections', exact: true })).toHaveCount(isInstanceAdmin ? 1 : 0);
   await expect(platform.getByRole('link', { name: 'Manage policies', exact: true })).toHaveCount(isInstanceAdmin ? 1 : 0);
-  await expect(agents.getByText('Setup not available yet', { exact: true })).toHaveCount(1);
+  await expect(agents.getByText('Setup not available yet', { exact: true })).toHaveCount(0);
   await expect(agents.getByRole('link', { name: 'Manage Codex connection', exact: true })).toHaveAttribute('href', '/account/agents');
-  await expect(agents.getByRole('link', { name: 'Manage instance accounts', exact: true })).toHaveCount(isInstanceAdmin ? 1 : 0);
+  await expect(agents.getByRole('link', { name: 'Manage instance accounts', exact: true })).toHaveCount(isInstanceAdmin ? 2 : 0);
   await expect(cloudflare.getByRole('link', { name: 'Configure source storage', exact: true })).toHaveCount(isInstanceAdmin ? 1 : 0);
-  await expect(agents.getByText('Claude Code', { exact: true })).toBeVisible();
+  await expect(agents.getByRole('link', { name: 'Manage Claude Code connection', exact: true })).toHaveAttribute('href', '/account/agents'); await expect(agents.getByText('Claude Code', { exact: true })).toBeVisible();
   await expect(agents.getByText('Codex', { exact: true })).toBeVisible();
   await expect(agents.getByText('R2 sources', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Cloudflare is optional.', { exact: false })).toBeVisible();

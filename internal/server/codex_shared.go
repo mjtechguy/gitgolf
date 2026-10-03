@@ -59,12 +59,14 @@ func (s *Server) codexAuthorized(ctx context.Context, a codexActor, connectionID
 	e := s.codexGuard(ctx, a, func(tx *sql.Tx, userID int64) error {
 		var e error
 		if connectionID == "" {
-			r, e = scanCodex(tx.QueryRowContext(ctx, `SELECT `+codexColumns+` FROM golf_codex_connections WHERE user_id=$1 FOR SHARE`, userID))
+			sel := selectedAgent(ctx)
+			r, e = scanCodex(tx.QueryRowContext(ctx, `SELECT `+codexColumns+` FROM golf_codex_connections WHERE user_id=$1 AND harness=$2 AND provider=$3 FOR SHARE`, userID, sel.Harness, sel.Provider))
 		} else {
 			r, e = scanCodex(tx.QueryRowContext(ctx, `SELECT `+codexColumns+` FROM golf_codex_connections WHERE id=$1 AND forge_url=$2 FOR SHARE`, connectionID, s.config.GiteaURL))
 		}
 		if errors.Is(e, sql.ErrNoRows) && connectionID == "" {
-			r = codexRecord{State: "UNCONFIGURED", Scope: "PERSONAL", Name: "Personal Codex", OwnerID: sql.NullInt64{Int64: userID, Valid: true}}
+			sel := selectedAgent(ctx)
+			r = codexRecord{Harness: sel.Harness, Provider: sel.Provider, State: "UNCONFIGURED", Scope: "PERSONAL", Name: "Personal " + agentLabel(sel.Harness), OwnerID: sql.NullInt64{Int64: userID, Valid: true}}
 			return nil
 		}
 		if errors.Is(e, sql.ErrNoRows) {
@@ -153,7 +155,7 @@ func (s *Server) ListCodexConnections(ctx context.Context, req *connect.Request[
 	}
 	var ids []string
 	e = s.codexGuard(ctx, a, func(tx *sql.Tx, userID int64) error {
-		query := `SELECT id::text FROM golf_codex_connections c WHERE c.scope='INSTANCE' AND c.forge_url=$1 AND ($2 OR EXISTS(SELECT 1 FROM golf_codex_connection_access x WHERE x.connection_id=c.id AND x.user_id=$3)) ORDER BY lower(name),id LIMIT 64`
+		query := `SELECT id::text FROM golf_codex_connections c WHERE c.forge_url=$1 AND ((c.scope='INSTANCE' AND ($2 OR EXISTS(SELECT 1 FROM golf_codex_connection_access x WHERE x.connection_id=c.id AND x.user_id=$3))) OR (NOT $2 AND c.scope='PERSONAL' AND c.user_id=$3 AND c.harness<>'codex')) ORDER BY lower(name),id LIMIT 64`
 		rows, e := tx.QueryContext(ctx, query, s.config.GiteaURL, req.Msg.InstanceAdmin, userID)
 		if e != nil {
 			return errStorageUnavailable
@@ -184,11 +186,16 @@ func (s *Server) ListCodexConnections(ctx context.Context, req *connect.Request[
 		}
 		// Personal inventory is a use view. Even an administrator does not receive
 		// management/device material through that projection.
-		result.Connections = append(result.Connections, codexVisible(r, s.config.CodexBinary != "", req.Msg.InstanceAdmin))
+		result.Connections = append(result.Connections, codexVisible(r, s.agentBinary(r) != "", r.Scope == "PERSONAL" || req.Msg.InstanceAdmin))
 	}
 	return connect.NewResponse(result), nil
 }
 func (s *Server) CreateCodexConnection(ctx context.Context, req *connect.Request[golfv1.CreateCodexConnectionRequest]) (*connect.Response[golfv1.CreateCodexConnectionResponse], error) {
+	ctx, selectionErr := selectAgent(ctx, req.Msg.Harness, req.Msg.Provider)
+	if selectionErr != nil {
+		return nil, rpcError(selectionErr)
+	}
+	sel := selectedAgent(ctx)
 	a, e := s.codexIdentity(ctx, req.Header())
 	if e != nil {
 		return nil, rpcError(e)
@@ -212,7 +219,7 @@ func (s *Server) CreateCodexConnection(ctx context.Context, req *connect.Request
 		if n >= 64 {
 			return invalid("The instance Codex connection limit is 64.")
 		}
-		if _, e := tx.ExecContext(ctx, `INSERT INTO golf_codex_connections(id,user_id,scope,name,forge_url,state) VALUES($1,NULL,'INSTANCE',$2,$3,'UNCONFIGURED')`, id, req.Msg.Name, s.config.GiteaURL); e != nil {
+		if _, e := tx.ExecContext(ctx, `INSERT INTO golf_codex_connections(id,user_id,scope,name,forge_url,state,harness,provider) VALUES($1,NULL,'INSTANCE',$2,$3,'UNCONFIGURED',$4,$5)`, id, req.Msg.Name, s.config.GiteaURL, sel.Harness, sel.Provider); e != nil {
 			return errStorageUnavailable
 		}
 		return s.codexAuditTx(ctx, tx, a, "CODEX_CONNECTION_CREATED", id)
@@ -224,7 +231,7 @@ func (s *Server) CreateCodexConnection(ctx context.Context, req *connect.Request
 	if e != nil {
 		return nil, rpcError(e)
 	}
-	return connect.NewResponse(&golfv1.CreateCodexConnectionResponse{Connection: codexVisible(r, s.config.CodexBinary != "", true)}), nil
+	return connect.NewResponse(&golfv1.CreateCodexConnectionResponse{Connection: codexVisible(r, s.agentBinary(r) != "", true)}), nil
 }
 func (s *Server) SetCodexConnectionAccess(ctx context.Context, req *connect.Request[golfv1.SetCodexConnectionAccessRequest]) (*connect.Response[golfv1.SetCodexConnectionAccessResponse], error) {
 	a, e := s.codexIdentity(ctx, req.Header())
@@ -321,7 +328,7 @@ func (s *Server) SetCodexConnectionAccess(ctx context.Context, req *connect.Requ
 	if e != nil {
 		return nil, rpcError(e)
 	}
-	return connect.NewResponse(&golfv1.SetCodexConnectionAccessResponse{Connection: codexVisible(r, s.config.CodexBinary != "", true)}), nil
+	return connect.NewResponse(&golfv1.SetCodexConnectionAccessResponse{Connection: codexVisible(r, s.agentBinary(r) != "", true)}), nil
 }
 
 // Keep older session writers compatible with their historical migration slice;

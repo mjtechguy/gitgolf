@@ -325,6 +325,9 @@ const (
 	// CodexAccountServiceStartCodexLoginProcedure is the fully-qualified name of the
 	// CodexAccountService's StartCodexLogin RPC.
 	CodexAccountServiceStartCodexLoginProcedure = "/golf.v1.CodexAccountService/StartCodexLogin"
+	// CodexAccountServiceCompleteAgentLoginProcedure is the fully-qualified name of the
+	// CodexAccountService's CompleteAgentLogin RPC.
+	CodexAccountServiceCompleteAgentLoginProcedure = "/golf.v1.CodexAccountService/CompleteAgentLogin"
 	// CodexAccountServiceCancelCodexLoginProcedure is the fully-qualified name of the
 	// CodexAccountService's CancelCodexLogin RPC.
 	CodexAccountServiceCancelCodexLoginProcedure = "/golf.v1.CodexAccountService/CancelCodexLogin"
@@ -3247,6 +3250,7 @@ type CodexAccountServiceClient interface {
 	SetCodexConnectionAccess(context.Context, *connect.Request[v1.SetCodexConnectionAccessRequest]) (*connect.Response[v1.SetCodexConnectionAccessResponse], error)
 	GetCodexConnection(context.Context, *connect.Request[v1.GetCodexConnectionRequest]) (*connect.Response[v1.GetCodexConnectionResponse], error)
 	StartCodexLogin(context.Context, *connect.Request[v1.StartCodexLoginRequest]) (*connect.Response[v1.StartCodexLoginResponse], error)
+	CompleteAgentLogin(context.Context, *connect.Request[v1.CompleteAgentLoginRequest]) (*connect.Response[v1.CompleteAgentLoginResponse], error)
 	CancelCodexLogin(context.Context, *connect.Request[v1.CancelCodexLoginRequest]) (*connect.Response[v1.CancelCodexLoginResponse], error)
 	RefreshCodexConnection(context.Context, *connect.Request[v1.RefreshCodexConnectionRequest]) (*connect.Response[v1.RefreshCodexConnectionResponse], error)
 	DisconnectCodexConnection(context.Context, *connect.Request[v1.DisconnectCodexConnectionRequest]) (*connect.Response[v1.DisconnectCodexConnectionResponse], error)
@@ -3293,6 +3297,12 @@ func NewCodexAccountServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(codexAccountServiceMethods.ByName("StartCodexLogin")),
 			connect.WithClientOptions(opts...),
 		),
+		completeAgentLogin: connect.NewClient[v1.CompleteAgentLoginRequest, v1.CompleteAgentLoginResponse](
+			httpClient,
+			baseURL+CodexAccountServiceCompleteAgentLoginProcedure,
+			connect.WithSchema(codexAccountServiceMethods.ByName("CompleteAgentLogin")),
+			connect.WithClientOptions(opts...),
+		),
 		cancelCodexLogin: connect.NewClient[v1.CancelCodexLoginRequest, v1.CancelCodexLoginResponse](
 			httpClient,
 			baseURL+CodexAccountServiceCancelCodexLoginProcedure,
@@ -3321,6 +3331,7 @@ type codexAccountServiceClient struct {
 	setCodexConnectionAccess  *connect.Client[v1.SetCodexConnectionAccessRequest, v1.SetCodexConnectionAccessResponse]
 	getCodexConnection        *connect.Client[v1.GetCodexConnectionRequest, v1.GetCodexConnectionResponse]
 	startCodexLogin           *connect.Client[v1.StartCodexLoginRequest, v1.StartCodexLoginResponse]
+	completeAgentLogin        *connect.Client[v1.CompleteAgentLoginRequest, v1.CompleteAgentLoginResponse]
 	cancelCodexLogin          *connect.Client[v1.CancelCodexLoginRequest, v1.CancelCodexLoginResponse]
 	refreshCodexConnection    *connect.Client[v1.RefreshCodexConnectionRequest, v1.RefreshCodexConnectionResponse]
 	disconnectCodexConnection *connect.Client[v1.DisconnectCodexConnectionRequest, v1.DisconnectCodexConnectionResponse]
@@ -3351,6 +3362,11 @@ func (c *codexAccountServiceClient) StartCodexLogin(ctx context.Context, req *co
 	return c.startCodexLogin.CallUnary(ctx, req)
 }
 
+// CompleteAgentLogin calls golf.v1.CodexAccountService.CompleteAgentLogin.
+func (c *codexAccountServiceClient) CompleteAgentLogin(ctx context.Context, req *connect.Request[v1.CompleteAgentLoginRequest]) (*connect.Response[v1.CompleteAgentLoginResponse], error) {
+	return c.completeAgentLogin.CallUnary(ctx, req)
+}
+
 // CancelCodexLogin calls golf.v1.CodexAccountService.CancelCodexLogin.
 func (c *codexAccountServiceClient) CancelCodexLogin(ctx context.Context, req *connect.Request[v1.CancelCodexLoginRequest]) (*connect.Response[v1.CancelCodexLoginResponse], error) {
 	return c.cancelCodexLogin.CallUnary(ctx, req)
@@ -3373,6 +3389,7 @@ type CodexAccountServiceHandler interface {
 	SetCodexConnectionAccess(context.Context, *connect.Request[v1.SetCodexConnectionAccessRequest]) (*connect.Response[v1.SetCodexConnectionAccessResponse], error)
 	GetCodexConnection(context.Context, *connect.Request[v1.GetCodexConnectionRequest]) (*connect.Response[v1.GetCodexConnectionResponse], error)
 	StartCodexLogin(context.Context, *connect.Request[v1.StartCodexLoginRequest]) (*connect.Response[v1.StartCodexLoginResponse], error)
+	CompleteAgentLogin(context.Context, *connect.Request[v1.CompleteAgentLoginRequest]) (*connect.Response[v1.CompleteAgentLoginResponse], error)
 	CancelCodexLogin(context.Context, *connect.Request[v1.CancelCodexLoginRequest]) (*connect.Response[v1.CancelCodexLoginResponse], error)
 	RefreshCodexConnection(context.Context, *connect.Request[v1.RefreshCodexConnectionRequest]) (*connect.Response[v1.RefreshCodexConnectionResponse], error)
 	DisconnectCodexConnection(context.Context, *connect.Request[v1.DisconnectCodexConnectionRequest]) (*connect.Response[v1.DisconnectCodexConnectionResponse], error)
@@ -3415,6 +3432,12 @@ func NewCodexAccountServiceHandler(svc CodexAccountServiceHandler, opts ...conne
 		connect.WithSchema(codexAccountServiceMethods.ByName("StartCodexLogin")),
 		connect.WithHandlerOptions(opts...),
 	)
+	codexAccountServiceCompleteAgentLoginHandler := connect.NewUnaryHandler(
+		CodexAccountServiceCompleteAgentLoginProcedure,
+		svc.CompleteAgentLogin,
+		connect.WithSchema(codexAccountServiceMethods.ByName("CompleteAgentLogin")),
+		connect.WithHandlerOptions(opts...),
+	)
 	codexAccountServiceCancelCodexLoginHandler := connect.NewUnaryHandler(
 		CodexAccountServiceCancelCodexLoginProcedure,
 		svc.CancelCodexLogin,
@@ -3445,6 +3468,8 @@ func NewCodexAccountServiceHandler(svc CodexAccountServiceHandler, opts ...conne
 			codexAccountServiceGetCodexConnectionHandler.ServeHTTP(w, r)
 		case CodexAccountServiceStartCodexLoginProcedure:
 			codexAccountServiceStartCodexLoginHandler.ServeHTTP(w, r)
+		case CodexAccountServiceCompleteAgentLoginProcedure:
+			codexAccountServiceCompleteAgentLoginHandler.ServeHTTP(w, r)
 		case CodexAccountServiceCancelCodexLoginProcedure:
 			codexAccountServiceCancelCodexLoginHandler.ServeHTTP(w, r)
 		case CodexAccountServiceRefreshCodexConnectionProcedure:
@@ -3478,6 +3503,10 @@ func (UnimplementedCodexAccountServiceHandler) GetCodexConnection(context.Contex
 
 func (UnimplementedCodexAccountServiceHandler) StartCodexLogin(context.Context, *connect.Request[v1.StartCodexLoginRequest]) (*connect.Response[v1.StartCodexLoginResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.CodexAccountService.StartCodexLogin is not implemented"))
+}
+
+func (UnimplementedCodexAccountServiceHandler) CompleteAgentLogin(context.Context, *connect.Request[v1.CompleteAgentLoginRequest]) (*connect.Response[v1.CompleteAgentLoginResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.CodexAccountService.CompleteAgentLogin is not implemented"))
 }
 
 func (UnimplementedCodexAccountServiceHandler) CancelCodexLogin(context.Context, *connect.Request[v1.CancelCodexLoginRequest]) (*connect.Response[v1.CancelCodexLoginResponse], error) {

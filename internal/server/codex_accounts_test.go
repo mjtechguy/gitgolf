@@ -251,7 +251,7 @@ func TestCodexRPCOriginAndDelegationPostgres(t *testing.T) {
 	if w := apiRequest(f.s, source.Token, golfv1connect.CodexAccountServiceGetCodexConnectionProcedure, "{}"); w.Code != 403 {
 		t.Fatal("delegated API allowed")
 	}
-	for _, method := range []string{"GetCodexConnection", "StartCodexLogin", "CancelCodexLogin", "RefreshCodexConnection", "DisconnectCodexConnection"} {
+	for _, method := range []string{"GetCodexConnection", "StartCodexLogin", "CompleteAgentLogin", "CancelCodexLogin", "RefreshCodexConnection", "DisconnectCodexConnection"} {
 		r := httptest.NewRequest("POST", "/rpc/golf.v1.CodexAccountService/"+method, strings.NewReader("{}"))
 		r.Header.Set("Origin", "http://wrong-origin.invalid")
 		r.Header.Set("Content-Type", "application/json")

@@ -500,3 +500,5 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .details-dialog .field-help { margin:0; }
 @media(max-width:480px) { .detail-grid { grid-template-columns:1fr; } }
 .page-stack > dialog.create-dialog { margin:auto; }
+.compact-label { display:flex; align-items:center; gap:8px; margin:0; color:var(--muted); }
+.compact-label select { width:auto; min-width:140px; }

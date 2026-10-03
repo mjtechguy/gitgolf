@@ -120,6 +120,8 @@ type GolfCodexConnection struct {
 	Scope           string
 	Name            string
 	ForgeURL        string
+	Harness         string
+	Provider        string
 }
 
 type GolfCodexConnectionAccess struct {

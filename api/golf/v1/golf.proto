@@ -1277,6 +1277,7 @@ service CodexAccountService {
  rpc SetCodexConnectionAccess(SetCodexConnectionAccessRequest) returns (SetCodexConnectionAccessResponse);
  rpc GetCodexConnection(GetCodexConnectionRequest) returns (GetCodexConnectionResponse);
  rpc StartCodexLogin(StartCodexLoginRequest) returns (StartCodexLoginResponse);
+ rpc CompleteAgentLogin(CompleteAgentLoginRequest) returns (CompleteAgentLoginResponse);
  rpc CancelCodexLogin(CancelCodexLoginRequest) returns (CancelCodexLoginResponse);
  rpc RefreshCodexConnection(RefreshCodexConnectionRequest) returns (RefreshCodexConnectionResponse);
  rpc DisconnectCodexConnection(DisconnectCodexConnectionRequest) returns (DisconnectCodexConnectionResponse);
@@ -1293,6 +1294,7 @@ enum CodexLoginMethod {
  CODEX_LOGIN_METHOD_UNSPECIFIED = 0;
  CODEX_LOGIN_METHOD_CHATGPT_DEVICE = 1;
  CODEX_LOGIN_METHOD_API_KEY = 2;
+ CODEX_LOGIN_METHOD_BROWSER_CODE = 3;
 }
 enum CodexConnectionScope {
  CODEX_CONNECTION_SCOPE_UNSPECIFIED = 0;
@@ -1318,10 +1320,12 @@ message CodexConnection {
  bool can_manage = 16;
  bool can_use = 17;
  repeated string allowed_user_ids = 18;
+ string harness = 19;
+ string provider = 20;
 }
-message GetCodexConnectionRequest { string connection_id = 1; }
+message GetCodexConnectionRequest { string connection_id = 1; string harness = 2; string provider = 3; }
 message GetCodexConnectionResponse { CodexConnection connection = 1; }
-message StartCodexLoginRequest { CodexLoginMethod method = 1; string api_key = 2; string expected_version = 3; string connection_id = 4; }
+message StartCodexLoginRequest { CodexLoginMethod method = 1; string api_key = 2; string expected_version = 3; string connection_id = 4; string harness = 5; string provider = 6; }
 message StartCodexLoginResponse { CodexConnection connection = 1; }
 message CancelCodexLoginRequest { string login_id = 1; string expected_version = 2; string connection_id = 3; }
 message CancelCodexLoginResponse { CodexConnection connection = 1; }
@@ -1351,7 +1355,10 @@ message DisconnectCodexConnectionResponse { CodexConnection connection = 1; }
 
 message ListCodexConnectionsRequest { bool instance_admin = 1; }
 message ListCodexConnectionsResponse { repeated CodexConnection connections = 1; }
-message CreateCodexConnectionRequest { string name = 1; }
+message CreateCodexConnectionRequest { string name = 1; string harness = 2; string provider = 3; }
 message CreateCodexConnectionResponse { CodexConnection connection = 1; }
 message SetCodexConnectionAccessRequest { string connection_id = 1; string expected_version = 2; string name = 3; repeated string allowed_user_ids = 4; }
 message SetCodexConnectionAccessResponse { CodexConnection connection = 1; }
+
+message CompleteAgentLoginRequest { string connection_id = 1; string expected_version = 2; string login_id = 3; string authorization_code = 4; }
+message CompleteAgentLoginResponse { CodexConnection connection = 1; }

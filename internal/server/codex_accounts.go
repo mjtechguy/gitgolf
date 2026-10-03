@@ -20,7 +20,7 @@ import (
 	"github.com/mjtechguy/golf-git/internal/server/database"
 )
 
-const codexColumns = `id::text,version,state,auth_method,email,plan_type,checked_at,login_id,verification_url,user_code,login_expires_at,reason_code,user_id,scope,name`
+const codexColumns = `id::text,version,state,auth_method,email,plan_type,checked_at,login_id,verification_url,user_code,login_expires_at,reason_code,user_id,scope,name,harness,provider`
 const codexMaxRuntime = 15 * time.Minute
 
 var errCodexBrowserOnly = errors.New("Codex browser identity required")
@@ -30,7 +30,7 @@ var errCodexUnavailable = connect.NewError(connect.CodeUnavailable, errors.New("
 type codexRecord struct {
 	Use                                                    bool
 	OwnerID                                                sql.NullInt64
-	Scope, Name                                            string
+	Harness, Provider, Scope, Name                         string
 	Access                                                 []string
 	ID                                                     string
 	Version                                                int64
@@ -49,7 +49,7 @@ type codexRuntime struct {
 	connectionID string
 	done         chan struct{}
 	mu           sync.Mutex
-	process      *codexaccount.Process
+	process      agentAccountProcess
 	conn         *sql.Conn
 	actor        codexActor
 	record       codexRecord
@@ -58,7 +58,7 @@ type codexRuntime struct {
 
 func scanCodex(row workflowRunScanner) (codexRecord, error) {
 	var r codexRecord
-	e := row.Scan(&r.ID, &r.Version, &r.State, &r.Method, &r.Email, &r.Plan, &r.Checked, &r.LoginID, &r.URL, &r.Code, &r.Expires, &r.Reason, &r.OwnerID, &r.Scope, &r.Name)
+	e := row.Scan(&r.ID, &r.Version, &r.State, &r.Method, &r.Email, &r.Plan, &r.Checked, &r.LoginID, &r.URL, &r.Code, &r.Expires, &r.Reason, &r.OwnerID, &r.Scope, &r.Name, &r.Harness, &r.Provider)
 	return r, e
 }
 func codexBinding(id string) []byte {
@@ -66,7 +66,7 @@ func codexBinding(id string) []byte {
 	return b[:]
 }
 func codexWire(r codexRecord, available bool) *golfv1.CodexConnection {
-	v := &golfv1.CodexConnection{Id: r.ID, Name: r.Name, CanManage: true, CanUse: true, AllowedUserIds: r.Access, Scope: golfv1.CodexConnectionScope_CODEX_CONNECTION_SCOPE_PERSONAL, Version: strconv.FormatInt(r.Version, 10), Email: r.Email, PlanType: r.Plan, LoginId: r.LoginID, VerificationUrl: r.URL, UserCode: r.Code, ReasonCode: r.Reason}
+	v := &golfv1.CodexConnection{Id: r.ID, Name: r.Name, Harness: r.Harness, Provider: r.Provider, CanManage: true, CanUse: true, AllowedUserIds: r.Access, Scope: golfv1.CodexConnectionScope_CODEX_CONNECTION_SCOPE_PERSONAL, Version: strconv.FormatInt(r.Version, 10), Email: r.Email, PlanType: r.Plan, LoginId: r.LoginID, VerificationUrl: r.URL, UserCode: r.Code, ReasonCode: r.Reason}
 	if r.Scope == "INSTANCE" {
 		v.Scope = golfv1.CodexConnectionScope_CODEX_CONNECTION_SCOPE_INSTANCE
 		v.CanUse = r.Use
@@ -83,6 +83,8 @@ func codexWire(r codexRecord, available bool) *golfv1.CodexConnection {
 	}
 	if r.Method == "chatgptDeviceCode" {
 		v.AuthMethod = golfv1.CodexLoginMethod_CODEX_LOGIN_METHOD_CHATGPT_DEVICE
+	} else if r.Method == "browserCode" {
+		v.AuthMethod = golfv1.CodexLoginMethod_CODEX_LOGIN_METHOD_BROWSER_CODE
 	} else if r.Method == "apiKey" {
 		v.AuthMethod = golfv1.CodexLoginMethod_CODEX_LOGIN_METHOD_API_KEY
 	}
@@ -221,7 +223,7 @@ func (s *Server) CloseCodexAccounts() {
 	}
 }
 func (s *Server) codexOpen(ctx context.Context, a codexActor, r codexRecord) (*codexRuntime, error) {
-	if s.config.CodexBinary == "" {
+	if s.agentBinary(r) == "" {
 		return nil, errCodexUnavailable
 	}
 	s.codexMu.Lock()
@@ -266,7 +268,12 @@ func (s *Server) codexOpen(ctx context.Context, a codexActor, r codexRecord) (*c
 			auth = []byte(plain)
 		}
 	}
-	p, e := codexaccount.New(context.Background(), codexaccount.Config{Binary: s.config.CodexBinary, Timeout: 10 * time.Second}, auth)
+	var p agentAccountProcess
+	if r.Harness == "codex" {
+		p, e = codexaccount.New(context.Background(), codexaccount.Config{Binary: s.agentBinary(r), Timeout: 10 * time.Second}, auth)
+	} else {
+		p, e = codexaccount.NewNative(s.agentBinary(r), r.Harness, r.Provider, auth)
+	}
 	if e != nil {
 		release()
 		return nil, errCodexUnavailable
@@ -313,7 +320,7 @@ func (s *Server) codexSave(ctx context.Context, rt *codexRuntime, r codexRecord)
 	}
 	e = s.codexGuard(ctx, rt.actor, func(tx *sql.Tx, id int64) error {
 		if r.Version == 0 {
-			_, e := tx.ExecContext(ctx, `INSERT INTO golf_codex_connections(id,user_id,state,forge_url) VALUES($1,$2,'UNCONFIGURED',$3) ON CONFLICT(user_id) DO NOTHING`, r.ID, id, s.config.GiteaURL)
+			_, e := tx.ExecContext(ctx, `INSERT INTO golf_codex_connections(id,user_id,state,forge_url,harness,provider,name) VALUES($1,$2,'UNCONFIGURED',$3,$4,$5,$6) ON CONFLICT(user_id,harness,provider) DO NOTHING`, r.ID, id, s.config.GiteaURL, r.Harness, r.Provider, "Personal "+agentLabel(r.Harness))
 			if e != nil {
 				return errStorageUnavailable
 			}
@@ -375,10 +382,12 @@ func codexReported(r *codexRecord, a codexaccount.Account) {
 	r.Email = ""
 	r.Plan = ""
 	r.Reason = ""
-	if a.Type == "chatgpt" || a.Type == "apiKey" {
+	if a.Type == "chatgpt" || a.Type == "claude" || a.Type == "apiKey" {
 		r.State = "CONNECTED"
 		if a.Type == "apiKey" {
 			r.Method = "apiKey"
+		} else if a.Type == "claude" {
+			r.Method = "browserCode"
 		} else {
 			r.Method = "chatgptDeviceCode"
 		}
@@ -400,6 +409,8 @@ func (s *Server) watchCodex(rt *codexRuntime) {
 	defer timer.Stop()
 	for {
 		select {
+		case <-rt.done:
+			return
 		case event, ok := <-rt.process.Events():
 			if !ok {
 				s.closeCodexRuntime(rt)
@@ -512,9 +523,13 @@ func (s *Server) codexGet(ctx context.Context, h http.Header, connectionID strin
 			}
 		}
 	}
-	return codexVisible(r, s.config.CodexBinary != "", r.Scope == "PERSONAL" || a.Admin), nil
+	return codexVisible(r, s.agentBinary(r) != "", r.Scope == "PERSONAL" || a.Admin), nil
 }
 func (s *Server) GetCodexConnection(ctx context.Context, req *connect.Request[golfv1.GetCodexConnectionRequest]) (*connect.Response[golfv1.GetCodexConnectionResponse], error) {
+	ctx, e := selectAgent(ctx, req.Msg.Harness, req.Msg.Provider)
+	if e != nil {
+		return nil, rpcError(e)
+	}
 	r, e := s.codexGet(ctx, req.Header(), req.Msg.ConnectionId)
 	if e != nil {
 		return nil, rpcError(e)
@@ -537,18 +552,27 @@ func (s *Server) codexMutate(ctx context.Context, h http.Header, version, action
 		return nil, e
 	}
 	if action == "start" {
-		if method != golfv1.CodexLoginMethod_CODEX_LOGIN_METHOD_CHATGPT_DEVICE && method != golfv1.CodexLoginMethod_CODEX_LOGIN_METHOD_API_KEY {
-			return nil, invalid("Select a supported Codex authentication method.")
+		validMethod := method == golfv1.CodexLoginMethod_CODEX_LOGIN_METHOD_API_KEY || r.Harness == "codex" && method == golfv1.CodexLoginMethod_CODEX_LOGIN_METHOD_CHATGPT_DEVICE || r.Harness == "claude-code" && method == golfv1.CodexLoginMethod_CODEX_LOGIN_METHOD_BROWSER_CODE
+		if !validMethod {
+			return nil, invalid("Select a supported agent authentication method.")
 		}
-		if (method == golfv1.CodexLoginMethod_CODEX_LOGIN_METHOD_API_KEY && (!regexp.MustCompile(`^sk-[A-Za-z0-9_-]{20,500}$`).MatchString(apiKey))) || (method == golfv1.CodexLoginMethod_CODEX_LOGIN_METHOD_CHATGPT_DEVICE && apiKey != "") {
-			return nil, invalid("Codex authentication input is invalid.")
+		if method == golfv1.CodexLoginMethod_CODEX_LOGIN_METHOD_API_KEY {
+			if r.Harness == "codex" && !regexp.MustCompile(`^sk-[A-Za-z0-9_-]{20,500}$`).MatchString(apiKey) || r.Harness != "codex" && !codexaccount.ValidNativeKey(apiKey) {
+				return nil, invalid("Agent authentication input is invalid.")
+			}
+		} else if apiKey != "" {
+			return nil, invalid("Do not supply an API key for account login.")
 		}
 	}
 	if action == "disconnect" {
 		return s.codexForget(ctx, a, r)
 	}
 	if r.ID == "" {
-		r.ID = uuid.NewSHA1(uuid.NameSpaceURL, []byte("golf:personal-codex:"+s.config.GiteaURL+":"+strconv.FormatInt(a.UserID, 10))).String()
+		identity := "golf:personal-codex:" + s.config.GiteaURL + ":" + strconv.FormatInt(a.UserID, 10)
+		if r.Harness != "codex" {
+			identity += "\x00" + r.Harness + "\x00" + r.Provider
+		}
+		r.ID = uuid.NewSHA1(uuid.NameSpaceURL, []byte(identity)).String()
 	}
 
 	rt, e := s.codexOpen(ctx, a, r)
@@ -597,10 +621,13 @@ func (s *Server) codexMutate(ctx context.Context, h http.Header, version, action
 		if method == golfv1.CodexLoginMethod_CODEX_LOGIN_METHOD_API_KEY {
 			m = "apiKey"
 		}
+		if method == golfv1.CodexLoginMethod_CODEX_LOGIN_METHOD_BROWSER_CODE {
+			m = "browserCode"
+		}
 		r.Method = m
 		login, err := rt.process.StartLogin(ctx, codexaccount.LoginRequest{Type: m, APIKey: apiKey})
-		if err == nil && m == "chatgptDeviceCode" {
-			if login.Type != m || login.VerificationURL != "https://auth.openai.com/codex/device" || len(login.LoginID) == 0 || len(login.LoginID) > 128 || len(login.UserCode) == 0 || len(login.UserCode) > 64 || !login.ExpiresAt.After(time.Now()) || login.ExpiresAt.After(time.Now().Add(codexMaxRuntime)) {
+		if err == nil && m != "apiKey" {
+			if login.Type != m || !validAgentLoginURL(r.Harness, login.VerificationURL) || len(login.LoginID) == 0 || len(login.LoginID) > 128 || (m == "chatgptDeviceCode" && len(login.UserCode) == 0) || len(login.UserCode) > 64 || !login.ExpiresAt.After(time.Now()) || login.ExpiresAt.After(time.Now().Add(codexMaxRuntime)) {
 				err = errCodexUnavailable
 			} else {
 				r.State = "AWAITING_AUTH"
@@ -627,6 +654,20 @@ func (s *Server) codexMutate(ctx context.Context, h http.Header, version, action
 			s.closeCodexLocked(rt)
 			return nil, errCodexUnavailable
 		}
+	case "complete":
+		if r.State != "AWAITING_AUTH" || loginID == "" || loginID != r.LoginID || !r.Expires.Valid || !r.Expires.Time.After(time.Now()) {
+			return nil, errCodexConflict
+		}
+		native, ok := rt.process.(interface {
+			CompleteLogin(context.Context, string, string) error
+		})
+		if !ok {
+			return nil, invalid("This login does not accept an authorization code.")
+		}
+		if err := native.CompleteLogin(ctx, loginID, apiKey); err != nil {
+			return nil, errCodexUnavailable
+		}
+		// Native completion events perform the authenticated, versioned save.
 	case "refresh":
 		r.Action = "CODEX_CONNECTION_REFRESHED"
 		if r.State == "AWAITING_AUTH" {
@@ -634,13 +675,16 @@ func (s *Server) codexMutate(ctx context.Context, h http.Header, version, action
 		}
 		account, err := rt.process.Account(ctx, true)
 		if len(usageOut) > 0 {
-			usage := &golfv1.CodexUsage{Reason: "Usage could not be reported by Codex. Refresh to try again."}
-			if err == nil && account.Type == "chatgpt" {
+			usage := &golfv1.CodexUsage{Reason: "Usage is not reported by this account adapter."}
+			if err == nil && r.Harness == "codex" && account.Type == "chatgpt" {
 				if reported, usageErr := rt.process.Usage(ctx); usageErr == nil {
 					usage = codexUsageWire(reported)
 				}
 			} else if err == nil && account.Type == "apiKey" {
-				usage.Reason = "ChatGPT plan quotas and earned resets do not apply to API-key connections."
+				usage.Reason = "Provider account quotas are not reported for this API-key connection."
+				if r.Harness == "codex" {
+					usage.Reason = "ChatGPT plan quotas and earned resets do not apply to API-key connections."
+				}
 			}
 			*usageOut[0] = usage
 		}
@@ -684,6 +728,10 @@ func (s *Server) codexMutate(ctx context.Context, h http.Header, version, action
 	return codexVisible(rt.record, true, true), nil
 }
 func (s *Server) StartCodexLogin(ctx context.Context, req *connect.Request[golfv1.StartCodexLoginRequest]) (*connect.Response[golfv1.StartCodexLoginResponse], error) {
+	ctx, e := selectAgent(ctx, req.Msg.Harness, req.Msg.Provider)
+	if e != nil {
+		return nil, rpcError(e)
+	}
 	r, e := s.codexMutate(ctx, req.Header(), req.Msg.ExpectedVersion, "start", "", req.Msg.ConnectionId, req.Msg.Method, req.Msg.ApiKey)
 	if e != nil {
 		return nil, rpcError(e)
@@ -801,7 +849,7 @@ func (s *Server) codexForget(ctx context.Context, a codexActor, r codexRecord) (
 		s.closeCodexRuntime(rt)
 	}
 	if r.ID == "" {
-		return codexWire(r, s.config.CodexBinary != ""), nil
+		return codexWire(r, s.agentBinary(r) != ""), nil
 	}
 	conn, e := s.db.Conn(ctx)
 	if e != nil {
@@ -845,7 +893,7 @@ func (s *Server) codexForget(ctx context.Context, a codexActor, r codexRecord) (
 	if e != nil {
 		return nil, e
 	}
-	return codexWire(r, s.config.CodexBinary != ""), nil
+	return codexWire(r, s.agentBinary(r) != ""), nil
 }
 
 func codexLockID(id string) int64 {

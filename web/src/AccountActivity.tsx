@@ -31,13 +31,13 @@ const actionLabels: Partial<Record<AuditAction, string>> = {
   [AuditAction.SESSION_REVOKED]: 'Session revoked',
   [AuditAction.OTHER_SESSIONS_REVOKED]: 'Other sessions revoked',
   [AuditAction.SESSION_REPLACED]: 'Session replaced',
-  [AuditAction.CODEX_LOGIN_STARTED]: 'Codex login started',
-  [AuditAction.CODEX_LOGIN_COMPLETED]: 'Codex login completed',
-  [AuditAction.CODEX_LOGIN_CANCELED]: 'Codex login cancelled',
-  [AuditAction.CODEX_CONNECTION_REFRESHED]: 'Codex connection checked',
-  [AuditAction.CODEX_CONNECTION_DISCONNECTED]: 'Codex disconnected',
-  [AuditAction.CODEX_CONNECTION_CREATED]: 'Codex connection created',
-  [AuditAction.CODEX_ACCESS_CHANGED]: 'Codex connection name or access changed',
+  [AuditAction.CODEX_LOGIN_STARTED]: 'Coding agent login started',
+  [AuditAction.CODEX_LOGIN_COMPLETED]: 'Coding agent login completed',
+  [AuditAction.CODEX_LOGIN_CANCELED]: 'Coding agent login cancelled',
+  [AuditAction.CODEX_CONNECTION_REFRESHED]: 'Coding agent connection checked',
+  [AuditAction.CODEX_CONNECTION_DISCONNECTED]: 'Coding agent disconnected',
+  [AuditAction.CODEX_CONNECTION_CREATED]: 'Coding agent connection created',
+  [AuditAction.CODEX_ACCESS_CHANGED]: 'Coding agent connection name or access changed',
 };
 
 function EventTime({ value }: { value: string }) {
@@ -50,7 +50,7 @@ const credentialLabel = (kind: string) => kind === 'oauth' ? 'Provider OAuth' : 
 function EventDetails({ event }: { event: AuditEvent }) {
   return <details><summary>Event details</summary><dl className="audit-metadata">
     <div><dt>Event ID</dt><dd><code>{event.id}</code></dd></div>
-    {event.resourceId ? <div><dt>Codex connection ID</dt><dd><code>{event.resourceId}</code></dd></div> : null}
+    {event.resourceId ? <div><dt>Coding agent connection ID</dt><dd><code>{event.resourceId}</code></dd></div> : null}
     <div><dt>Operation ID</dt><dd><code>{event.operationId || 'Not recorded'}</code></dd></div>
     <div><dt>Actor session ID</dt><dd><code>{event.actorSessionId || 'Not recorded'}</code></dd></div>
     <div><dt>Target session ID</dt><dd><code>{event.targetSessionId || 'No individual target'}</code></dd></div>
