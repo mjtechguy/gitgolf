@@ -929,3 +929,22 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .pull-review-composer .dialog-actions { flex-wrap:wrap; margin-top:12px; }
 .pull-review-composer .creation-status code { overflow-wrap:anywhere; }
 @media(max-width:720px) { .review-decisions { flex-direction:column; gap:4px; } .review-decisions label { min-height:44px; } .pull-review-composer .content-view-controls button { min-height:44px; } }
+
+/* Visible review comments reuse the shared compact discussion surfaces. */
+.review-comments-control>.text-button { margin-top:8px; }
+.review-inline-comments { margin-top:8px; border:1px solid var(--line); border-radius:4px; overflow:hidden; }
+.review-inline-summary { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 12px; font-size:.8125rem; background:var(--raised); border-bottom:1px solid var(--line); }
+.review-inline-summary>.icon-button { margin-left:auto; }
+.review-inline-list { padding:12px; }
+.review-inline-list>li { margin-bottom:12px; }
+.review-comment-avatar { flex-shrink:0; border-radius:50%; }
+.review-comment-location { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 12px; font-size:.8125rem; border-bottom:1px solid var(--line); }
+.review-comment-location>code { min-width:0; overflow-wrap:anywhere; }
+.review-comment-location .text-button { margin-top:0; }
+.review-comment-details { margin:0 12px 12px; }
+.review-comment-details .source-preview { max-height:240px; }
+.review-comments-observation { padding:0 12px 12px; }
+.review-comments-observation .field-help { margin-bottom:0; }
+@media(max-width:720px) { .review-comments-control>.text-button,.review-comment-location>.text-button { min-height:44px; } .review-inline-list { padding:8px; } }
+
+.pull-files-comments { display:grid; gap:var(--section-gap); padding:var(--panel-padding); border-top:1px solid var(--line); }

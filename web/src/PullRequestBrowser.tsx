@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { PullReviewComposer } from './PullReviewComposer';
+import { PullReviewComments } from './PullReviewComments';
 import { readReviewIntent, reviewIntentKey } from './reviewIntents';
 import { PullRequestEditControls } from './PullRequestEditControls';
 import { PullCommits, PullChecks } from './PullWorkspace';
@@ -40,21 +41,22 @@ function RefMetadata({ title, value }: { title: string; value?: PullRequestRef }
     <span className="pull-observation">{value.retainedSnapshot ? 'Retained PR snapshot' : 'Provider observation'}</span>
   </> : <p className="muted">Metadata unavailable.</p>}</section>;
 }
-function Reviews({ repositoryKey, queryKey, location, onReview, pull }: Props & {onReview:()=>void;pull:PullRequest}) {
+function Reviews({ repositoryKey, queryKey, location, onReview, pull, repositoryId, userId, reviewActionLabel='Review changes' }: Props & {onReview:()=>void;pull:PullRequest;reviewActionLabel?:string}) {
   const query = useInfiniteQuery({ ...privateQuery, queryKey: [...queryKey, 'pull', location.pull, 'reviews'], initialPageParam: 1,
     queryFn: ({ pageParam, signal }) => repositoryClient.listPullRequestReviews({ repository: repositoryKey, number: location.pull, page: { page: pageParam, limit: 20 } }, { signal, timeoutMs: 8_000 }), getNextPageParam: followingPage });
   const reviews = query.isSuccess && (!query.isFetching || query.isFetchingNextPage)
     ? [...new Map(query.data.pages.flatMap((page) => page.reviews).map((review) => [review.id, review])).values()] : [];
   return <section className="browser-panel pull-reviews" aria-labelledby="reviews-title">
-    <div className="browser-panel-heading"><h2 id="reviews-title">Reviews</h2><div className="panel-actions"><button className="button secondary" data-review-trigger onClick={onReview}>Review changes</button><button className="icon-button manual-refresh" aria-label="Refresh reviews" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} /></button></div></div>
+    <div className="browser-panel-heading"><h2 id="reviews-title">Reviews</h2><div className="panel-actions"><button className="button secondary" data-review-trigger onClick={onReview}>{reviewActionLabel}</button><button className="icon-button manual-refresh" aria-label="Refresh reviews" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} /></button></div></div>
     <details className="metadata-details panel-disclosure"><summary>About review states</summary><p className="panel-footnote">Native review records do not establish Golf approval eligibility or merge readiness.</p></details>
     {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : query.isPending || (query.isFetching && !query.isFetchingNextPage) ? <Loading label="Loading reviews…" /> : <>
       {reviews.length ? <ol className="pull-review-list">{reviews.map((review) => {
         const external = repositoryLink(review.htmlUrl);
         return <li key={review.id}><div className="pull-review-heading"><h3>{review.user?.login || 'Deleted or unavailable author'}</h3><div className="review-flags"><span className="visibility">{reviewLabels[review.state] || 'Unknown review state'}</span>{review.stale ? <span className="visibility">Outdated</span> : null}{review.commitId && pull.head?.commitId && review.commitId !== pull.head.commitId ? <span className="visibility">Earlier snapshot</span> : null}{review.dismissed ? <span className="visibility">Dismissed</span> : null}</div></div>
-          <p className="muted">Submitted <DateLabel value={review.submittedAt} /> · Updated <DateLabel value={review.updatedAt} /></p>
+          <p className="muted">{review.state===PullRequestReviewState.PENDING?<>Draft updated <DateLabel value={review.updatedAt}/></>:<>Submitted <DateLabel value={review.submittedAt}/> · Updated <DateLabel value={review.updatedAt}/></>}</p>
           <MarkdownBody text={review.body || 'No review text provided.'} label={`Review ${review.id} body, rendered Markdown`}/>
           <details className="metadata-details"><summary>Review details</summary><dl className="review-metadata"><div><dt>Review ID</dt><dd><code>{review.id}</code></dd></div><div><dt>Reviewed commit</dt><dd><code>{review.commitId || 'Unavailable'}</code></dd></div><div><dt>Marked stale</dt><dd>{review.stale ? 'Yes' : 'No'}</dd></div><div><dt>Dismissed</dt><dd>{review.dismissed ? 'Yes' : 'No'}</dd></div><div><dt>Official</dt><dd>{review.official ? 'Yes' : 'No'}</dd></div></dl></details>
+          <PullReviewComments key={`${repositoryId}-${pull.id}-${review.id}-${review.commitId}`} repositoryKey={repositoryKey} repositoryId={repositoryId} userId={userId} queryKey={queryKey} pull={pull} review={review}/>
           {external ? <a className="text-button" href={external} target="_blank" rel="noopener noreferrer">Open original review<ExternalLink size={14} /></a> : null}
         </li>;
       })}</ol> : <div className="empty-state"><GitPullRequest size={24} /><h3>No visible reviews in the loaded pages.</h3>{query.hasNextPage ? <p>More provider pages may contain visible reviews.</p> : null}</div>}
@@ -66,7 +68,9 @@ function PullDiscussion(props:Props){
  const query=useQuery({...privateQuery,queryKey:[...props.queryKey,'pull-discussion',props.location.pull],queryFn:({signal})=>repositoryClient.getPullRequestDiscussion({repository:props.repositoryKey,number:props.location.pull},{signal,timeoutMs:8000})});
  return query.isError?<PanelError error={query.error} retry={()=>void query.refetch()}/>:query.isSuccess&&query.data.issue?<Comments {...props} issue={query.data.issue} pullRequest onDenied={()=>{}}/>:<Loading label="Reading PR discussion…"/>;
 }
-function PullFiles({ pull, repositoryKey, queryKey, location, repositoryId, onReview }: Props & { pull: PullRequest; onReview:()=>void }) {
+function PullFiles(props: Props & { pull: PullRequest; onReview:()=>void }) {
+  const { pull, repositoryKey, queryKey, location, repositoryId, onReview }=props;
+  const [commentsOpen,setCommentsOpen]=useState(false);const commentsId=useId();
   const base = pull.base?.commitId || '', head = pull.head?.commitId || '';
   const query = useQuery({ ...privateQuery, queryKey: [...queryKey, 'pull-diff', location.pull, base, head],
     queryFn: async ({signal}) => {
@@ -76,7 +80,7 @@ function PullFiles({ pull, repositoryKey, queryKey, location, repositoryId, onRe
       return result;
     }});
   return <section className="browser-panel" aria-label="Pull request diff">
-    {query.isError ? <PanelError error={query.error} retry={()=>void query.refetch()}/> : !query.isSuccess || query.isFetching ? <Loading label="Reading changed files…"/> : <><DiffViewer key={`${String(queryKey[1])}-${repositoryId}-${pull.id}-${base}-${head}`} text={query.data.rawDiff} snapshotId={`${base}-${head}`} toolbarAction={<><button className="button secondary" data-review-trigger onClick={onReview}>Review changes</button><button className="icon-button manual-refresh" aria-label="Refresh PR diff" disabled={query.isFetching} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button></>}/><p className="panel-footnote">PR merge-base comparison · {query.data.byteSize.toLocaleString()} bytes. Viewed markers belong to this browser session and snapshot. This observation does not establish merge readiness.</p></>}
+    {query.isError ? <PanelError error={query.error} retry={()=>void query.refetch()}/> : !query.isSuccess || query.isFetching ? <Loading label="Reading changed files…"/> : <><DiffViewer key={`${String(queryKey[1])}-${repositoryId}-${pull.id}-${base}-${head}`} text={query.data.rawDiff} snapshotId={`${base}-${head}`} toolbarAction={<><button type="button" className="button secondary" aria-expanded={commentsOpen} aria-controls={commentsId} onClick={()=>setCommentsOpen(value=>!value)}><MessageSquare size={15} aria-hidden="true"/>{commentsOpen?'Hide':'Show'} review comments</button><button className="button secondary" data-review-trigger onClick={onReview}>Review changes</button><button className="icon-button manual-refresh" aria-label="Refresh PR diff" disabled={query.isFetching} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button></>}/><p className="panel-footnote">PR merge-base comparison · {query.data.byteSize.toLocaleString()} bytes. Viewed markers belong to this browser session and snapshot. This observation does not establish merge readiness.</p><div id={commentsId}>{commentsOpen?<section className="pull-files-comments" aria-label="Files changed comments"><Reviews {...props} reviewActionLabel="Review changes from comments"/><PullDiscussion {...props}/></section>:null}</div></>}
   </section>;
 }
 function PullDetail(props: Props) {
@@ -109,7 +113,10 @@ function PullDetail(props: Props) {
         <PullRequestEditControls key={pull.id} {...props} pull={pull} refresh={()=>{void query.refetch();void client.invalidateQueries({queryKey:[...queryKey,'pulls']});}}/>
       </>}
     </section>
-    {pull ? <><RepositoryTabs className="pull-tabs" label="Pull request workspace" selection={location.pullView||'conversation'}><Link {...repositoryOptions(location,{pullView:undefined})} aria-current={!location.pullView || location.pullView === 'conversation' ? 'page' : undefined}><MessageSquare size={16}/>Conversation</Link><Link {...repositoryOptions(location,{pullView:'commits'})} aria-current={location.pullView === 'commits' ? 'page' : undefined}><GitCommitHorizontal size={16}/>Commits</Link><Link {...repositoryOptions(location,{pullView:'checks'})} aria-current={location.pullView === 'checks' ? 'page' : undefined}><ListChecks size={16}/>Checks</Link><Link {...repositoryOptions(location,{pullView:'files'})} aria-current={location.pullView === 'files' ? 'page' : undefined}><FileDiff size={16}/>Files changed</Link></RepositoryTabs>
+    </div>
+    {pull ? <RepositoryTabs className="pull-tabs" label="Pull request workspace" selection={location.pullView||'conversation'}><Link {...repositoryOptions(location,{pullView:undefined})} aria-current={!location.pullView || location.pullView === 'conversation' ? 'page' : undefined}><MessageSquare size={16}/>Conversation</Link><Link {...repositoryOptions(location,{pullView:'commits'})} aria-current={location.pullView === 'commits' ? 'page' : undefined}><GitCommitHorizontal size={16}/>Commits</Link><Link {...repositoryOptions(location,{pullView:'checks'})} aria-current={location.pullView === 'checks' ? 'page' : undefined}><ListChecks size={16}/>Checks</Link><Link {...repositoryOptions(location,{pullView:'files'})} aria-current={location.pullView === 'files' ? 'page' : undefined}><FileDiff size={16}/>Files changed</Link></RepositoryTabs>:null}
+    <div hidden={query.isFetching && Boolean(pull)}>
+    {pull ? <>
       {reviewOpen?<PullReviewComposer key={`${props.userId}-${props.repositoryId}-${pull.id}-${reviewGeneration}`} repositoryKey={repositoryKey} repositoryId={props.repositoryId} userId={props.userId} pull={pull} blocked={query.isFetching} onClose={closeReview} onCurrentSelection={()=>{setDismissedReview(false);setReviewing(true);setReviewGeneration(v=>v+1);}} onReviewed={refreshReviews}/>:null}
       {location.pullView === 'commits' ? <PullCommits {...props} pull={pull}/> : location.pullView === 'checks' ? <PullChecks {...props} pull={pull}/> : location.pullView === 'files' ? <PullFiles {...props} pull={pull} onReview={openReview}/> : <div className="discussion-layout"><div className="discussion-main"><section className="browser-panel discussion-description" aria-label="Pull request description"><div className="browser-panel-heading"><strong>{pull.user?.login || 'Deleted or unavailable author'}</strong><span className="muted">opened <DateLabel value={pull.createdAt}/></span></div><MarkdownBody text={pull.body || 'No description provided.'} label="Pull request body, rendered Markdown"/>{external ? <div className="issue-footer"><span>Updated <DateLabel value={pull.updatedAt}/></span><a className="text-button" href={external} target="_blank" rel="noopener noreferrer">Open original<ExternalLink size={14}/></a></div> : null}</section><Reviews {...props} pull={pull} onReview={openReview}/><PullDiscussion {...props}/><ReviewerRuns userId={String(queryKey[1]||'')} owner={repositoryKey.owner} name={repositoryKey.name} signingOut={false} pullNumber={pull.number}/></div>
         <aside className="discussion-sidebar" aria-label="Pull request metadata"><details className="metadata-details"><summary>Comparison details</summary><RefMetadata title="Base" value={pull.base}/><RefMetadata title="Head" value={pull.head}/></details>{pull.merged ? <div className="pull-merge-record"><strong>Native merge record</strong><p>Merged <DateLabel value={pull.mergedAt}/></p><code>{pull.mergeCommitId || 'Merge commit unavailable'}</code></div> : null}<div className="metadata-details"><h3>Merge availability</h3><p className="field-help">Reviews show native records; protected integration remains unavailable. These observations do not establish merge readiness.</p></div></aside>

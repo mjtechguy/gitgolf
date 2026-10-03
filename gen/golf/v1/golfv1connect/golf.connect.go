@@ -211,6 +211,9 @@ const (
 	// RepositoryServiceListPullRequestReviewsProcedure is the fully-qualified name of the
 	// RepositoryService's ListPullRequestReviews RPC.
 	RepositoryServiceListPullRequestReviewsProcedure = "/golf.v1.RepositoryService/ListPullRequestReviews"
+	// RepositoryServiceGetPullRequestReviewCommentsProcedure is the fully-qualified name of the
+	// RepositoryService's GetPullRequestReviewComments RPC.
+	RepositoryServiceGetPullRequestReviewCommentsProcedure = "/golf.v1.RepositoryService/GetPullRequestReviewComments"
 	// RepositoryServiceCreatePullRequestReviewProcedure is the fully-qualified name of the
 	// RepositoryService's CreatePullRequestReview RPC.
 	RepositoryServiceCreatePullRequestReviewProcedure = "/golf.v1.RepositoryService/CreatePullRequestReview"
@@ -1067,6 +1070,7 @@ type RepositoryServiceClient interface {
 	ListPullRequests(context.Context, *connect.Request[v1.ListPullRequestsRequest]) (*connect.Response[v1.ListPullRequestsResponse], error)
 	GetPullRequest(context.Context, *connect.Request[v1.GetPullRequestRequest]) (*connect.Response[v1.GetPullRequestResponse], error)
 	ListPullRequestReviews(context.Context, *connect.Request[v1.ListPullRequestReviewsRequest]) (*connect.Response[v1.ListPullRequestReviewsResponse], error)
+	GetPullRequestReviewComments(context.Context, *connect.Request[v1.GetPullRequestReviewCommentsRequest]) (*connect.Response[v1.GetPullRequestReviewCommentsResponse], error)
 	CreatePullRequestReview(context.Context, *connect.Request[v1.CreatePullRequestReviewRequest]) (*connect.Response[v1.CreatePullRequestReviewResponse], error)
 	GetPullRequestReviewMutation(context.Context, *connect.Request[v1.GetPullRequestReviewMutationRequest]) (*connect.Response[v1.GetPullRequestReviewMutationResponse], error)
 }
@@ -1238,6 +1242,12 @@ func NewRepositoryServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(repositoryServiceMethods.ByName("ListPullRequestReviews")),
 			connect.WithClientOptions(opts...),
 		),
+		getPullRequestReviewComments: connect.NewClient[v1.GetPullRequestReviewCommentsRequest, v1.GetPullRequestReviewCommentsResponse](
+			httpClient,
+			baseURL+RepositoryServiceGetPullRequestReviewCommentsProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("GetPullRequestReviewComments")),
+			connect.WithClientOptions(opts...),
+		),
 		createPullRequestReview: connect.NewClient[v1.CreatePullRequestReviewRequest, v1.CreatePullRequestReviewResponse](
 			httpClient,
 			baseURL+RepositoryServiceCreatePullRequestReviewProcedure,
@@ -1281,6 +1291,7 @@ type repositoryServiceClient struct {
 	listPullRequests             *connect.Client[v1.ListPullRequestsRequest, v1.ListPullRequestsResponse]
 	getPullRequest               *connect.Client[v1.GetPullRequestRequest, v1.GetPullRequestResponse]
 	listPullRequestReviews       *connect.Client[v1.ListPullRequestReviewsRequest, v1.ListPullRequestReviewsResponse]
+	getPullRequestReviewComments *connect.Client[v1.GetPullRequestReviewCommentsRequest, v1.GetPullRequestReviewCommentsResponse]
 	createPullRequestReview      *connect.Client[v1.CreatePullRequestReviewRequest, v1.CreatePullRequestReviewResponse]
 	getPullRequestReviewMutation *connect.Client[v1.GetPullRequestReviewMutationRequest, v1.GetPullRequestReviewMutationResponse]
 }
@@ -1415,6 +1426,11 @@ func (c *repositoryServiceClient) ListPullRequestReviews(ctx context.Context, re
 	return c.listPullRequestReviews.CallUnary(ctx, req)
 }
 
+// GetPullRequestReviewComments calls golf.v1.RepositoryService.GetPullRequestReviewComments.
+func (c *repositoryServiceClient) GetPullRequestReviewComments(ctx context.Context, req *connect.Request[v1.GetPullRequestReviewCommentsRequest]) (*connect.Response[v1.GetPullRequestReviewCommentsResponse], error) {
+	return c.getPullRequestReviewComments.CallUnary(ctx, req)
+}
+
 // CreatePullRequestReview calls golf.v1.RepositoryService.CreatePullRequestReview.
 func (c *repositoryServiceClient) CreatePullRequestReview(ctx context.Context, req *connect.Request[v1.CreatePullRequestReviewRequest]) (*connect.Response[v1.CreatePullRequestReviewResponse], error) {
 	return c.createPullRequestReview.CallUnary(ctx, req)
@@ -1453,6 +1469,7 @@ type RepositoryServiceHandler interface {
 	ListPullRequests(context.Context, *connect.Request[v1.ListPullRequestsRequest]) (*connect.Response[v1.ListPullRequestsResponse], error)
 	GetPullRequest(context.Context, *connect.Request[v1.GetPullRequestRequest]) (*connect.Response[v1.GetPullRequestResponse], error)
 	ListPullRequestReviews(context.Context, *connect.Request[v1.ListPullRequestReviewsRequest]) (*connect.Response[v1.ListPullRequestReviewsResponse], error)
+	GetPullRequestReviewComments(context.Context, *connect.Request[v1.GetPullRequestReviewCommentsRequest]) (*connect.Response[v1.GetPullRequestReviewCommentsResponse], error)
 	CreatePullRequestReview(context.Context, *connect.Request[v1.CreatePullRequestReviewRequest]) (*connect.Response[v1.CreatePullRequestReviewResponse], error)
 	GetPullRequestReviewMutation(context.Context, *connect.Request[v1.GetPullRequestReviewMutationRequest]) (*connect.Response[v1.GetPullRequestReviewMutationResponse], error)
 }
@@ -1620,6 +1637,12 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 		connect.WithSchema(repositoryServiceMethods.ByName("ListPullRequestReviews")),
 		connect.WithHandlerOptions(opts...),
 	)
+	repositoryServiceGetPullRequestReviewCommentsHandler := connect.NewUnaryHandler(
+		RepositoryServiceGetPullRequestReviewCommentsProcedure,
+		svc.GetPullRequestReviewComments,
+		connect.WithSchema(repositoryServiceMethods.ByName("GetPullRequestReviewComments")),
+		connect.WithHandlerOptions(opts...),
+	)
 	repositoryServiceCreatePullRequestReviewHandler := connect.NewUnaryHandler(
 		RepositoryServiceCreatePullRequestReviewProcedure,
 		svc.CreatePullRequestReview,
@@ -1686,6 +1709,8 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 			repositoryServiceGetPullRequestHandler.ServeHTTP(w, r)
 		case RepositoryServiceListPullRequestReviewsProcedure:
 			repositoryServiceListPullRequestReviewsHandler.ServeHTTP(w, r)
+		case RepositoryServiceGetPullRequestReviewCommentsProcedure:
+			repositoryServiceGetPullRequestReviewCommentsHandler.ServeHTTP(w, r)
 		case RepositoryServiceCreatePullRequestReviewProcedure:
 			repositoryServiceCreatePullRequestReviewHandler.ServeHTTP(w, r)
 		case RepositoryServiceGetPullRequestReviewMutationProcedure:
@@ -1801,6 +1826,10 @@ func (UnimplementedRepositoryServiceHandler) GetPullRequest(context.Context, *co
 
 func (UnimplementedRepositoryServiceHandler) ListPullRequestReviews(context.Context, *connect.Request[v1.ListPullRequestReviewsRequest]) (*connect.Response[v1.ListPullRequestReviewsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.ListPullRequestReviews is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) GetPullRequestReviewComments(context.Context, *connect.Request[v1.GetPullRequestReviewCommentsRequest]) (*connect.Response[v1.GetPullRequestReviewCommentsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.GetPullRequestReviewComments is not implemented"))
 }
 
 func (UnimplementedRepositoryServiceHandler) CreatePullRequestReview(context.Context, *connect.Request[v1.CreatePullRequestReviewRequest]) (*connect.Response[v1.CreatePullRequestReviewResponse], error) {

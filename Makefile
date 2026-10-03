@@ -43,6 +43,11 @@ qualify-pull-reviews:
 	python3 scripts/pull-review-mutations-smoke.py
 qualify-pull-review-native:
 	python3 scripts/pull-review-native-probe.py
+.PHONY: qualify-pull-review-comments qualify-pull-review-comments-native
+qualify-pull-review-comments: cli
+	python3 scripts/pull-review-comments-smoke.py
+qualify-pull-review-comments-native:
+	python3 scripts/pull-review-comments-native-probe.py
 qualify-protected-boundary:
 	python3 -m unittest discover -s scripts/protected-boundary -p 'test_*.py'
 	python3 scripts/protected-boundary/qualify.py

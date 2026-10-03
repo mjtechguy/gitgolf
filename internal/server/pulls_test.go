@@ -22,7 +22,7 @@ var pullProcedures = []string{
 	golfv1connect.RepositoryServiceGetRepositoryImageProcedure,
 	golfv1connect.RepositoryServiceListPullRequestsProcedure,
 	golfv1connect.RepositoryServiceGetPullRequestProcedure,
-	golfv1connect.RepositoryServiceListPullRequestReviewsProcedure,
+	golfv1connect.RepositoryServiceListPullRequestReviewsProcedure, golfv1connect.RepositoryServiceGetPullRequestReviewCommentsProcedure,
 	golfv1connect.RepositoryServiceCreatePullRequestReviewProcedure,
 	golfv1connect.RepositoryServiceGetPullRequestReviewMutationProcedure,
 }

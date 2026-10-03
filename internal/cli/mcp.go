@@ -42,6 +42,7 @@ var mcpReads = []mcpRead{
 	{"golf_pr_list", "List pull requests. Native list heads are retained snapshots, not freshness evidence.", "pr list", []string{"repository"}, []string{"state", "page", "limit"}},
 	{"golf_pr_view", "Read pull-request metadata. Native review/check state does not establish Golf merge eligibility.", "pr view", []string{"repository", "number"}, nil},
 	{"golf_pr_reviews", "Read native reviews; continue page.nextPage even on an empty filtered page. No Golf approval eligibility claim.", "pr reviews", []string{"repository", "number"}, []string{"page", "limit"}},
+	{"golf_pr_review_comments", "Read an entire bounded native review-comment collection at explicit repository/PR/review IDs and reviewed commit. No inferred threads, pagination, source freshness or merge eligibility.", "pr review-comments", []string{"repository", "number", "review_id"}, []string{"repository_id", "pull_request_id", "review_commit_id"}},
 	{"golf_org_list", "List your current native organization memberships.", "org list", nil, []string{"page", "limit"}},
 	{"golf_org_view", "Read a member-scoped organization.", "org view", []string{"organization"}, nil},
 	{"golf_org_teams", "List provider-visible teams in an organization you belong to.", "org teams", []string{"organization"}, []string{"page", "limit"}},
@@ -78,9 +79,9 @@ func (tool mcpRead) schema() map[string]any {
 		case "repository":
 			field["description"] = "OWNER/REPO"
 			field["minLength"] = 3
-		case "team_id", "before_id", "snapshot_id":
+		case "team_id", "before_id", "snapshot_id", "review_id", "repository_id", "pull_request_id":
 			field["pattern"] = "^[1-9][0-9]*$"
-		case "commit_id":
+		case "commit_id", "review_commit_id":
 			field["pattern"] = commitID.String()
 		case "idempotency_key":
 			field["pattern"] = creationKey.String()
@@ -88,6 +89,9 @@ func (tool mcpRead) schema() map[string]any {
 		properties[key] = field
 	}
 	required := tool.positions
+	if tool.command == "pr review-comments" {
+		required = append(append([]string{}, tool.positions...), tool.flags...)
+	}
 	if required == nil {
 		required = []string{}
 	}
@@ -129,9 +133,8 @@ func (tool mcpRead) parse(raw json.RawMessage) (command, error) {
 			if key == "state" && value != "open" && value != "closed" && value != "all" {
 				return command{}, invalid
 			}
-			if key == "team_id" || key == "before_id" || key == "snapshot_id" {
-				id, err := strconv.ParseInt(value, 10, 64)
-				if err != nil || id <= 0 || strconv.FormatInt(id, 10) != value {
+			if key == "team_id" || key == "before_id" || key == "snapshot_id" || key == "review_id" || key == "repository_id" || key == "pull_request_id" {
+				if !canonicalNativeID(value) {
 					return command{}, invalid
 				}
 			}
@@ -147,7 +150,11 @@ func (tool mcpRead) parse(raw json.RawMessage) (command, error) {
 	}
 	for _, key := range tool.flags {
 		if value, ok := values[key]; ok {
-			args = append(args, "--"+strings.ReplaceAll(key, "_", "-"), value)
+			flag := strings.ReplaceAll(key, "_", "-")
+			if tool.command == "pr review-comments" {
+				flag = map[string]string{"repository_id": "repo-id", "pull_request_id": "pull-id", "review_commit_id": "review-commit"}[key]
+			}
+			args = append(args, "--"+flag, value)
 		}
 	}
 	parsed, err := parseCommand(args)

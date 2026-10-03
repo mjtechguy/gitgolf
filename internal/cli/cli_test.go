@@ -251,6 +251,8 @@ func TestAdditionalReadCommandsAndEphemeralSession(t *testing.T) {
 			`{"repository":{"owner":"alice","name":"private"},"state":"ISSUE_STATE_ALL","page":{"page":2,"limit":1}}`, `{"pullRequests":[{"id":"9007199254740993","number":7,"head":{"repositoryId":"9223372036854775807","retainedSnapshot":true}}],"page":{"nextPage":3}}`, `"retainedSnapshot":true`},
 		{[]string{"pr", "view", "alice/private", "2147483647"}, golfv1connect.RepositoryServiceGetPullRequestProcedure,
 			`{"repository":{"owner":"alice","name":"private"},"number":2147483647}`, `{"pullRequest":{"id":"9007199254740993","number":2147483647,"body":"<script>plain text</script>","merged":true}}`, `"id":"9007199254740993"`},
+		{[]string{"pr", "review-comments", "alice/private", "7", "9007199254740993", "--repo-id", "9007199254740994", "--pull-id", "9223372036854775807", "--review-commit", strings.Repeat("a", 64)}, golfv1connect.RepositoryServiceGetPullRequestReviewCommentsProcedure,
+			`{"repository":{"owner":"alice","name":"private"},"repositoryId":"9007199254740994","pullRequestId":"9223372036854775807","number":7,"reviewId":"9007199254740993","reviewCommitId":"` + strings.Repeat("a", 64) + `"}`, `{"repositoryId":"9007199254740994","pullRequestId":"9223372036854775807","review":{"id":"9007199254740993","commitId":"` + strings.Repeat("a", 64) + `"},"comments":[{"id":"9223372036854775807","body":"<script>literal</script>\u001b[31m","path":"src/[literal]* 世界.ts","oldLine":3,"reviewId":"9007199254740993","resolved":true}],"currentHeadCommitId":"` + strings.Repeat("b", 64) + `"}`, `"oldLine":3`},
 		{[]string{"pr", "reviews", "alice/private", "7", "--page", "2", "--limit", "1"}, golfv1connect.RepositoryServiceListPullRequestReviewsProcedure,
 			`{"repository":{"owner":"alice","name":"private"},"number":7,"page":{"page":2,"limit":1}}`, `{"page":{"nextPage":3}}`, `"reviews":[]`},
 		{[]string{"org", "list", "--page", "2", "--limit", "1"}, golfv1connect.OrganizationServiceListOrganizationsProcedure,
@@ -394,5 +396,41 @@ func TestPathHistoryIdentityAndLiteralInput(t *testing.T) {
 	}
 	if strings.Join(calls, ",") != "LoginWithGiteaToken,GetRepository,ListCommits,Logout" {
 		t.Fatal("history identity/session cleanup", calls)
+	}
+}
+
+func TestReviewCommentExplicitSelectionBeforeAuthentication(t *testing.T) {
+	valid := []string{"pr", "review-comments", "alice/private", "7", "9007199254740993", "--repo-id", "9007199254740994", "--pull-id", "9223372036854775807", "--review-commit", strings.Repeat("a", 40)}
+	parsed, err := parseCommand(valid)
+	if err != nil || parsed.reviewID != valid[4] || parsed.repositoryID != valid[6] || parsed.pullID != valid[8] || parsed.page != nil {
+		t.Fatal("explicit selection lost exact IDs or invented pagination")
+	}
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls.Add(1) }))
+	defer server.Close()
+	cases := [][]string{valid[:5], append(append([]string{}, valid...), "--page", "1"), append(append([]string{}, valid...), "--limit", "1"), append(append([]string{}, valid...), "--ref", "main"), append(append([]string{}, valid...), "extra")}
+	for _, index := range []int{3, 4, 6, 8} {
+		for _, value := range []string{"", "0", "01", "+1", "-1", "1 ", "1.0", "9223372036854775808"} {
+			args := append([]string{}, valid...)
+			args[index] = value
+			cases = append(cases, args)
+		}
+	}
+	for _, value := range []string{"main", strings.Repeat("A", 40), strings.Repeat("a", 12), strings.Repeat("a", 39), strings.Repeat("a", 41), strings.Repeat("a", 63), strings.Repeat("a", 65), " " + strings.Repeat("a", 40)} {
+		args := append([]string{}, valid...)
+		args[10] = value
+		cases = append(cases, args)
+	}
+	for _, args := range cases {
+		var output, diagnostics bytes.Buffer
+		code := Run(context.Background(), append([]string{"--url", server.URL}, args...), strings.NewReader(""), &output, &diagnostics, func(name string) string {
+			if name == "GOLF_GITEA_TOKEN" {
+				return "fixture-private-token"
+			}
+			return ""
+		})
+		if code != 2 || output.Len() != 0 || calls.Load() != 0 || strings.Contains(diagnostics.String(), "fixture-private-token") {
+			t.Fatal("invalid review selection authenticated or leaked input")
+		}
 	}
 }

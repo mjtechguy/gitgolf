@@ -101,6 +101,25 @@ def git_environment(owner, token):
     return env
 
 
+def declared_receive(work, env, intent):
+    """Same immutable old/new/ref intent, with an actual bounded local Git pack.
+
+    This is not a capture of Git's original HTTP bytes. It supplies a valid
+    replay/probe command rather than relying on ls-remote's already-up-to-date
+    optimization, which would never issue a second native receive request.
+    """
+    result = subprocess.run(['git', 'pack-objects', '--stdout', '--revs', '--delta-base-offset'],
+        cwd=work, env=env, input=(intent['new'] + '\n^' + intent['old'] + '\n').encode(),
+        capture_output=True, timeout=30)
+    assert result.returncode == 0 and result.stdout.startswith(b'PACK'), 'Local fixture pack generation failed'
+    assert len(result.stdout) <= 2 << 20, 'Local fixture pack exceeded receive bound'
+    line = (intent['old'] + ' ' + intent['new'] + ' refs/heads/' + intent['branch'] +
+            '\0 report-status-v2 side-band-64k object-format=sha1 agent=git/2.39.5').encode('ascii')
+    body = f'{len(line) + 4:04x}'.encode('ascii') + line + b'0000' + result.stdout
+    assert len(body) <= 2 << 20, 'Local fixture command/pack exceeded receive bound'
+    return body
+
+
 def qualify(port):
     project = 'golf-boundary-proof-' + secrets.token_hex(5)
     with tempfile.TemporaryDirectory(prefix=project + '-') as temporary:
@@ -207,6 +226,18 @@ def qualify(port):
                 assert time.monotonic() < deadline, 'Classifier startup timed out'
                 time.sleep(0.2)
             check('fresh private pinned native provider and classified loopback ingress ready')
+            api_root = '/api/v1/repos/' + owner + '/source'
+            observed = json.loads(request(base, api_root, token))
+            assert (observed['id'], observed['owner']['id']) == (intent['repository_id'], intent['owner_id'])
+            observed_branch = json.loads(request(base, api_root + '/branches/main', token))
+            assert observed_branch['commit']['id'] == intent['old']
+            for headers in ({}, {'Authorization': 'Bearer ' + token}):
+                observed_actor = json.loads(request(base, '/api/v1/user', token, headers=headers))
+                assert (observed_actor['id'], observed_actor['login']) == (actor['id'], owner)
+            observed = json.loads(request(base, api_root, token, headers={'Authorization': 'Bearer ' + token}))
+            assert (observed['id'], observed['owner']['id']) == (intent['repository_id'], intent['owner_id'])
+            request(base, '/api/v1/version', token, headers={'Authorization': 'Bearer ' + 'f' * 40}, expected=403)
+            check('broker repository/main metadata and current-user reads bind actual native IDs; native Bearer PAT authentication works; invalid Bearer fails')
             env = git_environment(owner, token)
             remote = base + '/' + owner + '/source.git'
             work = directory / 'work'
@@ -221,7 +252,18 @@ def qualify(port):
             command('git', 'merge-base', '--is-ancestor', intent['old'], intent['new'], env=env, cwd=work)
             intent_path.write_text(json.dumps(intent))
             check('ordinary non-admin native credentials admit clone/upload and exact identity metadata reads')
-            api_root = '/api/v1/repos/' + owner + '/source'
+            replay_body = declared_receive(work, env, intent)
+            receive_path = '/' + owner + '/source.git/git-receive-pack'
+            receive_headers = {'Content-Type': 'application/x-git-receive-pack-request'}
+            for field in ('repository_id', 'owner_id'):
+                expected_id = intent[field]
+                intent[field] = expected_id + 100000
+                intent_path.write_text(json.dumps(intent))
+                request(base, receive_path, token, method='POST', body=replay_body, headers=receive_headers, expected=403)
+                assert native_call(private, api_root + '/branches/feature', token)['commit']['id'] == intent['old']
+                intent[field] = expected_id
+                intent_path.write_text(json.dumps(intent))
+            check('mismatched native repository/owner IDs refuse declared receive before publication or one-shot dispatch consumption')
             negatives = [('/api/internal/serv/command', 'GET'), (api_root + '/pulls/1', 'GET'),
                 (api_root + '/contents/forbidden.txt', 'POST'), (api_root + '/branch_protections', 'POST'),
                 (api_root + '/mirror-sync', 'POST'), ('/' + owner + '/source/_edit/main/README.md', 'POST'),
@@ -275,6 +317,10 @@ print('isolated')
             assert native_call(private, api_root + '/branches/feature', token)['commit']['id'] == intent['new']
             assert native_call(private, api_root + '/branches/main', token)['commit']['id'] == intent['old']
             check('single declared fast-forward branch HTTP receive published exact C with explicit old-object lease; main unchanged')
+            request(base, receive_path, token, method='POST', body=replay_body, headers=receive_headers, expected=403)
+            assert native_call(private, api_root + '/branches/feature', token)['commit']['id'] == intent['new']
+            assert native_call(private, api_root + '/branches/main', token)['commit']['id'] == intent['old']
+            check('second same declared old/new/ref receive denied after first dispatch; feature/main readback unchanged')
             command('git', 'fetch', '--quiet', remote, 'feature', env=env, cwd=work)
             assert command('git', 'rev-parse', 'FETCH_HEAD', env=env, cwd=work) == intent['new']
             check('mediated supported Git upload independently reads back published candidate')

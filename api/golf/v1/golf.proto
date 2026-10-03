@@ -149,6 +149,7 @@ service RepositoryService {
   rpc ListPullRequests(ListPullRequestsRequest) returns (ListPullRequestsResponse);
   rpc GetPullRequest(GetPullRequestRequest) returns (GetPullRequestResponse);
   rpc ListPullRequestReviews(ListPullRequestReviewsRequest) returns (ListPullRequestReviewsResponse);
+  rpc GetPullRequestReviewComments(GetPullRequestReviewCommentsRequest) returns (GetPullRequestReviewCommentsResponse);
   rpc CreatePullRequestReview(CreatePullRequestReviewRequest) returns (CreatePullRequestReviewResponse);
   rpc GetPullRequestReviewMutation(GetPullRequestReviewMutationRequest) returns (GetPullRequestReviewMutationResponse);
 }
@@ -692,6 +693,44 @@ message ListPullRequestReviewsResponse {
   // Provider filtering can produce an empty page that still has a next page.
   repeated PullRequestReview reviews = 1;
   PageResponse page = 2;
+}
+// Native comments do not expose reply IDs, ranges or authoritative outdatedness.
+message PullRequestReviewComment {
+  string id = 1;
+  User user = 2;
+  User resolver = 3;
+  string body = 4;
+  string path = 5;
+  // Exactly one native side is present; these are file lines, not patch offsets.
+  uint32 old_line = 6;
+  uint32 new_line = 7;
+  string review_id = 8;
+  // Native line/blame metadata, distinct from the review's selected commit.
+  string commit_id = 9;
+  string original_commit_id = 10;
+  string diff_hunk = 11;
+  string created_at = 12;
+  string updated_at = 13;
+  string html_url = 14;
+  // Per-comment native resolver presence, including a deleted resolver.
+  // This does not establish resolution of an inferred location or thread.
+  bool resolved = 15;
+}
+message GetPullRequestReviewCommentsRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string pull_request_id = 3;
+  uint32 number = 4;
+  string review_id = 5;
+  string review_commit_id = 6;
+}
+message GetPullRequestReviewCommentsResponse {
+  string repository_id = 1;
+  string pull_request_id = 2;
+  PullRequestReview review = 3;
+  // Entire bounded native collection; the supported endpoint is unpaginated.
+  repeated PullRequestReviewComment comments = 4;
+  string current_head_commit_id = 5;
 }
 
 enum CapabilityState {

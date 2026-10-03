@@ -76,7 +76,7 @@ func TestMCPDiscoveryReadErrorsAndCleanup(t *testing.T) {
 			defer upstream.Close()
 			s := mcpTestSession(t, upstream.URL, version, context.Background())
 			tools, err := s.ListTools(context.Background(), &mcp.ListToolsParams{})
-			if err != nil || len(tools.Tools) != 21 || logins.Load() != 0 {
+			if err != nil || len(tools.Tools) != 22 || logins.Load() != 0 {
 				t.Fatalf("discovery performed authentication or lost tools: %v", err)
 			}
 			for _, tool := range tools.Tools {
@@ -125,10 +125,10 @@ func TestMCPDiscoveryReadErrorsAndCleanup(t *testing.T) {
 }
 
 func TestMCPInputAndLaunchBoundary(t *testing.T) {
-	values := map[string]any{"repository": "alice/private", "organization": "org", "team_id": "9007199254740993", "idempotency_key": "12345678-1234-4234-8234-123456789abc", "commit_id": strings.Repeat("a", 40), "number": 1}
+	values := map[string]any{"repository": "alice/private", "organization": "org", "team_id": "9007199254740993", "idempotency_key": "12345678-1234-4234-8234-123456789abc", "commit_id": strings.Repeat("a", 40), "number": 1, "review_id": "9007199254740993", "repository_id": "9007199254740994", "pull_request_id": "9223372036854775807", "review_commit_id": strings.Repeat("a", 40)}
 	for _, tool := range mcpReads {
 		args := map[string]any{}
-		for _, key := range tool.positions {
+		for _, key := range tool.schema()["required"].([]string) {
 			args[key] = values[key]
 		}
 		raw, _ := json.Marshal(args)
@@ -251,5 +251,145 @@ func TestMCPCancellationAndSaturation(t *testing.T) {
 			}
 
 		})
+	}
+}
+
+func TestMCPReviewCommentsExactSelectionAndCredentialModes(t *testing.T) {
+	ref := strings.Repeat("a", 40)
+	arguments := map[string]any{"repository": "alice/private", "number": 7, "review_id": "9007199254740993", "repository_id": "9007199254740994", "pull_request_id": "9223372036854775807", "review_commit_id": ref}
+	var tool mcpRead
+	for _, candidate := range mcpReads {
+		if candidate.name == "golf_pr_review_comments" {
+			tool = candidate
+		}
+	}
+	if !reflect.DeepEqual(tool.schema()["required"], []string{"repository", "number", "review_id", "repository_id", "pull_request_id", "review_commit_id"}) {
+		t.Fatal("explicit identity fields are not required")
+	}
+	properties := tool.schema()["properties"].(map[string]any)
+	for _, field := range []string{"review_id", "repository_id", "pull_request_id", "review_commit_id"} {
+		if properties[field].(map[string]any)["type"] != "string" {
+			t.Fatal("opaque ID became a number")
+		}
+	}
+	for _, version := range []string{"2026-07-28", "2025-11-25"} {
+		for _, api := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/api=%v", version, api), func(t *testing.T) {
+				var logins, reads, logouts atomic.Int32
+				var deny, failCleanup atomic.Bool
+				upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					if r.Header.Get("Origin") != "http://"+r.Host {
+						t.Error("origin changed")
+					}
+					switch {
+					case strings.HasSuffix(r.URL.Path, "/LoginWithGiteaToken"):
+						if api {
+							t.Error("bearer attempted bootstrap")
+						}
+						logins.Add(1)
+						http.SetCookie(w, &http.Cookie{Name: "golf_session", Value: "temporary", Path: "/", HttpOnly: true})
+						fmt.Fprint(w, `{}`)
+					case strings.HasSuffix(r.URL.Path, "/Logout"):
+						logouts.Add(1)
+						if failCleanup.Load() {
+							w.WriteHeader(503)
+							fmt.Fprint(w, `{"code":"unavailable","message":"fixture-private-token"}`)
+						} else {
+							fmt.Fprint(w, `{}`)
+						}
+					case strings.HasSuffix(r.URL.Path, "/GetPullRequestReviewComments"):
+						reads.Add(1)
+						var input map[string]any
+						if json.NewDecoder(r.Body).Decode(&input) != nil || !reflect.DeepEqual(input, map[string]any{"repository": map[string]any{"owner": "alice", "name": "private"}, "number": float64(7), "repositoryId": arguments["repository_id"], "pullRequestId": arguments["pull_request_id"], "reviewId": arguments["review_id"], "reviewCommitId": ref}) {
+							t.Error("selection/alias mapping lost precision")
+						}
+						if api {
+							if r.Header.Get("Authorization") != "Bearer fixture-private-token" || r.Header.Get("Cookie") != "" {
+								t.Error("bearer authority changed")
+							}
+						} else if cookie, err := r.Cookie("golf_session"); err != nil || cookie.Value != "temporary" {
+							t.Error("temporary session missing")
+						}
+						if deny.Load() {
+							w.WriteHeader(403)
+							fmt.Fprint(w, `{"code":"permission_denied","message":"fixture-private-token private-review-body"}`)
+						} else {
+							fmt.Fprint(w, `{"repositoryId":"9007199254740994","pullRequestId":"9223372036854775807","review":{"id":"9007199254740993"},"comments":[{"id":"9007199254740995","body":"private-review-body"}]}`)
+						}
+					default:
+						t.Error("unexpected lookup/pager/write")
+						w.WriteHeader(404)
+					}
+				}))
+				defer upstream.Close()
+				session := mcpTestCredentialSession(t, upstream.URL, version, context.Background(), credential{token: "fixture-private-token", api: api})
+				call := func(args map[string]any) *mcp.CallToolResult {
+					t.Helper()
+					result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: tool.name, Arguments: args})
+					if err != nil {
+						t.Fatal(err)
+					}
+					return result
+				}
+				for _, field := range []string{"review_id", "repository_id", "pull_request_id", "review_commit_id"} {
+					for _, value := range []any{nil, "", float64(9007199254740993), "01", "+1", "9223372036854775808", "main"} {
+						input := map[string]any{}
+						for key, original := range arguments {
+							input[key] = original
+						}
+						input[field] = value
+						if result := call(input); !result.IsError || result.StructuredContent != nil || logins.Load() != 0 || reads.Load() != 0 {
+							t.Fatal("invalid opaque selection reached authentication")
+						}
+					}
+					input := map[string]any{}
+					for key, original := range arguments {
+						if key != field {
+							input[key] = original
+						}
+					}
+					if result := call(input); !result.IsError || logins.Load() != 0 || reads.Load() != 0 {
+						t.Fatal("missing binding authenticated")
+					}
+				}
+				for _, field := range []string{"page", "limit", "token", "origin", "command"} {
+					input := map[string]any{}
+					for key, value := range arguments {
+						input[key] = value
+					}
+					input[field] = 1
+					if result := call(input); !result.IsError || reads.Load() != 0 {
+						t.Fatal("extra authority/pagination accepted")
+					}
+				}
+				result := call(arguments)
+				encoded, _ := json.Marshal(result.StructuredContent)
+				var structured, textual any
+				json.Unmarshal(encoded, &structured)
+				json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &textual)
+				if result.IsError || !reflect.DeepEqual(structured, textual) || !strings.Contains(string(encoded), `"9007199254740995"`) {
+					t.Fatal("successful comment output/IDs/parity lost")
+				}
+				deny.Store(true)
+				result = call(arguments)
+				if !result.IsError || result.StructuredContent != nil || strings.Contains(result.Content[0].(*mcp.TextContent).Text, "private-review-body") || strings.Contains(result.Content[0].(*mcp.TextContent).Text, "fixture-private-token") {
+					t.Fatal("denied private output leaked")
+				}
+				want := int32(2)
+				if !api {
+					deny.Store(false)
+					failCleanup.Store(true)
+					result = call(arguments)
+					if !result.IsError || result.StructuredContent != nil {
+						t.Fatal("failed logout released comments")
+					}
+					want = 3
+				}
+				if reads.Load() != want || api && (logins.Load() != 0 || logouts.Load() != 0) || !api && (logins.Load() != want || logouts.Load() != want) {
+					t.Fatal("cleanup reused sessions or bearer performed session writes")
+				}
+			})
+		}
 	}
 }

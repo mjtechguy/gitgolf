@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Bounded executable route/receive negative corpus; no native side effects."""
 import unittest
+from pathlib import Path
+import subprocess
+import tempfile
 from classifier import Denied, classify
+from qualify import command, declared_receive, git_environment
 
 INTENT = {'owner': 'fixture', 'repository': 'source', 'branch': 'feature',
           'old': '1' * 40, 'new': '2' * 40}
@@ -16,7 +20,7 @@ def receive(old=INTENT['old'], new=INTENT['new'], ref='refs/heads/feature', caps
 
 class ClassifierTests(unittest.TestCase):
     def test_reads(self):
-        for target in ('/api/v1/version', '/api/v1/repos/fixture/source',
+        for target in ('/api/v1/version', '/api/v1/user', '/api/v1/repos/fixture/source',
                        '/api/v1/repos/fixture/source/branches/main',
                        GIT + '/info/refs?service=git-upload-pack', GIT + '/info/refs?service=git-receive-pack'):
             self.assertTrue(classify('GET', target, HEADERS, b'', INTENT))
@@ -40,7 +44,7 @@ class ClassifierTests(unittest.TestCase):
         # The same admitted read address must not become a native PATCH/DELETE
         # surface merely because its GET route is recognized.
         for method in ('POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'):
-            for target in ('/api/v1/version', '/api/v1/repos/fixture/source',
+            for target in ('/api/v1/version', '/api/v1/user', '/api/v1/repos/fixture/source',
                            '/api/v1/repos/fixture/source/branches/main'):
                 with self.subTest(method=method, target=target), self.assertRaises(Denied):
                     classify(method, target, HEADERS, b'', INTENT)
@@ -59,6 +63,25 @@ class ClassifierTests(unittest.TestCase):
             with self.assertRaises(Denied):
                 classify('GET', '/api/v1/version', headers, body, INTENT)
 
+    def test_narrow_bearer_user_read(self):
+        for token in ('1' * 40, 'eyJhbGciOiJSUzI1NiJ9.payload.signature'):
+            headers = {'Authorization': 'Bearer ' + token}
+            self.assertEqual(classify('GET', '/api/v1/user', headers, b'', INTENT), 'classified-current-user-read')
+            self.assertEqual(classify('GET', '/api/v1/repos/fixture/source', headers, b'', INTENT), 'classified-metadata-read')
+            for target in (GIT + '/info/refs?service=git-upload-pack',
+                           GIT + '/info/refs?service=git-receive-pack',
+                           '/api/v1/user?access_token=' + token, '/api/v1/user/settings',
+                           '/api/v1/users/other', '/login/oauth/access_token'):
+                with self.subTest(target=target), self.assertRaises(Denied):
+                    classify('GET', target, headers, b'', INTENT)
+        for token in ('', 'contains space', 'contains\ttab', 'contains\rnewline',
+                      'nonascii\u00e9', 'abc=padding-middle', 'x' * 8193):
+            with self.subTest(token=token[:8]), self.assertRaises(Denied):
+                classify('GET', '/api/v1/user', {'Authorization': 'Bearer ' + token}, b'', INTENT)
+        with self.assertRaises(Denied):
+            classify('POST', GIT + '/git-receive-pack', {'Authorization': 'Bearer ' + '1' * 40,
+                     'Content-Type': 'application/x-git-receive-pack-request'}, receive(), INTENT)
+
     def test_receive(self):
         headers = HEADERS | {'Content-Type': 'application/x-git-receive-pack-request'}
         self.assertEqual(classify('POST', GIT + '/git-receive-pack', headers, receive(), INTENT), 'one-declared-branch-receive')
@@ -76,6 +99,32 @@ class ClassifierTests(unittest.TestCase):
         for headers in (HEADERS, headers | {'Git-Protocol': 'version=2'}):
             with self.assertRaises(Denied):
                 classify('POST', GIT + '/git-receive-pack', headers, receive(), INTENT)
+
+    def test_local_git_pack_replay_body(self):
+        # Pure local Git work: no provider/network/container or real credential.
+        # Verify the replay helper makes a valid pack and matching protocol body,
+        # rather than an invalid body that any provider would reject anyway.
+        env = git_environment('fixture', '1' * 40)
+        with tempfile.TemporaryDirectory(prefix='golf-boundary-unit-') as temporary:
+            work = Path(temporary)
+            command('git', 'init', '--quiet', '--initial-branch=main', env=env, cwd=work)
+            for key, value in (('user.name', 'Fixture'), ('user.email', 'fixture@example.invalid'),
+                               ('commit.gpgsign', 'false')):
+                command('git', 'config', key, value, env=env, cwd=work)
+            commits = []
+            for content in ('base\n', 'candidate\n'):
+                (work / 'fixture.txt').write_text(content)
+                command('git', 'add', '--', 'fixture.txt', env=env, cwd=work)
+                command('git', 'commit', '--quiet', '-m', 'Local fixture', env=env, cwd=work)
+                commits.append(command('git', 'rev-parse', 'HEAD', env=env, cwd=work))
+            intent = INTENT | dict(old=commits[0], new=commits[1])
+            body = declared_receive(work, env, intent)
+            self.assertEqual(classify('POST', GIT + '/git-receive-pack',
+                HEADERS | {'Content-Type': 'application/x-git-receive-pack-request'}, body, intent), 'one-declared-branch-receive')
+            start = int(body[:4], 16) + 4
+            result = subprocess.run(['git', 'index-pack', '--strict', '--stdin'], cwd=work,
+                env=env, input=body[start:], capture_output=True, timeout=30)
+            self.assertEqual(result.returncode, 0, 'Local replay pack failed native Git validation')
 
 
 if __name__ == '__main__':

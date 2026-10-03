@@ -34,6 +34,14 @@ def classify(method, target, headers, body, intent):
     if authorization.startswith('token '):
         if not SHA.fullmatch(authorization[6:]):
             raise Denied('fixture PAT format required')
+    elif authorization.startswith('Bearer '):
+        # Native auth owns signature/expiry/scope validation. This grammar is
+        # only a bounded header format, never evidence that a token is valid.
+        bearer = authorization[7:]
+        if len(bearer) > 8192 or not re.fullmatch(r'[A-Za-z0-9._~+/-]+=*', bearer):
+            raise Denied('Bearer credential format')
+        if not target.startswith('/api/v1/'):
+            raise Denied('Bearer Git transport not qualified')
     elif authorization.startswith('Basic '):
         try:
             username, password = base64.b64decode(authorization[6:], validate=True).decode('ascii').split(':', 1)
@@ -46,6 +54,8 @@ def classify(method, target, headers, body, intent):
     repo = '/api/v1/repos/' + intent['owner'] + '/' + intent['repository']
     git = '/' + intent['owner'] + '/' + intent['repository'] + '.git'
     if method == 'GET' and not body:
+        if target == '/api/v1/user':
+            return 'classified-current-user-read'
         if target in ('/api/v1/version', repo, repo + '/branches/main'):
             return 'classified-metadata-read'
         if target == git + '/info/refs?service=git-upload-pack':
