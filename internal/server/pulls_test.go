@@ -23,6 +23,8 @@ var pullProcedures = []string{
 	golfv1connect.RepositoryServiceListPullRequestsProcedure,
 	golfv1connect.RepositoryServiceGetPullRequestProcedure,
 	golfv1connect.RepositoryServiceListPullRequestReviewsProcedure,
+	golfv1connect.RepositoryServiceCreatePullRequestReviewProcedure,
+	golfv1connect.RepositoryServiceGetPullRequestReviewMutationProcedure,
 }
 
 func TestPullBoundary(t *testing.T) {
@@ -87,6 +89,10 @@ func (f *pullFixture) serveProvider(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Header.Get("Authorization") != "token pull-pat" && r.Header.Get("Authorization") != "Bearer pull-oauth" {
 		w.WriteHeader(401)
+		return
+	}
+	if r.URL.Path == "/api/v1/settings/api" {
+		fmt.Fprint(w, `{"max_response_items":50}`)
 		return
 	}
 	mode := f.mode.Load().(string)

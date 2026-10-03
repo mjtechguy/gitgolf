@@ -149,6 +149,8 @@ service RepositoryService {
   rpc ListPullRequests(ListPullRequestsRequest) returns (ListPullRequestsResponse);
   rpc GetPullRequest(GetPullRequestRequest) returns (GetPullRequestResponse);
   rpc ListPullRequestReviews(ListPullRequestReviewsRequest) returns (ListPullRequestReviewsResponse);
+  rpc CreatePullRequestReview(CreatePullRequestReviewRequest) returns (CreatePullRequestReviewResponse);
+  rpc GetPullRequestReviewMutation(GetPullRequestReviewMutationRequest) returns (GetPullRequestReviewMutationResponse);
 }
 
 // Native forge membership browsing. These reads do not define Golf roles.
@@ -642,6 +644,44 @@ message PullRequestReview {
   string submitted_at = 9;
   string updated_at = 10;
   string html_url = 11;
+  uint32 comments_count = 12;
+}
+// Immediate overall review only; pending/inline draft publication is separate.
+message CreatePullRequestReviewRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string pull_request_id = 3;
+  uint32 number = 4;
+  string expected_revision = 5;
+  string base_commit_id = 6;
+  string head_commit_id = 7;
+  PullRequestReviewState state = 8;
+  string body = 9;
+  string idempotency_key = 10;
+}
+message PullRequestReviewMutation {
+  string id = 1;
+  string idempotency_key = 2;
+  IssueMutationState state = 3;
+  RepositoryKey repository = 4;
+  string repository_id = 5;
+  string pull_request_id = 6;
+  uint32 number = 7;
+  string head_commit_id = 8;
+  PullRequestReviewState review_state = 9;
+  string observed_review_id = 10;
+  string failure_code = 11;
+  string created_at = 12;
+  string updated_at = 13;
+}
+message CreatePullRequestReviewResponse {
+  PullRequestReviewMutation mutation = 1;
+  PullRequestReview review = 2;
+}
+message GetPullRequestReviewMutationRequest { string idempotency_key = 1; }
+message GetPullRequestReviewMutationResponse {
+  PullRequestReviewMutation mutation = 1;
+  PullRequestReview review = 2;
 }
 message ListPullRequestReviewsRequest {
   RepositoryKey repository = 1;

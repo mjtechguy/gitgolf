@@ -245,36 +245,38 @@ func (s *Server) ListRepositoryCollaborators(ctx context.Context, req *connect.R
 	}
 	result := &golfv1.ListRepositoryCollaboratorsResponse{}
 	err = s.withRepositoryAccess(ctx, s.cookieValue(req.Header()), token, key, req.Msg.RepositoryId, req.Msg.OwnerId, req.Msg.ExpectedRevision, func(_ User, access *golfv1.RepositoryAccess) error {
-		base, _ := repositoryPath(key)
-		var users []User
-		headers, err := s.forge(ctx, http.MethodGet, base+"/collaborators?"+pageQuery(page, limit).Encode(), token, nil, &users)
-		if err != nil {
-			return err
-		}
-		next, err := repositoryCollaboratorNextPage(headers, page, limit)
-		if err != nil {
-			return err
-		}
-		if len(users) > int(limit) {
-			return errInvalidForgeResponse
-		}
-		seen := map[int64]bool{}
-		for _, user := range users {
-			if user.ID <= 0 || !validOrganizationName(user.Login) || seen[user.ID] {
-				return errInvalidForgeResponse
-			}
-			seen[user.ID] = true
-			member, err := s.readRepositoryCollaborator(ctx, token, key, access, user.Login)
+		return s.withNativePageSize(ctx, token, limit, func(limit uint32) error {
+			base, _ := repositoryPath(key)
+			var users []User
+			headers, err := s.forge(ctx, http.MethodGet, base+"/collaborators?"+pageQuery(page, limit).Encode(), token, nil, &users)
 			if err != nil {
 				return err
 			}
-			if member.User.Id != strconv.FormatInt(user.ID, 10) || !member.IsDirect {
-				return errRepositoryAccessConflict
+			next, err := repositoryCollaboratorNextPage(headers, page, limit)
+			if err != nil {
+				return err
 			}
-			result.Collaborators = append(result.Collaborators, member)
-		}
-		result.Page = wirePage(next)
-		return nil
+			if len(users) > int(limit) {
+				return errInvalidForgeResponse
+			}
+			seen := map[int64]bool{}
+			for _, user := range users {
+				if user.ID <= 0 || !validOrganizationName(user.Login) || seen[user.ID] {
+					return errInvalidForgeResponse
+				}
+				seen[user.ID] = true
+				member, err := s.readRepositoryCollaborator(ctx, token, key, access, user.Login)
+				if err != nil {
+					return err
+				}
+				if member.User.Id != strconv.FormatInt(user.ID, 10) || !member.IsDirect {
+					return errRepositoryAccessConflict
+				}
+				result.Collaborators = append(result.Collaborators, member)
+			}
+			result.Page = wirePage(next)
+			return nil
+		})
 	})
 	if err != nil {
 		return nil, rpcError(err)

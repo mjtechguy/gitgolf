@@ -55,6 +55,15 @@ type forgePullReview struct {
 	UpdatedAt      string `json:"updated_at"`
 	HTMLURL        string `json:"html_url"`
 	PullRequestURL string `json:"pull_request_url"`
+	CommentsCount  *int64 `json:"comments_count"`
+}
+
+func wirePullReview(row forgePullReview) *golfv1.PullRequestReview {
+	result := &golfv1.PullRequestReview{Id: strconv.FormatInt(row.ID, 10), User: wirePullUser(row.User), Body: row.Body, State: pullReviewState(row.State), CommitId: row.CommitID, Stale: row.Stale, Dismissed: row.Dismissed, Official: row.Official, SubmittedAt: row.SubmittedAt, UpdatedAt: row.UpdatedAt, HtmlUrl: row.HTMLURL}
+	if row.CommentsCount != nil && *row.CommentsCount >= 0 && *row.CommentsCount <= 2147483647 {
+		result.CommentsCount = uint32(*row.CommentsCount)
+	}
+	return result
 }
 
 func pullState(value golfv1.IssueState) (string, error) {
@@ -233,30 +242,32 @@ func (s *Server) listPullRequests(ctx context.Context, value string, token forge
 	var result []*golfv1.PullRequest
 	var next uint32
 	err = s.withRepositoryRead(ctx, value, token, key, func(base string, repo Repository) error {
-		query := pageQuery(page, limit)
-		query.Set("state", filter)
-		query.Set("sort", "recentupdate")
-		var rows []forgePull
-		headers, err := s.forge(ctx, http.MethodGet, base+"/pulls?"+query.Encode(), token, nil, &rows)
-		if err != nil {
-			return err
-		}
-		if rows == nil {
-			return errInvalidForgeResponse
-		}
-		if len(rows) > int(limit) {
-			return errForgeResponseTooLarge
-		}
-		seenID, seenNumber := map[int64]bool{}, map[int64]bool{}
-		for _, row := range rows {
-			if !validPull(row, repo) || seenID[row.ID] || seenNumber[row.Number] || (filter != "all" && row.State != filter) {
+		return s.withNativePageSize(ctx, token, limit, func(limit uint32) error {
+			query := pageQuery(page, limit)
+			query.Set("state", filter)
+			query.Set("sort", "recentupdate")
+			var rows []forgePull
+			headers, err := s.forge(ctx, http.MethodGet, base+"/pulls?"+query.Encode(), token, nil, &rows)
+			if err != nil {
+				return err
+			}
+			if rows == nil {
 				return errInvalidForgeResponse
 			}
-			seenID[row.ID], seenNumber[row.Number] = true, true
-			result = append(result, wirePull(row, true))
-		}
-		next, err = pullNextPage(headers, page, limit)
-		return err
+			if len(rows) > int(limit) {
+				return errForgeResponseTooLarge
+			}
+			seenID, seenNumber := map[int64]bool{}, map[int64]bool{}
+			for _, row := range rows {
+				if !validPull(row, repo) || seenID[row.ID] || seenNumber[row.Number] || (filter != "all" && row.State != filter) {
+					return errInvalidForgeResponse
+				}
+				seenID[row.ID], seenNumber[row.Number] = true, true
+				result = append(result, wirePull(row, true))
+			}
+			next, err = pullNextPage(headers, page, limit)
+			return err
+		})
 	})
 	if err != nil {
 		return nil, 0, err
@@ -293,35 +304,35 @@ func (s *Server) listPullRequestReviews(ctx context.Context, value string, token
 	var result []*golfv1.PullRequestReview
 	var next uint32
 	err = s.withRepositoryRead(ctx, value, token, key, func(base string, repo Repository) error {
-		pull, err := s.readPull(ctx, token, base, repo, number)
-		if err != nil {
-			return err
-		}
-		var rows []forgePullReview
-		headers, err := s.forge(ctx, http.MethodGet, base+"/pulls/"+strconv.FormatUint(uint64(number), 10)+"/reviews?"+pageQuery(page, limit).Encode(), token, nil, &rows)
-		if err != nil {
-			return err
-		}
-		if rows == nil {
-			return errInvalidForgeResponse
-		}
-		if len(rows) > int(limit) {
-			return errForgeResponseTooLarge
-		}
-		seen := map[int64]bool{}
-		for _, row := range rows {
-			state := pullReviewState(row.State)
-			if row.ID <= 0 || seen[row.ID] || !validPullUser(row.User) || state == golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_UNSPECIFIED ||
-				(row.CommitID != "" && !objectID.MatchString(row.CommitID)) || !validPullTime(row.SubmittedAt) || !validPullTime(row.UpdatedAt) || row.PullRequestURL != pull.HTMLURL {
+		return s.withNativePageSize(ctx, token, limit, func(limit uint32) error {
+			pull, err := s.readPull(ctx, token, base, repo, number)
+			if err != nil {
+				return err
+			}
+			var rows []forgePullReview
+			headers, err := s.forge(ctx, http.MethodGet, base+"/pulls/"+strconv.FormatUint(uint64(number), 10)+"/reviews?"+pageQuery(page, limit).Encode(), token, nil, &rows)
+			if err != nil {
+				return err
+			}
+			if rows == nil {
 				return errInvalidForgeResponse
 			}
-			seen[row.ID] = true
-			result = append(result, &golfv1.PullRequestReview{Id: strconv.FormatInt(row.ID, 10), User: wirePullUser(row.User), Body: row.Body,
-				State: state, CommitId: row.CommitID, Stale: row.Stale, Dismissed: row.Dismissed, Official: row.Official,
-				SubmittedAt: row.SubmittedAt, UpdatedAt: row.UpdatedAt, HtmlUrl: row.HTMLURL})
-		}
-		next, err = pullNextPage(headers, page, limit)
-		return err
+			if len(rows) > int(limit) {
+				return errForgeResponseTooLarge
+			}
+			seen := map[int64]bool{}
+			for _, row := range rows {
+				state := pullReviewState(row.State)
+				if row.ID <= 0 || seen[row.ID] || !validPullUser(row.User) || state == golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_UNSPECIFIED ||
+					(row.CommitID != "" && !objectID.MatchString(row.CommitID)) || !validPullTime(row.SubmittedAt) || !validPullTime(row.UpdatedAt) || row.PullRequestURL != pull.HTMLURL {
+					return errInvalidForgeResponse
+				}
+				seen[row.ID] = true
+				result = append(result, wirePullReview(row))
+			}
+			next, err = pullNextPage(headers, page, limit)
+			return err
+		})
 	})
 	if err != nil {
 		return nil, 0, err

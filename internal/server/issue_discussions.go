@@ -140,60 +140,62 @@ func (s *Server) listIssueComments(ctx context.Context, session string, token fo
 	var result []*golfv1.IssueComment
 	var next uint32
 	err = s.withRepositoryRead(ctx, session, token, key, func(base string, repo Repository) error {
-		if repo.ID != repoID {
-			return errIssueTargetChanged
-		}
-		before, err := s.readDiscussionIssue(ctx, token, base, repo, number)
-		if err != nil {
-			return err
-		}
-		if before.ID != issueID {
-			return errIssueTargetChanged
-		}
-		var comments []forgeIssueComment
-		headers, err := s.forge(ctx, http.MethodGet, base+"/issues/comments?"+pageQuery(page, limit).Encode(), token, nil, &comments)
-		if err != nil {
-			return err
-		}
-		if len(comments) > int(limit) {
-			return errForgeResponseTooLarge
-		}
-		next, err = pullNextPage(headers, page, limit)
-		if err != nil {
-			return err
-		}
-		seen := map[int64]bool{}
-		for _, comment := range comments {
-			if comment.ID <= 0 || seen[comment.ID] {
-				return errInvalidForgeResponse
+		return s.withNativePageSize(ctx, token, limit, func(limit uint32) error {
+			if repo.ID != repoID {
+				return errIssueTargetChanged
 			}
-			seen[comment.ID] = true
-			// Exactly one native repository-wide page. Unrelated issues and PRs
-			// never enter Golf's response; an empty filtered page may advance.
-			related := discussionURL(comment.IssueURL, repo.HTMLURL, issueSuffix(int64(number)), "")
-			if isPullDiscussion(ctx) {
-				related = discussionURL(comment.PullRequestURL, repo.HTMLURL, discussionSuffix(int64(number), true), "")
+			before, err := s.readDiscussionIssue(ctx, token, base, repo, number)
+			if err != nil {
+				return err
 			}
-			if !related {
-				continue
+			if before.ID != issueID {
+				return errIssueTargetChanged
 			}
-
-			if len(comment.Body) > 256<<10 {
+			var comments []forgeIssueComment
+			headers, err := s.forge(ctx, http.MethodGet, base+"/issues/comments?"+pageQuery(page, limit).Encode(), token, nil, &comments)
+			if err != nil {
+				return err
+			}
+			if len(comments) > int(limit) {
 				return errForgeResponseTooLarge
 			}
-			if !validIssueComment(comment, repo, number, isPullDiscussion(ctx)) {
-				return errInvalidForgeResponse
+			next, err = pullNextPage(headers, page, limit)
+			if err != nil {
+				return err
 			}
-			result = append(result, wireIssueComment(comment))
-		}
-		after, err := s.readDiscussionIssue(ctx, token, base, repo, number)
-		if err != nil {
-			return err
-		}
-		if after.ID != issueID {
-			return errIssueTargetChanged
-		}
-		return nil
+			seen := map[int64]bool{}
+			for _, comment := range comments {
+				if comment.ID <= 0 || seen[comment.ID] {
+					return errInvalidForgeResponse
+				}
+				seen[comment.ID] = true
+				// Exactly one native repository-wide page. Unrelated issues and PRs
+				// never enter Golf's response; an empty filtered page may advance.
+				related := discussionURL(comment.IssueURL, repo.HTMLURL, issueSuffix(int64(number)), "")
+				if isPullDiscussion(ctx) {
+					related = discussionURL(comment.PullRequestURL, repo.HTMLURL, discussionSuffix(int64(number), true), "")
+				}
+				if !related {
+					continue
+				}
+
+				if len(comment.Body) > 256<<10 {
+					return errForgeResponseTooLarge
+				}
+				if !validIssueComment(comment, repo, number, isPullDiscussion(ctx)) {
+					return errInvalidForgeResponse
+				}
+				result = append(result, wireIssueComment(comment))
+			}
+			after, err := s.readDiscussionIssue(ctx, token, base, repo, number)
+			if err != nil {
+				return err
+			}
+			if after.ID != issueID {
+				return errIssueTargetChanged
+			}
+			return nil
+		})
 	})
 	if err != nil {
 		return nil, 0, err

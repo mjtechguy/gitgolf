@@ -38,6 +38,15 @@ qualify-pull-workspace:
 qualify-pull-mutations:
 	python3 scripts/pull-mutations-smoke.py
 
+.PHONY: qualify-pull-reviews qualify-pull-review-native qualify-protected-boundary
+qualify-pull-reviews:
+	python3 scripts/pull-review-mutations-smoke.py
+qualify-pull-review-native:
+	python3 scripts/pull-review-native-probe.py
+qualify-protected-boundary:
+	python3 -m unittest discover -s scripts/protected-boundary -p 'test_*.py'
+	python3 scripts/protected-boundary/qualify.py
+
 .PHONY: qualify-issue-updates
 qualify-issue-updates:
 	python3 scripts/issue-updates-smoke.py

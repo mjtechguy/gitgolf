@@ -66,6 +66,10 @@ func newDiscussionFixture(t *testing.T) *discussionFixture {
 			fmt.Fprint(w, `{"version":"1.27.3"}`)
 			return
 		}
+		if r.URL.Path == "/api/v1/settings/api" {
+			fmt.Fprint(w, `{"max_response_items":50}`)
+			return
+		}
 		if status := f.readStatus.Load(); r.Method == "GET" && status != 0 {
 			w.WriteHeader(int(status))
 			return

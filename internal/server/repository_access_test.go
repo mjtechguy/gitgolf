@@ -82,6 +82,8 @@ func TestRepositoryAccessNativeProjection(t *testing.T) {
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case r.URL.Path == "/api/v1/settings/api":
+			json.NewEncoder(w).Encode(map[string]int{"max_response_items": 50})
 		case r.URL.Path == "/api/v1/version":
 			json.NewEncoder(w).Encode(map[string]string{"version": "1.27.3"})
 		case r.URL.Path == "/api/v1/repos/alice/example":
@@ -173,6 +175,8 @@ func TestRepositoryAccessPostgres(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 		switch r.URL.Path {
+		case "/api/v1/settings/api":
+			json.NewEncoder(w).Encode(map[string]int{"max_response_items": 50})
 		case "/api/v1/version":
 			json.NewEncoder(w).Encode(map[string]string{"version": "1.27.3"})
 		case "/api/v1/user":

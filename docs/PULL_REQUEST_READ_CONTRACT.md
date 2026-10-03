@@ -73,3 +73,7 @@ The subsequent [PR mutation contract](PULL_MUTATION_CONTRACT.md) adds browser-se
 ## Current shared diff presentation
 
 The [shared diff workspace contract](DIFF_WORKSPACE_CONTRACT.md) supersedes earlier presentation-only descriptions: compact native-index-bound folder navigation, loaded file-type/Viewed filters, persisted display booleans, optional wrapping and safe per-hunk syntax tokens now accompany the original native text. Native reads/authorization and protected-write limitations above remain unchanged. Current exact qualification is recorded in the implementation ledger.
+
+## Configured native page span follow-up (2026-10-03)
+
+Total-based PR/review/comment/collaborator pagination now observes the supported native API settings around each read and requests the smaller of the caller limit and `max_response_items`. Current native settings clamp100 to50. Completion arithmetic uses this actual configured span; visible empty filtered pages retain continuation. Invalid/missing or observed changed settings fail the read. This observes settings rather than locking configuration or detecting ABA changes. The [human review contract](PULL_REVIEW_MUTATION_CONTRACT.md) records the shared fix, real-PG regression evidence and its additional bounded pending-draft scan. That separately generated API/editor now publishes initial overall human reviews; inline drafts/threads/suggestions and protected publication remain open. Historical read-only scope statements above refer to their original increment.

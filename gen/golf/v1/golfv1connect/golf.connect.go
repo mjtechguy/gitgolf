@@ -211,6 +211,12 @@ const (
 	// RepositoryServiceListPullRequestReviewsProcedure is the fully-qualified name of the
 	// RepositoryService's ListPullRequestReviews RPC.
 	RepositoryServiceListPullRequestReviewsProcedure = "/golf.v1.RepositoryService/ListPullRequestReviews"
+	// RepositoryServiceCreatePullRequestReviewProcedure is the fully-qualified name of the
+	// RepositoryService's CreatePullRequestReview RPC.
+	RepositoryServiceCreatePullRequestReviewProcedure = "/golf.v1.RepositoryService/CreatePullRequestReview"
+	// RepositoryServiceGetPullRequestReviewMutationProcedure is the fully-qualified name of the
+	// RepositoryService's GetPullRequestReviewMutation RPC.
+	RepositoryServiceGetPullRequestReviewMutationProcedure = "/golf.v1.RepositoryService/GetPullRequestReviewMutation"
 	// OrganizationServiceListOrganizationsProcedure is the fully-qualified name of the
 	// OrganizationService's ListOrganizations RPC.
 	OrganizationServiceListOrganizationsProcedure = "/golf.v1.OrganizationService/ListOrganizations"
@@ -1061,6 +1067,8 @@ type RepositoryServiceClient interface {
 	ListPullRequests(context.Context, *connect.Request[v1.ListPullRequestsRequest]) (*connect.Response[v1.ListPullRequestsResponse], error)
 	GetPullRequest(context.Context, *connect.Request[v1.GetPullRequestRequest]) (*connect.Response[v1.GetPullRequestResponse], error)
 	ListPullRequestReviews(context.Context, *connect.Request[v1.ListPullRequestReviewsRequest]) (*connect.Response[v1.ListPullRequestReviewsResponse], error)
+	CreatePullRequestReview(context.Context, *connect.Request[v1.CreatePullRequestReviewRequest]) (*connect.Response[v1.CreatePullRequestReviewResponse], error)
+	GetPullRequestReviewMutation(context.Context, *connect.Request[v1.GetPullRequestReviewMutationRequest]) (*connect.Response[v1.GetPullRequestReviewMutationResponse], error)
 }
 
 // NewRepositoryServiceClient constructs a client for the golf.v1.RepositoryService service. By
@@ -1230,37 +1238,51 @@ func NewRepositoryServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(repositoryServiceMethods.ByName("ListPullRequestReviews")),
 			connect.WithClientOptions(opts...),
 		),
+		createPullRequestReview: connect.NewClient[v1.CreatePullRequestReviewRequest, v1.CreatePullRequestReviewResponse](
+			httpClient,
+			baseURL+RepositoryServiceCreatePullRequestReviewProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("CreatePullRequestReview")),
+			connect.WithClientOptions(opts...),
+		),
+		getPullRequestReviewMutation: connect.NewClient[v1.GetPullRequestReviewMutationRequest, v1.GetPullRequestReviewMutationResponse](
+			httpClient,
+			baseURL+RepositoryServiceGetPullRequestReviewMutationProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("GetPullRequestReviewMutation")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // repositoryServiceClient implements RepositoryServiceClient.
 type repositoryServiceClient struct {
-	listRepositories         *connect.Client[v1.ListRepositoriesRequest, v1.ListRepositoriesResponse]
-	createRepository         *connect.Client[v1.CreateRepositoryRequest, v1.CreateRepositoryResponse]
-	getRepositoryCreation    *connect.Client[v1.GetRepositoryCreationRequest, v1.GetRepositoryCreationResponse]
-	getRepository            *connect.Client[v1.GetRepositoryRequest, v1.GetRepositoryResponse]
-	listBranches             *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
-	listCommits              *connect.Client[v1.ListCommitsRequest, v1.ListCommitsResponse]
-	getCommitDiff            *connect.Client[v1.GetCommitDiffRequest, v1.GetCommitDiffResponse]
-	listPullRequestCommits   *connect.Client[v1.ListPullRequestCommitsRequest, v1.ListPullRequestCommitsResponse]
-	listPullRequestChecks    *connect.Client[v1.ListPullRequestChecksRequest, v1.ListPullRequestChecksResponse]
-	getPullRequestDiff       *connect.Client[v1.GetPullRequestDiffRequest, v1.GetPullRequestDiffResponse]
-	getRepositoryComparison  *connect.Client[v1.GetRepositoryComparisonRequest, v1.GetRepositoryComparisonResponse]
-	getRepositoryImage       *connect.Client[v1.GetRepositoryImageRequest, v1.GetRepositoryImageResponse]
-	getContents              *connect.Client[v1.GetContentsRequest, v1.GetContentsResponse]
-	listIssues               *connect.Client[v1.ListIssuesRequest, v1.ListIssuesResponse]
-	getPullRequestDiscussion *connect.Client[v1.GetPullRequestDiscussionRequest, v1.GetPullRequestDiscussionResponse]
-	getIssue                 *connect.Client[v1.GetIssueRequest, v1.GetIssueResponse]
-	listIssueComments        *connect.Client[v1.ListIssueCommentsRequest, v1.ListIssueCommentsResponse]
-	createIssue              *connect.Client[v1.CreateIssueRequest, v1.CreateIssueResponse]
-	createIssueComment       *connect.Client[v1.CreateIssueCommentRequest, v1.CreateIssueCommentResponse]
-	updateIssue              *connect.Client[v1.UpdateIssueRequest, v1.UpdateIssueResponse]
-	createPullRequest        *connect.Client[v1.CreatePullRequestRequest, v1.CreatePullRequestResponse]
-	updatePullRequest        *connect.Client[v1.UpdatePullRequestRequest, v1.UpdatePullRequestResponse]
-	getIssueMutation         *connect.Client[v1.GetIssueMutationRequest, v1.GetIssueMutationResponse]
-	listPullRequests         *connect.Client[v1.ListPullRequestsRequest, v1.ListPullRequestsResponse]
-	getPullRequest           *connect.Client[v1.GetPullRequestRequest, v1.GetPullRequestResponse]
-	listPullRequestReviews   *connect.Client[v1.ListPullRequestReviewsRequest, v1.ListPullRequestReviewsResponse]
+	listRepositories             *connect.Client[v1.ListRepositoriesRequest, v1.ListRepositoriesResponse]
+	createRepository             *connect.Client[v1.CreateRepositoryRequest, v1.CreateRepositoryResponse]
+	getRepositoryCreation        *connect.Client[v1.GetRepositoryCreationRequest, v1.GetRepositoryCreationResponse]
+	getRepository                *connect.Client[v1.GetRepositoryRequest, v1.GetRepositoryResponse]
+	listBranches                 *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
+	listCommits                  *connect.Client[v1.ListCommitsRequest, v1.ListCommitsResponse]
+	getCommitDiff                *connect.Client[v1.GetCommitDiffRequest, v1.GetCommitDiffResponse]
+	listPullRequestCommits       *connect.Client[v1.ListPullRequestCommitsRequest, v1.ListPullRequestCommitsResponse]
+	listPullRequestChecks        *connect.Client[v1.ListPullRequestChecksRequest, v1.ListPullRequestChecksResponse]
+	getPullRequestDiff           *connect.Client[v1.GetPullRequestDiffRequest, v1.GetPullRequestDiffResponse]
+	getRepositoryComparison      *connect.Client[v1.GetRepositoryComparisonRequest, v1.GetRepositoryComparisonResponse]
+	getRepositoryImage           *connect.Client[v1.GetRepositoryImageRequest, v1.GetRepositoryImageResponse]
+	getContents                  *connect.Client[v1.GetContentsRequest, v1.GetContentsResponse]
+	listIssues                   *connect.Client[v1.ListIssuesRequest, v1.ListIssuesResponse]
+	getPullRequestDiscussion     *connect.Client[v1.GetPullRequestDiscussionRequest, v1.GetPullRequestDiscussionResponse]
+	getIssue                     *connect.Client[v1.GetIssueRequest, v1.GetIssueResponse]
+	listIssueComments            *connect.Client[v1.ListIssueCommentsRequest, v1.ListIssueCommentsResponse]
+	createIssue                  *connect.Client[v1.CreateIssueRequest, v1.CreateIssueResponse]
+	createIssueComment           *connect.Client[v1.CreateIssueCommentRequest, v1.CreateIssueCommentResponse]
+	updateIssue                  *connect.Client[v1.UpdateIssueRequest, v1.UpdateIssueResponse]
+	createPullRequest            *connect.Client[v1.CreatePullRequestRequest, v1.CreatePullRequestResponse]
+	updatePullRequest            *connect.Client[v1.UpdatePullRequestRequest, v1.UpdatePullRequestResponse]
+	getIssueMutation             *connect.Client[v1.GetIssueMutationRequest, v1.GetIssueMutationResponse]
+	listPullRequests             *connect.Client[v1.ListPullRequestsRequest, v1.ListPullRequestsResponse]
+	getPullRequest               *connect.Client[v1.GetPullRequestRequest, v1.GetPullRequestResponse]
+	listPullRequestReviews       *connect.Client[v1.ListPullRequestReviewsRequest, v1.ListPullRequestReviewsResponse]
+	createPullRequestReview      *connect.Client[v1.CreatePullRequestReviewRequest, v1.CreatePullRequestReviewResponse]
+	getPullRequestReviewMutation *connect.Client[v1.GetPullRequestReviewMutationRequest, v1.GetPullRequestReviewMutationResponse]
 }
 
 // ListRepositories calls golf.v1.RepositoryService.ListRepositories.
@@ -1393,6 +1415,16 @@ func (c *repositoryServiceClient) ListPullRequestReviews(ctx context.Context, re
 	return c.listPullRequestReviews.CallUnary(ctx, req)
 }
 
+// CreatePullRequestReview calls golf.v1.RepositoryService.CreatePullRequestReview.
+func (c *repositoryServiceClient) CreatePullRequestReview(ctx context.Context, req *connect.Request[v1.CreatePullRequestReviewRequest]) (*connect.Response[v1.CreatePullRequestReviewResponse], error) {
+	return c.createPullRequestReview.CallUnary(ctx, req)
+}
+
+// GetPullRequestReviewMutation calls golf.v1.RepositoryService.GetPullRequestReviewMutation.
+func (c *repositoryServiceClient) GetPullRequestReviewMutation(ctx context.Context, req *connect.Request[v1.GetPullRequestReviewMutationRequest]) (*connect.Response[v1.GetPullRequestReviewMutationResponse], error) {
+	return c.getPullRequestReviewMutation.CallUnary(ctx, req)
+}
+
 // RepositoryServiceHandler is an implementation of the golf.v1.RepositoryService service.
 type RepositoryServiceHandler interface {
 	ListRepositories(context.Context, *connect.Request[v1.ListRepositoriesRequest]) (*connect.Response[v1.ListRepositoriesResponse], error)
@@ -1421,6 +1453,8 @@ type RepositoryServiceHandler interface {
 	ListPullRequests(context.Context, *connect.Request[v1.ListPullRequestsRequest]) (*connect.Response[v1.ListPullRequestsResponse], error)
 	GetPullRequest(context.Context, *connect.Request[v1.GetPullRequestRequest]) (*connect.Response[v1.GetPullRequestResponse], error)
 	ListPullRequestReviews(context.Context, *connect.Request[v1.ListPullRequestReviewsRequest]) (*connect.Response[v1.ListPullRequestReviewsResponse], error)
+	CreatePullRequestReview(context.Context, *connect.Request[v1.CreatePullRequestReviewRequest]) (*connect.Response[v1.CreatePullRequestReviewResponse], error)
+	GetPullRequestReviewMutation(context.Context, *connect.Request[v1.GetPullRequestReviewMutationRequest]) (*connect.Response[v1.GetPullRequestReviewMutationResponse], error)
 }
 
 // NewRepositoryServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -1586,6 +1620,18 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 		connect.WithSchema(repositoryServiceMethods.ByName("ListPullRequestReviews")),
 		connect.WithHandlerOptions(opts...),
 	)
+	repositoryServiceCreatePullRequestReviewHandler := connect.NewUnaryHandler(
+		RepositoryServiceCreatePullRequestReviewProcedure,
+		svc.CreatePullRequestReview,
+		connect.WithSchema(repositoryServiceMethods.ByName("CreatePullRequestReview")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryServiceGetPullRequestReviewMutationHandler := connect.NewUnaryHandler(
+		RepositoryServiceGetPullRequestReviewMutationProcedure,
+		svc.GetPullRequestReviewMutation,
+		connect.WithSchema(repositoryServiceMethods.ByName("GetPullRequestReviewMutation")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/golf.v1.RepositoryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case RepositoryServiceListRepositoriesProcedure:
@@ -1640,6 +1686,10 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 			repositoryServiceGetPullRequestHandler.ServeHTTP(w, r)
 		case RepositoryServiceListPullRequestReviewsProcedure:
 			repositoryServiceListPullRequestReviewsHandler.ServeHTTP(w, r)
+		case RepositoryServiceCreatePullRequestReviewProcedure:
+			repositoryServiceCreatePullRequestReviewHandler.ServeHTTP(w, r)
+		case RepositoryServiceGetPullRequestReviewMutationProcedure:
+			repositoryServiceGetPullRequestReviewMutationHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1751,6 +1801,14 @@ func (UnimplementedRepositoryServiceHandler) GetPullRequest(context.Context, *co
 
 func (UnimplementedRepositoryServiceHandler) ListPullRequestReviews(context.Context, *connect.Request[v1.ListPullRequestReviewsRequest]) (*connect.Response[v1.ListPullRequestReviewsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.ListPullRequestReviews is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) CreatePullRequestReview(context.Context, *connect.Request[v1.CreatePullRequestReviewRequest]) (*connect.Response[v1.CreatePullRequestReviewResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.CreatePullRequestReview is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) GetPullRequestReviewMutation(context.Context, *connect.Request[v1.GetPullRequestReviewMutationRequest]) (*connect.Response[v1.GetPullRequestReviewMutationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.GetPullRequestReviewMutation is not implemented"))
 }
 
 // OrganizationServiceClient is a client for the golf.v1.OrganizationService service.

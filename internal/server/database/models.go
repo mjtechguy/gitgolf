@@ -395,6 +395,39 @@ type GolfOrganizationCreationSelection struct {
 	UserID   int64
 }
 
+type GolfPullReviewMutation struct {
+	ID                 int64
+	UserID             int64
+	ActorForgeUserID   int64
+	IdempotencyKey     string
+	PayloadFingerprint []byte
+	BodyFingerprint    []byte
+	RepositoryID       int64
+	RepositoryOwner    string
+	RepositoryName     string
+	PullRequestID      int64
+	Number             int64
+	ExpectedRevision   string
+	BaseCommitID       string
+	HeadCommitID       string
+	ReviewState        string
+	State              string
+	ObservedReviewID   int64
+	FailureCode        string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+type GolfPullReviewMutationEvent struct {
+	ID               int64
+	MutationID       int64
+	OccurredAt       time.Time
+	Phase            string
+	State            string
+	ObservedReviewID int64
+	FailureCode      string
+}
+
 type GolfPushMaterialization struct {
 	ID                uuid.UUID
 	EventID           int64
