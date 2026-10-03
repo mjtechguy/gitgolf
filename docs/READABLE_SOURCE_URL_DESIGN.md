@@ -1,0 +1,99 @@
+# Readable source URLs and exact source identity
+
+Prepared 2026-10-03. **Implementation design, not an implemented resolver or qualification result.** The full requirement is ordinary readable branch/tag browsing **and** immutable commit permalinks, on both infrastructure tracks. The next packet strengthens the source API and its callers before readable route parsing. It does not close the [implementation plan](../GOLF_IMPLEMENTATION_PLAN.md), protected merge, native review or recovery gates.
+
+## User-visible end state
+
+Normal browsing retains an address such as `/OWNER/REPO/tree/main/src` or `/OWNER/REPO/blob/v1.2/README.md`. Branch/tag selection, directory/file links, README links and breadcrumbs retain that readable context. A page resolves its named selection to one internally pinned native repository ID/full commit; its content, images, latest-commit banner and loaded navigator use that same selection. It does **not** replace every readable address with a SHA after loading.
+
+**Latest** explicitly resolves the same typed branch/tag again and replaces the in-memory comparison only after a matching authorized receipt. Ref movement may produce a notice, but SSE/metadata refresh cannot silently mix commits or replace an active source/review selection. Reload/new readable navigation resolves current source again; back/forward preserves the readable location and may resolve its current head, with honest snapshot labels. The displayed commit stays visible. A previously loaded object is not a claim that the named ref still points to it.
+
+**Copy permalink** produces `/OWNER/REPO/tree/FULL_SHA/PATH` or `/blob/FULL_SHA/PATH`, preserving a valid line fragment and removing irrelevant readable selectors. Commit links, path-history snapshots, review/draft coordinates and mutation intent continue to use full immutable identities. No abbreviated SHA, tag object, branch label or current-head guess is an operation authority. [GitHub documents ordinary branch views and separate commit permalinks](https://docs.github.com/en/repositories/working-with-files/using-files/getting-permanent-links-to-files); Golf should deliver both behaviors.
+
+## Current source and first boundary to repair
+
+| Existing code | Current behavior / required change |
+| --- | --- |
+| [GetContents wire contract](../api/golf/v1/golf.proto) | Request contains repository address/ref/path; response contains commit/path/kind/content, with no expected repository ID or identity receipt. Add explicit exact selection. |
+| [Source adapter](../internal/server/browser.go) `getContents` | Resolves generic `commits?sha=REF`, then calls `contents-ext` at the returned SHA. Does not independently bind the caller-selected repository ID around the complete read. Reuse the established caller/repository read boundary. |
+| [RPC](../internal/server/rpc.go) `GetContents` | Calls that helper directly. Do not imply frontend query keys enforce server identity. |
+| [Repository read boundary](../internal/server/pulls.go) `withRepositoryRead` | Existing current caller/native repository checks before/after provider waits; extend with expected-ID checks, not a new credential/proxy plane. These observations still are not native permission/ref locks. |
+| [Main source panel](../web/src/RepositoryBrowser.tsx), [navigation](../web/src/navigation.ts), [router](../web/src/router.tsx) | Main source currently canonicalizes resolved names to SHA; tree/blob paths currently accept full SHA only. Separate readable address state from resolved snapshot state instead of removing the pin. |
+| [README](../web/src/RepositoryReadme.tsx), [navigator](../web/src/SourceNavigator.tsx), [image adapter](../internal/server/repository_images.go) | All dependent source reads need the same expected repository ID and SHA. Image reads already have an outer current-repository boundary; their nested source and content requests still need explicit selection propagation. |
+| [CLI](../internal/cli/cli.go), [MCP tool](../internal/cli/mcp.go) | `repo contents` and `golf_repo_contents` currently pass address/ref/path directly. Migrate both through the shared typed resolver/exact read; preserve bounded read-only delegation. |
+
+The first packet is **exact GetContents binding and all known caller migration**, including default-branch/legacy inputs. No readable URL control is complete merely because an entry URL redirects to a SHA. The [navigator contract](SOURCE_NAVIGATOR_CONTRACT.md) explicitly records the present server-ID gap; its existing limits/privacy behavior remain requirements.
+
+## Supported-native evidence and qualification boundary
+
+Pinned Gitea 1.27.3 [API routes](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/routers/api/v1/api.go) expose wildcard branch/tag/ref names. The [branch handler](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/routers/api/v1/repo/branch.go) checks database-backed branch existence before obtaining the Git commit; branch metadata can lag Git, so a branch endpoint/inventory miss alone must not prove exact namespace absence. The [Git refs handler](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/routers/api/v1/repo/git_ref.go) and [ref helper](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/routers/api/v1/utils/git.go) read Git directly through the supported API, but return an unpaged **prefix collection**, with object/array response logic. A `/git/refs/heads/NAME` result must be bounded and matched to exactly `refs/heads/NAME`, with valid commit object type/ID; a prefix neighbor is not a match. Oversized/truncated/malformed output remains unresolved rather than proving absence.
+
+The [tag handler](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/routers/api/v1/repo/tag.go) and [Git tag implementation](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/modules/git/repo_tag.go) support exact named-tag lookup and distinguish tag objects from peeled source commits. Verify namespace/name/object and full peeled commit independently. Native [short-name guessing](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/modules/git/repo_ref.go) explicitly uses branch-first precedence and warns about ambiguous inputs; it must not become Golf selection authority.
+
+These are completed read-only source findings, not new native fixture proofs. They do not qualify every encoded-name/router/proxy behavior, Git-versus-database synchronization case, nested tag peel or read/write ref fence. The proposed 32-position/64-check budget below is engineering policy awaiting implementation/qualification. No native fixtures, forge storage writes or deployments ran for this design.
+
+## Proposed API contract and migration
+
+Add `repository_id = 4` to `GetContentsRequest` and `repository_id = 6` to its response; retain `ref` as the full selected SHA in exact mode and `path` as the literal repository path. Exact mode requires a positive canonical signed64 decimal native ID and lowercase full 40/64-character object ID. A supplied expected ID must never fall back to legacy address-only or resolve a different ref. Read the exact commit, compare its first native SHA, read bounded metadata/content, then recheck session/current native identity and exact repository ID before releasing any output. Return exact ID/SHA/path; reject wrong IDs, changed identity, authority loss and wrong-kind/metadata/content receipts. Keep existing 256KiB preview/1000-entry directory limits and metadata-only LFS/symlink/submodule behavior; require unique direct-child entries. Propagate the same native ID through Markdown/image context, including [RepositoryImage](../web/src/RepositoryImage.tsx). Add expected `repository_id = 5` to `GetRepositoryImageRequest` and response receipts for repository ID, full document commit and literal document/reference selection; validate them before decoding displayed bytes. Its internal exact document read and relative image request must use the same bound repository. Existing external-image allowlists/SSRF/size/redirect controls remain unchanged, and current document authority is still required for either image mode.
+
+Add one bounded read-only `ResolveRepositorySource` RPC for typed selection, shared by the browser/CLI/MCP:
+
+```text
+request:
+  repository: {owner, name}
+  repository_id: canonical native ID
+  selector: {kind: DEFAULT_BRANCH | BRANCH | TAG | COMMIT, name: string}
+  path: literal relative path
+response:
+  repository_id
+  repository: currently authorized canonical {owner, name}
+  selection: {kind, name, commit_id, optional tag_object_id}
+  path
+```
+
+DEFAULT_BRANCH permits an empty name and selects the independently read default branch; BRANCH/TAG require a valid nonempty exact name; COMMIT requires a full SHA. Resolve branches with exact matching of the bounded supported Git-ref result, not database-backed branch inventory completeness. Resolve tags by their exact supported named-tag namespace, preserve annotated tag object versus peeled commit identities, and verify the returned full commit. Do not reuse generic commit-resolution precedence for named refs. Bind current repository ID/authority around resolution; reread the selected named ref before returning and reject observed movement rather than substituting a different head. The returned names/commit are observations, not an atomic ref lock. Source reads remain separately authorized.
+
+During additive adoption, omitted-ID existing API calls may use an explicitly documented legacy/default resolver under the same current caller, before/after native repository observation and returned identity receipt. They cannot promise a caller-selected immutable ID. Do not normalize that limitation into success for exact callers. Migrate every checked-in source caller to metadata ID → typed resolver → exact GetContents, including empty default selection, existing query aliases, CLI defaults, README/images and native/browser qualification helpers. Invalid/ambiguous named input must fail or require explicit type, never fall back to the default branch. Existing detached SHA permalinks need no named resolution. Freeze the compatibility window/strictness decision in the contract; completion of this first packet requires all supported product paths to use exact mode and a runnable legacy/default migration proof. A later strict rejection of omitted identity must be announced as an API change, rather than accidentally breaking old clients.
+
+The new resolver is a read procedure only. Review/draft/mutation interfaces accept their existing immutable IDs/M/B/H/version/generation; they do not accept readable labels as replacements. Add a narrowly scoped read allowlist entry only after procedure/session/native authority tests; do not grant writes or broaden source-fork credentials.
+
+## Readable routes, collisions and literal decoding
+
+Preserve simple human addresses. For `/tree/feature/topic/src/file`, the untyped suffix may mean branch `feature`, path `topic/src/file`, branch `feature/topic`, path `src/file`, or a tag with either name. Name collisions can occur even when branch and tag peel to the same commit. Do not choose branch-first, tag-first, longest-prefix, a loaded inventory match or whichever candidate happens to contain the path.
+
+A server resolver must enumerate bounded possible ref/path boundaries and check **each exact branch and tag candidate** against supported native namespace reads under current authority. One fully checked candidate permits selection; multiple candidates require an explicit chooser. Candidate existence is independent of whether its file exists: do not disambiguate by leaking/probing every candidate source. No candidates means not found only after all permitted exact checks complete. Timeout/bound exhaustion/malformed native metadata means unresolved, not unique/not found. Paged branch/tag inventories and native observed totals are discovery aids, never an atomic complete namespace proof.
+
+Proposed initial limits: 4096 UTF-8 bytes for suffix/path, existing 1024-byte valid-ref bound, at most 32 candidate split positions/64 exact namespace checks, concurrency at most four and one bounded overall request deadline. If more candidates or an unresolved check remain, show an explicit typed ref/path selection. Extend the same resolver request with a separate untyped-suffix variant only when that packet is implemented; do not scaffold it in the first typed packet.
+
+Selections that require disambiguation retain readable paths with validated explicit selectors, for example:
+
+```text
+/OWNER/REPO/blob/feature/topic/src/file?refKind=branch&refName=feature%2Ftopic
+/OWNER/REPO/blob/release/README.md?refKind=tag&refName=release
+```
+
+Validate that the explicit exact ref plus literal path reconstructs the requested suffix. These selectors are meaningful authority inputs to resolution, not redundant SHA queries; preserve them on readable navigation. Full-SHA route syntax denotes a permalink unless an explicit typed selector identifies a ref whose name resembles a SHA. A qualified alternate typed slash-ref path may be added later, but encoded slash alone must not be assumed to preserve a parser boundary.
+
+Decode route/query components exactly once at an explicit shared boundary. Preserve literal UTF-8 spaces, Unicode, `%`, `#`, `?`, `+` and percent-looking names; encode each emitted component once. Reject malformed percent escapes, NUL/control/backslash, empty/dot/dotdot path segments and invalid ref syntax before native requests. Do not recursively decode `%252F` into a separator. Keep fragments separate and validate line fragments independently. Router/browser/native HTTP may decode escaped slashes differently; actual served tests must prove behavior rather than treating a mocked splat as native qualification.
+
+## Repository renames and private state
+
+GitHub [documents repository-rename redirects](https://docs.github.com/en/repositories/creating-and-managing-repositories/renaming-a-repository), but Golf must enforce its own current identity/authority boundary. Native [API assignment](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/routers/api/v1/api.go) and [repository context](https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/services/context/repo.go) can produce rename redirects before canonical repository permission assignment; a redirect alone is not permission evidence. The configured native origin remains fixed; existing [HTTP client](../internal/server/server.go) refuses redirects. Do not enable global redirect following or forward a provider credential to a returned Location/HTML/raw URL. A later rename adapter may inspect one narrowly validated same-origin supported native repository route without following it, independently authorize the destination, verify its exact original native ID before/after, and normalize only the still-current logical browser location. A recreated old address or inaccessible target cannot inherit content or labels. If supported native redirect metadata cannot safely prove this, require explicit selection of the current repository instead of guessing. No general cross-fork source route is introduced.
+
+Query keys include account/native repository ID/full SHA/path. Readable selection belongs in separate resolver keys; a stale resolver/source receipt cannot overwrite later navigation or mix two commits. Abort and synchronously hide private source/README/images/navigator/banner during observed account/native access change; fence late callbacks. No private path/ref inventories or source content go into browser storage. Keep explicit refresh, focus, keyboard links, shared component/styles, both themes and mobile density. Copy permalink is available only for a validated complete source receipt.
+
+## Ordered tasks and ownership
+
+| Packet / owner | Files and acceptance |
+| --- | --- |
+| RS-1 API/backend owner | Proto/generated clients; `browser.go`, `rpc.go`, existing read helpers and image adapter; typed resolver, exact GetContents receipt/ID enforcement and bounded compatibility path. Reuse shared validation/crypto/session primitives. No schema migration or native write. |
+| RS-1 CLI/MCP owner | `internal/cli/cli.go`, `mcp.go`, tests/contracts; migrate default/typed names through resolver and exact read; verify all receipts and retain existing read delegation/session cleanup. Coordinate generated fields before editing. |
+| RS-1 browser owner | SourcePanel/README/navigator/content image contexts; one shared exact-receipt validator and native ID propagation. Keep current SHA navigation initially; prove no dependent legacy read remains. API owner owns generated files, UI owner owns no backend. |
+| RS-2 backend owner | Exact candidate resolver with exhaustive bounded branch/tag namespace checks, explicit ambiguous/unresolved results and safe rename adapter only if native-qualified. No inventory-completeness shortcut. |
+| RS-2 browser owner | Router/navigation/ref picker/breadcrumb/source actions; readable mode retained, explicit Latest and immutable permalink, typed collision chooser and query-selector roundtrip. Shared layouts/control rules; no duplicate page router or table engine. |
+| Qualification owner | Native Git/API and actual served browser proof with supported fixtures, independent object/blob bytes, privacy/redirect/encoded-name cases; root coordinates serial fixture/deployment ownership. No ordinary live DB or canonical forge-file writes. |
+| Documentation owner | Update API/navigator/URL/status/plan and sibling agent exports after source freeze and actual evidence. Distinguish source/unit fixtures/native/served/runtime identities; do not claim the overall goal complete. |
+
+Meaningful tests: wrong/changed expected native IDs and replaced repositories; exact SHA echo/content identity including empty text and duplicate directory entries; revoke/expire during each provider wait and after resolver-before-content; delegated/PAT/bearer/session/Origin boundaries; all migrated default/legacy callers; branch/tag collision at identical and different SHA, annotated/lightweight tags, slash/prefix refs, SHA-looking names, deleted/moved refs, native capped/paged inventories and deadline/bound exhaustion. Verify malformed/double-encoded/literal percent/Unicode/reserved paths, no credential redirect, same-ID rename versus recreated address, and no broadened private-fork source rights. Browser tests cover readable address remaining after load and directory traversal, exact displayed content versus commit banner/images/history, Latest replacing all snapshot-dependent state, Copy permalink and line fragment reload, back/forward, ambiguity focus/keyboard, both themes at 1280/390/320px and late-result private clearing. Actual native Git/blob evidence and exact served image identity are required before runtime qualification.
+
+Full acceptance requires readable branch **and tag** browsing with slash/collision handling, explicit immutable permalinks, all exact source consumers and current authorization, safe alias/rename behavior where supported, and CLI/MCP read parity. RS-1 exact binding alone is a necessary foundation; it is not readable-route completion, protected write fencing, native review lifecycle, release readiness or either infrastructure track’s completion.
