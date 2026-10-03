@@ -63,6 +63,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewAccountSecurityServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewAutomationGrantServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewRepositoryActivityServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewOrganizationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewOrganizationAdminServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewInstanceAdminServiceHandler(s, options...))
@@ -132,6 +133,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.AuditServiceListAuditEventsProcedure, golfv1connect.SessionServiceGetSessionProcedure,
 			golfv1connect.ApiCredentialServiceCreateApiCredentialProcedure, golfv1connect.ApiCredentialServiceListApiCredentialsProcedure, golfv1connect.ApiCredentialServiceRevokeApiCredentialProcedure,
 			golfv1connect.SessionServiceListSessionsProcedure, golfv1connect.SessionServiceRevokeSessionProcedure, golfv1connect.SessionServiceRevokeOtherSessionsProcedure,
+			golfv1connect.RepositoryActivityServiceWatchRepositoryProcedure,
 			golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryCreationProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure,
 			golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure,
 			golfv1connect.RepositoryServiceGetCommitDiffProcedure, golfv1connect.RepositoryServiceGetPullRequestDiffProcedure, golfv1connect.RepositoryServiceGetRepositoryImageProcedure,

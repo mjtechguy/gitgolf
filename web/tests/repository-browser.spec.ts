@@ -349,3 +349,19 @@ test('README renders GFM, highlights code, pins relative links and blocks active
  await expect(readme.locator('script,[onerror],iframe')).toHaveCount(0);expect(external).toEqual([]);expect(await page.evaluate(()=> 'executed' in window)).toBe(false);
  await expect(page.getByRole('navigation',{name:'Breadcrumb'})).toContainText('alex');
  });
+
+
+test('compact work lists share loaded search and sorting without inventing server filters', async ({ page }) => {
+ const state = await backend(page);
+ await page.goto('/alex/design-system/issues');
+ await page.getByRole('button',{name:'Load more issues'}).click();
+ await expect(page.locator('.issue-list>li')).toHaveCount(2);
+ const before=state.methods.filter(m=>m==='ListIssues').length;
+ await page.getByRole('searchbox',{name:'Search loaded issues'}).fill('management');
+ await expect(page.locator('.issue-list>li')).toHaveCount(1);
+ await expect(page.locator('.issue-list')).toContainText('Document focus management');
+ await page.getByRole('searchbox',{name:'Search loaded issues'}).fill('');
+ await page.getByLabel('Sort loaded issues').selectOption('title');
+ await expect(page.locator('.issue-list>li').first()).toContainText('Document focus management');
+ expect(state.methods.filter(m=>m==='ListIssues').length).toBe(before);
+});

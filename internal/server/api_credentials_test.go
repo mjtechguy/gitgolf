@@ -116,7 +116,7 @@ func TestApiCredentialBoundary(t *testing.T) {
 			}
 		}
 	}
-	if count != 24 {
+	if count != 25 {
 		t.Fatal("unexpected bearer allowlist size", count)
 	}
 	for _, invalid := range []string{token + "=", token[:len(token)-1] + "B", strings.TrimPrefix(token, apiTokenPrefix), " " + token} {

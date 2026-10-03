@@ -37,6 +37,7 @@ type Config struct {
 	Telemetry                                                  *telemetry.Runtime
 }
 type Server struct {
+	activity                      activityLimits
 	codexMu                       sync.Mutex
 	codexRuntimes                 map[string]*codexRuntime
 	pushCoordinatorSeen           atomic.Int64

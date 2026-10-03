@@ -10,7 +10,7 @@ References captured in a separate signed-out browser at 1280 × 720: [Flask repo
 | Readable 14px UI / 16px documentation, 32/24/20px document headings | Shared application and Markdown typography, list markers, striped tables, bounded code and compact conversation spacing | Complete README outline, richer embedded media and document formats |
 | Repository/file breadcrumbs and contextual tabs | Shared workspace breadcrumbs and source directory breadcrumbs; Code/Issues/PRs/Actions/Settings tabs | Owner profile routes and full capability-aware navigation |
 | Meaningful issue, PR, commit and file paths | Canonical owner/repo paths; issue and PR numbers in path; `/pull/N/files`, `/commit/SHA`, immutable `/tree/SHA/path` and `/blob/SHA/file` | Branch-name URLs and canonical settings paths |
-| Explicit PR branch comparison and file actions | Compact PR state/title, base/head comparison, unified/split diff, collapse, Viewed, search and line anchors | Commits/checks tabs, metadata sidebar, human reviews, trusted checks and protected merges |
+| Explicit PR branch comparison and file actions | Compact PR state/title, base/head comparison, unified/split diff, collapse, Viewed, search and line anchors | Commits/checks tabs, full metadata editing, human reviews, trusted checks and protected merges |
 | HTML logo blocks and source image sizing | Sanitized HTML/alignment; managed image bytes and shared dimension rules | Arbitrary image-host policy, WebP/AVIF, attachments and authenticated remote assets |
 
 Legacy `/repositories/owner/repo` query links still open. New paths retain branch/filter context; immutable source IDs avoid ambiguous slash refs. Invalid commit IDs, numbers and path traversal fail before repository reads. Browser back/forward/reload and legacy links are tested.
@@ -35,3 +35,5 @@ All private fixtures are owned by local `golf-admin`; upstream code and workflow
 | octocat/Spoon-Knife | readme-spoon-knife | d0dd1f61b33d64e29d8bc1372a94ef6a2fee76a9 | Small Markdown README and public links |
 
 First-push metadata can lag and native default-branch metadata must match the pushed main branch. Qualification uses supported native branch configuration and bounded read retries, without replaying creation or direct database/repository changes. Temporary Git credentials are revoked after qualification.
+
+The subsequent [GitHub visual audit](GITHUB_VISUAL_AUDIT.md) expands the reference set and records shared work headers, About/discussion metadata columns, loaded-list search/sort and run-first Actions. [Live activity](REPOSITORY_ACTIVITY_CONTRACT.md) describes the current private invalidation stream and its limits.

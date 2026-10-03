@@ -75,7 +75,8 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, workVi
 
   const content = <>
     <section className="page-stack" aria-labelledby="workflow-configurations-title">
-      <header className="repository-intro"><div><span className="eyebrow">REPOSITORY CONFIGURATION</span><h1 id="workflow-configurations-title"><FileCode2 size={29} />{workView?'Actions':'Workflow configuration'}</h1><p>Inspect Actions and GitLab configuration from the current default-branch commit.</p></div></header>
+      <header className="repository-intro"><div>{workView ? null : <span className="eyebrow">REPOSITORY CONFIGURATION</span>}<h1 id="workflow-configurations-title"><FileCode2 size={29} />{workView?'Actions':'Workflow configuration'}</h1><p>{workView ? 'Workflow runs and coding tasks for this repository.' : 'Inspect Actions and GitLab configuration from the current default-branch commit.'}</p></div></header>
+      {workView ? <><WorkflowRuns userId={userId} owner={owner} name={name} signingOut={signingOut}/><AgentTasks userId={userId} owner={owner} name={name} signingOut={signingOut}/></> : null}
       <section className="browser-panel credential-list-panel" aria-labelledby="workflow-inventory-title">
         <div className="browser-panel-heading"><h2 id="workflow-inventory-title">Configuration files</h2><button className="button secondary" disabled={query.isFetching || signingOut} onClick={() => void query.refetch()}><RefreshCw size={15} />Refresh workflow inspection</button></div>
         <p className="panel-footnote">Manual execution requires every applicable execution policy to allow this repository and workflow, plus an operator-enrolled worker and approved image. A checked inspection subset alone does not grant execution.</p>
@@ -91,7 +92,6 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, workVi
       {result && !workView ? <><ExecutionPolicyPanel key={`${userId}/${owner}/${name}`} userId={userId} signingOut={signingOut} scope={ExecutionScope.REPOSITORY} repository={{ owner, name }} />
       <ReviewerPanel userId={userId} owner={owner} name={name} signingOut={signingOut}/><AgentTasks userId={userId} owner={owner} name={name} signingOut={signingOut}/><AgentUsagePanel userId={userId} signingOut={signingOut} scope={AgentUsageScope.REPOSITORY} repository={{ owner, name }} /><AutomationGrantPanel userId={userId} owner={owner} name={name} signingOut={signingOut} />
       <WorkflowRuns key={`runs/${userId}/${owner}/${name}`} userId={userId} owner={owner} name={name} signingOut={signingOut} /></> : null}
-      {workView ? <><WorkflowRuns userId={userId} owner={owner} name={name} signingOut={signingOut}/><AgentTasks userId={userId} owner={owner} name={name} signingOut={signingOut}/></> : null}
     </section>
   </>;
   return workView ? content : <RepositorySettingsLayout owner={owner} name={name}>{content}</RepositorySettingsLayout>;

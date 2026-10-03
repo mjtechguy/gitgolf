@@ -424,6 +424,15 @@ type GolfRecoveryEvent struct {
 	LocalAccountsDisabledCount int64
 }
 
+type GolfRepositoryActivity struct {
+	ID              int64
+	ForgeURL        string
+	RepositoryID    int64
+	RecipientUserID int64
+	Topic           string
+	CreatedAt       time.Time
+}
+
 type GolfRepositoryCreation struct {
 	ID                 int64
 	UserID             int64

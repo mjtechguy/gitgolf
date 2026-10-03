@@ -6,13 +6,18 @@ import type { ColumnDef, RowData } from '@tanstack/react-table';
 const features = { columnFilteringFeature, globalFilteringFeature, rowPaginationFeature, rowSortingFeature, filterFns, sortFns, filteredRowModel: createFilteredRowModel(), sortedRowModel: createSortedRowModel(), paginatedRowModel: createPaginatedRowModel() };
 export type DataTableColumn<T extends RowData> = ColumnDef<typeof features, T>;
 
+// Inventories and repository work lists share filtering and sorting behavior.
+export function useLoadedTable<T extends RowData>(data: T[], columns: DataTableColumn<T>[], getRowId: (item: T) => string) {
+  return useTable({ features, data, columns, getRowId, defaultColumn: { sortDescFirst: false, sortFn: 'text' }, globalFilterFn: 'includesString', initialState: { pagination: { pageIndex: 0, pageSize: 20 } }, autoResetPageIndex: true });
+}
+
 export function DataTable<T extends RowData>({ data, columns, getRowId, label, emptyMessage = 'No entries.', pagination = true }: {
   data: T[]; columns: DataTableColumn<T>[]; getRowId: (item: T) => string; label: string; emptyMessage?: string; pagination?: boolean;
 }) {
   const searchId = useId();
   const pageSizeId = useId();
   const scopeId = useId();
-  const table = useTable({ features, data, columns, getRowId, defaultColumn: { sortDescFirst: false, sortFn: 'text' }, globalFilterFn: 'includesString', initialState: { pagination: { pageIndex: 0, pageSize: 20 } }, autoResetPageIndex: true });
+  const table = useLoadedTable(data, columns, getRowId);
   const rows = pagination ? table.getRowModel().rows : table.getPrePaginatedRowModel().rows;
   const search = String(table.state.globalFilter ?? '');
   const filteredCount = table.getPrePaginatedRowModel().rows.length;

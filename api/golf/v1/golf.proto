@@ -1581,3 +1581,22 @@ message RequestReviewResponse { ReviewerRun run = 1; }
 
 message GetPullRequestDiscussionRequest { RepositoryKey repository = 1; uint32 number = 2; }
 message GetPullRequestDiscussionResponse { Issue issue = 1; }
+
+
+// Short-lived server streaming over the same private Connect/auth boundary.
+// Events invalidate observations; they never establish merge eligibility.
+service RepositoryActivityService {
+ rpc WatchRepository(WatchRepositoryRequest) returns (stream WatchRepositoryResponse);
+}
+message WatchRepositoryRequest {
+ RepositoryKey repository = 1;
+ string repository_id = 2;
+ string cursor = 3;
+}
+message WatchRepositoryResponse {
+ string repository_id = 1;
+ string cursor = 2;
+ // reset, change, heartbeat or reconnect.
+ string kind = 3;
+ repeated string topics = 4;
+}

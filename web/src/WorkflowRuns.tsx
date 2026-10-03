@@ -45,7 +45,7 @@ export function WorkflowRuns({ userId, owner, name, signingOut }: { userId: stri
   { accessorKey: 'runnerId', header: 'Worker', cell: ({ row }) => row.original.runnerId || 'Awaiting assignment' },
  ], [pending, signingOut]);
  return <section className="browser-panel credential-list-panel" aria-labelledby="workflow-runs-title">
-  <div className="browser-panel-heading"><h2 id="workflow-runs-title">Workflow runs</h2><button className="button secondary" disabled={pending || signingOut || query.isFetching} onClick={() => void refresh()}><RefreshCw size={15} />Refresh runs</button></div>
+  <div className="browser-panel-heading"><h2 id="workflow-runs-title">Workflow runs</h2><button className="button secondary manual-refresh" disabled={pending || signingOut || query.isFetching} onClick={() => void refresh()}><RefreshCw size={15} />Refresh runs</button></div>
   {query.error ? <PanelError error={query.error} retry={() => void refresh()} /> : loading ? <Loading label="Loading runs…" /> : <DataTable label="Workflow runs" data={rows} columns={columns} getRowId={row => row.id} emptyMessage="No workflow runs." />}
   <More hasMore={Boolean(query.hasNextPage)} loading={query.isFetchingNextPage || pending || signingOut} load={() => void query.fetchNextPage()} label="workflow runs" />
   {notice && !signingOut ? <p role="status" className="panel-footnote">{notice}</p> : null}

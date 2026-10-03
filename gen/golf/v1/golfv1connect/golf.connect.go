@@ -70,6 +70,9 @@ const (
 	AgentTaskServiceName = "golf.v1.AgentTaskService"
 	// ReviewerServiceName is the fully-qualified name of the ReviewerService service.
 	ReviewerServiceName = "golf.v1.ReviewerService"
+	// RepositoryActivityServiceName is the fully-qualified name of the RepositoryActivityService
+	// service.
+	RepositoryActivityServiceName = "golf.v1.RepositoryActivityService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -388,6 +391,9 @@ const (
 	// ReviewerServiceRequestReviewProcedure is the fully-qualified name of the ReviewerService's
 	// RequestReview RPC.
 	ReviewerServiceRequestReviewProcedure = "/golf.v1.ReviewerService/RequestReview"
+	// RepositoryActivityServiceWatchRepositoryProcedure is the fully-qualified name of the
+	// RepositoryActivityService's WatchRepository RPC.
+	RepositoryActivityServiceWatchRepositoryProcedure = "/golf.v1.RepositoryActivityService/WatchRepository"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -4092,4 +4098,75 @@ func (UnimplementedReviewerServiceHandler) ListReviewerRuns(context.Context, *co
 
 func (UnimplementedReviewerServiceHandler) RequestReview(context.Context, *connect.Request[v1.RequestReviewRequest]) (*connect.Response[v1.RequestReviewResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ReviewerService.RequestReview is not implemented"))
+}
+
+// RepositoryActivityServiceClient is a client for the golf.v1.RepositoryActivityService service.
+type RepositoryActivityServiceClient interface {
+	WatchRepository(context.Context, *connect.Request[v1.WatchRepositoryRequest]) (*connect.ServerStreamForClient[v1.WatchRepositoryResponse], error)
+}
+
+// NewRepositoryActivityServiceClient constructs a client for the golf.v1.RepositoryActivityService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRepositoryActivityServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepositoryActivityServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	repositoryActivityServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryActivityService").Methods()
+	return &repositoryActivityServiceClient{
+		watchRepository: connect.NewClient[v1.WatchRepositoryRequest, v1.WatchRepositoryResponse](
+			httpClient,
+			baseURL+RepositoryActivityServiceWatchRepositoryProcedure,
+			connect.WithSchema(repositoryActivityServiceMethods.ByName("WatchRepository")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// repositoryActivityServiceClient implements RepositoryActivityServiceClient.
+type repositoryActivityServiceClient struct {
+	watchRepository *connect.Client[v1.WatchRepositoryRequest, v1.WatchRepositoryResponse]
+}
+
+// WatchRepository calls golf.v1.RepositoryActivityService.WatchRepository.
+func (c *repositoryActivityServiceClient) WatchRepository(ctx context.Context, req *connect.Request[v1.WatchRepositoryRequest]) (*connect.ServerStreamForClient[v1.WatchRepositoryResponse], error) {
+	return c.watchRepository.CallServerStream(ctx, req)
+}
+
+// RepositoryActivityServiceHandler is an implementation of the golf.v1.RepositoryActivityService
+// service.
+type RepositoryActivityServiceHandler interface {
+	WatchRepository(context.Context, *connect.Request[v1.WatchRepositoryRequest], *connect.ServerStream[v1.WatchRepositoryResponse]) error
+}
+
+// NewRepositoryActivityServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRepositoryActivityServiceHandler(svc RepositoryActivityServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	repositoryActivityServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryActivityService").Methods()
+	repositoryActivityServiceWatchRepositoryHandler := connect.NewServerStreamHandler(
+		RepositoryActivityServiceWatchRepositoryProcedure,
+		svc.WatchRepository,
+		connect.WithSchema(repositoryActivityServiceMethods.ByName("WatchRepository")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RepositoryActivityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RepositoryActivityServiceWatchRepositoryProcedure:
+			repositoryActivityServiceWatchRepositoryHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRepositoryActivityServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRepositoryActivityServiceHandler struct{}
+
+func (UnimplementedRepositoryActivityServiceHandler) WatchRepository(context.Context, *connect.Request[v1.WatchRepositoryRequest], *connect.ServerStream[v1.WatchRepositoryResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryActivityService.WatchRepository is not implemented"))
 }
