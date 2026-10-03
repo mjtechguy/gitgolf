@@ -419,3 +419,83 @@ func TestMCPExplicitPullReadsAndCredentialModes(t *testing.T) {
 		}
 	}
 }
+
+func TestMCPSourceTypedSelectorsExactReceiptsAndCredentialBoundary(t *testing.T) {
+	var tool mcpRead
+	for _, entry := range mcpReads {
+		if entry.name == "golf_repo_contents" {
+			tool = entry
+		}
+	}
+	schema := tool.schema()
+	if !reflect.DeepEqual(schema["required"], []string{"repository"}) || !reflect.DeepEqual(schema["properties"].(map[string]any)["ref_kind"].(map[string]any)["enum"], []string{"branch", "tag", "commit"}) {
+		t.Fatal("source selector schema changed required fields or namespaces")
+	}
+	for _, raw := range []string{`{"repository":"alice/private","ref_kind":"default"}`, `{"repository":"alice/private","ref_kind":""}`, `{"repository":"alice/private","ref_kind":"tag"}`, `{"repository":"alice/private","ref_kind":"commit","ref":"main"}`, `{"repository":"alice/private","ref_kind":null}`, `{"repository":"alice/private","ref_kind":"branch","ref":"feature//topic"}`} {
+		if _, err := tool.parse(json.RawMessage(raw)); err == nil {
+			t.Fatal("invalid typed source arguments accepted")
+		}
+	}
+	sha := strings.Repeat("a", 40)
+	selections := []struct {
+		kind, name string
+		args       map[string]any
+	}{
+		{"DEFAULT_BRANCH", "", map[string]any{}},
+		{"BRANCH", "release", map[string]any{"ref": "release"}},
+		{"TAG", "release", map[string]any{"ref": "release", "ref_kind": "tag"}},
+		{"COMMIT", sha, map[string]any{"ref": sha}},
+		{"TAG", sha, map[string]any{"ref": sha, "ref_kind": "tag"}},
+	}
+	for _, api := range []bool{false, true} {
+		for _, selection := range selections {
+			t.Run(fmt.Sprintf("api=%v/%s/%s", api, selection.kind, selection.name), func(t *testing.T) {
+				upstream, calls := sourceReadFixture(t, api, selection.kind, selection.name, "")
+				auth := credential{token: "fixture-private-token"}
+				if api {
+					auth = credential{token: fixtureAPIToken, api: true}
+				}
+				session := mcpTestCredentialSession(t, upstream.URL, "2026-07-28", context.Background(), auth)
+				invalidResult, invalidErr := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "golf_repo_contents", Arguments: map[string]any{"repository": "alice/private", "ref_kind": "commit", "ref": "main"}})
+				if invalidErr != nil || !invalidResult.IsError || len(calls()) != 0 {
+					t.Fatal("invalid typed source arguments performed authentication/network")
+				}
+				args := map[string]any{"repository": "alice/private", "path": "src/hello %25 世界.txt"}
+				for key, value := range selection.args {
+					args[key] = value
+				}
+				result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "golf_repo_contents", Arguments: args})
+				if err != nil || result.IsError {
+					t.Fatalf("typed MCP source read failed: %v", err)
+				}
+				encoded, _ := json.Marshal(result.StructuredContent)
+				var structured, textual any
+				json.Unmarshal(encoded, &structured)
+				json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &textual)
+				if !reflect.DeepEqual(structured, textual) || !strings.Contains(string(encoded), `"repositoryId":"9007199254740993"`) || !strings.Contains(string(encoded), `"commitId":"`+sha+`"`) {
+					t.Fatal("MCP source envelope lost bound identity/text parity")
+				}
+				want := "GetRepository,ResolveRepositorySource,GetContents"
+				if !api {
+					want = "LoginWithGiteaToken," + want + ",Logout"
+				}
+				if strings.Join(calls(), ",") != want {
+					t.Fatalf("MCP traversal/lifecycle boundary changed: %v", calls())
+				}
+			})
+		}
+	}
+	for _, failure := range []string{"resolve-id", "resolve-tag", "contents-sha", "ResolveRepositorySource", "GetContents"} {
+		t.Run("failure="+failure, func(t *testing.T) {
+			upstream, calls := sourceReadFixture(t, true, "TAG", "release", failure)
+			session := mcpTestCredentialSession(t, upstream.URL, "2026-07-28", context.Background(), credential{token: fixtureAPIToken, api: true})
+			result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "golf_repo_contents", Arguments: map[string]any{"repository": "alice/private", "ref": "release", "ref_kind": "tag", "path": "src/hello %25 世界.txt"}})
+			if err != nil || !result.IsError || result.StructuredContent != nil || strings.Contains(result.Content[0].(*mcp.TextContent).Text, "private-source") {
+				t.Fatal("MCP invalid/denied source released private output")
+			}
+			if strings.Contains(strings.Join(calls(), ","), "LoginWithGiteaToken") || strings.Contains(strings.Join(calls(), ","), "Logout") {
+				t.Fatal("MCP bearer traversal created a session")
+			}
+		})
+	}
+}

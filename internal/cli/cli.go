@@ -36,7 +36,7 @@ Usage: golf [--url ORIGIN] [--token-stdin | --api-token-stdin] COMMAND
   repo creation IDEMPOTENCY_KEY
   repo branches OWNER/REPO [--page N] [--limit N]
   repo commits OWNER/REPO [--ref REF] [--path PATH] [--page N] [--limit N]
-  repo contents OWNER/REPO [--ref REF] [--path PATH]
+  repo contents OWNER/REPO [--ref REF] [--ref-kind branch|tag|commit] [--path PATH]
   commit diff OWNER/REPO SHA
   issue list OWNER/REPO [--state open|closed|all] [--page N] [--limit N]
   issue view OWNER/REPO NUMBER
@@ -79,6 +79,10 @@ PR diffs require exact native repository/PR IDs and full base/head commits; old-
 Review comments require exact native repository/PR/review IDs and a full reviewed commit; no lookup or pagination.
 Issue operation inspection takes a canonical UUID v4 and never posts or retries a write.
 An observed result ID is a provisional receipt; OUTCOME_UNKNOWN still means unconfirmed.
+Source contents: omitted ref selects the default branch; a bare full SHA selects
+a commit, other bare refs select only a branch. Tags require --ref-kind tag.
+Typed branch/tag selectors also support names that look like a full SHA.
+
 `
 
 // Run writes PAT-mode results only after logout succeeds. Error text excludes credentials
@@ -222,6 +226,7 @@ type command struct {
 	repository   *golfv1.RepositoryKey
 	page         *golfv1.PageRequest
 	ref          string
+	refKind      string
 	commitID     string
 	creationKey  string
 	path         string
@@ -323,6 +328,9 @@ func parseCommand(args []string) (command, error) {
 	if result.name == "repo commits" || result.name == "repo contents" {
 		flags.StringVar(&ref, "ref", "", "branch or commit")
 	}
+	if result.name == "repo contents" {
+		flags.StringVar(&result.refKind, "ref-kind", "", "branch, tag or commit; no namespace fallback")
+	}
 	if result.name == "repo contents" || result.name == "repo commits" {
 		flags.StringVar(&filePath, "path", "", "repository-relative file or directory")
 	}
@@ -376,6 +384,37 @@ func parseCommand(args []string) (command, error) {
 	}
 	if result.name == "repo commits" && filePath != "" && !commitID.MatchString(ref) {
 		return result, invalid
+	}
+	if result.name == "repo contents" {
+		emptyKind := false
+		flags.Visit(func(f *flag.Flag) {
+			if f.Name == "ref-kind" && result.refKind == "" {
+				emptyKind = true
+			}
+		})
+		if emptyKind {
+			return result, invalid
+		}
+		switch result.refKind {
+		case "":
+			if ref == "" {
+				result.refKind = "default"
+			} else if commitID.MatchString(ref) {
+				result.refKind = "commit"
+			} else {
+				result.refKind = "branch"
+			}
+		case "branch", "tag":
+			if ref == "" {
+				return result, invalid
+			}
+		case "commit":
+			if !commitID.MatchString(ref) {
+				return result, invalid
+			}
+		default:
+			return result, invalid
+		}
 	}
 	result.ref, result.path = ref, filePath
 	result.state = map[string]golfv1.IssueState{"open": golfv1.IssueState_ISSUE_STATE_OPEN, "closed": golfv1.IssueState_ISSUE_STATE_CLOSED, "all": golfv1.IssueState_ISSUE_STATE_ALL}[state]
@@ -540,9 +579,48 @@ func (command command) read(ctx context.Context, client golfv1connect.Repository
 		}
 		return response.Msg, nil
 	case "repo contents":
-		response, err := client.GetContents(ctx, connect.NewRequest(&golfv1.GetContentsRequest{Repository: command.repository, Ref: command.ref, Path: command.path}))
+		metadata, err := client.GetRepository(ctx, connect.NewRequest(&golfv1.GetRepositoryRequest{Repository: command.repository}))
 		if err != nil {
 			return nil, err
+		}
+		repository := metadata.Msg.GetRepository()
+		if repository == nil || !canonicalNativeID(repository.GetId()) {
+			return nil, errors.New("repository identity unavailable")
+		}
+		parts := strings.Split(repository.GetFullName(), "/")
+		if len(parts) != 2 || parts[0] == "" || parts[1] != repository.GetName() || !strings.EqualFold(repository.GetFullName(), command.repository.GetOwner()+"/"+command.repository.GetName()) {
+			return nil, errors.New("repository identity mismatch")
+		}
+		canonical := &golfv1.RepositoryKey{Owner: parts[0], Name: parts[1]}
+		kind := map[string]golfv1.RepositorySourceRefKind{
+			"default": golfv1.RepositorySourceRefKind_REPOSITORY_SOURCE_REF_KIND_DEFAULT_BRANCH,
+			"branch":  golfv1.RepositorySourceRefKind_REPOSITORY_SOURCE_REF_KIND_BRANCH,
+			"tag":     golfv1.RepositorySourceRefKind_REPOSITORY_SOURCE_REF_KIND_TAG,
+			"commit":  golfv1.RepositorySourceRefKind_REPOSITORY_SOURCE_REF_KIND_COMMIT,
+		}[command.refKind]
+		if kind == golfv1.RepositorySourceRefKind_REPOSITORY_SOURCE_REF_KIND_UNSPECIFIED {
+			return nil, errors.New("invalid source selector")
+		}
+		resolved, err := client.ResolveRepositorySource(ctx, connect.NewRequest(&golfv1.ResolveRepositorySourceRequest{Repository: canonical, RepositoryId: repository.GetId(), Selector: &golfv1.RepositorySourceSelector{Kind: kind, Name: command.ref}, Path: command.path}))
+		if err != nil {
+			return nil, err
+		}
+		selection := resolved.Msg.GetSelection()
+		if resolved.Msg.GetRepositoryId() != repository.GetId() || !proto.Equal(resolved.Msg.GetRepository(), canonical) || resolved.Msg.GetPath() != command.path || selection == nil || selection.GetKind() != kind || !commitID.MatchString(selection.GetCommitId()) {
+			return nil, errors.New("source selection mismatch")
+		}
+		if (command.refKind == "default" && (selection.GetName() == "" || !gitinput.ValidRef(selection.GetName()))) || (command.refKind != "default" && selection.GetName() != command.ref) || (command.refKind == "commit" && selection.GetCommitId() != command.ref) {
+			return nil, errors.New("source selector mismatch")
+		}
+		if selection.TagObjectId != nil && (command.refKind != "tag" || !commitID.MatchString(selection.GetTagObjectId()) || len(selection.GetTagObjectId()) != len(selection.GetCommitId())) {
+			return nil, errors.New("source tag identity mismatch")
+		}
+		response, err := client.GetContents(ctx, connect.NewRequest(&golfv1.GetContentsRequest{Repository: canonical, RepositoryId: repository.GetId(), Ref: selection.GetCommitId(), Path: command.path}))
+		if err != nil {
+			return nil, err
+		}
+		if response.Msg.GetRepositoryId() != repository.GetId() || response.Msg.GetCommitId() != selection.GetCommitId() || response.Msg.GetPath() != command.path {
+			return nil, errors.New("source receipt mismatch")
 		}
 		return response.Msg, nil
 	case "commit diff":

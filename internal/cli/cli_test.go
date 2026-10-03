@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -45,19 +46,34 @@ func TestReadCommandSessionAndFailureCleanup(t *testing.T) {
 					fmt.Fprint(w, `{}`)
 					return
 				}
-				var input struct {
-					Ref, Path  string
-					Repository struct{ Owner, Name string }
+				if strings.HasSuffix(r.URL.Path, golfv1connect.RepositoryServiceGetRepositoryProcedure) {
+					fmt.Fprint(w, `{"repository":{"id":"9007199254740993","name":"private","fullName":"alice/private"}}`)
+					return
 				}
-				if json.NewDecoder(r.Body).Decode(&input) != nil || input.Ref != "feature/a&b" || input.Path != "src/hello 世界.txt" || input.Repository.Owner != "alice" || input.Repository.Name != "private" || !strings.HasSuffix(r.URL.Path, golfv1connect.RepositoryServiceGetContentsProcedure) {
+				var input struct {
+					Ref, Path, RepositoryId string
+					Repository              struct{ Owner, Name string }
+					Selector                struct{ Kind, Name string }
+				}
+				if json.NewDecoder(r.Body).Decode(&input) != nil || input.Path != "src/hello 世界.txt" || input.Repository.Owner != "alice" || input.Repository.Name != "private" || input.RepositoryId != "9007199254740993" {
 					t.Error("query escaping changed the selected source")
+				}
+				if strings.HasSuffix(r.URL.Path, golfv1connect.RepositoryServiceResolveRepositorySourceProcedure) {
+					if input.Selector.Kind != "REPOSITORY_SOURCE_REF_KIND_BRANCH" || input.Selector.Name != "feature/a&b" {
+						t.Error("bare named ref did not select exact branch namespace")
+					}
+					fmt.Fprintf(w, `{"repositoryId":"9007199254740993","repository":{"owner":"alice","name":"private"},"selection":{"kind":"REPOSITORY_SOURCE_REF_KIND_BRANCH","name":"feature/a&b","commitId":%q},"path":"src/hello 世界.txt"}`, strings.Repeat("a", 40))
+					return
+				}
+				if !strings.HasSuffix(r.URL.Path, golfv1connect.RepositoryServiceGetContentsProcedure) || input.Ref != strings.Repeat("a", 40) {
+					t.Error("source read did not use resolved full snapshot")
 				}
 				if denied {
 					w.WriteHeader(403)
 					fmt.Fprintf(w, `{"code":"permission_denied","message":%q}`, token)
 					return
 				}
-				fmt.Fprint(w, `{"commitId":"abc","file":{"content":"<script>alert(1)</script>\u001b[31m"}}`)
+				fmt.Fprintf(w, `{"repositoryId":"9007199254740993","commitId":%q,"path":"src/hello 世界.txt","file":{"content":"<script>alert(1)</script>\u001b[31m"}}`, strings.Repeat("a", 40))
 			}))
 			defer forge.Close()
 			var out, diagnostic bytes.Buffer
@@ -73,14 +89,14 @@ func TestReadCommandSessionAndFailureCleanup(t *testing.T) {
 						Commit string `json:"commitId"`
 					} `json:"data"`
 				}
-				if code != 0 || json.Unmarshal(out.Bytes(), &envelope) != nil || envelope.Schema != "golf.cli.v1" || envelope.Data.Commit != "abc" || bytes.Contains(out.Bytes(), []byte{27}) {
+				if code != 0 || json.Unmarshal(out.Bytes(), &envelope) != nil || envelope.Schema != "golf.cli.v1" || envelope.Data.Commit != strings.Repeat("a", 40) || bytes.Contains(out.Bytes(), []byte{27}) {
 					t.Fatalf("unsafe or missing machine result: code=%d", code)
 				}
 			}
 			if strings.Contains(out.String()+diagnostic.String(), token) {
 				t.Fatal("credential leaked to output")
 			}
-			want := "POST /rpc" + golfv1connect.SessionServiceLoginWithGiteaTokenProcedure + ",POST /rpc" + golfv1connect.RepositoryServiceGetContentsProcedure + ",POST /rpc" + golfv1connect.SessionServiceLogoutProcedure
+			want := "POST /rpc" + golfv1connect.SessionServiceLoginWithGiteaTokenProcedure + ",POST /rpc" + golfv1connect.RepositoryServiceGetRepositoryProcedure + ",POST /rpc" + golfv1connect.RepositoryServiceResolveRepositorySourceProcedure + ",POST /rpc" + golfv1connect.RepositoryServiceGetContentsProcedure + ",POST /rpc" + golfv1connect.SessionServiceLogoutProcedure
 			if strings.Join(calls, ",") != want {
 				t.Fatalf("missing session cleanup: %v", calls)
 			}
@@ -480,5 +496,202 @@ func TestPullDiffExplicitSelectionBeforeAuthentication(t *testing.T) {
 		if code != 2 || output.Len() != 0 || calls.Load() != 0 || strings.Contains(diagnostics.String(), "fixture-private-token") {
 			t.Fatal("invalid diff selection authenticated or leaked input")
 		}
+	}
+}
+
+func TestSourceSelectorsFailBeforeCredentialInput(t *testing.T) {
+	for _, flags := range [][]string{
+		{"--ref-kind", ""}, {"--ref-kind", "default"}, {"--ref-kind", "BRANCH", "--ref", "main"},
+		{"--ref-kind", "branch"}, {"--ref-kind", "tag"}, {"--ref-kind", "commit"},
+		{"--ref-kind", "commit", "--ref", "main"}, {"--ref-kind", "commit", "--ref", strings.Repeat("A", 40)},
+		{"--ref-kind", "tag", "--ref", "release~1"}, {"--ref-kind", "branch", "--ref", "feature//topic"},
+		{"--ref-kind", "tag", "--ref", "release", "--path", "../private"},
+	} {
+		var output, diagnostic bytes.Buffer
+		args := append([]string{"--token-stdin", "repo", "contents", "alice/private"}, flags...)
+		if code := Run(context.Background(), args, unreadInput{t}, &output, &diagnostic, func(string) string { return "" }); code != 2 || output.Len() != 0 {
+			t.Fatalf("invalid selector consumed credentials: %v", flags)
+		}
+	}
+	for _, flags := range [][]string{{"--ref-kind", "tag", "--ref", "release"}, {"--ref-kind", "branch", "--ref", "main"}} {
+		if _, err := parseCommand(append([]string{"repo", "commits", "alice/private"}, flags...)); err == nil {
+			t.Fatal("source selector leaked into ordinary history flags")
+		}
+	}
+}
+
+// The fixture models separate authorized metadata, typed resolution and exact
+// contents receipts. A rejected intermediate receipt must stop traversal.
+func sourceReadFixture(t *testing.T, api bool, kind, name, failure string) (*httptest.Server, func() []string) {
+	t.Helper()
+	var mu sync.Mutex
+	var calls []string
+	sha, nativeID, path := strings.Repeat("a", 40), "9007199254740993", "src/hello %25 世界.txt"
+	if kind == "COMMIT" {
+		sha = name
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+		mu.Lock()
+		calls = append(calls, method)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if r.Header.Get("Origin") != "http://"+r.Host || r.Method != "POST" {
+			t.Error("source request lost origin binding")
+		}
+		if api {
+			if r.Header.Get("Authorization") != "Bearer "+fixtureAPIToken || r.Header.Get("Cookie") != "" || method == "LoginWithGiteaToken" || method == "Logout" {
+				t.Error("bearer source traversal crossed session boundary")
+			}
+		} else if method == "LoginWithGiteaToken" {
+			http.SetCookie(w, &http.Cookie{Name: "golf_session", Value: "opaque", Path: "/", HttpOnly: true})
+			fmt.Fprint(w, `{"user":{"id":"1"}}`)
+			return
+		} else if cookie, err := r.Cookie("golf_session"); err != nil || cookie.Value != "opaque" || r.Header.Get("Authorization") != "" {
+			t.Error("source request lost temporary session")
+		}
+		if method == "Logout" {
+			fmt.Fprint(w, `{}`)
+			return
+		}
+		if method == failure {
+			w.WriteHeader(403)
+			fmt.Fprint(w, `{"code":"permission_denied","message":"fixture-private-token private-source"}`)
+			return
+		}
+		var input struct {
+			Repository              struct{ Owner, Name string }
+			RepositoryId, Ref, Path string
+			Selector                struct{ Kind, Name string }
+		}
+		if json.NewDecoder(r.Body).Decode(&input) != nil || input.Repository.Owner != "alice" || input.Repository.Name != "private" {
+			t.Error("source repository address changed")
+		}
+		var result map[string]any
+		switch method {
+		case "GetRepository":
+			result = map[string]any{"repository": map[string]any{"id": nativeID, "name": "private", "fullName": "alice/private"}}
+			metadata := result["repository"].(map[string]any)
+			switch failure {
+			case "metadata-id":
+				metadata["id"] = "9223372036854775808"
+			case "metadata-route":
+				metadata["fullName"] = "alice/replaced"
+			}
+		case "ResolveRepositorySource":
+			if input.RepositoryId != nativeID || input.Path != path || input.Selector.Kind != "REPOSITORY_SOURCE_REF_KIND_"+kind || input.Selector.Name != name {
+				t.Error("resolver selection or bigint/literal path changed")
+			}
+			selectedName := name
+			if kind == "DEFAULT_BRANCH" {
+				selectedName = "main"
+			}
+			selection := map[string]any{"kind": "REPOSITORY_SOURCE_REF_KIND_" + kind, "name": selectedName, "commitId": sha}
+			if kind == "TAG" {
+				selection["tagObjectId"] = strings.Repeat("b", 40)
+			}
+			result = map[string]any{"repositoryId": nativeID, "repository": map[string]any{"owner": "alice", "name": "private"}, "selection": selection, "path": path}
+			switch failure {
+			case "resolve-id":
+				result["repositoryId"] = "1"
+			case "resolve-route":
+				result["repository"] = map[string]any{"owner": "other", "name": "private"}
+			case "resolve-kind":
+				selection["kind"] = "REPOSITORY_SOURCE_REF_KIND_TAG"
+			case "resolve-name":
+				selection["name"] = "other"
+			case "resolve-sha":
+				selection["commitId"] = "short"
+			case "resolve-path":
+				result["path"] = "private.txt"
+			case "resolve-tag":
+				selection["tagObjectId"] = "wrong"
+			case "resolve-extra-tag":
+				selection["tagObjectId"] = strings.Repeat("b", 40)
+			}
+		case "GetContents":
+			if input.RepositoryId != nativeID || input.Ref != sha || input.Path != path {
+				t.Error("contents used legacy/unresolved source selection")
+			}
+			result = map[string]any{"repositoryId": nativeID, "commitId": sha, "path": path, "kind": "SOURCE_ENTRY_TYPE_FILE", "file": map[string]any{"content": "private-source"}}
+			switch failure {
+			case "contents-id":
+				result["repositoryId"] = "2"
+			case "contents-sha":
+				result["commitId"] = strings.Repeat("c", 40)
+			case "contents-path":
+				result["path"] = "other.txt"
+			case "contents-missing-id":
+				delete(result, "repositoryId")
+			}
+		default:
+			t.Error("unexpected source procedure")
+		}
+		_ = json.NewEncoder(w).Encode(result)
+	}))
+	t.Cleanup(server.Close)
+	return server, func() []string { mu.Lock(); defer mu.Unlock(); return append([]string{}, calls...) }
+}
+
+func TestSourceContentsTypedResolutionAndBoundReceipts(t *testing.T) {
+	sha := strings.Repeat("a", 40)
+	selectors := []struct {
+		kind, name string
+		flags      []string
+	}{
+		{"DEFAULT_BRANCH", "", nil}, {"BRANCH", "feature/topic", []string{"--ref", "feature/topic"}},
+		{"TAG", "release", []string{"--ref", "release", "--ref-kind", "tag"}},
+		{"COMMIT", sha, []string{"--ref", sha}},
+		{"COMMIT", strings.Repeat("a", 64), []string{"--ref", strings.Repeat("a", 64), "--ref-kind", "commit"}},
+		{"BRANCH", sha, []string{"--ref", sha, "--ref-kind", "branch"}},
+		{"TAG", sha, []string{"--ref", sha, "--ref-kind", "tag"}},
+	}
+	for _, api := range []bool{false, true} {
+		for _, selection := range selectors {
+			t.Run(fmt.Sprintf("api=%v/%s/%s", api, selection.kind, selection.name), func(t *testing.T) {
+				server, calls := sourceReadFixture(t, api, selection.kind, selection.name, "")
+				var output, diagnostic bytes.Buffer
+				flag, token := "--token-stdin", "fixture-private-token"
+				if api {
+					flag, token = "--api-token-stdin", fixtureAPIToken
+				}
+				args := append([]string{"--url", server.URL, flag, "repo", "contents", "alice/private", "--path", "src/hello %25 世界.txt"}, selection.flags...)
+				code := Run(context.Background(), args, strings.NewReader(token+"\n"), &output, &diagnostic, func(string) string { return "" })
+				wantSHA := sha
+				if selection.kind == "COMMIT" {
+					wantSHA = selection.name
+				}
+				var envelope struct {
+					Data struct{ RepositoryId, CommitId, Path string }
+				}
+				if code != 0 || json.Unmarshal(output.Bytes(), &envelope) != nil || envelope.Data.RepositoryId != "9007199254740993" || envelope.Data.CommitId != wantSHA || envelope.Data.Path != "src/hello %25 世界.txt" {
+					t.Fatalf("exact source read failed: code=%d diagnostic=%s", code, diagnostic.String())
+				}
+				want := "GetRepository,ResolveRepositorySource,GetContents"
+				if !api {
+					want = "LoginWithGiteaToken," + want + ",Logout"
+				}
+				if strings.Join(calls(), ",") != want {
+					t.Fatalf("source traversal/session cleanup changed: %v", calls())
+				}
+			})
+		}
+	}
+	for _, failure := range []string{"metadata-id", "metadata-route", "resolve-id", "resolve-route", "resolve-kind", "resolve-name", "resolve-sha", "resolve-path", "resolve-extra-tag", "contents-id", "contents-sha", "contents-path", "contents-missing-id", "GetRepository", "ResolveRepositorySource", "GetContents"} {
+		t.Run(failure, func(t *testing.T) {
+			server, calls := sourceReadFixture(t, false, "BRANCH", "feature/topic", failure)
+			var output, diagnostic bytes.Buffer
+			code := Run(context.Background(), []string{"--url", server.URL, "--token-stdin", "repo", "contents", "alice/private", "--ref", "feature/topic", "--path", "src/hello %25 世界.txt"}, strings.NewReader("fixture-private-token\n"), &output, &diagnostic, func(string) string { return "" })
+			if code != 1 || output.Len() != 0 || strings.Contains(diagnostic.String(), "private-source") || strings.Contains(diagnostic.String(), "fixture-private-token") {
+				t.Fatal("rejected source receipt leaked private output")
+			}
+			trace := calls()
+			if trace[len(trace)-1] != "Logout" {
+				t.Fatal("failed source traversal skipped cleanup")
+			}
+			if (strings.HasPrefix(failure, "metadata") || strings.HasPrefix(failure, "resolve") || failure == "GetRepository" || failure == "ResolveRepositorySource") && strings.Contains(strings.Join(trace, ","), "GetContents") {
+				t.Fatal("invalid intermediate source receipt still fetched content")
+			}
+		})
 	}
 }

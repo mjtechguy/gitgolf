@@ -33,7 +33,7 @@ var mcpReads = []mcpRead{
 	{"golf_repo_creation", "Inspect your recorded creation intent. Unknown/rejected is not creation success. Never redispatches.", "repo creation", []string{"idempotency_key"}, nil},
 	{"golf_repo_branches", "List branches; select an exact commit for stable later reads.", "repo branches", []string{"repository"}, []string{"page", "limit"}},
 	{"golf_repo_commits", "List native commit history; optional path requires a full immutable ref and returns exact path history pages.", "repo commits", []string{"repository"}, []string{"ref", "path", "page", "limit"}},
-	{"golf_repo_contents", "Read bounded source at ref/path. Follow returned commitId for stable traversal; non-text files return metadata.", "repo contents", []string{"repository"}, []string{"ref", "path"}},
+	{"golf_repo_contents", "Read bounded source through exact repository/ref resolution. Omitted ref selects default branch; bare SHA selects commit; other bare refs select branch only. Tags require ref_kind=tag. Use returned repositoryId/commitId for immutable identity; non-text files return metadata.", "repo contents", []string{"repository"}, []string{"ref", "ref_kind", "path"}},
 	{"golf_commit_diff", "Read bounded raw native diff at a full exact commit ID. Roots/first-parent merges are labeled; no completeness or merge-readiness claim.", "commit diff", []string{"repository", "commit_id"}, nil},
 	{"golf_issue_list", "List issues with explicit state and pagination.", "issue list", []string{"repository"}, []string{"state", "page", "limit"}},
 	{"golf_issue_view", "Read issue metadata and plain-text description.", "issue view", []string{"repository", "number"}, nil},
@@ -73,6 +73,8 @@ func (tool mcpRead) schema() map[string]any {
 			field = map[string]any{"type": "integer", "minimum": 1, "maximum": maximum}
 		case "state":
 			field["enum"] = []string{"open", "closed", "all"}
+		case "ref_kind":
+			field["enum"] = []string{"branch", "tag", "commit"}
 		case "ref":
 			field["maxLength"] = 1024
 		case "path":
