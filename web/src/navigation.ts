@@ -9,6 +9,7 @@ export type RepositorySearch = {
   pullView?: 'conversation' | 'files';
   commit?: string;
   run?: string;
+  step?: number;
 };
 export const defaultRepositorySearch: RepositorySearch = { view: 'source', ref: '', path: '', branch: '', state: 'open' };
 export type RepositoryLocation = RepositorySearch & { kind: 'repository'; owner: string; name: string };
@@ -30,6 +31,7 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
     pullView: next.view === 'pulls' && next.pull ? next.pullView : undefined,
     commit: next.view === 'commits' ? next.commit : undefined,
     run: next.view === 'actions' ? next.run : undefined,
+    step: next.view === 'actions' && next.run ? next.step : undefined,
   };
   const params = {owner:next.owner,name:next.name};
   let path = '';

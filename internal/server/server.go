@@ -123,6 +123,7 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	r.Post("/internal/ci/recover", s.runnerRecover)
 	r.Post("/internal/ci/attempt/{id}/heartbeat", s.runnerAttempt)
 	r.Post("/internal/ci/attempt/{id}/logs", s.runnerAttempt)
+	r.Post("/internal/ci/attempt/{id}/progress", s.runnerAttempt)
 	r.Post("/internal/ci/attempt/{id}/finish", s.runnerAttempt)
 	r.Get("/internal/ci/attempt/{id}/source", s.runnerAttempt)
 	rpc := s.rpcBoundary(http.StripPrefix("/rpc", s.rpcHandler()))

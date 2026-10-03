@@ -1779,3 +1779,9 @@ The [GitHub visual audit](docs/GITHUB_VISUAL_AUDIT.md) records actual page/row/m
 ### Actions run and log continuation implementation reference
 
 Canonical full-page run detail and sequence-paged loaded logs now implement another GX-2/GX-5 slice. Current scope, cursor/privacy/cancellation boundaries and remaining job/step/engine/ACP work are documented in [pipeline execution compatibility](docs/PIPELINE_EXECUTION_COMPATIBILITY.md#current-actions-run-workspace). This does not replace P4/P6 requirements or establish protected merge authority.
+
+### Worker-recorded step progress and interaction follow-up
+
+The narrow single-job executor now records start/finish events independently of stdout, exposes named step outcomes/times, and supports zero-based step log links with snapshot-bound boundaries. The [runner isolation contract](docs/RUNNER_ISOLATION_CONTRACT.md) describes the private worker event origin and native exec lifecycle; [pipeline compatibility](docs/PIPELINE_EXECUTION_COMPATIBILITY.md#current-actions-run-workspace) retains multi-job/engine, artifacts/cache, rerun and safe agent/ACP work. Schema031 remains beyond the qualified recovery checkpoint.
+
+Expanded GitHub screenshots cover branch/clone menus, file controls and row filtering/sorting/density. Shared branch search, protocol/copy controls and literal code/path copy advance GX-1/GX-3/GX-7; authenticated write menus and remaining lifecycle controls need their own native operation contracts. The [visual audit](docs/GITHUB_VISUAL_AUDIT.md) records evidence and remaining tasks. P0.8 protected merge/check enforcement remains required and unresolved.

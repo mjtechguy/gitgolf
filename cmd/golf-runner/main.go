@@ -268,6 +268,25 @@ func (c *coordinator) execute(parent context.Context, e *runner.Executor, a assi
 		for _, step := range a.Steps {
 			job.Steps = append(job.Steps, runner.Step{Script: step.Run, Shell: step.Shell})
 		}
+		job.OnProgress = func(ctx context.Context, event runner.StepEvent) error {
+			sequence := event.Index*2 + 1
+			if event.Kind == "finished" {
+				sequence++
+				// Close incomplete UTF-8 suffixes before recording the step's immutable
+				// log boundary. A suffix cannot drift into the next step's output.
+				for _, stream := range []string{"stdout", "stderr"} {
+					if err := forward.write(ctx, runner.LogChunk{Stream: stream}, true); err != nil {
+						return err
+					}
+				}
+			}
+			return c.post(ctx, a, "progress", struct {
+				Sequence  int    `json:"sequence"`
+				StepIndex int    `json:"stepIndex"`
+				Kind      string `json:"kind"`
+				ExitCode  int    `json:"exitCode"`
+			}{sequence, event.Index, event.Kind, event.ExitCode})
+		}
 		var execution runner.Result
 		execution, err = e.Execute(ctx, job, func(ctx context.Context, chunk runner.LogChunk) error {
 			err := forward.write(ctx, chunk, false)

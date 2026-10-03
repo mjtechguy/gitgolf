@@ -54,14 +54,20 @@ type Step struct {
 	Script string `json:"script"`
 	Shell  string `json:"shell"`
 }
+type StepEvent struct {
+	Index    int
+	Kind     string
+	ExitCode int
+}
 type Job struct {
-	AttemptID         string        `json:"attempt_id"`
-	JobID             string        `json:"job_id"`
-	SourceCommit      string        `json:"source_commit"`
-	ImageDigest       string        `json:"image_digest"`
-	Steps             []Step        `json:"steps"`
-	Timeout           time.Duration `json:"-"`
-	SourceArchivePath string        `json:"-"`
+	AttemptID         string                                 `json:"attempt_id"`
+	JobID             string                                 `json:"job_id"`
+	SourceCommit      string                                 `json:"source_commit"`
+	ImageDigest       string                                 `json:"image_digest"`
+	Steps             []Step                                 `json:"steps"`
+	Timeout           time.Duration                          `json:"-"`
+	SourceArchivePath string                                 `json:"-"`
+	OnProgress        func(context.Context, StepEvent) error `json:"-"`
 }
 type LogChunk struct {
 	Stream string `json:"stream"`
@@ -283,21 +289,16 @@ func (e *Executor) removeVolume(ctx context.Context, id, attempt, owner string) 
 	_, err := e.command(ctx, nil, "volume", "rm", id)
 	return err
 }
-func imageBootstrap(steps []Step) string {
-	var out strings.Builder
-	out.WriteString("set -e\ncp -R /golf/source/. /workspace/\nchmod -R u+w /workspace\ncd /workspace\n")
-	for index, step := range steps {
-		file := "/golf/steps/" + strconv.Itoa(index)
-		switch step.Shell {
-		case "sh":
-			out.WriteString("/bin/sh -e " + file + "\n")
-		case "bash":
-			out.WriteString("/bin/bash --noprofile --norc -e -o pipefail " + file + "\n")
-		default:
-			out.WriteString("if command -v bash >/dev/null 2>&1; then bash -e " + file + "; else /bin/sh -e " + file + "; fi\n")
-		}
+func stepCommand(index int, step Step) string {
+	file := "/golf/steps/" + strconv.Itoa(index)
+	switch step.Shell {
+	case "sh":
+		return "exec /bin/sh -e " + file
+	case "bash":
+		return "exec /bin/bash --noprofile --norc -e -o pipefail " + file
+	default:
+		return "if command -v bash >/dev/null 2>&1; then exec bash -e " + file + "; else exec /bin/sh -e " + file + "; fi"
 	}
-	return out.String()
 }
 
 type logSink struct {
@@ -402,7 +403,7 @@ func (e *Executor) Execute(ctx context.Context, job Job, onLog func(context.Cont
 			mount += ",readonly"
 			args = append(args, "--read-only", "--init", "--tmpfs", "/workspace:rw,nosuid,nodev,size=134217728,mode=0700,uid=1000,gid=1000", "--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=33554432,mode=1777", "--workdir=/workspace")
 		}
-		args = append(args, "--mount", mount, "--entrypoint=/usr/bin/env", images[0].ID, "-i", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME=/tmp", "GOLF_SOURCE_COMMIT="+job.SourceCommit, "GOLF_JOB_ID="+job.JobID, "/bin/sh", "-c", imageBootstrap(job.Steps))
+		args = append(args, "--mount", mount, "--entrypoint=/usr/bin/env", images[0].ID, "-i", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME=/tmp", "GOLF_SOURCE_COMMIT="+job.SourceCommit, "GOLF_JOB_ID="+job.JobID, "/bin/sh", "-c", "while :; do sleep 3600; done")
 		data, err := e.command(runCtx, nil, args...)
 		id := strings.TrimSpace(string(data))
 		if err != nil || !containerPattern.MatchString(id) {
@@ -423,35 +424,64 @@ func (e *Executor) Execute(ctx context.Context, job Job, onLog func(context.Cont
 	if container, err = create(true); err != nil {
 		return
 	}
+	if _, err = e.command(runCtx, nil, "container", "start", container); err != nil {
+		return
+	}
+	// Each native exec has a fresh explicit environment. Docker exec otherwise
+	// inherits image/container variables; worker credentials never enter the job.
+	execArgs := func(command string) []string {
+		return []string{"container", "exec", "--user=1000:1000", "--workdir=/workspace", container, "/usr/bin/env", "-i", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME=/tmp", "GOLF_SOURCE_COMMIT=" + job.SourceCommit, "GOLF_JOB_ID=" + job.JobID, "/bin/sh", "-c", command}
+	}
+	if _, err = e.command(runCtx, nil, execArgs("set -e\ncp -R /golf/source/. /workspace/\nchmod -R u+w /workspace")...); err != nil {
+		return
+	}
 	attachCtx, cancel := context.WithCancel(runCtx)
 	defer cancel()
 	sink := &logSink{ctx: attachCtx, cancel: cancel, limit: e.config.MaxLogBytes, onLog: onLog}
-	cmd := exec.CommandContext(attachCtx, e.config.DockerBinary, "container", "start", "--attach", container)
-	cmd.Stdout = streamWriter{sink, "stdout"}
-	cmd.Stderr = streamWriter{sink, "stderr"}
-	cmd.WaitDelay = 2 * time.Second
-	commandErr := cmd.Run()
-	sink.mu.Lock()
-	result.LogLimitExceeded = sink.exceeded
-	result.LogsTruncated = sink.exceeded
-	callbackFailed := sink.failed
-	sink.mu.Unlock()
-	result.TimedOut = errors.Is(runCtx.Err(), context.DeadlineExceeded)
-	result.Cancelled = ctx.Err() != nil && !result.TimedOut
-	if callbackFailed {
-		return result, ErrInfrastructure
+	for index, step := range job.Steps {
+		if job.OnProgress != nil && job.OnProgress(attachCtx, StepEvent{Index: index, Kind: "started"}) != nil {
+			return result, ErrInfrastructure
+		}
+		cmd := exec.CommandContext(attachCtx, e.config.DockerBinary, execArgs(stepCommand(index, step))...)
+		cmd.Stdout = streamWriter{sink, "stdout"}
+		cmd.Stderr = streamWriter{sink, "stderr"}
+		cmd.WaitDelay = 2 * time.Second
+		commandErr := cmd.Run()
+		sink.mu.Lock()
+		result.LogLimitExceeded = sink.exceeded
+		result.LogsTruncated = sink.exceeded
+		callbackFailed := sink.failed
+		sink.mu.Unlock()
+		result.TimedOut = errors.Is(runCtx.Err(), context.DeadlineExceeded)
+		result.Cancelled = ctx.Err() != nil && !result.TimedOut
+		if callbackFailed {
+			return result, ErrInfrastructure
+		}
+		if result.LogLimitExceeded || result.TimedOut || result.Cancelled {
+			return result, nil
+		}
+		// A lost/removed/stopped container is infrastructure loss, not a completed
+		// step. Report native CLI outcomes only while the owned job remains alive.
+		var records []containerInfo
+		if e.inspect(runCtx, "container", container, &records) != nil || len(records) != 1 || records[0].ID != container || !records[0].State.Running || !owned(records[0].Config.Labels, job.AttemptID, owner, e.config.WorkerID) {
+			return result, ErrInfrastructure
+		}
+		result.ExitCode = 0
+		if commandErr != nil {
+			var exited *exec.ExitError
+			if !errors.As(commandErr, &exited) || exited.ExitCode() < 0 || exited.ExitCode() > 255 {
+				return result, ErrInfrastructure
+			}
+			result.ExitCode = exited.ExitCode()
+		}
+		if job.OnProgress != nil && job.OnProgress(attachCtx, StepEvent{Index: index, Kind: "finished", ExitCode: result.ExitCode}) != nil {
+			return result, ErrInfrastructure
+		}
+		if result.ExitCode != 0 {
+			return result, nil
+		}
 	}
-	if result.LogLimitExceeded || result.TimedOut || result.Cancelled {
-		return result, nil
-	}
-	var records []containerInfo
-	if e.inspect(runCtx, "container", container, &records) != nil || len(records) != 1 || records[0].ID != container || records[0].State.Running || !owned(records[0].Config.Labels, job.AttemptID, owner, e.config.WorkerID) {
-		return result, ErrInfrastructure
-	}
-	result.ExitCode = records[0].State.ExitCode
-	if commandErr != nil && result.ExitCode == 0 {
-		return result, ErrInfrastructure
-	}
+
 	return result, nil
 }
 

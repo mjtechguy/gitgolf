@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, Columns2, FileDiff, List, Search } from 'lucide-react';
 import { parseDiff, splitLines } from './diff';
 import type { DiffFile, DiffLine } from './diff';
+import { CopyButton } from './RepositoryUI';
 
 function LineNumber({ number, id }: { number?: number; id: string }) {
   return <td className="diff-line-number">{number !== undefined ? <a id={id} href={`#${id}`} aria-label={`Line ${number}`}>{number}</a> : null}</td>;
@@ -25,7 +26,7 @@ function FilePatch({ file, id, split }: { file: DiffFile; id: string; split: boo
 function ChangedFile({file,id,split,viewed,onViewed}:{file:DiffFile;id:string;split:boolean;viewed:boolean;onViewed:(value:boolean)=>void}) {
   const [collapsed,setCollapsed]=useState(false);
   const expanded=!collapsed&&!viewed;
-  return <section id={id} className="diff-file"><div className="diff-file-heading"><button className="diff-file-toggle" aria-expanded={expanded} aria-controls={`${id}-patch`} aria-label={`${expanded?'Collapse':'Expand'} ${file.path}`} onClick={()=>{if(viewed)onViewed(false);setCollapsed(expanded);}}>{expanded?<ChevronDown size={16}/>:<ChevronRight size={16}/>}<code title={file.path}>{file.path}</code></button><span className="diff-stats"><span className="diff-added">+{file.additions}</span><span className="diff-deleted">−{file.deletions}</span></span><label className="diff-viewed"><input type="checkbox" checked={viewed} onChange={(event)=>{onViewed(event.target.checked);setCollapsed(false);}}/>Viewed</label></div><div id={`${id}-patch`} hidden={!expanded}>{expanded?<FilePatch file={file} id={id} split={split}/>:null}</div></section>;
+  return <section id={id} className="diff-file"><div className="diff-file-heading"><button className="diff-file-toggle" aria-expanded={expanded} aria-controls={`${id}-patch`} aria-label={`${expanded?'Collapse':'Expand'} ${file.path}`} onClick={()=>{if(viewed)onViewed(false);setCollapsed(expanded);}}>{expanded?<ChevronDown size={16}/>:<ChevronRight size={16}/>}<code title={file.path}>{file.path}</code></button><CopyButton text={file.path} label={`Copy path ${file.path}`}/><span className="diff-stats"><span className="diff-added">+{file.additions}</span><span className="diff-deleted">−{file.deletions}</span></span><label className="diff-viewed"><input type="checkbox" checked={viewed} onChange={(event)=>{onViewed(event.target.checked);setCollapsed(false);}}/>Viewed</label></div><div id={`${id}-patch`} hidden={!expanded}>{expanded?<FilePatch file={file} id={id} split={split}/>:null}</div></section>;
 }
 function Hunk({ lines, header, id, split }: { lines: DiffLine[]; header: string; id: string; split: boolean }) {
   return <><tr className="diff-hunk"><td colSpan={split ? 4 : 3}><code>{header}</code></td></tr>{split ? splitLines(lines).map((row, index) => <tr key={index}><SplitCell line={row.left} side="old" id={`${id}-L${row.left?.old ?? `note${index}`}`}/><SplitCell line={row.right} side="new" id={`${id}-R${row.right?.next ?? `note${index}`}`}/></tr>) : lines.map((line, index) => <tr key={index} className={line.kind}>

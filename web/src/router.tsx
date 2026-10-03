@@ -100,6 +100,7 @@ const validateRepositorySearch = (search: Record<string, unknown>): RepositorySe
       pullView: search.pullView === 'files' ? 'files' : undefined,
       commit: search.commit === undefined ? undefined : typeof search.commit === 'string' ? search.commit : '',
       run: search.run === undefined ? undefined : typeof search.run === 'string' ? search.run : '',
+      step: search.step === undefined ? undefined : typeof search.step === 'number' ? search.step : typeof search.step === 'string' && /^(0|[1-9][0-9]*)$/.test(search.step) ? Number(search.step) : NaN,
     };
   };
 const repositoryRoute = createRoute({
@@ -112,6 +113,7 @@ const repositoryRoute = createRoute({
     if (search.issue !== undefined && (!Number.isSafeInteger(search.issue) || search.issue <= 0 || search.issue > 0xffffffff)) throw notFound();
     if (search.commit !== undefined && !isCommitID(search.commit)) throw notFound();
     if (search.run !== undefined && !isRunID(search.run)) throw notFound();
+    if (search.step !== undefined && (!Number.isInteger(search.step)||search.step<0||search.step>49)) throw notFound();
   },
   search: { middlewares: [stripSearchParams(defaultRepositorySearch)] },
   component: RepositoryPage,
@@ -122,6 +124,7 @@ const repositoryRoute = createRoute({
 function canonicalLocation(owner:string,name:string,tail:string,search:RepositorySearch) {
   if(!owner||!name||/[\/\\]/.test(owner+name)) throw notFound();
   if(search.run!==undefined&&!isRunID(search.run))throw notFound();
+  if(search.step!==undefined&&(!Number.isInteger(search.step)||search.step<0||search.step>49))throw notFound();
   const location={...search,owner,name,kind:'repository' as const};
   if(!tail) return location;
   const parts=tail.split('/');

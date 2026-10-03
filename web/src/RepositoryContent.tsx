@@ -6,6 +6,7 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import { RepositoryImage, type DocumentContext } from './RepositoryImage';
 import type { Root, Element, RootContent } from 'hast';
 import { Code2, Eye } from 'lucide-react';
+import { CopyButton } from './RepositoryUI';
 
 const languages: Record<string, string> = { js:'javascript',jsx:'javascript',ts:'typescript',tsx:'typescript',py:'python',go:'go',rs:'rust',sh:'bash',yml:'yaml',yaml:'yaml',json:'json',css:'css',html:'xml',xml:'xml',sql:'sql',md:'markdown',toml:'ini',ini:'ini',java:'java',rb:'ruby',php:'php',c:'c',h:'c',cpp:'cpp',cs:'csharp',dockerfile:'dockerfile' };
 export const isMarkdownPath = (path:string) => /\.(md|markdown|mdown)$/i.test(path);
@@ -14,8 +15,9 @@ function Tokens({text,language}:{text:string;language:string}) {return language?
 export function CodePreview({ text, path, label }: {text:string;path:string;label?:string}) {
  const filename=path.split('/').pop()?.toLowerCase()||'';
  const language=languages[filename]||languages[filename.split('.').pop()||'']||'';
- return <pre className="source-preview code-preview" tabIndex={0} aria-label={label||`Source of ${path}`}><code><Tokens text={text} language={language}/></code></pre>;
+ return <div className="code-block"><CopyButton text={text} label={`Copy source of ${path}`}/><pre className="source-preview code-preview" tabIndex={0} aria-label={label||`Source of ${path}`}><code><Tokens text={text || '(Empty text file)'} language={language}/></code></pre></div>;
 }
+const nodeText=(node:RootContent):string=>node.type==='text'?node.value:node.type==='element'?node.children.map(nodeText).join(''):'';
 // Resolve relative document links within the same repository/immutable snapshot.
 // Relative source links never become Golf account/admin/API routes.
 export function contentLink(href:string, context?:DocumentContext):string|undefined {
@@ -34,9 +36,8 @@ export function contentLink(href:string, context?:DocumentContext):string|undefi
 }
 function headingAnchors(){return (tree:Root)=>{
  const counts=new Map<string,number>();
- const text=(node:RootContent):string=>node.type==='text'?node.value:node.type==='element'?node.children.map(text).join(''):'';
  const visit=(node:Root|Element)=>{for(const child of node.children){if(child.type!=='element')continue;
-  if(/^h[1-6]$/.test(child.tagName)){const slug=child.children.map(text).join('').toLowerCase().replace(/[^\p{L}\p{N}_ -]/gu,'').replace(/ /g,'-');const count=counts.get(slug)||0;counts.set(slug,count+1);child.properties.id=`user-content-${slug}${count?`-${count}`:''}`;}
+  if(/^h[1-6]$/.test(child.tagName)){const slug=child.children.map(nodeText).join('').toLowerCase().replace(/[^\p{L}\p{N}_ -]/gu,'').replace(/ /g,'-');const count=counts.get(slug)||0;counts.set(slug,count+1);child.properties.id=`user-content-${slug}${count?`-${count}`:''}`;}
   visit(child);
  }};visit(tree);
 };}
@@ -47,6 +48,7 @@ export function MarkdownBody({text,label,context}:{text:string;label:string;cont
   a:({href,children})=>href?<a href={href} target={/^https?:/.test(href)?'_blank':undefined} rel="noopener noreferrer">{children}</a>:<span>{children}</span>,
   img:({src,alt,height,width})=><RepositoryImage src={src} alt={alt} height={height} width={width} context={context}/>,
   code:({className,children})=><code className={className}><Tokens text={String(children)} language={className?.replace(/^language-/,'')||''}/></code>,
+  pre:({children,node})=><div className="code-block"><CopyButton text={node?.children.map(nodeText).join('')||''} label="Copy code block"/><pre>{children}</pre></div>,
  }}>{text}</Markdown></div>;
 }
 export function FileContent({text,path,context}:{text:string;path:string;context:DocumentContext}) {

@@ -87,7 +87,7 @@ def main():
             deadline=time.monotonic()+90
             while time.monotonic()<deadline:
                 item=rpc('WorkflowRunService/GetWorkflowRun',{'runId':identifier})['run']
-                if state and item['state']==state: return item
+                if state and item['state']==state and (state!='WORKFLOW_RUN_STATE_RUNNING' or any(step.get('state')=='WORKFLOW_STEP_STATE_RUNNING' for step in item.get('progress',{}).get('steps',[]))): return item
                 if not state and item['state'] not in ['WORKFLOW_RUN_STATE_QUEUED','WORKFLOW_RUN_STATE_RUNNING']: return item
                 time.sleep(.5)
             raise AssertionError('Run did not reach expected state')
@@ -138,7 +138,7 @@ def main():
             repository={'owner':name,'name':'pipeline-proof'}
             base='repos/'+name+'/pipeline-proof'
             files={
-              '.github/workflows/actions.yml': 'name: Actions proof\non: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: |\n          test "$(id -u)" = 1000\n          test -f README.md\n          printf "actions proof\\n"\n',
+              '.github/workflows/actions.yml': 'name: Actions proof\non: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - name: Read source\n        run: |\n          test "$(id -u)" = 1000\n          test -f README.md\n          export STEP_PRIVATE=first\n          printf "actions proof\\n"\n      - name: Verify workspace\n        run: |\n          test -z "${STEP_PRIVATE:-}"\n          test -f README.md\n          printf "second step proof\\n"\n',
               '.gitlab-ci.yml': 'proof:\n  image: '+IMAGE+'\n  script:\n    - value=shared\n    - test "$value" = shared\n    - test -f README.md\n    - printf "gitlab proof\\n"\n',
               '.github/workflows/failure.yml': 'on: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: exit 7\n      - run: printf "must not execute\\n"\n',
               '.github/workflows/slow.yml': 'on: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: sleep 60\n',
@@ -169,10 +169,20 @@ def main():
             assert action_result['state']=='WORKFLOW_RUN_STATE_SUCCEEDED'
             logs=rpc('WorkflowRunService/GetWorkflowRunLogs',{'runId':actions['id']})
             assert 'actions proof' in ''.join(row['text'] for row in logs.get('logs',[]))
+            progress=action_result['progress'];assert progress['eventsRecorded'] and progress['jobId']=='proof' and len(progress['steps'])==2
+            assert all(step['state']=='WORKFLOW_STEP_STATE_SUCCEEDED' and step.get('startedAt') and step.get('finishedAt') for step in progress['steps'])
+            first=rpc('WorkflowRunService/GetWorkflowRunLogs',{'runId':actions['id'],'stepIndex':0})
+            second=rpc('WorkflowRunService/GetWorkflowRunLogs',{'runId':actions['id'],'stepIndex':1})
+            first_text=''.join(row['text'] for row in first.get('logs',[]));second_text=''.join(row['text'] for row in second.get('logs',[]))
+            assert 'actions proof' in first_text and 'second step proof' not in first_text
+            assert 'second step proof' in second_text and 'actions proof' not in second_text
+            print('PASS: real independent Actions step events, names, timing and isolated log ranges.',flush=True)
             gitlab=dispatch('.gitlab-ci.yml');assert wait_run(gitlab['id'])['state']=='WORKFLOW_RUN_STATE_SUCCEEDED'
             assert 'gitlab proof' in ''.join(row['text'] for row in rpc('WorkflowRunService/GetWorkflowRunLogs',{'runId':gitlab['id']}).get('logs',[]))
+            gitlab_result=rpc('WorkflowRunService/GetWorkflowRun',{'runId':gitlab['id']})['run'];assert len(gitlab_result['progress']['steps'])==1 and gitlab_result['progress']['steps'][0]['state']=='WORKFLOW_STEP_STATE_SUCCEEDED'
             failure=dispatch('.github/workflows/failure.yml');failed=wait_run(failure['id']);assert failed['state']=='WORKFLOW_RUN_STATE_FAILED' and failed['exitCode']==7
             assert 'must not execute' not in ''.join(row['text'] for row in rpc('WorkflowRunService/GetWorkflowRunLogs',{'runId':failure['id']}).get('logs',[]))
+            assert [step['state'] for step in failed['progress']['steps']]==['WORKFLOW_STEP_STATE_FAILED','WORKFLOW_STEP_STATE_SKIPPED']
             stage('actual worker output continues through every bounded log page')
             paged_run=dispatch('.github/workflows/logs.yml');assert wait_run(paged_run['id'])['state']=='WORKFLOW_RUN_STATE_SUCCEEDED'
             after=0;chunks=[];pages=0
@@ -191,6 +201,7 @@ def main():
             stage('running cancellation and policy revocation fence worker results')
             slow=dispatch('.github/workflows/slow.yml');running=wait_run(slow['id'],'WORKFLOW_RUN_STATE_RUNNING')
             cancelled=rpc('WorkflowRunService/CancelWorkflowRun',{'runId':slow['id'],'expectedVersion':running['version']})['run'];assert cancelled['state']=='WORKFLOW_RUN_STATE_CANCELLED'
+            cancelled_detail=rpc('WorkflowRunService/GetWorkflowRun',{'runId':slow['id']})['run'];assert cancelled_detail['progress']['steps'][0]['state']=='WORKFLOW_STEP_STATE_INTERRUPTED'
             time.sleep(11)
             revoked=dispatch('.github/workflows/slow.yml');wait_run(revoked['id'],'WORKFLOW_RUN_STATE_RUNNING')
             repo_policy=update('REPOSITORY',repo_policy,False,repository)

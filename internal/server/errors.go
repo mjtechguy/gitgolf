@@ -60,6 +60,8 @@ func rpcError(err error) error {
 		code, message = connect.CodeFailedPrecondition, "Infrastructure connection changed or its source binding is unavailable. Refresh and review before continuing."
 	case errors.Is(err, errOrganizationCreationPolicyConflict):
 		code, message = connect.CodeFailedPrecondition, "Organization creation policy changed. Refresh before continuing."
+	case errors.Is(err, errWorkflowStepUnrecorded):
+		code, message = connect.CodeFailedPrecondition, "The selected step has no recorded log boundaries."
 	case errors.Is(err, errWorkflowRunConflict):
 		code, message = connect.CodeFailedPrecondition, "Workflow run intent or version changed. Inspect the recorded run before continuing."
 	case errors.Is(err, errWorkflowPolicyDenied):

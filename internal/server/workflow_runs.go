@@ -585,11 +585,13 @@ func (s *Server) GetWorkflowRun(ctx context.Context, req *connect.Request[golfv1
 	var result *golfv1.WorkflowRun
 	err = s.withWorkflowRepository(ctx, s.cookieValue(req.Header()), credential, repositoryKey{record.RepositoryOwner, record.RepositoryName}, record.RepositoryID, record.OwnerID, false, func(_ User, a *golfv1.RepositoryAccess) error {
 		var e error
-		record, e = s.loadWorkflowRun(ctx, record.ID)
+		var progress *golfv1.WorkflowJobProgress
+		record, progress, e = s.workflowRunDetail(ctx, record.ID)
 		if e != nil {
 			return e
 		}
 		result = wireWorkflowRun(record, workflowWritable(a))
+		result.Progress = progress
 		return nil
 	})
 	if err != nil {
@@ -695,7 +697,24 @@ func (s *Server) GetWorkflowRunLogs(ctx context.Context, req *connect.Request[go
 	}
 	result := &golfv1.GetWorkflowRunLogsResponse{}
 	err = s.withWorkflowRepository(ctx, s.cookieValue(req.Header()), credential, repositoryKey{record.RepositoryOwner, record.RepositoryName}, record.RepositoryID, record.OwnerID, false, func(_ User, _ *golfv1.RepositoryAccess) error {
-		rows, e := s.db.QueryContext(ctx, `SELECT sequence,text FROM golf_workflow_run_logs WHERE run_id=$1 AND sequence>$2 ORDER BY sequence LIMIT 17`, record.ID, int64(req.Msg.AfterSequence))
+		tx, e := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+		if e != nil {
+			return errStorageUnavailable
+		}
+		defer tx.Rollback()
+		after := int64(req.Msg.AfterSequence)
+		var through *int64
+		if req.Msg.StepIndex != nil {
+			start, end, e := workflowStepLogRange(ctx, tx, record.ID, *req.Msg.StepIndex)
+			if e != nil {
+				return e
+			}
+			if start > after {
+				after = start
+			}
+			through = end
+		}
+		rows, e := tx.QueryContext(ctx, `SELECT sequence,text FROM golf_workflow_run_logs WHERE run_id=$1 AND sequence>$2 AND ($3::bigint IS NULL OR sequence<=$3) ORDER BY sequence LIMIT 17`, record.ID, after, through)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -715,11 +734,15 @@ func (s *Server) GetWorkflowRunLogs(ctx context.Context, req *connect.Request[go
 			result.HasMore = true
 			result.Logs = result.Logs[:16]
 		}
-		record, e = s.loadWorkflowRun(ctx, record.ID)
-		if e != nil {
-			return e
+		if e = rows.Close(); e != nil {
+			return errStorageUnavailable
 		}
-		result.Truncated = record.LogsTruncated
+		if tx.QueryRowContext(ctx, `SELECT logs_truncated FROM golf_workflow_runs WHERE id=$1`, record.ID).Scan(&result.Truncated) != nil {
+			return errStorageUnavailable
+		}
+		if tx.Commit() != nil {
+			return errStorageUnavailable
+		}
 		return nil
 	})
 	if err != nil {

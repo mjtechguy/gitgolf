@@ -345,6 +345,8 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Sequence            int64  `json:"sequence"`
 		Text                string `json:"text"`
+		StepIndex           int32  `json:"stepIndex"`
+		Kind                string `json:"kind"`
 		ExitCode            int32  `json:"exitCode"`
 		TimedOut            bool   `json:"timedOut"`
 		Cancelled           bool   `json:"cancelled"`
@@ -433,7 +435,32 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 			}
 			_, err = tx.ExecContext(ctx, `UPDATE golf_workflow_runs SET log_sequence=$2,log_bytes=log_bytes+$3 WHERE id=$1`, run.ID, input.Sequence, len(input.Text))
 		}
+	case "progress":
+		if input.Sequence < 1 || input.Sequence > 100 {
+			runnerFail(w, 400)
+			return
+		}
+		err = recordWorkflowProgress(ctx, tx, run, int32(input.Sequence), input.StepIndex, input.Kind, input.ExitCode)
+		if errors.Is(err, errWorkflowProgressInput) {
+			runnerFail(w, 400)
+			return
+		}
+		if errors.Is(err, errWorkflowRunConflict) {
+			runnerFail(w, 409)
+			return
+		}
 	case "finish":
+		if !input.TimedOut && !input.Cancelled && !input.InfrastructureError && !input.LogsTruncated {
+			err = checkWorkflowProgressFinish(ctx, tx, run, input.ExitCode)
+			if errors.Is(err, errWorkflowRunConflict) {
+				runnerFail(w, 409)
+				return
+			}
+			if err != nil {
+				runnerFail(w, 503)
+				return
+			}
+		}
 		if input.ExitCode < 0 || input.ExitCode > 255 {
 			runnerFail(w, 400)
 			return

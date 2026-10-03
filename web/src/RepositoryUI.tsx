@@ -1,4 +1,6 @@
-import { ArrowDown, LoaderCircle, RefreshCw } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import type { FocusEvent, KeyboardEvent } from 'react';
+import { ArrowDown, Check, Copy, LoaderCircle, RefreshCw } from 'lucide-react';
 import type { PageResponse } from './gen/golf/v1/golf_pb';
 import { errorMessage } from './api';
 
@@ -6,6 +8,33 @@ import { errorMessage } from './api';
 export const privateQuery = { staleTime: 0, gcTime: 0 };
 export const nextPage = (response: { page?: PageResponse }) => response.page?.nextPage || undefined;
 export const shortSHA = (value: string) => value.slice(0, 12);
+
+export function CopyButton({ text, label }: { text: string; label: string }) {
+  const [status, setStatus] = useState('');
+  const mounted = useRef(false);
+  const generation = useRef(0);
+  useEffect(() => { mounted.current = true; generation.current++; setStatus(''); return () => { mounted.current = false; generation.current++; }; }, [text]);
+  async function copy() {
+    const stamp = generation.current;
+    try {
+      await navigator.clipboard.writeText(text);
+      if (mounted.current && stamp === generation.current) setStatus('Copied.');
+    } catch {
+      if (mounted.current && stamp === generation.current) setStatus('Copy unavailable. Select the text and copy it manually.');
+    }
+  }
+  return <span className="copy-action"><button type="button" className="icon-button" aria-label={label} title={label} onClick={() => void copy()}>{status === 'Copied.' ? <Check size={15} aria-hidden="true"/> : <Copy size={15} aria-hidden="true"/>}</button><span className="sr-only" role="status">{status}</span></span>;
+}
+
+// Native disclosures retain ordinary tab order; Escape returns to the trigger.
+export const disclosureDismiss = {
+  onKeyDown: (event: KeyboardEvent<HTMLDetailsElement>) => {
+    if (event.key === 'Escape') { event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); event.stopPropagation(); }
+  },
+  onBlur: (event: FocusEvent<HTMLDetailsElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+  },
+};
 
 export function Loading({ label }: { label: string }) {
   return <div className="browser-loading" role="status"><LoaderCircle size={20} className="spin" />{label}</div>;

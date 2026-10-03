@@ -332,7 +332,7 @@ test('README renders GFM, highlights code, pins relative links and blocks active
  expect(await page.evaluate(()=> 'executed' in window)).toBe(false);
  for(const theme of ['light','dark']){await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);}
  await readme.getByRole('button',{name:'Source',exact:true}).click();
- await expect(readme.getByLabel('Source of README.md')).toContainText('# Golf example');
+  await expect(readme.getByLabel('Source of README.md',{exact:true})).toContainText('# Golf example');
 });
 
  test('HTML logos, heading anchors and image bytes render safely without external browser requests',async({page})=>{
@@ -364,4 +364,50 @@ test('compact work lists share loaded search and sorting without inventing serve
  await page.getByLabel('Sort loaded issues').selectOption('title');
  await expect(page.locator('.issue-list>li').first()).toContainText('Document focus management');
  expect(state.methods.filter(m=>m==='ListIssues').length).toBe(before);
+ });
+
+test('branch search is loaded-only, preserves pagination and dismisses with keyboard focus', async ({ page }) => {
+ const state = await backend(page);
+ await page.goto('/alex/design-system');
+ const trigger = page.locator('.branch-picker > summary');
+ await trigger.click();
+ const search = page.getByRole('searchbox', {name:'Search loaded branches'});
+ await search.fill('feature');
+ await expect(page.getByText('No loaded branches match your search.')).toBeVisible();
+ const before = state.methods.filter(m => m === 'ListBranches').length;
+ await page.getByRole('button', {name:'Load more branches'}).click();
+ await expect(page.locator('.branch-options li')).toHaveCount(1);
+ await expect(page.locator('.branch-options li')).toContainText('feature/UI');
+ expect(state.methods.filter(m => m === 'ListBranches').length).toBe(before + 1);
+ await search.press('Escape');
+ await expect(trigger).toBeFocused();
+ await expect(search).toBeHidden();
+ await trigger.click();
+ await expect(search).toHaveValue('');
+ await expect(page.locator('.branch-options li')).toHaveCount(2);
+});
+
+test('clone protocol and shared source copy use exact text and handle unavailable clipboard', async ({ page }) => {
+ const state = await backend(page);
+ state.readme = '```sh\nprintf "<literal>"\n```';
+ await page.addInitScript(() => { Object.defineProperty(navigator,'clipboard',{value:{writeText:async(text:string)=>{(window as unknown as {copied:string}).copied=text;}}}); });
+ await page.goto('/alex/design-system');
+ await page.locator('.clone-picker > summary').click();
+ await expect(page.getByLabel('HTTPS clone URL',{exact:true})).toHaveValue(repository.cloneUrl);
+ await page.getByRole('button',{name:'Copy HTTPS clone URL'}).click();
+ expect(await page.evaluate(() => (window as unknown as {copied:string}).copied)).toBe(repository.cloneUrl);
+ await page.getByRole('button',{name:'SSH',exact:true}).click();
+ await expect(page.getByLabel('SSH clone URL',{exact:true})).toHaveValue(repository.sshUrl);
+ await page.getByRole('button',{name:'Copy SSH clone URL'}).click();
+ expect(await page.evaluate(() => (window as unknown as {copied:string}).copied)).toBe(repository.sshUrl);
+ await page.getByRole('button',{name:'SSH',exact:true}).press('Escape');
+ await expect(page.locator('.clone-picker > summary')).toBeFocused();
+ await page.getByRole('button',{name:'Copy code block'}).click();
+ expect(await page.evaluate(() => (window as unknown as {copied:string}).copied)).toBe('printf "<literal>"\n');
+ await page.goto(`/alex/design-system/blob/${head}/empty.txt`);
+ await page.getByRole('button',{name:'Copy source of empty.txt'}).click();
+ expect(await page.evaluate(() => (window as unknown as {copied:string}).copied)).toBe('');
+ await page.evaluate(() => { navigator.clipboard.writeText = async () => { throw new Error('denied'); }; });
+ await page.getByRole('button',{name:'Copy source of empty.txt'}).click();
+ await expect(page.getByRole('status').filter({hasText:'Copy unavailable.'})).toBeAttached();
 });

@@ -606,3 +606,14 @@ type GolfWorkflowRunLog struct {
 	Sequence int64
 	Text     string
 }
+
+type GolfWorkflowRunProgress struct {
+	RunID       uuid.UUID
+	AttemptID   string
+	Sequence    int32
+	StepIndex   int32
+	Kind        string
+	ExitCode    sql.NullInt32
+	LogSequence int64
+	OccurredAt  time.Time
+}

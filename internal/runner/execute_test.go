@@ -161,6 +161,8 @@ func TestDockerIsolation(t *testing.T) {
  export STEP_PRIVATE=first
  printf 'stdout-marker\n'
  printf 'stderr-marker\n' >&2`}, {Shell: "sh", Script: `test -z "${STEP_PRIVATE:-}"; test "$(cat hello.txt)" = xxxchanged; printf 'second-step\n'`}}
+		var events []StepEvent
+		job.OnProgress = func(_ context.Context, e StepEvent) error { events = append(events, e); return nil }
 		var stdout, stderr bytes.Buffer
 		verified := false
 		result, err := e.Execute(context.Background(), job, func(_ context.Context, c LogChunk) error {
@@ -225,6 +227,9 @@ func TestDockerIsolation(t *testing.T) {
 			return nil
 		})
 		clean(job.AttemptID)
+		if len(events) != 4 || events[0].Index != 0 || events[0].Kind != "started" || events[1].Kind != "finished" || events[1].ExitCode != 0 || events[2].Index != 1 || events[3].ExitCode != 0 {
+			t.Fatal("worker progress differs", events)
+		}
 		if err != nil || result.ExitCode != 0 || !verified || !strings.Contains(stdout.String(), "second-step") || !strings.Contains(stderr.String(), "stderr-marker") {
 			t.Fatalf("isolation failed result=%+v err=%v stdout=%q stderr=%q", result, err, stdout.String(), stderr.String())
 		}
@@ -232,10 +237,15 @@ func TestDockerIsolation(t *testing.T) {
 	t.Run("nonzero_stops_later_steps", func(t *testing.T) {
 		job := testJob(t)
 		job.ImageDigest = image
-		job.Steps = []Step{{Shell: "sh", Script: "printf before; exit 7"}, {Shell: "sh", Script: "printf must-not-run"}}
+		job.Steps = []Step{{Shell: "sh", Script: `printf '{"kind":"finished","stepIndex":1,"exitCode":0}'; exit 7`}, {Shell: "sh", Script: "printf must-not-run"}}
+		var events []StepEvent
+		job.OnProgress = func(_ context.Context, e StepEvent) error { events = append(events, e); return nil }
 		var logs bytes.Buffer
 		r, err := e.Execute(context.Background(), job, func(_ context.Context, c LogChunk) error { logs.Write(c.Data); return nil })
 		clean(job.AttemptID)
+		if len(events) != 2 || events[0].Index != 0 || events[1].Kind != "finished" || events[1].ExitCode != 7 {
+			t.Fatal("stdout spoofed progress or later step ran", events)
+		}
 		if err != nil || r.ExitCode != 7 || strings.Contains(logs.String(), "must-not-run") {
 			t.Fatalf("result=%+v err=%v", r, err)
 		}

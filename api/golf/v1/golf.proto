@@ -1045,6 +1045,32 @@ message WorkflowRun {
   string event_ref = 20;
   string repository_event_id = 21;
   string automation_grant_id = 22;
+  optional WorkflowJobProgress progress = 23;
+}
+enum WorkflowStepState {
+ WORKFLOW_STEP_STATE_UNSPECIFIED = 0;
+ WORKFLOW_STEP_STATE_PENDING = 1;
+ WORKFLOW_STEP_STATE_RUNNING = 2;
+ WORKFLOW_STEP_STATE_SUCCEEDED = 3;
+ WORKFLOW_STEP_STATE_FAILED = 4;
+ WORKFLOW_STEP_STATE_SKIPPED = 5;
+ WORKFLOW_STEP_STATE_INTERRUPTED = 6;
+ WORKFLOW_STEP_STATE_UNRECORDED = 7;
+}
+message WorkflowStepProgress {
+ uint32 index = 1;
+ string name = 2;
+ WorkflowStepState state = 3;
+ optional string started_at = 4;
+ optional string finished_at = 5;
+ optional int32 exit_code = 6;
+}
+message WorkflowJobProgress {
+ string job_id = 1;
+ string name = 2;
+ string stage = 3;
+ repeated WorkflowStepProgress steps = 4;
+ bool events_recorded = 5;
 }
 message DispatchWorkflowRequest { RepositoryKey repository = 1; string ref = 2; string workflow_path = 3; string idempotency_key = 4; }
 message DispatchWorkflowResponse { WorkflowRun run = 1; }
@@ -1055,7 +1081,7 @@ message ListWorkflowRunsResponse { repeated WorkflowRun runs = 1; PageResponse p
 message CancelWorkflowRunRequest { string run_id = 1; string expected_version = 2; }
 message CancelWorkflowRunResponse { WorkflowRun run = 1; }
 message WorkflowRunLog { uint64 sequence = 1; string text = 2; }
-message GetWorkflowRunLogsRequest { string run_id = 1; uint64 after_sequence = 2; }
+message GetWorkflowRunLogsRequest { string run_id = 1; uint64 after_sequence = 2; optional uint32 step_index = 3; }
 message GetWorkflowRunLogsResponse { repeated WorkflowRunLog logs = 1; bool has_more = 2; bool truncated = 3; }
 
 // Golf API ceiling; independently exposed native APIs remain separate.

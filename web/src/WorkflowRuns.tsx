@@ -4,7 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { ArrowLeft, ArrowDownToLine, CheckCircle2, CircleDashed, CircleSlash, Clock3, Download, GitCommitHorizontal, LoaderCircle, RefreshCw, Search, XCircle } from 'lucide-react';
 import { workflowRunClient, errorMessage } from './api';
-import { WorkflowRunOrigin, WorkflowRunState, type WorkflowRun } from './gen/golf/v1/golf_pb';
+import { WorkflowRunOrigin, WorkflowRunState, WorkflowStepState, type WorkflowStepProgress, type WorkflowRun } from './gen/golf/v1/golf_pb';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { DateLabel, Loading, More, PanelError, privateQuery } from './RepositoryUI';
 import { repositoryOptions } from './navigation';
@@ -41,6 +41,17 @@ function elapsed(run:WorkflowRun) {
  const seconds=Math.floor((Date.parse(run.finishedAt)-Date.parse(run.startedAt))/1000);
  return Number.isFinite(seconds)&&seconds>=0?`${Math.floor(seconds/60)}m ${seconds%60}s`:'Unavailable';
 }
+function stepLabel(state:WorkflowStepState){return WorkflowStepState[state]?.toLowerCase()||'unknown';}
+function stepDuration(step:WorkflowStepProgress){
+ if(!step.startedAt)return stepLabel(step.state);
+ if(!step.finishedAt)return step.state===WorkflowStepState.INTERRUPTED?'Interrupted':'In progress';
+ const seconds=Math.floor((Date.parse(step.finishedAt)-Date.parse(step.startedAt))/1000);
+ return Number.isFinite(seconds)&&seconds>=0?`${seconds}s`:'Duration unavailable';
+}
+function StepState({step}:{step:WorkflowStepProgress}){
+ const Icon=step.state===WorkflowStepState.SUCCEEDED?CheckCircle2:step.state===WorkflowStepState.FAILED?XCircle:step.state===WorkflowStepState.RUNNING?LoaderCircle:step.state===WorkflowStepState.SKIPPED||step.state===WorkflowStepState.INTERRUPTED?CircleSlash:CircleDashed;
+ return <span className={`run-state run-state-${stepLabel(step.state)}`} title={stepLabel(step.state)}><Icon size={16} aria-label={stepLabel(step.state)} className={step.state===WorkflowStepState.RUNNING?'spin':undefined}/></span>;
+}
 function LogHighlight({text,search}:{text:string;search:string}) {
  if(!search)return text;
  // Bound DOM work without dropping log text; browser Find can reach further matches.
@@ -51,11 +62,11 @@ function LogHighlight({text,search}:{text:string;search:string}) {
  }
  parts.push(text.slice(cursor));return parts;
 }
-function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled}:{userId:string;owner:string;name:string;runId:string;truncated:boolean;enabled:boolean}) {
+function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex}:{userId:string;owner:string;name:string;runId:string;truncated:boolean;enabled:boolean;stepIndex?:number}) {
  const [search,setSearch]=useState('');const searchId=useId();const end=useRef<HTMLSpanElement>(null);
- const query=useInfiniteQuery({...privateQuery,queryKey:['workflow-run-logs',userId,owner,name,runId],enabled,initialPageParam:0n,
+ const query=useInfiniteQuery({...privateQuery,queryKey:['workflow-run-logs',userId,owner,name,runId,stepIndex??'all'],enabled,initialPageParam:0n,
   queryFn:async({signal,pageParam})=>{
-   const page=await workflowRunClient.getWorkflowRunLogs({runId,afterSequence:pageParam},{signal,timeoutMs:12_000});
+   const page=await workflowRunClient.getWorkflowRunLogs({runId,afterSequence:pageParam,stepIndex},{signal,timeoutMs:12_000});
    let sequence=pageParam;
    for(const chunk of page.logs){if(chunk.sequence<=sequence||chunk.sequence>9223372036854775807n)throw new ConnectError('The log page has an invalid sequence. Refresh before continuing.',Code.Internal);sequence=chunk.sequence;}
    if(page.logs.length>16||page.hasMore&&!page.logs.length)throw new ConnectError('The log page cannot be continued safely.',Code.Internal);
@@ -68,7 +79,7 @@ function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled}:{userId:str
  function download(){
   if(denied||loading||!text)return;
   const url=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));
-  const link=document.createElement('a');link.href=url;link.download=`golf-run-${runId}${query.hasNextPage?'-loaded':''}.log`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  const link=document.createElement('a');link.href=url;link.download=`golf-run-${runId}${stepIndex!==undefined?'-step-'+(stepIndex+1):''}${query.hasNextPage?'-loaded':''}.log`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
  }
  return <section className="browser-panel workflow-log-panel" aria-labelledby="workflow-log-title">
   <div className="browser-panel-heading"><h2 id="workflow-log-title">Run log</h2><div className="row-actions"><button className="icon-button manual-refresh" aria-label="Refresh run log" title="Refresh run log" disabled={query.isFetching||!enabled} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button><button className="icon-button" aria-label="Download loaded log" title="Download loaded log" disabled={denied||loading||!text} onClick={download}><Download size={16}/></button><button className="icon-button" aria-label="Go to end of loaded log" title="Go to end of loaded log" disabled={denied||loading||!text} onClick={()=>end.current?.scrollIntoView({block:'end'})}><ArrowDownToLine size={16}/></button></div></div>
@@ -81,7 +92,7 @@ function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled}:{userId:str
  </section>;
 }
 
-export function WorkflowRunPage({userId,owner,name,repositoryId,runId,signingOut}:{userId:string;owner:string;name:string;repositoryId:string;runId:string;signingOut:boolean}) {
+export function WorkflowRunPage({userId,owner,name,repositoryId,runId,signingOut,selectedStep}:{userId:string;owner:string;name:string;repositoryId:string;runId:string;signingOut:boolean;selectedStep?:number}) {
  const [notice,setNotice]=useState('');const [pending,setPending]=useState(false);
  const controller=useRef<AbortController|null>(null);const alive=useRef(true);
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;controller.current?.abort();};},[]);
@@ -106,7 +117,15 @@ export function WorkflowRunPage({userId,owner,name,repositoryId,runId,signingOut
    <header className="discussion-summary workflow-run-summary"><div><h2>{run.workflowPath}</h2><p><RunState state={run.state}/><span>{run.origin===WorkflowRunOrigin.PUSH?'Push':run.origin===WorkflowRunOrigin.MANUAL?'Manual':'Unknown trigger'}{run.eventRef?` · ${run.eventRef}`:''}</span><span><Clock3 size={14}/>{elapsed(run)}</span></p></div><div className="row-actions"><button className="icon-button manual-refresh" aria-label="Refresh selected run" title="Refresh selected run" disabled={pending||query.isFetching||signingOut} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button>{run.canCancel?<button className="button secondary" disabled={pending||signingOut||query.isFetching} onClick={()=>void cancel()}>Cancel run</button>:null}</div></header>
    <section className="browser-panel workflow-run-metadata" aria-label="Run summary"><dl><div><dt>Commit</dt><dd><Link {...repositoryOptions({owner,name},{view:'commits',commit:run.commitId})}><GitCommitHorizontal size={14}/><code title={run.commitId}>{run.commitId.slice(0,12)}</code></Link></dd></div><div><dt>Created</dt><dd><DateLabel value={run.createdAt}/></dd></div><div><dt>Worker</dt><dd>{run.runnerId||'Awaiting assignment'}</dd></div><div><dt>Exit code</dt><dd>{run.exitCode??'Not reported'}</dd></div></dl><details><summary>Execution receipt</summary><dl><div><dt>Run</dt><dd><code>{run.id}</code></dd></div><div><dt>Workflow source</dt><dd><Link {...repositoryOptions({owner,name},{ref:run.commitId,path:run.workflowPath},'file')}>{run.workflowPath}</Link></dd></div><div><dt>Workflow blob</dt><dd><code>{run.workflowBlobId}</code></dd></div><div><dt>Source archive</dt><dd><code>{run.sourceSha256}</code></dd></div>{run.origin===WorkflowRunOrigin.PUSH?<><div><dt>Event</dt><dd>{run.repositoryEventId}</dd></div><div><dt>Automation grant</dt><dd><code>{run.automationGrantId}</code></dd></div></>:null}</dl></details></section>
    {run.reason?<p className="panel-footnote">{run.reason}</p>:null}
-   <WorkflowRunLogs userId={userId} owner={owner} name={name} runId={runId} truncated={run.logsTruncated} enabled={!query.isFetching&&!signingOut}/>
+   <div className="automation-run-layout"><aside className="automation-job-navigation" aria-label="Jobs and steps">
+    <h3>Jobs</h3><strong>{run.progress?.name||run.progress?.jobId||'Job'}</strong>{run.progress?.stage?<span className="muted">{run.progress.stage}</span>:null}
+    <Link className="automation-step-link" aria-current={selectedStep===undefined?'page':undefined} {...repositoryOptions({owner,name},{view:'actions',run:runId,step:undefined})}>All run output</Link>
+    {run.progress?.steps.length?<ol>{run.progress.steps.map(step=><li key={step.index}>{step.startedAt?<Link className="automation-step-link" aria-current={selectedStep===step.index?'page':undefined} {...repositoryOptions({owner,name},{view:'actions',run:runId,step:step.index})}><StepState step={step}/><span>{step.name}<small>{stepDuration(step)}</small></span></Link>:<div className="automation-step-link"><StepState step={step}/><span>{step.name}<small>{stepLabel(step.state)}</small></span></div>}</li>)}</ol>:<p className="field-help">Step events were not recorded for this run.</p>}
+    {run.progress&&!run.progress.eventsRecorded&&run.state!==WorkflowRunState.QUEUED&&run.state!==WorkflowRunState.RUNNING?<p className="field-help">This run has no recorded step outcomes. Its overall result does not establish individual step results.</p>:null}
+   </aside><div className="automation-run-output">
+    {selectedStep!==undefined?<h3>{run.progress?.steps.find(step=>step.index===selectedStep)?.name||'Selected step'}</h3>:null}
+    {selectedStep!==undefined&&!run.progress?.steps.find(step=>step.index===selectedStep)?.startedAt?<p className="panel-footnote" role="status">The selected step has no recorded output. Choose all run output or a step that started.</p>:<WorkflowRunLogs key={selectedStep??'all'} userId={userId} owner={owner} name={name} runId={runId} stepIndex={selectedStep} truncated={run.logsTruncated} enabled={!query.isFetching&&!signingOut}/>}
+   </div></div>
   </div>{query.isFetching?<Loading label="Checking run access…"/>:null}</>:null}
   {notice&&!signingOut?<p role="status" className="panel-footnote">{notice}</p>:null}
  </section>;

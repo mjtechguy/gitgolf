@@ -1,13 +1,13 @@
 import { expect,test,type Page,type Route } from '@playwright/test';
 import { create,toJson } from '@bufbuild/protobuf';
 import { respond,request,reject,disabledAgentTasks } from './rpc';
-import { GetSessionResponseSchema,GetRepositoryResponseSchema,ListRepositoriesResponseSchema,ListCapabilitiesResponseSchema,GetWorkflowRunRequestSchema,GetWorkflowRunResponseSchema,GetWorkflowRunLogsRequestSchema,GetWorkflowRunLogsResponseSchema,CancelWorkflowRunRequestSchema,CancelWorkflowRunResponseSchema,WatchRepositoryResponseSchema,WorkflowRunState,WorkflowRunOrigin } from '../src/gen/golf/v1/golf_pb';
+import { GetSessionResponseSchema,GetRepositoryResponseSchema,ListRepositoriesResponseSchema,ListCapabilitiesResponseSchema,GetWorkflowRunRequestSchema,GetWorkflowRunResponseSchema,GetWorkflowRunLogsRequestSchema,GetWorkflowRunLogsResponseSchema,CancelWorkflowRunRequestSchema,CancelWorkflowRunResponseSchema,WatchRepositoryResponseSchema,WorkflowRunState,WorkflowRunOrigin,WorkflowStepState } from '../src/gen/golf/v1/golf_pb';
 
 const runId='12345678-1234-4234-8234-123456789abc',head='a'.repeat(40),path=`/alex/demo/actions/runs/${runId}`;
 function frame(flag:number,body:unknown){const payload=Buffer.from(JSON.stringify(body)),header=Buffer.alloc(5);header[0]=flag;header.writeUInt32BE(payload.length,1);return Buffer.concat([header,payload]);}
 async function backend(page:Page){
- const state={cursor:1,live:false,deny:false,foreign:false,badLogs:false,truncated:false,chunks:17,after:[] as string[],reads:0,cancels:[] as {runId:string;expectedVersion:string}[],cancelLost:false,cancelBarrier:undefined as Promise<void>|undefined,state:WorkflowRunState.RUNNING};
- const run=()=>({id:runId,repositoryId:state.foreign?'22':'11',workflowPath:'.github/workflows/qualification.yml',workflowBlobId:'b'.repeat(40),sourceSha256:'c'.repeat(64),commitId:head,createdAt:'2026-10-03T00:00:00Z',startedAt:'2026-10-03T00:01:00Z',finishedAt:state.state===WorkflowRunState.RUNNING?undefined:'2026-10-03T00:02:05Z',exitCode:state.state===WorkflowRunState.RUNNING?undefined:0,runnerId:'local-worker',version:'9',canCancel:state.state===WorkflowRunState.RUNNING,origin:WorkflowRunOrigin.PUSH,eventRef:'refs/heads/main',repositoryEventId:'5',automationGrantId:'owned-grant',state:state.state,logsTruncated:state.truncated});
+ const state={cursor:1,live:false,deny:false,foreign:false,badLogs:false,truncated:false,chunks:17,after:[] as string[],reads:0,cancels:[] as {runId:string;expectedVersion:string}[],cancelLost:false,cancelBarrier:undefined as Promise<void>|undefined,state:WorkflowRunState.RUNNING,progress:false,stepComplete:false,startSecond:true,stepReads:[] as (number|undefined)[]};
+ const run=()=>({id:runId,repositoryId:state.foreign?'22':'11',workflowPath:'.github/workflows/qualification.yml',workflowBlobId:'b'.repeat(40),sourceSha256:'c'.repeat(64),commitId:head,createdAt:'2026-10-03T00:00:00Z',startedAt:'2026-10-03T00:01:00Z',finishedAt:state.state===WorkflowRunState.RUNNING?undefined:'2026-10-03T00:02:05Z',exitCode:state.state===WorkflowRunState.RUNNING?undefined:0,runnerId:'local-worker',version:'9',canCancel:state.state===WorkflowRunState.RUNNING,origin:WorkflowRunOrigin.PUSH,eventRef:'refs/heads/main',repositoryEventId:'5',automationGrantId:'owned-grant',state:state.state,logsTruncated:state.truncated,progress:state.progress?{jobId:'check',name:'Check source',eventsRecorded:true,steps:[{index:0,name:'First step',state:WorkflowStepState.SUCCEEDED,startedAt:'2026-10-03T00:01:00Z',finishedAt:'2026-10-03T00:01:10Z',exitCode:0},{index:1,name:'Second step',state:!state.startSecond?WorkflowStepState.PENDING:state.stepComplete?WorkflowStepState.SUCCEEDED:WorkflowStepState.RUNNING,startedAt:state.startSecond?'2026-10-03T00:01:11Z':undefined,finishedAt:state.stepComplete?'2026-10-03T00:01:25Z':undefined,exitCode:state.stepComplete?0:undefined}]}:undefined});
  await page.route('**/rpc/**',async(route:Route)=>{
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
   if(method==='WatchRepository'){
@@ -27,7 +27,8 @@ async function backend(page:Page){
    return respond(route,GetWorkflowRunResponseSchema,{run:run()});
   }
   if(method==='GetWorkflowRunLogs'){
-   const input=request(route,GetWorkflowRunLogsRequestSchema);expect(input.runId).toBe(runId);state.after.push(input.afterSequence.toString());
+   const input=request(route,GetWorkflowRunLogsRequestSchema);expect(input.runId).toBe(runId);state.after.push(input.afterSequence.toString());state.stepReads.push(input.stepIndex);
+   if(input.stepIndex!==undefined){return respond(route,GetWorkflowRunLogsResponseSchema,{logs:[{sequence:BigInt(input.stepIndex+1),text:input.stepIndex===0?'First step output':'Second step output'}]});}
    if(state.deny)return reject(route,'permission_denied','Run log access removed.');
    if(state.badLogs&&input.afterSequence>0n)return respond(route,GetWorkflowRunLogsResponseSchema,{logs:[{sequence:input.afterSequence,text:'Invalid repeated sequence'}],hasMore:true});
    const start=Number(input.afterSequence),end=Math.min(start+16,state.chunks);
@@ -92,7 +93,7 @@ test('cancellation sends the observed version once and lost response remains ins
 });
 
 test('run workspace stays contained in dark/light mobile and preserves receipt/source navigation',async({page},testInfo)=>{
- await backend(page);await page.goto(path);await expect(page.getByLabel('Workflow run log',{exact:true})).toBeVisible();
+ const state=await backend(page);state.progress=true;await page.goto(path);await expect(page.getByLabel('Workflow run log',{exact:true})).toBeVisible();
  await page.locator('summary').filter({hasText:'Execution receipt'}).click();await expect(page.getByRole('link',{name:'.github/workflows/qualification.yml',exact:true})).toHaveAttribute('href',new RegExp(`/blob/${head}/.github/workflows/qualification.yml`));
  for(const theme of ['dark','light']){
   await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);await page.setViewportSize({width:320,height:844});
@@ -106,4 +107,28 @@ test('leaving a pending cancellation aborts local UI handling without replaying 
  await page.getByRole('button',{name:'Cancel run'}).click();await expect.poll(()=>state.cancels.length).toBe(1);
  await page.getByRole('link',{name:'All workflow runs'}).click();await expect(page).toHaveURL(/\/alex\/demo\/actions$/);release();
  await expect(page.getByText('Run cancelled.',{exact:false})).toHaveCount(0);expect(state.cancels).toHaveLength(1);
+});
+
+
+test('job sidebar uses recorded events and step-scoped log links, including the zero index and reload',async({page})=>{
+ const state=await backend(page);state.progress=true;await page.goto(path);await expect(page.getByLabel('Jobs and steps')).toContainText('Check source');
+ await page.getByRole('link',{name:'First step 10s'}).click();await expect(page).toHaveURL(/step=0/);await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveText('First step output');expect(state.stepReads).toContain(0);
+ await page.reload();await expect(page.getByRole('link',{name:'First step 10s'})).toHaveAttribute('aria-current','page');await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveText('First step output');
+ await page.getByRole('link',{name:'Second step In progress'}).click();await expect(page).toHaveURL(/step=1/);await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveText('Second step output');
+ const download=page.waitForEvent('download');await page.getByRole('button',{name:'Download loaded log'}).click();expect((await download).suggestedFilename()).toBe(`golf-run-${runId}-step-2.log`);
+ await page.getByRole('link',{name:'All run output'}).click();await expect(page).not.toHaveURL(/step=/);await expect(page.getByLabel('Workflow run log',{exact:true})).toContainText('Chunk 1');
+});
+
+test('live step completion updates sidebar while keeping selected log scope',async({page})=>{
+ const state=await backend(page);state.live=true;state.progress=true;await page.goto(path+'?step=1');await expect(page.getByText('Live',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('Jobs and steps')).toContainText('In progress');state.stepComplete=true;state.cursor++;
+ await expect(page.getByLabel('Jobs and steps')).toContainText('14s');await expect(page.getByRole('link',{name:'Second step 14s'})).toHaveAttribute('aria-current','page');
+ await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveText('Second step output');expect(state.stepReads.every(value=>value===1)).toBe(true);
+});
+
+
+test('a direct pending-step link waits for a real start event before reading its logs',async({page})=>{
+ const state=await backend(page);state.live=true;state.progress=true;state.startSecond=false;await page.goto(path+'?step=1');
+ await expect(page.getByRole('status').filter({hasText:'The selected step has no recorded output'})).toBeVisible();expect(state.stepReads).toEqual([]);
+ state.startSecond=true;state.cursor++;await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveText('Second step output');expect(state.stepReads).toContain(1);
 });
