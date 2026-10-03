@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -124,17 +125,6 @@ func (s *Server) admitReview(ctx context.Context, p reviewerRecord, number uint3
 	if active >= 20 {
 		return out, invalid("Reviewer hourly/outstanding admission limit reached.")
 	}
-	diff, e := s.readCommitDiff(ctx, base+"/pulls/"+strconv.Itoa(int(number))+".diff", a.Credential)
-	if e != nil {
-		return out, e
-	}
-	if len(diff) > 200000 || len(reviewDiffLines(diff)) == 0 {
-		return out, invalid("PR diff is unsupported or exceeds the review bound.")
-	}
-	fresh, e := s.readPull(ctx, a.Credential, base, repo, number)
-	if e != nil || fresh.Head.SHA != pull.Head.SHA || fresh.Base.SHA != pull.Base.SHA {
-		return out, errExecutionPolicyConflict
-	}
 	user, e := s.currentUser(ctx, a.Credential)
 	if e != nil {
 		return out, e
@@ -152,6 +142,19 @@ func (s *Server) admitReview(ctx context.Context, p reviewerRecord, number uint3
 			_, _ = s.db.ExecContext(clean, `DELETE FROM golf_sessions WHERE token_hash=$1`, a.Hash)
 		}
 	}()
+	selectionRead, e := s.getPullRequestDiff(ctx, login.Value, a.Credential, &golfv1.GetPullRequestDiffRequest{Repository: p.Config.Repository, RepositoryId: strconv.FormatInt(repo.ID, 10), PullRequestId: strconv.FormatInt(pull.ID, 10), Number: number, BaseCommitId: pull.Base.SHA, HeadCommitId: pull.Head.SHA})
+	if e != nil {
+		return out, e
+	}
+	diff := selectionRead.RawDiff
+	_, e = parseReviewComparison(diff)
+	if e != nil || len(diff) > 200000 || selectionRead.MergeBaseCommitId != pull.MergeBase {
+		return out, invalid("PR comparison is unsupported or changed.")
+	}
+	if e = s.reviewerEffectClear(ctx, p, number, pull.ID); e != nil {
+		return out, e
+	}
+	diffHash := sha256.Sum256([]byte(diff))
 	ctx = context.WithValue(ctx, reviewTriggerKey{}, trigger)
 	selection := &golfv1.AgentTaskSelection{ConnectionId: p.Config.ConnectionId, ModelId: p.Config.ModelId, Reasoning: p.Config.Reasoning, Trigger: trigger}
 	prompt := reviewPrompt(p, pull, diff, question)
@@ -164,7 +167,7 @@ func (s *Server) admitReview(ctx context.Context, p reviewerRecord, number uint3
 		return out, errCodexPermission
 	}
 	id := uuid.NewString()
-	_, e = s.db.ExecContext(ctx, `INSERT INTO golf_reviewer_runs(id,reviewer_id,reviewer_revision,pull_number,base_commit,head_commit,trigger,intent,diff,publisher_id,state) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'admitting')`, id, p.ID, p.Revision, number, pull.Base.SHA, pull.Head.SHA, trigger, intent, diff, p.PublisherID)
+	_, e = s.db.ExecContext(ctx, `INSERT INTO golf_reviewer_runs(id,reviewer_id,reviewer_revision,pull_number,base_commit,head_commit,trigger,intent,diff,publisher_id,repository_id,pull_request_id,merge_base_commit,diff_fingerprint,state) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'admitting')`, id, p.ID, p.Revision, number, pull.Base.SHA, pull.Head.SHA, trigger, intent, diff, p.PublisherID, repo.ID, pull.ID, pull.MergeBase, diffHash[:])
 	if e != nil {
 		return out, errStorageUnavailable
 	}
@@ -190,7 +193,7 @@ func (s *Server) admitReview(ctx context.Context, p reviewerRecord, number uint3
 	}
 	keepSession = true
 	// Superseding work loses publication authority, and queued/running work stops.
-	_, _ = s.db.ExecContext(ctx, `UPDATE golf_reviewer_runs SET state='outdated',reason='PR commits changed; this review is historical.' WHERE reviewer_id=$1 AND pull_number=$2 AND (base_commit<>$3 OR head_commit<>$4) AND state NOT IN ('admitting','publishing')`, p.ID, number, pull.Base.SHA, pull.Head.SHA)
+	_, _ = s.db.ExecContext(ctx, `UPDATE golf_reviewer_runs SET state='outdated',reason='PR commits changed; this review is historical.' WHERE reviewer_id=$1 AND pull_number=$2 AND (base_commit<>$3 OR head_commit<>$4) AND state IN ('queued','running','failed') AND NOT EXISTS(SELECT 1 FROM golf_reviewer_publications x WHERE x.run_id=golf_reviewer_runs.id AND x.state IN ('reserved','dispatch_unknown'))`, p.ID, number, pull.Base.SHA, pull.Head.SHA)
 	_, _ = s.db.ExecContext(ctx, `UPDATE golf_agent_tasks SET state='cancelled',version=version+1,finished_at=clock_timestamp(),reason='PR snapshot was superseded.' WHERE id IN (SELECT task_id FROM golf_reviewer_runs WHERE reviewer_id=$1 AND state='outdated') AND state IN ('queued','running')`, p.ID)
 	_ = s.reviewCheck(ctx, a, p, pull.Head.SHA, "pending", "Security review running")
 	return scanReviewRun(s.db.QueryRowContext(ctx, `SELECT `+reviewRunColumns+` FROM golf_reviewer_runs WHERE id=$1`, id))
@@ -276,43 +279,6 @@ type reviewResult struct {
 	Findings []reviewFinding `json:"findings"`
 }
 
-var reviewHunk = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
-
-func reviewDiffLines(diff string) map[string]map[int]bool {
-	files := map[string]map[int]bool{}
-	path := ""
-	line := 0
-	inHunk := false
-	for _, s := range strings.Split(diff, "\n") {
-		if strings.HasPrefix(s, "diff --git ") {
-			path = ""
-			inHunk = false
-		}
-		if !inHunk && strings.HasPrefix(s, "+++ b/") {
-			path = strings.TrimPrefix(s, "+++ b/")
-			if validSourcePath(path) {
-				files[path] = map[int]bool{}
-			} else {
-				path = ""
-			}
-			inHunk = false
-			continue
-		}
-		if h := reviewHunk.FindStringSubmatch(s); h != nil {
-			line, _ = strconv.Atoi(h[1])
-			inHunk = true
-			continue
-		}
-		if !inHunk || path == "" {
-			continue
-		}
-		if strings.HasPrefix(s, "+") || strings.HasPrefix(s, " ") {
-			files[path][line] = true
-			line++
-		}
-	}
-	return files
-}
 func validateReviewResult(text, diff string) (reviewResult, error) {
 	text = strings.TrimSpace(text)
 	if strings.HasPrefix(text, "```json\n") && strings.HasSuffix(text, "```") {
@@ -331,11 +297,14 @@ func validateReviewResult(text, diff string) (reviewResult, error) {
 	if len(r.Summary) < 1 || len(r.Summary) > 4000 || len(r.Findings) > 10 || strings.IndexFunc(r.Summary, func(c rune) bool { return unicode.IsControl(c) && c != '\n' && c != '\t' }) >= 0 {
 		return r, errInvalidForgeResponse
 	}
-	lines := reviewDiffLines(diff)
+	comparison, e := parseReviewComparison(diff)
+	if e != nil {
+		return r, e
+	}
 	seen := map[string]bool{}
 	for _, f := range r.Findings {
 		key := fmt.Sprintf("%s:%d:%s", f.Path, f.Line, f.Title)
-		if !lines[f.Path][f.Line] || seen[key] || !validReviewText(f.Title) || !validReviewText(f.Evidence) || !validReviewText(f.Suggestion) || len(f.Title) < 3 || len(f.Title) > 160 || len(f.Evidence) < 10 || len(f.Evidence) > 2000 || len(f.Suggestion) > 2000 || (f.Severity != "high" && f.Severity != "medium" && f.Severity != "low") {
+		if !comparison.Allows(f.Path, f.Line) || seen[key] || !validReviewText(f.Title) || !validReviewText(f.Evidence) || !validReviewText(f.Suggestion) || len(f.Title) < 3 || len(f.Title) > 160 || len(f.Evidence) < 10 || len(f.Evidence) > 2000 || len(f.Suggestion) > 2000 || (f.Severity != "high" && f.Severity != "medium" && f.Severity != "low") {
 			return r, errInvalidForgeResponse
 		}
 		seen[key] = true
@@ -349,6 +318,14 @@ func (s *Server) reviewCheck(ctx context.Context, a codexActor, p reviewerRecord
 	base, _ := repositoryPath(keyFrom(p.Config.Repository))
 	_, e := s.forgeJSON(ctx, http.MethodPost, base+"/statuses/"+head, a.Credential, map[string]string{"state": state, "context": "golf/security-reviewer", "description": description}, &struct{}{}, http.StatusCreated)
 	return e
+}
+func (s *Server) failReviewerRun(ctx context.Context, id, reason string) bool {
+	updated, err := s.db.ExecContext(ctx, `UPDATE golf_reviewer_runs SET state='failed',reason=$2 WHERE id=$1 AND state IN ('queued','running') AND NOT EXISTS(SELECT 1 FROM golf_reviewer_publications x WHERE x.run_id=golf_reviewer_runs.id AND x.state IN ('reserved','dispatch_unknown'))`, id, reason)
+	if err != nil {
+		return false
+	}
+	n, err := updated.RowsAffected()
+	return err == nil && n == 1
 }
 func (s *Server) publishReviews(ctx context.Context) {
 	rows, e := s.db.QueryContext(ctx, `SELECT `+reviewRunColumns+` FROM golf_reviewer_runs WHERE reviewer_id IN (SELECT id FROM golf_reviewers WHERE forge_url=$1) AND state IN ('queued','running') ORDER BY created_at LIMIT 25`, s.config.GiteaURL)
@@ -399,16 +376,22 @@ func (s *Server) publishReviews(ctx context.Context) {
 			}
 		}
 		if e != nil || pull.State != "open" || pull.Head == nil || pull.Base == nil || pull.Head.SHA != r.Head || pull.Base.SHA != r.Base {
-			_, _ = s.db.ExecContext(check, `UPDATE golf_reviewer_runs SET state='outdated',reason='PR or delegation authority changed; no review published.' WHERE id=$1`, r.ID)
+			_, _ = s.db.ExecContext(check, `UPDATE golf_reviewer_runs SET state='outdated',reason='PR or delegation authority changed; no review published.' WHERE id=$1 AND state IN ('queued','running') AND NOT EXISTS(SELECT 1 FROM golf_reviewer_publications x WHERE x.run_id=golf_reviewer_runs.id AND x.state IN ('reserved','dispatch_unknown'))`, r.ID)
 			stop()
 			continue
 		}
 		fail := func(reason string) {
-			_, _ = s.db.ExecContext(check, `UPDATE golf_reviewer_runs SET state='failed',reason=$2 WHERE id=$1 AND state IN ('queued','running')`, r.ID, reason)
-			_ = s.reviewCheck(check, a, p, r.Head, "error", reason)
+			if s.failReviewerRun(check, r.ID, reason) {
+				_ = s.reviewCheck(check, a, p, r.Head, "error", reason)
+			}
 		}
 		if t.State != "succeeded" {
 			fail("Native review task did not complete; no automatic replay.")
+			stop()
+			continue
+		}
+		if r.RepositoryID <= 0 || r.PullID <= 0 || r.MergeBase == "" {
+			fail("Legacy review lacks exact captured comparison; no publication.")
 			stop()
 			continue
 		}
@@ -438,56 +421,28 @@ func (s *Server) publishReviews(ctx context.Context) {
 			stop()
 			continue
 		}
-		e = s.codexGuard(check, actor, func(tx *sql.Tx, _ int64) error {
-			if e := s.agentFence(check, tx, actor, account, t.RepositoryID, t.OwnerID, t.Fingerprint); e != nil {
+		authority := func(c context.Context) error {
+			if e := s.reviewerCurrent(c, p); e != nil {
 				return e
 			}
-			var current int64
-			if e := tx.QueryRowContext(check, `SELECT revision FROM golf_reviewers WHERE id=$1 AND enabled AND expires_at>clock_timestamp() FOR UPDATE`, p.ID).Scan(&current); e != nil || current != r.Revision {
-				return errExecutionPolicyConflict
-			}
-			result, e := tx.ExecContext(check, `UPDATE golf_reviewer_runs SET state='publishing' WHERE id=$1 AND state IN ('queued','running')`, r.ID)
-			if e != nil {
+			if _, e := s.taskActor(c, t); e != nil {
 				return e
 			}
-			n, _ := result.RowsAffected()
-			if n != 1 {
-				return errExecutionPolicyConflict
+			current, e := s.codexAuthorized(c, actor, t.Connection, false)
+			if e != nil || current.Version != t.ConnectionVersion+1 {
+				return errCodexConflict
 			}
-			return nil
-		})
+			return s.codexGuard(c, actor, func(tx *sql.Tx, _ int64) error {
+				return s.agentFence(c, tx, actor, current, t.RepositoryID, t.OwnerID, t.Fingerprint)
+			})
+		}
+		e = s.publishReviewer(check, p, r, parsed, authority)
 		if e != nil {
-			fail("Policy/account changed before publication.")
-			stop()
-			continue
-		}
-		if e = s.reviewerCurrent(check, p); e == nil {
-			var repo Repository
-			repo, e = s.readRepository(check, base, a.Credential)
-			if e == nil {
-				pull, e = s.readPull(check, a.Credential, base, repo, uint32(r.Number))
-			}
-		}
-		if e != nil || pull.State != "open" || pull.Head.SHA != r.Head || pull.Base.SHA != r.Base {
-			_, _ = s.db.ExecContext(check, `UPDATE golf_reviewer_runs SET state='outdated',reason='Authority or snapshot changed before native publication.' WHERE id=$1 AND state='publishing'`, r.ID)
-			stop()
-			continue
-		}
-		body := fmt.Sprintf("**Golf bot · %s**\n\n%s\n\nReviewed base `%s` → head `%s`. Read-only review; no tests were executed.\n\n<!-- golf-review:%s -->", reviewText(p.Config.Name), reviewText(parsed.Summary), r.Base, r.Head, r.ID)
-		comments := []map[string]any{}
-		for _, f := range parsed.Findings {
-			comments = append(comments, map[string]any{"path": f.Path, "new_position": f.Line, "old_position": 0, "body": fmt.Sprintf("**%s · %s**\n\n%s\n\nSuggested fix: %s", f.Severity, reviewText(f.Title), reviewText(f.Evidence), reviewText(f.Suggestion))})
-		}
-		var receipt forgePullReview
-		_, e = s.forgeJSON(check, http.MethodPost, base+"/pulls/"+strconv.FormatInt(r.Number, 10)+"/reviews", forgeCredential{Kind: "pat", Token: s.config.ReviewPublisherToken}, map[string]any{"body": body, "comments": comments, "commit_id": r.Head, "event": "COMMENT"}, &receipt, http.StatusOK)
-		if e != nil || receipt.ID <= 0 || receipt.User == nil || receipt.User.ID != r.PublisherID || receipt.CommitID != r.Head {
-			_, _ = s.db.ExecContext(check, `UPDATE golf_reviewer_runs SET state='publication_unknown',reason='Native publication outcome unknown; never automatically repost.' WHERE id=$1 AND state='publishing'`, r.ID)
-			stop()
-			continue
-		}
-		findings, _ := json.Marshal(parsed)
-		_, e = s.db.ExecContext(check, `UPDATE golf_reviewer_runs SET state='published',review_id=$2,findings=$3 WHERE id=$1 AND state='publishing'`, r.ID, receipt.ID, findings)
-		if e == nil {
+			// A pre-reservation refusal must terminate the completed task's run.
+			// An unresolved journal or a winner's terminal state remains untouched.
+			// Do not post a status: this caller may have lost to another publisher.
+			s.failReviewerRun(check, r.ID, "Review publication was refused before dispatch; inspect before explicitly retrying.")
+		} else {
 			state, description := "success", "Security review completed with no findings"
 			if len(parsed.Findings) > 0 {
 				state, description = "failure", "Security review reported findings"
@@ -495,7 +450,7 @@ func (s *Server) publishReviews(ctx context.Context) {
 			_ = s.reviewCheck(check, a, p, r.Head, state, description)
 		}
 		// Only this dedicated task session is revoked; sponsor browser sessions survive.
-		_, _ = s.db.ExecContext(check, `DELETE FROM golf_sessions WHERE token_hash=$1`, t.Hash)
+		_, _ = s.db.ExecContext(check, `DELETE FROM golf_sessions WHERE token_hash=$1 AND EXISTS(SELECT 1 FROM golf_reviewer_runs WHERE id=$2 AND state NOT IN ('queued','running'))`, t.Hash, r.ID)
 		stop()
 	}
 }
@@ -541,7 +496,7 @@ func (s *Server) reviewTaskAccess(ctx context.Context, t agentTaskRecord) error 
 	if e != nil {
 		return e
 	}
-	if pull.State != "open" || pull.Head.SHA != r.Head || pull.Base.SHA != r.Base {
+	if pull.State != "open" || pull.Head.SHA != r.Head || pull.Base.SHA != r.Base || pull.ID != r.PullID || pull.MergeBase != r.MergeBase || repo.ID != r.RepositoryID {
 		return errExecutionPolicyConflict
 	}
 	return nil

@@ -5,20 +5,70 @@ Supported APIs and native account setup only. No Golf mutation qualification,
 native storage edits, workflows/inference, merge or remote organization writes.
 """
 import base64
+import argparse
+import json
+import os
+from pathlib import Path
 import secrets
 import re
+import subprocess
 import sys
+import tempfile
 import time
+import urllib.request
 from runpy import run_path
 from urllib.parse import quote
 
 sys.dont_write_bytecode = True
-from smoke import ROOT, GITEA, admin, client, provider, ready, request, wait_for_push
+from smoke import ROOT, GITEA, admin as default_admin, client, command, provider, ready, request, wait_for_push
 
 probe = run_path(str(ROOT/'scripts/pull-review-native-probe.py'))['probe']
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--parser-proof', action='store_true', help='Check the strict Go parser against supported native API contexts; no provider execution')
+    parser.add_argument('--stack-root', type=Path, help='Existing Compose project directory for account setup when the probe source is in a worktree')
+    args = parser.parse_args()
+    stack_root = args.stack_root.resolve() if args.stack_root else None
+    if stack_root:
+        assert (stack_root/'compose.yaml').is_file() and (stack_root/'.env').is_file(), 'Existing stack Compose/environment files required'
+
+    def admin(*values):
+        if stack_root:
+            return command('docker', 'compose', '--project-directory', str(stack_root), '--file', str(stack_root/'compose.yaml'),
+                           '--env-file', str(stack_root/'.env'), 'exec', '-T', 'gitea', 'gitea',
+                           '--config', '/etc/gitea/app.ini', 'admin', 'user', *values)
+        return default_admin(*values)
+
+    def raw_diff(token, route):
+        req = urllib.request.Request(GITEA+'/api/v1/'+route+'.diff', headers={'Authorization': 'token '+token})
+        with client().open(req, timeout=20) as response:
+            assert response.status == 200
+            raw = response.read(512*1024+1)
+            assert len(raw) <= 512*1024, 'Bounded native diff required'
+            return raw.decode('utf-8')
+
+    def parser_proof(original, current, baseline_row, stale_row):
+        assert baseline_row['path'] == stale_row['path'] == path and baseline_row['position'] == stale_row['position'] == 1
+        rows = [
+            {'name': 'selected-original-context', 'diff': original, 'path': path, 'line': 1, 'hunk': baseline_row['diff_hunk'], 'matches': True},
+            {'name': 'historical-selected-current-context', 'diff': original, 'path': path, 'line': 1, 'hunk': stale_row['diff_hunk'], 'matches': False},
+            {'name': 'current-context', 'diff': current, 'path': path, 'line': 1, 'hunk': stale_row['diff_hunk'], 'matches': True},
+        ]
+        # Synthetic private contents, not credentials, cross into the Go test
+        # via an owner-only temporary file and are removed on every outcome.
+        with tempfile.TemporaryDirectory(prefix='golf-native-review-parser-') as directory:
+            target = Path(directory)/'proof.json'
+            descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(descriptor, 'w') as stream:
+                json.dump({'cases': rows}, stream)
+            env = {**os.environ, 'GOLF_REVIEW_DIFF_NATIVE_PROOF': str(target)}
+            result = subprocess.run(['go', 'test', './internal/server', '-run', '^TestReviewComparisonNativeProof$', '-count=1'],
+                                    cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
+            assert result.returncode == 0, 'Strict native parser proof failed (private output withheld)'
+        print('PASS: strict Go parser admits actual selected M→H same-path context and rejects historical selected-head/current-hunk mixture; current-context positive control passes', flush=True)
+
     ready()
     assert request(client(), 'GET', GITEA+'/api/v1/version')['version'] == '1.27.3'
     prefix = 'golf-inline-write-'+secrets.token_hex(4)
@@ -103,6 +153,7 @@ def main():
 
         stage = 'divergent PR metadata settle'
         settled(chosen)
+        frozen_diff = raw_diff(reviewer['read'], proute) if args.parser_proof else None
         stage = 'baseline inline create'
         baseline = create(reviewer, chosen, 'COMMENT', [
             {'path': path, 'body': 'Original new side', 'new_position': 1},
@@ -121,6 +172,7 @@ def main():
         stage = 'stale explicit selected head with current context'
         advanced = content(author, 'PUT', 'inline-head', 'current-head one\ncurrent-head two\nstable three\n', selected['content']['sha'])
         current = advanced['commit']['sha']; settled(current)
+        current_diff = raw_diff(reader['read'], proute) if args.parser_proof else None
         stale = create(reader, chosen, 'COMMENT', [
             {'path': path, 'body': 'Stale new side', 'new_position': 1},
             {'path': path, 'body': 'Stale old side', 'old_position': 1}])
@@ -131,6 +183,9 @@ def main():
         assert next(r for r in stale_rows if r['original_position'])['commit_id'] == current
         assert all(r['original_commit_id'] == '' for r in stale_rows)
         print('PASS: explicit stale selected review head retained, new hunk uses current head; new blame follows selected head, old child commit follows current head and old context uses merge base', flush=True)
+        if args.parser_proof:
+            stage = 'strict Go parser native context proof'
+            parser_proof(frozen_diff, current_diff, next(r for r in baseline_rows if r['position']), next(r for r in stale_rows if r['position']))
 
         stage = 'append existing pending with mismatched selected commit'
         pending = create(reviewer, chosen, 'PENDING', [{'path': path, 'body': 'Pending first', 'new_position': 1}])

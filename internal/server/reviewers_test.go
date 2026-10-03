@@ -24,8 +24,8 @@ func TestReviewerResultBoundary(t *testing.T) {
 
 func TestReviewerDiffCannotForgeFileHeader(t *testing.T) {
 	diff := "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1 +1,3 @@\n keep\n+++ b/other.py\n+new\n"
-	lines := reviewDiffLines(diff)
-	if !lines["a.py"][2] || !lines["a.py"][3] || len(lines["other.py"]) > 0 {
+	comparison, err := parseReviewComparison(diff)
+	if err != nil || !comparison.Allows("a.py", 2) || !comparison.Allows("a.py", 3) || comparison.Allows("other.py", 1) {
 		t.Fatal("source content forged a diff header")
 	}
 	if !reviewConnectionID("208c39b0-a49d-574f-9130-caf6cf452991") || reviewConnectionID("not-a-connection") {

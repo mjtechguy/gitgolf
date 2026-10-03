@@ -539,23 +539,52 @@ type GolfReviewer struct {
 	ExpiresAt       time.Time
 }
 
-type GolfReviewerRun struct {
-	ID               uuid.UUID
-	ReviewerID       uuid.UUID
-	ReviewerRevision int64
-	PullNumber       int64
-	BaseCommit       string
-	HeadCommit       string
-	Trigger          string
-	Intent           string
-	TaskID           uuid.NullUUID
-	State            string
-	Reason           string
-	Diff             string
-	Findings         json.RawMessage
-	ReviewID         sql.NullInt64
-	PublisherID      int64
+type GolfReviewerPublication struct {
+	RunID              uuid.UUID
+	ForgeURL           string
+	RepositoryID       int64
+	PullRequestID      int64
+	PullNumber         int64
+	PublisherID        int64
+	PayloadFingerprint []byte
+	State              string
+	ObservedReviewID   sql.NullInt64
+	FailureCode        string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+type GolfReviewerPublicationEvent struct {
+	ID               int64
+	RunID            uuid.UUID
+	Phase            string
+	ObservedReviewID sql.NullInt64
+	FailureCode      string
 	CreatedAt        time.Time
+}
+
+type GolfReviewerRun struct {
+	ID                uuid.UUID
+	ReviewerID        uuid.UUID
+	ReviewerRevision  int64
+	PullNumber        int64
+	BaseCommit        string
+	HeadCommit        string
+	Trigger           string
+	Intent            string
+	TaskID            uuid.NullUUID
+	State             string
+	Reason            string
+	Diff              string
+	Findings          json.RawMessage
+	ReviewID          sql.NullInt64
+	PublisherID       int64
+	CreatedAt         time.Time
+	RepositoryID      sql.NullInt64
+	PullRequestID     sql.NullInt64
+	MergeBaseCommit   sql.NullString
+	DiffFingerprint   []byte
+	LegacyEffectBlock bool
 }
 
 type GolfRunnerPresence struct {
