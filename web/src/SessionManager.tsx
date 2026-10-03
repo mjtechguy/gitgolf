@@ -85,7 +85,7 @@ export function SessionManager({ userId, onSignedOut }: { userId: string; onSign
     { accessorKey: 'expiresAt', header: 'Expires', cell: ({ row }) => <SessionTime value={row.original.expiresAt} /> },
     { id: 'actions', header: 'Actions', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => <button className="button secondary" disabled={revoke.isPending || query.isFetching} aria-label={row.original.current ? 'Revoke current session' : `Revoke session ${row.original.id}`} onClick={(event) => { confirmationTrigger.current = event.currentTarget; setNotice(''); setConfirmation(row.original); }}>Revoke</button> },
   ], [revoke.isPending, query.isFetching]);
-  return <section className="account-sessions" aria-labelledby="sessions-title">
+  return <section className="account-sessions page-stack" aria-labelledby="sessions-title">
     <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1 id="sessions-title"><ShieldCheck size={29} />Your Golf sessions</h1><p>Review and revoke browser access.</p></div></header>
     <p className="organization-guidance" id="sessions-boundary">Revoke access to Golf on a session you no longer need. This does not revoke your provider token, OAuth provider consent or Git keys.</p>
     {error ? <div><p className="error" role="alert">{errorMessage(error)}</p><button className="button secondary" disabled={query.isFetching} onClick={refresh}>Try again</button></div> : null}

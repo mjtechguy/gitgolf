@@ -214,3 +214,31 @@ func TestCodexStaleManagerRequiresCurrentRolePostgres(t *testing.T) {
 		t.Fatal("cached manager role bypassed current authority")
 	}
 }
+
+func TestCodexPersonalRenamePostgres(t *testing.T) {
+	f, owner, _ := codexFixture(t)
+	current := codexResponse(t, codexCall(f.s, owner, "StartCodexLogin", `{"method":"CODEX_LOGIN_METHOD_API_KEY","apiKey":"`+fixtureCodexKey+`","expectedVersion":"0"}`))
+	id, version := current["id"].(string), current["version"].(string)
+	body := `{"connectionId":"` + id + `","expectedVersion":"` + version + `","name":"Work Codex"}`
+	renamed := codexResponse(t, codexCall(f.s, owner, "SetCodexConnectionAccess", body))
+	if renamed["name"] != "Work Codex" || renamed["id"] != id || renamed["state"] != current["state"] || renamed["version"] == version {
+		t.Fatal("rename changed identity or authentication")
+	}
+	if w := codexCall(f.s, owner, "SetCodexConnectionAccess", body); w.Code != 400 {
+		t.Fatal("stale rename accepted", w.Code)
+	}
+	enrollLocal(t, f, "bob", false)
+	bob := localLogin(t, f, "bob")
+	if w := codexCall(f.s, bob, "SetCodexConnectionAccess", body); w.Code != 404 {
+		t.Fatal("foreign personal rename accepted", w.Code)
+	}
+	body = `{"connectionId":"` + id + `","expectedVersion":"` + renamed["version"].(string) + `","name":"Shared","allowedUserIds":["1"]}`
+	if w := codexCall(f.s, owner, "SetCodexConnectionAccess", body); w.Code != 400 {
+		t.Fatal("personal sharing accepted", w.Code)
+	}
+	// A restart must retain the encrypted login after metadata editing.
+	refreshed := codexResponse(t, codexCall(f.s, owner, "RefreshCodexConnection", `{"expectedVersion":"`+renamed["version"].(string)+`"}`))
+	if refreshed["state"] != current["state"] || refreshed["name"] != "Work Codex" {
+		t.Fatal("rename lost private login state")
+	}
+}

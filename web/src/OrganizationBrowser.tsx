@@ -102,5 +102,5 @@ function OrganizationDetail({ organization: name, teamId, userId }: { organizati
 }
 
 export function OrganizationBrowser({ location, userId }: { location: OrganizationLocation; userId: string }) {
-  return <div className="organization-browser">{location.organization ? <OrganizationDetail key={location.organization} organization={location.organization} teamId={location.team} userId={userId} /> : <OrganizationList userId={userId} />}</div>;
+  return <div className="organization-browser page-stack">{location.organization ? <OrganizationDetail key={location.organization} organization={location.organization} teamId={location.team} userId={userId} /> : <OrganizationList userId={userId} />}</div>;
 }

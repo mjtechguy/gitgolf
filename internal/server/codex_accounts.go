@@ -521,7 +521,7 @@ func (s *Server) GetCodexConnection(ctx context.Context, req *connect.Request[go
 	}
 	return connect.NewResponse(&golfv1.GetCodexConnectionResponse{Connection: r}), nil
 }
-func (s *Server) codexMutate(ctx context.Context, h http.Header, version, action, loginID, connectionID string, method golfv1.CodexLoginMethod, apiKey string) (*golfv1.CodexConnection, error) {
+func (s *Server) codexMutate(ctx context.Context, h http.Header, version, action, loginID, connectionID string, method golfv1.CodexLoginMethod, apiKey string, usageOut ...**golfv1.CodexUsage) (*golfv1.CodexConnection, error) {
 	a, e := s.codexIdentity(ctx, h)
 	if e != nil {
 		return nil, e
@@ -633,6 +633,17 @@ func (s *Server) codexMutate(ctx context.Context, h http.Header, version, action
 			return nil, errCodexConflict
 		}
 		account, err := rt.process.Account(ctx, true)
+		if len(usageOut) > 0 {
+			usage := &golfv1.CodexUsage{Reason: "Usage could not be reported by Codex. Refresh to try again."}
+			if err == nil && account.Type == "chatgpt" {
+				if reported, usageErr := rt.process.Usage(ctx); usageErr == nil {
+					usage = codexUsageWire(reported)
+				}
+			} else if err == nil && account.Type == "apiKey" {
+				usage.Reason = "ChatGPT plan quotas and earned resets do not apply to API-key connections."
+			}
+			*usageOut[0] = usage
+		}
 		if err == nil {
 			codexReported(&r, account)
 		} else {
@@ -687,11 +698,12 @@ func (s *Server) CancelCodexLogin(ctx context.Context, req *connect.Request[golf
 	return connect.NewResponse(&golfv1.CancelCodexLoginResponse{Connection: r}), nil
 }
 func (s *Server) RefreshCodexConnection(ctx context.Context, req *connect.Request[golfv1.RefreshCodexConnectionRequest]) (*connect.Response[golfv1.RefreshCodexConnectionResponse], error) {
-	r, e := s.codexMutate(ctx, req.Header(), req.Msg.ExpectedVersion, "refresh", "", req.Msg.ConnectionId, 0, "")
+	var usage *golfv1.CodexUsage
+	r, e := s.codexMutate(ctx, req.Header(), req.Msg.ExpectedVersion, "refresh", "", req.Msg.ConnectionId, 0, "", &usage)
 	if e != nil {
 		return nil, rpcError(e)
 	}
-	return connect.NewResponse(&golfv1.RefreshCodexConnectionResponse{Connection: r}), nil
+	return connect.NewResponse(&golfv1.RefreshCodexConnectionResponse{Connection: r, Usage: usage}), nil
 }
 func (s *Server) DisconnectCodexConnection(ctx context.Context, req *connect.Request[golfv1.DisconnectCodexConnectionRequest]) (*connect.Response[golfv1.DisconnectCodexConnectionResponse], error) {
 	r, e := s.codexMutate(ctx, req.Header(), req.Msg.ExpectedVersion, "disconnect", "", req.Msg.ConnectionId, 0, "")

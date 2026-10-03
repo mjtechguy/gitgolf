@@ -1326,7 +1326,26 @@ message StartCodexLoginResponse { CodexConnection connection = 1; }
 message CancelCodexLoginRequest { string login_id = 1; string expected_version = 2; string connection_id = 3; }
 message CancelCodexLoginResponse { CodexConnection connection = 1; }
 message RefreshCodexConnectionRequest { string expected_version = 1; string connection_id = 2; }
-message RefreshCodexConnectionResponse { CodexConnection connection = 1; }
+message CodexQuotaWindow {
+ double used_percent = 1;
+ optional uint32 window_duration_mins = 2;
+ string resets_at = 3;
+}
+message CodexQuotaBucket {
+ string id = 1;
+ string name = 2;
+ string plan_type = 3;
+ CodexQuotaWindow primary = 4;
+ CodexQuotaWindow secondary = 5;
+}
+message CodexUsage {
+ bool available = 1;
+ string reason = 2;
+ string checked_at = 3;
+ repeated CodexQuotaBucket buckets = 4;
+ optional uint32 banked_resets = 5;
+}
+message RefreshCodexConnectionResponse { CodexConnection connection = 1; CodexUsage usage = 2; }
 message DisconnectCodexConnectionRequest { string expected_version = 1; string connection_id = 2; }
 message DisconnectCodexConnectionResponse { CodexConnection connection = 1; }
 

@@ -70,7 +70,7 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut }: { us
   ], [owner, name, commit, dispatching, uncertain, signingOut, result?.executionAvailable]);
 
   return <RepositorySettingsLayout owner={owner} name={name}>
-    <section aria-labelledby="workflow-configurations-title">
+    <section className="page-stack" aria-labelledby="workflow-configurations-title">
       <header className="repository-intro"><div><span className="eyebrow">REPOSITORY CONFIGURATION</span><h1 id="workflow-configurations-title"><FileCode2 size={29} />Workflow configuration</h1><p>Inspect Actions and GitLab configuration from the current default-branch commit.</p></div></header>
       <section className="browser-panel credential-list-panel" aria-labelledby="workflow-inventory-title">
         <div className="browser-panel-heading"><h2 id="workflow-inventory-title">Configuration files</h2><button className="button secondary" disabled={query.isFetching || signingOut} onClick={() => void query.refetch()}><RefreshCw size={15} />Refresh workflow inspection</button></div>

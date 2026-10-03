@@ -106,7 +106,7 @@ export function SSHKeys({ userId, signingOut }: { userId: string; signingOut: bo
     if (mutation.isPending) return;
     form.reset(); setEditing(false);
   }
-  return <section className="api-credentials" aria-labelledby="ssh-keys-title">
+  return <section className="api-credentials page-stack" aria-labelledby="ssh-keys-title">
     <header className="repository-intro"><div><span className="eyebrow">YOUR CODE, YOUR CONNECTION</span><h1 id="ssh-keys-title"><KeyRound size={29} />SSH keys</h1></div><div className="dialog-actions"><button className="button secondary" disabled={mutation.isPending || query.isFetching || signingOut} onClick={() => void refresh()}><RefreshCw size={16} />Refresh SSH keys</button><button ref={newKeyButton} className="button primary" disabled={disabled || editing} onClick={() => { form.reset(); setEditing(true); }}><KeyRound size={16} />New SSH key</button></div></header>
     <p className="organization-guidance">Connect your Git client to Golf. Keys use your repository permissions and remain active until removed; signing out does not remove them.</p>
     {listError || mutation.error ? <p role="alert" className="error">{errorMessage((listError ?? mutation.error)! as Error)}</p> : null}

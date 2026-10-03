@@ -231,16 +231,20 @@ func (s *Server) SetCodexConnectionAccess(ctx context.Context, req *connect.Requ
 	if e != nil {
 		return nil, rpcError(e)
 	}
-	if !a.Admin {
-		return nil, rpcError(errCodexPermission)
-	}
-	a.RequireAdmin = true
 	r, e := s.codexAuthorized(ctx, a, req.Msg.ConnectionId, true)
 	if e != nil {
 		return nil, rpcError(e)
 	}
-	if r.Scope != "INSTANCE" {
-		return nil, rpcError(errCodexPermission)
+	if r.Scope == "INSTANCE" {
+		a.RequireAdmin = true
+	} else if len(req.Msg.AllowedUserIds) != 0 {
+		return nil, rpcError(invalid("Personal connections cannot be shared."))
+	}
+	if r.ID == "" {
+		return nil, rpcError(invalid("Connect this account before renaming it."))
+	}
+	if r.Scope == "PERSONAL" && r.State == "AWAITING_AUTH" {
+		return nil, rpcError(invalid("Complete or cancel sign-in before renaming this connection."))
 	}
 	if e = codexVersion(req.Msg.ExpectedVersion, r); e != nil {
 		return nil, rpcError(e)
@@ -282,8 +286,11 @@ func (s *Server) SetCodexConnectionAccess(ctx context.Context, req *connect.Requ
 	defer releaseCodexOwner(conn, codexLockID(r.ID))
 	e = s.codexGuard(ctx, a, func(tx *sql.Tx, userID int64) error {
 		var version int64
-		if e := tx.QueryRowContext(ctx, `SELECT version FROM golf_codex_connections WHERE id=$1 AND scope='INSTANCE' AND forge_url=$2 FOR UPDATE`, r.ID, s.config.GiteaURL).Scan(&version); e != nil {
+		if e := tx.QueryRowContext(ctx, `SELECT version FROM golf_codex_connections WHERE id=$1 AND forge_url=$2 FOR UPDATE`, r.ID, s.config.GiteaURL).Scan(&version); e != nil {
 			return errResourceNotFound
+		}
+		if e := s.codexManageTx(ctx, tx, userID, r); e != nil {
+			return e
 		}
 		if version != r.Version {
 			return errCodexConflict

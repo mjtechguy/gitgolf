@@ -33,7 +33,7 @@ export function Capabilities({ isInstanceAdmin }: { isInstanceAdmin: boolean }) 
   const query = useQuery({ queryKey: ['capabilities'], queryFn: () => capabilityClient.listCapabilities({}) });
   const rows: StatusRow[] = query.isError ? [] : (query.data?.capabilities ?? []).map(row => ({ ...row, availability: row.state === CapabilityState.DEGRADED ? 'configured · degraded' : CapabilityState[row.state]?.toLowerCase() || 'unknown' }));
   const setupColumns: DataTableColumn<StatusRow>[] = [...columns, { id: 'setup', header: 'Configuration', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => setupAction(row.original, isInstanceAdmin) }];
-  return <section className="capabilities-section" id="capabilities" aria-labelledby="capabilities-title">
+  return <section className="capabilities-section page-stack" id="capabilities" aria-labelledby="capabilities-title">
     <div className="section-heading"><div><span className="eyebrow">A CLEAR VIEW OF WHAT’S AVAILABLE</span><h2 id="capabilities-title">Your workspace today</h2></div><button type="button" className="button secondary" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} />Refresh status</button></div>
     <p className="section-description">Availability comes directly from this Golf installation. Configuration, connection verification and successful execution are separate evidence.</p>
     {query.error ? <div className="error-message" role="alert">{errorMessage(query.error)}</div> : null}

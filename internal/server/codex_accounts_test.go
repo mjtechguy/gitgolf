@@ -58,6 +58,8 @@ for line in sys.stdin:
   else:
    result={'type':'chatgptDeviceCode','loginId':'fixture-login','verificationUrl':'https://auth.openai.com/codex/device','userCode':'ABCD-EFGH'}
    if os.path.exists(control+'.async'):threading.Thread(target=complete,daemon=True).start()
+ elif m=='account/rateLimits/read':
+  result={'rateLimits':{'limitId':'codex','primary':{'usedPercent':25,'windowDurationMins':300,'resetsAt':1781654400}},'rateLimitResetCredits':{'availableCount':2}}
  elif m=='account/read':
   if os.path.exists(control+'.block'):
    open(control+'.entered','w').close()
@@ -399,5 +401,44 @@ func TestCodexAuditFailureRollsBackAndDisableWaitPostgres(t *testing.T) {
 	var storedVersion string
 	if e := f.db.QueryRow(`SELECT version::text FROM golf_codex_connections`).Scan(&storedVersion); e != nil || storedVersion != version {
 		t.Fatal("disabled callback mutated connection")
+	}
+}
+
+func TestCodexUsageRefreshPostgres(t *testing.T) {
+	f, login, marker := codexFixture(t)
+	os.WriteFile(marker+".async", nil, 0600)
+	codexResponse(t, codexCall(f.s, login, "StartCodexLogin", `{"method":"CODEX_LOGIN_METHOD_CHATGPT_DEVICE","expectedVersion":"0"}`))
+	os.WriteFile(marker+".complete", nil, 0600)
+	until := time.Now().Add(5 * time.Second)
+	var c map[string]any
+	for {
+		c = codexResponse(t, codexCall(f.s, login, "GetCodexConnection", "{}"))
+		if c["state"] == "CODEX_CONNECTION_STATE_CONNECTED" {
+			break
+		}
+		if time.Now().After(until) {
+			t.Fatal("completion timed out")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	w := codexCall(f.s, login, "RefreshCodexConnection", `{"expectedVersion":"`+c["version"].(string)+`"}`)
+	var response struct {
+		Usage struct {
+			Available    bool
+			BankedResets *uint32
+			Buckets      []struct {
+				Primary struct {
+					UsedPercent        float64
+					WindowDurationMins uint32
+					ResetsAt           string
+				}
+			}
+		}
+	}
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &response) != nil || !response.Usage.Available || response.Usage.BankedResets == nil || *response.Usage.BankedResets != 2 || len(response.Usage.Buckets) != 1 || response.Usage.Buckets[0].Primary.UsedPercent != 25 || response.Usage.Buckets[0].Primary.WindowDurationMins != 300 || response.Usage.Buckets[0].Primary.ResetsAt == "" {
+		t.Fatal("provider usage did not survive authenticated refresh")
+	}
+	if bytes.Contains(w.Body.Bytes(), []byte("private-refresh")) {
+		t.Fatal("provider credentials exposed")
 	}
 }

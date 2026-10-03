@@ -63,6 +63,8 @@ func TestNativeFixture(t *testing.T) {
 				os.WriteFile(filepath.Join(os.Getenv("CODEX_HOME"), "auth.json"), []byte(`{"tokens":{"access_token":"refreshed-private"}}`), 0600)
 			}
 			result = map[string]any{"account": map[string]string{"type": "chatgpt", "email": "user@example.invalid", "planType": "pro"}, "requiresOpenaiAuth": true}
+		case "account/rateLimits/read":
+			result = map[string]any{"rateLimitsByLimitId": map[string]any{"codex": map[string]any{"limitId": "codex", "planType": "pro", "primary": map[string]any{"usedPercent": 25, "windowDurationMins": 300, "resetsAt": 1781654400}, "secondary": map[string]any{"usedPercent": 80, "windowDurationMins": 10080}}}, "rateLimitResetCredits": map[string]any{"availableCount": 0}}
 		case "account/login/start":
 			var params struct {
 				Type   string `json:"type"`
@@ -205,5 +207,21 @@ func TestTransportAndCredentialBoundaries(t *testing.T) {
 	}
 	if _, err := New(context.Background(), Config{Binary: "/bin/true"}, []byte("bad")); !errors.Is(err, ErrInvalidCredential) {
 		t.Fatal("Invalid cache accepted")
+	}
+}
+
+func TestProviderUsagePreservesUnknownAndZero(t *testing.T) {
+	p, err := New(context.Background(), Config{Binary: os.Args[0], Args: []string{"-test.run=TestNativeFixture", "--", "--codex-account-fixture"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	u, err := p.Usage(context.Background())
+	if err != nil || len(u.Buckets) != 1 || u.BankedResets == nil || *u.BankedResets != 0 {
+		t.Fatal("missing quota or known-zero earned resets", err)
+	}
+	b := u.Buckets[0]
+	if b.Primary == nil || *b.Primary.UsedPercent != 25 || b.Primary.Duration == nil || *b.Primary.Duration != 300 || b.Secondary == nil || b.Secondary.ResetsAt != nil {
+		t.Fatal("quota windows lost provider presence semantics")
 	}
 }

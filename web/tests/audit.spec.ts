@@ -252,7 +252,7 @@ test('coding-agent changes appear in the existing personal activity inventory', 
   await page.goto('/audit');
   await expect(page.getByRole('heading', { name: 'Account history', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Load more activity' }).click();
-  await expect(page.locator('table[aria-label="Account activity"] tbody strong')).toHaveText(['Codex connection access changed', 'Codex disconnected', 'Codex login completed']);
+  await expect(page.locator('table[aria-label="Account activity"] tbody strong')).toHaveText(['Codex connection name or access changed', 'Codex disconnected', 'Codex login completed']);
   await page.getByText('Event details', { exact: true }).first().click();
   await expect(page.getByText('4f4a2a2e-52a8-4f83-b29e-9460c1309fa9', { exact: true })).toBeVisible();
 });

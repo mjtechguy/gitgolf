@@ -195,7 +195,7 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
     { id: 'actions', header: 'Actions', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => !row.original.revokedAt ? <button className="button secondary" disabled={query.isFetching || revoke.isPending || issuance.isPending} aria-label={`Revoke credential ${row.original.id}`} onClick={() => { setNotice(''); setConfirmation(row.original); }}>Revoke</button> : null },
   ], [query.isFetching, revoke.isPending, issuance.isPending]);
 
-  return <div className="api-credentials">
+  return <div className="api-credentials page-stack">
     <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1><KeyRound size={29} />API credentials</h1><p>Short-lived, read-only access for your tools.</p></div><button ref={newButton} className="button primary" disabled={editing || Boolean(visibleSecret) || uncertain || Boolean(listError) || query.isFetching || signingOut} onClick={() => { setEditing(true); setNotice(''); }}><Plus size={16} />New API credential</button></header>
     <p className="organization-guidance">These credentials can call Golf’s allowed read operations using your source session’s current repository access. They cannot create repositories, change your account or manage credentials. Signing out, revoking that source session or reaching its expiry also ends this access. They are not provider tokens or Git credentials.</p>
     {editing || visibleSecret || uncertain ? <section className="browser-panel credential-create-panel" aria-labelledby="credential-create-title">

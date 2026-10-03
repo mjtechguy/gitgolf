@@ -37,7 +37,7 @@ const actionLabels: Partial<Record<AuditAction, string>> = {
   [AuditAction.CODEX_CONNECTION_REFRESHED]: 'Codex connection checked',
   [AuditAction.CODEX_CONNECTION_DISCONNECTED]: 'Codex disconnected',
   [AuditAction.CODEX_CONNECTION_CREATED]: 'Codex connection created',
-  [AuditAction.CODEX_ACCESS_CHANGED]: 'Codex connection access changed',
+  [AuditAction.CODEX_ACCESS_CHANGED]: 'Codex connection name or access changed',
 };
 
 function EventTime({ value }: { value: string }) {
@@ -80,7 +80,7 @@ export function AccountActivity({ userId }: { userId: string }) {
   const refresh = () => { void client.resetQueries({ queryKey, exact: true }); };
   const loading = query.isPending || (query.isFetching && !query.isFetchingNextPage);
   const events = useMemo(() => query.isSuccess && !loading ? query.data.pages.flatMap((page) => page.events) : [], [query.isSuccess, query.data, loading]);
-  return <div className="account-activity">
+  return <div className="account-activity page-stack">
     <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1><History size={29} />Account activity</h1><p>Sign-ins, session changes and coding-agent connection activity for your account.</p></div></header>
     <p className="organization-guidance">History begins when session activity recording is enabled on this installation. Earlier activity, failed sign-ins and changes made outside Golf are not included.</p>
     <section className="browser-panel" aria-labelledby="activity-title" aria-busy={query.isFetching}>

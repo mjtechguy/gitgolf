@@ -37,7 +37,7 @@ export function DataTable<T extends RowData>({ data, columns, getRowId, label, e
       <label htmlFor={pageSizeId}>Rows per page<select id={pageSizeId} className="data-table-page-size" aria-label={`Rows per page for ${label}`} value={pageSize} onChange={(event) => table.setPagination({ pageIndex: 0, pageSize: Number(event.target.value) })}>{[10, 20, 50].map(size => <option key={size} value={size}>{size}</option>)}</select></label>
       <span className="data-table-page-status" aria-live="polite">Page {pageIndex + 1} of {pageCount}<span>Rows {firstRow}–{lastRow}</span></span>
       <div className="data-table-page-actions"><button type="button" className="button secondary" aria-label="Previous loaded page" disabled={!table.getCanPreviousPage()} onClick={() => table.previousPage()}>Previous</button><button type="button" className="button secondary" aria-label="Next loaded page" disabled={!table.getCanNextPage()} onClick={() => table.nextPage()}>Next</button></div>
-      </nav> : null}
-    <p id={scopeId} className="data-table-scope">{pagination ? 'Search, sorting and pages cover loaded entries only.' : 'Search and sorting cover all reported entries.'}</p>
+      <p id={scopeId} className="data-table-scope">Search, sorting and pages cover loaded entries only.</p>
+      </nav> : <p id={scopeId} className="data-table-scope">Search and sorting cover all reported entries.</p>}
   </div>;
 }

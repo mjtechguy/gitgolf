@@ -4,6 +4,12 @@ Open **Account settings → Coding agents** (`/account/agents`). Choose **Connec
 
 The inventory shows provider-reported email/plan when available, authentication method, last check, and connection/reconnect state. API-key accounts do not report an email or ChatGPT plan. **Check provider status** requests native token refresh; **Reconnect Codex** starts a new explicit login. **Disconnect** requires confirmation and removes the Golf-owned cache; it does not revoke a provider account or API key. Provider-managed refresh does not expose a reliable token-expiry countdown. Authentication, API-key acceptance, model entitlement, and successful task execution are separate evidence.
 
+## Plan, quota windows and resets
+
+For a connected account, choose **Refresh plan and usage**. Golf refreshes the native account and reads `account/rateLimits/read` through the same serialized, version-fenced connection owner. It shows the provider-reported plan, remaining/used percentages, actual quota-window duration, absolute reset time and a local countdown, plus the banked earned-reset count when reported. Multiple metered buckets and primary/secondary windows are separate. Missing values remain “Not reported”; known zero resets are shown as zero. Reading does not redeem a reset or run inference.
+
+Usage is a private in-page provider snapshot, cleared on disconnect, reconnect, page hide or access loss. Reload or refresh explicitly to obtain a new snapshot; the countdown does not infer that the quota has actually renewed. Unsupported/error quota reads leave account authentication separate from quota availability. API-key connections do not expose ChatGPT plan quotas. Managers inspect instance-account usage in its authentication details; permitted users retain the existing metadata-only projection. Credential snapshots after the provider wait use the same current session, role and version checks as connection refresh.
+
 ## Instance-managed accounts and access
 
 Open **Admin portal → Coding agents** (`/admin/agents`) to add named instance connections. Each connection has its own authentication state and encrypted cache. Use **Edit access** to choose enabled Golf users by immutable identity. New connections allow no users; management authority does not automatically grant use. Administrators may explicitly select themselves.
@@ -31,3 +37,9 @@ Schema **202610020022** adds managed Codex state; **202610020023** adds instance
 The [local operator task runtime](CODEX_LOCAL_RUNTIME.md) is a separate execution experiment. Managed task admission, execution/publishing, agent triggers, additional harnesses, amd64/Kubernetes/Cloudflare qualification, provider-approved successful login, and paid model execution require their own evidence.
 
 Sources: [official app-server account protocol](https://learn.chatgpt.com/docs/app-server), [Codex authentication](https://learn.chatgpt.com/docs/auth).
+
+## Connection inventory and details
+
+Inventory rows use Lucide icon actions with accessible names and hover titles. Details open in a bounded, keyboard-dismissable modal with focus returned to its launcher; provider plan and usage are shown there rather than expanding the inventory. Personal connections support an explicit Rename editor after initial connection; renaming preserves connection identity and encrypted login state and cannot grant shared access. Complete or cancel pending device approval before renaming. Instance administrators edit names and allowed users through the existing explicit editor and manage authentication separately. Disconnect remains a confirmation. Users granted shared use see safe metadata details only.
+
+`SetCodexConnectionAccess` also accepts owner-only personal renaming with an empty allowed-user list. Every update uses expected-version checks, current session/management authority and the existing audited connection-configuration transaction; unknown results require inspection rather than resubmission.
