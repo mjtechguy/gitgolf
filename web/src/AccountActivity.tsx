@@ -31,6 +31,11 @@ const actionLabels: Partial<Record<AuditAction, string>> = {
   [AuditAction.SESSION_REVOKED]: 'Session revoked',
   [AuditAction.OTHER_SESSIONS_REVOKED]: 'Other sessions revoked',
   [AuditAction.SESSION_REPLACED]: 'Session replaced',
+  [AuditAction.CODEX_LOGIN_STARTED]: 'Codex login started',
+  [AuditAction.CODEX_LOGIN_COMPLETED]: 'Codex login completed',
+  [AuditAction.CODEX_LOGIN_CANCELED]: 'Codex login cancelled',
+  [AuditAction.CODEX_CONNECTION_REFRESHED]: 'Codex connection checked',
+  [AuditAction.CODEX_CONNECTION_DISCONNECTED]: 'Codex disconnected',
 };
 
 function EventTime({ value }: { value: string }) {
@@ -73,12 +78,12 @@ export function AccountActivity({ userId }: { userId: string }) {
   const loading = query.isPending || (query.isFetching && !query.isFetchingNextPage);
   const events = useMemo(() => query.isSuccess && !loading ? query.data.pages.flatMap((page) => page.events) : [], [query.isSuccess, query.data, loading]);
   return <div className="account-activity">
-    <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1><History size={29} />Account activity</h1><p>Successful sign-ins, sign-outs and session changes for your account.</p></div></header>
+    <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1><History size={29} />Account activity</h1><p>Sign-ins, session changes and coding-agent connection activity for your account.</p></div></header>
     <p className="organization-guidance">History begins when session activity recording is enabled on this installation. Earlier activity, failed sign-ins and changes made outside Golf are not included.</p>
     <section className="browser-panel" aria-labelledby="activity-title" aria-busy={query.isFetching}>
-      <div className="browser-panel-heading"><h2 id="activity-title">Session history</h2><button className="button secondary" disabled={query.isFetching} onClick={refresh}><RefreshCw size={15} className={query.isFetching ? 'spin' : ''} />Refresh activity</button></div>
+      <div className="browser-panel-heading"><h2 id="activity-title">Account history</h2><button className="button secondary" disabled={query.isFetching} onClick={refresh}><RefreshCw size={15} className={query.isFetching ? 'spin' : ''} />Refresh activity</button></div>
       {query.isError ? <PanelError error={query.error} retry={refresh} /> : loading ? <Loading label="Loading account activity…" /> : <>
-        <DataTable label="Account activity" data={events} columns={activityColumns} getRowId={(event) => event.id} emptyMessage="No recorded account activity. New successful session events will appear after you refresh." />
+        <DataTable label="Account activity" data={events} columns={activityColumns} getRowId={(event) => event.id} emptyMessage="No recorded account activity. New account events will appear after you refresh." />
         <div className="list-footer audit-footer"><span>{events.length} loaded {events.length === 1 ? 'event' : 'events'}</span><More hasMore={Boolean(query.hasNextPage)} loading={query.isFetching} load={() => void query.fetchNextPage()} label="activity" /></div>
         {events.length ? <p className="panel-footnote">Loaded newest first; table sorting and search apply only to loaded events. This history snapshot stays fixed while you load older events. Refresh to include new activity.</p> : null}
       </>}

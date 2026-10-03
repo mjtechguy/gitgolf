@@ -32,6 +32,7 @@ const apiCredentialsRoute = createRoute({
   path: '/account/api-credentials',
   component: () => <App location={{ kind: 'api-credentials' }} />,
 });
+const accountAgentsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/account/agents', component: () => <App location={{ kind: 'account-agents' }} /> });
 const accountSecurityRoute = createRoute({ getParentRoute: () => rootRoute, path: '/account/security', component: () => <App location={{ kind: 'account-security' }} /> });
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/account/settings',
@@ -142,7 +143,7 @@ function OrganizationPage() {
 
 // Router owns navigation only. Private server data stays in the cancellable Query cache.
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([homeRoute, statusRoute, repositoryRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountSecurityRoute, sessionsRoute]),
+  routeTree: rootRoute.addChildren([homeRoute, statusRoute, repositoryRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountSecurityRoute, accountAgentsRoute, sessionsRoute]),
   defaultPreload: false,
   // Refs and paths are opaque strings, including names such as "1234" or "true".
   parseSearch: (search) => Object.fromEntries(new URLSearchParams(search)),

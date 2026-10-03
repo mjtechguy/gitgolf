@@ -69,6 +69,7 @@ func serverConfig() server.Config {
 		databaseTLS = parsed.Query().Get("sslmode")
 	}
 	return server.Config{
+		CodexBinary:      os.Getenv("GOLF_CODEX_BINARY"),
 		PushCIEnabled:    os.Getenv("GOLF_PUSH_CI_ENABLED") == "true",
 		DatabaseEndpoint: databaseEndpoint, DatabaseTLSMode: databaseTLS, NativeDatabaseEndpoint: os.Getenv("GOLF_NATIVE_DATABASE_ENDPOINT"),
 		ObjectStoreConfig:              objectstore.Config{Endpoint: os.Getenv("GOLF_OBJECT_ENDPOINT"), Bucket: os.Getenv("GOLF_OBJECT_BUCKET"), Region: env("GOLF_OBJECT_REGION", "us-east-1"), Prefix: os.Getenv("GOLF_OBJECT_PREFIX"), AccessKeyID: os.Getenv("GOLF_OBJECT_ACCESS_KEY_ID"), SecretAccessKey: os.Getenv("GOLF_OBJECT_SECRET_ACCESS_KEY"), SessionToken: os.Getenv("GOLF_OBJECT_SESSION_TOKEN"), PathStyle: os.Getenv("GOLF_OBJECT_PATH_STYLE") == "true", AllowHTTP: os.Getenv("GOLF_OBJECT_ALLOW_HTTP") == "true"},
@@ -121,6 +122,7 @@ func serve(ctx context.Context, logger zerolog.Logger) error {
 	if err != nil {
 		return err
 	}
+	defer app.CloseCodexAccounts()
 	httpServer := newHTTPServer(env("GOLF_LISTEN_ADDR", ":8080"), app, logger)
 	// Bind every enabled listener before starting any of them. An occupied
 	// metrics port cannot leave an otherwise running application behind.

@@ -19,6 +19,7 @@ const groups = [
   { id: 'cloudflare', title: 'Cloudflare integrations', description: 'Optional provider implementations are listed separately by function. A configured credential does not establish a verified connection or operational service.' },
 ];
 function setupAction(row: StatusRow, isInstanceAdmin: boolean) {
+  if (row.id === 'agents.codex') return <div><Link className="text-button" to="/account/agents">Manage Codex connection</Link><p className="field-help">Personal authentication setup; model access and task execution are separate.</p></div>;
   if (row.id === 'repositories') return <Link className="text-button" to="/">Manage repositories</Link>;
   if (row.id === 'pipelines') return isInstanceAdmin ? <Link className="text-button" to="/admin/execution">Manage policies</Link> : <span className="muted">Ask an instance administrator about worker setup</span>;
   if (row.id === 'events.native') return <span className="muted">Configured in deployment; UI setup unavailable</span>;

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 )
 
 type Config struct {
+	CodexBinary                                                string
 	PushCIEnabled                                              bool
 	ObjectStoreConfig                                          objectstore.Config
 	DatabaseEndpoint, DatabaseTLSMode, NativeDatabaseEndpoint  string
@@ -33,6 +35,8 @@ type Config struct {
 	Telemetry                                                  *telemetry.Runtime
 }
 type Server struct {
+	codexMu                       sync.Mutex
+	codexRuntimes                 map[int64]*codexRuntime
 	pushCoordinatorSeen           atomic.Int64
 	config                        Config
 	db                            *sql.DB

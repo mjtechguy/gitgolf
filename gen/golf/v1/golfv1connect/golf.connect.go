@@ -62,6 +62,8 @@ const (
 	AccountSecurityServiceName = "golf.v1.AccountSecurityService"
 	// AutomationGrantServiceName is the fully-qualified name of the AutomationGrantService service.
 	AutomationGrantServiceName = "golf.v1.AutomationGrantService"
+	// CodexAccountServiceName is the fully-qualified name of the CodexAccountService service.
+	CodexAccountServiceName = "golf.v1.CodexAccountService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -308,6 +310,21 @@ const (
 	// AutomationGrantServiceRevokeAutomationGrantProcedure is the fully-qualified name of the
 	// AutomationGrantService's RevokeAutomationGrant RPC.
 	AutomationGrantServiceRevokeAutomationGrantProcedure = "/golf.v1.AutomationGrantService/RevokeAutomationGrant"
+	// CodexAccountServiceGetCodexConnectionProcedure is the fully-qualified name of the
+	// CodexAccountService's GetCodexConnection RPC.
+	CodexAccountServiceGetCodexConnectionProcedure = "/golf.v1.CodexAccountService/GetCodexConnection"
+	// CodexAccountServiceStartCodexLoginProcedure is the fully-qualified name of the
+	// CodexAccountService's StartCodexLogin RPC.
+	CodexAccountServiceStartCodexLoginProcedure = "/golf.v1.CodexAccountService/StartCodexLogin"
+	// CodexAccountServiceCancelCodexLoginProcedure is the fully-qualified name of the
+	// CodexAccountService's CancelCodexLogin RPC.
+	CodexAccountServiceCancelCodexLoginProcedure = "/golf.v1.CodexAccountService/CancelCodexLogin"
+	// CodexAccountServiceRefreshCodexConnectionProcedure is the fully-qualified name of the
+	// CodexAccountService's RefreshCodexConnection RPC.
+	CodexAccountServiceRefreshCodexConnectionProcedure = "/golf.v1.CodexAccountService/RefreshCodexConnection"
+	// CodexAccountServiceDisconnectCodexConnectionProcedure is the fully-qualified name of the
+	// CodexAccountService's DisconnectCodexConnection RPC.
+	CodexAccountServiceDisconnectCodexConnectionProcedure = "/golf.v1.CodexAccountService/DisconnectCodexConnection"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -3212,4 +3229,178 @@ func (UnimplementedAutomationGrantServiceHandler) CreateAutomationGrant(context.
 
 func (UnimplementedAutomationGrantServiceHandler) RevokeAutomationGrant(context.Context, *connect.Request[v1.RevokeAutomationGrantRequest]) (*connect.Response[v1.RevokeAutomationGrantResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AutomationGrantService.RevokeAutomationGrant is not implemented"))
+}
+
+// CodexAccountServiceClient is a client for the golf.v1.CodexAccountService service.
+type CodexAccountServiceClient interface {
+	GetCodexConnection(context.Context, *connect.Request[v1.GetCodexConnectionRequest]) (*connect.Response[v1.GetCodexConnectionResponse], error)
+	StartCodexLogin(context.Context, *connect.Request[v1.StartCodexLoginRequest]) (*connect.Response[v1.StartCodexLoginResponse], error)
+	CancelCodexLogin(context.Context, *connect.Request[v1.CancelCodexLoginRequest]) (*connect.Response[v1.CancelCodexLoginResponse], error)
+	RefreshCodexConnection(context.Context, *connect.Request[v1.RefreshCodexConnectionRequest]) (*connect.Response[v1.RefreshCodexConnectionResponse], error)
+	DisconnectCodexConnection(context.Context, *connect.Request[v1.DisconnectCodexConnectionRequest]) (*connect.Response[v1.DisconnectCodexConnectionResponse], error)
+}
+
+// NewCodexAccountServiceClient constructs a client for the golf.v1.CodexAccountService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewCodexAccountServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) CodexAccountServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	codexAccountServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("CodexAccountService").Methods()
+	return &codexAccountServiceClient{
+		getCodexConnection: connect.NewClient[v1.GetCodexConnectionRequest, v1.GetCodexConnectionResponse](
+			httpClient,
+			baseURL+CodexAccountServiceGetCodexConnectionProcedure,
+			connect.WithSchema(codexAccountServiceMethods.ByName("GetCodexConnection")),
+			connect.WithClientOptions(opts...),
+		),
+		startCodexLogin: connect.NewClient[v1.StartCodexLoginRequest, v1.StartCodexLoginResponse](
+			httpClient,
+			baseURL+CodexAccountServiceStartCodexLoginProcedure,
+			connect.WithSchema(codexAccountServiceMethods.ByName("StartCodexLogin")),
+			connect.WithClientOptions(opts...),
+		),
+		cancelCodexLogin: connect.NewClient[v1.CancelCodexLoginRequest, v1.CancelCodexLoginResponse](
+			httpClient,
+			baseURL+CodexAccountServiceCancelCodexLoginProcedure,
+			connect.WithSchema(codexAccountServiceMethods.ByName("CancelCodexLogin")),
+			connect.WithClientOptions(opts...),
+		),
+		refreshCodexConnection: connect.NewClient[v1.RefreshCodexConnectionRequest, v1.RefreshCodexConnectionResponse](
+			httpClient,
+			baseURL+CodexAccountServiceRefreshCodexConnectionProcedure,
+			connect.WithSchema(codexAccountServiceMethods.ByName("RefreshCodexConnection")),
+			connect.WithClientOptions(opts...),
+		),
+		disconnectCodexConnection: connect.NewClient[v1.DisconnectCodexConnectionRequest, v1.DisconnectCodexConnectionResponse](
+			httpClient,
+			baseURL+CodexAccountServiceDisconnectCodexConnectionProcedure,
+			connect.WithSchema(codexAccountServiceMethods.ByName("DisconnectCodexConnection")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// codexAccountServiceClient implements CodexAccountServiceClient.
+type codexAccountServiceClient struct {
+	getCodexConnection        *connect.Client[v1.GetCodexConnectionRequest, v1.GetCodexConnectionResponse]
+	startCodexLogin           *connect.Client[v1.StartCodexLoginRequest, v1.StartCodexLoginResponse]
+	cancelCodexLogin          *connect.Client[v1.CancelCodexLoginRequest, v1.CancelCodexLoginResponse]
+	refreshCodexConnection    *connect.Client[v1.RefreshCodexConnectionRequest, v1.RefreshCodexConnectionResponse]
+	disconnectCodexConnection *connect.Client[v1.DisconnectCodexConnectionRequest, v1.DisconnectCodexConnectionResponse]
+}
+
+// GetCodexConnection calls golf.v1.CodexAccountService.GetCodexConnection.
+func (c *codexAccountServiceClient) GetCodexConnection(ctx context.Context, req *connect.Request[v1.GetCodexConnectionRequest]) (*connect.Response[v1.GetCodexConnectionResponse], error) {
+	return c.getCodexConnection.CallUnary(ctx, req)
+}
+
+// StartCodexLogin calls golf.v1.CodexAccountService.StartCodexLogin.
+func (c *codexAccountServiceClient) StartCodexLogin(ctx context.Context, req *connect.Request[v1.StartCodexLoginRequest]) (*connect.Response[v1.StartCodexLoginResponse], error) {
+	return c.startCodexLogin.CallUnary(ctx, req)
+}
+
+// CancelCodexLogin calls golf.v1.CodexAccountService.CancelCodexLogin.
+func (c *codexAccountServiceClient) CancelCodexLogin(ctx context.Context, req *connect.Request[v1.CancelCodexLoginRequest]) (*connect.Response[v1.CancelCodexLoginResponse], error) {
+	return c.cancelCodexLogin.CallUnary(ctx, req)
+}
+
+// RefreshCodexConnection calls golf.v1.CodexAccountService.RefreshCodexConnection.
+func (c *codexAccountServiceClient) RefreshCodexConnection(ctx context.Context, req *connect.Request[v1.RefreshCodexConnectionRequest]) (*connect.Response[v1.RefreshCodexConnectionResponse], error) {
+	return c.refreshCodexConnection.CallUnary(ctx, req)
+}
+
+// DisconnectCodexConnection calls golf.v1.CodexAccountService.DisconnectCodexConnection.
+func (c *codexAccountServiceClient) DisconnectCodexConnection(ctx context.Context, req *connect.Request[v1.DisconnectCodexConnectionRequest]) (*connect.Response[v1.DisconnectCodexConnectionResponse], error) {
+	return c.disconnectCodexConnection.CallUnary(ctx, req)
+}
+
+// CodexAccountServiceHandler is an implementation of the golf.v1.CodexAccountService service.
+type CodexAccountServiceHandler interface {
+	GetCodexConnection(context.Context, *connect.Request[v1.GetCodexConnectionRequest]) (*connect.Response[v1.GetCodexConnectionResponse], error)
+	StartCodexLogin(context.Context, *connect.Request[v1.StartCodexLoginRequest]) (*connect.Response[v1.StartCodexLoginResponse], error)
+	CancelCodexLogin(context.Context, *connect.Request[v1.CancelCodexLoginRequest]) (*connect.Response[v1.CancelCodexLoginResponse], error)
+	RefreshCodexConnection(context.Context, *connect.Request[v1.RefreshCodexConnectionRequest]) (*connect.Response[v1.RefreshCodexConnectionResponse], error)
+	DisconnectCodexConnection(context.Context, *connect.Request[v1.DisconnectCodexConnectionRequest]) (*connect.Response[v1.DisconnectCodexConnectionResponse], error)
+}
+
+// NewCodexAccountServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewCodexAccountServiceHandler(svc CodexAccountServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	codexAccountServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("CodexAccountService").Methods()
+	codexAccountServiceGetCodexConnectionHandler := connect.NewUnaryHandler(
+		CodexAccountServiceGetCodexConnectionProcedure,
+		svc.GetCodexConnection,
+		connect.WithSchema(codexAccountServiceMethods.ByName("GetCodexConnection")),
+		connect.WithHandlerOptions(opts...),
+	)
+	codexAccountServiceStartCodexLoginHandler := connect.NewUnaryHandler(
+		CodexAccountServiceStartCodexLoginProcedure,
+		svc.StartCodexLogin,
+		connect.WithSchema(codexAccountServiceMethods.ByName("StartCodexLogin")),
+		connect.WithHandlerOptions(opts...),
+	)
+	codexAccountServiceCancelCodexLoginHandler := connect.NewUnaryHandler(
+		CodexAccountServiceCancelCodexLoginProcedure,
+		svc.CancelCodexLogin,
+		connect.WithSchema(codexAccountServiceMethods.ByName("CancelCodexLogin")),
+		connect.WithHandlerOptions(opts...),
+	)
+	codexAccountServiceRefreshCodexConnectionHandler := connect.NewUnaryHandler(
+		CodexAccountServiceRefreshCodexConnectionProcedure,
+		svc.RefreshCodexConnection,
+		connect.WithSchema(codexAccountServiceMethods.ByName("RefreshCodexConnection")),
+		connect.WithHandlerOptions(opts...),
+	)
+	codexAccountServiceDisconnectCodexConnectionHandler := connect.NewUnaryHandler(
+		CodexAccountServiceDisconnectCodexConnectionProcedure,
+		svc.DisconnectCodexConnection,
+		connect.WithSchema(codexAccountServiceMethods.ByName("DisconnectCodexConnection")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.CodexAccountService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case CodexAccountServiceGetCodexConnectionProcedure:
+			codexAccountServiceGetCodexConnectionHandler.ServeHTTP(w, r)
+		case CodexAccountServiceStartCodexLoginProcedure:
+			codexAccountServiceStartCodexLoginHandler.ServeHTTP(w, r)
+		case CodexAccountServiceCancelCodexLoginProcedure:
+			codexAccountServiceCancelCodexLoginHandler.ServeHTTP(w, r)
+		case CodexAccountServiceRefreshCodexConnectionProcedure:
+			codexAccountServiceRefreshCodexConnectionHandler.ServeHTTP(w, r)
+		case CodexAccountServiceDisconnectCodexConnectionProcedure:
+			codexAccountServiceDisconnectCodexConnectionHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedCodexAccountServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedCodexAccountServiceHandler struct{}
+
+func (UnimplementedCodexAccountServiceHandler) GetCodexConnection(context.Context, *connect.Request[v1.GetCodexConnectionRequest]) (*connect.Response[v1.GetCodexConnectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.CodexAccountService.GetCodexConnection is not implemented"))
+}
+
+func (UnimplementedCodexAccountServiceHandler) StartCodexLogin(context.Context, *connect.Request[v1.StartCodexLoginRequest]) (*connect.Response[v1.StartCodexLoginResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.CodexAccountService.StartCodexLogin is not implemented"))
+}
+
+func (UnimplementedCodexAccountServiceHandler) CancelCodexLogin(context.Context, *connect.Request[v1.CancelCodexLoginRequest]) (*connect.Response[v1.CancelCodexLoginResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.CodexAccountService.CancelCodexLogin is not implemented"))
+}
+
+func (UnimplementedCodexAccountServiceHandler) RefreshCodexConnection(context.Context, *connect.Request[v1.RefreshCodexConnectionRequest]) (*connect.Response[v1.RefreshCodexConnectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.CodexAccountService.RefreshCodexConnection is not implemented"))
+}
+
+func (UnimplementedCodexAccountServiceHandler) DisconnectCodexConnection(context.Context, *connect.Request[v1.DisconnectCodexConnectionRequest]) (*connect.Response[v1.DisconnectCodexConnectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.CodexAccountService.DisconnectCodexConnection is not implemented"))
 }

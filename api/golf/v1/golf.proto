@@ -693,6 +693,11 @@ enum AuditAction {
   AUDIT_ACTION_SESSION_REVOKED = 3;
   AUDIT_ACTION_OTHER_SESSIONS_REVOKED = 4;
   AUDIT_ACTION_SESSION_REPLACED = 5;
+ AUDIT_ACTION_CODEX_LOGIN_STARTED = 6;
+ AUDIT_ACTION_CODEX_LOGIN_COMPLETED = 7;
+ AUDIT_ACTION_CODEX_LOGIN_CANCELED = 8;
+ AUDIT_ACTION_CODEX_CONNECTION_REFRESHED = 9;
+ AUDIT_ACTION_CODEX_CONNECTION_DISCONNECTED = 10;
 }
 message AuditEvent {
   string id = 1;
@@ -1261,3 +1266,49 @@ message EnableRegularLocalAccountResponse {
  uint64 sessions_revoked = 2;
  string operation_id = 3;
 }
+
+// Personal provider authentication is available only to Golf browser sessions.
+service CodexAccountService {
+ rpc GetCodexConnection(GetCodexConnectionRequest) returns (GetCodexConnectionResponse);
+ rpc StartCodexLogin(StartCodexLoginRequest) returns (StartCodexLoginResponse);
+ rpc CancelCodexLogin(CancelCodexLoginRequest) returns (CancelCodexLoginResponse);
+ rpc RefreshCodexConnection(RefreshCodexConnectionRequest) returns (RefreshCodexConnectionResponse);
+ rpc DisconnectCodexConnection(DisconnectCodexConnectionRequest) returns (DisconnectCodexConnectionResponse);
+}
+enum CodexConnectionState {
+ CODEX_CONNECTION_STATE_UNSPECIFIED = 0;
+ CODEX_CONNECTION_STATE_UNCONFIGURED = 1;
+ CODEX_CONNECTION_STATE_AWAITING_AUTH = 2;
+ CODEX_CONNECTION_STATE_CONNECTED = 3;
+ CODEX_CONNECTION_STATE_REAUTH_REQUIRED = 4;
+ CODEX_CONNECTION_STATE_UNAVAILABLE = 5;
+}
+enum CodexLoginMethod {
+ CODEX_LOGIN_METHOD_UNSPECIFIED = 0;
+ CODEX_LOGIN_METHOD_CHATGPT_DEVICE = 1;
+ CODEX_LOGIN_METHOD_API_KEY = 2;
+}
+message CodexConnection {
+ CodexConnectionState state = 1;
+ string version = 2;
+ CodexLoginMethod auth_method = 3;
+ string email = 4;
+ string plan_type = 5;
+ string checked_at = 6;
+ bool model_verified = 7;
+ string login_id = 8;
+ string verification_url = 9;
+ string user_code = 10;
+ string login_expires_at = 11;
+ string reason_code = 12;
+}
+message GetCodexConnectionRequest {}
+message GetCodexConnectionResponse { CodexConnection connection = 1; }
+message StartCodexLoginRequest { CodexLoginMethod method = 1; string api_key = 2; string expected_version = 3; }
+message StartCodexLoginResponse { CodexConnection connection = 1; }
+message CancelCodexLoginRequest { string login_id = 1; string expected_version = 2; }
+message CancelCodexLoginResponse { CodexConnection connection = 1; }
+message RefreshCodexConnectionRequest { string expected_version = 1; }
+message RefreshCodexConnectionResponse { CodexConnection connection = 1; }
+message DisconnectCodexConnectionRequest { string expected_version = 1; }
+message DisconnectCodexConnectionResponse { CodexConnection connection = 1; }

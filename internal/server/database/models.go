@@ -93,6 +93,31 @@ type GolfAutomationGrantEvent struct {
 	OccurredAt     time.Time
 }
 
+type GolfCodexAuth struct {
+	ConnectionID        uuid.UUID
+	EncryptedCredential []byte
+	CredentialBinding   []byte
+	CredentialKeyID     string
+}
+
+type GolfCodexConnection struct {
+	ID              uuid.UUID
+	UserID          int64
+	Version         int64
+	State           string
+	AuthMethod      string
+	Email           string
+	PlanType        string
+	CheckedAt       sql.NullTime
+	LoginID         string
+	VerificationURL string
+	UserCode        string
+	LoginExpiresAt  sql.NullTime
+	ReasonCode      string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
 type GolfCryptoEvent struct {
 	ID                             int64
 	OccurredAt                     time.Time

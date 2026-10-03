@@ -205,6 +205,39 @@ func ensureLegacyBinding(ctx context.Context, db *sql.DB, keys *Keyring) error {
 			break
 		}
 	}
+	// Codex native auth blobs share the infrastructure codec and usage counter,
+	// but their distinct personal-connection bindings are authenticated independently.
+	codeCursor := ""
+	for {
+		rowsCodex, err := tx.QueryContext(ctx, `SELECT connection_id::text,encrypted_credential,credential_binding FROM golf_codex_auth WHERE credential_key_id='legacy' AND connection_id::text>$1 ORDER BY connection_id LIMIT 500`, codeCursor)
+		if err != nil {
+			return keyOperationError(ctx)
+		}
+		count := 0
+		for rowsCodex.Next() {
+			var id string
+			var encrypted, binding []byte
+			if err := rowsCodex.Scan(&id, &encrypted, &binding); err != nil {
+				rowsCodex.Close()
+				return keyOperationError(ctx)
+			}
+			if _, err := keys.open("legacy", infrastructureConnectionDomain, encrypted, binding); err != nil {
+				rowsCodex.Close()
+				return errKeyBootstrap
+			}
+			codeCursor = id
+			count++
+		}
+		err = rowsCodex.Err()
+		rowsCodex.Close()
+		if err != nil {
+			return keyOperationError(ctx)
+		}
+		if count < 500 {
+			break
+		}
+	}
+
 	automationCursor := ""
 	for {
 		rows, err := q.BootstrapLegacyAutomationCredentials(ctx, automationCursor)
@@ -484,7 +517,11 @@ func rotateCredentialBatch(ctx context.Context, db *sql.DB, keys *Keyring, opera
 	if err != nil {
 		return fail(keyOperationError(ctx))
 	}
-	automation, err := q.LockRotationAutomationCredentials(ctx, database.LockRotationAutomationCredentialsParams{ActiveKeyID: active, RowLimit: int32(batchSize - len(sessions) - len(attempts) - len(locals) - len(infrastructure))})
+	codexCount, err := rotateCodexAuth(ctx, tx, keys, batchSize-len(sessions)-len(attempts)-len(locals)-len(infrastructure))
+	if err != nil {
+		return fail(err)
+	}
+	automation, err := q.LockRotationAutomationCredentials(ctx, database.LockRotationAutomationCredentialsParams{ActiveKeyID: active, RowLimit: int32(batchSize - len(sessions) - len(attempts) - len(locals) - len(infrastructure) - codexCount)})
 	if err != nil {
 		return fail(keyOperationError(ctx))
 	}
@@ -553,7 +590,7 @@ func rotateCredentialBatch(ctx context.Context, db *sql.DB, keys *Keyring, opera
 			return fail(keyOperationError(ctx))
 		}
 	}
-	sc, ac, lc, ic, gc := uint64(len(sessions)), uint64(len(attempts)), uint64(len(locals)), uint64(len(infrastructure)), uint64(len(automation))
+	sc, ac, lc, ic, gc := uint64(len(sessions)), uint64(len(attempts)), uint64(len(locals)), uint64(len(infrastructure)+codexCount), uint64(len(automation))
 	if sc+ac+lc+ic+gc > 0 {
 		if err := appendCrypto(ctx, q, operation, "CREDENTIAL_BATCH_REENCRYPTED", active, sc, ac, lc, ic, gc); err != nil {
 			return fail(err)

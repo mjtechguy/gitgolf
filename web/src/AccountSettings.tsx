@@ -14,6 +14,7 @@ export function AccountLayout({ children }: { children: ReactNode }) {
   return <div className="account-layout"><nav className="account-navigation" aria-label="Account settings"><span className="eyebrow">PERSONAL SETTINGS</span>
     <Link to="/account/settings" activeOptions={{ exact:true }}><UserRound size={18} />Profile</Link>
     <Link to="/account/security" activeOptions={{ exact:true }}><ShieldCheck size={18} />Sign-in and security</Link>
+    <Link to="/account/agents" activeOptions={{ exact:true }}><KeyRound size={18} />Coding agents</Link>
     <Link to="/account/sessions" activeOptions={{ exact:true }}><ShieldCheck size={18} />Sessions</Link>
     <Link to="/account/ssh-keys" activeOptions={{ exact:true }}><KeyRound size={18} />SSH keys</Link>
     <Link to="/account/api-credentials" activeOptions={{ exact:true }}><KeyRound size={18} />API credentials</Link>
@@ -38,7 +39,7 @@ export function AccountSettings({ user, signingOut }: { user: User; signingOut: 
 }
 
 export type SettingsScope = 'personal' | 'organization' | 'repository' | 'instance';
-type SettingEntry = { id: string; section: string; state: 'Ready' | 'Partial' | 'Read only' | 'Planned'; detail: string; task: string; to?: '/account/security' | '/account/sessions' | '/account/ssh-keys' | '/account/api-credentials' | '/audit' | '/' | '/organizations' | '/status' | '/admin/execution' | '/admin/organizations' | '/admin/settings/infrastructure' | '/admin/settings'; hash?: string };
+type SettingEntry = { id: string; section: string; state: 'Ready' | 'Partial' | 'Read only' | 'Planned'; detail: string; task: string; to?: '/account/agents' | '/account/security' | '/account/sessions' | '/account/ssh-keys' | '/account/api-credentials' | '/audit' | '/' | '/organizations' | '/status' | '/admin/execution' | '/admin/organizations' | '/admin/settings/infrastructure' | '/admin/settings'; hash?: string };
 const inventory: Record<SettingsScope, SettingEntry[]> = {
   personal: [
     { id: 'profile', section: 'Profile and email', state: 'Partial', detail: 'Edit public profile fields above. Golf sign-in email changes have a separate security page; username changes, mailbox verification and recovery remain planned.', task: 'P1.3 / G1' },
@@ -51,7 +52,7 @@ const inventory: Record<SettingsScope, SettingEntry[]> = {
     { id: 'notifications', section: 'Notifications and email', state: 'Planned', detail: 'Subscriptions, delivery preferences, verified email and webhook/email delivery are not implemented. Provider selection must remain optional for portable installs.', task: 'P3 / P6' },
     { id: 'appearance', section: 'Appearance', state: 'Ready', detail: 'Use the header theme button. Dark/light choice is stored in this browser; synchronized account preferences are not implemented.', task: 'P1.4' },
     { id: 'activity', section: 'Account activity', state: 'Ready', detail: 'Inspect recorded successful session changes. Export, retention policy and broader security events remain planned.', task: 'P1.3', to: '/audit' },
-    { id: 'agents', section: 'Agent tools and provider credentials', state: 'Planned', detail: 'Model connections, five coding harnesses, MCP tool approvals, credential ownership and budgets need integrated execution and policy enforcement.', task: 'P5 / G4' },
+    { id: 'agents', section: 'Agent tools and provider credentials', state: 'Partial', detail: 'Connect and re-authenticate your own Codex account in Coding agents. Model access and task execution are not verified by authentication; other harnesses, repository authority and budgets remain planned.', task: 'P5 / G4', to: '/account/agents' },
   ],
   organization: [
     { id: 'members', section: 'Members, teams and roles', state: 'Partial', detail: 'Browse teams and manage existing account membership in ordinary teams as an organization owner. Invitations, team grant editors and delegated Golf roles still require implementation and ownership safeguards.', task: 'P1.5 / G1', to: '/organizations' },

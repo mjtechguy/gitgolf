@@ -1,6 +1,6 @@
 # Codex CLI local runtime foundation
 
-This opt-in operator runtime starts the Codex-first N5 increment. It is separate
+For ordinary account setup, use [Coding agents inside Golf](CODEX_ACCOUNTS.md). This opt-in operator runtime is a separate Codex-first N5 execution experiment. It is separate
 from the network-disabled CI executor and is not yet Golf's managed connection,
 task, repository permission, or browser setup service. The coding-agent capability
 must remain unavailable until those consumers are implemented and qualified.

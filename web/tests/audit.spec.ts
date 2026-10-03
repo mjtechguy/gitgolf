@@ -82,7 +82,7 @@ test('activity preserves a snapshot through new events, exact IDs and all lifecy
 test('empty history is explicit and later successful events appear only after refresh', async ({ page }) => {
   const state = await backend(page); state.events = [];
   await page.goto('/audit');
-  await expect(page.getByRole('cell', { name: 'No recorded account activity. New successful session events will appear after you refresh.', exact:true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'No recorded account activity. New account events will appear after you refresh.', exact:true })).toBeVisible();
   await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Load more activity' })).toHaveCount(0);
   state.events = [events[0]!];
@@ -187,7 +187,7 @@ test('sign-out aborts pending history and another sign-in never reuses it', asyn
   await page.getByText('Advanced token sign-in', { exact: true }).click();
   await page.getByLabel('Provider access token').fill('fixture-only-token');
   await page.getByRole('button', { name: 'Continue to workspace' }).click();
-  await expect(page.getByRole('cell', { name: 'No recorded account activity. New successful session events will appear after you refresh.', exact:true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'No recorded account activity. New account events will appear after you refresh.', exact:true })).toBeVisible();
   await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(0);
 });
 
@@ -243,4 +243,13 @@ test('audit table sorts and searches loaded events without changing keyset snaps
   await page.getByRole('button', { name:'Load more activity' }).click();
   await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(5);
   expect(state.inputs.at(-1)).toEqual({ beforeId:'9007199254740994', snapshotId:'9223372036854775806' });
+});
+
+
+test('coding-agent changes appear in the existing personal activity inventory', async ({ page }) => {
+  const state = await backend(page);
+  state.events = [create(AuditEventSchema, { id: '2', occurredAt: '2026-10-03T02:00:00Z', action: AuditAction.CODEX_CONNECTION_DISCONNECTED, actorSessionId: '123', credentialKind: 'local' }), create(AuditEventSchema, { id: '1', occurredAt: '2026-10-03T01:00:00Z', action: AuditAction.CODEX_LOGIN_COMPLETED, actorSessionId: '123', credentialKind: 'local' })];
+  await page.goto('/audit');
+  await expect(page.getByRole('heading', { name: 'Account history', exact: true })).toBeVisible();
+  await expect(page.locator('table[aria-label="Account activity"] tbody strong')).toHaveText(['Codex disconnected', 'Codex login completed']);
 });

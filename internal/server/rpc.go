@@ -54,6 +54,7 @@ func (s *Server) rpcHandler() http.Handler {
 		}),
 	}
 	mux := http.NewServeMux()
+	mux.Handle(golfv1connect.NewCodexAccountServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewSessionServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewProfileServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewAccountSecurityServiceHandler(s, options...))
@@ -111,7 +112,8 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		switch procedure {
 		case golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLoginWithPasswordProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
 			public = true
-		case golfv1connect.AutomationGrantServiceListAutomationGrantsProcedure, golfv1connect.AutomationGrantServiceCreateAutomationGrantProcedure, golfv1connect.AutomationGrantServiceRevokeAutomationGrantProcedure,
+		case golfv1connect.CodexAccountServiceGetCodexConnectionProcedure, golfv1connect.CodexAccountServiceStartCodexLoginProcedure, golfv1connect.CodexAccountServiceCancelCodexLoginProcedure, golfv1connect.CodexAccountServiceRefreshCodexConnectionProcedure, golfv1connect.CodexAccountServiceDisconnectCodexConnectionProcedure,
+			golfv1connect.AutomationGrantServiceListAutomationGrantsProcedure, golfv1connect.AutomationGrantServiceCreateAutomationGrantProcedure, golfv1connect.AutomationGrantServiceRevokeAutomationGrantProcedure,
 			golfv1connect.AccountSecurityServiceGetAccountSecurityProcedure, golfv1connect.AccountSecurityServiceChangeOwnPasswordProcedure, golfv1connect.AccountSecurityServiceChangeOwnLoginEmailProcedure,
 			golfv1connect.InstanceAdminServiceEnrollRegularLocalAccountProcedure, golfv1connect.InstanceAdminServiceResetRegularLocalPasswordProcedure, golfv1connect.InstanceAdminServiceEnableRegularLocalAccountProcedure,
 			golfv1connect.ProfileServiceGetProfileProcedure, golfv1connect.ProfileServiceUpdateProfileProcedure,
@@ -494,7 +496,7 @@ func (s *Server) ListCapabilities(ctx context.Context, _ *connect.Request[golfv1
 		{"email.inbound", "Inbound email", "Planned. Authorized email-to-comment, issue and task routing is not implemented."},
 		{"deployments", "Protected previews and deployment", "Planned. Portable and Cloudflare deployment targets require their own qualified adapters."},
 		{"agents.claude-code", "Claude Code", "Planned Golf adapter. Local machine execution and supported account/API authentication need qualification."},
-		{"agents.codex", "Codex", "Planned Golf adapter. Local machine execution and supported account/API authentication need qualification."},
+		{"agents.codex", "Codex", "Personal ChatGPT/API connections are managed in account settings. Model access and task execution still require qualification."},
 		{"agents.opencode", "OpenCode", "Planned Golf adapter. Local execution, ACP and supported provider connections need qualification."},
 		{"agents.grok", "Grok", "Planned Golf adapter. Local execution and supported native authentication/protocol need qualification."},
 		{"agents.pi", "Pi", "Planned Golf adapter. Local execution and supported native authentication/protocol need qualification."},

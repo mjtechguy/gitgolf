@@ -43,6 +43,12 @@ func rpcError(err error) error {
 	var input inputError
 	var upstream forgeError
 	switch {
+	case errors.Is(err, errCodexBrowserOnly):
+		code, message = connect.CodePermissionDenied, "Use your Golf browser account to manage Codex authentication."
+	case errors.Is(err, errCodexConflict):
+		code, message = connect.CodeFailedPrecondition, "Codex connection changed. Refresh before retrying."
+	case errors.Is(err, errCodexUnavailable):
+		code, message = connect.CodeUnavailable, "Codex account service is unavailable."
 	case errors.Is(err, errAutomationGrantConflict):
 		code, message = connect.CodeFailedPrecondition, "Automation grant revision or intent changed. Refresh and review before continuing."
 	case errors.Is(err, errAutomationGrantLimit):
