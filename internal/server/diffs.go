@@ -11,10 +11,47 @@ import (
 	"unicode/utf8"
 
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
+	"strconv"
 )
 
 const maxCommitDiffBytes = 512 << 10
 const maxCommitDiffParents = 1000
+
+// Native PR output is a merge-base comparison. Bind it to the selected PR
+// before and after the provider wait. This observes freshness, not an atomic
+// native lock or trusted merge/check evidence.
+func (s *Server) getPullRequestDiff(ctx context.Context, value string, token forgeCredential, key repositoryKey, number uint32, baseID, headID string) (*golfv1.GetPullRequestDiffResponse, error) {
+	if err := pullNumber(number); err != nil {
+		return nil, err
+	}
+	if !objectID.MatchString(baseID) || !objectID.MatchString(headID) || len(baseID) != len(headID) {
+		return nil, invalid("Select full lowercase base and head commit IDs.")
+	}
+	var result *golfv1.GetPullRequestDiffResponse
+	err := s.withRepositoryRead(ctx, value, token, key, func(base string, repo Repository) error {
+		before, err := s.readPull(ctx, token, base, repo, number)
+		if err != nil {
+			return err
+		}
+		if before.Base.SHA != baseID || before.Head.SHA != headID {
+			return errPullSnapshotChanged
+		}
+		diff, err := s.readCommitDiff(ctx, base+"/pulls/"+strconv.FormatUint(uint64(number), 10)+".diff", token)
+		if err != nil {
+			return err
+		}
+		after, err := s.readPull(ctx, token, base, repo, number)
+		if err != nil {
+			return err
+		}
+		if after.ID != before.ID || after.Base.RepositoryID != before.Base.RepositoryID || after.Head.RepositoryID != before.Head.RepositoryID || after.Base.SHA != baseID || after.Head.SHA != headID {
+			return errPullSnapshotChanged
+		}
+		result = &golfv1.GetPullRequestDiffResponse{BaseCommitId: baseID, HeadCommitId: headID, RawDiff: diff, ByteSize: uint32(len(diff))}
+		return nil
+	})
+	return result, err
+}
 
 // getCommitDiff fixes both sides to commit objects. Gitea 1.27.3's supported
 // .diff endpoint uses the first parent even for merges, and git show for roots.

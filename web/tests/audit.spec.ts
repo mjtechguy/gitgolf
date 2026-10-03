@@ -147,7 +147,7 @@ test('leaving the view cancels private reads; reopening and deep reload request 
   await page.getByRole('button', { name: 'Refresh activity' }).click();
   await expect(page.getByText('Loading account activity…')).toBeVisible();
   const aborted = page.waitForEvent('requestfailed', (request) => request.url().endsWith('/ListAuditEvents'));
-  await page.getByRole('link', { name: /Repositories/ }).click();
+  await page.getByRole('navigation',{name:'Workspace'}).getByRole('link', { name: 'Repositories',exact:true }).click();
   await aborted;
   state.events = [events[4]!]; state.barrier = undefined; release();
   await page.goBack();

@@ -134,7 +134,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.SessionServiceListSessionsProcedure, golfv1connect.SessionServiceRevokeSessionProcedure, golfv1connect.SessionServiceRevokeOtherSessionsProcedure,
 			golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryCreationProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure,
 			golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure,
-			golfv1connect.RepositoryServiceGetCommitDiffProcedure,
+			golfv1connect.RepositoryServiceGetCommitDiffProcedure, golfv1connect.RepositoryServiceGetPullRequestDiffProcedure, golfv1connect.RepositoryServiceGetRepositoryImageProcedure,
 			golfv1connect.RepositoryServiceListIssuesProcedure, golfv1connect.RepositoryServiceGetIssueProcedure,
 			golfv1connect.RepositoryServiceGetPullRequestDiscussionProcedure, golfv1connect.RepositoryServiceListIssueCommentsProcedure, golfv1connect.RepositoryServiceGetIssueMutationProcedure, golfv1connect.RepositoryServiceCreateIssueProcedure, golfv1connect.RepositoryServiceCreateIssueCommentProcedure,
 			golfv1connect.RepositoryServiceListPullRequestsProcedure, golfv1connect.RepositoryServiceGetPullRequestProcedure, golfv1connect.RepositoryServiceListPullRequestReviewsProcedure,
@@ -396,6 +396,17 @@ func (s *Server) GetCommitDiff(ctx context.Context, req *connect.Request[golfv1.
 		return nil, err
 	}
 	result, err := s.getCommitDiff(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), req.Msg.CommitId)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return connect.NewResponse(result), nil
+}
+func (s *Server) GetPullRequestDiff(ctx context.Context, req *connect.Request[golfv1.GetPullRequestDiffRequest]) (*connect.Response[golfv1.GetPullRequestDiffResponse], error) {
+	token, err := rpcToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result, err := s.getPullRequestDiff(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), req.Msg.Number, req.Msg.BaseCommitId, req.Msg.HeadCommitId)
 	if err != nil {
 		return nil, rpcError(err)
 	}

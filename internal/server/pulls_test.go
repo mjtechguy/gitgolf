@@ -19,6 +19,7 @@ import (
 )
 
 var pullProcedures = []string{
+	golfv1connect.RepositoryServiceGetRepositoryImageProcedure,
 	golfv1connect.RepositoryServiceListPullRequestsProcedure,
 	golfv1connect.RepositoryServiceGetPullRequestProcedure,
 	golfv1connect.RepositoryServiceListPullRequestReviewsProcedure,

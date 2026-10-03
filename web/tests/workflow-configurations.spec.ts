@@ -1,7 +1,7 @@
 import { disabledAgentTasks, disabledAgentUsage } from './rpc';
 import { expect, test, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetRepositorySettingsResponseSchema, GetSessionResponseSchema, InspectWorkflowsRequestSchema, InspectWorkflowsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ExecutionScope, ExecutionMode, GetExecutionPolicyResponseSchema, ListWorkflowRunsResponseSchema, ListWorkflowRunsRequestSchema, WorkflowRunState, WorkflowRunOrigin, WorkflowConfigurationSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
+import { GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetRepositorySettingsResponseSchema, GetSessionResponseSchema, GetReviewerResponseSchema, ListReviewerRunsResponseSchema, GetRepositoryResponseSchema, InspectWorkflowsRequestSchema, InspectWorkflowsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ExecutionScope, ExecutionMode, GetExecutionPolicyResponseSchema, ListWorkflowRunsResponseSchema, ListWorkflowRunsRequestSchema, WorkflowRunState, WorkflowRunOrigin, WorkflowConfigurationSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 const path = '/repositories/alex/private/settings/workflows';
@@ -15,6 +15,9 @@ async function backend(page: Page) {
  if(method === 'GetAgentUsage') return disabledAgentUsage(route);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Your session ended.');
+    if(method==='GetReviewer')return respond(route,GetReviewerResponseSchema,{executionAvailable:false});
+    if(method==='ListReviewerRuns')return respond(route,ListReviewerRunsResponseSchema,{});
+    if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository:{id:'9007199254740997',name:'private',defaultBranch:'main',private:true}});
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '9007199254740993', login: 'alex' } });
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
     if (method === 'GetRepositoryAccess') return respond(route, GetRepositoryAccessResponseSchema, { access: { repositoryId: '9007199254740997', ownerId: '9007199254740993', currentPermission: 'read' } });
@@ -53,7 +56,7 @@ test('workflow inventory pins source links, exposes keyboard details and renders
   await expect(page.getByText('Inspection subset checked', { exact: true })).toBeVisible();
   const source = page.getByRole('link', { name: manual.path, exact: true });
   const url = new URL((await source.getAttribute('href'))!, 'http://127.0.0.1:4179');
-  expect(url.searchParams.get('ref')).toBe(commit); expect(url.searchParams.get('path')).toBe(manual.path);
+  expect(url.searchParams.get('ref')).toBe(commit); expect(url.pathname).toContain('/'+manual.path);
   const details = page.locator('summary').filter({ hasText: `Inspect ${manual.path}` });
   await details.focus(); await page.keyboard.press('Enter');
   await expect(page.getByText('<img src=x onerror=alert(1)>', { exact: true })).toBeVisible();
@@ -128,4 +131,16 @@ test('push-only inspection hides the manual Run action', async ({ page }) => {
   await page.getByRole('button', { name: 'Refresh workflow inspection', exact: true }).click();
   await expect(page.getByText('Push trigger only', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run workflow', exact: true })).toHaveCount(0);
+});
+
+
+test('Actions is a repository work tab with direct run inventory and configuration links', async({page})=>{
+ const state=await backend(page);state.runPages=true;
+ await page.goto('/repositories/alex/private?view=actions');
+ await expect(page.locator('.repository-tabs [aria-current="page"]')).toHaveText('Actions');
+ await expect(page.getByRole('heading',{name:'Actions',exact:true})).toBeVisible();
+ await expect(page.getByRole('table',{name:'Workflow runs',exact:true})).toBeVisible();
+ await expect(page.getByRole('table',{name:'Workflow configurations',exact:true})).toBeVisible();
+ await expect(page.locator('.settings-navigation')).toHaveCount(0);
+ await page.reload();await expect(page.locator('.repository-tabs [aria-current="page"]')).toHaveText('Actions');
 });

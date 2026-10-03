@@ -72,7 +72,7 @@ try {
   for (const width of [640, 320]) {
     await page.setViewportSize({ width, height: 900 });
     require(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-    await page.getByRole('navigation', { name: 'Repository', exact: true }).getByRole('link', { name: 'Source', exact: true }).waitFor();
+    await page.getByRole('navigation', { name: 'Repository', exact: true }).getByRole('link', { name: 'Code', exact: true }).waitFor();
     await page.screenshot({ path: `${artifacts}/native-source-light-${width}.png`, fullPage: true });
   }
   await page.setViewportSize({ width: 1440, height: 1000 });

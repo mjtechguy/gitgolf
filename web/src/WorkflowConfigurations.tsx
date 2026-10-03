@@ -29,7 +29,7 @@ function Diagnostics({ diagnostics }: { diagnostics: WorkflowDiagnostic[] }) {
   </li>)}</ul>;
 }
 
-export function WorkflowConfigurations({ userId, owner, name, signingOut }: { userId: string; owner: string; name: string; signingOut: boolean }) {
+export function WorkflowConfigurations({ userId, owner, name, signingOut, workView = false }: { workView?:boolean; userId: string; owner: string; name: string; signingOut: boolean }) {
   const [dispatching, setDispatching] = useState(false);
   const [notice, setNotice] = useState('');
   const [uncertain, setUncertain] = useState(false);
@@ -64,18 +64,18 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut }: { us
     { id: 'findings', header: 'Details', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => <details>
       <summary>Inspect {row.original.path}</summary>
       <p>Blob <code>{row.original.blobId}</code></p>
-      {row.original.events.length ? <p>Declared events: {row.original.events.join(', ')}. No triggers are active.</p> : null}
+      {row.original.events.length ? <p>Declared events: {row.original.events.join(', ')}. Effective policies and automation grants determine activation.</p> : null}
       {row.original.jobs.length ? <ul>{row.original.jobs.map(job => <li key={job.id}>
         <strong>{job.name || job.id}</strong>{job.name && job.name !== job.id ? ` (${job.id})` : ''}
         {job.stage ? ` · Stage ${job.stage}` : ''} · {job.stepCount} declared step{job.stepCount === 1 ? '' : 's'}
       </li>)}</ul> : <p>No job summary is available for this configuration.</p>}
-      {row.original.diagnostics.length ? <Diagnostics diagnostics={row.original.diagnostics} /> : <p>The bounded static inspection found no unsupported fields. Jobs have not run.</p>}
+      {row.original.diagnostics.length ? <Diagnostics diagnostics={row.original.diagnostics} /> : <p>The bounded static inspection found no unsupported fields. Static inspection does not execute jobs.</p>}
     </details> },
   ], [owner, name, commit, dispatching, uncertain, signingOut, result?.executionAvailable]);
 
-  return <RepositorySettingsLayout owner={owner} name={name}>
+  const content = <>
     <section className="page-stack" aria-labelledby="workflow-configurations-title">
-      <header className="repository-intro"><div><span className="eyebrow">REPOSITORY CONFIGURATION</span><h1 id="workflow-configurations-title"><FileCode2 size={29} />Workflow configuration</h1><p>Inspect Actions and GitLab configuration from the current default-branch commit.</p></div></header>
+      <header className="repository-intro"><div><span className="eyebrow">REPOSITORY CONFIGURATION</span><h1 id="workflow-configurations-title"><FileCode2 size={29} />{workView?'Actions':'Workflow configuration'}</h1><p>Inspect Actions and GitLab configuration from the current default-branch commit.</p></div></header>
       <section className="browser-panel credential-list-panel" aria-labelledby="workflow-inventory-title">
         <div className="browser-panel-heading"><h2 id="workflow-inventory-title">Configuration files</h2><button className="button secondary" disabled={query.isFetching || signingOut} onClick={() => void query.refetch()}><RefreshCw size={15} />Refresh workflow inspection</button></div>
         <p className="panel-footnote">Manual execution requires every applicable execution policy to allow this repository and workflow, plus an operator-enrolled worker and approved image. A checked inspection subset alone does not grant execution.</p>
@@ -86,11 +86,13 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut }: { us
           <DataTable label="Workflow configurations" data={result.configurations} columns={columns} getRowId={item => item.path} emptyMessage="No matching workflow configuration files at this commit." />
           <p className="panel-footnote">{result.configurations.length} configuration{result.configurations.length === 1 ? '' : 's'} inspected or reported as unsupported. Direct <code>.github/workflows/*.yml</code>/<code>*.yaml</code> and root <code>.gitlab-ci.yml</code> only; nested and custom locations are excluded.</p>
         </>}
-        <p className="panel-footnote">Limits: 20 files, 64 KiB per inspected file and 512 KiB in total. Oversized files stay metadata-only; an overfull inventory fails visibly. Scripts and provider-specific semantics remain untrusted. Automatic triggers and deployments remain unavailable.</p>
+        <p className="panel-footnote">Limits: 20 files, 64 KiB per inspected file and 512 KiB in total. Oversized files stay metadata-only; an overfull inventory fails visibly. Scripts and provider-specific semantics remain untrusted. Automatic push execution requires configured policies and an active automation grant; deployments remain unavailable.</p>
       </section>
-      {result ? <><ExecutionPolicyPanel key={`${userId}/${owner}/${name}`} userId={userId} signingOut={signingOut} scope={ExecutionScope.REPOSITORY} repository={{ owner, name }} />
+      {result && !workView ? <><ExecutionPolicyPanel key={`${userId}/${owner}/${name}`} userId={userId} signingOut={signingOut} scope={ExecutionScope.REPOSITORY} repository={{ owner, name }} />
       <ReviewerPanel userId={userId} owner={owner} name={name} signingOut={signingOut}/><AgentTasks userId={userId} owner={owner} name={name} signingOut={signingOut}/><AgentUsagePanel userId={userId} signingOut={signingOut} scope={AgentUsageScope.REPOSITORY} repository={{ owner, name }} /><AutomationGrantPanel userId={userId} owner={owner} name={name} signingOut={signingOut} />
       <WorkflowRuns key={`runs/${userId}/${owner}/${name}`} userId={userId} owner={owner} name={name} signingOut={signingOut} /></> : null}
+      {workView ? <><WorkflowRuns userId={userId} owner={owner} name={name} signingOut={signingOut}/><AgentTasks userId={userId} owner={owner} name={name} signingOut={signingOut}/></> : null}
     </section>
-  </RepositorySettingsLayout>;
+  </>;
+  return workView ? content : <RepositorySettingsLayout owner={owner} name={name}>{content}</RepositorySettingsLayout>;
 }

@@ -319,6 +319,8 @@ Initial source layout: thin `cmd/golf` (server/worker modes), `cmd/golfctl` (ins
 
 ## 4. Forge backends and collaboration
 
+The active full repository-experience workstream is tracked in [the GitHub/Gitea capability matrix](docs/REPOSITORY_EXPERIENCE_PARITY.md), including code/Markdown/diffs, issue and PR mutation/review/merge, Actions, live SSE and agent progress. This expands implementation detail without closing unresolved gates.
+
 ### 4.1 Common v1 contract
 
 The shared Gitea-backed forge contract covers repository creation/deletion/visibility, effective access, trees/files/history/blame/diffs, Git HTTPS/SSH, LFS, organizations/teams, issues/comments/labels/milestones, boards, PRs/reviews/comments, checks/statuses, protection, tags/releases/attachments, events, and import/export on both infrastructure tracks.

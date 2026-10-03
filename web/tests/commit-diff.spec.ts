@@ -64,7 +64,7 @@ test('commit history opens an exact diff and preserves branch context, reload, b
   await page.goto('/repositories/alex/design-system?view=commits&ref=feature%2FUI&branch=feature%2FUI');
   await expect(page).toHaveURL(new RegExp(`ref=${head}`));
   await page.getByRole('link', { name: `View diff ${head.slice(0, 12)}`, exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`commit=${head}`));
+  await expect(page).toHaveURL(new RegExp(`commit/${head}`));
   await expect(page.getByLabel('Unified diff, plain text')).toHaveText(raw);
   await expect(page.locator('.repository-tabs [aria-current="page"]')).toHaveText('Commits');
   await expect(page.locator('.branch-picker')).toHaveCount(0);
@@ -77,7 +77,7 @@ test('commit history opens an exact diff and preserves branch context, reload, b
   expect(historyURL.searchParams.get('branch')).toBe('feature/UI');
   expect(historyURL.searchParams.has('commit')).toBe(false);
   await page.goBack();
-  await expect(page.getByLabel('Unified diff, plain text')).toBeVisible();
+  await expect(page.locator('.diff-workspace')).toBeVisible();
   await page.getByRole('link', { name: 'Browse this commit', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'This directory is empty.' })).toBeVisible();
   expect(state.sourceRefs.at(-1)).toBe(head);
@@ -105,7 +105,7 @@ test('native root headers, first-parent merges, binary markers, empty text and 6
 test('typed diff failures remove cached text, retries hide stale content and repository denial clears metadata', async ({ page }) => {
   const state = await backend(page);
   await page.goto(diffURL(head));
-  await expect(page.getByLabel('Unified diff, plain text')).toBeVisible();
+  await expect(page.locator('.diff-workspace')).toBeVisible();
   for (const failure of ['permission_denied', 'not_found', 'failed_precondition', 'resource_exhausted', 'unavailable'] as const) {
     state.failure = failure;
     await page.getByRole('button', { name: 'Refresh diff', exact: true }).click();
@@ -114,7 +114,7 @@ test('typed diff failures remove cached text, retries hide stale content and rep
     await expect(page.locator('.commit-diff-metadata')).toHaveCount(0);
     state.failure = undefined;
     await page.getByRole('button', { name: 'Try again', exact: true }).click();
-    await expect(page.getByLabel('Unified diff, plain text')).toBeVisible();
+    await expect(page.locator('.diff-workspace')).toBeVisible();
   }
   let release!: () => void;
   state.barrier = new Promise<void>((resolve) => { release = resolve; });
@@ -122,7 +122,7 @@ test('typed diff failures remove cached text, retries hide stale content and rep
   await expect(page.getByText('Loading commit diff…', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Unified diff, plain text')).toHaveCount(0);
   release();
-  await expect(page.getByLabel('Unified diff, plain text')).toBeVisible();
+  await expect(page.locator('.diff-workspace')).toBeVisible();
   state.repositoryDenied = true;
   await page.getByRole('button', { name: 'Refresh repository access', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Repository not found or inaccessible.');
@@ -134,7 +134,7 @@ test('render bounds accept exactly 512 KiB and refuse oversized, mis-sized or wr
   const state = await backend(page);
   state.raw = 'x'.repeat(512 * 1024);
   await page.goto(diffURL(head));
-  await expect(page.getByLabel('Unified diff, plain text')).toBeVisible();
+  await expect(page.locator('.diff-workspace')).toBeVisible();
   expect(await page.getByLabel('Unified diff, plain text').evaluate((element) => element.textContent?.length)).toBe(512 * 1024);
   state.raw += 'x';
   await page.getByRole('button', { name: 'Refresh diff' }).click();
@@ -152,7 +152,7 @@ test('render bounds accept exactly 512 KiB and refuse oversized, mis-sized or wr
 test('expired sessions remove diff data and return to sign-in', async ({ page }) => {
   const state = await backend(page);
   await page.goto(diffURL(head));
-  await expect(page.getByLabel('Unified diff, plain text')).toBeVisible();
+  await expect(page.locator('.diff-workspace')).toBeVisible();
   state.failure = 'unauthenticated';
   await page.getByRole('button', { name: 'Refresh diff' }).click();
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
@@ -163,7 +163,7 @@ test('expired sessions remove diff data and return to sign-in', async ({ page })
 test('sign-out cancels a pending diff and a fresh login cannot reuse its private response', async ({ page }) => {
   const state = await backend(page);
   await page.goto(diffURL(head));
-  await expect(page.getByLabel('Unified diff, plain text')).toBeVisible();
+  await expect(page.locator('.diff-workspace')).toBeVisible();
   let release!: () => void;
   state.barrier = new Promise<void>((resolve) => { release = resolve; });
   await page.getByRole('button', { name: 'Refresh diff' }).click();
@@ -185,10 +185,11 @@ test('plain text diff stays keyboard-scrollable and fits charcoal and light mobi
   const state = await backend(page); state.raw += `+${'long line '.repeat(200)}\n`;
   const errors: string[] = []; page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(diffURL(merge));
-  await expect(page.getByLabel('Unified diff, plain text')).toBeVisible();
+  await expect(page.locator('.diff-workspace')).toBeVisible();
   await expect(page.getByLabel('Commit message, plain text')).toHaveText(message);
   await expect(page.locator('.commit-diff-preview img,.commit-diff-preview a,.commit-diff-message script')).toHaveCount(0);
   if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
+  await page.getByText('Native diff text', {exact:true}).click();
   await page.getByLabel('Unified diff, plain text').focus();
   await expect(page.getByLabel('Unified diff, plain text')).toBeFocused();
   await page.keyboard.press('ArrowRight');
@@ -201,4 +202,13 @@ test('plain text diff stays keyboard-scrollable and fits charcoal and light mobi
   await page.setViewportSize({ width: 320, height: 760 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(errors).toEqual([]);
+});
+
+test('large multi-file comparisons retain full native output without an unbounded structured DOM', async({page})=>{
+ const state=await backend(page);
+ state.raw=Array.from({length:501},(_,index)=>`diff --git a/file${index} b/file${index}\nnew file mode 100644\n--- /dev/null\n+++ b/file${index}\n@@ -0,0 +1 @@\n+new\n`).join('');
+ await page.goto(diffURL(head));
+ await expect(page.getByText('This comparison exceeds the structured preview limit of 500 files or 12,000 rows. The complete bounded native text remains available.',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('Unified diff, plain text')).toHaveText(state.raw);
+ await expect(page.locator('.diff-file')).toHaveCount(0);
 });

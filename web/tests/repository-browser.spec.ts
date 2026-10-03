@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import {
-  GetAuthenticationOptionsResponseSchema, GetContentsRequestSchema, GetContentsResponseSchema, GetIssueRequestSchema, GetIssueResponseSchema, GetRepositoryResponseSchema,
+  GetAuthenticationOptionsResponseSchema, GetRepositoryImageResponseSchema, GetContentsRequestSchema, GetContentsResponseSchema, GetIssueRequestSchema, GetIssueResponseSchema, GetRepositoryResponseSchema,
   GetSessionResponseSchema, IssueSchema, IssueState, ListBranchesRequestSchema, ListBranchesResponseSchema, ListCapabilitiesResponseSchema,
   ListCommitsRequestSchema, ListCommitsResponseSchema, ListIssueCommentsResponseSchema, ListIssuesRequestSchema, ListIssuesResponseSchema, ListRepositoriesResponseSchema,
   LoginWithGiteaTokenResponseSchema, LogoutResponseSchema, RepositorySchema, SourceEntrySchema, SourceEntryType, UserSchema,
@@ -28,7 +28,7 @@ const entries = [
 ];
 
 async function backend(page: Page) {
-  const state = { featureHead: feature, signedIn: true, empty: false, metadataStatus: 200, sourceStatus: 200, issueStatus: 200, sourceWait: undefined as Promise<void> | undefined, methods: [] as string[], sourceRequests: [] as GetContentsRequest[] };
+  const state = { readme: '# PRIVATE README\n<script>window.executed=true</script>\n<a href="javascript:alert(1)">Untrusted</a>\n', featureHead: feature, signedIn: true, empty: false, metadataStatus: 200, sourceStatus: 200, issueStatus: 200, sourceWait: undefined as Promise<void> | undefined, methods: [] as string[], sourceRequests: [] as GetContentsRequest[] };
   await page.route('**/rpc/**', async (route) => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1)!;
     state.methods.push(method);
@@ -44,6 +44,7 @@ async function backend(page: Page) {
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
     if (method === 'GetRepository') return state.metadataStatus === 200 ? respond(route, GetRepositoryResponseSchema, { repository: { ...repository, empty: state.empty } }) : error(state.metadataStatus, 'Repository not found or inaccessible.');
     if (method === 'ListBranches') return respond(route, ListBranchesResponseSchema, request(route, ListBranchesRequestSchema).page?.page === 2 ? { branches: [{ name: 'feature/UI', commitId: feature }] } : { branches: [{ name: 'main', commitId: head, protected: true }], page: { nextPage: 2 } });
+    if(method==='GetRepositoryImage') return respond(route,GetRepositoryImageResponseSchema,{mediaType:'image/svg+xml',content:new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 30"><path fill="green" d="M0 0h100v30H0z"/><script>window.executed=true</script><image href="https://tracker.invalid/pixel"/></svg>')});
     if (method === 'GetContents') {
       const input = request(route, GetContentsRequestSchema);
       state.sourceRequests.push(input);
@@ -57,7 +58,7 @@ async function backend(page: Page) {
       const entry = entries.find((item) => item.path === sourcePath);
       if (!entry) return error(404, 'Source not found or inaccessible.');
       const reasons: Record<string, string> = { 'binary.png': 'Binary content cannot be previewed.', 'large.txt': 'File exceeds the 256 KiB preview limit.', 'pointer.lfs': 'Git LFS content is not fetched.', link: 'Symlink targets are not followed.', module: 'Submodule repositories are not followed.', 'huge.bin': 'File exceeds the 256 KiB preview limit.' };
-      return respond(route, GetContentsResponseSchema, { commitId, path: sourcePath, kind: entry.type, file: { entry, content: sourcePath === 'README.md' ? '# PRIVATE README\n<script>window.executed=true</script>\n<a href="javascript:alert(1)">Untrusted</a>\n' : sourcePath === 'empty.txt' ? '' : undefined, previewReason: reasons[sourcePath] } });
+      return respond(route, GetContentsResponseSchema, { commitId, path: sourcePath, kind: entry.type, file: { entry, content: sourcePath === 'README.md' ? state.readme : sourcePath === 'empty.txt' ? '' : undefined, previewReason: reasons[sourcePath] } });
     }
     if (method === 'ListCommits') {
       const input = request(route, ListCommitsRequestSchema);
@@ -90,7 +91,7 @@ test('repository navigation pins snapshots, paginates branches, supports slash r
   await page.getByRole('link', { name: 'alex/design-system', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`ref=${head}`));
   await page.getByRole('link', { name: 'src Directory', exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`ref=${head}.*path=src`));
+  await expect(page).toHaveURL(new RegExp(`tree/${head}/src`));
   await page.getByRole('link', { name: 'index.ts File 40 B', exact: true }).click();
   await expect(page.getByLabel('Plain text preview of index.ts')).toContainText('PRIVATE_SOURCE');
   await page.goBack();
@@ -115,11 +116,11 @@ test('repository navigation pins snapshots, paginates branches, supports slash r
   expect(errors).toEqual([]);
 });
 
-test('source and issue bodies are plain text; excluded previews explain their boundaries', async ({ page }) => {
+test('source and issues render safe Markdown; excluded previews explain their boundaries', async ({ page }) => {
   await backend(page);
   await page.goto(`/repositories/alex/design-system?ref=${head}&path=README.md`);
-  await expect(page.getByLabel('Plain text preview of README.md')).toContainText('<script>window.executed=true</script>');
-  await expect(page.locator('.source-preview script, .source-preview a')).toHaveCount(0);
+  await expect(page.getByLabel('Rendered README.md')).toContainText('PRIVATE README');
+  await expect(page.locator('.markdown-body script, .markdown-body a')).toHaveCount(0);
   expect(await page.evaluate(() => 'executed' in window)).toBe(false);
   const reasons = { 'binary.png': 'Binary content cannot be previewed.', 'large.txt': 'File exceeds the 256 KiB preview limit.', 'pointer.lfs': 'Git LFS content is not fetched.', link: 'Symlink targets are not followed.', module: 'Submodule repositories are not followed.' };
   for (const [path, reason] of Object.entries(reasons)) {
@@ -129,8 +130,8 @@ test('source and issue bodies are plain text; excluded previews explain their bo
     await expect(page.locator('.source-preview')).toHaveCount(0);
   }
   await page.goto('/repositories/alex/design-system?view=issues&issue=12');
-  await expect(page.getByLabel('Issue body, plain text')).toContainText('<img src=x onerror="window.executed=true">');
-  await expect(page.locator('.issue-body img, .issue-body a')).toHaveCount(0);
+  await expect(page.getByLabel('Issue body, rendered Markdown')).toContainText('image preview unavailable');
+  await expect(page.locator('.markdown-body img, .markdown-body a')).toHaveCount(0);
   expect(await page.evaluate(() => 'executed' in window)).toBe(false);
   expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toMatch(/PRIVATE|Make navigation/);
 });
@@ -144,7 +145,7 @@ test('commit history paginates and opens the selected immutable source commit', 
   await page.getByRole('button', { name: 'Load more commits' }).click();
   await page.getByRole('link', { name: `Browse commit ${older.slice(0, 12)}` }).click();
   await expect(page).toHaveURL(new RegExp(`ref=${older}`));
-  await expect(page.getByRole('navigation', { name: 'Repository', exact: true }).getByRole('link', { name: 'Source' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('navigation', { name: 'Repository', exact: true }).getByRole('link', { name: 'Code' })).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('.commit-pin')).toHaveText(older.slice(0, 12));
 });
 
@@ -168,15 +169,15 @@ test('issues support state filters, pagination, deep-linked detail and isolated 
   await expect(page.getByRole('link', { name: issue.title })).toHaveCount(0);
   await page.getByLabel('Issue state').selectOption('all');
   await page.getByRole('link', { name: issue.title }).click();
-  await expect(page).toHaveURL(/view=issues&state=all&issue=12/);
+  await expect(page).toHaveURL(/issues\/12\?state=all/);
   await expect(page.getByRole('heading', { name: `${issue.title} #12` })).toBeVisible();
   await page.reload();
-  await expect(page.getByLabel('Issue body, plain text')).toBeVisible();
+  await expect(page.getByLabel('Issue body, rendered Markdown')).toBeVisible();
   state.issueStatus = 403;
   await page.getByRole('button', { name: 'Refresh issue', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Issue browsing requires read:issue.');
-  await expect(page.getByLabel('Issue body, plain text')).toHaveCount(0);
-  await page.getByRole('navigation', { name: 'Repository', exact: true }).getByRole('link', { name: 'Source' }).click();
+  await expect(page.getByLabel('Issue body, rendered Markdown')).toHaveCount(0);
+  await page.getByRole('navigation', { name: 'Repository', exact: true }).getByRole('link', { name: 'Code' }).click();
   await expect(page.getByRole('link', { name: 'README.md File 128 B', exact: true })).toBeVisible();
 });
 
@@ -228,7 +229,7 @@ test('permission denial hides cached source through retries; expiry and sign-out
   await expect(page.getByText('PRIVATE_SOURCE', { exact: false })).toHaveCount(0);
   state.metadataStatus = 200;
   await page.goto('/repositories/alex/design-system?view=issues&issue=12');
-  await expect(page.getByLabel('Issue body, plain text')).toBeVisible();
+  await expect(page.getByLabel('Issue body, rendered Markdown')).toBeVisible();
   await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   await expect(page.getByText('PRIVATE ISSUE', { exact: false })).toHaveCount(0);
@@ -252,7 +253,7 @@ test('repository browser is keyboard reachable and fits light/dark mobile screen
   if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
   await page.getByRole('navigation', { name: 'Repository', exact: true }).getByRole('link', { name: 'Issues' }).click();
   await page.getByRole('link', { name: issue.title }).click();
-  await expect(page.getByLabel('Issue body, plain text')).toBeVisible();
+  await expect(page.getByLabel('Issue body, rendered Markdown')).toBeVisible();
   await expect(page.locator('.repository-tabs [aria-current="page"]')).toHaveCount(1);
   await expect(page.locator('.repository-tabs [aria-current="page"]')).toHaveText('Issues');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -294,8 +295,8 @@ test('repository branding keeps loaded fonts, legible text and reflow at 320px a
       expect(await page.locator('.repository-tabs a').first().evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(13);
       await page.getByRole('navigation', { name: 'Repository', exact: true }).getByRole('link', { name: 'Issues', exact: true }).click();
       await page.getByRole('link', { name: issue.title, exact: true }).click();
-      await expect(page.getByLabel('Issue body, plain text')).toBeVisible();
-      expect(await page.locator('.issue-body').evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(13);
+      await expect(page.getByLabel('Issue body, rendered Markdown')).toBeVisible();
+      expect(await page.getByLabel('Issue body, rendered Markdown').evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(13);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.getByRole('button', { name: 'Add a comment', exact: true }).click();
       await page.getByLabel('Comment, plain text', { exact: true }).focus();
@@ -313,3 +314,38 @@ test('repository branding keeps loaded fonts, legible text and reflow at 320px a
     }
   }
 });
+
+
+test('README renders GFM, highlights code, pins relative links and blocks active content in both themes',async({page})=>{
+ const state=await backend(page);
+ state.readme='# Golf example\n\n| Name | Value |\n| --- | --- |\n| Mode | local |\n\n- [x] Ready\n\n```javascript\nconst answer = 42;\n```\n\n[Source](src/index.ts)\n[Unsafe](javascript:alert(1))\n![Tracker](https://tracker.invalid/pixel)\n<script>window.executed=true</script>';
+ const requests:string[]=[];page.on('request',r=>{if(r.url().includes('tracker.invalid'))requests.push(r.url());});
+ await page.setViewportSize({width:390,height:844});
+ await page.goto('/repositories/alex/design-system');
+ const readme=page.getByRole('region',{name:'Repository README'});
+ await expect(readme.getByRole('heading',{name:'Golf example'})).toBeVisible();
+ await expect(readme.getByRole('table')).toContainText('local');
+ await expect(readme.getByRole('checkbox')).toBeChecked();await expect(readme.getByRole('checkbox')).toBeDisabled();
+ await expect(readme.locator('.hljs-keyword')).toHaveText('const');
+ await expect(readme.getByRole('link',{name:'Source',exact:true})).toHaveAttribute('href',`/alex/design-system/tree/${head}/src/index.ts`);
+ await expect(readme.getByRole('link',{name:'Unsafe'})).toHaveCount(0);await expect(readme.locator('img,script,iframe')).toHaveCount(0);expect(requests).toEqual([]);
+ expect(await page.evaluate(()=> 'executed' in window)).toBe(false);
+ for(const theme of ['light','dark']){await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);}
+ await readme.getByRole('button',{name:'Source',exact:true}).click();
+ await expect(readme.getByLabel('Source of README.md')).toContainText('# Golf example');
+});
+
+ test('HTML logos, heading anchors and image bytes render safely without external browser requests',async({page})=>{
+ const state=await backend(page);state.readme='<div align="center"><img src="logo.svg" alt="Example logo" height="150"></div>\n\n# Example\n\n## Install\n\n[Jump](#install)\n\n## Install\n';
+ const external:string[]=[];page.on('request',r=>{if(r.url().includes('tracker.invalid'))external.push(r.url());});
+ await page.goto(`/alex/design-system/tree/${head}`);
+ const readme=page.getByRole('region',{name:'Repository README'});
+ await expect(readme.getByRole('img',{name:'Example logo'})).toBeVisible();
+ await expect(readme.getByRole('img',{name:'Example logo'})).toHaveAttribute('height','150');
+ expect((await readme.getByRole('img',{name:'Example logo'}).boundingBox())?.height).toBe(150);
+ await expect(readme.locator('.markdown-align-center')).toBeVisible();
+ await expect(readme.locator('#user-content-install')).toBeVisible();await expect(readme.locator('#user-content-install-1')).toBeVisible();
+ await expect(readme.getByRole('link',{name:'Jump'})).toHaveAttribute('href','#user-content-install');
+ await expect(readme.locator('script,[onerror],iframe')).toHaveCount(0);expect(external).toEqual([]);expect(await page.evaluate(()=> 'executed' in window)).toBe(false);
+ await expect(page.getByRole('navigation',{name:'Breadcrumb'})).toContainText('alex');
+ });

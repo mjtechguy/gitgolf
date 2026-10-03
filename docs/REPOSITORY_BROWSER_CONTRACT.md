@@ -12,6 +12,8 @@ Contract: [`api/golf/v1/golf.proto`](../api/golf/v1/golf.proto). Every procedure
 | ListBranches | repository and optional `{page:{page,limit}}` → `{branches,page:{nextPage}}` |
 | ListCommits | repository, optional ref/page → `{commits,page}` |
 | GetCommitDiff | repository and exact lowercase `commitId` → commit/parents/base, bounded `rawDiff` and numeric `byteSize`; see the [diff contract](COMMIT_DIFF_CONTRACT.md) |
+| GetPullRequestDiff | repository, PR number and selected full lowercase base/head IDs → bounded native merge-base diff; changed base/head/PR binding or post-wait access is refused |
+| GetRepositoryImage | repository, immutable commit/document path and literal image reference → bounded image bytes/media type; current private access is checked before and after delivery |
 | GetContents | repository, optional ref/path → `{commitId,path,kind,entries,file}` |
 | ListIssues | repository, optional enum state/page → `{issues,page}` |
 | GetIssue | repository and positive number → `{issue}` |
@@ -39,3 +41,8 @@ The pinned Gitea 1.27.3 instance's `/swagger.v1.json` is the operation inventory
 Real local qualification covers a first push, branch names containing slashes, Unicode/space paths, LFS pointer metadata without downloading its object, binary and oversized files, symlinks, gitlinks, issue/PR separation and independently scoped credentials. The initial-push branch failure was reproduced while upstream repository metadata remained empty and disappeared when that processing completed. This is a Gitea lifecycle boundary, not a retry-on-any-error policy.
 
 Read-only API qualification is separate from P0.8's protected-write/conditional-merge gate. This increment does not claim those unsafe-to-assume operations, complete collaboration, production scale or a native Cloudflare forge.
+
+
+## Current presentation and image delivery (2026-10-03)
+
+The source RPC remains bounded text. The shared UI now renders Markdown/GFM and sanitized HTML, with heading anchors, relative snapshot links and lazy syntax highlighting. Scripts, event handlers, frames and arbitrary style declarations are removed. README images use `GetRepositoryImage`, not browser requests to the source host. See [presentation contract and visual comparison](REPOSITORY_PRESENTATION.md) for formats, source binding, external-host limits and URL compatibility. This supersedes the initial plain-text presentation statements above; it does not add issue edits, review writes or merges.

@@ -21,6 +21,7 @@ var (
 	errInvalidForgeResponse       = errors.New("invalid forge response")
 	errForgeUnavailable           = errors.New("forge unavailable")
 	errEmptyRepository            = errors.New("repository has no commits")
+	errPullSnapshotChanged        = errors.New("pull comparison changed")
 	errDiffTextUnsupported        = errors.New("commit diff cannot be represented as supported text")
 	errResourceNotFound           = errors.New("resource not found")
 	errUnauthenticated            = errors.New("session missing or expired")
@@ -115,6 +116,8 @@ func rpcError(err error) error {
 		code, message = connect.CodeFailedPrecondition, "Provider sign-in is not currently available."
 	case errors.Is(err, errEmptyRepository):
 		code, message = connect.CodeFailedPrecondition, "This repository has no commits yet."
+	case errors.Is(err, errPullSnapshotChanged):
+		code, message = connect.CodeFailedPrecondition, "The pull request comparison changed. Refresh the pull request before reading its new files."
 	case errors.Is(err, errDiffTextUnsupported):
 		code, message = connect.CodeFailedPrecondition, "This diff contains unsupported text encoding or control characters. Read it with a local Git client."
 	case errors.Is(err, errForgeResponseTooLarge):

@@ -130,6 +130,8 @@ service RepositoryService {
   rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse);
   rpc ListCommits(ListCommitsRequest) returns (ListCommitsResponse);
   rpc GetCommitDiff(GetCommitDiffRequest) returns (GetCommitDiffResponse);
+  rpc GetPullRequestDiff(GetPullRequestDiffRequest) returns (GetPullRequestDiffResponse);
+  rpc GetRepositoryImage(GetRepositoryImageRequest) returns (GetRepositoryImageResponse);
   rpc GetContents(GetContentsRequest) returns (GetContentsResponse);
   rpc ListIssues(ListIssuesRequest) returns (ListIssuesResponse);
   rpc GetPullRequestDiscussion(GetPullRequestDiscussionRequest) returns (GetPullRequestDiscussionResponse);
@@ -348,6 +350,33 @@ message GetCommitDiffResponse {
   // never silently truncated. This is not a parsed patch or merge evidence.
   string raw_diff = 5;
   uint32 byte_size = 6;
+}
+
+message GetPullRequestDiffRequest {
+  RepositoryKey repository = 1;
+  uint32 number = 2;
+  // Full immutable IDs observed in the selected PR. A changed snapshot is refused.
+  string base_commit_id = 3;
+  string head_commit_id = 4;
+}
+message GetPullRequestDiffResponse {
+  string base_commit_id = 1;
+  string head_commit_id = 2;
+  // Native PR merge-base diff, bounded UTF-8 text. This is not merge eligibility.
+  string raw_diff = 3;
+  uint32 byte_size = 4;
+}
+
+message GetRepositoryImageRequest {
+  RepositoryKey repository = 1;
+  string commit_id = 2;
+  string document_path = 3;
+  // Literal image reference from this immutable source document.
+  string image_url = 4;
+}
+message GetRepositoryImageResponse {
+  bytes content = 1;
+  string media_type = 2;
 }
 
 enum SourceEntryType {

@@ -110,7 +110,7 @@ test('provider quota snapshots show plan, remaining percentages, reset time and 
 test('shared page stack gives panels consistent desktop and mobile section gaps', async ({ page }) => {
  await backend(page); await page.goto('/account/agents');
  await expect(page.getByRole('region', { name: 'Codex account connection', exact: true })).toBeVisible();
- for (const [width, gap] of [[1440,24],[390,20]] as const) {
+ for (const [width, gap] of [[1440,20],[390,20]] as const) {
   await page.setViewportSize({ width, height: 1000 });
   const bounds = await page.evaluate(() => {
    const panel = document.querySelector('[aria-label="Codex account connection"]')!.getBoundingClientRect();

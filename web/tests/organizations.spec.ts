@@ -87,7 +87,7 @@ test('organization/team routes paginate, preserve opaque IDs and support back, r
   await expect(page.getByRole('heading', { name: 'No visible repositories in the loaded pages.' })).toBeVisible();
   await page.getByRole('button', { name: 'Load more repositories' }).click();
   await page.getByRole('link', { name: 'lab/engine', exact: true }).click();
-  await expect(page).toHaveURL(/\/repositories\/lab\/engine$/);
+  await expect(page).toHaveURL(/\/lab\/engine$/);
   await expect(page.getByRole('heading', { name: 'No commits yet.' })).toBeVisible();
   await page.goBack();
   await expect(page.getByRole('heading', { name: 'Platform', exact: true })).toBeVisible();

@@ -98,8 +98,8 @@ test('creates a plain-text issue once with immutable target IDs and follows its 
   expect(state.creates[0]!.idempotencyKey).toMatch(/^[a-f0-9-]{14}4[a-f0-9-]{21}$/);
   await expect(dialog.getByLabel('Issue title')).toBeDisabled();
   release();
-  await expect(page).toHaveURL(/view=issues&issue=12$/);
-  await expect(page.getByLabel('Issue body, plain text')).toHaveText(body);
+  await expect(page).toHaveURL(/issues\/12$/);
+  await expect(page.getByLabel('Issue body, rendered Markdown')).toContainText('PRIVATE_DRAFT');
   await expect(page.locator('.issue-body img')).toHaveCount(0);
   expect(await stored(page)).toEqual([]);
   expect(await page.evaluate(() => 'executed' in window)).toBe(false);
@@ -125,7 +125,7 @@ test('unknown creation closes and reloads with metadata only, and resumes status
   await expect(page.getByLabel('Description, plain text')).toHaveValue('');
   expect(state.creates).toHaveLength(1); expect(state.inspections).toHaveLength(0);
   await page.getByRole('button', { name: 'Check request status' }).click();
-  await expect(page).toHaveURL(/issue=12$/);
+  await expect(page).toHaveURL(/issues\/12$/);
   expect(state.creates).toHaveLength(1); expect(state.inspections).toEqual([key]);
   expect(await stored(page)).toEqual([]);
 });
@@ -191,15 +191,15 @@ test('comments advance across an empty native page, render literal text and pres
   await expect(page.getByRole('heading', { name: 'No comments in the loaded pages.' })).toBeVisible();
   expect(state.pages.length).toBeGreaterThan(0); expect(state.pages.every((number) => number === 1)).toBe(true);
   await page.getByRole('button', { name: 'Load more comments' }).click();
-  await expect(page.getByLabel(`Comment ${comment.id}, plain text`)).toHaveText(comment.body);
+  await expect(page.getByLabel(`Comment ${comment.id}, rendered Markdown`)).toContainText('image preview unavailable');
   expect(state.pages.at(-1)).toBe(2); expect(state.pages.filter((number) => number === 2)).toHaveLength(1);
   await expect(page.locator('.issue-comment img, .issue-comment a[href^="javascript:"]')).toHaveCount(0);
   await page.getByRole('link', { name: 'All open issues' }).click();
-  await expect(page).toHaveURL(/view=issues$/);
+  await expect(page).toHaveURL(/issues$/);
   await page.goBack();
-  await expect(page.getByLabel('Issue body, plain text')).toBeVisible();
+  await expect(page.getByLabel('Issue body, rendered Markdown')).toBeVisible();
   await page.reload();
-  await expect(page.getByLabel('Issue body, plain text')).toBeVisible();
+  await expect(page.getByLabel('Issue body, rendered Markdown')).toBeVisible();
 });
 
 test('posts comment exactly once, validates native result IDs and clears its persisted intent', async ({ page }) => {
@@ -263,7 +263,7 @@ test('comment scope denial clears the draft and read denial removes prior discus
   await expect(page.getByLabel('Comment, plain text', { exact: true })).toHaveValue('');
   state.errors.ListIssueComments = 'permission_denied';
   await page.getByRole('button', { name: 'Refresh comments' }).click();
-  await expect(page.getByLabel('Issue body, plain text')).toHaveCount(0);
+  await expect(page.getByLabel('Issue body, rendered Markdown')).toHaveCount(0);
   await expect(page.locator('.issue-comment')).toHaveCount(0);
   await expect(page.getByLabel('Comment, plain text', { exact: true })).toHaveCount(0);
 });

@@ -1,11 +1,12 @@
 export type RepositorySearch = {
-  view: 'source' | 'commits' | 'issues' | 'pulls';
+  view: 'source' | 'commits' | 'issues' | 'pulls' | 'actions';
   ref: string;
   path: string;
   branch: string;
   state: 'open' | 'closed' | 'all';
   issue?: number;
   pull?: number;
+  pullView?: 'conversation' | 'files';
   commit?: string;
 };
 export const defaultRepositorySearch: RepositorySearch = { view: 'source', ref: '', path: '', branch: '', state: 'open' };
@@ -18,13 +19,21 @@ export function organizationOptions({ organization, team }: { organization: stri
   return { to: '/organizations/$organization' as const, params: { organization }, search: { team }, activeOptions: { exact: true } };
 }
 
-export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | 'name'> & Partial<RepositorySearch>, changes: Partial<RepositorySearch> = {}) {
+export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | 'name'> & Partial<RepositorySearch>, changes: Partial<RepositorySearch> = {}, sourceKind?:'file') {
   const next = { ...defaultRepositorySearch, ...location, ...changes };
   const search: RepositorySearch = {
     view: next.view, ref: next.ref, path: next.view === 'source' ? next.path : '', branch: next.branch,
     state: next.state, issue: next.view === 'issues' ? next.issue : undefined,
     pull: next.view === 'pulls' ? next.pull : undefined,
+    pullView: next.view === 'pulls' && next.pull ? next.pullView : undefined,
     commit: next.view === 'commits' ? next.commit : undefined,
   };
-  return { to: '/repositories/$owner/$name' as const, params: { owner: next.owner, name: next.name }, search, activeOptions: { exact: true } };
+  const params = {owner:next.owner,name:next.name};
+  let path = '';
+  if(next.view==='issues') path=next.issue?`issues/${next.issue}`:'issues';
+  else if(next.view==='pulls') path=next.pull?`pull/${next.pull}${next.pullView==='files'?'/files':''}`:'pulls';
+  else if(next.view==='actions') path='actions';
+  else if(next.view==='commits') path=next.commit?`commit/${next.commit}`:'commits';
+  else if(isCommitID(next.ref)) path=`${sourceKind==='file'?'blob':'tree'}/${next.ref}${next.path?`/${next.path}`:''}`;
+  return {to:'/$owner/$name/$' as const,params:{...params,_splat:path},search,activeOptions:{exact:true}};
 }

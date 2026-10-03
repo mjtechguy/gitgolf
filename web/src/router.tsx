@@ -89,20 +89,22 @@ const organizationRoute = createRoute({
   },
   component: OrganizationPage,
 });
-const repositoryRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/repositories/$owner/$name',
-  validateSearch: (search: Record<string, unknown>): RepositorySearch => {
+const validateRepositorySearch = (search: Record<string, unknown>): RepositorySearch => {
     const issue = search.issue === undefined ? undefined : Number(search.issue);
     const pull = search.pull === undefined ? undefined : typeof search.pull === 'number' ? search.pull : typeof search.pull === 'string' && /^[1-9][0-9]*$/.test(search.pull) ? Number(search.pull) : NaN;
     return {
-      view: search.view === 'commits' || search.view === 'issues' || search.view === 'pulls' ? search.view : 'source',
+      view: search.view === 'commits' || search.view === 'issues' || search.view === 'pulls' || search.view === 'actions' ? search.view : 'source',
       ref: typeof search.ref === 'string' ? search.ref : '', path: typeof search.path === 'string' ? search.path : '',
       branch: typeof search.branch === 'string' ? search.branch : '',
       state: search.state === 'closed' || search.state === 'all' ? search.state : 'open', issue, pull,
+      pullView: search.pullView === 'files' ? 'files' : undefined,
       commit: search.commit === undefined ? undefined : typeof search.commit === 'string' ? search.commit : '',
     };
-  },
+  };
+const repositoryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/repositories/$owner/$name',
+  validateSearch: validateRepositorySearch,
   beforeLoad: ({ params, search }) => {
     if (!params.owner || !params.name || /[\/\\]/.test(params.owner + params.name)) throw notFound();
     if (search.pull !== undefined && (!Number.isSafeInteger(search.pull) || search.pull <= 0 || search.pull > 0x7fffffff)) throw notFound();
@@ -112,6 +114,34 @@ const repositoryRoute = createRoute({
   search: { middlewares: [stripSearchParams(defaultRepositorySearch)] },
   component: RepositoryPage,
 });
+
+// Explicitly keep legacy query URLs readable. New navigation uses familiar
+// repository paths; immutable source IDs avoid slash-ref ambiguity.
+function canonicalLocation(owner:string,name:string,tail:string,search:RepositorySearch) {
+  if(!owner||!name||/[\/\\]/.test(owner+name)) throw notFound();
+  const location={...search,owner,name,kind:'repository' as const};
+  if(!tail) return location;
+  const parts=tail.split('/');
+  const item=parts[1]||'';
+  if(parts[0]==='tree'||parts[0]==='blob') {
+    if(!isCommitID(item)) throw notFound();
+    const path=parts.slice(2).join('/');
+    if(path.split('/').some(p=>p==='.'||p==='..')||/[\\\u0000-\u001f]/.test(path)) throw notFound();
+    return {...location,view:'source' as const,ref:item,path};
+  }
+  if(parts[0]==='commit'&&parts.length===2&&isCommitID(item)) return {...location,view:'commits' as const,commit:item};
+  if(parts[0]==='issues'&&parts.length<=2) {
+    if(parts.length===1)return {...location,view:'issues' as const,issue:undefined};
+    if(/^[1-9][0-9]*$/.test(item)&&Number(parts[1])<=0x7fffffff)return {...location,view:'issues' as const,issue:Number(parts[1])};
+  }
+  if(parts[0]==='pull'&&parts.length>=2&&parts.length<=3&&/^[1-9][0-9]*$/.test(item)&&Number(parts[1])<=0x7fffffff&&(!parts[2]||parts[2]==='files')) return {...location,view:'pulls' as const,pull:Number(parts[1]),pullView:parts[2]==='files'?'files' as const:undefined};
+  if(parts.length===1&&['pulls','commits','actions'].includes(tail))return {...location,view:tail as 'pulls'|'commits'|'actions',pull:undefined,commit:undefined};
+  throw notFound();
+}
+const canonicalRepositoryPageRoute=createRoute({getParentRoute:()=>rootRoute,path:'/$owner/$name/$',validateSearch:validateRepositorySearch,
+  beforeLoad:({params,search})=>{canonicalLocation(params.owner,params.name,params._splat||'',search);},
+  search:{middlewares:[({search,next})=>{const clean:Partial<RepositorySearch>={...next(search)};delete clean.view;delete clean.path;delete clean.issue;delete clean.pull;delete clean.pullView;delete clean.commit;return clean as RepositorySearch;},stripSearchParams(defaultRepositorySearch)]},
+  component:()=>{const p=canonicalRepositoryPageRoute.useParams();return <App location={canonicalLocation(p.owner,p.name,p._splat||'',canonicalRepositoryPageRoute.useSearch())}/>;}});
 
 function RepositorySettingsPage() {
   const { owner, name } = repositorySettingsRoute.useParams();
@@ -144,7 +174,7 @@ function OrganizationPage() {
 
 // Router owns navigation only. Private server data stays in the cancellable Query cache.
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([homeRoute, statusRoute, repositoryRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountSecurityRoute, accountAgentsRoute, sessionsRoute]),
+  routeTree: rootRoute.addChildren([homeRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountSecurityRoute, accountAgentsRoute, sessionsRoute]),
   defaultPreload: false,
   // Refs and paths are opaque strings, including names such as "1234" or "true".
   parseSearch: (search) => Object.fromEntries(new URLSearchParams(search)),

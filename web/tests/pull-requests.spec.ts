@@ -1,3 +1,5 @@
+import {GetPullRequestDiffRequestSchema,GetPullRequestDiffResponseSchema} from '../src/gen/golf/v1/golf_pb';
+import {GetPullRequestDiscussionResponseSchema,ListIssueCommentsResponseSchema,ListReviewerRunsResponseSchema} from '../src/gen/golf/v1/golf_pb';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
@@ -26,7 +28,7 @@ const review = create(PullRequestReviewSchema, { id: '9007199254740998', user, b
 const pending = create(PullRequestReviewSchema, { ...review, id: '9007199254740999', user: undefined, body: '', state: PullRequestReviewState.PENDING, stale: false, dismissed: false, official: false, htmlUrl: 'javascript:alert(1)' });
 
 async function backend(page: Page) {
-  const state = { signedIn: true, metadataStatus: 200, listStatus: 200, detailStatus: 200, reviewStatus: 200, empty: false,
+  const state = { signedIn: true, metadataStatus: 200, listStatus: 200, detailStatus: 200, reviewStatus: 200, diffStatus: 200, empty: false,
     reviewWait: undefined as Promise<void> | undefined, detailWait: undefined as Promise<void> | undefined,
     methods: [] as string[], pages: [] as number[], reviewPages: [] as number[], states: [] as IssueState[], numbers: [] as number[] };
   await page.route('**/rpc/**', async (route) => {
@@ -52,6 +54,13 @@ async function backend(page: Page) {
       const listed = { ...pull, head: create(PullRequestRefSchema, { ...pull.head!, retainedSnapshot: true }) };
       return respond(route, ListPullRequestsResponseSchema, state.empty ? {} : input.state === IssueState.CLOSED ? { pullRequests: [closed] } : input.state === IssueState.ALL ? { pullRequests: [listed, closed, snapshot] } : input.page?.page === 2 ? { pullRequests: [listed, snapshot] } : { pullRequests: [listed], page: { nextPage: 2 } });
     }
+    if(method==='GetPullRequestDiff') {
+      const input=request(route,GetPullRequestDiffRequestSchema);
+      expect(input).toMatchObject({number:12,baseCommitId:base,headCommitId:head});
+      if(state.diffStatus!==200)return error(state.diffStatus,'PR comparison is unavailable.');
+      const rawDiff='diff --git a/control.ts b/control.ts\n--- a/control.ts\n+++ b/control.ts\n@@ -1 +1,2 @@\n-old control\n+new control\n+<script>window.executed=true</script>\n';
+      return respond(route,GetPullRequestDiffResponseSchema,{baseCommitId:base,headCommitId:head,rawDiff,byteSize:new TextEncoder().encode(rawDiff).byteLength});
+    }
     if (method === 'GetPullRequest') {
       const input = request(route, GetPullRequestRequestSchema); state.numbers.push(input.number);
       if (state.detailWait) await state.detailWait;
@@ -59,6 +68,9 @@ async function backend(page: Page) {
       const result = [pull, closed, snapshot].find((item) => item.number === input.number);
       return result ? respond(route, GetPullRequestResponseSchema, { pullRequest: result }) : error(404, 'Pull request not found or inaccessible.');
     }
+    if(method==='GetPullRequestDiscussion')return respond(route,GetPullRequestDiscussionResponseSchema,{issue:{id:'9007199254740999',number:pull.number,title:pull.title,state:IssueState.OPEN}});
+    if(method==='ListIssueComments')return respond(route,ListIssueCommentsResponseSchema,{});
+    if(method==='ListReviewerRuns')return respond(route,ListReviewerRunsResponseSchema,{});
     if (method === 'ListPullRequestReviews') {
       const input = request(route, ListPullRequestReviewsRequestSchema); state.reviewPages.push(input.page?.page || 0);
       if (state.reviewWait) await state.reviewWait;
@@ -74,7 +86,7 @@ async function backend(page: Page) {
 async function visibleReview(page: Page) {
   await expect(page.getByRole('heading', { name: 'Reviews', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Load more reviews' }).click();
-  await expect(page.getByLabel(`Review ${review.id} body, plain text`)).toBeVisible();
+  await expect(page.getByLabel(`Review ${review.id} body, rendered Markdown`)).toBeVisible();
 }
 
 test('pull navigation paginates and filters native states with canonical detail URLs, reload and history', async ({ page }) => {
@@ -83,7 +95,7 @@ test('pull navigation paginates and filters native states with canonical detail 
   expect(state.methods).not.toContain('ListPullRequests');
   await page.goto('/repositories/alex/design-system?view=pulls');
   await expect(page.getByRole('link', { name: pull.title })).toBeVisible();
-  await expect(page.locator('.repository-tabs [aria-current="page"]')).toHaveText('Pull requests');
+  await expect(page.locator('nav[aria-label="Repository"] [aria-current="page"]')).toHaveText('Pull requests');
   await expect(page.locator('.pull-list')).toContainText('Retained PR snapshot');
   await page.getByRole('button', { name: 'Load more pull requests' }).click();
   await expect(page.locator('.pull-list>li')).toHaveCount(2);
@@ -94,24 +106,25 @@ test('pull navigation paginates and filters native states with canonical detail 
   await expect(page.getByRole('link', { name: pull.title })).toHaveCount(0);
   await page.getByLabel('Pull request state').selectOption('all');
   await page.getByRole('link', { name: pull.title }).click();
-  await expect(page).toHaveURL(/view=pulls&state=all&pull=12$/);
+  await expect(page).toHaveURL(/pull\/12\?state=all$/);
   await expect(page.getByRole('heading', { name: `${pull.title} #12` })).toBeVisible();
   await page.reload();
-  await expect(page.getByLabel('Pull request body, plain text')).toBeVisible();
+  await expect(page.getByLabel('Pull request body, rendered Markdown')).toBeVisible();
   await page.getByRole('link', { name: 'All pull requests', exact: true }).click();
   await expect(page.getByRole('link', { name: pull.title })).toBeVisible();
   await page.goBack();
-  await expect(page.getByLabel('Pull request body, plain text')).toBeVisible();
+  await expect(page.getByLabel('Pull request body, rendered Markdown')).toBeVisible();
   expect(state.states).toContain(IssueState.CLOSED);
   expect(state.states).toContain(IssueState.ALL);
   expect(state.methods).not.toContain('ListIssues');
   expect(state.methods).not.toContain('ListBranches');
 });
 
-test('detail preserves exact refs and IDs; review pagination retains empty pages and shows only native flags and plain text', async ({ page }) => {
+test('detail preserves exact refs and IDs; review pagination retains empty pages and shows native flags and safe Markdown', async ({ page }) => {
   const state = await backend(page);
   await page.goto('/repositories/alex/design-system?view=pulls&pull=12');
-  await expect(page.getByLabel('Pull request body, plain text')).toContainText('<img src=x onerror="window.executed=true">');
+  await expect(page.getByLabel('Pull request body, rendered Markdown')).toContainText('image preview unavailable');
+  await page.getByText('Comparison details',{exact:true}).click();
   await expect(page.getByRole('region', { name: 'Base metadata' })).toContainText(repository.id);
   await expect(page.getByRole('region', { name: 'Head metadata' })).toContainText('9007199254740995');
   await expect(page.getByRole('region', { name: 'Head metadata' })).toContainText(head);
@@ -138,6 +151,7 @@ test('detail preserves exact refs and IDs; review pagination retains empty pages
 test('retained or deleted source metadata and merged records never imply a live source or current approval', async ({ page }) => {
   await backend(page);
   await page.goto('/repositories/alex/design-system?view=pulls&pull=14');
+  await page.getByText('Comparison details',{exact:true}).click();
   await expect(page.getByRole('region', { name: 'Head metadata' })).toContainText('Retained PR snapshot');
   await expect(page.getByRole('region', { name: 'Head metadata' })).toContainText('refs/pull/14/head');
   await expect(page.getByRole('region', { name: 'Head metadata' })).toContainText('Repository IDUnavailable');
@@ -157,7 +171,7 @@ test('review and detail denials remove cached private content throughout retry a
   await page.getByRole('button', { name: 'Refresh reviews' }).click();
   await expect(page.getByRole('alert')).toHaveText('Reviews not found or inaccessible.');
   await expect(page.getByText('PRIVATE REVIEW', { exact: false })).toHaveCount(0);
-  await expect(page.getByLabel('Pull request body, plain text')).toBeVisible();
+  await expect(page.getByLabel('Pull request body, rendered Markdown')).toBeVisible();
   let release!: () => void;
   state.reviewWait = new Promise<void>((resolve) => { release = resolve; });
   state.reviewStatus = 200;
@@ -165,7 +179,7 @@ test('review and detail denials remove cached private content throughout retry a
   await expect(page.getByText('PRIVATE REVIEW', { exact: false })).toHaveCount(0);
   release(); state.reviewWait = undefined;
   await expect(page.getByRole('alert')).toHaveCount(0);
-  await expect(page.getByLabel(`Review ${review.id} body, plain text`)).toBeVisible();
+  await expect(page.getByLabel(`Review ${review.id} body, rendered Markdown`)).toBeVisible();
   state.detailStatus = 404;
   await page.getByRole('button', { name: 'Refresh pull request', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Pull request not found or inaccessible.');
@@ -195,7 +209,7 @@ test('expired sessions and logout discard pull and review data, including naviga
   await expect(page.getByText('PRIVATE REVIEW', { exact: false })).toHaveCount(0);
   state.detailStatus = 200;
   await page.getByRole('button', { name: 'Try again' }).click();
-  await expect(page.getByLabel('Pull request body, plain text')).toBeVisible();
+  await expect(page.getByLabel('Pull request body, rendered Markdown')).toBeVisible();
   await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   await expect(page.getByText('PRIVATE PULL', { exact: false })).toHaveCount(0);
@@ -225,8 +239,8 @@ test('invalid pull numbers are rejected before RPC and changing tabs clears the 
   }
   expect(state.methods).not.toContain('GetPullRequest');
   await page.goto('/repositories/alex/design-system?view=pulls&pull=12');
-  await expect(page.getByLabel('Pull request body, plain text')).toBeVisible();
-  await page.getByRole('navigation', { name: 'Repository', exact: true }).getByRole('link', { name: 'Source', exact: true }).click();
+  await expect(page.getByLabel('Pull request body, rendered Markdown')).toBeVisible();
+  await page.getByRole('navigation', { name: 'Repository', exact: true }).getByRole('link', { name: 'Code', exact: true }).click();
   await expect(page).not.toHaveURL(/pull=/);
   await expect(page.getByRole('heading', { name: 'Source', exact: true })).toBeVisible();
 });
@@ -237,11 +251,11 @@ test('pull browsing is keyboard accessible and fits charcoal and light mobile la
   await page.goto('/repositories/alex/design-system?view=pulls');
   await page.getByRole('link', { name: pull.title }).focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByLabel('Pull request body, plain text')).toBeVisible();
+  await expect(page.getByLabel('Pull request body, rendered Markdown')).toBeVisible();
   if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
   await page.getByRole('button', { name: 'Load more reviews' }).focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByLabel(`Review ${review.id} body, plain text`)).toBeVisible();
+  await expect(page.getByLabel(`Review ${review.id} body, rendered Markdown`)).toBeVisible();
   await page.screenshot({ path: 'test-results/pull-request-dark.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -252,6 +266,43 @@ test('pull browsing is keyboard accessible and fits charcoal and light mobile la
   await page.screenshot({ path: 'test-results/pull-request-mobile-light.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({ path: 'test-results/pull-request-light.png', fullPage: true });
-  await expect(page.locator('.repository-tabs [aria-current="page"]')).toHaveCount(1);
+  await expect(page.locator('nav[aria-label="Repository"] [aria-current="page"]')).toHaveCount(1);
   expect(errors).toEqual([]);
+});
+
+
+test('PR changed-files workspace binds comparison, toggles split, filters, marks viewed and clears denied data',async({page})=>{
+ const state=await backend(page);
+ await page.goto('/repositories/alex/design-system?view=pulls&pull=12');
+ expect(state.methods).not.toContain('GetPullRequestDiff');
+ await page.getByRole('link',{name:'Files changed',exact:true}).click();
+ await expect(page).toHaveURL(/pull\/12\/files/);
+ await expect(page.getByRole('heading',{name:'Files changed',exact:true})).toBeVisible();
+ await expect(page.locator('.diff-file')).toHaveCount(1);
+ await expect(page.locator('.diff-lines')).toContainText('new control');
+ await expect(page.locator('.diff-workspace script,.diff-workspace img')).toHaveCount(0);
+ await page.getByRole('button',{name:'Split',exact:true}).click();
+ await expect(page.locator('.diff-lines')).toHaveClass(/split/);
+ await expect(page.getByRole('link',{name:'Line 2',exact:true})).toHaveAttribute('href',new RegExp(`diff-${base}-${head}-file-0-R2`));
+ await page.getByLabel('Viewed',{exact:true}).check();
+ await expect(page.getByText('1/1 viewed this session',{exact:true})).toBeVisible();
+ await expect(page.locator('.diff-lines')).toBeHidden();
+ await page.getByLabel('Viewed',{exact:true}).uncheck();
+ await page.getByLabel('Filter changed files').fill('missing');
+ await expect(page.getByText('No files match this filter.',{exact:true})).toBeVisible();
+ await page.getByLabel('Filter changed files').fill('control');
+ await expect(page.locator('.diff-file')).toHaveCount(1);
+ await page.reload();
+ await expect(page.locator('.diff-lines')).toBeVisible();
+ await expect(page.getByLabel('Viewed',{exact:true})).not.toBeChecked();
+ for(const theme of ['dark','light']) {
+   await page.evaluate((value)=>document.documentElement.setAttribute('data-theme',value),theme);
+   await page.setViewportSize({width:320,height:760});
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ }
+ state.diffStatus=403;
+ await page.getByRole('button',{name:'Refresh PR diff',exact:true}).click();
+ await expect(page.getByRole('alert')).toHaveText('PR comparison is unavailable.');
+ await expect(page.locator('.diff-workspace')).toHaveCount(0);
+ expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain('new control');
 });
