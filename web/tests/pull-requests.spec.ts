@@ -1,9 +1,11 @@
+import { UpdatePullRequestRequestSchema, UpdatePullRequestResponseSchema, GetIssueMutationRequestSchema, GetIssueMutationResponseSchema, IssueMutationKind, IssueMutationState } from '../src/gen/golf/v1/golf_pb';
+import type { UpdatePullRequestRequest, IssueMutation } from '../src/gen/golf/v1/golf_pb';
 import {ListPullRequestCommitsRequestSchema,ListPullRequestCommitsResponseSchema,ListPullRequestChecksRequestSchema,ListPullRequestChecksResponseSchema,ReportedCheckState} from '../src/gen/golf/v1/golf_pb';
 import {GetPullRequestDiffRequestSchema,GetPullRequestDiffResponseSchema} from '../src/gen/golf/v1/golf_pb';
 import {GetPullRequestDiscussionResponseSchema,ListIssueCommentsResponseSchema,ListReviewerRunsResponseSchema} from '../src/gen/golf/v1/golf_pb';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { create } from '@bufbuild/protobuf';
+import { create, clone } from '@bufbuild/protobuf';
 import {
   GetAuthenticationOptionsResponseSchema, GetContentsResponseSchema, GetPullRequestRequestSchema, GetPullRequestResponseSchema,
   GetRepositoryResponseSchema, GetSessionResponseSchema, IssueState, ListCapabilitiesResponseSchema, ListPullRequestReviewsRequestSchema,
@@ -18,7 +20,7 @@ const head = 'b'.repeat(40);
 const merged = 'c'.repeat(40);
 const user = create(UserSchema, { id: '9007199254740993', login: 'alex', fullName: 'Alex' });
 const repository = create(RepositorySchema, { id: '9007199254740993', name: 'design-system', fullName: 'alex/design-system', private: true, defaultBranch: 'main', description: 'A private repository.', htmlUrl: 'https://forge.example/alex/design-system' });
-const pull = create(PullRequestSchema, { id: '9007199254740994', number: 12, title: 'Make every control keyboard accessible', body: '# PRIVATE PULL\n<img src=x onerror="window.executed=true">\n[Unsafe](javascript:alert(1))', state: IssueState.OPEN, user, draft: true,
+const pull = create(PullRequestSchema, { revision:'e'.repeat(64), id: '9007199254740994', number: 12, title: 'Make every control keyboard accessible', body: '# PRIVATE PULL\n<img src=x onerror="window.executed=true">\n[Unsafe](javascript:alert(1))', state: IssueState.OPEN, user, draft: true,
   createdAt: '2026-10-01T12:00:00Z', updatedAt: '2026-10-02T12:00:00Z', htmlUrl: 'https://forge.example/alex/design-system/pulls/12',
   base: { repositoryId: repository.id, label: 'alex:main', ref: 'main', commitId: base },
   head: { repositoryId: '9007199254740995', label: 'contributor:feature/keyboard', ref: 'feature/keyboard', commitId: head },
@@ -29,7 +31,7 @@ const review = create(PullRequestReviewSchema, { id: '9007199254740998', user, b
 const pending = create(PullRequestReviewSchema, { ...review, id: '9007199254740999', user: undefined, body: '', state: PullRequestReviewState.PENDING, stale: false, dismissed: false, official: false, htmlUrl: 'javascript:alert(1)' });
 
 async function backend(page: Page) {
-  const state = { signedIn: true, metadataStatus: 200, listStatus: 200, detailStatus: 200, reviewStatus: 200, diffStatus: 200, empty: false,
+  const state = { pull:clone(PullRequestSchema,pull),updates:[] as UpdatePullRequestRequest[],inspections:[] as string[],mutation:undefined as IssueMutation|undefined,updateFailure:"",unknown:false,wrongMutation:false,wrongObject:false,missingObject:false,dropUpdate:false,updateWait:undefined as Promise<void>|undefined, signedIn: true, metadataStatus: 200, listStatus: 200, detailStatus: 200, reviewStatus: 200, diffStatus: 200, empty: false,
     workspaceStatus: 200, workspaceWait: undefined as Promise<void>|undefined, mismatched: false, badPage: false, emptyWorkspace: false, duplicateContext: false,
     commitPages: [] as number[], checkPages: [] as number[],
     reviewWait: undefined as Promise<void> | undefined, detailWait: undefined as Promise<void> | undefined,
@@ -87,8 +89,24 @@ async function backend(page: Page) {
       const input = request(route, GetPullRequestRequestSchema); state.numbers.push(input.number);
       if (state.detailWait) await state.detailWait;
       if (state.detailStatus !== 200) return error(state.detailStatus, 'Pull request not found or inaccessible.');
-      const result = [pull, closed, snapshot].find((item) => item.number === input.number);
+      const result = [state.pull, closed, snapshot].find((item) => item.number === input.number);
       return result ? respond(route, GetPullRequestResponseSchema, { pullRequest: result }) : error(404, 'Pull request not found or inaccessible.');
+    }
+    if(method==='UpdatePullRequest') {
+      const input=request(route,UpdatePullRequestRequestSchema);state.updates.push(input);
+      if(state.updateWait)await state.updateWait;
+      const result=state.updateFailure?IssueMutationState.REJECTED:state.unknown?IssueMutationState.OUTCOME_UNKNOWN:IssueMutationState.SUCCEEDED;
+      if(result===IssueMutationState.SUCCEEDED)state.pull=create(PullRequestSchema,{...state.pull,
+        title:input.title??(input.draft===true?'WIP: '+state.pull.title:input.draft===false?state.pull.title.replace(/^WIP: /,''):state.pull.title),body:input.body??state.pull.body,
+        state:input.state===IssueState.UNSPECIFIED?state.pull.state:input.state,draft:input.draft??state.pull.draft,revision:'f'.repeat(64)});
+      state.mutation=create((await import('../src/gen/golf/v1/golf_pb')).IssueMutationSchema,{id:'101',idempotencyKey:input.idempotencyKey,kind:IssueMutationKind.UPDATE_PULL,state:result,repository:input.repository,repositoryId:input.repositoryId,pullRequestId:input.pullRequestId,number:input.number,
+        observedResultId:result===IssueMutationState.SUCCEEDED?input.pullRequestId:'',observedNumber:result===IssueMutationState.SUCCEEDED?input.number:0,failureCode:state.updateFailure});
+      if(state.dropUpdate)return route.abort();
+      return respond(route,UpdatePullRequestResponseSchema,{mutation:state.wrongMutation?{...state.mutation,pullRequestId:'999'}:state.mutation,pullRequest:result===IssueMutationState.SUCCEEDED&&!state.missingObject?{...state.pull,id:state.wrongObject?'999':state.pull.id}:undefined});
+    }
+    if(method==='GetIssueMutation') {
+      state.inspections.push(request(route,GetIssueMutationRequestSchema).idempotencyKey);
+      return respond(route,GetIssueMutationResponseSchema,{mutation:state.wrongMutation?{...state.mutation!,pullRequestId:'999'}:state.mutation,pullRequest:state.mutation?.state===IssueMutationState.SUCCEEDED&&!state.missingObject?{...state.pull,id:state.wrongObject?'999':state.pull.id}:undefined});
     }
     if(method==='GetPullRequestDiscussion')return respond(route,GetPullRequestDiscussionResponseSchema,{issue:{id:'9007199254740999',number:pull.number,title:pull.title,state:IssueState.OPEN}});
     if(method==='ListIssueComments')return respond(route,ListIssueCommentsResponseSchema,{});
@@ -431,4 +449,54 @@ test('all four PR tabs remain keyboard visible and compact in charcoal/light mob
   }
  }
  expect(errors).toEqual([]);
+});
+
+const intentRows=(page:Page)=>page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('golf.issue-intent.')));
+for(const field of ['title','body','draft','ready','close','reopen'] as const) {
+ test(`PR ${field} sends one field with independent PR identity and frozen revision`,async({page})=>{
+  const state=await backend(page);state.pull.draft=field==='ready';if(field==='reopen')state.pull.state=IssueState.CLOSED;
+  await page.goto('/alex/design-system/pull/12');
+  await expect(page.getByLabel('Pull request title',{exact:true})).toHaveCount(0);
+  const trigger=field==='title'?'Edit pull request title':field==='body'?'Edit pull request description':field==='draft'?'Convert to draft':field==='ready'?'Ready for review':field==='close'?'Close pull request':'Reopen pull request';
+  await page.getByRole('button',{name:trigger,exact:true}).click();
+  const editor=page.getByRole('region',{name:field==='title'?'Edit title':field==='body'?'Edit description':trigger,exact:true});
+  if(field==='title')await editor.getByLabel('Pull request title',{exact:true}).fill(' Edited proposal ');
+  if(field==='body'){await page.getByRole('button',{name:'Add a comment',exact:true}).click();await editor.getByLabel('Description, Markdown',{exact:true}).fill('');await expect(page.getByLabel('Comment, plain text',{exact:true})).toHaveValue('');}
+  let release!:()=>void;state.updateWait=new Promise<void>(resolve=>release=resolve);
+  await editor.locator('form').evaluate((form:HTMLFormElement)=>{form.requestSubmit();form.requestSubmit()});
+  await expect.poll(()=>state.updates.length).toBe(1);const input=state.updates[0]!;
+  expect(input).toMatchObject({repository:{owner:'alex',name:'design-system'},repositoryId:repository.id,pullRequestId:pull.id,number:12,expectedRevision:pull.revision});
+  expect(input.title).toBe(field==='title'?'Edited proposal':undefined);expect(input.body).toBe(field==='body'?'':undefined);
+  expect(input.draft).toBe(field==='draft'?true:field==='ready'?false:undefined);
+  expect(input.state).toBe(field==='close'?IssueState.CLOSED:field==='reopen'?IssueState.OPEN:IssueState.UNSPECIFIED);
+  const saved=await intentRows(page);expect(saved).toHaveLength(1);expect(JSON.parse(saved[0]![1])).toEqual({key:input.idempotencyKey,kind:'pull-update',repositoryId:repository.id,issueId:'',pullRequestId:pull.id,number:12,editField:field});
+  release();await expect(editor).toHaveCount(0);expect(await intentRows(page)).toEqual([]);
+  if(field==='title')await expect(page.getByRole('heading',{name:'Edited proposal #12'})).toBeVisible();
+ });
+}
+test('PR editing preserves unsent draft and old revision across revalidation; rejection requires a fresh review',async({page})=>{
+ const state=await backend(page);await page.goto('/alex/design-system/pull/12');await page.getByRole('button',{name:'Edit pull request title',exact:true}).click();
+ await page.getByLabel('Pull request title',{exact:true}).fill('PRIVATE_UNSENT');
+ state.pull=create(PullRequestSchema,{...state.pull,title:'Concurrent title',revision:'c'.repeat(64)});
+ await page.getByRole('button',{name:'Refresh pull request',exact:true}).click();await expect(page.getByRole('heading',{name:'Concurrent title #12'})).toBeVisible();
+ await expect(page.getByLabel('Pull request title',{exact:true})).toHaveValue('PRIVATE_UNSENT');state.updateFailure='revision_changed';
+ await page.getByRole('button',{name:'Save changes',exact:true}).click();await expect(page.getByText(/changed before this request was sent/)).toBeVisible();expect(state.updates[0]!.expectedRevision).toBe(pull.revision);
+ await page.getByRole('button',{name:'Review current pull request',exact:true}).click();await page.getByRole('button',{name:'Edit pull request title',exact:true}).click();await expect(page.getByLabel('Pull request title',{exact:true})).toHaveValue('Concurrent title');
+ state.updateFailure='';await page.getByLabel('Pull request title',{exact:true}).fill('Freshly reviewed');await page.getByRole('button',{name:'Save changes',exact:true}).click();await expect(page.getByRole('heading',{name:'Freshly reviewed #12'})).toBeVisible();expect(state.updates[1]!.expectedRevision).toBe('c'.repeat(64));expect(state.updates[1]!.idempotencyKey).not.toBe(state.updates[0]!.idempotencyKey);
+});
+for(const mode of ['unknown','wrongMutation','wrongObject','missingObject','dropUpdate'] as const) {
+ test(`PR ${mode} keeps the metadata key and never automatically resends`,async({page})=>{
+  const state=await backend(page);state[mode]=true;await page.goto('/alex/design-system/pull/12');await page.getByRole('button',{name:'Edit pull request description',exact:true}).click();
+  await page.getByLabel('Description, Markdown',{exact:true}).fill('PRIVATE_DESCRIPTION');await page.getByRole('button',{name:'Save changes',exact:true}).click();await expect(page.getByRole('button',{name:'Check request status',exact:true})).toBeEnabled();
+  expect(JSON.stringify(await intentRows(page))).not.toContain('PRIVATE_DESCRIPTION');await page.reload();await expect(page.getByText(/This resumed request supports status checks only/)).toBeVisible();
+  await page.getByRole('button',{name:'Check request status',exact:true}).click();await expect.poll(()=>state.inspections.length).toBe(1);expect(state.updates).toHaveLength(1);
+  if(mode==='dropUpdate'){await expect(page.getByRole('region',{name:'Edit description',exact:true})).toHaveCount(0);expect(await intentRows(page)).toEqual([]);}else{expect(await intentRows(page)).toHaveLength(1);await expect(page.getByRole('button',{name:'Save changes',exact:true})).toHaveCount(0);}
+ });
+}
+test('PR merged/unverified lifecycle is disabled, editors are explicit, and both mobile themes keep focus and fit',async({page})=>{
+ const state=await backend(page);await page.goto('/alex/design-system/pull/13');await expect(page.getByRole('button',{name:'Reopen pull request',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'Convert to draft',exact:true})).toBeDisabled();
+ await page.goto('/alex/design-system/pull/12');state.pull.revision='';await page.getByRole('button',{name:'Refresh pull request',exact:true}).click();await expect(page.getByRole('button',{name:'Edit pull request title',exact:true})).toBeDisabled();
+ state.pull.revision=pull.revision;await page.getByRole('button',{name:'Refresh pull request',exact:true}).click();await expect(page.getByRole('button',{name:'Edit pull request description',exact:true})).toBeEnabled();await page.setViewportSize({width:390,height:844});
+ for(const theme of ['dark','light']){if(await page.locator('html').getAttribute('data-theme')!==theme)await page.getByRole('button',{name:`Switch to ${theme} theme`,exact:true}).click();await page.getByRole('button',{name:'Edit pull request description',exact:true}).click();await expect(page.getByLabel('Description, Markdown',{exact:true})).toBeFocused();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/pr-edit-mobile-${theme}.png`,fullPage:true});await page.getByRole('button',{name:'Close editor',exact:true}).click();}
+ expect(state.updates).toHaveLength(0);
 });

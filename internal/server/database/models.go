@@ -316,6 +316,7 @@ type GolfIssueMutation struct {
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 	PullRequest        bool
+	PullRequestID      int64
 }
 
 type GolfIssueMutationEvent struct {

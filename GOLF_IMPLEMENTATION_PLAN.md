@@ -1776,6 +1776,8 @@ Remaining implementation tasks: qualify Claude/OpenCode/Grok/Pi and API-billed e
 
 ### 2026-10-03 visual and live implementation references
 
+Element-level screenshot acceptance is recorded in the [visual audit matrix](docs/GITHUB_VISUAL_AUDIT.md#element-level-comparison-and-layout-priorities): diff preferences/ranges/file filters/menus, branch row actions/check details, desktop/mobile tags/releases and the compare-to-create flow. Prioritize shared page/toolbars and contextual file navigation, then real compare/lifecycle and supported row operations. Keep matched screenshots and accessible control snapshots for both themes, mobile, open menus, long content, empty and denied states. This reference work does not qualify pending implementations or change the P0.8 protected-merge gate.
+
 The [GitHub visual audit](docs/GITHUB_VISUAL_AUDIT.md) records actual page/row/menu comparisons and remaining controls under GX-1–GX-8. The [repository activity contract](docs/REPOSITORY_ACTIVITY_CONTRACT.md) defines the initial private Connect invalidation stream, immutable snapshot behavior, bounded admission/replay and unqualified distributed/proxy/log acceptance. The implementation ledger records tests and served-image qualification; neither reference completes full GitHub parity or protected merge enforcement.
 
 ### Actions run and log continuation implementation reference
@@ -1791,3 +1793,5 @@ Expanded GitHub screenshots cover branch/clone menus, file controls and row filt
 The expanded visual pass compares11 actual public GitHub page types at matched desktop/mobile widths plus history author/date menus. Compact authored-date commit rows, exact SHA/source actions, shared issue/PR comment cards and mobile work-tab scrolling advance GX-1/GX-7. Authenticated row/settings/merge controls, richer filters and full collaboration remain required. Evidence and follow-up acceptance criteria are in the [visual audit](docs/GITHUB_VISUAL_AUDIT.md); P0.8 remains unresolved.
 
 Ordinary issue editing/lifecycle advances GX-4 using explicit inline editors, separate title/body/state intents and the existing durable owner-scoped journal. The [discussion contract](docs/ISSUE_DISCUSSION_CONTRACT.md#edit-close-and-reopen-ordinary-issues) records actual native permissions, body-version admission and non-atomic title/state limitations; latest-schema recovery and remaining collaboration requirements stay open.
+
+PR creation/lifecycle advances GX-4 with two generated browser-session writes, separate native PR IDs and shared explicit issue/PR editors. Native body versions, displayed source/base/revision observations and durable receipt/readback detect stale or uncertain outcomes without retries. [PR mutation contract](docs/PULL_MUTATION_CONTRACT.md) retains the non-atomic native-address/title/state limits, latest-schema033 recovery gap and required full-page compare/create UI, human review/metadata and protected integration work.

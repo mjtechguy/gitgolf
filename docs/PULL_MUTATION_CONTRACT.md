@@ -1,0 +1,41 @@
+# Pull request creation and lifecycle observations
+
+This extends the shared portable/Cloudflare core through supported Gitea1.27.3 APIs. Actual tests and running image identities belong in the [implementation ledger](IMPLEMENTATION_STATUS.md). Protected merging remains a separate unresolved P0.8 gate. These operations do not implement approval, trusted checks or merge readiness.
+
+## API and identity
+
+`RepositoryService.CreatePullRequest` takes the target repository address/immutable ID, source repository address/immutable ID, existing named base/head branches, their displayed full lowercase40/64-character commits, title/body, draft boolean and a canonical UUIDv4 key. The source repository is independently caller-authorized. Target and source branch observations must match before dispatch and after its receipt. Same repository/same branch is refused. The native request uses explicit `owner/repository:branch` for another source repository, avoiding owner-only fork inference. Both repository names remain native address observations, not atomic ID predicates.
+
+`RepositoryService.UpdatePullRequest` takes repository address/ID, **native PR ID**, repository-local number, displayed `PullRequest.revision`, UUID key and exactly one optional title, optional body, OPEN/CLOSED state or optional draft boolean. Native PR IDs and issue IDs occupy separate namespaces; the shared journal's `pullRequestId` never substitutes an issue ID. Empty body and false draft remain explicit present values. Titles are trimmed nonempty UTF-8 up to255 bytes without controls; bodies preserve UTF-8 up to6000 bytes with only tab/CR/LF controls. Existing Connect request bounds still apply.
+
+The displayed revision hashes PR ID/number, author ID, native content version, title/body/state, creation/update times, draft/merged observations, merge record and source/base repository/ref/commit identities. Repository descriptions, user names/avatars and presentation labels do not invalidate an edit. Missing/negative native content version disables writing; a changed displayed revision or unchanged selected value is rejected without PATCH. Merged PRs cannot be closed/reopened or switched draft/ready through this operation; title/body editing remains separately native-authorized.
+
+## Native permissions and drafts
+
+Only live browser-session authority with exact Origin may write. Read-only Golf API credentials and local CLI/MCP writes are refused. Native `write:repository` scope and caller-binding user scope are needed; PR metadata writes do not use `write:issue`. Discussion/comments retain their separate issue scope. Native authors or accounts with pull-request-unit write permission may update; read-role users may create a proposal and edit their own. Offered UI controls do not establish a preverified per-action `canEdit` observation; permission is checked when saving.
+
+Pinned native drafts are title-derived: default prefixes are `WIP:` and `[WIP]`. Golf adds `WIP: ` to mark draft, recognizes either default prefix and removes one to request ready. It verifies the actual returned draft flag; there is no independent native draft-field write. Unrecognized custom prefixes are refused when requesting ready, and a custom configuration that disagrees with the mapping cannot produce a confirmed transition. Title edits may also change native draft state. Automatic CODEOWNERS requests or notification semantics are not claimed equivalent to GitHub. Native hooks/events/notifications may run.
+
+## Durable outcomes
+
+`CREATE_PULL` and `UPDATE_PULL` extend the existing owner/forge/key metadata-only journal. Canonical input fingerprints bind the exact selection, intent and target; no titles, bodies, branch selections or credentials are stored as payloads. A committed once-only reservation precedes native dispatch. Only that invocation may POST/PATCH. An identical key reads evidence; a changed input with the same key fails. There is no native retry, including after restart, cancellation, provider failure or a missing response.
+
+A valid HTTP201 receipt must identify the selected native repository/PR and submitted field values. Creation additionally binds its author and full base/head selection. Updates reject mismatched authors, comparison identities, merge records and unrelated simultaneous field changes. Immutable provisional result ID/number evidence is stored while still `OUTCOME_UNKNOWN`; only an independent authorized readback matching the receipt revision and intended fields records success. Creation also reobserves both named branches. A mismatched receipt is never adopted later by searching for similar text. Lost/malformed responses, post-dispatch head/base movement, access/session revocation or changed readback remain unknown without another native write.
+
+Qualified explicit native400/401/403/404/409/412/422/423 denials can record rejection. A title/state/version precheck is not an atomic whole-PR CAS; native handlers are not transactional across fields, so mixed-field updates are refused. Native body edits use content-version admission, including a qualified stale-body409. Postflight detects observed interference but cannot rule out ABA or an effect at a replaced owner/name/number address during dispatch. Success is verified observed evidence, not a promise of exactly-once external effects or target-side fencing.
+
+`GetIssueMutation` retains its existing generic journal name and adds optional current `pullRequest`. Native result objects require current caller/native repository access and matching recorded identity; historical success grants no new access. Unknown/rejected records return metadata only. Foreign outcome keys are concealed. Current result projections can reflect later edits; they are not immutable copies of submitted text.
+
+## Shared browser editor
+
+Explicit title/description icons and draft/ready/close/reopen actions open the shared discussion editor. Issues and PRs reuse TanStack Form, Markdown preview, global styles, byte validation, duplicate-submission latch, private in-memory frozen values and owner-scoped outcome handling. Editors preserve their original revision and unsent draft through background revalidation; private content is hidden while access is checked and removed on denial. A stale rejection requires **Review current pull request**, then an explicit reopened editor; Golf never rebases a draft silently.
+
+Tab storage retains only origin/account/repository/PR IDs, number, field, operation kind and UUID key. Reload resumes status inspection without resending or restoring text. Navigation aborts local response handling, not native work. A matching confirmed result clears the key; unknown, mismatched or inaccessible results keep it. Sign-out/account changes clear convenience records. No settings modal or default bare form is added.
+
+Creation is currently API-qualified; the full-page branch/fork comparison and New PR composition UI remains required. General compare reads, human reviews/inline threads, metadata/assignees/CODEOWNERS, notifications, merge/squash/rebase and P0.8 enforcement remain full requirements.
+
+## Persistence and recovery
+
+Schema033 adds a separate native PR identity, PR operation kinds, native-target/receipt constraints and immutable guards, including the issue-versus-PR discriminator. Existing issue/comment fingerprints and outcomes are preserved. Down refuses silent history loss. Latest schema033 recovery is unqualified; the recovery operator must continue refusing schemas beyond its proved checkpoint. A current-schema restore/replay corpus remains necessary before claiming recoverability.
+
+Primary sources: [pinned create/edit handlers](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/api/v1/repo/pull.go), [PR wire definitions](https://github.com/go-gitea/gitea/blob/v1.27.3/modules/structs/pull.go), [explicit source addressing](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/common/compare.go), [draft defaults](https://github.com/go-gitea/gitea/blob/v1.27.3/modules/setting/repository.go). Local qualification: `make qualify-pull-mutations` creates/purges its own users and private repositories through supported native APIs and records no provider credentials.

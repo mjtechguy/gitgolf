@@ -24,21 +24,22 @@ type forgePullRef struct {
 }
 
 type forgePull struct {
-	ID            int64         `json:"id"`
-	Number        int64         `json:"number"`
-	Title         string        `json:"title"`
-	Body          string        `json:"body"`
-	State         string        `json:"state"`
-	User          *User         `json:"user"`
-	CreatedAt     string        `json:"created_at"`
-	UpdatedAt     string        `json:"updated_at"`
-	HTMLURL       string        `json:"html_url"`
-	Draft         *bool         `json:"draft"`
-	Merged        *bool         `json:"merged"`
-	MergedAt      *string       `json:"merged_at"`
-	MergeCommitID *string       `json:"merge_commit_sha"`
-	Head          *forgePullRef `json:"head"`
-	Base          *forgePullRef `json:"base"`
+	ContentVersion *int64        `json:"content_version"`
+	ID             int64         `json:"id"`
+	Number         int64         `json:"number"`
+	Title          string        `json:"title"`
+	Body           string        `json:"body"`
+	State          string        `json:"state"`
+	User           *User         `json:"user"`
+	CreatedAt      string        `json:"created_at"`
+	UpdatedAt      string        `json:"updated_at"`
+	HTMLURL        string        `json:"html_url"`
+	Draft          *bool         `json:"draft"`
+	Merged         *bool         `json:"merged"`
+	MergedAt       *string       `json:"merged_at"`
+	MergeCommitID  *string       `json:"merge_commit_sha"`
+	Head           *forgePullRef `json:"head"`
+	Base           *forgePullRef `json:"base"`
 }
 
 type forgePullReview struct {
@@ -154,7 +155,7 @@ func wirePull(row forgePull, listed bool) *golfv1.PullRequest {
 	}
 	result := &golfv1.PullRequest{Id: strconv.FormatInt(row.ID, 10), Number: uint32(row.Number), Title: row.Title, Body: row.Body,
 		State: state, User: wirePullUser(row.User), CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, HtmlUrl: row.HTMLURL,
-		Draft: *row.Draft, Merged: *row.Merged, Head: wirePullRef(row.Head, listed || row.Head.Ref == "refs/pull/"+strconv.FormatInt(row.Number, 10)+"/head"), Base: wirePullRef(row.Base, false)}
+		Revision: pullRevision(row), Draft: *row.Draft, Merged: *row.Merged, Head: wirePullRef(row.Head, listed || row.Head.Ref == "refs/pull/"+strconv.FormatInt(row.Number, 10)+"/head"), Base: wirePullRef(row.Base, false)}
 	if row.MergedAt != nil {
 		result.MergedAt = *row.MergedAt
 	}

@@ -34,6 +34,10 @@ cli:
 qualify-pull-workspace:
 	python3 scripts/pull-workspace-smoke.py
 
+.PHONY: qualify-pull-mutations
+qualify-pull-mutations:
+	python3 scripts/pull-mutations-smoke.py
+
 .PHONY: qualify-issue-updates
 qualify-issue-updates:
 	python3 scripts/issue-updates-smoke.py

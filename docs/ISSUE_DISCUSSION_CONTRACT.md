@@ -38,7 +38,7 @@ The pinned handler is **not transactional across title/body/state**, so mixed-fi
 
 The pinned native POST routes address repositories by owner/name and comments by issue number; they have no expected-ID predicate. Golf's preflight and verified postflight establish observed results but cannot atomically prevent a native rename/delete/reuse during dispatch. A mismatch after dispatch can mean an effect occurred at another native address, and remains unknown rather than becoming a successful Golf observation. Neither an account lock nor a receipt check is a target-side conditional write fence.
 
-This limitation remains a release qualification gap where the plan requires conditional target admission. It does not weaken the separate protected Git/source/base/approval gates, enable PR mutations or claim exactly-once external effects. The current supported-native-address workflow follows the selected Gitea integration; a required conditional workflow needs a supported enforcement design and its own complete race corpus before it can be advertised as qualified.
+This limitation remains a release qualification gap where the plan requires conditional target admission. It does not weaken the separate protected Git/source/base/approval gates, qualify the separately documented PR mutations or claim exactly-once external effects. The current supported-native-address workflow follows the selected Gitea integration; a required conditional workflow needs a supported enforcement design and its own complete race corpus before it can be advertised as qualified.
 
 ## Authentication and client behavior
 
@@ -54,8 +54,10 @@ Schema `202610020006` adds `golf_issue_mutations` and separate append-only `golf
 
 Schema `202610030032` extends kind/target/receipt constraints and immutable guards for updates without adding private payload columns or changing historical create/comment fingerprints. Migration Down explicitly refuses silent journal/history loss. Latest schema032 coordinated recovery remains unqualified; existing recovery tooling refuses it until its full restore/replay corpus passes. This migration does not establish recovery readiness.
 
-Labels/assignees/milestones, boards, attachments, complete issue event timelines, richer notification/webhook delivery, PR creation/edit/review mutations, import and general outbox/job reconciliation remain required later work. This journal covers these concrete ordinary writes; it does not implement their broader execution infrastructure.
+Labels/assignees/milestones, boards, attachments, complete issue event timelines, richer notification/webhook delivery, full-page PR creation, human review mutations, import and general outbox/job reconciliation remain required later work. This journal covers these concrete ordinary writes; it does not implement their broader execution infrastructure.
 
 Primary references: [pinned native comment handlers](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/api/v1/repo/issue_comment.go), [pinned issue handlers](https://github.com/go-gitea/gitea/blob/v1.27.3/routers/api/v1/repo/issue.go), and the existing [native role qualification](GITEA_IDENTITY_ROLE_QUALIFICATION.md). Actual native behavior and final test evidence belong in the implementation ledger.
 
 Native Gitea may process mentions, notifications and hooks for submitted text independently of Golf’s safe Markdown rendering. This is not a promise of side-effect-free native posting. A malformed or moved comment association fails visibly without returning a current object; known repository/issue ID replacement can return only the historical successful record.
+
+The shared journal and editor now also serve separately scoped [PR creation/lifecycle operations](PULL_MUTATION_CONTRACT.md). Native PR IDs have their own field; this does not turn issue scopes into repository/PR authority. Schema033 and its latest-schema recovery limits supersede the preceding schema032 persistence boundary.

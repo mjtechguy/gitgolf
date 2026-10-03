@@ -31,10 +31,20 @@ type issueMutationInput struct {
 	Title        string `json:"title"`
 	Body         string `json:"body"`
 	// Appended optional fields preserve all existing create/comment fingerprints.
-	EditTitle        *string `json:"edit_title,omitempty"`
-	EditBody         *string `json:"edit_body,omitempty"`
-	EditState        string  `json:"edit_state,omitempty"`
-	ExpectedRevision string  `json:"expected_revision,omitempty"`
+	EditTitle          *string `json:"edit_title,omitempty"`
+	EditBody           *string `json:"edit_body,omitempty"`
+	EditState          string  `json:"edit_state,omitempty"`
+	ExpectedRevision   string  `json:"expected_revision,omitempty"`
+	PullRequestID      int64   `json:"pull_request_id,omitempty"`
+	EditDraft          *bool   `json:"edit_draft,omitempty"`
+	SourceOwner        string  `json:"source_owner,omitempty"`
+	SourceRepository   string  `json:"source_repository,omitempty"`
+	SourceRepositoryID int64   `json:"source_repository_id,omitempty"`
+	BaseBranch         string  `json:"base_branch,omitempty"`
+	HeadBranch         string  `json:"head_branch,omitempty"`
+	BaseCommitID       string  `json:"base_commit_id,omitempty"`
+	HeadCommitID       string  `json:"head_commit_id,omitempty"`
+	CreateDraft        bool    `json:"create_draft,omitempty"`
 }
 
 func (input issueMutationInput) validate(key string) error {
@@ -46,6 +56,12 @@ func (input issueMutationInput) validate(key string) error {
 	}
 	if input.RepositoryID <= 0 || !discussionText(input.Body, 6000) {
 		return invalid("Provide a positive repository ID and UTF-8 body up to 6000 bytes, without controls other than tab or newlines.")
+	}
+	if isPullMutationKind(input.Kind) {
+		return input.validatePull()
+	}
+	if input.PullRequestID != 0 || input.EditDraft != nil || input.SourceOwner != "" || input.SourceRepository != "" || input.SourceRepositoryID != 0 || input.BaseBranch != "" || input.HeadBranch != "" || input.BaseCommitID != "" || input.HeadCommitID != "" || input.CreateDraft {
+		return invalid("Pull fields require a pull request mutation.")
 	}
 	if input.Kind != "UPDATE_ISSUE" && (input.EditTitle != nil || input.EditBody != nil || input.EditState != "" || input.ExpectedRevision != "") {
 		return invalid("Edit fields require an issue update.")
@@ -77,7 +93,7 @@ func wireIssueMutation(record database.GolfIssueMutation) *golfv1.IssueMutation 
 	return &golfv1.IssueMutation{Id: strconv.FormatInt(record.ID, 10), IdempotencyKey: record.IdempotencyKey,
 		Kind: golfv1.IssueMutationKind(golfv1.IssueMutationKind_value["ISSUE_MUTATION_KIND_"+record.Kind]), State: golfv1.IssueMutationState(golfv1.IssueMutationState_value["ISSUE_MUTATION_STATE_"+record.State]),
 		Repository: &golfv1.RepositoryKey{Owner: record.RepositoryOwner, Name: record.RepositoryName}, RepositoryId: strconv.FormatInt(record.RepositoryID, 10),
-		IssueId: optionalID(record.IssueID), Number: uint32(record.IssueNumber), CommentId: optionalID(record.CommentID),
+		PullRequestId: optionalID(record.PullRequestID), IssueId: optionalID(record.IssueID), Number: uint32(record.IssueNumber), CommentId: optionalID(record.CommentID),
 		ObservedResultId: optionalID(record.ObservedResultID), ObservedNumber: uint32(record.ObservedNumber),
 		CreatedAt: record.CreatedAt.Format(time.RFC3339Nano), UpdatedAt: record.UpdatedAt.Format(time.RFC3339Nano), FailureCode: record.FailureCode}
 }
@@ -153,7 +169,7 @@ func (s *Server) completeIssueMutation(ctx context.Context, record database.Golf
 	}
 	defer tx.Rollback()
 	queries := database.New(s.db).WithTx(tx)
-	updated, err := queries.CompleteIssueMutation(ctx, database.CompleteIssueMutationParams{MutationID: record.ID, UserID: record.UserID, ForgeURL: s.config.GiteaURL, State: state, FailureCode: failure, IssueID: record.IssueID, IssueNumber: record.IssueNumber, CommentID: record.CommentID})
+	updated, err := queries.CompleteIssueMutation(ctx, database.CompleteIssueMutationParams{MutationID: record.ID, UserID: record.UserID, ForgeURL: s.config.GiteaURL, State: state, FailureCode: failure, IssueID: record.IssueID, IssueNumber: record.IssueNumber, CommentID: record.CommentID, PullRequestID: record.PullRequestID})
 	if err != nil {
 		return errStorageUnavailable
 	}
@@ -203,7 +219,7 @@ func (s *Server) createIssueMutation(ctx context.Context, session string, token 
 	dispatch := false
 	err := s.withManagedSession(ctx, session, token, func(queries *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
 		var err error
-		record, err = queries.ReserveIssueMutation(ctx, database.ReserveIssueMutationParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: key, PayloadFingerprint: fingerprint[:], Kind: input.Kind, RepositoryID: input.RepositoryID, RepositoryOwner: input.Owner, RepositoryName: input.Repository, IssueID: input.IssueID, IssueNumber: int64(input.Number), PullRequest: input.PullRequest})
+		record, err = queries.ReserveIssueMutation(ctx, database.ReserveIssueMutationParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: key, PayloadFingerprint: fingerprint[:], Kind: input.Kind, RepositoryID: input.RepositoryID, RepositoryOwner: input.Owner, RepositoryName: input.Repository, IssueID: input.IssueID, IssueNumber: int64(input.Number), PullRequest: input.PullRequest, PullRequestID: input.PullRequestID})
 		if errors.Is(err, sql.ErrNoRows) {
 			record, err = queries.GetIssueMutation(ctx, database.GetIssueMutationParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: key})
 			if err != nil {
@@ -226,7 +242,20 @@ func (s *Server) createIssueMutation(ctx context.Context, session string, token 
 	if err != nil {
 		return nil, err
 	}
-	if dispatch {
+	if dispatch && isPullMutationKind(input.Kind) {
+		next, state, failure, dispatchErr := s.dispatchPullMutation(ctx, session, token, record, input)
+		if dispatchErr != nil {
+			return nil, dispatchErr
+		}
+		if state != "" {
+			completion, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			err = s.completeIssueMutation(completion, next, state, failure)
+			cancel()
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else if dispatch {
 		state, failure := "", ""
 		repo, before, _, preflightErr := s.observeIssueMutationTarget(ctx, session, token, record)
 		if preflightErr == nil && input.Kind == "UPDATE_ISSUE" {
@@ -348,7 +377,18 @@ func (s *Server) getIssueMutation(ctx context.Context, session string, token for
 	if record.State != "SUCCEEDED" {
 		return result, nil
 	}
-	_, issue, comment, readErr := s.observeIssueMutationTarget(ctx, session, token, record)
+	var issue *Issue
+	var comment *golfv1.IssueComment
+	var readErr error
+	if isPullMutationKind(record.Kind) {
+		var pull *forgePull
+		_, pull, readErr = s.observePullMutationTarget(ctx, session, token, record)
+		if readErr == nil && pull != nil {
+			result.PullRequest = wirePull(*pull, false)
+		}
+	} else {
+		_, issue, comment, readErr = s.observeIssueMutationTarget(ctx, session, token, record)
+	}
 	// Operation evidence survives access loss. Final native actor + local source
 	// checks still run even when a target read itself was denied or replaced.
 	if err := s.withManagedSession(ctx, session, token, func(*database.Queries, database.LockManagedSessionRow, []byte) error { return nil }); err != nil {

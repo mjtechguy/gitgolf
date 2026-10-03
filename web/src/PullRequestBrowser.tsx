@@ -1,10 +1,11 @@
+import { PullRequestEditControls } from './PullRequestEditControls';
 import { PullCommits, PullChecks } from './PullWorkspace';
 import { RepositoryListControls, useRepositoryWorkList } from './RepositoryListControls';
 import { MarkdownBody } from './RepositoryContent';
 import { DiffViewer } from './DiffViewer';
 import { Comments } from './IssueBrowser';
 import { ReviewerRuns } from './ReviewerPanel';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, ExternalLink, FileDiff, GitCommitHorizontal, ListChecks, GitPullRequest, MessageSquare, RefreshCw } from 'lucide-react';
@@ -77,19 +78,23 @@ function PullFiles({ pull, repositoryKey, queryKey, location }: Props & { pull: 
 }
 function PullDetail(props: Props) {
   const { repositoryKey, queryKey, location } = props;
+  const client=useQueryClient();
   const query = useQuery({ ...privateQuery, queryKey: [...queryKey, 'pull', location.pull], queryFn: async ({ signal }) => {
     const response = await repositoryClient.getPullRequest({ repository: repositoryKey, number: location.pull }, { signal, timeoutMs: 8_000 });
     if (!response.pullRequest) throw new ConnectError('The pull request response is missing its metadata.', Code.Internal);
     return response.pullRequest;
   } });
-  const pull = query.isSuccess && !query.isFetching ? query.data : undefined;
+  const pull = query.isSuccess ? query.data : undefined;
   const external = pull && repositoryLink(pull.htmlUrl);
   return <>
+    {query.isFetching && pull ? <Loading label="Checking pull request access…"/> : null}
+    <div hidden={query.isFetching && Boolean(pull)}>
     <section className="discussion-summary pull-detail" aria-labelledby="pull-detail-title">
       <div className="discussion-navigation"><Link className="text-button" {...repositoryOptions(location, { pull: undefined })}><ArrowLeft size={15} />All {location.state === 'all' ? '' : `${location.state} `}pull requests</Link><button className="icon-button manual-refresh" aria-label="Refresh pull request" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} /></button></div>
       {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : !pull ? <Loading label="Loading pull request…" /> : <>
         <h2 id="pull-detail-title">{pull.title} <span className="muted">#{pull.number}</span></h2>
         <div className="discussion-summary-meta"><PullState pull={pull} /><p>{pull.user?.login || 'Deleted or unavailable author'} opened this pull request on <DateLabel value={pull.createdAt} /></p><span className="pull-comparison"><code>{pull.base?.label || pull.base?.ref}</code><span>←</span><code>{pull.head?.label || pull.head?.ref}</code></span></div>
+        <PullRequestEditControls key={pull.id} {...props} pull={pull} refresh={()=>{void query.refetch();void client.invalidateQueries({queryKey:[...queryKey,'pulls']});}}/>
       </>}
     </section>
     {pull ? <><RepositoryTabs className="pull-tabs" label="Pull request workspace" selection={location.pullView||'conversation'}><Link {...repositoryOptions(location,{pullView:undefined})} aria-current={!location.pullView || location.pullView === 'conversation' ? 'page' : undefined}><MessageSquare size={16}/>Conversation</Link><Link {...repositoryOptions(location,{pullView:'commits'})} aria-current={location.pullView === 'commits' ? 'page' : undefined}><GitCommitHorizontal size={16}/>Commits</Link><Link {...repositoryOptions(location,{pullView:'checks'})} aria-current={location.pullView === 'checks' ? 'page' : undefined}><ListChecks size={16}/>Checks</Link><Link {...repositoryOptions(location,{pullView:'files'})} aria-current={location.pullView === 'files' ? 'page' : undefined}><FileDiff size={16}/>Files changed</Link></RepositoryTabs>
@@ -97,6 +102,7 @@ function PullDetail(props: Props) {
         <aside className="discussion-sidebar" aria-label="Pull request metadata"><details className="metadata-details"><summary>Comparison details</summary><RefMetadata title="Base" value={pull.base}/><RefMetadata title="Head" value={pull.head}/></details>{pull.merged ? <div className="pull-merge-record"><strong>Native merge record</strong><p>Merged <DateLabel value={pull.mergedAt}/></p><code>{pull.mergeCommitId || 'Merge commit unavailable'}</code></div> : null}<div className="metadata-details"><h3>Merge availability</h3><p className="field-help">Reviews show native records; protected integration remains unavailable. These observations do not establish merge readiness.</p></div></aside>
       </div>}
     </> : null}
+    </div>
   </>;
 }
 

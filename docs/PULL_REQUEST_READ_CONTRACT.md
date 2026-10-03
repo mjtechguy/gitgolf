@@ -67,3 +67,5 @@ The real-provider command is `python3 scripts/pulls-smoke.py --cli bin/golf` aga
 P0.8 remains open and [ADR 0004](decisions/0004-protected-integration-enforcement.md) remains proposed. Displaying native PR and review records does not enable protected integration or complete the broader forge, identity, collaboration or release gates. Repository CI remains disabled; applicable checks run locally.
 
 The subsequent [PR Commits/Checks contract](PULL_WORKSPACE_CONTRACT.md) adds two selected read-only procedures, canonical four-tab URLs and shared history/latest-status controls. PR Files changed and sanitized Markdown supersede the initial plain-text-only display described above; the older section records its original scope.
+
+The subsequent [PR mutation contract](PULL_MUTATION_CONTRACT.md) adds browser-session creation and single-field title/body/state/draft lifecycle operations, separate native PR IDs, displayed revisions and shared explicit editors. Read scopes and review semantics above remain distinct; human approvals and protected merging remain pending.

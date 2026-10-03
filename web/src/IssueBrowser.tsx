@@ -8,7 +8,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, CircleDot, ExternalLink, LoaderCircle, MessageSquare, Plus, RefreshCw, Pencil, FilePenLine, CircleCheck, Undo2, X } from 'lucide-react';
 import { repositoryClient, repositoryLink, errorMessage } from './api';
 import { IssueMutationKind, IssueMutationState, IssueState } from './gen/golf/v1/golf_pb';
-import type { CreateIssueCommentRequest, CreateIssueRequest, GetIssueMutationResponse, Issue, IssueComment, IssueMutation, PageResponse, RepositoryKey, UpdateIssueRequest, User } from './gen/golf/v1/golf_pb';
+import type { CreateIssueCommentRequest, CreateIssueRequest, GetIssueMutationResponse, Issue, IssueComment, IssueMutation, PageResponse, RepositoryKey, UpdateIssueRequest, UpdatePullRequestRequest, PullRequest, User } from './gen/golf/v1/golf_pb';
 import { repositoryOptions } from './navigation';
 import type { RepositoryLocation } from './navigation';
 import { DateLabel, Loading, More, PanelError, privateQuery } from './RepositoryUI';
@@ -16,7 +16,7 @@ import { issueIntentKey, readIssueIntent } from './issueIntents';
 import type { IssueIntent } from './issueIntents';
 
 type Props = { repositoryKey: Pick<RepositoryKey, 'owner' | 'name'>; repositoryId: string; queryKey: readonly unknown[]; location: RepositoryLocation; userId: string; pullRequest?: boolean };
-type Observation = Pick<GetIssueMutationResponse, 'mutation' | 'issue' | 'comment'>;
+type Observation = Pick<GetIssueMutationResponse, 'mutation' | 'issue' | 'comment' | 'pullRequest'>;
 const followingPage = (response: { page?: PageResponse }, _pages: unknown[], current: number) => {
   const next = response.page?.nextPage ?? 0;
   return next > current && next <= 10_000 ? next : undefined;
@@ -34,13 +34,16 @@ function Comment({ comment }: { comment: IssueComment }) {
   </article>;
 }
 
-function Composer({ repositoryKey, repositoryId, queryKey, userId, pullRequest, issue, onCreated, onPending, onPosted, editField, onUpdated, onClose }: Props & { issue?: Issue; onCreated?: (issue: Issue) => void; onPending?: (value: boolean) => void; onPosted?: () => void; editField?: IssueIntent['editField']; onUpdated?: (issue?: Issue) => void; onClose?: () => void }) {
+export function DiscussionComposer({ repositoryKey, repositoryId, queryKey, userId, pullRequest, issue, proposal, onCreated, onPending, onPosted, editField, onUpdated, onPullUpdated, onClose }: Props & { issue?: Issue; proposal?: PullRequest; onPullUpdated?: (pull?: PullRequest) => void; onCreated?: (issue: Issue) => void; onPending?: (value: boolean) => void; onPosted?: () => void; editField?: IssueIntent['editField']; onUpdated?: (issue?: Issue) => void; onClose?: () => void }) {
   const edit = Boolean(editField);
   const originalIssue = useRef(issue);
-  const kind = edit ? 'update' : issue ? 'comment' : 'issue';
-  const storageKey = issueIntentKey(userId, repositoryId, issue?.id) + (edit ? ':edit' : '');
-  const [intent, setIntent] = useState(() => readIssueIntent(storageKey, repositoryId, issue?.id, issue?.number, kind));
-  const form = useForm({ defaultValues: { title: editField === 'title' ? issue?.title || '' : '', body: editField === 'body' ? issue?.body || '' : '' }, onSubmit: () => submit() });
+  const originalProposal = useRef(proposal);
+  const target = proposal || issue;
+  const targetName = proposal ? "pull request" : "issue";
+  const kind = proposal ? 'pull-update' : edit ? 'update' : issue ? 'comment' : 'issue';
+  const storageKey = issueIntentKey(userId, repositoryId, proposal ? 'pull-'+proposal.id : issue?.id) + (edit ? ':edit' : '');
+  const [intent, setIntent] = useState(() => readIssueIntent(storageKey, repositoryId, issue?.id, target?.number, kind, proposal?.id));
+  const form = useForm({ defaultValues: { title: editField === 'title' ? target?.title || '' : '', body: editField === 'body' ? target?.body || '' : '' }, onSubmit: () => submit() });
   const { title, body } = useStore(form.store, (state) => state.values);
   const setTitle = (value: string) => form.setFieldValue('title', value);
   const setBody = (value: string) => form.setFieldValue('body', value);
@@ -53,6 +56,7 @@ function Composer({ repositoryKey, repositoryId, queryKey, userId, pullRequest, 
   const controller = useRef<AbortController | null>(null);
   const frozen = useRef<Pick<CreateIssueRequest, 'title' | 'body'> | Pick<CreateIssueCommentRequest, 'body'> | null>(null);
   const updateFrozen = useRef<UpdateIssueRequest | null>(null);
+  const pullFrozen = useRef<UpdatePullRequestRequest | null>(null);
   const firstInput = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const statusButton = useRef<HTMLButtonElement>(null);
   const client = useQueryClient();
@@ -61,19 +65,20 @@ function Composer({ repositoryKey, repositoryId, queryKey, userId, pullRequest, 
     if (!active()) return;
     const value = response.mutation;
     if (!value || value.idempotencyKey !== pending.key || value.repositoryId !== repositoryId || value.repository?.owner !== repositoryKey.owner || value.repository?.name !== repositoryKey.name ||
-      value.kind !== (edit ? IssueMutationKind.UPDATE_ISSUE : issue ? IssueMutationKind.CREATE_COMMENT : IssueMutationKind.CREATE_ISSUE) || issue && (value.issueId !== issue.id || value.number !== issue.number)) {
+      value.kind !== (proposal ? IssueMutationKind.UPDATE_PULL : edit ? IssueMutationKind.UPDATE_ISSUE : issue ? IssueMutationKind.CREATE_COMMENT : IssueMutationKind.CREATE_ISSUE) || issue && (value.issueId !== issue.id || value.number !== issue.number) || proposal && (value.issueId !== "" || value.pullRequestId !== proposal.id || value.number !== proposal.number)) {
       throw new ConnectError('The outcome record does not match this request. Keep its key and check again.', Code.FailedPrecondition);
     }
     const success = value.state === IssueMutationState.SUCCEEDED;
-    if (success && (response.issue && (response.issue.id !== value.issueId || response.issue.number !== value.number) || response.comment && response.comment.id !== value.commentId)) {
+    if (success && (response.issue && (response.issue.id !== value.issueId || response.issue.number !== value.number) || response.comment && response.comment.id !== value.commentId || proposal && (value.observedResultId !== value.pullRequestId || value.observedNumber !== value.number || response.pullRequest && (response.pullRequest.id !== value.pullRequestId || response.pullRequest.number !== value.number || response.pullRequest.base?.repositoryId !== repositoryId)))) {
       throw new ConnectError('The returned object does not match the recorded outcome. Keep its key and check again.', Code.FailedPrecondition);
     }
     setRecord(value);
-    const confirmed = success && (edit ? Boolean(response.issue) : issue ? Boolean(response.comment) : Boolean(response.issue));
+    const confirmed = success && (proposal ? Boolean(response.pullRequest) : edit ? Boolean(response.issue) : issue ? Boolean(response.comment) : Boolean(response.issue));
     if (!confirmed) return;
     try { sessionStorage.removeItem(storageKey); } catch { /* A later lookup can inspect the same durable outcome. */ }
     onPending?.(false);
-    if (edit && response.issue) { onUpdated?.(response.issue); }
+    if (proposal && response.pullRequest) { onPullUpdated?.(response.pullRequest); }
+    else if (edit && response.issue) { onUpdated?.(response.issue); }
     else if (issue && response.comment) { setPosted(response.comment); onPosted?.(); }
     else if (response.issue) { void client.invalidateQueries({ queryKey: [...queryKey, 'issues'] }); onCreated?.(response.issue); }
   }
@@ -85,6 +90,7 @@ function Composer({ repositoryKey, repositoryId, queryKey, userId, pullRequest, 
       controller.current = new AbortController();
       const options = { signal: controller.current.signal, timeoutMs: inspect ? 8_000 : 15_000 };
       if (inspect) await observe(await repositoryClient.getIssueMutation({ idempotencyKey: pending.key }, options), pending);
+      else if (proposal && pullFrozen.current) await observe(await repositoryClient.updatePullRequest(pullFrozen.current, options), pending);
       else if (edit && updateFrozen.current) await observe(await repositoryClient.updateIssue(updateFrozen.current, options), pending);
       else if (issue && frozen.current) await observe(await repositoryClient.createIssueComment({ repository: repositoryKey, repositoryId, number: issue.number, issueId: issue.id, body: frozen.current.body, pullRequest, idempotencyKey: pending.key }, options), pending);
       else if (frozen.current && 'title' in frozen.current) await observe(await repositoryClient.createIssue({ repository: repositoryKey, repositoryId, title: frozen.current.title, body: frozen.current.body, idempotencyKey: pending.key }, options), pending);
@@ -93,30 +99,31 @@ function Composer({ repositoryKey, repositoryId, queryKey, userId, pullRequest, 
     onError: (failure) => {
       if (!active()) return;
       setRecord(null); setPosted(null); setError(failure);
-      if (denied(failure)) { setTitle(''); setBody(''); frozen.current = null; updateFrozen.current = null; }
+      if (denied(failure)) { setTitle(''); setBody(''); frozen.current = null; updateFrozen.current = null; pullFrozen.current = null; }
     },
     onSettled: () => { latch.current = false; controller.current = null; },
   });
   useEffect(() => {
     mounted.current = true;
     if (intent) statusButton.current?.focus(); else firstInput.current?.focus();
-    return () => { mounted.current = false; controller.current?.abort(); frozen.current = null; updateFrozen.current = null; };
+    return () => { mounted.current = false; controller.current?.abort(); frozen.current = null; updateFrozen.current = null; pullFrozen.current = null; };
   }, []);
   function submit() {
     if (latch.current || intent) return;
     const exactTitle = title.trim();
     const titleBytes = new TextEncoder().encode(exactTitle);
     const bodyBytes = new TextEncoder().encode(body);
-    if ((!issue || editField === 'title') && (!exactTitle || titleBytes.byteLength > 255 || new TextDecoder().decode(titleBytes) !== exactTitle || /\p{Cc}/u.test(exactTitle))) {
+    if ((!target || editField === 'title') && (!exactTitle || titleBytes.byteLength > 255 || new TextDecoder().decode(titleBytes) !== exactTitle || /\p{Cc}/u.test(exactTitle))) {
       setError(new Error('Use a title of 1–255 UTF-8 bytes without control characters. No request was sent.')); return;
     }
     if (bodyBytes.byteLength > 6000 || new TextDecoder().decode(bodyBytes) !== body || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/u.test(body) || issue && !edit && !body.trim()) {
       setError(new Error(`Use ${issue && !edit ? 'nonempty ' : ''}valid text up to 6,000 UTF-8 bytes. Only tabs and line breaks are allowed as control characters. No request was sent.`)); return;
     }
     try {
-      const pending: IssueIntent = { key: crypto.randomUUID(), kind, repositoryId, issueId: issue?.id || '', number: issue?.number || 0, ...(edit ? {editField} : {}) };
+      const pending: IssueIntent = { key: crypto.randomUUID(), kind, repositoryId, issueId: issue?.id || '', number: target?.number || 0, ...(proposal ? {pullRequestId:proposal.id} : {}), ...(edit ? {editField} : {}) };
       sessionStorage.setItem(storageKey, JSON.stringify(pending));
-      if (edit) updateFrozen.current = { $typeName: 'golf.v1.UpdateIssueRequest', repository: {...repositoryKey,$typeName:'golf.v1.RepositoryKey'}, repositoryId, issueId: issue!.id, number: issue!.number, expectedRevision: originalIssue.current!.revision, idempotencyKey: pending.key, state: editField === 'close' ? IssueState.CLOSED : editField === 'reopen' ? IssueState.OPEN : IssueState.UNSPECIFIED, ...(editField === 'title' ? {title:exactTitle} : editField === 'body' ? {body} : {}) };
+      if (proposal) pullFrozen.current = { $typeName:'golf.v1.UpdatePullRequestRequest', repository:{...repositoryKey,$typeName:'golf.v1.RepositoryKey'}, repositoryId, pullRequestId:proposal.id, number:proposal.number, expectedRevision:originalProposal.current!.revision, idempotencyKey:pending.key, state:editField==='close'?IssueState.CLOSED:editField==='reopen'?IssueState.OPEN:IssueState.UNSPECIFIED, ...(editField==='title'?{title:exactTitle}:editField==='body'?{body}:editField==='draft'?{draft:true}:editField==='ready'?{draft:false}:{}) };
+      else if (edit) updateFrozen.current = { $typeName: 'golf.v1.UpdateIssueRequest', repository: {...repositoryKey,$typeName:'golf.v1.RepositoryKey'}, repositoryId, issueId: issue!.id, number: issue!.number, expectedRevision: originalIssue.current!.revision, idempotencyKey: pending.key, state: editField === 'close' ? IssueState.CLOSED : editField === 'reopen' ? IssueState.OPEN : IssueState.UNSPECIFIED, ...(editField === 'title' ? {title:exactTitle} : editField === 'body' ? {body} : {}) };
       else frozen.current = issue ? { body } : { title: exactTitle, body };
       latch.current = true; setIntent(pending); setError(null); onPending?.(true);
       action.mutate({ pending, inspect: false });
@@ -130,22 +137,22 @@ function Composer({ repositoryKey, repositoryId, queryKey, userId, pullRequest, 
   function nextIntent() {
     if (latch.current || record?.state !== IssueMutationState.REJECTED && !posted) return;
     try { sessionStorage.removeItem(storageKey); } catch { setError(new Error('Golf could not clear the pending request in this tab. No new request was sent.')); return; }
-    frozen.current = null; updateFrozen.current = null; setIntent(null); setRecord(null); setPosted(null); setError(null); action.reset(); onPending?.(false);
-    if (edit) { setTitle(''); setBody(''); onUpdated?.(); }
+    frozen.current = null; updateFrozen.current = null; pullFrozen.current = null; setIntent(null); setRecord(null); setPosted(null); setError(null); action.reset(); onPending?.(false);
+    if (edit) { setTitle(''); setBody(''); if(proposal)onPullUpdated?.();else onUpdated?.(); }
     if (posted) setBody('');
     requestAnimationFrame(() => firstInput.current?.focus());
   }
   const rejected = record?.state === IssueMutationState.REJECTED;
   const succeeded = record?.state === IssueMutationState.SUCCEEDED;
   return <div className="issue-composer">
-    {edit ? <details className="metadata-details"><summary>Editing permissions</summary><p className="field-help">The issue author or an account with issue-write access can make changes. Permissions are checked when saving. A concurrent change may require a new review.</p></details> : <p className="field-help">Creating issues and posting comments requires issue-write permission. If your connected account has read-only access, ask your administrator to update it.</p>}
+    {edit ? <details className="metadata-details"><summary>Editing permissions</summary><p className="field-help">The {targetName} author or an account with {proposal ? "pull-request" : "issue"}-write access can make changes. Permissions are checked when saving. A concurrent change may require a new review.</p></details> : <p className="field-help">Creating issues and posting comments requires issue-write permission. If your connected account has read-only access, ask your administrator to update it.</p>}
     {posted ? <><p className="session-notice" role="status">Comment posted.</p><Comment comment={posted} /><button className="button secondary" onClick={nextIntent}>Write another comment</button></> : <form onSubmit={(event) => { event.preventDefault(); void form.handleSubmit(); }}>
-      {!issue || editField === 'title' ? <><label htmlFor="issue-title-input">Issue title</label><input ref={(element) => { firstInput.current = element; }} id="issue-title-input" value={title} onChange={(event) => setTitle(event.target.value)} required maxLength={255} disabled={Boolean(intent)} autoComplete="off" /></> : null}
-      {!edit || editField === 'body' ? <><label htmlFor={edit ? 'issue-edit-body-input' : issue ? 'issue-comment-input' : 'issue-body-input'}>{editField === 'body' ? 'Description, Markdown' : issue ? 'Comment, plain text' : 'Description, plain text'}</label><textarea ref={issue ? (element) => { firstInput.current = element; } : undefined} id={edit ? 'issue-edit-body-input' : issue ? 'issue-comment-input' : 'issue-body-input'} value={body} onChange={(event) => setBody(event.target.value)} required={Boolean(issue) && !edit} rows={issue ? 5 : 7} maxLength={6000} disabled={Boolean(intent)} autoComplete="off" />
-      <button type="button" className="text-button" aria-pressed={preview} onClick={()=>setPreview(!preview)}>{preview?'Hide preview':'Preview Markdown'}</button>{preview?<MarkdownBody text={body||'Nothing to preview.'} label="Draft Markdown preview"/>:null}<p className="field-help">Markdown is rendered safely; HTML stays text. Maximum 6,000 UTF-8 bytes.</p></> : editField === 'close' || editField === 'reopen' ? <p>{editField === 'close' ? 'Close' : 'Reopen'} issue #{issue!.number}? This changes its native state and may send configured notifications.</p> : null}
-      {intent ? <div className="creation-status" role="status"><p>{action.isPending ? 'Checking this request… Its outcome may still be unknown.' : rejected ? record.failureCode === 'provider_http_403' ? 'Your account does not have permission to make this change.' : record.failureCode === 'revision_changed' || record.failureCode === 'provider_http_409' ? 'The issue changed before this request was sent. Review the current issue before editing again.' : record.failureCode === 'unchanged' ? 'The selected field is already unchanged. Review the current issue.' : record.failureCode === 'target_changed' ? 'The target changed before this write was sent. Refresh repository access and inspect the issue before explicitly starting a new request.' : 'The request was rejected. You can explicitly start a new request.' : succeeded ? 'The write was recorded as successful, but Golf cannot confirm current access to its result. This record does not grant access.' : 'This request may still be running, or its outcome is unknown. Check its status; do not repost the text as a new request.'}</p><p className="field-help">Request key <code>{intent.key}</code></p>{!frozen.current && !updateFrozen.current ? <p className="field-help">Draft text was not stored. This resumed request supports status checks only.</p> : null}<p className="field-help">Closing or leaving does not cancel provider work. This tab saves only the key and target IDs until sign-out.</p></div> : null}
+      {!target || editField === 'title' ? <><label htmlFor="issue-title-input">{proposal ? "Pull request title" : "Issue title"}</label><input ref={(element) => { firstInput.current = element; }} id="issue-title-input" value={title} onChange={(event) => setTitle(event.target.value)} required maxLength={255} disabled={Boolean(intent)} autoComplete="off" /></> : null}
+      {!edit || editField === 'body' ? <><label htmlFor={edit ? 'issue-edit-body-input' : issue ? 'issue-comment-input' : 'issue-body-input'}>{editField === 'body' ? 'Description, Markdown' : issue ? 'Comment, plain text' : 'Description, plain text'}</label><textarea ref={target ? (element) => { firstInput.current = element; } : undefined} id={edit ? 'issue-edit-body-input' : issue ? 'issue-comment-input' : 'issue-body-input'} value={body} onChange={(event) => setBody(event.target.value)} required={Boolean(issue) && !edit} rows={issue ? 5 : 7} maxLength={6000} disabled={Boolean(intent)} autoComplete="off" />
+      <button type="button" className="text-button" aria-pressed={preview} onClick={()=>setPreview(!preview)}>{preview?'Hide preview':'Preview Markdown'}</button>{preview?<MarkdownBody text={body||'Nothing to preview.'} label="Draft Markdown preview"/>:null}<p className="field-help">Markdown is rendered safely; HTML stays text. Maximum 6,000 UTF-8 bytes.</p></> : editField === 'close' || editField === 'reopen' ? <p>{editField === 'close' ? 'Close' : 'Reopen'} {targetName} #{target!.number}? This changes its native state and may send configured notifications.</p> : editField === 'draft' || editField === 'ready' ? <p>{editField === 'draft' ? 'Convert to draft' : 'Mark ready for review'}? Draft state uses the native title prefix. This changes the title and may send configured notifications.</p> : null}
+      {intent ? <div className="creation-status" role="status"><p>{action.isPending ? 'Checking this request… Its outcome may still be unknown.' : rejected ? record.failureCode === 'provider_http_403' ? 'Your account does not have permission to make this change.' : record.failureCode === 'revision_changed' || record.failureCode === 'provider_http_409' ? `The ${targetName} changed before this request was sent. Review the current ${targetName} before editing again.` : record.failureCode === 'unchanged' ? `The selected field is already unchanged. Review the current ${targetName}.` : record.failureCode === 'target_changed' ? 'The target changed before this write was sent. Refresh repository access and inspect the issue before explicitly starting a new request.' : 'The request was rejected. You can explicitly start a new request.' : succeeded ? 'The write was recorded as successful, but Golf cannot confirm current access to its result. This record does not grant access.' : 'This request may still be running, or its outcome is unknown. Check its status; do not repost the text as a new request.'}</p><p className="field-help">Request key <code>{intent.key}</code></p>{!frozen.current && !updateFrozen.current && !pullFrozen.current ? <p className="field-help">Draft text was not stored. This resumed request supports status checks only.</p> : null}<p className="field-help">Closing or leaving does not cancel provider work. This tab saves only the key and target IDs until sign-out.</p></div> : null}
       {error ? <p className="error" role="alert">{errorMessage(error)}</p> : null}
-      <div className="credential-actions">{intent ? <><button ref={statusButton} type="button" className="button secondary" disabled={action.isPending} onClick={inspect}><RefreshCw size={15} />Check request status</button>{rejected ? <button type="button" className="button primary" onClick={nextIntent}>{edit ? 'Review current issue' : 'Start a new request'}</button> : null}</> : <button className="button primary" disabled={edit ? editField === 'title' ? !title.trim() || title.trim() === originalIssue.current?.title : editField === 'body' ? body === originalIssue.current?.body : false : issue ? !body.trim() : !title.trim()}>{action.isPending ? <LoaderCircle className="spin" size={16} /> : edit ? editField === 'reopen' ? <Undo2 size={16}/> : <CircleCheck size={16}/> : <Plus size={16} />}{edit ? editField === 'close' ? 'Close issue' : editField === 'reopen' ? 'Reopen issue' : 'Save changes' : issue ? 'Post comment' : 'Create issue'}</button>}{onClose ? <button type="button" className="button secondary" onClick={onClose}>Close editor</button> : null}</div>
+      <div className="credential-actions">{intent ? <><button ref={statusButton} type="button" className="button secondary" disabled={action.isPending} onClick={inspect}><RefreshCw size={15} />Check request status</button>{rejected ? <button type="button" className="button primary" onClick={nextIntent}>{edit ? `Review current ${targetName}` : 'Start a new request'}</button> : null}</> : <button className="button primary" disabled={edit ? editField === 'title' ? !title.trim() || title.trim() === (originalProposal.current || originalIssue.current)?.title : editField === 'body' ? body === (originalProposal.current || originalIssue.current)?.body : false : issue ? !body.trim() : !title.trim()}>{action.isPending ? <LoaderCircle className="spin" size={16} /> : edit ? editField === 'reopen' ? <Undo2 size={16}/> : <CircleCheck size={16}/> : <Plus size={16} />}{edit ? editField === 'close' ? `Close ${targetName}` : editField === 'reopen' ? `Reopen ${targetName}` : editField === 'draft' ? 'Convert to draft' : editField === 'ready' ? 'Ready for review' : 'Save changes' : issue ? 'Post comment' : 'Create issue'}</button>}{onClose ? <button type="button" className="button secondary" onClick={onClose}>Close editor</button> : null}</div>
     </form>}
   </div>;
 }
@@ -158,7 +165,7 @@ function NewIssue({ onClose, ...props }: Props & { onClose: () => void; onPendin
     if (dialog.current && !dialog.current.open) dialog.current.showModal();
     return () => { if (focus.current?.isConnected) focus.current.focus(); };
   }, []);
-  return <dialog ref={dialog} className="create-dialog new-issue-dialog" aria-labelledby="new-issue-title" onClose={onClose}><div className="dialog-header"><span className="small-icon"><CircleDot size={21} /></span><button className="icon-button" aria-label="Close new issue" onClick={onClose}><X size={19} /></button></div><h2 id="new-issue-title">New issue</h2><Composer {...props} /><div className="dialog-actions"><button className="button secondary" onClick={onClose}>Close</button></div></dialog>;
+  return <dialog ref={dialog} className="create-dialog new-issue-dialog" aria-labelledby="new-issue-title" onClose={onClose}><div className="dialog-header"><span className="small-icon"><CircleDot size={21} /></span><button className="icon-button" aria-label="Close new issue" onClick={onClose}><X size={19} /></button></div><h2 id="new-issue-title">New issue</h2><DiscussionComposer {...props} /><div className="dialog-actions"><button className="button secondary" onClick={onClose}>Close</button></div></dialog>;
 }
 
 export function Comments(props: Props & { issue: Issue; onDenied: (error: Error) => void }) {
@@ -177,7 +184,7 @@ export function Comments(props: Props & { issue: Issue; onDenied: (error: Error)
       {comments.length ? <ol className="issue-comment-list">{comments.map((comment) => <li key={comment.id}><Comment comment={comment} /></li>)}</ol> : <div className="empty-state"><MessageSquare size={24} /><h3>No comments in the loaded pages.</h3>{query.hasNextPage ? <p>More repository pages may contain comments for this issue.</p> : <p>No visible comments were returned for this issue.</p>}</div>}
       <div className="list-footer"><span>{comments.length} loaded comments</span><More hasMore={query.hasNextPage} loading={query.isFetching} load={() => void query.fetchNextPage()} label="comments" /></div><p className="panel-footnote">Each page reads one repository-wide provider page, filtered to this issue. An empty page can still have a next page.</p>
     </>}
-    {!query.isError ? <section className="issue-comment-compose" aria-labelledby="comment-compose-title"><h2 id="comment-compose-title">Discussion</h2>{composing ? <><Composer {...props} onPosted={() => { void client.invalidateQueries({ queryKey: key, exact: true }); }} /><button className="button secondary" onClick={() => { setComposing(false); requestAnimationFrame(() => addButton.current?.focus()); }}>Close comment editor</button></> : <button ref={addButton} className="button secondary" onClick={() => setComposing(true)}><Plus size={16} />Add a comment</button>}</section> : null}
+    {!query.isError ? <section className="issue-comment-compose" aria-labelledby="comment-compose-title"><h2 id="comment-compose-title">Discussion</h2>{composing ? <><DiscussionComposer {...props} onPosted={() => { void client.invalidateQueries({ queryKey: key, exact: true }); }} /><button className="button secondary" onClick={() => { setComposing(false); requestAnimationFrame(() => addButton.current?.focus()); }}>Close comment editor</button></> : <button ref={addButton} className="button secondary" onClick={() => setComposing(true)}><Plus size={16} />Add a comment</button>}</section> : null}
   </section>;
 }
 
@@ -195,7 +202,7 @@ function IssueEditControls(props: Props & { issue: Issue; refresh: () => void })
       <button className="icon-button" aria-label="Edit issue description" title="Edit issue description" disabled={Boolean(mode) || pending || !issue.revision} onClick={() => setMode('body')}><FilePenLine size={16}/></button>
       <button className="button secondary" disabled={Boolean(mode) || pending || !issue.revision} onClick={() => setMode(issue.state === IssueState.CLOSED ? 'reopen' : 'close')}>{issue.state === IssueState.CLOSED ? <Undo2 size={16}/> : <CircleCheck size={16}/>} {issue.state === IssueState.CLOSED ? 'Reopen issue' : 'Close issue'}</button>
     </>}</div>
-    {mode ? <section className="browser-panel issue-edit-panel" aria-label={mode === 'title' ? 'Edit issue title' : mode === 'body' ? 'Edit issue description' : 'Confirm issue state'}><div className="browser-panel-heading"><h2>{mode === 'title' ? 'Edit title' : mode === 'body' ? 'Edit description' : mode === 'close' ? 'Close issue' : 'Reopen issue'}</h2></div><div className="issue-edit-content"><Composer key={`${issue.id}:${mode}`} {...props} editField={mode} onPending={setPending} onUpdated={done} onClose={() => { setMode(undefined); requestAnimationFrame(() => trigger.current?.focus()); }}/></div></section> : null}
+    {mode ? <section className="browser-panel issue-edit-panel" aria-label={mode === 'title' ? 'Edit issue title' : mode === 'body' ? 'Edit issue description' : 'Confirm issue state'}><div className="browser-panel-heading"><h2>{mode === 'title' ? 'Edit title' : mode === 'body' ? 'Edit description' : mode === 'close' ? 'Close issue' : 'Reopen issue'}</h2></div><div className="issue-edit-content"><DiscussionComposer key={`${issue.id}:${mode}`} {...props} editField={mode} onPending={setPending} onUpdated={done} onClose={() => { setMode(undefined); requestAnimationFrame(() => trigger.current?.focus()); }}/></div></section> : null}
     {!issue.revision ? <p className="field-help">Editing is unavailable because the native issue revision could not be verified.</p> : null}
   </section>;
 }
