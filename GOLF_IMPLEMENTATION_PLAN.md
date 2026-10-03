@@ -1744,3 +1744,10 @@ Golf-owned password login accepts an operator-enrolled unique email or username.
 ### Connection inventory interaction rule
 
 Coding-agent connection inventories use compact Lucide icon actions with accessible names and hover hints. Item metadata and provider quota details belong in a read-only details modal with keyboard dismissal and focus return. Add/Edit/Rename expose explicit TanStack Form editors; Disconnect uses confirmation. Personal rename preserves immutable connection identity, credentials and ownership, while instance name/access changes retain administrator authorization and optimistic versions. Shared-use permission never implies management or private usage access. Common global table, modal and page-stack styles own layout and spacing.
+
+
+### Implementation update: bounded manual Codex tasks (2026-10-03)
+
+The portable Docker track now implements browser-managed manual Codex ChatGPT tasks: current scoped usage/account/model admission, pinned ordinary-file source capture, durable request receipts, exclusive native account ownership, worker leases/revocation checks, confirmed cancellation, private isolated workspace, final summary/proposed patch and terminal worker-loss outcomes without automatic replay. See [execution contract](docs/AGENT_TASKS.md) and [current evidence](docs/IMPLEMENTATION_STATUS.md). This advances the managed-agent execution phase; it does not complete the broader agent, HA/recovery or Cloudflare gates.
+
+Remaining implementation tasks: qualify Claude/OpenCode/Grok/Pi and API-billed execution independently; add automation credentials and push/PR-comment dispatch; task API/MCP/ACP access; fair queueing and scope-specific aggregate quotas; crash-safe credential checkpoints/resume; artifact-store snapshots; reviewed proposal publication; task audit/event history; Kubernetes/Cloudflare adapters and canonical schema026 recovery. Cloudflare infrastructure remains optional for this portable path. No repository CI workflows are added.

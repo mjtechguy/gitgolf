@@ -1,5 +1,7 @@
 .PHONY: setup dev build cli test test-integration check helm-check fmt vet web-check generate generate-check qualify-git qualify-settings qualify-organization-admin qualify-public-repositories qualify-repository-access qualify-workflow-inspection qualify-instance-admin qualify-account-security qualify-repository-events qualify-automation-grants up down local-up local-stop local-status
-LOCAL_COMPOSE = docker compose --env-file .env --env-file .env.ci --env-file .env.storage -f compose.yaml -f compose.ci.yaml -f compose.storage.yaml
+AGENT_COMPOSE = $(if $(wildcard .env.agents),--env-file .env.agents -f compose.agents.yaml,)
+AGENT_SERVICE = $(if $(wildcard .env.agents),agent-worker,)
+LOCAL_COMPOSE = docker compose --env-file .env --env-file .env.ci --env-file .env.storage -f compose.yaml -f compose.ci.yaml -f compose.storage.yaml $(AGENT_COMPOSE)
 .DEFAULT_GOAL := setup
 HTTPS_COMPOSE = $(LOCAL_COMPOSE) --env-file .env.https -f compose.https.yaml
 ACTIVE_LOCAL_COMPOSE = $(LOCAL_COMPOSE)
@@ -73,12 +75,18 @@ down:
 local-up: setup
 	python3 scripts/init-ci-env.py
 	python3 scripts/init-storage-env.py
-	$(ACTIVE_LOCAL_COMPOSE) stop runner
+	$(ACTIVE_LOCAL_COMPOSE) stop runner $(AGENT_SERVICE)
 	$(ACTIVE_LOCAL_COMPOSE) up -d --build golf rustfs
 	$(ACTIVE_LOCAL_COMPOSE) exec -T golf golf objectstore initialize
-	$(ACTIVE_LOCAL_COMPOSE) build runner
-	$(ACTIVE_LOCAL_COMPOSE) up -d --no-build runner
+	$(ACTIVE_LOCAL_COMPOSE) build runner $(AGENT_SERVICE)
+	$(ACTIVE_LOCAL_COMPOSE) up -d --no-build runner $(AGENT_SERVICE)
 local-stop:
 	$(LOCAL_COMPOSE) stop
 local-status:
 	$(LOCAL_COMPOSE) ps
+
+.PHONY: local-agents-up
+local-agents-up: local-up
+	docker build -f Dockerfile.codex -t golf-codex-task:0.160.0 .
+	python3 scripts/init-agent-env.py
+	$(MAKE) local-up

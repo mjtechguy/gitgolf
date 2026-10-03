@@ -96,7 +96,7 @@ func New(config Config) (*Executor, error) {
 		return nil, ErrInvalidJob
 	}
 	for _, image := range config.ApprovedImages {
-		if !imagePattern.MatchString(image) {
+		if !imagePattern.MatchString(image) && !imageIDPattern.MatchString(image) {
 			return nil, ErrInvalidJob
 		}
 	}

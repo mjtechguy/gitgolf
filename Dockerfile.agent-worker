@@ -1,0 +1,7 @@
+# Trusted control-plane worker; never mount its database/keyring into a task.
+FROM golf-golf:latest
+USER root
+RUN apk add --no-cache docker-cli=29.5.2-r0
+COPY deploy/docker/codex/seccomp.json /app/seccomp.json
+USER golf
+ENTRYPOINT ["golf", "agent-worker"]

@@ -239,7 +239,7 @@ func normalizeWorkflowSource(reader io.Reader, commit, file, blob string, workfl
 	root := ""
 	entries := 0
 	payload := int64(0)
-	found := false
+	found := file == ""
 	headers := 0
 	globalSeen, rootSeen := false, false
 	for {

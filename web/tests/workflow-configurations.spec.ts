@@ -1,4 +1,4 @@
-import { disabledAgentUsage } from './rpc';
+import { disabledAgentTasks, disabledAgentUsage } from './rpc';
 import { expect, test, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import { GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetRepositorySettingsResponseSchema, GetSessionResponseSchema, InspectWorkflowsRequestSchema, InspectWorkflowsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ExecutionScope, ExecutionMode, GetExecutionPolicyResponseSchema, ListWorkflowRunsResponseSchema, ListWorkflowRunsRequestSchema, WorkflowRunState, WorkflowRunOrigin, WorkflowConfigurationSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
@@ -11,6 +11,7 @@ async function backend(page: Page) {
   const state = { mode: 'ready', signedIn: true, barrier: undefined as Promise<void> | undefined, requests: [] as unknown[], runPages: false, denyRuns: false, requestedRunPages: [] as number[] };
   await page.route('**/rpc/**', async route => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
+ if(method === 'ListAgentTasks') return disabledAgentTasks(route);
  if(method === 'GetAgentUsage') return disabledAgentUsage(route);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Your session ended.');

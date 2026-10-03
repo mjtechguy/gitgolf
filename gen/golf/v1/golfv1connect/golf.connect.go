@@ -66,6 +66,8 @@ const (
 	CodexAccountServiceName = "golf.v1.CodexAccountService"
 	// AgentUsageServiceName is the fully-qualified name of the AgentUsageService service.
 	AgentUsageServiceName = "golf.v1.AgentUsageService"
+	// AgentTaskServiceName is the fully-qualified name of the AgentTaskService service.
+	AgentTaskServiceName = "golf.v1.AgentTaskService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -351,6 +353,18 @@ const (
 	// AgentUsageServicePreviewAgentTaskProcedure is the fully-qualified name of the AgentUsageService's
 	// PreviewAgentTask RPC.
 	AgentUsageServicePreviewAgentTaskProcedure = "/golf.v1.AgentUsageService/PreviewAgentTask"
+	// AgentTaskServiceCreateAgentTaskProcedure is the fully-qualified name of the AgentTaskService's
+	// CreateAgentTask RPC.
+	AgentTaskServiceCreateAgentTaskProcedure = "/golf.v1.AgentTaskService/CreateAgentTask"
+	// AgentTaskServiceListAgentTasksProcedure is the fully-qualified name of the AgentTaskService's
+	// ListAgentTasks RPC.
+	AgentTaskServiceListAgentTasksProcedure = "/golf.v1.AgentTaskService/ListAgentTasks"
+	// AgentTaskServiceGetAgentTaskProcedure is the fully-qualified name of the AgentTaskService's
+	// GetAgentTask RPC.
+	AgentTaskServiceGetAgentTaskProcedure = "/golf.v1.AgentTaskService/GetAgentTask"
+	// AgentTaskServiceCancelAgentTaskProcedure is the fully-qualified name of the AgentTaskService's
+	// CancelAgentTask RPC.
+	AgentTaskServiceCancelAgentTaskProcedure = "/golf.v1.AgentTaskService/CancelAgentTask"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -3681,4 +3695,152 @@ func (UnimplementedAgentUsageServiceHandler) ListAgentModels(context.Context, *c
 
 func (UnimplementedAgentUsageServiceHandler) PreviewAgentTask(context.Context, *connect.Request[v1.PreviewAgentTaskRequest]) (*connect.Response[v1.PreviewAgentTaskResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AgentUsageService.PreviewAgentTask is not implemented"))
+}
+
+// AgentTaskServiceClient is a client for the golf.v1.AgentTaskService service.
+type AgentTaskServiceClient interface {
+	CreateAgentTask(context.Context, *connect.Request[v1.CreateAgentTaskRequest]) (*connect.Response[v1.CreateAgentTaskResponse], error)
+	ListAgentTasks(context.Context, *connect.Request[v1.ListAgentTasksRequest]) (*connect.Response[v1.ListAgentTasksResponse], error)
+	GetAgentTask(context.Context, *connect.Request[v1.GetAgentTaskRequest]) (*connect.Response[v1.GetAgentTaskResponse], error)
+	CancelAgentTask(context.Context, *connect.Request[v1.CancelAgentTaskRequest]) (*connect.Response[v1.CancelAgentTaskResponse], error)
+}
+
+// NewAgentTaskServiceClient constructs a client for the golf.v1.AgentTaskService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewAgentTaskServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AgentTaskServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	agentTaskServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("AgentTaskService").Methods()
+	return &agentTaskServiceClient{
+		createAgentTask: connect.NewClient[v1.CreateAgentTaskRequest, v1.CreateAgentTaskResponse](
+			httpClient,
+			baseURL+AgentTaskServiceCreateAgentTaskProcedure,
+			connect.WithSchema(agentTaskServiceMethods.ByName("CreateAgentTask")),
+			connect.WithClientOptions(opts...),
+		),
+		listAgentTasks: connect.NewClient[v1.ListAgentTasksRequest, v1.ListAgentTasksResponse](
+			httpClient,
+			baseURL+AgentTaskServiceListAgentTasksProcedure,
+			connect.WithSchema(agentTaskServiceMethods.ByName("ListAgentTasks")),
+			connect.WithClientOptions(opts...),
+		),
+		getAgentTask: connect.NewClient[v1.GetAgentTaskRequest, v1.GetAgentTaskResponse](
+			httpClient,
+			baseURL+AgentTaskServiceGetAgentTaskProcedure,
+			connect.WithSchema(agentTaskServiceMethods.ByName("GetAgentTask")),
+			connect.WithClientOptions(opts...),
+		),
+		cancelAgentTask: connect.NewClient[v1.CancelAgentTaskRequest, v1.CancelAgentTaskResponse](
+			httpClient,
+			baseURL+AgentTaskServiceCancelAgentTaskProcedure,
+			connect.WithSchema(agentTaskServiceMethods.ByName("CancelAgentTask")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// agentTaskServiceClient implements AgentTaskServiceClient.
+type agentTaskServiceClient struct {
+	createAgentTask *connect.Client[v1.CreateAgentTaskRequest, v1.CreateAgentTaskResponse]
+	listAgentTasks  *connect.Client[v1.ListAgentTasksRequest, v1.ListAgentTasksResponse]
+	getAgentTask    *connect.Client[v1.GetAgentTaskRequest, v1.GetAgentTaskResponse]
+	cancelAgentTask *connect.Client[v1.CancelAgentTaskRequest, v1.CancelAgentTaskResponse]
+}
+
+// CreateAgentTask calls golf.v1.AgentTaskService.CreateAgentTask.
+func (c *agentTaskServiceClient) CreateAgentTask(ctx context.Context, req *connect.Request[v1.CreateAgentTaskRequest]) (*connect.Response[v1.CreateAgentTaskResponse], error) {
+	return c.createAgentTask.CallUnary(ctx, req)
+}
+
+// ListAgentTasks calls golf.v1.AgentTaskService.ListAgentTasks.
+func (c *agentTaskServiceClient) ListAgentTasks(ctx context.Context, req *connect.Request[v1.ListAgentTasksRequest]) (*connect.Response[v1.ListAgentTasksResponse], error) {
+	return c.listAgentTasks.CallUnary(ctx, req)
+}
+
+// GetAgentTask calls golf.v1.AgentTaskService.GetAgentTask.
+func (c *agentTaskServiceClient) GetAgentTask(ctx context.Context, req *connect.Request[v1.GetAgentTaskRequest]) (*connect.Response[v1.GetAgentTaskResponse], error) {
+	return c.getAgentTask.CallUnary(ctx, req)
+}
+
+// CancelAgentTask calls golf.v1.AgentTaskService.CancelAgentTask.
+func (c *agentTaskServiceClient) CancelAgentTask(ctx context.Context, req *connect.Request[v1.CancelAgentTaskRequest]) (*connect.Response[v1.CancelAgentTaskResponse], error) {
+	return c.cancelAgentTask.CallUnary(ctx, req)
+}
+
+// AgentTaskServiceHandler is an implementation of the golf.v1.AgentTaskService service.
+type AgentTaskServiceHandler interface {
+	CreateAgentTask(context.Context, *connect.Request[v1.CreateAgentTaskRequest]) (*connect.Response[v1.CreateAgentTaskResponse], error)
+	ListAgentTasks(context.Context, *connect.Request[v1.ListAgentTasksRequest]) (*connect.Response[v1.ListAgentTasksResponse], error)
+	GetAgentTask(context.Context, *connect.Request[v1.GetAgentTaskRequest]) (*connect.Response[v1.GetAgentTaskResponse], error)
+	CancelAgentTask(context.Context, *connect.Request[v1.CancelAgentTaskRequest]) (*connect.Response[v1.CancelAgentTaskResponse], error)
+}
+
+// NewAgentTaskServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewAgentTaskServiceHandler(svc AgentTaskServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	agentTaskServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("AgentTaskService").Methods()
+	agentTaskServiceCreateAgentTaskHandler := connect.NewUnaryHandler(
+		AgentTaskServiceCreateAgentTaskProcedure,
+		svc.CreateAgentTask,
+		connect.WithSchema(agentTaskServiceMethods.ByName("CreateAgentTask")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentTaskServiceListAgentTasksHandler := connect.NewUnaryHandler(
+		AgentTaskServiceListAgentTasksProcedure,
+		svc.ListAgentTasks,
+		connect.WithSchema(agentTaskServiceMethods.ByName("ListAgentTasks")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentTaskServiceGetAgentTaskHandler := connect.NewUnaryHandler(
+		AgentTaskServiceGetAgentTaskProcedure,
+		svc.GetAgentTask,
+		connect.WithSchema(agentTaskServiceMethods.ByName("GetAgentTask")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentTaskServiceCancelAgentTaskHandler := connect.NewUnaryHandler(
+		AgentTaskServiceCancelAgentTaskProcedure,
+		svc.CancelAgentTask,
+		connect.WithSchema(agentTaskServiceMethods.ByName("CancelAgentTask")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.AgentTaskService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case AgentTaskServiceCreateAgentTaskProcedure:
+			agentTaskServiceCreateAgentTaskHandler.ServeHTTP(w, r)
+		case AgentTaskServiceListAgentTasksProcedure:
+			agentTaskServiceListAgentTasksHandler.ServeHTTP(w, r)
+		case AgentTaskServiceGetAgentTaskProcedure:
+			agentTaskServiceGetAgentTaskHandler.ServeHTTP(w, r)
+		case AgentTaskServiceCancelAgentTaskProcedure:
+			agentTaskServiceCancelAgentTaskHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedAgentTaskServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedAgentTaskServiceHandler struct{}
+
+func (UnimplementedAgentTaskServiceHandler) CreateAgentTask(context.Context, *connect.Request[v1.CreateAgentTaskRequest]) (*connect.Response[v1.CreateAgentTaskResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AgentTaskService.CreateAgentTask is not implemented"))
+}
+
+func (UnimplementedAgentTaskServiceHandler) ListAgentTasks(context.Context, *connect.Request[v1.ListAgentTasksRequest]) (*connect.Response[v1.ListAgentTasksResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AgentTaskService.ListAgentTasks is not implemented"))
+}
+
+func (UnimplementedAgentTaskServiceHandler) GetAgentTask(context.Context, *connect.Request[v1.GetAgentTaskRequest]) (*connect.Response[v1.GetAgentTaskResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AgentTaskService.GetAgentTask is not implemented"))
+}
+
+func (UnimplementedAgentTaskServiceHandler) CancelAgentTask(context.Context, *connect.Request[v1.CancelAgentTaskRequest]) (*connect.Response[v1.CancelAgentTaskResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AgentTaskService.CancelAgentTask is not implemented"))
 }

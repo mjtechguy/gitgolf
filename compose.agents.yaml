@@ -1,0 +1,49 @@
+# Optional trusted managed-agent worker on the existing dedicated Docker daemon.
+# Task containers receive only their source and selected native account cache.
+services:
+  golf:
+    environment:
+      GOLF_AGENT_IMAGE: ${GOLF_AGENT_IMAGE:?Run scripts/init-agent-env.py}
+  agent-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent-worker
+    environment:
+      GOLF_AGENT_IMAGE: ${GOLF_AGENT_IMAGE:?Run scripts/init-agent-env.py}
+      GOLF_AGENT_WORKER_ID: local-agents
+      GOLF_AGENT_SECCOMP: /app/seccomp.json
+      GOLF_PUBLIC_URL: ${GOLF_PUBLIC_URL:-http://localhost:8080}
+      GOLF_ALLOW_INSECURE_COOKIES: 'true'
+      GOLF_ENCRYPTION_KEY: ${GOLF_ENCRYPTION_KEY:-}
+      GOLF_ENCRYPTION_KEYS: ${GOLF_ENCRYPTION_KEYS:-}
+      GOLF_ACTIVE_ENCRYPTION_KEY: ${GOLF_ACTIVE_ENCRYPTION_KEY:-}
+      DATABASE_URL: postgres://golf:${GOLF_DB_PASSWORD:?Run scripts/init-env.sh}@postgres:5432/golf?sslmode=disable
+      GITEA_URL: http://gitea:3000
+      GITEA_PUBLIC_URL: ${GITEA_PUBLIC_URL:-}
+      GITEA_OAUTH_CLIENT_ID: ${GITEA_OAUTH_CLIENT_ID:-}
+      GITEA_OAUTH_CLIENT_SECRET: ${GITEA_OAUTH_CLIENT_SECRET:-}
+      GOLF_OBJECT_ENDPOINT: ${GOLF_OBJECT_ENDPOINT:-}
+      GOLF_OBJECT_BUCKET: ${GOLF_OBJECT_BUCKET:-}
+      GOLF_OBJECT_REGION: ${GOLF_OBJECT_REGION:-us-east-1}
+      GOLF_OBJECT_PREFIX: ${GOLF_OBJECT_PREFIX:-}
+      GOLF_OBJECT_ACCESS_KEY_ID: ${GOLF_OBJECT_ACCESS_KEY_ID:-}
+      GOLF_OBJECT_SECRET_ACCESS_KEY: ${GOLF_OBJECT_SECRET_ACCESS_KEY:-}
+      GOLF_OBJECT_PATH_STYLE: ${GOLF_OBJECT_PATH_STYLE:-true}
+      GOLF_OBJECT_ALLOW_HTTP: ${GOLF_OBJECT_ALLOW_HTTP:-true}
+      DOCKER_HOST: tcp://runner-daemon:2376
+      DOCKER_TLS_VERIFY: '1'
+      DOCKER_CERT_PATH: /certs/client
+    volumes:
+      - runner-client-certs:/certs/client:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=67108864,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      golf:
+        condition: service_started
+      runner-daemon:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,6 +22,7 @@ import (
 )
 
 type Config struct {
+	AgentImage                                                 string
 	ClaudeBinary, OpenCodeBinary, CodexBinary                  string
 	PushCIEnabled                                              bool
 	ObjectStoreConfig                                          objectstore.Config
@@ -51,6 +53,9 @@ type Server struct {
 }
 
 func New(config Config, db *sql.DB) (*Server, error) {
+	if config.AgentImage != "" && !regexp.MustCompile(`^sha256:[a-f0-9]{64}$`).MatchString(config.AgentImage) {
+		return nil, errors.New("GOLF_AGENT_IMAGE must identify an exact local image")
+	}
 	public, err := url.Parse(config.PublicURL)
 	if err != nil || public.Host == "" || public.User != nil || public.RawQuery != "" || public.Fragment != "" || (public.Path != "" && public.Path != "/") || (public.Scheme != "https" && public.Scheme != "http") {
 		return nil, errors.New("GOLF_PUBLIC_URL must be an HTTP(S) origin without credentials, path or query")

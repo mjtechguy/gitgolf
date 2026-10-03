@@ -148,7 +148,7 @@ func (s *Server) agentSettings(ctx context.Context, a codexActor, auth execution
 	if rev > 0 && owner != auth.OwnerID {
 		return nil, errExecutionPolicyConflict
 	}
-	v := &golfv1.AgentUsageSettings{Scope: scope, ScopeId: auth.ID, Revision: strconv.FormatInt(rev, 10), AuthorityRevision: auth.Revision, CanEdit: auth.CanEdit, Config: c, Effective: proto.Clone(c).(*golfv1.AgentUsageConfig), BlockedReasons: []string{"Managed task executor is not available; saved triggers do not dispatch work."}}
+	v := &golfv1.AgentUsageSettings{Scope: scope, ScopeId: auth.ID, Revision: strconv.FormatInt(rev, 10), AuthorityRevision: auth.Revision, CanEdit: auth.CanEdit, Config: c, Effective: proto.Clone(c).(*golfv1.AgentUsageConfig), BlockedReasons: []string{"Automatic agent triggers are not available; supported manual tasks use the managed worker."}}
 	if len(overrides) > 0 && overrides[0] != nil {
 		o := overrides[0]
 		if o.ConnectionId != "" {
@@ -215,6 +215,10 @@ func (s *Server) agentSettings(ctx context.Context, a codexActor, auth execution
 	if v.Effective.Enabled && (v.Effective.ConnectionId == "" || v.Effective.ModelId == "") {
 		v.Effective.Enabled = false
 		v.BlockedReasons = append(v.BlockedReasons, "No account/model default selected.")
+	}
+	v.ExecutionAvailable = s.agentAvailable(ctx)
+	if !v.ExecutionAvailable {
+		v.BlockedReasons = append(v.BlockedReasons, "Managed agent worker is not connected.")
 	}
 	return v, nil
 }
@@ -302,6 +306,9 @@ func (s *Server) SaveAgentUsage(ctx context.Context, req *connect.Request[golfv1
 	a.RequireAdmin = auth.Scope == "instance"
 	raw, _ := json.Marshal(m.Config)
 	e = s.codexGuard(ctx, a, func(tx *sql.Tx, user int64) error {
+		if _, e := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, s.config.GiteaURL+"/agent-policy/"+auth.Scope+"/"+auth.ID); e != nil {
+			return errStorageUnavailable
+		}
 		if m.Config.ConnectionId != "" {
 			var permitted bool
 			e := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_codex_connections c WHERE c.id=$1 AND c.forge_url=$2 AND c.state='CONNECTED' AND EXISTS(SELECT 1 FROM golf_agent_model_catalogs mc WHERE mc.connection_id=c.id AND mc.connection_version=c.version AND EXISTS(SELECT 1 FROM jsonb_array_elements(mc.models) m WHERE m->>'id'=$5::text AND ($6::text='' OR COALESCE(m->'reasoning','[]'::jsonb) @> to_jsonb(ARRAY[$6::text])))) AND ((c.scope='PERSONAL' AND c.user_id=$3 AND $4='personal') OR (c.scope='INSTANCE' AND EXISTS(SELECT 1 FROM golf_codex_connection_access x JOIN golf_local_accounts l ON l.user_id=x.user_id WHERE x.connection_id=c.id AND x.user_id=$3 AND l.disabled_at IS NULL))))`, m.Config.ConnectionId, s.config.GiteaURL, user, auth.Scope, m.Config.ModelId, m.Config.Reasoning).Scan(&permitted)

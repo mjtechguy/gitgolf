@@ -176,7 +176,7 @@ func newWorkflowRunFixture(t *testing.T) *workflowRunFixture {
 			write(map[string]string{"version": "1.27.3"})
 			return
 		}
-		if r.Header.Get("Authorization") != "token run-fixture" {
+		if r.Header.Get("Authorization") != "token run-fixture" && r.Header.Get("Authorization") != "Bearer run-fixture" {
 			w.WriteHeader(401)
 			return
 		}

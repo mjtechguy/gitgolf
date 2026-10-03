@@ -1,4 +1,4 @@
-import { disabledAgentUsage } from './rpc';
+import { disabledAgentTasks, disabledAgentUsage } from './rpc';
 import { test, expect, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, InspectWorkflowsResponseSchema, GetExecutionPolicyResponseSchema, ExecutionScope, GetRepositorySettingsResponseSchema, GetRepositoryAccessResponseSchema, ListAutomationGrantsRequestSchema, ListAutomationGrantsResponseSchema, CreateAutomationGrantRequestSchema, CreateAutomationGrantResponseSchema, RevokeAutomationGrantRequestSchema, RevokeAutomationGrantResponseSchema, AutomationGrantSchema } from '../src/gen/golf/v1/golf_pb';
@@ -9,6 +9,7 @@ async function backend(page: Page) {
  const state = { receiptState: 'unavailable', canEdit: true, permission: 'admin', denied: false, writes: [] as unknown[], cursors: [] as string[], unknown: false, wrongReceipt: false, wait: undefined as Promise<void> | undefined, rows: [create(AutomationGrantSchema, { id: grantId, repositoryId: '9007199254740997', ownerId: '9007199254740993', sponsorNativeUserId: '9007199254740993', revision: '2', revocationEpoch: '3', enabled: true, expiresAt: new Date(Date.now() + 86400000).toISOString(), branches: ['main'], workflowPaths: ['.github/workflows/check.yml'], executionState: 'unavailable' })] };
  await page.route('**/rpc/**', async route => {
   const method = new URL(route.request().url()).pathname.split('/').at(-1);
+ if(method === 'ListAgentTasks') return disabledAgentTasks(route);
  if(method === 'GetAgentUsage') return disabledAgentUsage(route);
   if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
   if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '9007199254740993', login: 'alex' } });

@@ -36,6 +36,9 @@ func run() error {
 
 func runCommand(ctx context.Context, args []string, output io.Writer, logger zerolog.Logger) error {
 	if len(args) > 0 {
+		if args[0] == "agent-worker" {
+			return runAgentWorker(ctx, args)
+		}
 		if args[0] == "objectstore" {
 			return initializeObjectStore(ctx, args, output)
 		}
@@ -69,6 +72,7 @@ func serverConfig() server.Config {
 		databaseTLS = parsed.Query().Get("sslmode")
 	}
 	return server.Config{
+		AgentImage:       os.Getenv("GOLF_AGENT_IMAGE"),
 		CodexBinary:      os.Getenv("GOLF_CODEX_BINARY"),
 		ClaudeBinary:     os.Getenv("GOLF_CLAUDE_BINARY"),
 		OpenCodeBinary:   os.Getenv("GOLF_OPENCODE_BINARY"),

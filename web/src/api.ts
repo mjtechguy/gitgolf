@@ -1,6 +1,6 @@
 import { createClient, ConnectError } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
-import { AgentUsageService, CodexAccountService, AutomationGrantService, AccountSecurityService, ProfileService, InfrastructureConnectionService, OrganizationCreationService, ExecutionPolicyService, WorkflowRunService, WorkflowService, RepositoryAccessService, InstanceAdminService, OrganizationAdminService, RepositorySettingsService, GitAccessService, ApiCredentialService, AuditService, CapabilityService, OrganizationService, RepositoryService, SessionService } from './gen/golf/v1/golf_pb';
+import { AgentTaskService, AgentUsageService, CodexAccountService, AutomationGrantService, AccountSecurityService, ProfileService, InfrastructureConnectionService, OrganizationCreationService, ExecutionPolicyService, WorkflowRunService, WorkflowService, RepositoryAccessService, InstanceAdminService, OrganizationAdminService, RepositorySettingsService, GitAccessService, ApiCredentialService, AuditService, CapabilityService, OrganizationService, RepositoryService, SessionService } from './gen/golf/v1/golf_pb';
 
 const transport = createConnectTransport({
   baseUrl: '/rpc',
@@ -8,6 +8,7 @@ const transport = createConnectTransport({
   fetch: (input, init) => fetch(input, { ...init, credentials: 'same-origin', cache: 'no-store' }),
 });
 
+export const agentTaskClient=createClient(AgentTaskService,transport);
 export const agentUsageClient = createClient(AgentUsageService, transport);
 export const codexAccountClient = createClient(CodexAccountService, transport);
 export const automationGrantClient = createClient(AutomationGrantService, transport);

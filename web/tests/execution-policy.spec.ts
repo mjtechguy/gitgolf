@@ -1,4 +1,4 @@
-import { disabledAgentUsage } from './rpc';
+import { disabledAgentTasks, disabledAgentUsage } from './rpc';
 import { expect, test, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import { ExecutionMode, ExecutionScope, ExecutionPolicySchema, GetExecutionPolicyResponseSchema, UpdateExecutionPolicyRequestSchema, UpdateExecutionPolicyResponseSchema, GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, InspectWorkflowsResponseSchema, GetOrganizationResponseSchema, GetRepositorySettingsResponseSchema, GetRepositoryAccessResponseSchema } from '../src/gen/golf/v1/golf_pb';
@@ -8,6 +8,7 @@ async function backend(page: Page, scope = ExecutionScope.REPOSITORY) {
   const state = { reads: 0, writes: [] as ReturnType<typeof request<typeof UpdateExecutionPolicyRequestSchema>>[], failure: false, invalidReceipt: false, invalidPushReceipt: false, denied: false, policy: create(ExecutionPolicySchema, { scope, scopeId: '9007199254740997', ownerId: '9007199254740993', mode: ExecutionMode.DISABLED, revision: '0', revocationEpoch: '0', authorityRevision: 'a'.repeat(64), canEdit: true }) };
   await page.route('**/rpc/**', async route => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
+ if(method === 'ListAgentTasks') return disabledAgentTasks(route);
  if(method === 'GetAgentUsage') return disabledAgentUsage(route);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '9007199254740993', login: 'alex', isInstanceAdmin: true } });

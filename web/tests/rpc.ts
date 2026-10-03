@@ -1,4 +1,4 @@
-import { GetAgentUsageRequestSchema, GetAgentUsageResponseSchema } from '../src/gen/golf/v1/golf_pb';
+import { ListAgentTasksResponseSchema, GetAgentUsageRequestSchema, GetAgentUsageResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import { create, fromJson, toJson } from '@bufbuild/protobuf';
 import type { DescMessage, MessageInitShape } from '@bufbuild/protobuf';
 import type { Route } from '@playwright/test';
@@ -20,3 +20,5 @@ export function disabledAgentUsage(route: Route) {
  const config={timeoutSeconds:600,tokenBudget:64000,spendLimitCents:1000,maxConcurrent:1};
  return respond(route,GetAgentUsageResponseSchema,{settings:{scope:input.scope,scopeId:'fixture-scope',revision:'0',authorityRevision:'fixture-authority',canEdit:true,config,effective:config,blockedReasons:['Managed task executor is not available.']}});
 }
+
+export function disabledAgentTasks(route:Route){return respond(route,ListAgentTasksResponseSchema,{reason:"Managed worker is not connected."});}

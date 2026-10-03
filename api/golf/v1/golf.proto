@@ -1451,3 +1451,48 @@ message PreviewAgentTaskRequest {
  AgentTaskSelection selection = 4;
 }
 message PreviewAgentTaskResponse { AgentUsageSettings settings = 1; }
+
+// Managed tasks are private to their initiating user and retain current native
+// repository authority. Initial execution supports manual Codex ChatGPT tasks.
+service AgentTaskService {
+ rpc CreateAgentTask(CreateAgentTaskRequest) returns (CreateAgentTaskResponse);
+ rpc ListAgentTasks(ListAgentTasksRequest) returns (ListAgentTasksResponse);
+ rpc GetAgentTask(GetAgentTaskRequest) returns (GetAgentTaskResponse);
+ rpc CancelAgentTask(CancelAgentTaskRequest) returns (CancelAgentTaskResponse);
+}
+message AgentTask {
+ string id = 1;
+ RepositoryKey repository = 2;
+ string commit_id = 3;
+ string state = 4;
+ string version = 5;
+ string created_at = 6;
+ string started_at = 7;
+ string finished_at = 8;
+ string connection_id = 9;
+ string model_id = 10;
+ string reasoning = 11;
+ string summary = 12;
+ string patch = 13;
+ string reason = 14;
+ string tokens = 15;
+ bool can_cancel = 16;
+ string worker_id = 17;
+}
+message CreateAgentTaskRequest {
+ RepositoryKey repository = 1;
+ string ref = 2;
+ string instructions = 3;
+ AgentTaskSelection selection = 4;
+ string expected_revision = 5;
+ string expected_authority_revision = 6;
+ string expected_connection_version = 7;
+ string idempotency_key = 8;
+}
+message ListAgentTasksRequest { RepositoryKey repository = 1; string after_id = 2; }
+message ListAgentTasksResponse { repeated AgentTask tasks = 1; string next_after_id = 2; bool execution_available = 3; string reason = 4; }
+message GetAgentTaskRequest { string task_id = 1; }
+message CancelAgentTaskRequest { string task_id = 1; string expected_version = 2; }
+message CreateAgentTaskResponse { AgentTask task = 1; }
+message GetAgentTaskResponse { AgentTask task = 1; }
+message CancelAgentTaskResponse { AgentTask task = 1; }

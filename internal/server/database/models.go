@@ -26,6 +26,38 @@ type GolfAgentModelCatalog struct {
 	CheckedAt         time.Time
 }
 
+type GolfAgentTask struct {
+	ID                uuid.UUID
+	ForgeURL          string
+	RepositoryID      int64
+	OwnerID           int64
+	RepositoryOwner   string
+	RepositoryName    string
+	UserID            int64
+	NativeUserID      int64
+	SessionHash       []byte
+	ConnectionID      uuid.UUID
+	ConnectionVersion int64
+	CommitID          string
+	SourceArchive     []byte
+	Config            json.RawMessage
+	PolicyFingerprint string
+	IdempotencyKey    uuid.UUID
+	InputHash         []byte
+	State             string
+	Version           int64
+	WorkerID          string
+	AttemptID         string
+	LeaseExpiresAt    sql.NullTime
+	CreatedAt         time.Time
+	StartedAt         sql.NullTime
+	FinishedAt        sql.NullTime
+	Summary           string
+	Patch             string
+	Reason            string
+	Tokens            int64
+}
+
 type GolfAgentUsageEvent struct {
 	ID          int64
 	ForgeURL    string
@@ -44,6 +76,13 @@ type GolfAgentUsageSetting struct {
 	Revision  int64
 	Config    json.RawMessage
 	UpdatedAt time.Time
+}
+
+type GolfAgentWorkerPresence struct {
+	ForgeURL string
+	WorkerID string
+	Image    string
+	LastSeen time.Time
 }
 
 type GolfApiCredential struct {

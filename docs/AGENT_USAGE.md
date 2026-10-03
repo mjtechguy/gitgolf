@@ -1,6 +1,6 @@
 # Agent usage defaults, model discovery and task preview
 
-This is saved configuration and a read-only policy preview. The managed coding-task executor is not implemented. Saving a push/comment trigger does not enqueue a task or spend provider credits. Existing shell CI policies and execution remain separate.
+This describes saved configuration and a read-only policy preview. A separate [managed manual Codex ChatGPT task path](AGENT_TASKS.md) is implemented. Saving a push/comment trigger does not enqueue a task or spend provider credits. Existing shell CI policies and execution remain separate.
 
 ## Configuration surfaces
 
@@ -29,9 +29,9 @@ Native credential refresh writes are preserved through the existing encrypted ca
 
 Repository configuration resolves the nearest default (repository, then organization if owned by one, then instance). Personal configuration resolves its own default then instance. Explicit higher-scope instructions are prepended and retained. All required model allowlists and enabled ceilings must permit the chosen model; missing higher configuration denies use. Trigger sets intersect. Runtime, token, spend and concurrency limits take the minimum, including a known zero spend cap. Per-task overrides require permission at every required scope. A lower configuration cannot increase a higher ceiling.
 
-`PreviewAgentTask` supports an explicit connected account/model/variant, appended task instructions, trigger and optional bounded budget values. It validates catalog support and current use access and returns resolved limits/denial reasons. Unsupported models/variants and unknown triggers fail. A denied trigger remains denied. A requested larger budget is clamped by each scope. Preview leaves saved configuration/revision unchanged, queues no work, runs no model and always reports execution unavailable. It is advisory inspection, not atomic execution admission or authorization evidence.
+`PreviewAgentTask` supports an explicit connected account/model/variant, appended task instructions, trigger and optional bounded budget values. It validates catalog support and current use access and returns resolved limits/denial reasons. Unsupported models/variants and unknown triggers fail. A denied trigger remains denied. A requested larger budget is clamped by each scope. Preview leaves saved configuration/revision unchanged, queues no work and runs no model; worker availability remains separate from exact account/model/task eligibility. It is advisory inspection, not atomic execution admission or authorization evidence.
 
-Limits currently describe per-task policy. They do not yet implement aggregate spend accounting, concurrent task admission, cancellation, automatic trigger assignment, comment command parsing, tool/egress policy, execution pools, proposal publication or protected merge. Those belong to the managed executor and must consume current ceilings, account grants and native repository authority at admission and during execution. Personal preference is not an automation credential grant. The initial native-authorization read/save pattern has bounded external permission preflight races; it is not native atomic CAS.
+Limits currently describe per-task policy. The separate manual task path adds conservative concurrent admission and cancellation. These settings do not yet implement aggregate spend accounting, automatic trigger assignment, comment command parsing, tool/egress policy, execution pools, proposal publication or protected merge. Expanded executors must consume current ceilings, account grants and native repository authority at admission and during execution. Personal preference is not an automation credential grant. The initial native-authorization read/save pattern has bounded external permission preflight races; it is not native atomic CAS.
 
 ## Persistence, API and recovery
 
