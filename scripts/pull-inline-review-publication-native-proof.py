@@ -126,7 +126,7 @@ def main():
                     if candidate in allowed:
                         print('Native handler assertion class: '+candidate, file=sys.stderr, flush=True)
             assert result.returncode == 0, 'Production handler native proof failed (private output withheld)'
-        print('PASS: production HTTP handlers save exact encrypted spaced/Unicode old/new draft, refuse own native PENDING without changing its child, keep rejected key status-only, and qualify three decisions with complete independent actual M/H context and one review per intent', flush=True)
+        print('PASS: production HTTP handlers save exact encrypted spaced/Unicode old/new draft, refuse own native PENDING without changing its child, keep rejected keys status-only, durably refuse an empty saved COMMENT summary with no shared event, and qualify three decisions with complete independent actual M/H context and one review per intent', flush=True)
         rows = provider(reviewer['token'], 'GET', proute+'/reviews?limit=50')
         assert len(rows) == 3 and {row['state'] for row in rows} == {'COMMENT', 'APPROVED', 'REQUEST_CHANGES'}
         for row in rows:

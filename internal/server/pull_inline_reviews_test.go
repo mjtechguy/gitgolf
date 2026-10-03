@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -936,11 +937,291 @@ func TestInlineReviewEncodedContextBudgetPostgres(t *testing.T) {
 	}
 	out := savePrivateDraft(t, c, input)
 	m := &golfv1.PublishPullRequestReviewDraftRequest{Target: input.Target, DraftId: input.DraftId, ExpectedVersion: out.CurrentVersion, ExpectedTargetGeneration: out.TargetGeneration, ComparisonId: out.Draft.Comparison.Id, OperationId: uuid.NewString(), Decision: golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_COMMENT}
-	if _, err := c.PublishPullRequestReviewDraft(context.Background(), connect.NewRequest(m)); connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Fatal("aggregate native context/JSON escaping bound not enforced", err)
+	outcome, err := c.PublishPullRequestReviewDraft(context.Background(), connect.NewRequest(m))
+	if err != nil || outcome.Msg.Mutation.Phase != golfv1.PullInlineReviewPhase_PULL_INLINE_REVIEW_PHASE_REJECTED {
+		t.Fatal("aggregate native context/JSON escaping refusal not durably known", err)
 	}
 	var rows int
-	if err := f.db.QueryRow("SELECT count(*) FROM golf_inline_review_mutations").Scan(&rows); err != nil || rows != 0 || f.posts.Load() != 0 {
-		t.Fatal("oversized receipt reserved/dispatched", err)
+	if err := f.db.QueryRow("SELECT count(*) FROM golf_inline_review_mutations").Scan(&rows); err != nil || rows != 1 || f.posts.Load() != 0 {
+		t.Fatal("oversized receipt missing refusal or dispatched", err)
 	}
+}
+
+// The source SAVE is valid even when native publication admission is narrower.
+// Refusal fingerprints contain every ordered entry, not just an admitted prefix.
+func TestInlineReviewSemanticRefusalPostgres(t *testing.T) {
+	for _, kind := range []string{"empty-summary", "zero-entries", "rename", "deleted"} {
+		t.Run(kind, func(t *testing.T) {
+			f := newInlineReviewFixture(t)
+			session := f.session(t, "pat")
+			c := f.client(t, session)
+			if kind == "rename" {
+				f.diff.Store("diff --git a/old.ts b/new.ts\nsimilarity index 90%\nrename from old.ts\nrename to new.ts\n--- a/old.ts\n+++ b/new.ts\n@@ -1,2 +1,2 @@\n context\n-old\n+new\n")
+			}
+			if kind == "deleted" {
+				f.diff.Store("diff --git a/deleted.ts b/deleted.ts\ndeleted file mode 100644\n--- a/deleted.ts\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-one\n-two\n")
+			}
+			in := f.create(t, c)
+			switch kind {
+			case "empty-summary":
+				in.Summary = " \n"
+			case "zero-entries":
+				in.Entries = nil
+			case "rename":
+				in.Entries[0].Coordinate.Path = "new.ts"
+			case "deleted":
+				in.Entries[0].Coordinate.Path = "deleted.ts"
+				in.Entries[0].Coordinate.Side = golfv1.PullReviewDraftSide_PULL_REVIEW_DRAFT_SIDE_OLD
+			}
+			saved := savePrivateDraft(t, c, in)
+			m := &golfv1.PublishPullRequestReviewDraftRequest{Target: in.Target, DraftId: in.DraftId, ExpectedVersion: saved.CurrentVersion, ExpectedTargetGeneration: saved.TargetGeneration, ComparisonId: saved.Draft.Comparison.Id, OperationId: uuid.NewString(), Decision: golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_COMMENT}
+			// Deliberately discard the successful reply: exact status, not the HTTP error
+			// or an absent native object, is the positive no-dispatch proof.
+			if _, err := c.PublishPullRequestReviewDraft(context.Background(), connect.NewRequest(m)); err != nil {
+				t.Fatal(err)
+			}
+			rejected := inlineStatus(t, c, m)
+			if rejected.Phase != golfv1.PullInlineReviewPhase_PULL_INLINE_REVIEW_PHASE_REJECTED || rejected.FailureCode != "preflight_refused" || rejected.ObservedReviewId != "" || len(rejected.VerifiedCommentIds) != 0 || rejected.AcceptedVersion != "1" {
+				t.Fatal("semantic refusal missing immutable receipt", rejected.Phase)
+			}
+			var fingerprint []byte
+			if err := f.db.QueryRow("SELECT payload_fingerprint FROM golf_inline_review_mutations WHERE operation_id=$1", m.OperationId).Scan(&fingerprint); err != nil {
+				t.Fatal(err)
+			}
+			frozen, err := frozenInlinePayload(saved.Draft, "COMMENT")
+			if err != nil || !bytes.Equal(fingerprint, inlinePayloadFingerprint(frozen)) {
+				t.Fatal("refusal lost complete frozen intent", err)
+			}
+			for i := 0; i < 2; i++ {
+				if out, err := c.PublishPullRequestReviewDraft(context.Background(), connect.NewRequest(m)); err != nil || out.Msg.Mutation.Phase != rejected.Phase {
+					t.Fatal("refused replay changed", err)
+				}
+			}
+			changed := proto.Clone(m).(*golfv1.PublishPullRequestReviewDraftRequest)
+			changed.Decision = golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_APPROVED
+			if _, err := c.PublishPullRequestReviewDraft(context.Background(), connect.NewRequest(changed)); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+				t.Fatal("same-key changed intent accepted", err)
+			}
+			// A fresh explicit intent is permitted after a known no-dispatch refusal,
+			// but must independently pass the unchanged native coordinate predicates.
+			next := proto.Clone(changed).(*golfv1.PublishPullRequestReviewDraftRequest)
+			next.OperationId = uuid.NewString()
+			out, err := c.PublishPullRequestReviewDraft(context.Background(), connect.NewRequest(next))
+			wanted := golfv1.PullInlineReviewPhase_PULL_INLINE_REVIEW_PHASE_REJECTED
+			posts := int32(0)
+			if kind == "empty-summary" {
+				wanted = golfv1.PullInlineReviewPhase_PULL_INLINE_REVIEW_PHASE_SUCCEEDED
+				posts = 1
+			}
+			if err != nil || out.Msg.Mutation.Phase != wanted || f.posts.Load() != posts {
+				t.Fatal("explicit refused-version intent bypassed admission", err)
+			}
+			if inlineStatus(t, c, m).Phase != rejected.Phase {
+				t.Fatal("original refusal rewritten")
+			}
+		})
+	}
+}
+func TestInlineReviewSemanticRefusalStorageLossPostgres(t *testing.T) {
+	f := newInlineReviewFixture(t)
+	session := f.session(t, "pat")
+	c := f.client(t, session)
+	in := f.create(t, c)
+	in.Summary = ""
+	saved := savePrivateDraft(t, c, in)
+	m := &golfv1.PublishPullRequestReviewDraftRequest{Target: in.Target, DraftId: in.DraftId, ExpectedVersion: saved.CurrentVersion, ExpectedTargetGeneration: saved.TargetGeneration, ComparisonId: saved.Draft.Comparison.Id, OperationId: uuid.NewString(), Decision: golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_COMMENT}
+	if _, err := f.db.Exec(`CREATE FUNCTION fixture_refusal_storage_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.phase='REJECTED' THEN RAISE EXCEPTION 'fixture rejection loss';END IF;RETURN NEW;END $$;CREATE TRIGGER fixture_refusal_storage_failure BEFORE UPDATE ON golf_inline_review_mutations FOR EACH ROW EXECUTE FUNCTION fixture_refusal_storage_failure()`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.PublishPullRequestReviewDraft(context.Background(), connect.NewRequest(m)); connect.CodeOf(err) != connect.CodeUnavailable {
+		t.Fatal("lost refusal storage claimed completion", err)
+	}
+	if r := inlineStatus(t, c, m); r.Phase != golfv1.PullInlineReviewPhase_PULL_INLINE_REVIEW_PHASE_RESERVED || r.FailureCode != "" {
+		t.Fatal("storage loss invented no-effect receipt")
+	}
+	if _, err := f.db.Exec(`DROP TRIGGER fixture_refusal_storage_failure ON golf_inline_review_mutations;DROP FUNCTION fixture_refusal_storage_failure()`); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := New(f.s.config, f.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.s = restarted
+	c = f.client(t, session)
+	if out, err := c.PublishPullRequestReviewDraft(context.Background(), connect.NewRequest(m)); err != nil || out.Msg.Mutation.Phase != golfv1.PullInlineReviewPhase_PULL_INLINE_REVIEW_PHASE_RESERVED {
+		t.Fatal("restart repaired unresolved reservation", err)
+	}
+	next := proto.Clone(m).(*golfv1.PublishPullRequestReviewDraftRequest)
+	next.OperationId = uuid.NewString()
+	if _, err := c.PublishPullRequestReviewDraft(context.Background(), connect.NewRequest(next)); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatal("semantic refusal bypassed unresolved actor gate", err)
+	}
+	if f.posts.Load() != 0 {
+		t.Fatal("known unsupported intent dispatched")
+	}
+}
+
+func TestInlineReviewQualifiedActivityPostgres(t *testing.T) {
+	for _, mode := range []string{"", "lost", "pending-hidden", "semantic-refusal"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newInlineReviewFixture(t)
+			c := f.client(t, f.session(t, "pat"))
+			var m *golfv1.PublishPullRequestReviewDraftRequest
+			if mode == "semantic-refusal" {
+				in := f.create(t, c)
+				in.Summary = ""
+				saved := savePrivateDraft(t, c, in)
+				m = &golfv1.PublishPullRequestReviewDraftRequest{Target: in.Target, DraftId: in.DraftId, ExpectedVersion: saved.CurrentVersion, ExpectedTargetGeneration: saved.TargetGeneration, ComparisonId: saved.Draft.Comparison.Id, OperationId: uuid.NewString(), Decision: golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_COMMENT}
+			} else {
+				_, m = f.saved(t, c)
+				f.effect.Store(mode)
+			}
+			var before int
+			if err := f.db.QueryRow("SELECT count(*) FROM golf_repository_activity").Scan(&before); err != nil || before != 0 {
+				t.Fatal("private save leaked shared activity", err)
+			}
+			for i := 0; i < 2; i++ {
+				if _, err := c.PublishPullRequestReviewDraft(context.Background(), connect.NewRequest(m)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			rows, err := f.db.Query("SELECT forge_url,repository_id,recipient_user_id,topic FROM golf_repository_activity")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rows.Close()
+			count := 0
+			for rows.Next() {
+				var forge, topic string
+				var repo, recipient int64
+				if err := rows.Scan(&forge, &repo, &recipient, &topic); err != nil {
+					t.Fatal(err)
+				}
+				count++
+				if forge != f.s.config.GiteaURL || repo != 11 || recipient != 0 || topic != "pulls" {
+					t.Fatal("qualified activity crossed tenant/topic scope")
+				}
+			}
+			wanted := 0
+			if mode == "" {
+				wanted = 1
+			}
+			if count != wanted || rows.Err() != nil {
+				t.Fatal("replay or unqualified effect leaked activity", count, wanted, rows.Err())
+			}
+		})
+	}
+}
+func TestInlineReviewOverallQualifiedActivityPostgres(t *testing.T) {
+	f := newInlineReviewFixture(t)
+	session := f.session(t, "pat")
+	c := f.client(t, session)
+	saved, m := f.saved(t, c)
+	overall := f.overall(m, saved)
+	digest := sha256.Sum256([]byte("overall fixture"))
+	var user, id int64
+	if err := f.s.withManagedSession(t.Context(), session.Value, forgeCredential{Kind: "pat", Token: "pull-pat"}, func(q *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
+		user = caller.UserID
+		row, e := q.ReservePullReviewMutation(t.Context(), database.ReservePullReviewMutationParams{UserID: user, ForgeURL: f.s.config.GiteaURL, IdempotencyKey: overall.IdempotencyKey, PayloadFingerprint: digest[:], BodyFingerprint: digest[:], RepositoryID: 11, RepositoryOwner: "alice", RepositoryName: "private", PullRequestID: 9007199254740993, Number: 7, ExpectedRevision: overall.ExpectedRevision, BaseCommitID: overall.BaseCommitId, HeadCommitID: overall.HeadCommitId, ReviewState: "COMMENT"})
+		id = row.ID
+		return e
+	}); err != nil {
+		t.Fatal(err)
+	}
+	count := func(want int) {
+		t.Helper()
+		var actual int
+		if err := f.db.QueryRow("SELECT count(*) FROM golf_repository_activity").Scan(&actual); err != nil || actual != want {
+			t.Fatal("overall qualified activity count", actual, want, err)
+		}
+	}
+	count(0)
+	q := database.New(f.db)
+	if _, err := q.RecordPullReviewReceipt(t.Context(), database.RecordPullReviewReceiptParams{ObservedReviewID: 881, UserID: user, ForgeURL: f.s.config.GiteaURL, MutationID: id}); err != nil {
+		t.Fatal(err)
+	}
+	count(0)
+	if _, err := q.CompletePullReviewMutation(t.Context(), database.CompletePullReviewMutationParams{State: "SUCCEEDED", UserID: user, ForgeURL: f.s.config.GiteaURL, MutationID: id}); err != nil {
+		t.Fatal(err)
+	}
+	count(1)
+	if _, err := q.CompletePullReviewMutation(t.Context(), database.CompletePullReviewMutationParams{State: "SUCCEEDED", UserID: user, ForgeURL: f.s.config.GiteaURL, MutationID: id}); err == nil {
+		t.Fatal("terminal replay rewrote overall effect")
+	}
+	count(1)
+	var forge, topic string
+	var repo, recipient int64
+	if err := f.db.QueryRow("SELECT forge_url,repository_id,recipient_user_id,topic FROM golf_repository_activity").Scan(&forge, &repo, &recipient, &topic); err != nil || forge != f.s.config.GiteaURL || repo != 11 || recipient != 0 || topic != "pulls" {
+		t.Fatal("overall event wrong scope", err)
+	}
+}
+
+func TestInlineReviewSemanticRefusalBoundaryPostgres(t *testing.T) {
+	t.Run("malformed request cannot fabricate durable refusal", func(t *testing.T) {
+		f := newInlineReviewFixture(t)
+		c := f.client(t, f.session(t, "pat"))
+		_, m := f.saved(t, c)
+		for _, field := range []string{"operation", "version", "decision", "comparison"} {
+			bad := proto.Clone(m).(*golfv1.PublishPullRequestReviewDraftRequest)
+			switch field {
+			case "operation":
+				bad.OperationId = "invalid"
+			case "version":
+				bad.ExpectedVersion = "01"
+			case "decision":
+				bad.Decision = golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_PENDING
+			case "comparison":
+				bad.ComparisonId = "invalid"
+			}
+			if _, err := c.PublishPullRequestReviewDraft(context.Background(), connect.NewRequest(bad)); connect.CodeOf(err) != connect.CodeInvalidArgument {
+				t.Fatal("malformed identity admitted", field, err)
+			}
+		}
+		var count int
+		if err := f.db.QueryRow("SELECT count(*) FROM golf_inline_review_mutations").Scan(&count); err != nil || count != 0 || f.posts.Load() != 0 {
+			t.Fatal("malformed request invented journal", err)
+		}
+	})
+	t.Run("unsupported intent cannot bypass managed bot uncertainty", func(t *testing.T) {
+		f := newInlineReviewFixture(t)
+		c := f.client(t, f.session(t, "pat"))
+		in := f.create(t, c)
+		in.Summary = ""
+		saved := savePrivateDraft(t, c, in)
+		m := &golfv1.PublishPullRequestReviewDraftRequest{Target: in.Target, DraftId: in.DraftId, ExpectedVersion: saved.CurrentVersion, ExpectedTargetGeneration: saved.TargetGeneration, ComparisonId: saved.Draft.Comparison.Id, OperationId: uuid.NewString(), Decision: golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_COMMENT}
+		run := f.seedBot(t, false)
+		digest := sha256.Sum256([]byte("pending publisher"))
+		if _, err := f.db.Exec(`INSERT INTO golf_reviewer_publications(run_id,forge_url,repository_id,pull_request_id,pull_number,publisher_id,payload_fingerprint,state) VALUES($1,$2,11,9007199254740993,7,42,$3,'reserved')`, run, f.s.config.GiteaURL, digest[:]); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c.PublishPullRequestReviewDraft(context.Background(), connect.NewRequest(m)); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+			t.Fatal("semantic rejection bypassed native actor gate", err)
+		}
+		var count int
+		if err := f.db.QueryRow("SELECT count(*) FROM golf_inline_review_mutations").Scan(&count); err != nil || count != 0 || f.posts.Load() != 0 {
+			t.Fatal("blocked domain invented safe refusal", err)
+		}
+	})
+	t.Run("native authority denial withholds refusal receipt", func(t *testing.T) {
+		f := newInlineReviewFixture(t)
+		c := f.client(t, f.session(t, "pat"))
+		in := f.create(t, c)
+		in.Summary = ""
+		saved := savePrivateDraft(t, c, in)
+		m := &golfv1.PublishPullRequestReviewDraftRequest{Target: in.Target, DraftId: in.DraftId, ExpectedVersion: saved.CurrentVersion, ExpectedTargetGeneration: saved.TargetGeneration, ComparisonId: saved.Draft.Comparison.Id, OperationId: uuid.NewString(), Decision: golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_COMMENT}
+		if _, err := c.PublishPullRequestReviewDraft(context.Background(), connect.NewRequest(m)); err != nil {
+			t.Fatal(err)
+		}
+		f.effect.Store("deny-target")
+		if _, err := c.GetPullRequestInlineReviewMutation(context.Background(), connect.NewRequest(&golfv1.GetPullRequestInlineReviewMutationRequest{Target: m.Target, DraftId: m.DraftId, OperationId: m.OperationId})); err == nil {
+			t.Fatal("authority loss exposed private refusal")
+		}
+		if _, err := c.PublishPullRequestReviewDraft(context.Background(), connect.NewRequest(m)); err == nil {
+			t.Fatal("replay bypassed lost native authority")
+		}
+		f.effect.Store("")
+		if inlineStatus(t, c, m).Phase != golfv1.PullInlineReviewPhase_PULL_INLINE_REVIEW_PHASE_REJECTED || f.posts.Load() != 0 {
+			t.Fatal("authority loss erased/reforged known receipt")
+		}
+	})
 }

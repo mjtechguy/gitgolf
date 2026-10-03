@@ -52,33 +52,49 @@ func inlinePayloadFingerprint(input reviewerPublicationInput) []byte {
 	h := sha256.Sum256(raw)
 	return h[:]
 }
-func inlinePayload(draft *golfv1.PullReviewDraft, decision string) (reviewerPublicationInput, reviewComparison, error) {
-	var c reviewComparison
-	if draft == nil || draft.Comparison == nil || draft.Comparison.Capture == nil || draft.Comparison.Capture.Selection == nil || len(draft.Entries) == 0 || len(draft.Entries) > 20 || !discussionText(draft.Summary, 6000) || decision != "APPROVED" && strings.TrimSpace(draft.Summary) == "" {
-		return reviewerPublicationInput{}, c, invalid("Publish 1–20 saved inline entries and a supported decision. Comment/change requests require a nonempty saved summary.")
+
+// Freeze every ordered saved entry before admission. Unsupported native coordinates
+// still identify an immutable intent and must never produce a partial fingerprint.
+func frozenInlinePayload(draft *golfv1.PullReviewDraft, decision string) (reviewerPublicationInput, error) {
+	if draft == nil || draft.Comparison == nil || draft.Comparison.Capture == nil || draft.Comparison.Capture.Selection == nil || decision == "" {
+		return reviewerPublicationInput{}, errCredentialUnavailable
 	}
 	if err := validateReviewDraftContents(draft.Summary, draft.Entries, draft.Comparison); err != nil {
-		return reviewerPublicationInput{}, c, err
-	}
-	var err error
-	c, err = parseReviewComparison(draft.Comparison.RawDiff)
-	if err != nil {
-		return reviewerPublicationInput{}, c, err
+		return reviewerPublicationInput{}, err
 	}
 	input := reviewerPublicationInput{Body: draft.Summary, Head: draft.Comparison.Capture.Selection.HeadCommitId, Event: decision, Comments: []reviewerPublicationComment{}}
 	for _, entry := range draft.Entries {
-		selected := entry.Coordinate
-		old := selected.Side == golfv1.PullReviewDraftSide_PULL_REVIEW_DRAFT_SIDE_OLD
-		if !c.allowsSide(selected.Path, int(selected.Line), old) {
-			return input, c, invalid("Selected native context is not qualified for publication. Renamed/deleted files remain private-draft only.")
-		}
-		comment := reviewerPublicationComment{Path: selected.Path, Body: entry.Body}
-		if old {
-			comment.OldLine = int(selected.Line)
+		comment := reviewerPublicationComment{Path: entry.Coordinate.Path, Body: entry.Body}
+		if entry.Coordinate.Side == golfv1.PullReviewDraftSide_PULL_REVIEW_DRAFT_SIDE_OLD {
+			comment.OldLine = int(entry.Coordinate.Line)
 		} else {
-			comment.NewLine = int(selected.Line)
+			comment.NewLine = int(entry.Coordinate.Line)
 		}
 		input.Comments = append(input.Comments, comment)
+	}
+	return input, nil
+}
+func inlinePayload(draft *golfv1.PullReviewDraft, decision string) (reviewerPublicationInput, reviewComparison, error) {
+	var c reviewComparison
+	input, err := frozenInlinePayload(draft, decision)
+	if err != nil {
+		return input, c, err
+	}
+	if len(input.Comments) == 0 || len(input.Comments) > 20 || decision != "APPROVED" && strings.TrimSpace(input.Body) == "" {
+		return input, c, invalid("Publish 1–20 saved inline entries and a supported decision. Comment/change requests require a nonempty saved summary.")
+	}
+	c, err = parseReviewComparison(draft.Comparison.RawDiff)
+	if err != nil {
+		return input, c, err
+	}
+	for _, comment := range input.Comments {
+		line, old := comment.NewLine, false
+		if comment.OldLine > 0 {
+			line, old = comment.OldLine, true
+		}
+		if !c.allowsSide(comment.Path, line, old) {
+			return input, c, invalid("Selected native context is not qualified for publication. Renamed/deleted files remain private-draft only.")
+		}
 	}
 	raw, err := json.Marshal(input)
 	if err != nil {
@@ -198,7 +214,7 @@ func (s *Server) reserveInlineReview(ctx context.Context, session string, token 
 		if e != nil {
 			return e
 		}
-		input, parsed, e = inlinePayload(draft, inlineDecision(m.Decision))
+		input, e = frozenInlinePayload(draft, inlineDecision(m.Decision))
 		if e != nil {
 			return e
 		}
@@ -430,7 +446,16 @@ func (s *Server) PublishPullRequestReviewDraft(ctx context.Context, req *connect
 			}
 			return e
 		}
-		base, repo, pull, e := s.inlinePreflight(ctx, session, token, m.Target, scope, r, draft)
+		// Semantic refusal is recorded only after the complete saved intent wins
+		// the same target/actor reservation as a native dispatch. No POST has run.
+		var e error
+		input, parsed, e = inlinePayload(draft, inlineDecision(m.Decision))
+		var base string
+		var repo Repository
+		var pull forgePull
+		if e == nil {
+			base, repo, pull, e = s.inlinePreflight(ctx, session, token, m.Target, scope, r, draft)
+		}
 		if e == nil {
 			pending, pe := s.ownPendingReview(ctx, session, token, database.GolfPullReviewMutation{RepositoryOwner: m.Target.Repository.Owner, RepositoryName: m.Target.Repository.Name, RepositoryID: r.RepositoryID, PullRequestID: r.PullRequestID, Number: int64(r.PullNumber), ActorForgeUserID: r.ActorID})
 			e = pe

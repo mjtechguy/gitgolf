@@ -122,6 +122,32 @@ func TestInlineReviewNativeProof(t *testing.T) {
 	if replay, e := c.PublishPullRequestReviewDraft(t.Context(), connect.NewRequest(rejected)); e != nil || replay.Msg.Mutation.Phase != golfv1.PullInlineReviewPhase_PULL_INLINE_REVIEW_PHASE_REJECTED || len(readNative()) != 0 {
 		t.Fatal("rejected key resumed after explicit cleanup")
 	}
+	// A native-valid saved OLD/NEW collection with an empty COMMENT summary is
+	// a known semantic refusal, not a missing-operation/status404 dead end.
+	semantic := newCapture()
+	empty := editPrivateDraft(saved)
+	empty.Summary = ""
+	edited, e := c.SavePullRequestReviewDraft(t.Context(), connect.NewRequest(empty))
+	if e != nil {
+		t.Fatal("native empty-summary private edit failed")
+	}
+	saved = edited.Msg
+	semantic.ExpectedVersion = saved.CurrentVersion
+	semantic.ExpectedTargetGeneration = saved.TargetGeneration
+	if _, e := c.PublishPullRequestReviewDraft(t.Context(), connect.NewRequest(semantic)); e != nil {
+		t.Fatal("native semantic refusal returned transport uncertainty")
+	}
+	status, e := c.GetPullRequestInlineReviewMutation(t.Context(), connect.NewRequest(&golfv1.GetPullRequestInlineReviewMutationRequest{Target: target, DraftId: semantic.DraftId, OperationId: semantic.OperationId}))
+	if e != nil || status.Msg.Mutation.Phase != golfv1.PullInlineReviewPhase_PULL_INLINE_REVIEW_PHASE_REJECTED || status.Msg.Mutation.FailureCode != "preflight_refused" || status.Msg.Mutation.AcceptedVersion != "2" || len(readNative()) != 0 {
+		t.Fatal("native semantic refusal missing exact inspectable no-dispatch receipt")
+	}
+	if replay, e := c.PublishPullRequestReviewDraft(t.Context(), connect.NewRequest(semantic)); e != nil || replay.Msg.Mutation.Phase != golfv1.PullInlineReviewPhase_PULL_INLINE_REVIEW_PHASE_REJECTED || len(readNative()) != 0 {
+		t.Fatal("native semantic rejection replay dispatched")
+	}
+	var priorActivity int
+	if e := s.db.QueryRow("SELECT count(*) FROM golf_repository_activity").Scan(&priorActivity); e != nil || priorActivity != 0 {
+		t.Fatal("private save or nondispatch refusal leaked shared invalidation")
+	}
 	for i, decision := range []golfv1.PullRequestReviewState{golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_COMMENT, golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_APPROVED, golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_REQUEST_CHANGES} {
 		// These are explicit new captures, not unknown retries, retained-draft remaps
 		// or automatic pending adoption. Native activity may alter PR timestamps.
@@ -170,8 +196,8 @@ func TestInlineReviewNativeProof(t *testing.T) {
 		t.Log("qualified decision", decision.String(), "exact old/new same-path batch; historical receipt only")
 	}
 	var shared int
-	if err = s.db.QueryRow("SELECT count(*) FROM golf_repository_activity").Scan(&shared); err != nil || shared != 0 {
-		t.Fatal("private/native helper created fabricated shared activity")
+	if err = s.db.QueryRow("SELECT count(*) FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=$2 AND recipient_user_id=0 AND topic='pulls'", s.config.GiteaURL, in.RepositoryID).Scan(&shared); err != nil || shared != 3 {
+		t.Fatal("qualified native effects did not produce exactly scoped shared invalidations")
 	}
 	_ = golfv1connect.RepositoryServicePublishPullRequestReviewDraftProcedure
 }

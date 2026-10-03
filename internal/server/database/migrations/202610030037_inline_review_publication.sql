@@ -23,7 +23,7 @@ CREATE TABLE golf_inline_review_mutations (
  head_commit text NOT NULL CHECK(head_commit ~ '^([a-f0-9]{40}|[a-f0-9]{64})$'),
  diff_sha256 text NOT NULL CHECK(diff_sha256 ~ '^[a-f0-9]{64}$'),
  decision text NOT NULL CHECK(decision IN ('COMMENT','APPROVED','REQUEST_CHANGES')),
- entry_count integer NOT NULL CHECK(entry_count BETWEEN 1 AND 20),
+ entry_count integer NOT NULL CHECK(entry_count BETWEEN 0 AND 20),
  phase text NOT NULL DEFAULT 'RESERVED' CHECK(phase IN ('RESERVED','DISPATCH_UNKNOWN','SUCCEEDED','REJECTED')),
  observed_review_id bigint NOT NULL DEFAULT 0 CHECK(observed_review_id>=0),
  verified_comment_ids jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(verified_comment_ids)='array'),
@@ -34,7 +34,7 @@ CREATE TABLE golf_inline_review_mutations (
  FOREIGN KEY(draft_id,user_id,forge_url,repository_id,pull_request_id) REFERENCES golf_review_drafts(id,user_id,forge_url,repository_id,pull_request_id),
  FOREIGN KEY(draft_id,draft_version) REFERENCES golf_review_draft_versions(draft_id,version),
  CHECK(length(base_tip)=length(merge_base) AND length(base_tip)=length(head_commit)),
- CHECK((phase='SUCCEEDED' AND observed_review_id>0 AND jsonb_array_length(verified_comment_ids)=entry_count AND failure_code='') OR
+ CHECK((phase='SUCCEEDED' AND entry_count>0 AND observed_review_id>0 AND jsonb_array_length(verified_comment_ids)=entry_count AND failure_code='') OR
        (phase<>'SUCCEEDED' AND jsonb_array_length(verified_comment_ids)=0)),
  CHECK((phase='RESERVED' AND observed_review_id=0 AND failure_code='') OR
        (phase='DISPATCH_UNKNOWN' AND failure_code IN ('','native_effect_unverified')) OR
@@ -118,6 +118,25 @@ END $$;
 CREATE TRIGGER golf_review_shared_overall BEFORE INSERT ON golf_pull_review_mutations FOR EACH ROW EXECUTE FUNCTION golf_review_shared_admission();
 CREATE TRIGGER golf_review_shared_bot BEFORE INSERT ON golf_reviewer_publications FOR EACH ROW EXECUTE FUNCTION golf_review_shared_admission();
 CREATE TRIGGER golf_review_shared_inline BEFORE INSERT ON golf_inline_review_mutations FOR EACH ROW EXECUTE FUNCTION golf_review_shared_admission();
+-- Only a fully qualified native effect invalidates shared repository views.
+-- Draft SAVE/DELETE, reservations, unknown receipts and refusals stay private.
+CREATE FUNCTION golf_human_review_activity() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE f text;
+BEGIN
+ IF TG_TABLE_NAME='golf_inline_review_mutations' THEN
+  IF OLD.phase<>'SUCCEEDED' AND NEW.phase='SUCCEEDED' THEN
+   PERFORM golf_append_repository_activity(NEW.forge_url,NEW.repository_id,0,'pulls');
+  END IF;
+ ELSE
+  IF OLD.state<>'SUCCEEDED' AND NEW.state='SUCCEEDED' THEN
+   SELECT forge_url INTO f FROM golf_users WHERE id=NEW.user_id;
+   PERFORM golf_append_repository_activity(f,NEW.repository_id,0,'pulls');
+  END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER golf_human_inline_review_activity AFTER UPDATE ON golf_inline_review_mutations FOR EACH ROW EXECUTE FUNCTION golf_human_review_activity();
+CREATE TRIGGER golf_human_overall_review_activity AFTER UPDATE ON golf_pull_review_mutations FOR EACH ROW EXECUTE FUNCTION golf_human_review_activity();
 -- +goose StatementEnd
 CREATE TRIGGER golf_inline_review_no_delete BEFORE DELETE OR TRUNCATE ON golf_inline_review_mutations FOR EACH STATEMENT EXECUTE FUNCTION golf_audit_reject_mutation();
 CREATE TRIGGER golf_inline_review_events_immutable BEFORE UPDATE OR DELETE OR TRUNCATE ON golf_inline_review_events FOR EACH STATEMENT EXECUTE FUNCTION golf_audit_reject_mutation();
