@@ -115,3 +115,16 @@ test('sign out cancels held receipt reads and a different owner cannot restore l
  const errors:string[]=[];page.on('console',message=>{if(message.type()==='error'&&message.text().includes('Cannot update a component'))errors.push(message.text());});
  const s=await backend(page);await open(page);await add(page);await save(page);let release!:()=>void;s.hold=new Promise(resolve=>release=resolve);await scope(page).getByRole('button',{name:'Reopen saved private draft',exact:true}).click();await page.getByLabel('Your account',{exact:true}).click();await page.getByRole('button',{name:'Sign out',exact:true}).click();await expect(page.getByLabel('Email or username')).toBeVisible();release();s.hold=undefined;s.signedIn=true;s.user=create(UserSchema,{id:'5',login:'new-reader'});await page.reload();await page.getByRole('button',{name:'Private draft',exact:true}).click();await expect(scope(page).getByRole('alert')).toContainText('owner');await expect(scope(page)).not.toContainText('PRIVATE comment');expect(s.saves).toHaveLength(1);expect(errors).toEqual([]);
 });
+
+
+const nativeDelimitedDiff=()=>diff.replace(`diff --git "a/${path}" "b/${path}"`,`diff --git a/${path} b/${path}`).replace(`--- "a/${path}"`,`--- a/${path}\t`).replace(`+++ "b/${path}"`,`+++ b/${path}\t`);
+test('native empty TAB side delimiters save exact old/new private coordinates and untouched comparison',async({page})=>{
+ const s=await backend(page);s.text=nativeDelimitedDiff();await open(page);await add(page,'old');await add(page,'new');expect(s.saves).toHaveLength(0);await save(page);
+ expect(s.saves).toHaveLength(1);const sent=s.saves[0]!;expect(sent.entries.map(e=>e.coordinate)).toEqual([expect.objectContaining({fileIndex:1,hunkIndex:1,side:1,line:10,path}),expect.objectContaining({fileIndex:1,hunkIndex:1,side:2,line:10,path})]);
+ expect(sent.comparison.case).toBe('capture');if(sent.comparison.case==='capture')expect(sent.comparison.value.diffSha256).toBe(createHash('sha256').update(s.text).digest('hex'));
+ expect(s.draft!.comparison!.rawDiff).toBe(s.text);expect(s.deletes).toHaveLength(0);
+});
+for(const suffix of ['\t\t','\ttimestamp','\tother/path\t'])test(`ambiguous native side suffix ${JSON.stringify(suffix)} offers no private coordinate or eager save`,async({page})=>{
+ const s=await backend(page);s.text=nativeDelimitedDiff().replace(`+++ b/${path}\t\n`,`+++ b/${path}${suffix}\n`);await page.goto('/owner/sample/pull/3/files');await page.getByRole('button',{name:'Private draft',exact:true}).click();const malformed=scope(page).locator('.diff-file').nth(1);
+ await expect(malformed).toContainText('cannot be mapped safely');await expect(malformed.getByRole('button',{name:/Add private comment/})).toHaveCount(0);await expect(malformed.locator('pre')).toContainText('newSecond');expect(s.saves).toHaveLength(0);expect(s.deletes).toHaveLength(0);
+});

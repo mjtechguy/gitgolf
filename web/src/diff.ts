@@ -31,6 +31,17 @@ function filePath(value: string) {
   return path === '/dev/null' ? '' : path.replace(/^[ab]\//, '');
 }
 
+// Only side headers have this native empty terminal delimiter. Do not trim
+// generic Git paths or hunk text, and never infer a path from a timestamp suffix.
+function sideHeaderPath(value: string): string | undefined {
+  const tab = value.indexOf('\t');
+  if (tab >= 0) {
+    if (tab !== value.length - 1 || value.slice(0, tab) === '/dev/null') return undefined;
+    value = value.slice(0, tab);
+  }
+  return filePath(value);
+}
+
 export function parseDiff(text: string): { files: DiffFile[]; preamble: string } {
   const files: DiffFile[] = [];
   const preamble: string[] = [];
@@ -80,8 +91,14 @@ export function parseDiff(text: string): { files: DiffFile[]; preamble: string }
       continue;
     }
     file.headers.push(line);
-    if (line.startsWith('--- ')) file.oldPath = filePath(line.slice(4));
-    if (line.startsWith('+++ ')) file.path = filePath(line.slice(4)) || file.oldPath;
+    if (line.startsWith('--- ')) {
+      const path = sideHeaderPath(line.slice(4));
+      if (path === undefined) file.valid = false; else file.oldPath = path;
+    }
+    if (line.startsWith('+++ ')) {
+      const path = sideHeaderPath(line.slice(4));
+      if (path === undefined) file.valid = false; else file.path = path || file.oldPath;
+    }
     if (line.startsWith('rename from ')) file.oldPath = gitPath(line.slice(12));
     if (line.startsWith('rename to ')) file.path = gitPath(line.slice(10));
     if (line.startsWith('Binary files ') || line === 'GIT binary patch') file.binary = true;
