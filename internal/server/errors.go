@@ -43,6 +43,8 @@ func rpcError(err error) error {
 	var input inputError
 	var upstream forgeError
 	switch {
+	case errors.Is(err, errCodexPermission):
+		code, message = connect.CodePermissionDenied, "You do not have permission to manage this Codex connection."
 	case errors.Is(err, errCodexBrowserOnly):
 		code, message = connect.CodePermissionDenied, "Use your Golf browser account to manage Codex authentication."
 	case errors.Is(err, errCodexConflict):

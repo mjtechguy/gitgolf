@@ -1,0 +1,69 @@
+import { useEffect, useRef, useState } from 'react';
+import { useForm } from '@tanstack/react-form';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { codexAccountClient, instanceAdminClient } from './api';
+import type { CodexConnection, LocalAccountInfo, User } from './gen/golf/v1/golf_pb';
+import { CodexConnectionScope, CodexConnectionState } from './gen/golf/v1/golf_pb';
+import { DataTable, type DataTableColumn } from './DataTable';
+import { Loading, More, privateQuery } from './RepositoryUI';
+import { CodexConnectionDetails, validConnection } from './CodexConnections';
+
+function ConnectionEditor({ connection, userId, pending, onSave, onCancel }: { connection?: CodexConnection; userId: string; pending: boolean; onSave: (name: string, allowedUserIds: string[]) => void; onCancel: () => void }) {
+  const first = useRef<HTMLInputElement>(null);
+  const form = useForm({ defaultValues: { name: connection?.name || '', allowedUserIds: connection?.allowedUserIds || [] as string[] }, validators: { onSubmit: ({ value }) => !value.name.trim() || value.name.trim().length > 80 ? 'Enter a connection name up to 80 characters.' : undefined }, onSubmit: ({ value }) => onSave(value.name.trim(), value.allowedUserIds) });
+  const users = useInfiniteQuery({ ...privateQuery, queryKey: ['codex-access-users', userId], enabled: Boolean(connection), initialPageParam: 1, queryFn: ({ pageParam, signal }) => instanceAdminClient.listLocalAccounts({ page: { page: pageParam, limit: 50 } }, { signal, timeoutMs: 8_000 }), getNextPageParam: (page, _pages, current) => page.page && page.page.nextPage > current ? page.page.nextPage : undefined });
+  useEffect(() => { first.current?.focus(); }, []);
+  const accounts = users.isSuccess && !users.isError ? [...new Map(users.data.pages.flatMap(page => page.accounts).map(account => [account.golfUserId, account])).values()].filter(account => account.golfUserId) : [];
+  return <form className="credential-form-content" aria-label={connection ? 'Edit connection access' : 'New Codex connection'} onSubmit={event => { event.preventDefault(); void form.handleSubmit(); }}>
+    <h3>{connection ? `Edit ${connection.name}` : 'New Codex connection'}</h3>
+    <form.Field name="name">{field => <label>Connection name<input ref={first} maxLength={80} required value={field.state.value} disabled={pending} onChange={event => field.handleChange(event.target.value)} onBlur={field.handleBlur} /></label>}</form.Field>
+    {connection ? <><h3>Allowed Golf users</h3><p className="field-help">Global administrators manage every instance connection but must also be selected here to receive use permission. Select enrolled users who may use this connection when task execution becomes available. An empty selection shares it with no ordinary users.</p>
+      {users.isError ? <p className="error" role="alert">User access could not be confirmed. Refresh the inventory before saving.</p> : users.isPending ? <Loading label="Loading enrolled Golf users…" /> : <form.Field name="allowedUserIds">{field => {
+        const columns: DataTableColumn<LocalAccountInfo>[] = [
+          { id: 'selected', header: 'Allowed', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => <input type="checkbox" aria-label={`Allow ${row.original.username}`} checked={field.state.value.includes(row.original.golfUserId)} disabled={pending || row.original.disabled && !field.state.value.includes(row.original.golfUserId)} onChange={event => field.handleChange(event.target.checked ? [...field.state.value, row.original.golfUserId] : field.state.value.filter(id => id !== row.original.golfUserId))} /> },
+          { accessorKey: 'username', header: 'User' }, { accessorKey: 'email', header: 'Golf email' },
+          { id: 'status', accessorFn: account => account.disabled ? 'Disabled' : account.isInstanceAdmin ? 'Administrator · manages all connections' : 'Enabled', header: 'Account' },
+        ];
+        const unlisted = field.state.value.filter(id => !accounts.some(account => account.golfUserId === id));
+        return <><DataTable label="Enrolled users for connection access" data={accounts} columns={columns} getRowId={account => account.golfUserId} /><div className="list-footer"><span>{accounts.length} loaded · search and sorting cover loaded users</span><More hasMore={Boolean(users.hasNextPage)} loading={users.isFetchingNextPage || pending} load={() => void users.fetchNextPage()} label="users" /></div>{unlisted.length ? <p className="field-help">{unlisted.length} selected identities are not in this loaded inventory. Load more users to inspect them, or <button type="button" className="text-button" disabled={pending} onClick={() => field.handleChange(field.state.value.filter(id => accounts.some(account => account.golfUserId === id)))}>remove unlisted access</button>.</p> : null}</>;
+      }}</form.Field>}</> : <p className="field-help">Create a private named connection first. Then configure allowed users and sign in to its Codex account using explicit Edit and Manage authentication actions.</p>}
+    <form.Subscribe selector={state => state.errors}>{errors => errors.length ? <p className="error" role="alert">{errors.join(' ')}</p> : null}</form.Subscribe>
+    <div className="credential-actions"><button className="button primary" type="submit" disabled={pending || Boolean(connection && (!users.isSuccess || users.isError))}>{pending ? 'Saving…' : connection ? 'Save connection access' : 'Create connection'}</button><button className="button secondary" type="button" disabled={pending} onClick={onCancel}>Cancel</button></div>
+  </form>;
+}
+
+export function AdminCodexConnections({ userId, signingOut }: { userId: string; signingOut: boolean }) {
+  const client = useQueryClient(); const key = ['codex-connections', userId, 'instance'];
+  const [editor, setEditor] = useState<{ connection?: CodexConnection } | null>(null); const [selected, setSelected] = useState(''); const [pending, setPending] = useState(false); const [uncertain, setUncertain] = useState(false); const [notice, setNotice] = useState(''); const [hidden, setHidden] = useState(false);
+  const live = useRef(true); const generation = useRef(0); const request = useRef<AbortController | null>(null);
+  const active = () => live.current && !signingOut && client.getQueryData<User | null>(['session'])?.id === userId;
+  const query = useQuery({ ...privateQuery, queryKey: key, enabled: !signingOut && !hidden, queryFn: async ({ signal }) => { const result = await codexAccountClient.listCodexConnections({ instanceAdmin: true }, { signal, timeoutMs: 8_000 }); if (result.connections.some(connection => !validConnection(connection) || connection.scope !== CodexConnectionScope.INSTANCE || !connection.id || !connection.canManage)) throw new Error('Administration could not be confirmed.'); return result.connections; } });
+  const connections = !signingOut && !hidden && query.isSuccess && !query.isError ? query.data : [];
+  function clear() { generation.current++; request.current?.abort(); setEditor(null); setSelected(''); setNotice(''); setHidden(true); void client.cancelQueries({ queryKey: key }); client.removeQueries({ queryKey: key }); void client.cancelQueries({ queryKey: ['codex-account', userId] }); client.removeQueries({ queryKey: ['codex-account', userId] }); void client.cancelQueries({ queryKey: ['codex-access-users', userId] }); client.removeQueries({ queryKey: ['codex-access-users', userId] }); }
+  useEffect(() => { live.current = true; const hide = () => clear(); window.addEventListener('pagehide', hide); return () => { live.current = false; generation.current++; request.current?.abort(); window.removeEventListener('pagehide', hide); void client.cancelQueries({ queryKey: ['codex-account', userId] }); client.removeQueries({ queryKey: ['codex-account', userId] }); client.removeQueries({ queryKey: ['codex-access-users', userId] }); }; }, [userId]);
+  useEffect(() => { if (signingOut || query.isError) clear(); }, [signingOut, query.isError]);
+  async function refresh() { if (!active() || request.current) return; setEditor(null); setSelected(''); setNotice(''); setHidden(true); const result = await query.refetch(); if (active() && result.isSuccess) { setHidden(false); setUncertain(false); } }
+  async function save(name: string, allowedUserIds: string[]) {
+    if (!active() || request.current || !editor || uncertain) return; const observed = editor.connection; const stamp = generation.current; const attempt = new AbortController(); request.current = attempt; setPending(true); setNotice('');
+    try { const options = { signal: attempt.signal, timeoutMs: 12_000 }; const response = observed ? await codexAccountClient.setCodexConnectionAccess({ connectionId: observed.id, expectedVersion: observed.version, name, allowedUserIds }, options) : await codexAccountClient.createCodexConnection({ name }, options);
+      if (!active() || attempt.signal.aborted || stamp !== generation.current) return;
+      if (!validConnection(response.connection) || !response.connection.id || !response.connection.canManage || response.connection.scope !== CodexConnectionScope.INSTANCE || response.connection.name !== name || observed && (response.connection.id !== observed.id || BigInt(response.connection.version) <= BigInt(observed.version) || [...response.connection.allowedUserIds].sort().join(',') !== [...allowedUserIds].sort().join(','))) throw new Error('Unverified connection receipt.');
+      setEditor(null); setNotice(observed ? 'Connection access saved.' : 'Connection created. Edit access or manage authentication to continue.'); await client.invalidateQueries({ queryKey: ['codex-connections', userId] }); client.removeQueries({ queryKey: ['codex-account', userId, response.connection.id], exact: true });
+    } catch { if (active() && stamp === generation.current) { setEditor(null); setSelected(''); setHidden(true); setUncertain(true); setNotice('The change could not be confirmed. Refresh and inspect access before trying again. No automatic retry was sent.'); client.removeQueries({ queryKey: key }); } }
+    finally { if (request.current === attempt) request.current = null; if (live.current) setPending(false); }
+  }
+  const columns: DataTableColumn<CodexConnection>[] = [
+    { accessorKey: 'name', header: 'Connection' },
+    { accessorKey: 'email', header: 'Account', cell: ({ row }) => <>{row.original.email || 'Not reported'}<small>{row.original.planType || 'Plan not reported'}</small></> },
+    { id: 'status', accessorFn: connection => connection.state === CodexConnectionState.CONNECTED ? 'Credentials configured' : connection.state === CodexConnectionState.AWAITING_AUTH ? 'Awaiting approval' : connection.state === CodexConnectionState.REAUTH_REQUIRED ? 'Reconnect required' : connection.state === CodexConnectionState.UNAVAILABLE ? 'Unavailable' : 'Not connected', header: 'Authentication' },
+    { id: 'access', accessorFn: connection => `${connection.allowedUserIds.length} selected users`, header: 'Access', cell: ({ row }) => <>{row.original.allowedUserIds.length} selected users<small>Global administrators manage this connection</small></> },
+    { id: 'actions', header: 'Actions', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => <div className="credential-actions"><button className="text-button" disabled={pending || uncertain || Boolean(editor)} onClick={() => { setSelected(''); setEditor({ connection: row.original }); }}>Edit name and access</button><button className="text-button" disabled={pending || uncertain || Boolean(editor)} onClick={() => setSelected(row.original.id)}>Manage authentication</button></div> },
+  ];
+  return <section className="browser-panel credential-list-panel" aria-label="Instance coding-agent connections"><div className="browser-panel-heading"><h2>Instance coding-agent connections</h2><div className="credential-actions"><button className="button primary" disabled={pending || uncertain || signingOut || hidden || !query.isSuccess || Boolean(editor)} onClick={() => { setSelected(''); setEditor({}); }}>New Codex connection</button><button className="button secondary" disabled={pending || query.isFetching || signingOut} onClick={() => void refresh()}>Refresh connections</button></div></div>
+    <p className="panel-footnote">Keep personal accounts separate from named instance accounts. Only global administrators manage shared authentication and allowed users. Authentication does not verify model access; agent execution and repository authority are not enabled by these permissions.</p>
+    {notice && !signingOut ? <p role={uncertain ? 'alert' : 'status'} className={uncertain ? 'error' : 'session-notice'}>{notice}</p> : null}
+    {editor && !hidden ? <ConnectionEditor key={editor.connection?.id || 'new'} connection={editor.connection} userId={userId} pending={pending} onSave={(name, users) => void save(name, users)} onCancel={() => setEditor(null)} /> : null}
+    {signingOut ? null : hidden || query.isError ? <p className="error" role="alert">Connection administration is unavailable. Refresh to verify your current access.</p> : query.isPending ? <Loading label="Verifying coding-agent administration…" /> : <DataTable label="Instance Codex connections" data={connections} columns={columns} getRowId={connection => connection.id} />}
+    {selected && connections.some(connection => connection.id === selected) ? <><div className="credential-actions"><button className="button secondary" onClick={() => setSelected('')}>Close authentication details</button></div><CodexConnectionDetails key={selected} userId={userId} signingOut={signingOut} connectionId={selected} embedded /></> : null}
+  </section>;
+}

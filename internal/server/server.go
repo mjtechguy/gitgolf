@@ -36,7 +36,7 @@ type Config struct {
 }
 type Server struct {
 	codexMu                       sync.Mutex
-	codexRuntimes                 map[int64]*codexRuntime
+	codexRuntimes                 map[string]*codexRuntime
 	pushCoordinatorSeen           atomic.Int64
 	config                        Config
 	db                            *sql.DB

@@ -51,6 +51,7 @@ type GolfAuditEvent struct {
 	RevokedCount    int64
 	OperationID     string
 	ExpiresAt       sql.NullTime
+	ResourceID      uuid.NullUUID
 }
 
 type GolfAutomationCredential struct {
@@ -102,7 +103,7 @@ type GolfCodexAuth struct {
 
 type GolfCodexConnection struct {
 	ID              uuid.UUID
-	UserID          int64
+	UserID          sql.NullInt64
 	Version         int64
 	State           string
 	AuthMethod      string
@@ -116,6 +117,14 @@ type GolfCodexConnection struct {
 	ReasonCode      string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	Scope           string
+	Name            string
+	ForgeURL        string
+}
+
+type GolfCodexConnectionAccess struct {
+	ConnectionID uuid.UUID
+	UserID       int64
 }
 
 type GolfCryptoEvent struct {

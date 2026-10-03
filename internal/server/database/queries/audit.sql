@@ -49,7 +49,7 @@ WHERE u.id = sqlc.arg(user_id) AND u.forge_url = sqlc.arg(forge_url)
 
 -- name: ListAuditEvents :many
 SELECT e.id, e.occurred_at, e.action, e.actor_session_id, e.target_session_id,
-       e.credential_kind, e.revoked_count, e.operation_id, e.expires_at
+       e.credential_kind, e.revoked_count, e.operation_id, e.expires_at,e.resource_id
 FROM golf_audit_events e
 JOIN golf_users u ON u.id = e.user_id
 JOIN golf_sessions caller ON caller.user_id = u.id
@@ -71,3 +71,7 @@ SELECT EXISTS (
     AND caller.token_hash = sqlc.arg(caller_token_hash)
     AND caller.expires_at > clock_timestamp()
 );
+
+-- name: AppendCodexAuditEvent :exec
+INSERT INTO golf_audit_events (user_id,action,actor_session_id,target_session_id,credential_kind,revoked_count,operation_id,expires_at,resource_id)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);

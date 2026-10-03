@@ -9,6 +9,8 @@ import (
 	"context"
 	"database/sql"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const appendAuditEvent = `-- name: AppendAuditEvent :exec
@@ -39,6 +41,38 @@ func (q *Queries) AppendAuditEvent(ctx context.Context, arg AppendAuditEventPara
 		arg.RevokedCount,
 		arg.OperationID,
 		arg.ExpiresAt,
+	)
+	return err
+}
+
+const appendCodexAuditEvent = `-- name: AppendCodexAuditEvent :exec
+INSERT INTO golf_audit_events (user_id,action,actor_session_id,target_session_id,credential_kind,revoked_count,operation_id,expires_at,resource_id)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+`
+
+type AppendCodexAuditEventParams struct {
+	UserID          int64
+	Action          string
+	ActorSessionID  int64
+	TargetSessionID sql.NullInt64
+	CredentialKind  string
+	RevokedCount    int64
+	OperationID     string
+	ExpiresAt       sql.NullTime
+	ResourceID      uuid.NullUUID
+}
+
+func (q *Queries) AppendCodexAuditEvent(ctx context.Context, arg AppendCodexAuditEventParams) error {
+	_, err := q.db.ExecContext(ctx, appendCodexAuditEvent,
+		arg.UserID,
+		arg.Action,
+		arg.ActorSessionID,
+		arg.TargetSessionID,
+		arg.CredentialKind,
+		arg.RevokedCount,
+		arg.OperationID,
+		arg.ExpiresAt,
+		arg.ResourceID,
 	)
 	return err
 }
@@ -123,7 +157,7 @@ func (q *Queries) GetAuditSnapshot(ctx context.Context, arg GetAuditSnapshotPara
 
 const listAuditEvents = `-- name: ListAuditEvents :many
 SELECT e.id, e.occurred_at, e.action, e.actor_session_id, e.target_session_id,
-       e.credential_kind, e.revoked_count, e.operation_id, e.expires_at
+       e.credential_kind, e.revoked_count, e.operation_id, e.expires_at,e.resource_id
 FROM golf_audit_events e
 JOIN golf_users u ON u.id = e.user_id
 JOIN golf_sessions caller ON caller.user_id = u.id
@@ -155,6 +189,7 @@ type ListAuditEventsRow struct {
 	RevokedCount    int64
 	OperationID     string
 	ExpiresAt       sql.NullTime
+	ResourceID      uuid.NullUUID
 }
 
 func (q *Queries) ListAuditEvents(ctx context.Context, arg ListAuditEventsParams) ([]ListAuditEventsRow, error) {
@@ -183,6 +218,7 @@ func (q *Queries) ListAuditEvents(ctx context.Context, arg ListAuditEventsParams
 			&i.RevokedCount,
 			&i.OperationID,
 			&i.ExpiresAt,
+			&i.ResourceID,
 		); err != nil {
 			return nil, err
 		}

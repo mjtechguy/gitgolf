@@ -698,6 +698,8 @@ enum AuditAction {
  AUDIT_ACTION_CODEX_LOGIN_CANCELED = 8;
  AUDIT_ACTION_CODEX_CONNECTION_REFRESHED = 9;
  AUDIT_ACTION_CODEX_CONNECTION_DISCONNECTED = 10;
+ AUDIT_ACTION_CODEX_CONNECTION_CREATED = 11;
+ AUDIT_ACTION_CODEX_ACCESS_CHANGED = 12;
 }
 message AuditEvent {
   string id = 1;
@@ -712,6 +714,7 @@ message AuditEvent {
   string operation_id = 8;
   // Only SIGN_IN: the new session's absolute expiry, not an event retention date.
   optional string expires_at = 9;
+ string resource_id = 10;
 }
 message ListAuditEventsRequest {
   // Zero defaults to 20; maximum 100.
@@ -1097,7 +1100,7 @@ message InfrastructureConnectionCredential {
  string session_token = 4;
 }
 message ListInfrastructureConnectionsRequest { PageRequest page = 1; }
-message ListInfrastructureConnectionsResponse { repeated InfrastructureConnection connections = 1; PageResponse page = 2; string active_revision = 3; string active_connection_id = 4; string active_connection_version = 5; repeated InfrastructureConnection deployment_defaults = 6; }
+message ListInfrastructureConnectionsResponse { repeated InfrastructureConnection connections = 1; PageResponse page = 2; string active_revision = 3; string active_connection_id = 4; string active_connection_version = 5; repeated InfrastructureConnection deployment_defaults = 6; InfrastructureConnection active_connection = 7; }
 message SaveInfrastructureConnectionRequest {
  InfrastructureConnection connection = 1;
  string expected_version = 2;
@@ -1269,6 +1272,9 @@ message EnableRegularLocalAccountResponse {
 
 // Personal provider authentication is available only to Golf browser sessions.
 service CodexAccountService {
+ rpc ListCodexConnections(ListCodexConnectionsRequest) returns (ListCodexConnectionsResponse);
+ rpc CreateCodexConnection(CreateCodexConnectionRequest) returns (CreateCodexConnectionResponse);
+ rpc SetCodexConnectionAccess(SetCodexConnectionAccessRequest) returns (SetCodexConnectionAccessResponse);
  rpc GetCodexConnection(GetCodexConnectionRequest) returns (GetCodexConnectionResponse);
  rpc StartCodexLogin(StartCodexLoginRequest) returns (StartCodexLoginResponse);
  rpc CancelCodexLogin(CancelCodexLoginRequest) returns (CancelCodexLoginResponse);
@@ -1288,6 +1294,11 @@ enum CodexLoginMethod {
  CODEX_LOGIN_METHOD_CHATGPT_DEVICE = 1;
  CODEX_LOGIN_METHOD_API_KEY = 2;
 }
+enum CodexConnectionScope {
+ CODEX_CONNECTION_SCOPE_UNSPECIFIED = 0;
+ CODEX_CONNECTION_SCOPE_PERSONAL = 1;
+ CODEX_CONNECTION_SCOPE_INSTANCE = 2;
+}
 message CodexConnection {
  CodexConnectionState state = 1;
  string version = 2;
@@ -1301,14 +1312,27 @@ message CodexConnection {
  string user_code = 10;
  string login_expires_at = 11;
  string reason_code = 12;
+ string id = 13;
+ string name = 14;
+ CodexConnectionScope scope = 15;
+ bool can_manage = 16;
+ bool can_use = 17;
+ repeated string allowed_user_ids = 18;
 }
-message GetCodexConnectionRequest {}
+message GetCodexConnectionRequest { string connection_id = 1; }
 message GetCodexConnectionResponse { CodexConnection connection = 1; }
-message StartCodexLoginRequest { CodexLoginMethod method = 1; string api_key = 2; string expected_version = 3; }
+message StartCodexLoginRequest { CodexLoginMethod method = 1; string api_key = 2; string expected_version = 3; string connection_id = 4; }
 message StartCodexLoginResponse { CodexConnection connection = 1; }
-message CancelCodexLoginRequest { string login_id = 1; string expected_version = 2; }
+message CancelCodexLoginRequest { string login_id = 1; string expected_version = 2; string connection_id = 3; }
 message CancelCodexLoginResponse { CodexConnection connection = 1; }
-message RefreshCodexConnectionRequest { string expected_version = 1; }
+message RefreshCodexConnectionRequest { string expected_version = 1; string connection_id = 2; }
 message RefreshCodexConnectionResponse { CodexConnection connection = 1; }
-message DisconnectCodexConnectionRequest { string expected_version = 1; }
+message DisconnectCodexConnectionRequest { string expected_version = 1; string connection_id = 2; }
 message DisconnectCodexConnectionResponse { CodexConnection connection = 1; }
+
+message ListCodexConnectionsRequest { bool instance_admin = 1; }
+message ListCodexConnectionsResponse { repeated CodexConnection connections = 1; }
+message CreateCodexConnectionRequest { string name = 1; }
+message CreateCodexConnectionResponse { CodexConnection connection = 1; }
+message SetCodexConnectionAccessRequest { string connection_id = 1; string expected_version = 2; string name = 3; repeated string allowed_user_ids = 4; }
+message SetCodexConnectionAccessResponse { CodexConnection connection = 1; }

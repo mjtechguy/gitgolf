@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"database/sql/driver"
+	"encoding/binary"
 	"errors"
 	"net/http"
 	"regexp"
@@ -19,7 +20,7 @@ import (
 	"github.com/mjtechguy/golf-git/internal/server/database"
 )
 
-const codexColumns = `id::text,version,state,auth_method,email,plan_type,checked_at,login_id,verification_url,user_code,login_expires_at,reason_code`
+const codexColumns = `id::text,version,state,auth_method,email,plan_type,checked_at,login_id,verification_url,user_code,login_expires_at,reason_code,user_id,scope,name`
 const codexMaxRuntime = 15 * time.Minute
 
 var errCodexBrowserOnly = errors.New("Codex browser identity required")
@@ -27,6 +28,10 @@ var errCodexConflict = connect.NewError(connect.CodeAborted, errors.New("Codex c
 var errCodexUnavailable = connect.NewError(connect.CodeUnavailable, errors.New("Codex account service is unavailable."))
 
 type codexRecord struct {
+	Use                                                    bool
+	OwnerID                                                sql.NullInt64
+	Scope, Name                                            string
+	Access                                                 []string
 	ID                                                     string
 	Version                                                int64
 	State, Method, Email, Plan, LoginID, URL, Code, Reason string
@@ -34,24 +39,26 @@ type codexRecord struct {
 	Checked, Expires                                       sql.NullTime
 }
 type codexActor struct {
-	UserID, NativeID int64
-	Hash             []byte
-	Credential       forgeCredential
+	UserID, NativeID    int64
+	Hash                []byte
+	Credential          forgeCredential
+	Admin, RequireAdmin bool
 }
 type codexRuntime struct {
-	ownerID int64
-	done    chan struct{}
-	mu      sync.Mutex
-	process *codexaccount.Process
-	conn    *sql.Conn
-	actor   codexActor
-	record  codexRecord
-	closed  bool
+	ownerID      int64
+	connectionID string
+	done         chan struct{}
+	mu           sync.Mutex
+	process      *codexaccount.Process
+	conn         *sql.Conn
+	actor        codexActor
+	record       codexRecord
+	closed       bool
 }
 
 func scanCodex(row workflowRunScanner) (codexRecord, error) {
 	var r codexRecord
-	e := row.Scan(&r.ID, &r.Version, &r.State, &r.Method, &r.Email, &r.Plan, &r.Checked, &r.LoginID, &r.URL, &r.Code, &r.Expires, &r.Reason)
+	e := row.Scan(&r.ID, &r.Version, &r.State, &r.Method, &r.Email, &r.Plan, &r.Checked, &r.LoginID, &r.URL, &r.Code, &r.Expires, &r.Reason, &r.OwnerID, &r.Scope, &r.Name)
 	return r, e
 }
 func codexBinding(id string) []byte {
@@ -59,7 +66,11 @@ func codexBinding(id string) []byte {
 	return b[:]
 }
 func codexWire(r codexRecord, available bool) *golfv1.CodexConnection {
-	v := &golfv1.CodexConnection{Version: strconv.FormatInt(r.Version, 10), Email: r.Email, PlanType: r.Plan, LoginId: r.LoginID, VerificationUrl: r.URL, UserCode: r.Code, ReasonCode: r.Reason}
+	v := &golfv1.CodexConnection{Id: r.ID, Name: r.Name, CanManage: true, CanUse: true, AllowedUserIds: r.Access, Scope: golfv1.CodexConnectionScope_CODEX_CONNECTION_SCOPE_PERSONAL, Version: strconv.FormatInt(r.Version, 10), Email: r.Email, PlanType: r.Plan, LoginId: r.LoginID, VerificationUrl: r.URL, UserCode: r.Code, ReasonCode: r.Reason}
+	if r.Scope == "INSTANCE" {
+		v.Scope = golfv1.CodexConnectionScope_CODEX_CONNECTION_SCOPE_INSTANCE
+		v.CanUse = r.Use
+	}
 	switch r.State {
 	case "CONNECTED":
 		v.State = golfv1.CodexConnectionState_CODEX_CONNECTION_STATE_CONNECTED
@@ -108,7 +119,15 @@ func (s *Server) codexIdentity(ctx context.Context, h http.Header) (codexActor, 
 		return codexActor{}, e
 	}
 	a := codexActor{NativeID: u.ID, Hash: hash, Credential: token}
-	e = s.codexGuard(ctx, a, func(tx *sql.Tx, id int64) error { a.UserID = id; return nil })
+	e = s.codexGuard(ctx, a, func(tx *sql.Tx, id int64) error {
+		a.UserID = id
+		var admin bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_local_accounts WHERE user_id=$1 AND is_instance_admin AND disabled_at IS NULL)`, id).Scan(&admin); err != nil {
+			return errStorageUnavailable
+		}
+		a.Admin = admin && token.Local
+		return nil
+	})
 	return a, e
 }
 
@@ -140,6 +159,18 @@ func (s *Server) codexGuard(ctx context.Context, a codexActor, fn func(*sql.Tx, 
 	if !allowed {
 		return errUnauthenticated
 	}
+	if a.RequireAdmin {
+		if c.CredentialKind != "local" {
+			return errCodexPermission
+		}
+		var admin bool
+		if e = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_local_accounts WHERE user_id=$1 AND is_instance_admin AND disabled_at IS NULL)`, u.ID).Scan(&admin); e != nil {
+			return errStorageUnavailable
+		}
+		if !admin {
+			return errCodexPermission
+		}
+	}
 	if e = fn(tx, u.ID); e != nil {
 		return e
 	}
@@ -150,16 +181,6 @@ func (s *Server) codexGuard(ctx context.Context, a codexActor, fn func(*sql.Tx, 
 		return errStorageUnavailable
 	}
 	return nil
-}
-func (s *Server) codexLoad(ctx context.Context, id int64) (codexRecord, error) {
-	r, e := scanCodex(s.db.QueryRowContext(ctx, `SELECT `+codexColumns+` FROM golf_codex_connections WHERE user_id=$1`, id))
-	if errors.Is(e, sql.ErrNoRows) {
-		return codexRecord{State: "UNCONFIGURED"}, nil
-	}
-	if e != nil {
-		return r, errStorageUnavailable
-	}
-	return r, nil
 }
 func codexVersion(value string, r codexRecord) error {
 	if value != strconv.FormatInt(r.Version, 10) {
@@ -183,8 +204,8 @@ func (s *Server) closeCodexLocked(rt *codexRuntime) {
 	// never leak into the SQL pool or another account's broker.
 	releaseCodexOwner(rt.conn, rt.ownerID)
 	s.codexMu.Lock()
-	if s.codexRuntimes[rt.actor.UserID] == rt {
-		delete(s.codexRuntimes, rt.actor.UserID)
+	if s.codexRuntimes[rt.connectionID] == rt {
+		delete(s.codexRuntimes, rt.connectionID)
 	}
 	s.codexMu.Unlock()
 }
@@ -205,30 +226,28 @@ func (s *Server) codexOpen(ctx context.Context, a codexActor, r codexRecord) (*c
 	}
 	s.codexMu.Lock()
 	defer s.codexMu.Unlock()
-	if rt := s.codexRuntimes[a.UserID]; rt != nil {
+	if rt := s.codexRuntimes[r.ID]; rt != nil {
 		return rt, nil
 	}
 	if len(s.codexRuntimes) >= 8 {
 		return nil, errCodexUnavailable
 	}
 	// Two-int advisory keys deliberately bound identities to PostgreSQL int32.
-	if a.UserID <= 0 || a.UserID > 2147483647 {
-		return nil, errCodexUnavailable
-	}
+	lockID := codexLockID(r.ID)
 	conn, e := s.db.Conn(ctx)
 	if e != nil {
 		return nil, errStorageUnavailable
 	}
 	var locked bool
-	if e = conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(741915267,$1::integer)`, a.UserID).Scan(&locked); e != nil || !locked {
+	if e = conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, codexLockID(r.ID)).Scan(&locked); e != nil || !locked {
 		if e != nil {
-			releaseCodexOwner(conn, a.UserID)
+			releaseCodexOwner(conn, codexLockID(r.ID))
 		} else {
 			conn.Close()
 		}
 		return nil, errCodexUnavailable
 	}
-	release := func() { releaseCodexOwner(conn, a.UserID) }
+	release := func() { releaseCodexOwner(conn, codexLockID(r.ID)) }
 	var auth []byte
 	if r.ID != "" {
 		var encrypted, binding []byte
@@ -252,11 +271,11 @@ func (s *Server) codexOpen(ctx context.Context, a codexActor, r codexRecord) (*c
 		release()
 		return nil, errCodexUnavailable
 	}
-	rt := &codexRuntime{process: p, conn: conn, actor: a, record: r, ownerID: a.UserID, done: make(chan struct{})}
+	rt := &codexRuntime{process: p, conn: conn, actor: a, record: r, ownerID: lockID, connectionID: r.ID, done: make(chan struct{})}
 	if s.codexRuntimes == nil {
-		s.codexRuntimes = map[int64]*codexRuntime{}
+		s.codexRuntimes = map[string]*codexRuntime{}
 	}
-	s.codexRuntimes[a.UserID] = rt
+	s.codexRuntimes[r.ID] = rt
 	go s.watchCodex(rt)
 	go s.monitorCodexOwner(rt)
 	return rt, nil
@@ -294,13 +313,16 @@ func (s *Server) codexSave(ctx context.Context, rt *codexRuntime, r codexRecord)
 	}
 	e = s.codexGuard(ctx, rt.actor, func(tx *sql.Tx, id int64) error {
 		if r.Version == 0 {
-			_, e := tx.ExecContext(ctx, `INSERT INTO golf_codex_connections(id,user_id,state) VALUES($1,$2,'UNCONFIGURED') ON CONFLICT(user_id) DO NOTHING`, r.ID, id)
+			_, e := tx.ExecContext(ctx, `INSERT INTO golf_codex_connections(id,user_id,state,forge_url) VALUES($1,$2,'UNCONFIGURED',$3) ON CONFLICT(user_id) DO NOTHING`, r.ID, id, s.config.GiteaURL)
 			if e != nil {
 				return errStorageUnavailable
 			}
 		}
+		if err := s.codexManageTx(ctx, tx, id, r); err != nil {
+			return err
+		}
 		var version int64
-		e := tx.QueryRowContext(ctx, `SELECT version FROM golf_codex_connections WHERE id=$1 AND user_id=$2 FOR UPDATE`, r.ID, id).Scan(&version)
+		e := tx.QueryRowContext(ctx, `SELECT version FROM golf_codex_connections WHERE id=$1 AND forge_url=$2 FOR UPDATE`, r.ID, s.config.GiteaURL).Scan(&version)
 		// A newly inserted connection is version 1; this first save is its first CAS.
 		expected := r.Version
 		if expected == 0 {
@@ -330,7 +352,7 @@ func (s *Server) codexSave(ctx context.Context, rt *codexRuntime, r codexRecord)
 		if e = tx.QueryRowContext(ctx, `SELECT session_id,credential_kind FROM golf_sessions WHERE token_hash=$1`, rt.actor.Hash).Scan(&sessionID, &kind); e != nil {
 			return errUnauthenticated
 		}
-		return appendAudit(ctx, database.New(s.db).WithTx(tx), database.AppendAuditEventParams{UserID: id, Action: action, ActorSessionID: sessionID, CredentialKind: kind})
+		return appendCodexAudit(ctx, database.New(s.db).WithTx(tx), database.AppendAuditEventParams{UserID: id, Action: action, ActorSessionID: sessionID, CredentialKind: kind}, r.ID)
 	})
 	if e == nil {
 		r.Version++
@@ -433,18 +455,21 @@ func (s *Server) watchCodex(rt *codexRuntime) {
 		}
 	}
 }
-func (s *Server) codexGet(ctx context.Context, h http.Header) (*golfv1.CodexConnection, error) {
+func (s *Server) codexGet(ctx context.Context, h http.Header, connectionID string) (*golfv1.CodexConnection, error) {
 	a, e := s.codexIdentity(ctx, h)
 	if e != nil {
 		return nil, e
 	}
-	r, e := s.codexLoad(ctx, a.UserID)
+	r, e := s.codexAuthorized(ctx, a, connectionID, false)
 	if e != nil {
 		return nil, e
 	}
-	if r.State == "AWAITING_AUTH" {
+	if r.Scope == "INSTANCE" && a.Admin {
+		a.RequireAdmin = true
+	}
+	if r.State == "AWAITING_AUTH" && (r.Scope == "PERSONAL" || a.Admin) {
 		s.codexMu.Lock()
-		rt := s.codexRuntimes[a.UserID]
+		rt := s.codexRuntimes[r.ID]
 		s.codexMu.Unlock()
 		if rt == nil {
 			// Another replica may own the login; only a free native owner lock proves
@@ -457,14 +482,17 @@ func (s *Server) codexGet(ctx context.Context, h http.Header) (*golfv1.CodexConn
 			}
 			defer conn.Close()
 			var locked bool
-			if e = conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(741915267,$1::integer)`, a.UserID).Scan(&locked); e != nil {
-				releaseCodexOwner(conn, a.UserID)
+			if e = conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, codexLockID(r.ID)).Scan(&locked); e != nil {
+				releaseCodexOwner(conn, codexLockID(r.ID))
 				return nil, errStorageUnavailable
 			}
 			if locked {
-				defer releaseCodexOwner(conn, a.UserID)
+				defer releaseCodexOwner(conn, codexLockID(r.ID))
 				e = s.codexGuard(ctx, a, func(tx *sql.Tx, id int64) error {
-					result, e := tx.ExecContext(ctx, `UPDATE golf_codex_connections SET state='REAUTH_REQUIRED',version=version+1,login_id='',verification_url='',user_code='',login_expires_at=NULL,reason_code='login_interrupted' WHERE user_id=$1 AND version=$2 AND state='AWAITING_AUTH'`, id, r.Version)
+					if err := s.codexManageTx(ctx, tx, id, r); err != nil {
+						return err
+					}
+					result, e := tx.ExecContext(ctx, `UPDATE golf_codex_connections SET state='REAUTH_REQUIRED',version=version+1,login_id='',verification_url='',user_code='',login_expires_at=NULL,reason_code='login_interrupted' WHERE id=$1 AND version=$2 AND state='AWAITING_AUTH'`, r.ID, r.Version)
 					if e != nil {
 						return errStorageUnavailable
 					}
@@ -477,30 +505,33 @@ func (s *Server) codexGet(ctx context.Context, h http.Header) (*golfv1.CodexConn
 				if e != nil {
 					return nil, e
 				}
-				r, e = s.codexLoad(ctx, a.UserID)
+				r, e = s.codexAuthorized(ctx, a, r.ID, false)
 				if e != nil {
 					return nil, e
 				}
 			}
 		}
 	}
-	return codexWire(r, s.config.CodexBinary != ""), nil
+	return codexVisible(r, s.config.CodexBinary != "", r.Scope == "PERSONAL" || a.Admin), nil
 }
 func (s *Server) GetCodexConnection(ctx context.Context, req *connect.Request[golfv1.GetCodexConnectionRequest]) (*connect.Response[golfv1.GetCodexConnectionResponse], error) {
-	r, e := s.codexGet(ctx, req.Header())
+	r, e := s.codexGet(ctx, req.Header(), req.Msg.ConnectionId)
 	if e != nil {
 		return nil, rpcError(e)
 	}
 	return connect.NewResponse(&golfv1.GetCodexConnectionResponse{Connection: r}), nil
 }
-func (s *Server) codexMutate(ctx context.Context, h http.Header, version, action, loginID string, method golfv1.CodexLoginMethod, apiKey string) (*golfv1.CodexConnection, error) {
+func (s *Server) codexMutate(ctx context.Context, h http.Header, version, action, loginID, connectionID string, method golfv1.CodexLoginMethod, apiKey string) (*golfv1.CodexConnection, error) {
 	a, e := s.codexIdentity(ctx, h)
 	if e != nil {
 		return nil, e
 	}
-	r, e := s.codexLoad(ctx, a.UserID)
+	r, e := s.codexAuthorized(ctx, a, connectionID, true)
 	if e != nil {
 		return nil, e
+	}
+	if r.Scope == "INSTANCE" {
+		a.RequireAdmin = true
 	}
 	if e = codexVersion(version, r); e != nil {
 		return nil, e
@@ -516,6 +547,10 @@ func (s *Server) codexMutate(ctx context.Context, h http.Header, version, action
 	if action == "disconnect" {
 		return s.codexForget(ctx, a, r)
 	}
+	if r.ID == "" {
+		r.ID = uuid.NewSHA1(uuid.NameSpaceURL, []byte("golf:personal-codex:"+s.config.GiteaURL+":"+strconv.FormatInt(a.UserID, 10))).String()
+	}
+
 	rt, e := s.codexOpen(ctx, a, r)
 	if e != nil {
 		return nil, e
@@ -635,31 +670,31 @@ func (s *Server) codexMutate(ctx context.Context, h http.Header, version, action
 		}
 		s.closeCodexLocked(rt)
 	}
-	return codexWire(rt.record, true), nil
+	return codexVisible(rt.record, true, true), nil
 }
 func (s *Server) StartCodexLogin(ctx context.Context, req *connect.Request[golfv1.StartCodexLoginRequest]) (*connect.Response[golfv1.StartCodexLoginResponse], error) {
-	r, e := s.codexMutate(ctx, req.Header(), req.Msg.ExpectedVersion, "start", "", req.Msg.Method, req.Msg.ApiKey)
+	r, e := s.codexMutate(ctx, req.Header(), req.Msg.ExpectedVersion, "start", "", req.Msg.ConnectionId, req.Msg.Method, req.Msg.ApiKey)
 	if e != nil {
 		return nil, rpcError(e)
 	}
 	return connect.NewResponse(&golfv1.StartCodexLoginResponse{Connection: r}), nil
 }
 func (s *Server) CancelCodexLogin(ctx context.Context, req *connect.Request[golfv1.CancelCodexLoginRequest]) (*connect.Response[golfv1.CancelCodexLoginResponse], error) {
-	r, e := s.codexMutate(ctx, req.Header(), req.Msg.ExpectedVersion, "cancel", req.Msg.LoginId, 0, "")
+	r, e := s.codexMutate(ctx, req.Header(), req.Msg.ExpectedVersion, "cancel", req.Msg.LoginId, req.Msg.ConnectionId, 0, "")
 	if e != nil {
 		return nil, rpcError(e)
 	}
 	return connect.NewResponse(&golfv1.CancelCodexLoginResponse{Connection: r}), nil
 }
 func (s *Server) RefreshCodexConnection(ctx context.Context, req *connect.Request[golfv1.RefreshCodexConnectionRequest]) (*connect.Response[golfv1.RefreshCodexConnectionResponse], error) {
-	r, e := s.codexMutate(ctx, req.Header(), req.Msg.ExpectedVersion, "refresh", "", 0, "")
+	r, e := s.codexMutate(ctx, req.Header(), req.Msg.ExpectedVersion, "refresh", "", req.Msg.ConnectionId, 0, "")
 	if e != nil {
 		return nil, rpcError(e)
 	}
 	return connect.NewResponse(&golfv1.RefreshCodexConnectionResponse{Connection: r}), nil
 }
 func (s *Server) DisconnectCodexConnection(ctx context.Context, req *connect.Request[golfv1.DisconnectCodexConnectionRequest]) (*connect.Response[golfv1.DisconnectCodexConnectionResponse], error) {
-	r, e := s.codexMutate(ctx, req.Header(), req.Msg.ExpectedVersion, "disconnect", "", 0, "")
+	r, e := s.codexMutate(ctx, req.Header(), req.Msg.ExpectedVersion, "disconnect", "", req.Msg.ConnectionId, 0, "")
 	if e != nil {
 		return nil, rpcError(e)
 	}
@@ -709,7 +744,7 @@ func rotateCodexAuth(ctx context.Context, tx *sql.Tx, keys *Keyring, limit int) 
 
 func codexOwnerAlive(ctx context.Context, rt *codexRuntime) bool {
 	var alive bool
-	e := rt.conn.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND pid=pg_backend_pid() AND classid=741915267 AND objid=$1::oid AND objsubid=2 AND granted)`, rt.ownerID).Scan(&alive)
+	e := rt.conn.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND pid=pg_backend_pid() AND classid=$1::oid AND objid=$2::oid AND objsubid=1 AND granted)`, uint32(uint64(rt.ownerID)>>32), uint32(uint64(rt.ownerID))).Scan(&alive)
 	return e == nil && alive
 }
 
@@ -738,7 +773,7 @@ func (s *Server) monitorCodexOwner(rt *codexRuntime) {
 func releaseCodexOwner(conn *sql.Conn, id int64) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if _, e := conn.ExecContext(ctx, `SELECT pg_advisory_unlock(741915267,$1::integer)`, id); e != nil {
+	if _, e := conn.ExecContext(ctx, `SELECT pg_advisory_unlock($1)`, id); e != nil {
 		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 	}
 	_ = conn.Close()
@@ -748,7 +783,7 @@ func releaseCodexOwner(conn *sql.Conn, id int64) {
 // unavailable. It stops a local broker first; it does not revoke a provider API key.
 func (s *Server) codexForget(ctx context.Context, a codexActor, r codexRecord) (*golfv1.CodexConnection, error) {
 	s.codexMu.Lock()
-	rt := s.codexRuntimes[a.UserID]
+	rt := s.codexRuntimes[r.ID]
 	s.codexMu.Unlock()
 	if rt != nil {
 		s.closeCodexRuntime(rt)
@@ -762,15 +797,18 @@ func (s *Server) codexForget(ctx context.Context, a codexActor, r codexRecord) (
 	}
 	defer conn.Close()
 	var locked bool
-	if e = conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(741915267,$1::integer)`, a.UserID).Scan(&locked); e != nil || !locked {
+	if e = conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, codexLockID(r.ID)).Scan(&locked); e != nil || !locked {
 		if e != nil {
-			releaseCodexOwner(conn, a.UserID)
+			releaseCodexOwner(conn, codexLockID(r.ID))
 		}
 		return nil, errCodexUnavailable
 	}
-	defer releaseCodexOwner(conn, a.UserID)
+	defer releaseCodexOwner(conn, codexLockID(r.ID))
 	e = s.codexGuard(ctx, a, func(tx *sql.Tx, id int64) error {
-		result, e := tx.ExecContext(ctx, `UPDATE golf_codex_connections SET version=version+1,state='UNCONFIGURED',auth_method='',email='',plan_type='',checked_at=NULL,login_id='',verification_url='',user_code='',login_expires_at=NULL,reason_code='',updated_at=clock_timestamp() WHERE id=$1 AND user_id=$2 AND version=$3`, r.ID, id, r.Version)
+		if err := s.codexManageTx(ctx, tx, id, r); err != nil {
+			return err
+		}
+		result, e := tx.ExecContext(ctx, `UPDATE golf_codex_connections SET version=version+1,state='UNCONFIGURED',auth_method='',email='',plan_type='',checked_at=NULL,login_id='',verification_url='',user_code='',login_expires_at=NULL,reason_code='',updated_at=clock_timestamp() WHERE id=$1 AND forge_url=$2 AND version=$3`, r.ID, s.config.GiteaURL, r.Version)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -786,14 +824,19 @@ func (s *Server) codexForget(ctx context.Context, a codexActor, r codexRecord) (
 		if e = tx.QueryRowContext(ctx, `SELECT session_id,credential_kind FROM golf_sessions WHERE token_hash=$1`, a.Hash).Scan(&sessionID, &kind); e != nil {
 			return errUnauthenticated
 		}
-		return appendAudit(ctx, database.New(s.db).WithTx(tx), database.AppendAuditEventParams{UserID: id, Action: "CODEX_CONNECTION_DISCONNECTED", ActorSessionID: sessionID, CredentialKind: kind})
+		return appendCodexAudit(ctx, database.New(s.db).WithTx(tx), database.AppendAuditEventParams{UserID: id, Action: "CODEX_CONNECTION_DISCONNECTED", ActorSessionID: sessionID, CredentialKind: kind}, r.ID)
 	})
 	if e != nil {
 		return nil, e
 	}
-	r, e = s.codexLoad(ctx, a.UserID)
+	r, e = s.codexAuthorized(ctx, a, r.ID, true)
 	if e != nil {
 		return nil, e
 	}
 	return codexWire(r, s.config.CodexBinary != ""), nil
+}
+
+func codexLockID(id string) int64 {
+	h := sha256.Sum256([]byte("golf:codex-owner:v2\x00" + id))
+	return int64(binary.BigEndian.Uint64(h[:8]))
 }

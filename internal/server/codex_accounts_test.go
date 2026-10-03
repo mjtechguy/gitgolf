@@ -19,9 +19,12 @@ import (
 // Only the external Codex process is substituted. The RPC cookie boundary,
 // immutable Golf identities, PostgreSQL ownership/CAS and AES-GCM are real.
 func codexFixture(t *testing.T) (*managementFixture, loginResult, string) {
+	return codexFixtureRole(t, false)
+}
+func codexFixtureRole(t *testing.T, admin bool) (*managementFixture, loginResult, string) {
 	t.Helper()
 	f := newManagementFixture(t)
-	enrollLocal(t, f, "alice", false)
+	enrollLocal(t, f, "alice", admin)
 	login := localLogin(t, f, "alice")
 	python, e := exec.LookPath("python3")
 	if e != nil {

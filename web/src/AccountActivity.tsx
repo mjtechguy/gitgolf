@@ -36,6 +36,8 @@ const actionLabels: Partial<Record<AuditAction, string>> = {
   [AuditAction.CODEX_LOGIN_CANCELED]: 'Codex login cancelled',
   [AuditAction.CODEX_CONNECTION_REFRESHED]: 'Codex connection checked',
   [AuditAction.CODEX_CONNECTION_DISCONNECTED]: 'Codex disconnected',
+  [AuditAction.CODEX_CONNECTION_CREATED]: 'Codex connection created',
+  [AuditAction.CODEX_ACCESS_CHANGED]: 'Codex connection access changed',
 };
 
 function EventTime({ value }: { value: string }) {
@@ -48,6 +50,7 @@ const credentialLabel = (kind: string) => kind === 'oauth' ? 'Provider OAuth' : 
 function EventDetails({ event }: { event: AuditEvent }) {
   return <details><summary>Event details</summary><dl className="audit-metadata">
     <div><dt>Event ID</dt><dd><code>{event.id}</code></dd></div>
+    {event.resourceId ? <div><dt>Codex connection ID</dt><dd><code>{event.resourceId}</code></dd></div> : null}
     <div><dt>Operation ID</dt><dd><code>{event.operationId || 'Not recorded'}</code></dd></div>
     <div><dt>Actor session ID</dt><dd><code>{event.actorSessionId || 'Not recorded'}</code></dd></div>
     <div><dt>Target session ID</dt><dd><code>{event.targetSessionId || 'No individual target'}</code></dd></div>
@@ -61,7 +64,7 @@ const activityColumns: DataTableColumn<AuditEvent>[] = [
   { accessorKey: 'occurredAt', header: 'Time', cell: ({ row }) => <EventTime value={row.original.occurredAt} /> },
   { id: 'credential', header: 'Credential', accessorFn: (event) => credentialLabel(event.credentialKind) },
   { id: 'session', header: 'Session', accessorFn: (event) => `${event.actorSessionId} ${event.targetSessionId}`, cell: ({ row }) => <><code>{row.original.actorSessionId || 'Not recorded'}</code><p>Target: <code>{row.original.targetSessionId || 'No individual target'}</code></p></> },
-  { id: 'metadata', header: 'Details', accessorFn: (event) => `${event.id} ${event.operationId} ${event.revokedCount} ${event.expiresAt}`, enableSorting: false, cell: ({ row }) => <EventDetails event={row.original} /> },
+  { id: 'metadata', header: 'Details', accessorFn: (event) => `${event.id} ${event.operationId} ${event.resourceId} ${event.revokedCount} ${event.expiresAt}`, enableSorting: false, cell: ({ row }) => <EventDetails event={row.original} /> },
 ];
 
 export function AccountActivity({ userId }: { userId: string }) {

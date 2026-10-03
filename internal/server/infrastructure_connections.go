@@ -284,6 +284,15 @@ func (s *Server) ListInfrastructureConnections(ctx context.Context, req *connect
 	if activeID.Valid {
 		result.ActiveConnectionId = activeID.String
 		result.ActiveConnectionVersion = strconv.FormatInt(activeVersion.Int64, 10)
+		// Read the immutable active version, rather than attributing a newer
+		// saved draft's endpoint/bucket to the currently active binding.
+		var current infrastructureConnectionRecord
+		var config []byte
+		if err := s.db.QueryRowContext(ctx, `SELECT profile_id::text,version,config,created_at FROM golf_infrastructure_connection_versions WHERE profile_id=$1 AND version=$2`, activeID.String, activeVersion.Int64).Scan(&current.ID, &current.Version, &config, &current.CreatedAt); err != nil || json.Unmarshal(config, &current.Config) != nil {
+			return nil, infrastructureRPCError(errStorageUnavailable)
+		}
+		result.ActiveConnection = wireInfrastructureConnection(current)
+		result.ActiveConnection.ActivationState = "active_ci_source_storage"
 	}
 	for rows.Next() {
 		var row infrastructureConnectionRecord

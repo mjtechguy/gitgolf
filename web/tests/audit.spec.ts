@@ -248,8 +248,11 @@ test('audit table sorts and searches loaded events without changing keyset snaps
 
 test('coding-agent changes appear in the existing personal activity inventory', async ({ page }) => {
   const state = await backend(page);
-  state.events = [create(AuditEventSchema, { id: '2', occurredAt: '2026-10-03T02:00:00Z', action: AuditAction.CODEX_CONNECTION_DISCONNECTED, actorSessionId: '123', credentialKind: 'local' }), create(AuditEventSchema, { id: '1', occurredAt: '2026-10-03T01:00:00Z', action: AuditAction.CODEX_LOGIN_COMPLETED, actorSessionId: '123', credentialKind: 'local' })];
+  state.events = [create(AuditEventSchema, { id: '3', occurredAt: '2026-10-03T03:00:00Z', action: AuditAction.CODEX_ACCESS_CHANGED, actorSessionId: '123', credentialKind: 'local', resourceId: '4f4a2a2e-52a8-4f83-b29e-9460c1309fa9' }), create(AuditEventSchema, { id: '2', occurredAt: '2026-10-03T02:00:00Z', action: AuditAction.CODEX_CONNECTION_DISCONNECTED, actorSessionId: '123', credentialKind: 'local' }), create(AuditEventSchema, { id: '1', occurredAt: '2026-10-03T01:00:00Z', action: AuditAction.CODEX_LOGIN_COMPLETED, actorSessionId: '123', credentialKind: 'local' })];
   await page.goto('/audit');
   await expect(page.getByRole('heading', { name: 'Account history', exact: true })).toBeVisible();
-  await expect(page.locator('table[aria-label="Account activity"] tbody strong')).toHaveText(['Codex disconnected', 'Codex login completed']);
+  await page.getByRole('button', { name: 'Load more activity' }).click();
+  await expect(page.locator('table[aria-label="Account activity"] tbody strong')).toHaveText(['Codex connection access changed', 'Codex disconnected', 'Codex login completed']);
+  await page.getByText('Event details', { exact: true }).first().click();
+  await expect(page.getByText('4f4a2a2e-52a8-4f83-b29e-9460c1309fa9', { exact: true })).toBeVisible();
 });

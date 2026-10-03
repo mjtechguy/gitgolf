@@ -39,7 +39,7 @@ export function AccountSettings({ user, signingOut }: { user: User; signingOut: 
 }
 
 export type SettingsScope = 'personal' | 'organization' | 'repository' | 'instance';
-type SettingEntry = { id: string; section: string; state: 'Ready' | 'Partial' | 'Read only' | 'Planned'; detail: string; task: string; to?: '/account/agents' | '/account/security' | '/account/sessions' | '/account/ssh-keys' | '/account/api-credentials' | '/audit' | '/' | '/organizations' | '/status' | '/admin/execution' | '/admin/organizations' | '/admin/settings/infrastructure' | '/admin/settings'; hash?: string };
+type SettingEntry = { id: string; section: string; state: 'Ready' | 'Partial' | 'Read only' | 'Planned'; detail: string; task: string; to?: '/account/agents' | '/account/security' | '/account/sessions' | '/account/ssh-keys' | '/account/api-credentials' | '/audit' | '/' | '/organizations' | '/status' | '/admin/execution' | '/admin/organizations' | '/admin/settings/infrastructure' | '/admin/settings' | '/admin/agents'; hash?: string };
 const inventory: Record<SettingsScope, SettingEntry[]> = {
   personal: [
     { id: 'profile', section: 'Profile and email', state: 'Partial', detail: 'Edit public profile fields above. Golf sign-in email changes have a separate security page; username changes, mailbox verification and recovery remain planned.', task: 'P1.3 / G1' },
@@ -52,7 +52,7 @@ const inventory: Record<SettingsScope, SettingEntry[]> = {
     { id: 'notifications', section: 'Notifications and email', state: 'Planned', detail: 'Subscriptions, delivery preferences, verified email and webhook/email delivery are not implemented. Provider selection must remain optional for portable installs.', task: 'P3 / P6' },
     { id: 'appearance', section: 'Appearance', state: 'Ready', detail: 'Use the header theme button. Dark/light choice is stored in this browser; synchronized account preferences are not implemented.', task: 'P1.4' },
     { id: 'activity', section: 'Account activity', state: 'Ready', detail: 'Inspect recorded successful session changes. Export, retention policy and broader security events remain planned.', task: 'P1.3', to: '/audit' },
-    { id: 'agents', section: 'Agent tools and provider credentials', state: 'Partial', detail: 'Connect and re-authenticate your own Codex account in Coding agents. Model access and task execution are not verified by authentication; other harnesses, repository authority and budgets remain planned.', task: 'P5 / G4', to: '/account/agents' },
+    { id: 'agents', section: 'Agent tools and provider credentials', state: 'Partial', detail: 'Connect and re-authenticate your own Codex account, and view instance connections shared with you in Coding agents. Model access and task execution are not verified by authentication; other harnesses, repository authority and budgets remain planned.', task: 'P5 / G4', to: '/account/agents' },
   ],
   organization: [
     { id: 'members', section: 'Members, teams and roles', state: 'Partial', detail: 'Browse teams and manage existing account membership in ordinary teams as an organization owner. Invitations, team grant editors and delegated Golf roles still require implementation and ownership safeguards.', task: 'P1.5 / G1', to: '/organizations' },
@@ -79,6 +79,7 @@ const inventory: Record<SettingsScope, SettingEntry[]> = {
     { id: 'danger', section: 'Archive, transfer and deletion', state: 'Planned', detail: 'Destructive administration is not exposed yet; ownership recovery, confirmation, target binding and audit must precede these controls.', task: 'P1.5 / P2.3' },
   ],
   instance: [
+    { id: 'agents', section: 'Coding-agent accounts and access', state: 'Partial', detail: 'Create named Codex connections, authenticate and re-authenticate accounts, and grant selected enrolled Golf users access. Authentication and access configuration do not enable agent execution.', task: 'P5 / G4', to: '/admin/agents' },
     { id: 'enrollment', section: 'Enrollment, identity and SSO', state: 'Partial', detail: 'Enrolled local accounts have a dedicated administration inventory. Instance administrators can enroll existing Git identities and reset, enable or disable ordinary local accounts after password confirmation. Self-service password and login-email changes have a security page; external OIDC, MFA and native account provisioning remain planned.', task: 'P1.3', to: '/admin/settings' },
     { id: 'health', section: 'System health and capabilities', state: 'Ready', detail: 'Inspect currently qualified capability states. Readiness reports dependencies; it is not an infrastructure configuration editor.', task: 'P1.1 / P1.2', to: '/status' },
     { id: 'infrastructure', section: 'Infrastructure connections', state: 'Ready', detail: 'Save and test versioned PostgreSQL and RustFS/S3/R2 connections. Activate private CI source storage after verification. Database changes require an operator migration and cutover; runner pools remain operator-managed.', task: 'P1 / P4 / P6', to: '/admin/settings/infrastructure' },
