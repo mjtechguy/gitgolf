@@ -161,7 +161,7 @@ def main():
   gitea:
     environment:
       GITEA__server__ROOT_URL: {smoke.GITEA}/
-      GITEA__webhook__ALLOWED_HOST_LIST: host.docker.internal
+      GITEA__security__ALLOWED_HOST_LIST: host.docker.internal
       GITEA__actions__ENABLED: 'false'
 {host_mapping}    ports: !override ["127.0.0.1:{forge_port}:3000"]
 ''')

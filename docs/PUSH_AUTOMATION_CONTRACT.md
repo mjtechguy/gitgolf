@@ -1,6 +1,6 @@
 # Automatic branch-push shell CI
 
-This is Golf's portable, opt-in automatic shell executor, not complete GitHub Actions or GitLab engine compatibility. AI and Cloudflare are optional. The retained development installation stays on qualified schema019 with push admission disabled while schema021 is qualified in disposable stacks.
+This is Golf's portable, opt-in automatic shell executor, not complete GitHub Actions or GitLab engine compatibility. AI and Cloudflare are optional. Schema021 now has qualified local RustFS recovery and is deployed on the retained development installation. Admission is enabled for the explicitly granted private local demo; other repositories retain their own default-deny policy and grant checks.
 
 ## Enable explicitly
 
@@ -46,6 +46,15 @@ python3 scripts/push-ci-smoke.py --image golf-push-automation:development --runn
 
 It uses actual native Git/HMAC callbacks, RustFS and isolated Docker shell execution. It checks exact commit/blob/source, independent logout, queued and completed restarts, same-body/new-delivery-ID replay, running revocation, subsequent push denial, bounded executor cleanup and credential-safe diagnostics. Captured-body replay is not a claim of a native public redelivery API. PostgreSQL race checks additionally cover concurrent/SKIP LOCKED claims, stale leases, bounded preparation retries, disabled/historical exclusion and recovery quarantine.
 
-Schema020/021 require stopped-writer coordinated upgrade; mixed binaries have incompatible manual uniqueness contracts. Schema 021 recovery cancels queued/leased preparation and revokes grants, but encrypted whole-stack restore with RustFS/automatic-origin history is **not qualified**. The recovery tool intentionally refuses these schema versions until the expanded drill passes. Keep the retained schema019 stack available.
+Schema020/021 require stopped-writer coordinated upgrade; mixed binaries have incompatible manual uniqueness contracts. Schema021 encrypted fresh-target recovery is now qualified for the canonical core and optional local RustFS profile, including automatic-origin history, cancelled runs, quarantined preparation and revoked grants. Schema020 alone, remote object stores and live/orphan Docker execution remain outside the qualified recovery profile. See [recovery evidence and procedure](RECOVERY.md).
 
 Remaining limits: full provider engine syntax/matrix/remote actions, artifacts/cache/check attribution, production multi-tenant isolation, fair autoscaling/backpressure, Helm job execution, Cloudflare execution adapters and the five coding-agent harnesses are separate acceptance gates. PostgreSQL is the local coordination backend; Workflows/Queues remain optional qualified Cloudflare adapters under the same Golf authority model.
+
+
+## Retained local test
+
+The local administrator can sign in at `http://localhost:8080/` using `admin@golfgit.local` and the existing password. The private `golf-admin/golf-local-ci-0c61aa` repository has one successful native push-origin Docker run with RustFS source. Its explicit demo grant expires after 24 hours; inspect or replace it through repository workflow settings before later tests. Existing repository content and account passwords are preserved.
+
+For another deliberately new private demo, first bring up the complete healthy local profile, then run `python3 scripts/local-push-ci-demo.py --configure`. The helper refuses older schemas or an unavailable worker before creating a repository, creates independent scoped native test credentials, configures one signed hook and 24-hour exact-branch/path grant, preserves existing operator bindings/policies and tests the real native push/run. It leaves its demo for review; it never runs during `--help`. Demo credentials are a development delegation, not a production automation-account onboarding flow.
+
+The portable Compose default explicitly permits the private `golf` callback host while retaining public native webhook destinations. It does not permit every private destination. Configuration follows the [pinned native1.27.3 security allowlist](https://github.com/go-gitea/gitea/blob/v1.27.3/custom/conf/app.example.ini).

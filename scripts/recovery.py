@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Encrypted, offline recovery for Golf's canonical three-service Docker profile.
+"""Encrypted, offline recovery for Golf's canonical core, optionally with local RustFS.
 
 Writers must already be drained/stopped. Restore accepts trusted operator backups
 only, creates a fresh project, invalidates restored Golf sessions and leaves both
@@ -27,11 +27,13 @@ from urllib.parse import parse_qs, unquote, urlsplit
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 FORMAT = 'golf.backup.v1'
-SUPPORTED_SCHEMAS = {'202610020008', '202610020009', '202610020019'}
+SUPPORTED_SCHEMAS = {'202610020008', '202610020009', '202610020019', '202610020021'}
 FILES = {'compose.json', 'postgres-init.sh', 'golf.dump', 'gitea.dump',
          'gitea-data.tar', 'gitea-config.tar'}
 PROJECT = re.compile(r'^[a-z0-9][a-z0-9_-]{0,62}$')
 LIMIT = 8 << 30
+RUSTFS_IMAGE = 'rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff'
+RUSTFS_TMPFS = {'/logs': 'uid=10001,gid=10001,size=67108864,mode=0750'}
 
 
 def envelope_limit(payload):
@@ -129,35 +131,102 @@ def compose_bytes(config):
     return json.dumps(config).encode()
 
 
-def snapshot(project, compose_file):
+def profile_files(rustfs):
+    return FILES | ({'rustfs-data.tar'} if rustfs else set())
+
+
+def storage_fingerprint(config):
+    golf = config['services']['golf']['environment']
+    rustfs = config['services'].get('rustfs')
+    if not rustfs:
+        require(not golf.get('GOLF_OBJECT_BUCKET'))
+        return ''
+    env = rustfs['environment']
+    require({key for key in env if key.startswith('RUSTFS_')} <= {
+        'RUSTFS_ACCESS_KEY', 'RUSTFS_SECRET_KEY', 'RUSTFS_VOLUMES', 'RUSTFS_ADDRESS',
+        'RUSTFS_CONSOLE_ENABLE', 'RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS',
+        'RUSTFS_OBS_ENVIRONMENT', 'RUSTFS_OBS_LOGGER_LEVEL', 'RUSTFS_OBS_LOG_DIRECTORY'})
+    expected = {'GOLF_OBJECT_ENDPOINT': 'http://rustfs:9000', 'GOLF_OBJECT_BUCKET': 'golf-ci',
+                'GOLF_OBJECT_REGION': 'us-east-1', 'GOLF_OBJECT_PREFIX': 'golf',
+                'GOLF_OBJECT_PATH_STYLE': 'true', 'GOLF_OBJECT_ALLOW_HTTP': 'true'}
+    require(all(golf.get(key) == value for key, value in expected.items()) and
+            not golf.get('GOLF_OBJECT_SESSION_TOKEN') and
+            env.get('RUSTFS_VOLUMES') == '/data' and env.get('RUSTFS_ADDRESS') == '0.0.0.0:9000' and
+            env.get('RUSTFS_CONSOLE_ENABLE') == 'false' and env.get('RUSTFS_OBS_LOG_DIRECTORY') == '/logs' and
+            env.get('RUSTFS_ACCESS_KEY') and env.get('RUSTFS_SECRET_KEY') and
+            golf.get('GOLF_OBJECT_ACCESS_KEY_ID') == env['RUSTFS_ACCESS_KEY'] and
+            golf.get('GOLF_OBJECT_SECRET_ACCESS_KEY') == env['RUSTFS_SECRET_KEY'])
+    value = {'Endpoint': expected['GOLF_OBJECT_ENDPOINT'], 'Bucket': expected['GOLF_OBJECT_BUCKET'],
+             'Region': expected['GOLF_OBJECT_REGION'], 'Prefix': expected['GOLF_OBJECT_PREFIX'], 'PathStyle': True}
+    return hashlib.sha256(json.dumps(value, separators=(',', ':')).encode()).hexdigest()
+
+
+def validate_source_bindings(pg, config, schema):
+    # Dormant connection profiles remain encrypted configuration, not backed-up
+    # external resources. Active profiles and any profile-backed source refuse
+    # this local-only backup, even if an operator labels that profile "local".
+    fingerprint = storage_fingerprint(config)
+    if int(schema) < 202610020013:
+        return
+    query = "SELECT count(*) FROM golf_workflow_runs WHERE source_storage='profile_s3' OR (source_storage='env_s3' AND source_fingerprint<>'"+fingerprint+"');"
+    require(run(['docker', 'exec', pg, 'psql', '-U', 'postgres', '-d', 'golf', '-Atc', query]).strip() == b'0')
+    if int(schema) >= 202610020014:
+        query = 'SELECT count(*) FROM golf_active_object_connection WHERE profile_id IS NOT NULL;'
+        require(run(['docker', 'exec', pg, 'psql', '-U', 'postgres', '-d', 'golf', '-Atc', query]).strip() == b'0')
+
+
+def matching_compose_files(label, supplied):
+    # Compose may recreate only changed services, leaving older service labels
+    # with fewer overlays. Every retained label must still describe this base
+    # and an ordered, distinct subset of the explicitly supplied files.
+    selected = label.split(',') if isinstance(label, str) else []
+    expected = [str(file) for file in supplied]
+    return bool(selected and expected and selected[0] == expected[0] and
+                len(set(selected)) == len(selected) and len(set(expected)) == len(expected) and
+                all(file in expected for file in selected) and
+                [expected.index(file) for file in selected] == sorted(expected.index(file) for file in selected))
+
+
+def snapshot(project, compose_files):
     rows = containers(project)
-    require(len(rows) == 3)
+    require(len(rows) in {3, 4})
     services = {row['Config']['Labels'].get('com.docker.compose.service'): row for row in rows}
-    require(set(services) == {'golf', 'gitea', 'postgres'})
+    rustfs = 'rustfs' in services
+    require(len(services) == len(rows))
+    require(set(services) == {'golf', 'gitea', 'postgres'} | ({'rustfs'} if rustfs else set()))
     for row in rows:
         labels = row['Config']['Labels']
         require(labels.get('com.docker.compose.oneoff') == 'False' and
-                labels.get('com.docker.compose.project.config_files') == str(compose_file))
+                matching_compose_files(labels.get('com.docker.compose.project.config_files'), compose_files))
         require(not row['HostConfig']['Privileged'] and not row['HostConfig']['NetworkMode'].startswith('host'))
         image_config = docker_json('image', 'inspect', row['Image'])[0]['Config']
         require(all((row['Config'].get(key) or None) == (image_config.get(key) or None)
                     for key in ['Entrypoint', 'Cmd', 'User', 'WorkingDir']))
         host = row['HostConfig']
+        is_rustfs = row is services.get('rustfs')
         require(host['RestartPolicy']['Name'] in {'', 'no'} and
-                not any(host.get(key) for key in ['Memory', 'NanoCpus', 'CpuShares', 'CapAdd', 'CapDrop',
-                                                'SecurityOpt', 'DeviceRequests', 'ReadonlyRootfs', 'ExtraHosts']))
+                not any(host.get(key) for key in ['Memory', 'NanoCpus', 'CpuShares', 'CapAdd',
+                                                'DeviceRequests', 'ReadonlyRootfs', 'ExtraHosts']))
+        if is_rustfs:
+            require(row['Image'] == docker_json('image', 'inspect', RUSTFS_IMAGE)[0]['Id'] and
+                    host.get('CapDrop') == ['ALL'] and host.get('SecurityOpt') == ['no-new-privileges:true'] and
+                    host.get('Tmpfs') == RUSTFS_TMPFS and not (host['PortBindings'] or {}))
+        else:
+            require(not host.get('CapDrop') and not host.get('SecurityOpt') and not host.get('Tmpfs'))
         require(len(row['NetworkSettings']['Networks']) == 1)
     require(services['postgres']['State']['Running'])
-    require(all(services[name]['State']['Status'] in {'exited', 'created'} for name in ['golf', 'gitea']))
+    require(all(services[name]['State']['Status'] in {'exited', 'created'} for name in ['golf', 'gitea', *(['rustfs'] if rustfs else [])]))
     require(services['gitea']['Config']['User'] == '1000:1000')
     expected = {'postgres': {'/var/lib/postgresql': 'postgres-data'},
-                'gitea': {'/var/lib/gitea': 'gitea-data', '/etc/gitea': 'gitea-config'}, 'golf': {}}
+                'gitea': {'/var/lib/gitea': 'gitea-data', '/etc/gitea': 'gitea-config'}, 'golf': {}, **({'rustfs': {'/data': 'rustfs-data'}} if rustfs else {})}
     volumes = set()
     initializer = None
     for name, row in services.items():
         mounts = dict(expected[name])
         for mount in row['Mounts']:
             target = mount['Destination']
+            if name == 'rustfs' and target == '/logs':
+                require(mount['Type'] == 'tmpfs'); continue
             if name == 'postgres' and target == '/docker-entrypoint-initdb.d/01-golf.sh':
                 require(mount['Type'] == 'bind' and not mount['RW'])
                 initializer = Path(mount['Source']).read_bytes()
@@ -182,7 +251,7 @@ def snapshot(project, compose_file):
     # administrator opening another connection after the check.
     query = "SELECT count(*) FROM pg_stat_activity WHERE datname IN ('golf','gitea') AND backend_type='client backend';"
     require(run(['docker', 'exec', pg, 'psql', '-U', 'postgres', '-d', 'postgres', '-Atc', query]).strip() == b'0')
-    config = {'services': {}, 'volumes': {name: {} for name in ['postgres-data', 'gitea-data', 'gitea-config']}}
+    config = {'services': {}, 'volumes': {name: {} for name in ['postgres-data', 'gitea-data', 'gitea-config', *(['rustfs-data'] if rustfs else [])]}}
     for name, row in services.items():
         image = row['Image']
         require(re.fullmatch(r'sha256:[a-f0-9]{64}', image))
@@ -214,29 +283,37 @@ def snapshot(project, compose_file):
                   depends_on={'postgres': {'condition': 'service_healthy'}})
     golf.update(ports=ports(services['golf'], ['8080/tcp']),
                 depends_on={'postgres': {'condition': 'service_healthy'}, 'gitea': {'condition': 'service_started'}})
+    if rustfs:
+        config['services']['rustfs'].update(volumes=['rustfs-data:/data'], tmpfs=['/logs:'+RUSTFS_TMPFS['/logs']],
+            cap_drop=['ALL'], security_opt=['no-new-privileges:true'],
+            healthcheck={'test': ['CMD', 'curl', '--fail', '--silent', 'http://localhost:9000/health'], 'interval': '3s', 'timeout': '3s', 'retries': 40})
+        golf['depends_on']['rustfs'] = {'condition': 'service_healthy'}
+    storage_fingerprint(config)
     return services, config, initializer
 
 
-def validate_volume(path, config=False):
+def validate_volume(path, config=False, rustfs=False):
     # Validate nested tar streams without extracting onto the host. Docker cp
     # receives only this checked archive; archive links cannot escape its root.
     references = set()
+    root = 'data' if rustfs else 'gitea'
+    owners = {0, 10001} if rustfs else {0, 1000}
     with tarfile.open(path, 'r:') as archive:
         members = {}
         total = 0
         for member in archive:
             name = member.name.rstrip('/')
             parts = PurePosixPath(name).parts
-            require(parts and parts[0] == 'gitea' and not name.startswith('/') and
+            require(parts and parts[0] == root and not name.startswith('/') and
                     '..' not in parts and name == PurePosixPath(name).as_posix() and len(name) <= 4096 and
                     name not in members and len(members) < 1_000_000)
-            require(member.isfile() or member.isdir() or member.issym() or member.islnk())
+            require(member.isfile() or member.isdir() or (not rustfs and (member.issym() or member.islnk())))
             require(0 <= member.size <= path.stat().st_size and (member.isfile() or member.size == 0))
-            require(member.uid in {0, 1000} and member.gid in {0, 1000} and member.mode & 0o7000 == 0)
+            require(member.uid in owners and member.gid in owners and member.mode & 0o7000 == 0)
             total += member.size
             require(total <= path.stat().st_size)
             members[name] = member
-        require('gitea' in members and members['gitea'].isdir())
+        require(root in members and members[root].isdir())
         links_to_files = set()
         for name, member in members.items():
             for parent in PurePosixPath(name).parents:
@@ -314,7 +391,10 @@ def validate_pair(stage):
 
 def backup(args, stage):
     require(not args.output.exists() and not args.output.is_symlink() and args.output.parent.is_dir())
-    services, config, initializer = snapshot(args.project, args.compose_file.resolve())
+    compose_files = [file.resolve() for file in args.compose_file]
+    services, config, initializer = snapshot(args.project, compose_files)
+    rustfs = 'rustfs' in services
+    files = profile_files(rustfs)
     pg = services['postgres']['Id']
     pg_version = run(['docker', 'exec', pg, 'postgres', '--version']).decode().strip()
     forge_version = run(['docker', 'run', '--rm', '--network', 'none', '--entrypoint', 'gitea',
@@ -323,6 +403,7 @@ def backup(args, stage):
                   'SELECT max(version_id) FROM goose_db_version WHERE is_applied;']).decode().strip()
     require(pg_version == 'postgres (PostgreSQL) 18.4' and forge_version.startswith('gitea version 1.27.3 ') and
             schema in SUPPORTED_SCHEMAS)
+    validate_source_bindings(pg, config, schema)
     write(stage/'compose.json', json.dumps(config).encode())
     write(stage/'postgres-init.sh', initializer)
     for name in ['golf', 'gitea']:
@@ -330,22 +411,27 @@ def backup(args, stage):
              '-U', 'postgres', '-d', name], output=stage/(name+'.dump'), limit=args.max_bytes)
     for name, directory in [('gitea-data.tar', '/var/lib/gitea'), ('gitea-config.tar', '/etc/gitea')]:
         run(['docker', 'cp', '-a', services['gitea']['Id']+':'+directory, '-'], output=stage/name, limit=args.max_bytes)
+    if rustfs:
+        run(['docker', 'cp', '-a', services['rustfs']['Id']+':/data', '-'], output=stage/'rustfs-data.tar', limit=args.max_bytes)
+        validate_volume(stage/'rustfs-data.tar', rustfs=True)
     validate_pair(stage)
     # Revalidate ordinary writer/container state and runtime configuration after
     # all components; the explicit drained-writers assertion remains required.
-    after, after_config, after_init = snapshot(args.project, args.compose_file.resolve())
+    after, after_config, after_init = snapshot(args.project, compose_files)
     require(config == after_config and initializer == after_init and
             all(after[name]['Id'] == row['Id'] for name, row in services.items()))
-    sizes = {name: {'bytes': (stage/name).stat().st_size, 'sha256': digest(stage/name)} for name in FILES}
+    sizes = {name: {'bytes': (stage/name).stat().st_size, 'sha256': digest(stage/name)} for name in files}
     total = sum(row['bytes'] for row in sizes.values())
     require(total <= args.max_bytes)
     manifest = {'schema_version': FORMAT, 'backup_id': uuid.uuid4().hex,
                 'created_at': datetime.now(timezone.utc).isoformat(), 'source_project': args.project,
                 'versions': {'postgres': pg_version, 'gitea': forge_version, 'golf_schema': schema},
                 'images': {name: row['Image'] for name, row in services.items()}, 'files': sizes}
+    if rustfs:
+        manifest['storage_profile'] = 'local_rustfs'
     write(stage/'manifest.json', json.dumps(manifest, sort_keys=True).encode())
     with tarfile.open(stage/'bundle.tar', 'w:') as archive:
-        for name in sorted(FILES | {'manifest.json'}):
+        for name in sorted(files | {'manifest.json'}):
             archive.add(stage/name, arcname=name, recursive=False)
     descriptor, temporary = tempfile.mkstemp(prefix='.golf-backup-', dir=args.output.parent)
     os.close(descriptor); os.unlink(temporary)
@@ -368,38 +454,51 @@ def verified(args, stage):
     total = 0
     with tarfile.open(stage/'bundle.tar', 'r:') as archive:
         for member in archive:
-            require(member.name in FILES | {'manifest.json'} and member.name not in found and member.isfile())
+            require(member.name in profile_files(True) | {'manifest.json'} and member.name not in found and member.isfile())
             require(member.size >= 0 and (member.name != 'manifest.json' or member.size <= 1 << 20))
             total += member.size
             require(total <= args.max_bytes+(1 << 20))
             with os.fdopen(os.open(stage/member.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as file:
                 shutil.copyfileobj(archive.extractfile(member), file, 1 << 20)
             found.add(member.name)
-    require(found == FILES | {'manifest.json'})
     manifest = json.loads((stage/'manifest.json').read_text())
+    rustfs = manifest.get('storage_profile') == 'local_rustfs'
+    require('storage_profile' not in manifest or rustfs)
+    files = profile_files(rustfs)
+    services = {'postgres', 'gitea', 'golf'} | ({'rustfs'} if rustfs else set())
+    require(found == files | {'manifest.json'})
     require(manifest['schema_version'] == FORMAT and re.fullmatch('[a-f0-9]{32}', manifest['backup_id']) and
-            set(manifest['files']) == FILES and set(manifest['images']) == {'postgres', 'gitea', 'golf'})
+            set(manifest['files']) == files and set(manifest['images']) == services)
     require(manifest['versions']['postgres'] == 'postgres (PostgreSQL) 18.4' and
             manifest['versions']['gitea'].startswith('gitea version 1.27.3 ') and
             manifest['versions']['golf_schema'] in SUPPORTED_SCHEMAS)
-    for name in FILES:
+    for name in files:
         require(manifest['files'][name] == {'bytes': (stage/name).stat().st_size, 'sha256': digest(stage/name)})
     require(sum(row['bytes'] for row in manifest['files'].values()) <= args.max_bytes)
     require((stage/'postgres-init.sh').read_bytes() == (ROOT/'deploy/postgres/init.sh').read_bytes())
     validate_pair(stage)
+    if rustfs:
+        validate_volume(stage/'rustfs-data.tar', rustfs=True)
     config = json.loads((stage/'compose.json').read_text())
     # This is an operator-trusted archive, not arbitrary uploaded Compose/SQL.
     # Still reject extra services, host mounts, privilege and substituted images.
-    require(set(config) == {'services', 'volumes'} and set(config['services']) == {'postgres', 'gitea', 'golf'} and
-            config['volumes'] == {name: {} for name in ['postgres-data', 'gitea-data', 'gitea-config']})
+    require(set(config) == {'services', 'volumes'} and set(config['services']) == services and
+            config['volumes'] == {name: {} for name in ['postgres-data', 'gitea-data', 'gitea-config', *(['rustfs-data'] if rustfs else [])]})
     for name, service in config['services'].items():
         require(service['image'] == manifest['images'][name] and re.fullmatch(r'sha256:[a-f0-9]{64}', service['image']))
-        require(set(service) <= {'image', 'pull_policy', 'environment', 'restart', 'volumes', 'ports', 'depends_on', 'healthcheck'})
+        require(set(service) <= {'image', 'pull_policy', 'environment', 'restart', 'volumes', 'ports', 'depends_on', 'healthcheck'} | ({'tmpfs', 'cap_drop', 'security_opt'} if name == 'rustfs' else set()))
         require(service['pull_policy'] == 'never' and service['restart'] == 'no' and isinstance(service['environment'], dict))
         require(all(isinstance(key, str) and isinstance(value, str) for key, value in service['environment'].items()))
     require(config['services']['postgres']['volumes'] == ['postgres-data:/var/lib/postgresql', './postgres-init.sh:/docker-entrypoint-initdb.d/01-golf.sh:ro'])
     require(config['services']['gitea']['volumes'] == ['gitea-data:/var/lib/gitea', 'gitea-config:/etc/gitea'])
     require('volumes' not in config['services']['golf'])
+    if rustfs:
+        service = config['services']['rustfs']
+        require(service['volumes'] == ['rustfs-data:/data'] and not service.get('ports') and
+                service.get('tmpfs') == ['/logs:'+RUSTFS_TMPFS['/logs']] and service.get('cap_drop') == ['ALL'] and
+                service.get('security_opt') == ['no-new-privileges:true'] and
+                service['image'] == docker_json('image', 'inspect', RUSTFS_IMAGE)[0]['Id'])
+    storage_fingerprint(config)
     return manifest
 
 
@@ -407,7 +506,7 @@ def fresh(project):
     require(not containers(project))
     require(not run(['docker', 'volume', 'ls', '-q', '--filter', 'label=com.docker.compose.project='+project]).strip())
     require(not run(['docker', 'network', 'ls', '-q', '--filter', 'label=com.docker.compose.project='+project]).strip())
-    for name in ['postgres-data', 'gitea-data', 'gitea-config']:
+    for name in ['postgres-data', 'gitea-data', 'gitea-config', 'rustfs-data']:
         require(not run(['docker', 'volume', 'ls', '-q', '--filter', 'name=^'+project+'_'+name+'$']).strip())
     require(not run(['docker', 'network', 'ls', '-q', '--filter', 'name=^'+project+'_default$']).strip())
 
@@ -425,7 +524,7 @@ def restore(args, stage, manifest):
     compose = ['docker', 'compose', '-p', args.project, '-f', str(args.directory/'compose.json')]
     run([*compose, 'create', '--pull', 'never'])
     rows = {row['Config']['Labels']['com.docker.compose.service']: row for row in containers(args.project)}
-    require(set(rows) == {'postgres', 'gitea', 'golf'} and not any(row['State']['Running'] for row in rows.values()))
+    require(set(rows) == set(manifest['images']) and not any(row['State']['Running'] for row in rows.values()))
     run([*compose, 'start', 'postgres'])
     deadline = time.monotonic()+90
     while time.monotonic() < deadline:
@@ -445,11 +544,15 @@ def restore(args, stage, manifest):
     for name, destination in [('gitea-data.tar', '/var/lib'), ('gitea-config.tar', '/etc')]:
         with (stage/name).open('rb') as file:
             run(['docker', 'cp', '-a', '-', rows['gitea']['Id']+':'+destination], input=file)
+    validate_source_bindings(rows['postgres']['Id'], json.loads((stage/'compose.json').read_text()), schema)
+    if 'rustfs' in rows:
+        with (stage/'rustfs-data.tar').open('rb') as file:
+            run(['docker', 'cp', '-a', '-', rows['rustfs']['Id']+':/'], input=file)
     recovery = json.loads(run([*compose, 'run', '--rm', '--no-deps', '-T', 'golf', 'recovery', 'invalidate-sessions',
                               '--backup-id', manifest['backup_id']]))
     require(recovery['schema_version'] == 'golf.recovery.v1' and recovery['state'] == 'complete')
     require(not any(row['State']['Running'] for row in containers(args.project)
-                    if row['Config']['Labels'].get('com.docker.compose.service') in {'golf', 'gitea'}))
+                    if row['Config']['Labels'].get('com.docker.compose.service') in {'golf', 'gitea', 'rustfs'}))
     return {'backup_id': manifest['backup_id'], 'compose_file': str(args.directory/'compose.json'),
             'sessions_count': recovery['result']['sessions_count'],
             'oauth_attempts_count': recovery['result']['oauth_attempts_count'],
@@ -467,7 +570,7 @@ def main():
             command.add_argument('--writers-drained', action='store_true', required=True,
                                  help='Assert ALL application, Git and direct DB writers are fenced/drained')
         if name == 'backup':
-            command.add_argument('--compose-file', required=True, type=Path)
+            command.add_argument('--compose-file', required=True, type=Path, action='append', help='Repeat for every source Compose file in runtime order')
             command.add_argument('--recipient', required=True, help='Public native age recipient')
             command.add_argument('--output', required=True, type=Path)
         else:
@@ -482,7 +585,7 @@ def main():
         if args.action != 'verify':
             require(PROJECT.fullmatch(args.project))
         if args.action == 'backup':
-            require(args.compose_file.is_file() and re.fullmatch(r'age1[0-9a-z]{58}', args.recipient))
+            require(all(file.is_file() for file in args.compose_file) and re.fullmatch(r'age1[0-9a-z]{58}', args.recipient))
             args.output = args.output.absolute()
         if args.action == 'restore':
             args.directory = args.directory.resolve()

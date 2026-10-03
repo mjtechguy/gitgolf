@@ -1,6 +1,6 @@
 # Offline recovery for the canonical Docker installation
 
-Updated: 2026-10-02. This is a bounded P1.6 foundation for the three-service developer installation, not a completed production recovery gate. The [operator script](../scripts/recovery.py) creates an encrypted coordinated backup, validates it and restores it into a fresh, quarantined Docker Compose project. It never starts the restored Golf or Gitea application. Real PostgreSQL invalidation tests, offline archive checks and the full native recovery drill **pass**, including simultaneous restart of all three restored services. See the [evidence ledger](IMPLEMENTATION_STATUS.md).
+Updated: 2026-10-02. This is bounded P1.6 recovery for the canonical core and optional local RustFS developer profile, not a completed production recovery gate. The [operator script](../scripts/recovery.py) creates an encrypted coordinated backup, validates it and restores it into a fresh, quarantined Docker Compose project. It never starts restored Golf, Gitea or RustFS. Real PostgreSQL invalidation tests, offline archive checks and the full native recovery drill **pass**, including restored core restart and local RustFS object verification. See the [evidence ledger](IMPLEMENTATION_STATUS.md).
 
 Cloudflare and AI are not required. The same origin-side procedure can apply to the canonical Docker core of either track; it does not back up Cloudflare resources or external deployment state. Kubernetes, external databases/object stores and modified topologies require separate recovery qualification.
 
@@ -8,20 +8,20 @@ Cloudflare and AI are not required. The same origin-side procedure can apply to 
 
 | Requirement | Current contract |
 | --- | --- |
-| Services | Exactly one `golf`, one rootless `gitea` and one `postgres` container belonging to the named Compose project and the specified single Compose configuration file. |
-| Versions | PostgreSQL **18.4**, Gitea **1.27.3**, Golf schema **202610020019**. The tool also retains the previously qualified schema008/009 archive formats; intermediate/newer schemas are rejected until separately qualified. Restore uses the source's actual Docker image IDs with `pull_policy: never`; all three images must already exist locally. Images are not included in the backup. |
+| Services | Exactly one `golf`, one rootless `gitea` and one `postgres`, optionally one canonical `rustfs`, belonging to the named Compose project. Supply the complete ordered configuration with repeatable `--compose-file`; captured service file lists must be ordered subsets with the same base file. Remove drained worker/daemon containers before capture. |
+| Versions | PostgreSQL **18.4**, Gitea **1.27.3**, Golf schema **202610020021** or historically qualified **202610020019/008/009**. Schema020 alone and other schemas are rejected. Restore uses the source's actual Docker image IDs with `pull_policy: never`; all captured images must already exist locally. Images are not included in the backup. |
 | Databases | Separate `golf` and `gitea` databases/roles in the bundled PostgreSQL service; canonical initialization script and matching resolved application credentials. No published PostgreSQL port. |
-| Persistent state | Named PostgreSQL volume at `/var/lib/postgresql`; Gitea volumes at `/var/lib/gitea` and `/etc/gitea`. No extra application mounts, privileged containers or host networking. |
-| Runtime configuration | Image-default command, entrypoint, user and working directory; no restart policy, custom resource/security/device/host overrides covered by the validator, or extra networks. Named volumes use the default local driver without options and belong to this project. Modified profiles are rejected rather than silently simplified during restore. |
+| Persistent state | Named PostgreSQL volume at `/var/lib/postgresql`; Gitea volumes at `/var/lib/gitea` and `/etc/gitea`. The optional RustFS profile also captures its canonical `/data` named volume. No extra application mounts, privileged containers or host networking. |
+| Runtime configuration | Image-default command, entrypoint, user and working directory; no restart policy, custom resource/security/device/host overrides covered by the validator, or extra networks. Named volumes use the default local driver without options and belong to this project. The optional RustFS service permits only its validated canonical security/resource/scratch configuration. Modified profiles are rejected rather than silently simplified during restore. |
 | Exposure | Golf HTTP, Gitea HTTP and Gitea SSH bindings are loopback-only. Existing public URLs, origin settings and port bindings are preserved, not automatically changed for another hostname. |
-| Writers | Golf and Gitea stopped, PostgreSQL running, no other active container using the captured volumes, and no ordinary client connections to either application database. The operator must also drain every external/direct writer. |
+| Writers | Golf, Gitea and optional RustFS stopped, PostgreSQL running, no other active container using the captured volumes, and no ordinary client connections to either application database. The operator must also drain every external/direct writer. |
 | Host tools | Python 3.11+ on a Unix host, Docker with Compose, and `age`. `age-keygen` is needed when provisioning a backup identity. The live drill additionally needs Git, Git LFS, GnuPG and `ssh-keyscan`. |
 
 Restore accepts only archives created by a trusted operator from a trusted installation. Successful age decryption establishes ciphertext integrity, **not the sender's identity**: anyone with the public recipient can encrypt another archive. Archive checks do not turn arbitrary Compose configuration, SQL or repository hooks into safe input. PostgreSQL explicitly warns that restoring a database dump can execute source-controlled code. Maintain backup provenance separately from the encrypted file and its checksum. See [age's public-recipient model](https://github.com/FiloSottile/age) and [PostgreSQL's restore trust warning](https://www.postgresql.org/docs/18/app-pgrestore.html).
 
 ## What is captured
 
-The encrypted `golf.backup.v1` archive contains a manifest plus these six payloads:
+The encrypted `golf.backup.v1` archive contains a manifest plus these six core payloads, and `rustfs-data.tar` when the validated local RustFS profile is selected:
 
 | Payload | Purpose |
 | --- | --- |
@@ -87,7 +87,7 @@ python3 scripts/recovery.py restore \
   --writers-drained
 ```
 
-Restore creates the three containers, starts only PostgreSQL and waits for its **TCP** health check so the temporary initialization server cannot be mistaken for the final server. It restores both databases and both Gitea volumes, then runs Golf's one-shot recovery invalidation command. Golf and Gitea stay stopped. Success returns exit 0 and `state: "quarantined"` with the backup ID, generated Compose path and exact invalidated session/attempt counts. It does not mean traffic may reopen.
+Restore creates the captured three or four containers, starts only PostgreSQL and waits for its **TCP** health check so the temporary initialization server cannot be mistaken for the final server. It restores both databases and both Gitea volumes, then runs Golf's one-shot recovery invalidation command. Golf, Gitea and optional RustFS stay stopped. Success returns exit 0 and `state: "quarantined"` with the backup ID, generated Compose path and exact invalidated session/attempt counts. It does not mean traffic may reopen.
 
 The native whole-stack restart drill passes with bounded database readiness retries. Docker can temporarily withdraw the `postgres` DNS name while restarting PostgreSQL; Golf retries connection readiness at 250ms intervals before migrations, under the caller's deadline or a 60s readiness limit when no deadline exists. Retryable cases include transport refusal/reset/timeouts, temporary or not-found DNS answers, PostgreSQL startup/recovery and temporary connection-slot exhaustion. A syntactically valid but misspelled hostname also waits until the deadline; unresolved DNS is not promised to fail immediately. Malformed DSNs, authentication failures, missing databases and migration errors are not retried. Migration execution itself is not wrapped in a retry loop, and cancellation remains effective.
 
@@ -174,6 +174,25 @@ Schema019 canonical-core recovery qualification passes on Docker image ID `sha25
 
 This qualifies the canonical three-service schema019 core. It does not cover RustFS object restoration, external database/provider resources, the live worker-daemon topology, an executing/orphan Docker process, automatic-run authority, Kubernetes or production failover. The leased-run fixture exercises control-plane capability quarantine; it does not claim a Docker job ran. Run the matching topology's complete recovery drill before production release.
 
-Source schema020 adds automatic run origins and changes the manual intent uniqueness target. It requires a coordinated stopped-writer upgrade; mixed old/new serving binaries are unsupported. The retained qualified development installation remains on schema019. The recovery allowlist deliberately refuses020 until an expanded drill proves automatic-origin quarantine/history and fresh restore; schema019 qualification must not be inferred for a rebuilt schema020 server.
+Source schema020 adds automatic run origins and changes the manual intent uniqueness target. It requires a coordinated stopped-writer upgrade; mixed old/new serving binaries are unsupported. Schema020 remains outside the recovery allowlist. The subsequent schema021 drill qualifies its complete automatic-origin/materialization schema; a schema019 proof alone does not.
 
-Schema021 adds canonical payload and push-materialization history. Source recovery quarantines pending/preparing leases as terminal blocked decisions, clears preparation capabilities and revokes restored grants. Schema020/021 remain outside the backup/restore allowlist until a full expanded encrypted native/RustFS/automatic-run drill passes; current retained schema019 evidence does not qualify them.
+Schema021 adds canonical payload and push-materialization history. Source recovery quarantines pending/preparing leases as terminal blocked decisions, clears preparation capabilities and revokes restored grants. Schema021 now passes the expanded native/RustFS/automatic-run drill below; schema020 alone remains outside the allowlist.
+
+
+## Schema021 and optional local RustFS qualification
+
+The full native encrypted backup/fresh-restore drill passes on image `sha256:27f9e813321169f851c6f281f9855611c5bc6fc7bb9c4830c40fb3e5117d9583`, with the same qualified backend binary `a3f234c3aa0e92436d01fc7b51c9fcd613f8f2e7e59f1ba8c4e3dd4ac5e11eef`. It admits two actual signed automatic pushes, retains exact source/provenance, and snapshots one queued and one HTTP-leased run of each origin. Interrupted pending/preparing materializations are additional explicit Golf-owned fixtures, not claimed executions. Fresh restore preserves every stopped RustFS file SHA-256 and native Git/LFS/attachment/signature/protection/SSH evidence, revokes restored grants, cancels four runs, blocks interrupted materializations, clears leases and denies both old attempt capabilities. Fresh login and fifth-family key rotation never reactivate work. Ciphertext/checksum/schema mismatch, live-writer/no-overwrite and size-cap negatives pass. All disposable projects/private files are removed.
+
+Backups with local RustFS retain the v1 envelope plus `storage_profile=local_rustfs`, a pinned fourth service and integrity-checked `rustfs-data.tar`. Only the canonical `/data` local labeled volume and exact Golf default storage binding are admitted. Source Golf/Gitea/RustFS must be stopped and all writers drained. Worker/image-init/daemon containers must be removed; dedicated executor jobs/volumes must first be reconciled. The executor daemon state and certificates are not archived or restored. Fresh restore leaves RustFS stopped until the operator explicitly starts it after quarantine.
+
+Remote environment S3, any profile-backed source or active object profile is rejected by this local-only tool. Dormant encrypted connection profiles are configuration history, not proof that their external resource data is backed up. External databases/storage, TLS edge volumes, live/orphan executable processes, Kubernetes, HA and production multi-tenant recovery remain separate gates.
+
+Repeat `--compose-file` for the selected base/overlays. Containers created before an overlay was selected may legitimately retain an ordered subset of those file labels; foreign/reordered/duplicate paths are rejected. Structural image, entrypoint, local volume, security, service and storage-binding checks remain mandatory.
+
+```sh
+python3 scripts/recovery.py backup --project golf \
+  --compose-file compose.yaml --compose-file compose.ci.yaml --compose-file compose.storage.yaml \
+  --recipient "$PUBLIC_AGE_RECIPIENT" --output /private/path/golf.age --writers-drained
+```
+
+Use the full restored profile's generated private Compose file and explicit operator reconciliation; never start a restored worker merely because a backup succeeded. For retained development, the pre-schema021 encrypted rollback snapshot and its private identity/configuration are under the ignored `.tmp/local-upgrade-*` directory. Protect/copy that directory separately; the same-host development copy is not an offsite recovery claim.

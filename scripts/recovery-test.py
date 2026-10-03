@@ -34,6 +34,16 @@ def denied(check):
 
 
 def main():
+    compose_files = [Path('/fixture/compose.yaml'), Path('/fixture/compose.ci.yaml'), Path('/fixture/compose.storage.yaml')]
+    for label in ['/fixture/compose.yaml', '/fixture/compose.yaml,/fixture/compose.storage.yaml',
+                  '/fixture/compose.yaml,/fixture/compose.ci.yaml,/fixture/compose.storage.yaml']:
+        assert recovery.matching_compose_files(label, compose_files)
+    for label in ['', None, '/foreign/compose.yaml', '/fixture/compose.ci.yaml',
+                  '/fixture/compose.yaml,/foreign/overlay.yaml',
+                  '/fixture/compose.yaml,/fixture/compose.ci.yaml,/fixture/compose.ci.yaml',
+                  '/fixture/compose.yaml,/fixture/compose.storage.yaml,/fixture/compose.ci.yaml']:
+        assert not recovery.matching_compose_files(label, compose_files)
+    assert not recovery.matching_compose_files('/fixture/compose.yaml', [compose_files[0], compose_files[0]])
     with tempfile.TemporaryDirectory(prefix='golf-recovery-test-') as directory:
         path = Path(directory)/'volume.tar'
         root = entry('gitea', tarfile.DIRTYPE, mode=0o700)
@@ -75,6 +85,51 @@ def main():
         denied(lambda: recovery.validate_pair(stage))
         archive(stage/'gitea-data.tar', [root, file, entry('gitea/secret')])
         recovery.validate_pair(stage)
+        storage_root = entry('data', tarfile.DIRTYPE, mode=0o700, uid=10001)
+        storage_file = entry('data/object', uid=10001)
+        archive(path, [storage_root, storage_file])
+        recovery.validate_volume(path, rustfs=True)
+        for rows in [
+            [entry('/data/absolute', uid=10001)], [entry('data/../escape', uid=10001)],
+            [entry('data/nested/missing', uid=10001)], [storage_file, storage_file],
+            [entry('data/link', tarfile.SYMTYPE, 'object', uid=10001)],
+            [entry('data/hard', tarfile.LNKTYPE, 'data/object', uid=10001)],
+            [entry('data/device', tarfile.CHRTYPE, uid=10001)],
+            [entry('data/suid', mode=0o4600, uid=10001)], [entry('data/foreign', uid=1000)],
+            [entry('gitea/wrong-root', uid=10001)],
+        ]:
+            archive(path, [storage_root, *rows])
+            denied(lambda: recovery.validate_volume(path, rustfs=True))
+        local = {'services': {
+            'golf': {'environment': {'GOLF_OBJECT_ENDPOINT': 'http://rustfs:9000', 'GOLF_OBJECT_BUCKET': 'golf-ci',
+                'GOLF_OBJECT_REGION': 'us-east-1', 'GOLF_OBJECT_PREFIX': 'golf', 'GOLF_OBJECT_PATH_STYLE': 'true',
+                'GOLF_OBJECT_ALLOW_HTTP': 'true', 'GOLF_OBJECT_ACCESS_KEY_ID': 'fixture-key', 'GOLF_OBJECT_SECRET_ACCESS_KEY': 'fixture-secret'}},
+            'rustfs': {'environment': {'RUSTFS_VOLUMES': '/data', 'RUSTFS_ADDRESS': '0.0.0.0:9000',
+                'RUSTFS_CONSOLE_ENABLE': 'false', 'RUSTFS_OBS_LOG_DIRECTORY': '/logs',
+                'RUSTFS_ACCESS_KEY': 'fixture-key', 'RUSTFS_SECRET_KEY': 'fixture-secret'}}}}
+        fingerprint = recovery.storage_fingerprint(local)
+        external_keys = json.loads(json.dumps(local))
+        external_keys['services']['rustfs']['environment']['RUSTFS_KMS_ENDPOINT'] = 'https://external.invalid'
+        denied(lambda: recovery.storage_fingerprint(external_keys))
+        assert len(fingerprint) == 64 and recovery.profile_files(True) - recovery.FILES == {'rustfs-data.tar'}
+        assert recovery.profile_files(False) == recovery.FILES
+        for key, value in [('GOLF_OBJECT_ENDPOINT', 'https://remote.invalid'), ('GOLF_OBJECT_BUCKET', 'other'),
+                           ('GOLF_OBJECT_PREFIX', 'other'), ('GOLF_OBJECT_ACCESS_KEY_ID', 'wrong'),
+                           ('GOLF_OBJECT_SESSION_TOKEN', 'temporary')]:
+            config = json.loads(json.dumps(local))
+            config['services']['golf']['environment'][key] = value
+            denied(lambda: recovery.storage_fingerprint(config))
+        denied(lambda: recovery.storage_fingerprint({'services': {'golf': local['services']['golf']}}))
+        assert recovery.storage_fingerprint({'services': {'golf': {'environment': {}}}}) == ''
+        native_run = recovery.run
+        try:
+            replies = iter([b'0', b'0'])
+            recovery.run = lambda *args, **kwargs: next(replies)
+            recovery.validate_source_bindings('fixture', local, '202610020021')
+            for replies in [iter([b'1']), iter([b'0', b'1'])]:
+                denied(lambda: recovery.validate_source_bindings('fixture', local, '202610020021'))
+        finally:
+            recovery.run = native_run
         identity = Path(directory)/'identity'
         recovery.write(identity, b'fixture')
         recovery.private_file(identity)
@@ -97,7 +152,7 @@ def main():
         denied(lambda: recovery.run([sys.executable, '-c', 'import sys; sys.stdout.buffer.write(b"x"*(2<<20))'],
                                     output=bounded, limit=1 << 20))
         assert bounded.stat().st_size <= 1 << 20
-    print('PASS: nested archive paths/links/duplicates/types/owners/modes/storage and private-file boundaries')
+    print('PASS: nested archive paths/links/duplicates/types/owners/modes/local RustFS/source bindings and private-file boundaries')
 
 
 if __name__ == '__main__':

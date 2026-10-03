@@ -28,6 +28,8 @@ services:
       GITEA__server__SSH_PORT: 2222
       GITEA__server__SSH_LISTEN_PORT: 2222
       GITEA__security__INSTALL_LOCK: 'true'
+      # Allow the authenticated Golf callback without allowing every private host.
+      GITEA__security__ALLOWED_HOST_LIST: 'external,golf'
       GITEA__service__DISABLE_REGISTRATION: 'true'
       GITEA__actions__ENABLED: 'false'
     ports:

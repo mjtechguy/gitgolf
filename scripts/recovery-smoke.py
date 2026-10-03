@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Qualify encrypted offline recovery in two disposable canonical Compose stacks.
+"""Qualify encrypted offline recovery in disposable native Compose/RustFS stacks.
 
 Requires Docker, age/age-keygen, Git/git-lfs, GnuPG and ssh-keyscan. Supply the
 locally built Golf image with --image. Neither the normal Compose project nor
 its credentials/ports are used. Native Gitea APIs/Git/admin create the fixture;
-only Golf's database is queried directly for recovery evidence. OAuth coverage
+only Golf's database is queried/seeded directly for recovery evidence. Two actual
+native pushes admit automatic runs; HTTP leases exercise control-plane authority,
+without executing Docker jobs. Explicit pending/preparing metadata fixtures cover
+interrupted materialization quarantine. OAuth coverage
 is a pending PKCE verifier, not restoration of an actual provider OAuth grant.
 All fixture containers, volumes, networks and private local files are removed.
 This small fixture does not qualify large backups. The 1 MiB cap check explicitly
@@ -53,6 +56,7 @@ HISTORY_TABLES = [
     ('golf_infrastructure_connections', 'id'), ('golf_infrastructure_connection_versions', 'profile_id,version'),
     ('golf_infrastructure_activation_events', 'revision'), ('golf_active_object_connection', 'singleton'),
     ('golf_repository_event_connections', 'id'), ('golf_repository_events', 'id'),
+    ('golf_repository_event_payloads', 'connection_id,payload_sha256'),
     ('golf_automation_credentials', 'grant_id'), ('golf_workflow_run_logs', 'run_id,sequence'),
 ]
 
@@ -109,6 +113,7 @@ def main():
     for tool in ['docker', 'age', 'age-keygen', 'git', 'git-lfs', 'gpg', 'gpgconf', 'ssh-keyscan']:
         assert shutil.which(tool), 'Required native tool is unavailable'
     image = json.loads(run('docker', 'image', 'inspect', args.image))[0]['Id']
+    print('Golf image: '+image, flush=True)
     for tag in ['postgres:18.4-alpine3.24', 'gitea/gitea:1.27.3-rootless']:
         run('docker', 'image', 'inspect', tag)
     prefix = 'golf-recovery-'+secrets.token_hex(5)
@@ -124,7 +129,7 @@ def main():
     smoke.GOLF, smoke.GITEA = 'http://127.0.0.1:'+str(golf_port), 'http://127.0.0.1:'+str(gitea_port)
     # Compose receives only explicit fixture values, never the operator's keys.
     env = {key: value for key, value in os.environ.items()
-           if not key.startswith(('GOLF_', 'GITEA_', 'COMPOSE_', 'POSTGRES_')) and key != 'DATABASE_URL'}
+           if not key.startswith(('GOLF_', 'GITEA_', 'COMPOSE_', 'POSTGRES_', 'RUSTFS_', 'AWS_')) and key != 'DATABASE_URL'}
     forbidden = []
     try:
         with tempfile.TemporaryDirectory(prefix=prefix+'-') as temporary, ExitStack() as cleanup:
@@ -173,6 +178,12 @@ def main():
             def sql(statement):
                 return compose('exec', '-T', 'postgres', 'psql', '-U', 'postgres', '-d', 'golf',
                                '-At', '-v', 'ON_ERROR_STOP=1', input=statement).strip()
+
+            def object_files():
+                data = run('docker', 'cp', '-a', container('rustfs')+':/data', '-', binary=True)
+                with tarfile.open(fileobj=io.BytesIO(data), mode='r:') as archive:
+                    return {item.name: hashlib.sha256(archive.extractfile(item).read()).hexdigest()
+                            for item in archive if item.isfile()}
 
             def rows(table, order='id'):
                 # Only fixed Golf table names and ordering constants are passed.
@@ -226,8 +237,11 @@ def main():
             legacy, next_key = [base64.b64encode(secrets.token_bytes(32)).decode() for _ in range(2)]
             oauth_secret = secrets.token_urlsafe(32)
             runner_key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=')
+            second_runner_key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=')
+            workers = [('recovery-worker',runner_key),('recovery-secondary',second_runner_key)]
             event_secret = secrets.token_urlsafe(32)
-            forbidden.extend(passwords+[legacy, next_key, oauth_secret, runner_key, event_secret])
+            object_access, object_secret = 'golf-proof-'+secrets.token_hex(12), secrets.token_hex(32)
+            forbidden.extend(passwords+[legacy, next_key, oauth_secret, runner_key, second_runner_key, event_secret, object_access, object_secret])
             config = {'services': {
                 'postgres': {'image': 'postgres:18.4-alpine3.24', 'pull_policy': 'never',
                     'environment': {'POSTGRES_PASSWORD': passwords[0], 'GOLF_DB_PASSWORD': passwords[1],
@@ -243,15 +257,19 @@ def main():
                         'GITEA__server__SSH_DOMAIN': '127.0.0.1', 'GITEA__server__SSH_PORT': str(ssh_port),
                         'GITEA__server__SSH_LISTEN_PORT': '2222', 'GITEA__server__LFS_START_SERVER': 'true',
                         'GITEA__security__INSTALL_LOCK': 'true', 'GITEA__service__DISABLE_REGISTRATION': 'true',
-                        'GITEA__actions__ENABLED': 'false', 'GITEA__webhook__ALLOWED_HOST_LIST': 'golf'},
+                        'GITEA__actions__ENABLED': 'false', 'GITEA__security__ALLOWED_HOST_LIST': 'golf'},
                     'ports': [f'127.0.0.1:{gitea_port}:3000', f'127.0.0.1:{ssh_port}:2222'],
                     'volumes': ['gitea-data:/var/lib/gitea', 'gitea-config:/etc/gitea'],
                     'depends_on': {'postgres': {'condition': 'service_healthy'}}},
                 'golf': {'image': image, 'pull_policy': 'never', 'environment': {
                         'GOLF_LISTEN_ADDR': ':8080', 'GOLF_PUBLIC_URL': smoke.GOLF,
                         'GOLF_ALLOW_INSECURE_COOKIES': 'true', 'GOLF_WEB_DIR': '/app/web/dist',
-                        'GOLF_ENCRYPTION_KEY': legacy,
-                        'GOLF_RUNNER_KEYS': json.dumps({'recovery-worker': runner_key}),
+                        'GOLF_ENCRYPTION_KEY': legacy, 'GOLF_PUSH_CI_ENABLED': 'false',
+                        'GOLF_OBJECT_ENDPOINT': 'http://rustfs:9000', 'GOLF_OBJECT_BUCKET': 'golf-ci',
+                        'GOLF_OBJECT_REGION': 'us-east-1', 'GOLF_OBJECT_PREFIX': 'golf',
+                        'GOLF_OBJECT_PATH_STYLE': 'true', 'GOLF_OBJECT_ALLOW_HTTP': 'true',
+                        'GOLF_OBJECT_ACCESS_KEY_ID': object_access, 'GOLF_OBJECT_SECRET_ACCESS_KEY': object_secret,
+                        'GOLF_RUNNER_KEYS': json.dumps(dict(workers)),
                         'GOLF_RUNNER_IMAGES': json.dumps({'linux': JOB_IMAGE}),
                         # Compose must unescape this to a literal dollar, then
                         # backup/restore must preserve that effective value.
@@ -262,6 +280,17 @@ def main():
                     'ports': [f'127.0.0.1:{golf_port}:8080'],
                     'depends_on': {'postgres': {'condition': 'service_healthy'}, 'gitea': {'condition': 'service_started'}}}},
                 'volumes': {name: {} for name in ['postgres-data', 'gitea-data', 'gitea-config']}}
+            config['services']['rustfs'] = {
+                'image': 'rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff',
+                'environment': {'RUSTFS_VOLUMES': '/data', 'RUSTFS_ADDRESS': '0.0.0.0:9000',
+                    'RUSTFS_CONSOLE_ENABLE': 'false', 'RUSTFS_ACCESS_KEY': object_access,
+                    'RUSTFS_SECRET_KEY': object_secret, 'RUSTFS_OBS_LOG_DIRECTORY': '/logs'},
+                'volumes': ['rustfs-data:/data'], 'tmpfs': ['/logs:uid=10001,gid=10001,size=67108864,mode=0750'],
+                'cap_drop': ['ALL'], 'security_opt': ['no-new-privileges:true'],
+                'healthcheck': {'test': ['CMD', 'curl', '--fail', '--silent', 'http://localhost:9000/health'],
+                    'interval': '3s', 'timeout': '3s', 'retries': 40}}
+            config['volumes']['rustfs-data'] = {}
+            config['services']['golf']['depends_on']['rustfs'] = {'condition': 'service_healthy'}
             private(config_file, json.dumps(config))
             identity, wrong_identity = directory/'identity.agekey', directory/'wrong.agekey'
             for path in [identity, wrong_identity]:
@@ -270,6 +299,7 @@ def main():
             check('start isolated canonical source and create native identities')
             compose('up', '-d', '--wait', '--wait-timeout', '120', timeout=180)
             ready()
+            compose('exec', '-T', 'golf', 'golf', 'objectstore', 'initialize')
             users = [prefix+'-'+label for label in ['owner', 'outsider']]
             tokens, sessions = [], []
             for username in users:
@@ -424,7 +454,6 @@ def main():
             assert int(sql('SELECT count(*) FROM golf_repository_events;')) > 0
             assert sql("SELECT count(*) FROM golf_repository_events WHERE ref='refs/heads/main' AND after_commit_id='"+commit_id+"';") == '1'
             # Stop future native deliveries before the stopped-writer snapshot.
-            smoke.provider(owner_token, 'PATCH', route+'/hooks/'+str(hook['id']), {'active': False}, expected=200)
             grants = []
             grant_input = {'repository': key, 'expectedRepositoryId': repository['id'],
                 'expectedOwnerId': native_owner_id, 'nativeToken': owner_token,
@@ -467,16 +496,57 @@ def main():
                 smoke.rpc(caller, 'ExecutionPolicyService/UpdateExecutionPolicy', {**request,
                     'scopeId': previous['scopeId'], 'expectedRevision': previous.get('revision', '0'),
                     'expectedAuthorityRevision': previous['authorityRevision'], 'mode': 'EXECUTION_MODE_ALL',
-                    'manualDispatchEnabled': True, 'pushAllowed': False, 'allowAllWorkflows': True})
-            fixture_runs = [smoke.rpc(owner, 'WorkflowRunService/DispatchWorkflow', {'repository': key,
-                'workflowPath': workflow, 'ref': commit_id, 'idempotencyKey': str(uuid.uuid4())})['run'] for _ in range(2)]
+                    'manualDispatchEnabled': True, 'pushAllowed': True, 'allowAllWorkflows': True})
+            check('two actual native pushes admit independently delegated automatic source snapshots')
+            config['services']['golf']['environment']['GOLF_PUSH_CI_ENABLED'] = 'true'
+            private(config_file, json.dumps(config)); compose('up', '-d', 'golf'); ready()
+            time.sleep(7)  # Native timestamps plus the five-second clock-skew margin.
+            automatic_runs, manual_runs = [], []
+            for index in range(2):
+                (work/'automation.txt').write_text('Recovery automatic source '+str(index)+'\n')
+                git('add', '.'); git('commit', '-m', 'Automatic recovery source '+str(index))
+                pushed = git('rev-parse', 'HEAD'); git('push', remote, 'main')
+                deadline = time.monotonic()+60
+                while time.monotonic() < deadline:
+                    candidates = smoke.rpc(owner, 'WorkflowRunService/ListWorkflowRuns', {'repository': key}).get('runs', [])
+                    matches = [row for row in candidates if row['commitId'] == pushed]
+                    if matches:
+                        assert len(matches) == 1
+                        automatic = matches[0]
+                        assert automatic['origin'] == 'WORKFLOW_RUN_ORIGIN_PUSH'
+                        assert automatic['eventRef'] == 'refs/heads/main' and automatic['automationGrantId'] == grants[0]['id']
+                        assert automatic['workflowBlobId'] == git('rev-parse', 'HEAD:'+workflow)
+                        automatic_runs.append(automatic)
+                        break
+                    time.sleep(.5)
+                else: raise AssertionError('Native automatic recovery admission timed out')
+                if index == 0:
+                    manual_runs.append(smoke.rpc(owner, 'WorkflowRunService/DispatchWorkflow', {'repository': key,
+                        'workflowPath': workflow, 'ref': commit_id, 'idempotencyKey': str(uuid.uuid4())})['run'])
+            smoke.provider(owner_token, 'PATCH', route+'/hooks/'+str(hook['id']), {'active': False}, expected=200)
+            refs = git('ls-remote', '--heads', '--tags', remote)
+            fixture_runs = automatic_runs+manual_runs+[smoke.rpc(owner, 'WorkflowRunService/DispatchWorkflow', {'repository': key,
+                'workflowPath': workflow, 'ref': commit_id, 'idempotencyKey': str(uuid.uuid4())})['run']]
+            deadline = time.monotonic()+30
+            while time.monotonic() < deadline and sql("SELECT count(*) FROM golf_push_materializations WHERE state IN ('pending','preparing');") != '0':
+                time.sleep(.5)
+            assert sql("SELECT count(*) FROM golf_push_materializations WHERE state IN ('pending','preparing');") == '0'
             poll = urllib.request.Request(smoke.GOLF+'/internal/ci/poll', data=b'{}', method='POST',
                 headers={'Authorization': 'Bearer '+runner_key, 'Golf-Runner-ID': 'recovery-worker', 'Content-Type': 'application/json'})
-            with urllib.request.urlopen(poll, timeout=15) as response:
-                assignment = json.load(response)
-            forbidden.append(assignment['attemptToken'])
-            assert assignment['runId'] in {row['id'] for row in fixture_runs}
-            assert sql("SELECT string_agg(state,',' ORDER BY state) FROM golf_workflow_runs;") == 'queued,running'
+            assignments = []
+            for worker_id, worker_key in workers:
+                request = urllib.request.Request(smoke.GOLF+'/internal/ci/poll', data=b'{}', method='POST',
+                    headers={'Authorization': 'Bearer '+worker_key, 'Golf-Runner-ID': worker_id, 'Content-Type': 'application/json'})
+                with urllib.request.urlopen(request, timeout=15) as response:
+                    assert response.status == 200, 'Expected worker assignment'
+                    assignments.append(json.load(response))
+                forbidden.append(assignments[-1]['attemptToken'])
+                assert assignments[-1]['runId'] in {row['id'] for row in fixture_runs}
+            assignment = assignments[0]
+            assert sql("SELECT string_agg(state,',' ORDER BY state) FROM golf_workflow_runs;") == 'queued,queued,running,running'
+            assert sql("SELECT string_agg(origin||':'||state,',' ORDER BY origin,state) FROM golf_workflow_runs;") == 'manual:queued,manual:running,push:queued,push:running'
+            assert sql("SELECT count(*) FROM golf_workflow_runs WHERE source_storage='env_s3' AND source_archive IS NULL;") == '4'
+            assert sql("SELECT count(*) FROM golf_push_materializations WHERE state='admitted' AND native_activity_id>0;") == '2'
             # This is a leased control-plane attempt, not a claim that a Docker job ran.
             check('drained key activation and partial re-encryption before backup')
             compose('stop', 'golf')
@@ -524,7 +594,19 @@ def main():
                 assert json.loads(run('docker', 'inspect', container(service)))[0]['State']['Running']
             # GnuPG agent sockets are runtime state, not backup payloads.
             compose('exec', '-T', 'gitea', 'gpgconf', '--kill', 'all')
-            compose('stop', 'golf', 'gitea')
+            compose('stop', 'golf', 'gitea', 'rustfs')
+            # Explicit Golf metadata fixtures exercise interrupted preparation quarantine;
+            # actual admitted automatic rows above retain separate native evidence.
+            for index, fixture_state in enumerate(['pending', 'preparing']):
+                lease = "NULL,NULL" if fixture_state == 'pending' else "'"+str(uuid.uuid4())+"'::uuid,clock_timestamp()+interval '1 hour'"
+                sql("INSERT INTO golf_push_materializations(id,event_id,grant_id,grant_revision,grant_epoch,credential_version,workflow_path,state,attempts,lease_id,lease_expires_at) "
+                    "SELECT '"+str(uuid.uuid4())+"'::uuid,(SELECT min(id) FROM golf_repository_events),g.id,g.revision,g.revocation_epoch,c.version,'"+workflow+"','"+fixture_state+"',1,"+lease+" FROM golf_automation_grants g JOIN golf_automation_credentials c ON c.grant_id=g.id WHERE g.id='"+grants[index*2]['id']+"'::uuid;")
+            materialization_history = json.loads(rows('golf_push_materializations'))
+            assert sum(row['state']=='admitted' for row in materialization_history) == 2
+            assert sum(row['state']=='pending' for row in materialization_history) == 1
+            assert sum(row['state']=='preparing' for row in materialization_history) == 1
+            source_object_files = object_files()
+            assert source_object_files
             backup_file = directory/'backup.age'
             backup_args = ['--project', source, '--compose-file', str(config_file), '--recipient', recipient,
                            '--output', str(backup_file), '--writers-drained']
@@ -552,6 +634,7 @@ def main():
             manifest = json.loads(files['manifest.json'])
             assert manifest['backup_id'] == backup_id and manifest['source_project'] == source
             assert manifest['images']['golf'] == image
+            assert manifest['storage_profile'] == 'local_rustfs' and 'rustfs-data.tar' in files
             for name, evidence in manifest['files'].items():
                 assert evidence == {'bytes': len(files[name]), 'sha256': hashlib.sha256(files[name]).hexdigest()}
             archived_config = json.loads(files['compose.json'])
@@ -618,8 +701,9 @@ def main():
             active_config, active_project = Path(restored['compose_file']), target
             assert active_config == restore_dir/'compose.json'
             assert marker_value() == 'literal-$recovery-marker'
-            for service in ['golf', 'gitea']:
+            for service in ['golf', 'gitea', 'rustfs']:
                 assert not json.loads(run('docker', 'inspect', container(service)))[0]['State']['Running']
+            assert object_files() == source_object_files, 'Restored RustFS file hashes differ'
             assert sql('SELECT count(*) FROM golf_sessions;') == '0'
             assert sql('SELECT count(*) FROM golf_oauth_attempts;') == '0'
             for table, order in HISTORY_TABLES:
@@ -642,6 +726,14 @@ def main():
                 assert actual['lease_token_hash'] is None and actual['finished_at'] is not None
                 excluded = {'state', 'version', 'finished_at', 'reason', 'lease_token_hash'}
                 assert {k:v for k,v in actual.items() if k not in excluded} == {k:v for k,v in previous.items() if k not in excluded}
+            for previous, actual in zip(materialization_history, json.loads(rows('golf_push_materializations'))):
+                mutable = {'state','reason','lease_id','lease_expires_at','updated_at'}
+                if previous['state'] in ['pending','preparing']:
+                    assert actual['state'] == 'blocked' and actual['reason'] == 'recovery_quarantine'
+                    assert actual['lease_id'] is None and actual['lease_expires_at'] is None
+                    assert {k:v for k,v in previous.items() if k not in mutable} == {k:v for k,v in actual.items() if k not in mutable}
+                else: assert actual == previous
+            print('PASS: RustFS file hashes/source locators/provenance preserved; pending/preparing work quarantined and admitted history retained', flush=True)
             print('PASS: enabled local and PAT-only grants revoked, prior revocation retained, queued/leased runs cancelled and all credential ciphertext/history preserved', flush=True)
             recovery_events = json.loads(rows('golf_recovery_events'))
             assert len(recovery_events) == 1
@@ -666,18 +758,20 @@ def main():
             assert sum(row.get('local_accounts', 0) for row in operator('status')['keys']) == 2
             print('PASS: quarantine, exact invalidation ledger, preserved identity/audit/crypto history and key registry', flush=True)
             check('reopen only the disposable target and verify private restored data')
-            compose('start', 'gitea', 'golf'); ready()
+            compose('start', 'rustfs')
+            compose('up', '-d', 'gitea', 'golf'); ready()
             for session in sessions:
                 smoke.rpc(session, 'SessionService/GetSession', expected=401)
-            old_attempt = urllib.request.Request(smoke.GOLF+'/internal/ci/attempt/'+assignment['attemptId']+'/heartbeat',
-                data=b'{}', method='POST', headers={'Authorization': 'Bearer '+runner_key,
-                    'Golf-Runner-ID': 'recovery-worker', 'Golf-Attempt-Token': assignment['attemptToken'], 'Content-Type': 'application/json'})
-            try:
-                urllib.request.urlopen(old_attempt, timeout=15)
-                raise AssertionError('Restored attempt capability accepted')
-            except urllib.error.HTTPError as error:
-                assert error.code == 403
-                error.close()
+            for (worker_id, worker_key), assignment in zip(workers,assignments):
+                old_attempt = urllib.request.Request(smoke.GOLF+'/internal/ci/attempt/'+assignment['attemptId']+'/heartbeat',
+                    data=b'{}', method='POST', headers={'Authorization': 'Bearer '+worker_key,
+                        'Golf-Runner-ID': worker_id, 'Golf-Attempt-Token': assignment['attemptToken'], 'Content-Type': 'application/json'})
+                try:
+                    urllib.request.urlopen(old_attempt, timeout=15)
+                    raise AssertionError('Restored attempt capability accepted')
+                except urllib.error.HTTPError as error:
+                    assert error.code == 403
+                    error.close()
             for index in range(2):
                 smoke.rpc(smoke.client(), 'SessionService/LoginWithPassword',
                     {'username': local_names[index], 'password': local_passwords[index]}, expected=401)
@@ -725,6 +819,8 @@ def main():
             with urllib.request.urlopen(poll, timeout=15) as response:
                 assert response.status == 204
             assert sql("SELECT count(*) FROM golf_workflow_runs WHERE state IN ('queued','running');") == '0'
+            assert sql("SELECT count(*) FROM golf_push_materializations WHERE state IN ('pending','preparing');") == '0'
+            assert sql('SELECT count(*) FROM golf_workflow_runs;') == '4'
             rotated = operator('rotate', '--batch-size', '2', '--max-batches', '20')
             assert rotated['rotated_automation_credentials'] == 3
             assert rotated['rotated_infrastructure_connections'] == 1
