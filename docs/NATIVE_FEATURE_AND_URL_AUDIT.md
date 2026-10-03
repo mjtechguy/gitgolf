@@ -1,6 +1,6 @@
 # Native feature and URL audit
 
-Reviewed 2026-10-03 against Golf source `44a9c7823718a9a942f28cc5e7797d9b82b38a67` and the installed Gitea 1.27.3. Both infrastructure tracks retain the same supported native API/Git boundary. This is an implementation inventory, not full parity qualification.
+Reviewed 2026-10-03 against the baseline and Golf URL/unit source `bfbb5deba7d86c298cc18b81e9326b402da9d533` and the installed Gitea 1.27.3. Both infrastructure tracks retain the same supported native API/Git boundary. This is an implementation inventory, not full parity qualification.
 
 ## Native integration
 
@@ -22,7 +22,7 @@ Golf already uses familiar `/OWNER/REPO`, `/issues/N`, `/pull/N/files`, `/commit
 
 Current source links are immutable `tree/SHA/path` or `blob/SHA/path`; branch/tag names are query context, not proof that a ref still points to the selected SHA. This avoids ambiguity between slash-containing refs and paths. GitHub supports both ordinary branch/ref URLs and immutable SHA permalinks; see [GitHub permanent-link documentation](https://docs.github.com/en/repositories/working-with-files/using-files/getting-permanent-links-to-files).
 
-Implemented in the latest bounded source increment (qualification details in implementation status):
+Implemented and locally deployed in the latest bounded increment (339 affected browser cases plus actual served/native proof; qualification details in implementation status):
 
 1. Strip redundant `ref` when source/path-history routes encode the SHA and omit path-owned view/detail query selectors. Keep deliberate source/history return context on other work pages and list filters only on Issues/PR views.
 2. Provide canonical `/OWNER/REPO/settings` and supported settings subpaths, retaining old `/repositories/...` aliases.
