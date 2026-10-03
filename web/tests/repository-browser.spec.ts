@@ -140,13 +140,54 @@ test('commit history paginates and opens the selected immutable source commit', 
   await backend(page);
   await page.goto(`/repositories/alex/design-system?view=commits&ref=${'d'.repeat(41)}`);
   await expect(page).toHaveURL(new RegExp(`ref=${head}`));
-  await page.getByText('Full commit message', { exact: true }).click();
+  await page.getByRole('button', { name: `Full commit message ${head.slice(0, 12)}`, exact: true }).click();
   await expect(page.locator('.commit-message pre')).toContainText('Keep focus visible everywhere.');
   await page.getByRole('button', { name: 'Load more commits' }).click();
   await page.getByRole('link', { name: `Browse commit ${older.slice(0, 12)}` }).click();
   await expect(page).toHaveURL(new RegExp(`ref=${older}`));
   await expect(page.getByRole('navigation', { name: 'Repository', exact: true }).getByRole('link', { name: 'Code' })).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('.commit-pin')).toHaveText(older.slice(0, 12));
+});
+
+test.describe('compact commit history', () => {
+  test.use({ timezoneId: 'UTC' });
+  test('date groups preserve native order across pagination and expose literal message and SHA controls', async ({ page }) => {
+    await backend(page);
+    const fourth = 'f'.repeat(40);
+    await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { (window as unknown as { copied: string }).copied = text; } } }));
+    await page.route('**/rpc/golf.v1.RepositoryService/ListCommits', async route => {
+      const next = request(route, ListCommitsRequestSchema).page?.page === 2;
+      const second = { sha: feature, message: 'Second', authorName: 'Alex', authoredAt: '2026-10-01T19:00:00Z' };
+      return respond(route, ListCommitsResponseSchema, next ? { commits: [second,
+        { sha: older, message: 'Earlier date', authorName: 'Alex', authoredAt: '2026-09-30T12:00:00Z' },
+        { sha: fourth, message: 'Later author date in native order', authorName: 'Alex', authoredAt: '2026-10-01T13:00:00Z' },
+      ] } : { commits: [{ sha: head, message: 'First\n\n<script>private literal message</script>', authorName: 'Alex', authoredAt: '2026-10-01T12:00:00Z' }, second], page: { nextPage: 2 } });
+    });
+    await page.goto('/alex/design-system/commits');
+    await expect(page.locator('.commit-date-group')).toHaveCount(1);
+    await page.getByRole('button', { name: `Full commit message ${head.slice(0, 12)}` }).click();
+    await expect(page.locator('.commit-message pre')).toHaveText('First\n\n<script>private literal message</script>');
+    await expect(page.locator('.commit-message script')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: `Full commit message ${head.slice(0, 12)}` })).toBeFocused();
+    await expect(page.locator('.commit-message pre')).toBeHidden();
+    await page.getByRole('button', { name: `Copy full SHA ${head.slice(0, 12)}` }).click();
+    expect(await page.evaluate(() => (window as unknown as { copied: string }).copied)).toBe(head);
+    await page.getByRole('button', { name: 'Load more commits' }).click();
+    await expect(page.locator('.commit-date-group')).toHaveCount(3);
+    await expect(page.locator('.commit-list h4')).toHaveText(['First', 'Second', 'Earlier date', 'Later author date in native order']);
+    await expect(page.locator('.commit-date-group>h3')).toHaveText(['Authored on Oct 1, 2026', 'Authored on Sep 30, 2026', 'Authored on Oct 1, 2026']);
+    expect(await page.locator('.commit-list>li').first().evaluate(e => e.getBoundingClientRect().height)).toBeLessThan(90);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(() => page.locator('.repository-tabs [aria-current="page"]').evaluate(e => { const r = e.getBoundingClientRect(); const n = e.parentElement!.getBoundingClientRect(); return r.left >= n.left && r.right <= n.right; })).toBe(true);
+    await page.getByRole('navigation', { name: 'Repository', exact: true }).getByRole('link', { name: 'Issues', exact: true }).focus();
+    await page.keyboard.press('Tab');
+    const nav = page.getByRole('navigation', { name: 'Repository', exact: true });
+    expect(await nav.evaluate(e => e.getBoundingClientRect().height)).toBeLessThan(65);
+    await expect(nav.getByRole('link', { name: 'Pull requests' })).toBeFocused();
+    await expect.poll(() => nav.getByRole('link', { name: 'Pull requests' }).evaluate(e => { const r = e.getBoundingClientRect(); const n = e.parentElement!.getBoundingClientRect(); return r.left >= n.left && r.right <= n.right; })).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
 });
 
 test('commit diff routes reject aliases and noncanonical IDs before repository requests', async ({ page }) => {

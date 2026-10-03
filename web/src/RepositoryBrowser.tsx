@@ -4,12 +4,12 @@ import { RepositoryReadme } from './RepositoryReadme';
 import { CodePreview, FileContent, isMarkdownPath } from './RepositoryContent';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { ArrowLeft, BookOpen, ChevronRight, CircleDot, Code2, File, Folder, GitBranch, GitCommitHorizontal, GitPullRequest, Link2, LockKeyhole, Play, RefreshCw, Settings, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, BookOpen, ChevronRight, CircleDot, Code2, File, Folder, GitBranch, GitCommitHorizontal, GitPullRequest, Link2, LockKeyhole, MoreHorizontal, Play, RefreshCw, Settings, ShieldCheck } from 'lucide-react';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { repositoryClient } from './api';
 import { CommitDiffBase, SourceEntryType } from './gen/golf/v1/golf_pb';
-import type { RepositoryKey, SourceEntry } from './gen/golf/v1/golf_pb';
+import type { Commit, RepositoryKey, SourceEntry } from './gen/golf/v1/golf_pb';
 import { repositoryOptions } from './navigation';
 import type { RepositoryLocation } from './navigation';
 
@@ -96,6 +96,19 @@ function SourcePanel({ repositoryKey, queryKey, location, defaultBranch }: { rep
   </section>;
 }
 
+// Keep native history order, including nonchronological author dates. Only
+// consecutive local-calendar dates group; pagination can extend the last group.
+function commitDateGroups(commits: Commit[]) {
+  const groups: { day: string; commits: Commit[] }[] = [];
+  for (const commit of commits) {
+    const date = new Date(commit.authoredAt);
+    const day = Number.isNaN(date.getTime()) ? 'unknown' : `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+    if (groups.at(-1)?.day === day) groups.at(-1)!.commits.push(commit);
+    else groups.push({ day, commits: [commit] });
+  }
+  return groups;
+}
+
 function CommitsPanel({ repositoryKey, queryKey, location, defaultBranch }: { repositoryKey: Pick<RepositoryKey, 'owner' | 'name'>; queryKey: readonly unknown[]; location: RepositoryLocation; defaultBranch: string }) {
   const navigate = useNavigate();
   const ref = location.ref || defaultBranch;
@@ -106,10 +119,10 @@ function CommitsPanel({ repositoryKey, queryKey, location, defaultBranch }: { re
   useEffect(() => {
     if (head && !isCommit(location.ref)) void navigate({ ...repositoryOptions(location, { ref: head, branch: location.branch || location.ref || defaultBranch }), replace: true });
   }, [head, location, defaultBranch, navigate]);
-  return <section aria-labelledby="commits-title" className="browser-panel">
+  return <section aria-labelledby="commits-title" className="browser-panel commit-history">
     <div className="browser-panel-heading"><h2 id="commits-title">Commit history</h2><button className="icon-button manual-refresh" aria-label="Refresh commits" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} /></button></div>
     {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : query.isPending || (query.isFetching && !query.isFetchingNextPage) ? <Loading label="Loading commits…" /> : <>
-      <ol className="commit-list">{commits.map((commit) => <li key={commit.sha}><GitCommitHorizontal size={20} /><div><h3>{commit.message.split('\n')[0] || 'Untitled commit'}</h3><p>{commit.authorName || 'Unknown author'} · <DateLabel value={commit.authoredAt} /></p>{commit.message.includes('\n') ? <details className="commit-message"><summary>Full commit message</summary><pre>{commit.message}</pre></details> : null}<Link className="text-button commit-diff-link" {...repositoryOptions(location, { commit: commit.sha })} aria-label={`View diff ${shortSHA(commit.sha)}`}>View diff<ChevronRight size={13} /></Link></div><Link className="sha-link" {...repositoryOptions(location, { view: 'source', ref: commit.sha, branch: '', path: '' })} aria-label={`Browse commit ${shortSHA(commit.sha)}`} title={commit.sha}>{shortSHA(commit.sha)}<ChevronRight size={14} /></Link></li>)}</ol>
+      <div className="commit-groups">{commitDateGroups(commits).map((group) => <section className="commit-date-group" key={group.commits[0]!.sha} aria-labelledby={`commit-day-${group.commits[0]!.sha}`}><h3 id={`commit-day-${group.commits[0]!.sha}`}><GitCommitHorizontal size={16} aria-hidden="true"/>{group.day === 'unknown' ? 'Author date unavailable' : <>Authored on <DateLabel value={group.commits[0]!.authoredAt}/></>}</h3><ol className="commit-list">{group.commits.map((commit) => <li key={commit.sha}><div className="commit-row-content"><div className="commit-row-title"><h4><Link {...repositoryOptions(location, { commit: commit.sha })}>{commit.message.split('\n')[0] || 'Untitled commit'}</Link></h4>{commit.message.split('\n').slice(1).some(line => line.trim()) ? <details className="commit-message" onKeyDown={disclosureDismiss.onKeyDown}><summary role="button" aria-label={`Full commit message ${shortSHA(commit.sha)}`} title="Full commit message"><MoreHorizontal size={16} aria-hidden="true"/></summary><pre>{commit.message}</pre></details> : null}</div><p>{commit.authorName || 'Unknown author'} · <DateLabel value={commit.authoredAt}/></p></div><div className="commit-row-actions"><Link className="sha-link" {...repositoryOptions(location, { commit: commit.sha })} aria-label={`View diff ${shortSHA(commit.sha)}`} title={commit.sha}>{shortSHA(commit.sha)}</Link><CopyButton text={commit.sha} label={`Copy full SHA ${shortSHA(commit.sha)}`}/><Link className="icon-button" {...repositoryOptions(location, { view: 'source', ref: commit.sha, branch: '', path: '' })} aria-label={`Browse commit ${shortSHA(commit.sha)}`} title="Browse repository at this commit"><Code2 size={16} aria-hidden="true"/></Link></div></li>)}</ol></section>)}</div>
       {!commits.length ? <div className="empty-state"><GitCommitHorizontal size={25} /><h3>No commits at this ref.</h3></div> : null}
       <div className="list-footer"><span>{commits.length} loaded commits{query.hasNextPage ? ' · More available' : ''}</span><More hasMore={query.hasNextPage} loading={query.isFetchingNextPage} load={() => void query.fetchNextPage()} label="commits" /></div>
     </>}
@@ -146,17 +159,32 @@ function CommitDiffPanel({ repositoryKey, queryKey, location }: { repositoryKey:
 }
 
 export function RepositoryBrowser({ location, userId }: { location: RepositoryLocation; userId: string }) {
+  const tabs = useRef<HTMLElement>(null);
   const repositoryKey = { owner: location.owner, name: location.name };
   const queryKey = ['repository', userId, location.owner, location.name];
   const query = useQuery({ ...privateQuery, queryKey: [...queryKey, 'metadata'], queryFn: ({ signal }) => repositoryClient.getRepository({ repository: repositoryKey }, { signal }).then((response) => { if (!response.repository) throw new ConnectError('The repository response is missing its metadata.', Code.Internal); return response.repository; }) });
   const live=useRepositoryLive(userId,location.owner,location.name,query.data?.id,location.ref,query.isSuccess&&!query.isError,location.view==='pulls'&&location.pullView==='files');
   const repository = query.isSuccess ? query.data : undefined;
+  useEffect(() => {
+    const nav = tabs.current;
+    if (!nav) return;
+    const reveal = () => {
+      const active = nav.querySelector<HTMLElement>('[aria-current="page"]');
+      if (active && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = active.offsetLeft - nav.offsetLeft - (nav.clientWidth - active.offsetWidth) / 2;
+    };
+    reveal();
+    const resize = new ResizeObserver(reveal);
+    resize.observe(nav);
+    const active = nav.querySelector<HTMLElement>('[aria-current="page"]');
+    if (active) resize.observe(active);
+    return () => resize.disconnect();
+  }, [location.view, repository?.id, query.isFetching]);
   const panelProps = { repositoryKey, queryKey, location, defaultBranch: repository?.defaultBranch || '' };
   return <RepositoryLiveContext value={live.status}><div className={`repository-browser ${live.status==='live'?'live-connected':''}`}>
     {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : !repository ? <Loading label="Opening repository…" /> : <>{query.isFetching ? <Loading label="Checking repository access…"/> : null}<div className="repository-authorized-content" hidden={query.isFetching}>
       <header className="repository-intro repository-work-header"><div><h1><BookOpen size={20} /><span className="repository-owner">{location.owner}</span><span className="repository-title-slash">/</span>{repository.name}<span className={`visibility ${repository.private ? 'private' : ''}`}>{repository.private ? <LockKeyhole size={11} /> : null}{repository.private ? 'Private' : 'Public'}</span></h1></div><div className="panel-actions"><RepositoryLiveStatus status={live.status} reconnect={live.reconnect}/><button className="icon-button manual-refresh" aria-label="Refresh repository access" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} /></button></div></header>
       {live.newSource?<p className="source-update-notice" role="status"><GitCommitHorizontal size={15}/>{location.view==='pulls'&&location.pullView==='files'?<>Repository activity changed. This comparison stays pinned.<button className="text-button" onClick={live.refreshComparison}>Refresh comparison</button></>:<>New repository activity is available. This source snapshot stays pinned; choose Latest branch head to view new code.</>}</p>:null}
-      <nav className="repository-tabs" aria-label="Repository"><Link {...repositoryOptions(location, { view: 'source', issue: undefined })} aria-current={location.view === 'source' ? 'page' : undefined}><Code2 size={16} />Code</Link><Link {...repositoryOptions(location, { view: 'commits', issue: undefined, commit: undefined })} aria-current={location.view === 'commits' ? 'page' : undefined}><GitCommitHorizontal size={17} />Commits</Link><Link {...repositoryOptions(location, { view: 'issues', issue: undefined })} aria-current={location.view === 'issues' ? 'page' : undefined}><CircleDot size={16} />Issues</Link><Link {...repositoryOptions(location, { view: 'pulls', pull: undefined })} aria-current={location.view === 'pulls' ? 'page' : undefined}><GitPullRequest size={16} />Pull requests</Link><Link {...repositoryOptions(location, { view: 'actions',run:undefined })} aria-current={location.view === 'actions' ? 'page' : undefined}><Play size={16}/>Actions</Link><Link to="/repositories/$owner/$name/settings" params={{owner:location.owner,name:location.name}}><Settings size={16}/>Settings</Link></nav>
+      <nav ref={tabs} className="repository-tabs" aria-label="Repository" onFocus={event => { if (event.target.matches(':focus-visible')) event.target.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }}><Link {...repositoryOptions(location, { view: 'source', issue: undefined })} aria-current={location.view === 'source' ? 'page' : undefined}><Code2 size={16} />Code</Link><Link {...repositoryOptions(location, { view: 'commits', issue: undefined, commit: undefined })} aria-current={location.view === 'commits' ? 'page' : undefined}><GitCommitHorizontal size={17} />Commits</Link><Link {...repositoryOptions(location, { view: 'issues', issue: undefined })} aria-current={location.view === 'issues' ? 'page' : undefined}><CircleDot size={16} />Issues</Link><Link {...repositoryOptions(location, { view: 'pulls', pull: undefined })} aria-current={location.view === 'pulls' ? 'page' : undefined}><GitPullRequest size={16} />Pull requests</Link><Link {...repositoryOptions(location, { view: 'actions',run:undefined })} aria-current={location.view === 'actions' ? 'page' : undefined}><Play size={16}/>Actions</Link><Link to="/repositories/$owner/$name/settings" params={{owner:location.owner,name:location.name}}><Settings size={16}/>Settings</Link></nav>
       {(location.view === 'source' || location.view === 'commits') && repository.empty ? <section className="browser-panel empty-state"><GitBranch size={29} /><h2>No commits yet.</h2><p>This repository is empty. Push your first commit through Git to add source and branches.</p>{repository.cloneUrl ? <div className="clone-address"><span>HTTPS clone URL</span><code>{repository.cloneUrl}</code></div> : null}{repository.sshUrl ? <div className="clone-address"><span>SSH clone URL</span><code>{repository.sshUrl}</code></div> : null}</section> : <>
         {location.view === 'source' || location.view === 'commits' && !location.commit ? <div className="repository-code-toolbar"><BranchSelector {...panelProps}/>{location.view === 'source' && (repository.cloneUrl || repository.sshUrl) ? <CloneMenu https={repository.cloneUrl} ssh={repository.sshUrl}/> : null}</div> : null}
         {location.view === 'source' ? <div className={!location.path ? 'repository-source-layout' : undefined}><SourcePanel {...panelProps}/>{!location.path ? <aside className="repository-about" aria-label="About this repository"><h2>About</h2><p>{repository.description || 'No description provided.'}</p><dl><div><dt>Visibility</dt><dd>{repository.private ? 'Private' : 'Public'}</dd></div><div><dt>Default branch</dt><dd><GitBranch size={14}/>{repository.defaultBranch}</dd></div><div><dt>Updated</dt><dd><DateLabel value={repository.updatedAt}/></dd></div></dl><Link className="text-button" {...repositoryOptions(location,{view:'commits',commit:undefined})}><GitCommitHorizontal size={15}/>Commit history</Link></aside> : null}</div> : location.view === 'commits' ? location.commit ? <CommitDiffPanel key={location.commit} {...panelProps} /> : <CommitsPanel {...panelProps} /> : location.view === 'actions' ? <Suspense fallback={<Loading label="Opening Actions…"/>}>{location.run ? <WorkflowRunPage key={location.run} userId={userId} owner={location.owner} name={location.name} repositoryId={repository.id} runId={location.run} selectedStep={location.step} signingOut={false}/> : <Actions userId={userId} owner={location.owner} name={location.name} signingOut={false} workView/>}</Suspense> : location.view === 'pulls' ? <Suspense fallback={<Loading label="Opening pull requests…" />}><PullRequestBrowser {...panelProps} repositoryId={repository.id} userId={userId}/></Suspense> : <Suspense fallback={<Loading label="Opening issues…" />}><IssueBrowser key={repository.id} {...panelProps} repositoryId={repository.id} userId={userId} /></Suspense>}

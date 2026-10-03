@@ -28,7 +28,10 @@ function IssueStateBadge({ state }: { state: IssueState }) {
 }
 function Comment({ comment }: { comment: IssueComment }) {
   const external = repositoryLink(comment.htmlUrl);
-  return <article className="issue-comment"><div className="issue-comment-heading"><h3>{comment.user?.login || 'Deleted or unavailable author'}</h3><span>Comment <code>{comment.id}</code></span></div><p className="muted">Posted <DateLabel value={comment.createdAt} /> · Updated <DateLabel value={comment.updatedAt} /></p><MarkdownBody text={comment.body || 'No comment text provided.'} label={`Comment ${comment.id}, rendered Markdown`}/>{external ? <a className="text-button" href={external} target="_blank" rel="noopener noreferrer">Open original comment<ExternalLink size={14} /></a> : null}</article>;
+  return <article className="issue-comment">
+    <header className="issue-comment-heading"><div className="issue-comment-byline"><h3>{comment.user?.login || 'Deleted or unavailable author'}</h3><span>commented <DateLabel value={comment.createdAt}/></span>{comment.updatedAt && comment.updatedAt !== comment.createdAt ? <span>· edited <DateLabel value={comment.updatedAt}/></span> : null}</div>{external ? <a className="icon-button" href={external} target="_blank" rel="noopener noreferrer" aria-label="Open original comment" title="Open original comment"><ExternalLink size={14} aria-hidden="true"/></a> : null}</header>
+    <MarkdownBody text={comment.body || 'No comment text provided.'} label={`Comment ${comment.id}, rendered Markdown`}/>
+  </article>;
 }
 
 function Composer({ repositoryKey, repositoryId, queryKey, userId, pullRequest, issue, onCreated, onPending, onPosted }: Props & { issue?: Issue; onCreated?: (issue: Issue) => void; onPending?: (value: boolean) => void; onPosted?: () => void }) {
