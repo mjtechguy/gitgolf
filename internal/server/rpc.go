@@ -45,6 +45,15 @@ func (s *Server) cookieValue(header http.Header) string {
 func (s *Server) rpcHandler() http.Handler {
 	options := []connect.HandlerOption{
 		connect.WithReadMaxBytes(16 << 10), connect.WithSendMaxBytes(16 << 20), connect.WithRequireConnectProtocolHeader(),
+		connect.WithConditionalHandlerOptions(func(spec connect.Spec) []connect.HandlerOption {
+			switch spec.Procedure {
+			case golfv1connect.RepositoryServiceSavePullRequestReviewDraftProcedure:
+				return []connect.HandlerOption{connect.WithReadMaxBytes(2 << 20), connect.WithSendMaxBytes(6 << 20)}
+			case golfv1connect.RepositoryServiceGetPullRequestReviewDraftProcedure:
+				return []connect.HandlerOption{connect.WithSendMaxBytes(6 << 20)}
+			}
+			return nil
+		}),
 		connect.WithInterceptors(connect.UnaryInterceptorFunc(s.apiReadInterceptor)),
 		connect.WithRecover(func(_ context.Context, _ connect.Spec, _ http.Header, value any) error {
 			if value == http.ErrAbortHandler {
@@ -139,6 +148,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.RepositoryServiceGetCommitDiffProcedure, golfv1connect.RepositoryServiceGetPullRequestDiffProcedure, golfv1connect.RepositoryServiceGetRepositoryComparisonProcedure, golfv1connect.RepositoryServiceListPullRequestCommitsProcedure, golfv1connect.RepositoryServiceListPullRequestChecksProcedure, golfv1connect.RepositoryServiceGetRepositoryImageProcedure,
 			golfv1connect.RepositoryServiceListIssuesProcedure, golfv1connect.RepositoryServiceGetIssueProcedure,
 			golfv1connect.RepositoryServiceGetPullRequestDiscussionProcedure, golfv1connect.RepositoryServiceListIssueCommentsProcedure, golfv1connect.RepositoryServiceGetIssueMutationProcedure, golfv1connect.RepositoryServiceCreateIssueProcedure, golfv1connect.RepositoryServiceCreateIssueCommentProcedure, golfv1connect.RepositoryServiceUpdateIssueProcedure, golfv1connect.RepositoryServiceCreatePullRequestProcedure, golfv1connect.RepositoryServiceUpdatePullRequestProcedure,
+			golfv1connect.RepositoryServiceGetPullRequestReviewDraftProcedure, golfv1connect.RepositoryServiceSavePullRequestReviewDraftProcedure, golfv1connect.RepositoryServiceDeletePullRequestReviewDraftProcedure,
 			golfv1connect.RepositoryServiceListPullRequestsProcedure, golfv1connect.RepositoryServiceGetPullRequestProcedure, golfv1connect.RepositoryServiceListPullRequestReviewsProcedure, golfv1connect.RepositoryServiceGetPullRequestReviewCommentsProcedure, golfv1connect.RepositoryServiceCreatePullRequestReviewProcedure, golfv1connect.RepositoryServiceGetPullRequestReviewMutationProcedure,
 			golfv1connect.OrganizationServiceListOrganizationsProcedure, golfv1connect.OrganizationServiceGetOrganizationProcedure,
 			golfv1connect.OrganizationServiceListTeamsProcedure, golfv1connect.OrganizationServiceGetTeamProcedure,
@@ -161,7 +171,11 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			}
 			r = r.WithContext(context.WithValue(r.Context(), sessionTokenKey{}, token))
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+		limit := int64(16 << 10)
+		if procedure == golfv1connect.RepositoryServiceSavePullRequestReviewDraftProcedure {
+			limit = 2 << 20
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
 		next.ServeHTTP(w, r)
 	})
 }

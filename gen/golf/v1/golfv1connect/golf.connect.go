@@ -214,6 +214,15 @@ const (
 	// RepositoryServiceGetPullRequestReviewCommentsProcedure is the fully-qualified name of the
 	// RepositoryService's GetPullRequestReviewComments RPC.
 	RepositoryServiceGetPullRequestReviewCommentsProcedure = "/golf.v1.RepositoryService/GetPullRequestReviewComments"
+	// RepositoryServiceGetPullRequestReviewDraftProcedure is the fully-qualified name of the
+	// RepositoryService's GetPullRequestReviewDraft RPC.
+	RepositoryServiceGetPullRequestReviewDraftProcedure = "/golf.v1.RepositoryService/GetPullRequestReviewDraft"
+	// RepositoryServiceSavePullRequestReviewDraftProcedure is the fully-qualified name of the
+	// RepositoryService's SavePullRequestReviewDraft RPC.
+	RepositoryServiceSavePullRequestReviewDraftProcedure = "/golf.v1.RepositoryService/SavePullRequestReviewDraft"
+	// RepositoryServiceDeletePullRequestReviewDraftProcedure is the fully-qualified name of the
+	// RepositoryService's DeletePullRequestReviewDraft RPC.
+	RepositoryServiceDeletePullRequestReviewDraftProcedure = "/golf.v1.RepositoryService/DeletePullRequestReviewDraft"
 	// RepositoryServiceCreatePullRequestReviewProcedure is the fully-qualified name of the
 	// RepositoryService's CreatePullRequestReview RPC.
 	RepositoryServiceCreatePullRequestReviewProcedure = "/golf.v1.RepositoryService/CreatePullRequestReview"
@@ -1071,6 +1080,9 @@ type RepositoryServiceClient interface {
 	GetPullRequest(context.Context, *connect.Request[v1.GetPullRequestRequest]) (*connect.Response[v1.GetPullRequestResponse], error)
 	ListPullRequestReviews(context.Context, *connect.Request[v1.ListPullRequestReviewsRequest]) (*connect.Response[v1.ListPullRequestReviewsResponse], error)
 	GetPullRequestReviewComments(context.Context, *connect.Request[v1.GetPullRequestReviewCommentsRequest]) (*connect.Response[v1.GetPullRequestReviewCommentsResponse], error)
+	GetPullRequestReviewDraft(context.Context, *connect.Request[v1.GetPullRequestReviewDraftRequest]) (*connect.Response[v1.GetPullRequestReviewDraftResponse], error)
+	SavePullRequestReviewDraft(context.Context, *connect.Request[v1.SavePullRequestReviewDraftRequest]) (*connect.Response[v1.SavePullRequestReviewDraftResponse], error)
+	DeletePullRequestReviewDraft(context.Context, *connect.Request[v1.DeletePullRequestReviewDraftRequest]) (*connect.Response[v1.DeletePullRequestReviewDraftResponse], error)
 	CreatePullRequestReview(context.Context, *connect.Request[v1.CreatePullRequestReviewRequest]) (*connect.Response[v1.CreatePullRequestReviewResponse], error)
 	GetPullRequestReviewMutation(context.Context, *connect.Request[v1.GetPullRequestReviewMutationRequest]) (*connect.Response[v1.GetPullRequestReviewMutationResponse], error)
 }
@@ -1248,6 +1260,24 @@ func NewRepositoryServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(repositoryServiceMethods.ByName("GetPullRequestReviewComments")),
 			connect.WithClientOptions(opts...),
 		),
+		getPullRequestReviewDraft: connect.NewClient[v1.GetPullRequestReviewDraftRequest, v1.GetPullRequestReviewDraftResponse](
+			httpClient,
+			baseURL+RepositoryServiceGetPullRequestReviewDraftProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("GetPullRequestReviewDraft")),
+			connect.WithClientOptions(opts...),
+		),
+		savePullRequestReviewDraft: connect.NewClient[v1.SavePullRequestReviewDraftRequest, v1.SavePullRequestReviewDraftResponse](
+			httpClient,
+			baseURL+RepositoryServiceSavePullRequestReviewDraftProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("SavePullRequestReviewDraft")),
+			connect.WithClientOptions(opts...),
+		),
+		deletePullRequestReviewDraft: connect.NewClient[v1.DeletePullRequestReviewDraftRequest, v1.DeletePullRequestReviewDraftResponse](
+			httpClient,
+			baseURL+RepositoryServiceDeletePullRequestReviewDraftProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("DeletePullRequestReviewDraft")),
+			connect.WithClientOptions(opts...),
+		),
 		createPullRequestReview: connect.NewClient[v1.CreatePullRequestReviewRequest, v1.CreatePullRequestReviewResponse](
 			httpClient,
 			baseURL+RepositoryServiceCreatePullRequestReviewProcedure,
@@ -1292,6 +1322,9 @@ type repositoryServiceClient struct {
 	getPullRequest               *connect.Client[v1.GetPullRequestRequest, v1.GetPullRequestResponse]
 	listPullRequestReviews       *connect.Client[v1.ListPullRequestReviewsRequest, v1.ListPullRequestReviewsResponse]
 	getPullRequestReviewComments *connect.Client[v1.GetPullRequestReviewCommentsRequest, v1.GetPullRequestReviewCommentsResponse]
+	getPullRequestReviewDraft    *connect.Client[v1.GetPullRequestReviewDraftRequest, v1.GetPullRequestReviewDraftResponse]
+	savePullRequestReviewDraft   *connect.Client[v1.SavePullRequestReviewDraftRequest, v1.SavePullRequestReviewDraftResponse]
+	deletePullRequestReviewDraft *connect.Client[v1.DeletePullRequestReviewDraftRequest, v1.DeletePullRequestReviewDraftResponse]
 	createPullRequestReview      *connect.Client[v1.CreatePullRequestReviewRequest, v1.CreatePullRequestReviewResponse]
 	getPullRequestReviewMutation *connect.Client[v1.GetPullRequestReviewMutationRequest, v1.GetPullRequestReviewMutationResponse]
 }
@@ -1431,6 +1464,21 @@ func (c *repositoryServiceClient) GetPullRequestReviewComments(ctx context.Conte
 	return c.getPullRequestReviewComments.CallUnary(ctx, req)
 }
 
+// GetPullRequestReviewDraft calls golf.v1.RepositoryService.GetPullRequestReviewDraft.
+func (c *repositoryServiceClient) GetPullRequestReviewDraft(ctx context.Context, req *connect.Request[v1.GetPullRequestReviewDraftRequest]) (*connect.Response[v1.GetPullRequestReviewDraftResponse], error) {
+	return c.getPullRequestReviewDraft.CallUnary(ctx, req)
+}
+
+// SavePullRequestReviewDraft calls golf.v1.RepositoryService.SavePullRequestReviewDraft.
+func (c *repositoryServiceClient) SavePullRequestReviewDraft(ctx context.Context, req *connect.Request[v1.SavePullRequestReviewDraftRequest]) (*connect.Response[v1.SavePullRequestReviewDraftResponse], error) {
+	return c.savePullRequestReviewDraft.CallUnary(ctx, req)
+}
+
+// DeletePullRequestReviewDraft calls golf.v1.RepositoryService.DeletePullRequestReviewDraft.
+func (c *repositoryServiceClient) DeletePullRequestReviewDraft(ctx context.Context, req *connect.Request[v1.DeletePullRequestReviewDraftRequest]) (*connect.Response[v1.DeletePullRequestReviewDraftResponse], error) {
+	return c.deletePullRequestReviewDraft.CallUnary(ctx, req)
+}
+
 // CreatePullRequestReview calls golf.v1.RepositoryService.CreatePullRequestReview.
 func (c *repositoryServiceClient) CreatePullRequestReview(ctx context.Context, req *connect.Request[v1.CreatePullRequestReviewRequest]) (*connect.Response[v1.CreatePullRequestReviewResponse], error) {
 	return c.createPullRequestReview.CallUnary(ctx, req)
@@ -1470,6 +1518,9 @@ type RepositoryServiceHandler interface {
 	GetPullRequest(context.Context, *connect.Request[v1.GetPullRequestRequest]) (*connect.Response[v1.GetPullRequestResponse], error)
 	ListPullRequestReviews(context.Context, *connect.Request[v1.ListPullRequestReviewsRequest]) (*connect.Response[v1.ListPullRequestReviewsResponse], error)
 	GetPullRequestReviewComments(context.Context, *connect.Request[v1.GetPullRequestReviewCommentsRequest]) (*connect.Response[v1.GetPullRequestReviewCommentsResponse], error)
+	GetPullRequestReviewDraft(context.Context, *connect.Request[v1.GetPullRequestReviewDraftRequest]) (*connect.Response[v1.GetPullRequestReviewDraftResponse], error)
+	SavePullRequestReviewDraft(context.Context, *connect.Request[v1.SavePullRequestReviewDraftRequest]) (*connect.Response[v1.SavePullRequestReviewDraftResponse], error)
+	DeletePullRequestReviewDraft(context.Context, *connect.Request[v1.DeletePullRequestReviewDraftRequest]) (*connect.Response[v1.DeletePullRequestReviewDraftResponse], error)
 	CreatePullRequestReview(context.Context, *connect.Request[v1.CreatePullRequestReviewRequest]) (*connect.Response[v1.CreatePullRequestReviewResponse], error)
 	GetPullRequestReviewMutation(context.Context, *connect.Request[v1.GetPullRequestReviewMutationRequest]) (*connect.Response[v1.GetPullRequestReviewMutationResponse], error)
 }
@@ -1643,6 +1694,24 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 		connect.WithSchema(repositoryServiceMethods.ByName("GetPullRequestReviewComments")),
 		connect.WithHandlerOptions(opts...),
 	)
+	repositoryServiceGetPullRequestReviewDraftHandler := connect.NewUnaryHandler(
+		RepositoryServiceGetPullRequestReviewDraftProcedure,
+		svc.GetPullRequestReviewDraft,
+		connect.WithSchema(repositoryServiceMethods.ByName("GetPullRequestReviewDraft")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryServiceSavePullRequestReviewDraftHandler := connect.NewUnaryHandler(
+		RepositoryServiceSavePullRequestReviewDraftProcedure,
+		svc.SavePullRequestReviewDraft,
+		connect.WithSchema(repositoryServiceMethods.ByName("SavePullRequestReviewDraft")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryServiceDeletePullRequestReviewDraftHandler := connect.NewUnaryHandler(
+		RepositoryServiceDeletePullRequestReviewDraftProcedure,
+		svc.DeletePullRequestReviewDraft,
+		connect.WithSchema(repositoryServiceMethods.ByName("DeletePullRequestReviewDraft")),
+		connect.WithHandlerOptions(opts...),
+	)
 	repositoryServiceCreatePullRequestReviewHandler := connect.NewUnaryHandler(
 		RepositoryServiceCreatePullRequestReviewProcedure,
 		svc.CreatePullRequestReview,
@@ -1711,6 +1780,12 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 			repositoryServiceListPullRequestReviewsHandler.ServeHTTP(w, r)
 		case RepositoryServiceGetPullRequestReviewCommentsProcedure:
 			repositoryServiceGetPullRequestReviewCommentsHandler.ServeHTTP(w, r)
+		case RepositoryServiceGetPullRequestReviewDraftProcedure:
+			repositoryServiceGetPullRequestReviewDraftHandler.ServeHTTP(w, r)
+		case RepositoryServiceSavePullRequestReviewDraftProcedure:
+			repositoryServiceSavePullRequestReviewDraftHandler.ServeHTTP(w, r)
+		case RepositoryServiceDeletePullRequestReviewDraftProcedure:
+			repositoryServiceDeletePullRequestReviewDraftHandler.ServeHTTP(w, r)
 		case RepositoryServiceCreatePullRequestReviewProcedure:
 			repositoryServiceCreatePullRequestReviewHandler.ServeHTTP(w, r)
 		case RepositoryServiceGetPullRequestReviewMutationProcedure:
@@ -1830,6 +1905,18 @@ func (UnimplementedRepositoryServiceHandler) ListPullRequestReviews(context.Cont
 
 func (UnimplementedRepositoryServiceHandler) GetPullRequestReviewComments(context.Context, *connect.Request[v1.GetPullRequestReviewCommentsRequest]) (*connect.Response[v1.GetPullRequestReviewCommentsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.GetPullRequestReviewComments is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) GetPullRequestReviewDraft(context.Context, *connect.Request[v1.GetPullRequestReviewDraftRequest]) (*connect.Response[v1.GetPullRequestReviewDraftResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.GetPullRequestReviewDraft is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) SavePullRequestReviewDraft(context.Context, *connect.Request[v1.SavePullRequestReviewDraftRequest]) (*connect.Response[v1.SavePullRequestReviewDraftResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.SavePullRequestReviewDraft is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) DeletePullRequestReviewDraft(context.Context, *connect.Request[v1.DeletePullRequestReviewDraftRequest]) (*connect.Response[v1.DeletePullRequestReviewDraftResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.DeletePullRequestReviewDraft is not implemented"))
 }
 
 func (UnimplementedRepositoryServiceHandler) CreatePullRequestReview(context.Context, *connect.Request[v1.CreatePullRequestReviewRequest]) (*connect.Response[v1.CreatePullRequestReviewResponse], error) {

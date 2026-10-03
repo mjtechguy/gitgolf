@@ -207,6 +207,7 @@ type GolfCryptoEvent struct {
 	LocalAccountsCount             int64
 	InfrastructureConnectionsCount int64
 	AutomationCredentialsCount     int64
+	ReviewContentsCount            int64
 }
 
 type GolfEncryptionKey struct {
@@ -519,6 +520,60 @@ type GolfRepositoryEventPayload struct {
 	PayloadSha256          string
 	EventID                int64
 	PushAdmissionRequested bool
+}
+
+type GolfReviewContent struct {
+	ID               uuid.UUID
+	UserID           int64
+	ForgeURL         string
+	RepositoryID     int64
+	PullRequestID    int64
+	DraftID          uuid.UUID
+	Version          int64
+	Kind             string
+	EncryptedContent []byte
+	ContentBinding   []byte
+	CredentialKeyID  string
+	CreatedAt        time.Time
+}
+
+type GolfReviewDraft struct {
+	ID             uuid.UUID
+	UserID         int64
+	ForgeURL       string
+	RepositoryID   int64
+	PullRequestID  int64
+	PullNumber     int32
+	ComparisonID   uuid.UUID
+	CurrentVersion int64
+	Deleted        bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+type GolfReviewDraftTarget struct {
+	UserID        int64
+	ForgeURL      string
+	RepositoryID  int64
+	PullRequestID int64
+	PullNumber    int32
+	Generation    int64
+}
+
+type GolfReviewDraftVersion struct {
+	DraftID            uuid.UUID
+	UserID             int64
+	ForgeURL           string
+	RepositoryID       int64
+	PullRequestID      int64
+	Version            int64
+	OperationID        uuid.UUID
+	Kind               string
+	ExpectedVersion    int64
+	ExpectedGeneration int64
+	AcceptedGeneration int64
+	ContentID          uuid.UUID
+	CreatedAt          time.Time
 }
 
 type GolfReviewer struct {

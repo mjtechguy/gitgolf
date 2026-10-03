@@ -150,6 +150,9 @@ service RepositoryService {
   rpc GetPullRequest(GetPullRequestRequest) returns (GetPullRequestResponse);
   rpc ListPullRequestReviews(ListPullRequestReviewsRequest) returns (ListPullRequestReviewsResponse);
   rpc GetPullRequestReviewComments(GetPullRequestReviewCommentsRequest) returns (GetPullRequestReviewCommentsResponse);
+  rpc GetPullRequestReviewDraft(GetPullRequestReviewDraftRequest) returns (GetPullRequestReviewDraftResponse);
+  rpc SavePullRequestReviewDraft(SavePullRequestReviewDraftRequest) returns (SavePullRequestReviewDraftResponse);
+  rpc DeletePullRequestReviewDraft(DeletePullRequestReviewDraftRequest) returns (DeletePullRequestReviewDraftResponse);
   rpc CreatePullRequestReview(CreatePullRequestReviewRequest) returns (CreatePullRequestReviewResponse);
   rpc GetPullRequestReviewMutation(GetPullRequestReviewMutationRequest) returns (GetPullRequestReviewMutationResponse);
 }
@@ -1836,3 +1839,111 @@ message UpdatePullRequestRequest {
  optional bool draft = 10;
 }
 message UpdatePullRequestResponse { IssueMutation mutation = 1; PullRequest pull_request = 2; }
+
+message PullReviewDraftTarget {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string pull_request_id = 3;
+  uint32 number = 4;
+}
+message PullReviewDraftCapture {
+  PullRequestSelection selection = 1;
+  string expected_pull_revision = 2;
+  string merge_base_commit_id = 3;
+  string diff_sha256 = 4;
+}
+message PullReviewDraftComparison {
+  string id = 1;
+  PullReviewDraftCapture capture = 2;
+  string parser_version = 3;
+  string raw_diff = 4;
+  uint32 byte_size = 5;
+}
+enum PullReviewDraftSide {
+  PULL_REVIEW_DRAFT_SIDE_UNSPECIFIED = 0;
+  PULL_REVIEW_DRAFT_SIDE_OLD = 1;
+  PULL_REVIEW_DRAFT_SIDE_NEW = 2;
+}
+message PullReviewDraftCoordinate {
+  uint32 file_index = 1;
+  uint32 hunk_index = 2;
+  PullReviewDraftSide side = 3;
+  uint32 line = 4;
+  string path = 5;
+}
+message PullReviewDraftEntry {
+  string id = 1;
+  PullReviewDraftCoordinate coordinate = 2;
+  string body = 3;
+}
+message PullReviewDraft {
+  string id = 1;
+  PullReviewDraftTarget target = 2;
+  string user_id = 3;
+  string version = 4;
+  PullReviewDraftComparison comparison = 5;
+  string summary = 6;
+  repeated PullReviewDraftEntry entries = 7;
+  string created_at = 8;
+  string updated_at = 9;
+}
+enum PullReviewDraftOperationKind {
+  PULL_REVIEW_DRAFT_OPERATION_KIND_UNSPECIFIED = 0;
+  PULL_REVIEW_DRAFT_OPERATION_KIND_SAVE = 1;
+  PULL_REVIEW_DRAFT_OPERATION_KIND_DELETE = 2;
+}
+message PullReviewDraftReceipt {
+  string operation_id = 1;
+  string draft_id = 2;
+  PullReviewDraftTarget target = 3;
+  PullReviewDraftOperationKind kind = 4;
+  string expected_version = 5;
+  string accepted_version = 6;
+  string comparison_id = 7;
+  string accepted_target_generation = 8;
+  string expected_target_generation = 9;
+}
+message GetPullRequestReviewDraftRequest {
+  PullReviewDraftTarget target = 1;
+  string draft_id = 2;
+  string operation_id = 3;
+}
+message GetPullRequestReviewDraftResponse {
+  PullReviewDraft draft = 1;
+  PullReviewDraftReceipt receipt = 2;
+  string current_version = 3;
+  bool deleted = 4;
+  string target_generation = 5;
+}
+message SavePullRequestReviewDraftRequest {
+  PullReviewDraftTarget target = 1;
+  string draft_id = 2;
+  string expected_version = 3;
+  string operation_id = 4;
+  oneof comparison {
+    PullReviewDraftCapture capture = 5;
+    string comparison_id = 6;
+  }
+  string summary = 7;
+  repeated PullReviewDraftEntry entries = 8;
+  string expected_target_generation = 9;
+}
+message SavePullRequestReviewDraftResponse {
+  PullReviewDraftReceipt receipt = 1;
+  PullReviewDraft draft = 2;
+  string current_version = 3;
+  string target_generation = 4;
+}
+message DeletePullRequestReviewDraftRequest {
+  PullReviewDraftTarget target = 1;
+  string draft_id = 2;
+  string expected_version = 3;
+  string operation_id = 4;
+  string expected_target_generation = 5;
+}
+message DeletePullRequestReviewDraftResponse {
+  PullReviewDraftReceipt receipt = 1;
+  string current_version = 2;
+  bool deleted = 3;
+  string target_generation = 4;
+}

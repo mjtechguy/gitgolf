@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
+	"github.com/mjtechguy/golf-git/internal/server/database"
 	"github.com/pressly/goose/v3"
 	"google.golang.org/protobuf/proto"
 )
@@ -494,7 +495,37 @@ func TestReviewerPublicationMigrationPostgres(t *testing.T) {
 	if _, err = provider.UpTo(t.Context(), 202610030034); err != nil {
 		t.Fatal(err)
 	}
-	f := newReviewerPublicationFixtureOnDatabase(t, db)
+	// Seed Golf-owned pre035 rows without constructing the latest runtime
+	// against an intentionally old schema. Latest key-family queries must not
+	// learn a downgrade fallback merely to support this migration fixture.
+	runtimeConfig := testConfig("http://migration-fixture.invalid")
+	keys, err := ParseKeyring(runtimeConfig.EncryptionKey, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := database.New(db)
+	user, err := q.UpsertUser(t.Context(), database.UpsertUserParams{ForgeURL: runtimeConfig.GiteaURL, ForgeUserID: 42, Login: "alice"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := sha256.Sum256([]byte("owned pre035 migration account"))
+	encrypted, key, err := keys.seal(localAccountDomain, "sponsor-fixture", binding[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	password, err := hashLocalPassword(t.Context(), localTestPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
+	account, err := q.CreateLocalAccount(t.Context(), database.CreateLocalAccountParams{UserID: user, Username: "alice", PasswordHash: password, EncryptedForgeToken: encrypted, CredentialBinding: binding[:], CredentialKeyID: key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := &reviewerPublicationFixture{p: reviewerRecord{ID: uuid.NewString(), RepoID: 11, OwnerID: 42, UserID: user, NativeID: 42, LocalID: account.ID, LocalVersion: 1, PublisherID: 43, Revision: 1, Enabled: true, Expiry: time.Now().Add(time.Hour), Config: &golfv1.Reviewer{Name: "Security Reviewer", Repository: &golfv1.RepositoryKey{Owner: "alice", Name: "example"}}}}
+	raw, _ := json.Marshal(f.p.Config)
+	if _, err = db.Exec(`INSERT INTO golf_reviewers(id,forge_url,repository_id,owner_id,repository_owner,repository_name,sponsor_user_id,sponsor_native_id,local_account_id,local_version,publisher_id,config,enabled,expires_at) VALUES($1,$2,11,42,'alice','example',$3,42,$4,1,43,$5,true,clock_timestamp()+interval '1 hour')`, f.p.ID, runtimeConfig.GiteaURL, user, account.ID, raw); err != nil {
+		t.Fatal(err)
+	}
 	states := []string{"publishing", "publication_unknown", "outdated", "published", "queued", "failed"}
 	for _, state := range states {
 		var native any
@@ -508,6 +539,10 @@ func TestReviewerPublicationMigrationPostgres(t *testing.T) {
 	}
 	if _, err = provider.Up(t.Context()); err != nil {
 		t.Fatal(err)
+	}
+	f.s, err = New(runtimeConfig, db)
+	if err != nil {
+		t.Fatal("latest runtime after complete upgrade", err)
 	}
 	for _, state := range states {
 		var blocked bool

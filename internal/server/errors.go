@@ -44,6 +44,12 @@ func rpcError(err error) error {
 	var input inputError
 	var upstream forgeError
 	switch {
+	case errors.Is(err, errReviewDraftConflict):
+		code, message = connect.CodeAborted, "The private draft version or target generation changed. Refresh and inspect the accepted operation before saving again."
+	case errors.Is(err, errReviewDraftIntent):
+		code, message = connect.CodeFailedPrecondition, "This private draft operation ID is bound to a different intent. Inspect its receipt."
+	case errors.Is(err, errReviewDraftQuota):
+		code, message = connect.CodeResourceExhausted, "Private review draft retention quota reached. Contact your instance operator."
 	case errors.Is(err, errCodexPermission):
 		code, message = connect.CodePermissionDenied, "You do not have permission to manage this Codex connection."
 	case errors.Is(err, errCodexBrowserOnly):
