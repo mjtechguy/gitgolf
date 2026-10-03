@@ -6,7 +6,7 @@ export type RepositorySearch = {
   state: 'open' | 'closed' | 'all';
   issue?: number;
   pull?: number;
-  pullView?: 'conversation' | 'files';
+  pullView?: 'conversation' | 'commits' | 'checks' | 'files';
   commit?: string;
   run?: string;
   step?: number;
@@ -36,7 +36,7 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
   const params = {owner:next.owner,name:next.name};
   let path = '';
   if(next.view==='issues') path=next.issue?`issues/${next.issue}`:'issues';
-  else if(next.view==='pulls') path=next.pull?`pull/${next.pull}${next.pullView==='files'?'/files':''}`:'pulls';
+  else if(next.view==='pulls') path=next.pull?`pull/${next.pull}${next.pullView&&next.pullView!=='conversation'?'/'+next.pullView:''}`:'pulls';
   else if(next.view==='actions') path=next.run?`actions/runs/${next.run}`:'actions';
   else if(next.view==='commits') path=next.commit?`commit/${next.commit}`:'commits';
   else if(isCommitID(next.ref)) path=`${sourceKind==='file'?'blob':'tree'}/${next.ref}${next.path?`/${next.path}`:''}`;

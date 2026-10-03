@@ -1,12 +1,13 @@
 import {expect,test,type Page,type Route} from '@playwright/test';
 import {create,toJson} from '@bufbuild/protobuf';
-import {respond,reject} from './rpc';
+import {respond,reject,request} from './rpc';
+import {GetPullRequestResponseSchema,ListPullRequestCommitsRequestSchema,ListPullRequestCommitsResponseSchema,ListPullRequestChecksRequestSchema,ListPullRequestChecksResponseSchema,ReportedCheckState} from '../src/gen/golf/v1/golf_pb';
 import {GetSessionResponseSchema,GetRepositoryResponseSchema,ListRepositoriesResponseSchema,ListCapabilitiesResponseSchema,GetContentsResponseSchema,ListBranchesResponseSchema,ListIssuesResponseSchema,GetIssueResponseSchema,ListIssueCommentsResponseSchema,WatchRepositoryResponseSchema,IssueState,SourceEntryType} from '../src/gen/golf/v1/golf_pb';
 
 const head='a'.repeat(40);
 function envelope(flag:number,body:unknown){const text=Buffer.from(JSON.stringify(body));const size=Buffer.alloc(5);size[0]=flag;size.writeUInt32BE(text.length,1);return Buffer.concat([size,text]);}
 async function fixture(page:Page){
- const state={cursor:1,title:'Original issue',topics:[] as string[],denied:false,offline:false,cursors:[] as string[],sources:0};
+ const state={cursor:1,title:'Original issue',topics:[] as string[],denied:false,offline:false,cursors:[] as string[],sources:0,pullHead:head,pullReads:0,checkState:ReportedCheckState.PENDING,commitReads:0,checkReads:0};
  await page.route('**/rpc/**',async(route:Route)=>{
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
   if(method==='WatchRepository'){
@@ -26,6 +27,9 @@ async function fixture(page:Page){
   if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository});
   if(method==='GetContents'){state.sources++;return respond(route,GetContentsResponseSchema,{kind:SourceEntryType.DIRECTORY,commitId:head,entries:[{name:'src',path:'src',type:SourceEntryType.DIRECTORY}]});}
   if(method==='ListBranches')return respond(route,ListBranchesResponseSchema,{branches:[{name:'main',commitId:head}]});
+  if(method==='GetPullRequest'){state.pullReads++;return respond(route,GetPullRequestResponseSchema,{pullRequest:{id:'4',number:1,title:'Live contribution',state:IssueState.OPEN,user,base:{repositoryId:'11',ref:'main',commitId:'b'.repeat(40)},head:{repositoryId:'11',ref:'feature',commitId:state.pullHead}}});}
+  if(method==='ListPullRequestCommits'){state.commitReads++;const input=request(route,ListPullRequestCommitsRequestSchema);return respond(route,ListPullRequestCommitsResponseSchema,{selection:input.selection,commits:[{sha:input.selection!.headCommitId,message:'Pinned private commit',authorName:'Alex',authoredAt:'2026-10-03T00:00:00Z'}]});}
+  if(method==='ListPullRequestChecks'){state.checkReads++;const input=request(route,ListPullRequestChecksRequestSchema);return respond(route,ListPullRequestChecksResponseSchema,{selection:input.selection,checks:[{id:'5',context:'ci/build',state:state.checkState,description:'Live private status',updatedAt:'2026-10-03T00:00:00Z'}]});}
   if(method==='GetIssue')return respond(route,GetIssueResponseSchema,{issue:{id:'3',number:1,title:state.title,state:IssueState.OPEN,user,createdAt:'2026-10-03T00:00:00Z'}});
   if(method==='ListIssueComments')return respond(route,ListIssueCommentsResponseSchema,{});
   if(method==='ListIssues')return respond(route,ListIssuesResponseSchema,{issues:[{id:'3',number:1,title:state.title,state:IssueState.OPEN,user,createdAt:'2026-10-03T00:00:00Z'}]});
@@ -58,4 +62,31 @@ test('live issue changes revalidate access without discarding an open private dr
  state.title='Updated issue title';state.topics=['issues'];state.cursor++;
  await expect(page.getByRole('heading',{name:'Updated issue title #1'})).toBeVisible();await expect(page.getByLabel('Comment, plain text',{exact:true})).toHaveValue('Unsent private draft');
  state.denied=true;await expect(page.getByRole('alert')).toBeVisible();await expect(page.getByLabel('Comment, plain text',{exact:true})).toHaveCount(0);
+});
+
+
+test('PR check events update reported rows while source changes keep selected commits pinned until explicit refresh',async({page})=>{
+ const state=await fixture(page);await page.goto('/alex/demo/pull/1/checks');
+ await expect(page.getByText('Live',{exact:true})).toBeVisible();await expect(page.getByRole('cell',{name:'Pending',exact:true})).toBeVisible();
+ const reads=state.pullReads;state.checkState=ReportedCheckState.SUCCESS;state.topics=['actions'];state.cursor++;
+ await expect(page.getByRole('cell',{name:'Success',exact:true})).toBeVisible();expect(state.pullReads).toBe(reads);
+ state.pullHead='c'.repeat(40);state.topics=['source'];state.cursor++;
+ await expect(page.getByRole('button',{name:'Refresh comparison',exact:true})).toBeVisible();
+ expect(state.pullReads).toBe(reads);await expect(page.getByRole('button',{name:'Copy checked commit SHA',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Refresh comparison',exact:true}).click();
+ await expect(page.locator('.panel-actions code')).toHaveAttribute('title',state.pullHead);expect(state.pullReads).toBeGreaterThan(reads);
+ state.denied=true;await expect(page.getByRole('alert')).toContainText('Repository access removed');
+ await expect(page.getByRole('cell',{name:'Success',exact:true})).toHaveCount(0);
+});
+
+test('PR commit pages remain pinned across pull activity and only move after explicit comparison refresh',async({page})=>{
+ const state=await fixture(page);await page.goto('/alex/demo/pull/1/commits');
+ await expect(page.getByText('Live',{exact:true})).toBeVisible();await expect(page.getByRole('link',{name:'Pinned private commit',exact:true})).toHaveAttribute('href',`/alex/demo/commit/${head}`);
+ const reads=state.commitReads;state.pullHead='c'.repeat(40);state.topics=['pulls'];state.cursor++;
+ await expect(page.getByRole('button',{name:'Refresh comparison',exact:true})).toBeVisible();expect(state.commitReads).toBe(reads);
+ await expect(page.getByRole('link',{name:'Pinned private commit',exact:true})).toHaveAttribute('href',`/alex/demo/commit/${head}`);
+ await page.getByRole('button',{name:'Refresh comparison',exact:true}).click();
+ await expect(page.getByRole('link',{name:'Pinned private commit',exact:true})).toHaveAttribute('href',`/alex/demo/commit/${state.pullHead}`);
+ state.denied=true;await expect(page.getByRole('alert')).toContainText('Repository access removed');
+ await expect(page.getByRole('link',{name:'Pinned private commit',exact:true})).toHaveCount(0);
 });

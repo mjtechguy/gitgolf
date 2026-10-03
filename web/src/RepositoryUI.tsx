@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FocusEvent, KeyboardEvent } from 'react';
+import type { FocusEvent, KeyboardEvent, ReactNode } from 'react';
 import { ArrowDown, Check, Copy, LoaderCircle, RefreshCw } from 'lucide-react';
 import type { PageResponse } from './gen/golf/v1/golf_pb';
 import { errorMessage } from './api';
@@ -48,4 +48,16 @@ export function DateLabel({ value }: { value: string }) {
 }
 export function More({ hasMore, loading, load, label }: { hasMore: boolean; loading: boolean; load: () => void; label: string }) {
   return hasMore ? <button className="text-button" disabled={loading} onClick={load}>{loading ? 'Loading…' : `Load more ${label}`}<ArrowDown size={14} /></button> : null;
+}
+
+// Repository and PR workspaces share active-tab reveal and keyboard behavior.
+export function RepositoryTabs({label,selection,children,className=''}:{label:string;selection:string;children:ReactNode;className?:string}) {
+ const tabs=useRef<HTMLElement>(null);
+ useEffect(()=>{
+  const nav=tabs.current;if(!nav)return;
+  const reveal=()=>{const focused=nav.querySelector<HTMLElement>(':focus-visible');const active=focused||nav.querySelector<HTMLElement>('[aria-current="page"]');if(active&&nav.scrollWidth>nav.clientWidth)nav.scrollLeft=active.offsetLeft-nav.offsetLeft-(nav.clientWidth-active.offsetWidth)/2;};
+  reveal();const resize=new ResizeObserver(reveal);resize.observe(nav);const active=nav.querySelector<HTMLElement>('[aria-current="page"]');if(active)resize.observe(active);
+  return()=>resize.disconnect();
+ },[selection]);
+ return <nav ref={tabs} className={`repository-tabs ${className}`} aria-label={label} onFocus={event=>{if(event.target.matches(':focus-visible')){const nav=event.currentTarget;nav.scrollLeft=event.target.offsetLeft-nav.offsetLeft-(nav.clientWidth-event.target.offsetWidth)/2;}}}>{children}</nav>;
 }

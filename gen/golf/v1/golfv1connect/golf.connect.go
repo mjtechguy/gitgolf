@@ -154,6 +154,12 @@ const (
 	// RepositoryServiceGetCommitDiffProcedure is the fully-qualified name of the RepositoryService's
 	// GetCommitDiff RPC.
 	RepositoryServiceGetCommitDiffProcedure = "/golf.v1.RepositoryService/GetCommitDiff"
+	// RepositoryServiceListPullRequestCommitsProcedure is the fully-qualified name of the
+	// RepositoryService's ListPullRequestCommits RPC.
+	RepositoryServiceListPullRequestCommitsProcedure = "/golf.v1.RepositoryService/ListPullRequestCommits"
+	// RepositoryServiceListPullRequestChecksProcedure is the fully-qualified name of the
+	// RepositoryService's ListPullRequestChecks RPC.
+	RepositoryServiceListPullRequestChecksProcedure = "/golf.v1.RepositoryService/ListPullRequestChecks"
 	// RepositoryServiceGetPullRequestDiffProcedure is the fully-qualified name of the
 	// RepositoryService's GetPullRequestDiff RPC.
 	RepositoryServiceGetPullRequestDiffProcedure = "/golf.v1.RepositoryService/GetPullRequestDiff"
@@ -1027,6 +1033,8 @@ type RepositoryServiceClient interface {
 	ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error)
 	ListCommits(context.Context, *connect.Request[v1.ListCommitsRequest]) (*connect.Response[v1.ListCommitsResponse], error)
 	GetCommitDiff(context.Context, *connect.Request[v1.GetCommitDiffRequest]) (*connect.Response[v1.GetCommitDiffResponse], error)
+	ListPullRequestCommits(context.Context, *connect.Request[v1.ListPullRequestCommitsRequest]) (*connect.Response[v1.ListPullRequestCommitsResponse], error)
+	ListPullRequestChecks(context.Context, *connect.Request[v1.ListPullRequestChecksRequest]) (*connect.Response[v1.ListPullRequestChecksResponse], error)
 	GetPullRequestDiff(context.Context, *connect.Request[v1.GetPullRequestDiffRequest]) (*connect.Response[v1.GetPullRequestDiffResponse], error)
 	GetRepositoryImage(context.Context, *connect.Request[v1.GetRepositoryImageRequest]) (*connect.Response[v1.GetRepositoryImageResponse], error)
 	GetContents(context.Context, *connect.Request[v1.GetContentsRequest]) (*connect.Response[v1.GetContentsResponse], error)
@@ -1094,6 +1102,18 @@ func NewRepositoryServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+RepositoryServiceGetCommitDiffProcedure,
 			connect.WithSchema(repositoryServiceMethods.ByName("GetCommitDiff")),
+			connect.WithClientOptions(opts...),
+		),
+		listPullRequestCommits: connect.NewClient[v1.ListPullRequestCommitsRequest, v1.ListPullRequestCommitsResponse](
+			httpClient,
+			baseURL+RepositoryServiceListPullRequestCommitsProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("ListPullRequestCommits")),
+			connect.WithClientOptions(opts...),
+		),
+		listPullRequestChecks: connect.NewClient[v1.ListPullRequestChecksRequest, v1.ListPullRequestChecksResponse](
+			httpClient,
+			baseURL+RepositoryServiceListPullRequestChecksProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("ListPullRequestChecks")),
 			connect.WithClientOptions(opts...),
 		),
 		getPullRequestDiff: connect.NewClient[v1.GetPullRequestDiffRequest, v1.GetPullRequestDiffResponse](
@@ -1192,6 +1212,8 @@ type repositoryServiceClient struct {
 	listBranches             *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
 	listCommits              *connect.Client[v1.ListCommitsRequest, v1.ListCommitsResponse]
 	getCommitDiff            *connect.Client[v1.GetCommitDiffRequest, v1.GetCommitDiffResponse]
+	listPullRequestCommits   *connect.Client[v1.ListPullRequestCommitsRequest, v1.ListPullRequestCommitsResponse]
+	listPullRequestChecks    *connect.Client[v1.ListPullRequestChecksRequest, v1.ListPullRequestChecksResponse]
 	getPullRequestDiff       *connect.Client[v1.GetPullRequestDiffRequest, v1.GetPullRequestDiffResponse]
 	getRepositoryImage       *connect.Client[v1.GetRepositoryImageRequest, v1.GetRepositoryImageResponse]
 	getContents              *connect.Client[v1.GetContentsRequest, v1.GetContentsResponse]
@@ -1241,6 +1263,16 @@ func (c *repositoryServiceClient) ListCommits(ctx context.Context, req *connect.
 // GetCommitDiff calls golf.v1.RepositoryService.GetCommitDiff.
 func (c *repositoryServiceClient) GetCommitDiff(ctx context.Context, req *connect.Request[v1.GetCommitDiffRequest]) (*connect.Response[v1.GetCommitDiffResponse], error) {
 	return c.getCommitDiff.CallUnary(ctx, req)
+}
+
+// ListPullRequestCommits calls golf.v1.RepositoryService.ListPullRequestCommits.
+func (c *repositoryServiceClient) ListPullRequestCommits(ctx context.Context, req *connect.Request[v1.ListPullRequestCommitsRequest]) (*connect.Response[v1.ListPullRequestCommitsResponse], error) {
+	return c.listPullRequestCommits.CallUnary(ctx, req)
+}
+
+// ListPullRequestChecks calls golf.v1.RepositoryService.ListPullRequestChecks.
+func (c *repositoryServiceClient) ListPullRequestChecks(ctx context.Context, req *connect.Request[v1.ListPullRequestChecksRequest]) (*connect.Response[v1.ListPullRequestChecksResponse], error) {
+	return c.listPullRequestChecks.CallUnary(ctx, req)
 }
 
 // GetPullRequestDiff calls golf.v1.RepositoryService.GetPullRequestDiff.
@@ -1322,6 +1354,8 @@ type RepositoryServiceHandler interface {
 	ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error)
 	ListCommits(context.Context, *connect.Request[v1.ListCommitsRequest]) (*connect.Response[v1.ListCommitsResponse], error)
 	GetCommitDiff(context.Context, *connect.Request[v1.GetCommitDiffRequest]) (*connect.Response[v1.GetCommitDiffResponse], error)
+	ListPullRequestCommits(context.Context, *connect.Request[v1.ListPullRequestCommitsRequest]) (*connect.Response[v1.ListPullRequestCommitsResponse], error)
+	ListPullRequestChecks(context.Context, *connect.Request[v1.ListPullRequestChecksRequest]) (*connect.Response[v1.ListPullRequestChecksResponse], error)
 	GetPullRequestDiff(context.Context, *connect.Request[v1.GetPullRequestDiffRequest]) (*connect.Response[v1.GetPullRequestDiffResponse], error)
 	GetRepositoryImage(context.Context, *connect.Request[v1.GetRepositoryImageRequest]) (*connect.Response[v1.GetRepositoryImageResponse], error)
 	GetContents(context.Context, *connect.Request[v1.GetContentsRequest]) (*connect.Response[v1.GetContentsResponse], error)
@@ -1385,6 +1419,18 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 		RepositoryServiceGetCommitDiffProcedure,
 		svc.GetCommitDiff,
 		connect.WithSchema(repositoryServiceMethods.ByName("GetCommitDiff")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryServiceListPullRequestCommitsHandler := connect.NewUnaryHandler(
+		RepositoryServiceListPullRequestCommitsProcedure,
+		svc.ListPullRequestCommits,
+		connect.WithSchema(repositoryServiceMethods.ByName("ListPullRequestCommits")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryServiceListPullRequestChecksHandler := connect.NewUnaryHandler(
+		RepositoryServiceListPullRequestChecksProcedure,
+		svc.ListPullRequestChecks,
+		connect.WithSchema(repositoryServiceMethods.ByName("ListPullRequestChecks")),
 		connect.WithHandlerOptions(opts...),
 	)
 	repositoryServiceGetPullRequestDiffHandler := connect.NewUnaryHandler(
@@ -1487,6 +1533,10 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 			repositoryServiceListCommitsHandler.ServeHTTP(w, r)
 		case RepositoryServiceGetCommitDiffProcedure:
 			repositoryServiceGetCommitDiffHandler.ServeHTTP(w, r)
+		case RepositoryServiceListPullRequestCommitsProcedure:
+			repositoryServiceListPullRequestCommitsHandler.ServeHTTP(w, r)
+		case RepositoryServiceListPullRequestChecksProcedure:
+			repositoryServiceListPullRequestChecksHandler.ServeHTTP(w, r)
 		case RepositoryServiceGetPullRequestDiffProcedure:
 			repositoryServiceGetPullRequestDiffHandler.ServeHTTP(w, r)
 		case RepositoryServiceGetRepositoryImageProcedure:
@@ -1550,6 +1600,14 @@ func (UnimplementedRepositoryServiceHandler) ListCommits(context.Context, *conne
 
 func (UnimplementedRepositoryServiceHandler) GetCommitDiff(context.Context, *connect.Request[v1.GetCommitDiffRequest]) (*connect.Response[v1.GetCommitDiffResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.GetCommitDiff is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) ListPullRequestCommits(context.Context, *connect.Request[v1.ListPullRequestCommitsRequest]) (*connect.Response[v1.ListPullRequestCommitsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.ListPullRequestCommits is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) ListPullRequestChecks(context.Context, *connect.Request[v1.ListPullRequestChecksRequest]) (*connect.Response[v1.ListPullRequestChecksResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.ListPullRequestChecks is not implemented"))
 }
 
 func (UnimplementedRepositoryServiceHandler) GetPullRequestDiff(context.Context, *connect.Request[v1.GetPullRequestDiffRequest]) (*connect.Response[v1.GetPullRequestDiffResponse], error) {

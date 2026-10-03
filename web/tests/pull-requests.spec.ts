@@ -1,3 +1,4 @@
+import {ListPullRequestCommitsRequestSchema,ListPullRequestCommitsResponseSchema,ListPullRequestChecksRequestSchema,ListPullRequestChecksResponseSchema,ReportedCheckState} from '../src/gen/golf/v1/golf_pb';
 import {GetPullRequestDiffRequestSchema,GetPullRequestDiffResponseSchema} from '../src/gen/golf/v1/golf_pb';
 import {GetPullRequestDiscussionResponseSchema,ListIssueCommentsResponseSchema,ListReviewerRunsResponseSchema} from '../src/gen/golf/v1/golf_pb';
 import { expect, test } from '@playwright/test';
@@ -29,6 +30,8 @@ const pending = create(PullRequestReviewSchema, { ...review, id: '90071992547409
 
 async function backend(page: Page) {
   const state = { signedIn: true, metadataStatus: 200, listStatus: 200, detailStatus: 200, reviewStatus: 200, diffStatus: 200, empty: false,
+    workspaceStatus: 200, workspaceWait: undefined as Promise<void>|undefined, mismatched: false, badPage: false, emptyWorkspace: false, duplicateContext: false,
+    commitPages: [] as number[], checkPages: [] as number[],
     reviewWait: undefined as Promise<void> | undefined, detailWait: undefined as Promise<void> | undefined,
     methods: [] as string[], pages: [] as number[], reviewPages: [] as number[], states: [] as IssueState[], numbers: [] as number[] };
   await page.route('**/rpc/**', async (route) => {
@@ -53,6 +56,25 @@ async function backend(page: Page) {
       if (state.listStatus !== 200) return error(state.listStatus, 'Pull requests not found or inaccessible.');
       const listed = { ...pull, head: create(PullRequestRefSchema, { ...pull.head!, retainedSnapshot: true }) };
       return respond(route, ListPullRequestsResponseSchema, state.empty ? {} : input.state === IssueState.CLOSED ? { pullRequests: [closed] } : input.state === IssueState.ALL ? { pullRequests: [listed, closed, snapshot] } : input.page?.page === 2 ? { pullRequests: [listed, snapshot] } : { pullRequests: [listed], page: { nextPage: 2 } });
+    }
+    if(method==='ListPullRequestCommits'||method==='ListPullRequestChecks') {
+      const commits=method==='ListPullRequestCommits';
+      const input=commits?request(route,ListPullRequestCommitsRequestSchema):request(route,ListPullRequestChecksRequestSchema);
+      expect(input.selection).toMatchObject({repository:{owner:'alex',name:'design-system'},repositoryId:repository.id,pullRequestId:pull.id,number:12,baseCommitId:base,headCommitId:head});
+      const number=input.page?.page||1;(commits?state.commitPages:state.checkPages).push(number);
+      if(state.workspaceWait)await state.workspaceWait;
+      if(state.workspaceStatus!==200)return error(state.workspaceStatus,'PR workspace is unavailable.');
+      const selection={...input.selection!,headCommitId:state.mismatched?'d'.repeat(40):head};
+      const page={nextPage:state.badPage?number:number===1?2:0};
+      if(commits)return respond(route,ListPullRequestCommitsResponseSchema,{selection,page:state.emptyWorkspace?undefined:page,commits:state.emptyWorkspace?[]:[
+        {sha:head,message:'PRIVATE COMMIT title\n\nMeaningful <script> body',authorName:'Alex',authoredAt:'2026-10-02T13:00:00Z'},
+        ...(number===2?[{sha:'c'.repeat(40),message:'Second commit',authorName:'Sam',authoredAt:'2026-10-01T13:00:00Z'}]:[]),
+      ]});
+      return respond(route,ListPullRequestChecksResponseSchema,{selection,page:state.emptyWorkspace?undefined:page,checks:state.emptyWorkspace?[]:[{
+        id:String(9007199254740993n+BigInt(number)),context:number===1||state.duplicateContext?'ci/build':'review/security',
+        state:number===1?ReportedCheckState.SUCCESS:ReportedCheckState.PENDING,description:number===1?'PRIVATE CHECK <img src=x>':'Security review queued',
+        creator:user,createdAt:'2026-10-02T13:00:00Z',updatedAt:'2026-10-02T13:00:00Z',targetUrl:number===1?'https://checks.example/build':'javascript:alert(1)',
+      }]});
     }
     if(method==='GetPullRequestDiff') {
       const input=request(route,GetPullRequestDiffRequestSchema);
@@ -305,4 +327,108 @@ test('PR changed-files workspace binds comparison, toggles split, filters, marks
  await expect(page.getByRole('alert')).toHaveText('PR comparison is unavailable.');
  await expect(page.locator('.diff-workspace')).toHaveCount(0);
  expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain('new control');
+});
+
+test('PR workspace exposes four canonical tabs, shared commit rows and latest reported checks without aggregate readiness',async({page})=>{
+ const state=await backend(page);
+ await page.goto('/alex/design-system/pull/12');
+ const tabs=page.getByRole('navigation',{name:'Pull request workspace'});
+ await expect(tabs.getByRole('link')).toHaveText(['Conversation','Commits','Checks','Files changed']);
+ expect(state.methods).not.toContain('ListPullRequestCommits');expect(state.methods).not.toContain('ListPullRequestChecks');
+ await tabs.getByRole('link',{name:'Commits',exact:true}).click();
+ await expect(page).toHaveURL(/\/pull\/12\/commits$/);
+ await expect(page.locator('.commit-list>li')).toHaveCount(1);
+ await expect(page.getByRole('link',{name:'PRIVATE COMMIT title',exact:true})).toHaveAttribute('href',`/alex/design-system/commit/${head}`);
+ await page.getByRole('button',{name:'Load more PR commits',exact:true}).click();
+ await expect(page.locator('.commit-list>li')).toHaveCount(2);expect([...new Set(state.commitPages)]).toEqual([1,2]);
+ await page.reload();await expect(page.locator('.commit-list>li')).toHaveCount(1);
+ await tabs.getByRole('link',{name:'Checks',exact:true}).click();
+ await expect(page).toHaveURL(/\/pull\/12\/checks$/);
+ await expect(page.getByRole('cell',{name:'Success',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Load more checks',exact:true}).click();
+ await expect(page.getByRole('cell',{name:'Pending',exact:true})).toBeVisible();
+ expect([...new Set(state.checkPages)]).toEqual([1,2]);
+ await expect(page.getByRole('link',{name:'Open details for ci/build',exact:true})).toHaveAttribute('href','https://checks.example/build');
+ await expect(page.getByRole('link',{name:'Open details for review/security',exact:true})).toHaveCount(0);
+ await page.getByRole('searchbox',{name:'Search loaded checks',exact:true}).fill('security');
+ await expect(page.getByRole('cell',{name:'Success',exact:true})).toHaveCount(0);await expect(page.getByRole('cell',{name:'Pending',exact:true})).toBeVisible();
+ await page.getByText('Check sources and permissions',{exact:true}).click();
+ await expect(page.getByText('Publishers may be repository writers.',{exact:false})).toBeVisible();
+ await expect(page.getByText('protected merge enforcement remains unavailable.',{exact:false})).toBeVisible();
+ await expect(page.locator('.browser-panel img,.browser-panel script,a[href^="javascript:"]')).toHaveCount(0);
+ await expect(page.getByRole('navigation',{name:'Breadcrumb'}).locator('[aria-current="page"]')).toHaveCount(1);
+ await page.goBack();await expect(page.locator('.commit-list>li')).toHaveCount(1);
+ expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toMatch(/PRIVATE COMMIT|PRIVATE CHECK/);
+});
+
+for(const kind of ['commits','checks'] as const) {
+ test(`PR ${kind} stale-response and continuation failures do not expose private rows`,async({page})=>{
+  const state=await backend(page);state.mismatched=true;
+  await page.goto(`/alex/design-system/pull/12/${kind}`);
+  await expect(page.getByRole('alert')).toHaveText('The response does not match this pull request and selected comparison.');
+  await expect(page.getByText(/PRIVATE COMMIT|PRIVATE CHECK/)).toHaveCount(0);
+  state.mismatched=false;state.badPage=true;
+  await page.getByRole('button',{name:'Try again',exact:true}).click();
+  await expect(page.getByRole('alert')).toHaveText('The page continuation is invalid. Refresh this comparison.');
+  await expect(page.getByText(/PRIVATE COMMIT|PRIVATE CHECK/)).toHaveCount(0);
+ });
+ test(`PR ${kind} denial, revalidation, repository revocation and session expiry clear loaded data`,async({page})=>{
+  const state=await backend(page);
+  await page.goto(`/repositories/alex/design-system?view=pulls&pull=12&pullView=${kind}`);
+  await expect(page.getByText(kind==='commits'?'PRIVATE COMMIT title':'PRIVATE CHECK <img src=x>',{exact:true})).toBeVisible();
+  state.workspaceStatus=403;
+  await page.getByRole('button',{name:`Refresh PR ${kind}`,exact:true}).click();
+  await expect(page.getByRole('alert')).toHaveText('PR workspace is unavailable.');
+  await expect(page.getByText(/PRIVATE COMMIT|PRIVATE CHECK/)).toHaveCount(0);
+  let release!:()=>void;state.workspaceWait=new Promise<void>(resolve=>{release=resolve;});state.workspaceStatus=200;
+  await page.getByRole('button',{name:'Try again',exact:true}).click();
+  await expect(page.getByText(/PRIVATE COMMIT|PRIVATE CHECK/)).toHaveCount(0);
+  release();state.workspaceWait=undefined;
+  await expect(page.getByText(kind==='commits'?'PRIVATE COMMIT title':'PRIVATE CHECK <img src=x>',{exact:true})).toBeVisible();
+  state.metadataStatus=404;
+  await page.getByRole('button',{name:'Refresh repository access',exact:true}).click();
+  await expect(page.getByRole('alert')).toHaveText('Repository not found or inaccessible.');
+  await expect(page.getByText(/PRIVATE COMMIT|PRIVATE CHECK/)).toHaveCount(0);
+  state.metadataStatus=200;await page.getByRole('button',{name:'Try again',exact:true}).click();
+  await expect(page.getByText(kind==='commits'?'PRIVATE COMMIT title':'PRIVATE CHECK <img src=x>',{exact:true})).toBeVisible();
+  state.signedIn=false;await page.getByRole('button',{name:`Refresh PR ${kind}`,exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Welcome to Golf',exact:true})).toBeVisible();
+  await expect(page.getByText(/PRIVATE COMMIT|PRIVATE CHECK/)).toHaveCount(0);
+ });
+ test(`PR ${kind} empty observation stays distinct from missing access`,async({page})=>{
+  const state=await backend(page);state.emptyWorkspace=true;
+  await page.goto(`/alex/design-system/pull/12/${kind}`);
+  await expect(page.getByText(kind==='commits'?'No commits returned for this comparison.':'No reported checks in the loaded pages.',{exact:true})).toBeVisible();
+  state.workspaceStatus=404;await page.getByRole('button',{name:`Refresh PR ${kind}`,exact:true}).click();
+  await expect(page.getByRole('alert')).toHaveText('PR workspace is unavailable.');
+  await expect(page.getByText(kind==='commits'?'No commits returned for this comparison.':'No reported checks in the loaded pages.',{exact:true})).toHaveCount(0);
+ });
+}
+
+test('changing native status contexts between pages fails the check view instead of showing contradictory rows',async({page})=>{
+ const state=await backend(page);state.duplicateContext=true;
+ await page.goto('/alex/design-system/pull/12/checks');
+ await page.getByRole('button',{name:'Load more checks',exact:true}).click();
+ await expect(page.getByRole('alert')).toHaveText('Check contexts changed while paging. Refresh the pages before using these observations.');
+ await expect(page.getByRole('cell',{name:'Success',exact:true})).toHaveCount(0);
+});
+
+test('all four PR tabs remain keyboard visible and compact in charcoal/light mobile layouts',async({page})=>{
+ await backend(page);const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+ await page.goto('/alex/design-system/pull/12/commits');
+ const tabs=page.getByRole('navigation',{name:'Pull request workspace'});
+ for(const theme of ['dark','light'])for(const width of [1280,390,320]) {
+  await page.setViewportSize({width,height:844});await page.evaluate(value=>document.documentElement.setAttribute('data-theme',value),theme);
+  for(const view of ['Commits','Checks','Files changed','Conversation']) {
+   const tab=tabs.getByRole('link',{name:view,exact:true});await tab.focus();await page.keyboard.press('Enter');
+   await expect(tab).toHaveAttribute('aria-current','page');
+   if(view==='Commits')await expect(page.locator('.commit-list>li')).toHaveCount(1);
+   if(view==='Checks')await expect(page.getByRole('cell',{name:'Success',exact:true})).toBeVisible();
+   if(view==='Files changed')await expect(page.locator('.diff-file')).toHaveCount(1);
+   if(view==='Conversation')await expect(page.getByLabel('Pull request body, rendered Markdown')).toBeVisible();
+   const visible=await tab.evaluate(el=>{const a=el.getBoundingClientRect(),p=el.parentElement!.getBoundingClientRect();return a.left>=p.left-1&&a.right<=p.right+1;});expect(visible).toBe(true);
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  }
+ }
+ expect(errors).toEqual([]);
 });

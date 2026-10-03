@@ -130,6 +130,8 @@ service RepositoryService {
   rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse);
   rpc ListCommits(ListCommitsRequest) returns (ListCommitsResponse);
   rpc GetCommitDiff(GetCommitDiffRequest) returns (GetCommitDiffResponse);
+  rpc ListPullRequestCommits(ListPullRequestCommitsRequest) returns (ListPullRequestCommitsResponse);
+  rpc ListPullRequestChecks(ListPullRequestChecksRequest) returns (ListPullRequestChecksResponse);
   rpc GetPullRequestDiff(GetPullRequestDiffRequest) returns (GetPullRequestDiffResponse);
   rpc GetRepositoryImage(GetRepositoryImageRequest) returns (GetRepositoryImageResponse);
   rpc GetContents(GetContentsRequest) returns (GetContentsResponse);
@@ -1647,3 +1649,37 @@ message WatchRepositoryResponse {
  string kind = 3;
  repeated string topics = 4;
 }
+
+// Complete displayed selection. Reads observe before/after binding, not locks.
+message PullRequestSelection {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string pull_request_id = 3;
+  uint32 number = 4;
+  string base_commit_id = 5;
+  string head_commit_id = 6;
+}
+message ListPullRequestCommitsRequest { PullRequestSelection selection = 1; PageRequest page = 2; }
+message ListPullRequestCommitsResponse { PullRequestSelection selection = 1; repeated Commit commits = 2; PageResponse page = 3; }
+enum ReportedCheckState {
+  REPORTED_CHECK_STATE_UNSPECIFIED = 0;
+  REPORTED_CHECK_STATE_PENDING = 1;
+  REPORTED_CHECK_STATE_SUCCESS = 2;
+  REPORTED_CHECK_STATE_FAILURE = 3;
+  REPORTED_CHECK_STATE_ERROR = 4;
+  REPORTED_CHECK_STATE_WARNING = 5;
+  REPORTED_CHECK_STATE_SKIPPED = 6;
+}
+// Native status observation; never Golf eligibility or trusted merge evidence.
+message ReportedCheck {
+  string id = 1;
+  string context = 2;
+  ReportedCheckState state = 3;
+  string description = 4;
+  User creator = 5;
+  string created_at = 6;
+  string updated_at = 7;
+  string target_url = 8;
+}
+message ListPullRequestChecksRequest { PullRequestSelection selection = 1; PageRequest page = 2; }
+message ListPullRequestChecksResponse { PullRequestSelection selection = 1; repeated ReportedCheck checks = 2; PageResponse page = 3; }

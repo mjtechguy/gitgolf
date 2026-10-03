@@ -97,7 +97,7 @@ const validateRepositorySearch = (search: Record<string, unknown>): RepositorySe
       ref: typeof search.ref === 'string' ? search.ref : '', path: typeof search.path === 'string' ? search.path : '',
       branch: typeof search.branch === 'string' ? search.branch : '',
       state: search.state === 'closed' || search.state === 'all' ? search.state : 'open', issue, pull,
-      pullView: search.pullView === 'files' ? 'files' : undefined,
+      pullView: search.pullView === 'files' || search.pullView === 'commits' || search.pullView === 'checks' ? search.pullView : undefined,
       commit: search.commit === undefined ? undefined : typeof search.commit === 'string' ? search.commit : '',
       run: search.run === undefined ? undefined : typeof search.run === 'string' ? search.run : '',
       step: search.step === undefined ? undefined : typeof search.step === 'number' ? search.step : typeof search.step === 'string' && /^(0|[1-9][0-9]*)$/.test(search.step) ? Number(search.step) : NaN,
@@ -140,7 +140,7 @@ function canonicalLocation(owner:string,name:string,tail:string,search:Repositor
     if(parts.length===1)return {...location,view:'issues' as const,issue:undefined};
     if(/^[1-9][0-9]*$/.test(item)&&Number(parts[1])<=0x7fffffff)return {...location,view:'issues' as const,issue:Number(parts[1])};
   }
-  if(parts[0]==='pull'&&parts.length>=2&&parts.length<=3&&/^[1-9][0-9]*$/.test(item)&&Number(parts[1])<=0x7fffffff&&(!parts[2]||parts[2]==='files')) return {...location,view:'pulls' as const,pull:Number(parts[1]),pullView:parts[2]==='files'?'files' as const:undefined};
+  if(parts[0]==='pull'&&parts.length>=2&&parts.length<=3&&/^[1-9][0-9]*$/.test(item)&&Number(parts[1])<=0x7fffffff&&(!parts[2]||['files','commits','checks'].includes(parts[2]))) return {...location,view:'pulls' as const,pull:Number(parts[1]),pullView:parts[2] as RepositorySearch['pullView']};
   if(parts[0]==='actions'&&parts[1]==='runs'&&parts.length===3&&isRunID(parts[2]||''))return {...location,view:'actions' as const,run:parts[2]};
   if(parts.length===1&&['pulls','commits','actions'].includes(tail))return {...location,view:tail as 'pulls'|'commits'|'actions',pull:undefined,commit:undefined,run:undefined};
   throw notFound();

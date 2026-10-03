@@ -1,3 +1,4 @@
+import { PullCommits, PullChecks } from './PullWorkspace';
 import { RepositoryListControls, useRepositoryWorkList } from './RepositoryListControls';
 import { MarkdownBody } from './RepositoryContent';
 import { DiffViewer } from './DiffViewer';
@@ -6,13 +7,13 @@ import { ReviewerRuns } from './ReviewerPanel';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, ExternalLink, FileDiff, GitPullRequest, MessageSquare, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ExternalLink, FileDiff, GitCommitHorizontal, ListChecks, GitPullRequest, MessageSquare, RefreshCw } from 'lucide-react';
 import { repositoryClient, repositoryLink } from './api';
 import { IssueState, PullRequestReviewState } from './gen/golf/v1/golf_pb';
 import type { PageResponse, PullRequest, PullRequestRef, RepositoryKey } from './gen/golf/v1/golf_pb';
 import { repositoryOptions } from './navigation';
 import type { RepositoryLocation } from './navigation';
-import { DateLabel, Loading, More, PanelError, privateQuery } from './RepositoryUI';
+import { DateLabel, RepositoryTabs, Loading, More, PanelError, privateQuery } from './RepositoryUI';
 
 type Props = { repositoryKey: Pick<RepositoryKey, 'owner' | 'name'>; queryKey: readonly unknown[]; location: RepositoryLocation; repositoryId:string;userId:string };
 const followingPage = (response: { page?: PageResponse }, _pages: unknown[], current: number) => {
@@ -91,8 +92,8 @@ function PullDetail(props: Props) {
         <div className="discussion-summary-meta"><PullState pull={pull} /><p>{pull.user?.login || 'Deleted or unavailable author'} opened this pull request on <DateLabel value={pull.createdAt} /></p><span className="pull-comparison"><code>{pull.base?.label || pull.base?.ref}</code><span>←</span><code>{pull.head?.label || pull.head?.ref}</code></span></div>
       </>}
     </section>
-    {pull ? <><nav className="repository-tabs pull-tabs" aria-label="Pull request workspace"><Link {...repositoryOptions(location,{pullView:undefined})} aria-current={location.pullView !== 'files' ? 'page' : undefined}><MessageSquare size={16}/>Conversation</Link><Link {...repositoryOptions(location,{pullView:'files'})} aria-current={location.pullView === 'files' ? 'page' : undefined}><FileDiff size={16}/>Files changed</Link></nav>
-      {location.pullView === 'files' ? <PullFiles {...props} pull={pull}/> : <div className="discussion-layout"><div className="discussion-main"><section className="browser-panel discussion-description" aria-label="Pull request description"><div className="browser-panel-heading"><strong>{pull.user?.login || 'Deleted or unavailable author'}</strong><span className="muted">opened <DateLabel value={pull.createdAt}/></span></div><MarkdownBody text={pull.body || 'No description provided.'} label="Pull request body, rendered Markdown"/>{external ? <div className="issue-footer"><span>Updated <DateLabel value={pull.updatedAt}/></span><a className="text-button" href={external} target="_blank" rel="noopener noreferrer">Open original<ExternalLink size={14}/></a></div> : null}</section><Reviews {...props}/><PullDiscussion {...props}/><ReviewerRuns userId={String(queryKey[1]||'')} owner={repositoryKey.owner} name={repositoryKey.name} signingOut={false} pullNumber={pull.number}/></div>
+    {pull ? <><RepositoryTabs className="pull-tabs" label="Pull request workspace" selection={location.pullView||'conversation'}><Link {...repositoryOptions(location,{pullView:undefined})} aria-current={!location.pullView || location.pullView === 'conversation' ? 'page' : undefined}><MessageSquare size={16}/>Conversation</Link><Link {...repositoryOptions(location,{pullView:'commits'})} aria-current={location.pullView === 'commits' ? 'page' : undefined}><GitCommitHorizontal size={16}/>Commits</Link><Link {...repositoryOptions(location,{pullView:'checks'})} aria-current={location.pullView === 'checks' ? 'page' : undefined}><ListChecks size={16}/>Checks</Link><Link {...repositoryOptions(location,{pullView:'files'})} aria-current={location.pullView === 'files' ? 'page' : undefined}><FileDiff size={16}/>Files changed</Link></RepositoryTabs>
+      {location.pullView === 'commits' ? <PullCommits {...props} pull={pull}/> : location.pullView === 'checks' ? <PullChecks {...props} pull={pull}/> : location.pullView === 'files' ? <PullFiles {...props} pull={pull}/> : <div className="discussion-layout"><div className="discussion-main"><section className="browser-panel discussion-description" aria-label="Pull request description"><div className="browser-panel-heading"><strong>{pull.user?.login || 'Deleted or unavailable author'}</strong><span className="muted">opened <DateLabel value={pull.createdAt}/></span></div><MarkdownBody text={pull.body || 'No description provided.'} label="Pull request body, rendered Markdown"/>{external ? <div className="issue-footer"><span>Updated <DateLabel value={pull.updatedAt}/></span><a className="text-button" href={external} target="_blank" rel="noopener noreferrer">Open original<ExternalLink size={14}/></a></div> : null}</section><Reviews {...props}/><PullDiscussion {...props}/><ReviewerRuns userId={String(queryKey[1]||'')} owner={repositoryKey.owner} name={repositoryKey.name} signingOut={false} pullNumber={pull.number}/></div>
         <aside className="discussion-sidebar" aria-label="Pull request metadata"><details className="metadata-details"><summary>Comparison details</summary><RefMetadata title="Base" value={pull.base}/><RefMetadata title="Head" value={pull.head}/></details>{pull.merged ? <div className="pull-merge-record"><strong>Native merge record</strong><p>Merged <DateLabel value={pull.mergedAt}/></p><code>{pull.mergeCommitId || 'Merge commit unavailable'}</code></div> : null}<div className="metadata-details"><h3>Merge availability</h3><p className="field-help">Reviews show native records; protected integration remains unavailable. These observations do not establish merge readiness.</p></div></aside>
       </div>}
     </> : null}

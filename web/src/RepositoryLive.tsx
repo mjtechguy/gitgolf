@@ -21,6 +21,7 @@ export function useRepositoryLive(userId:string,owner:string,name:string,reposit
    void client.invalidateQueries({predicate:query=>{
     const key=query.queryKey;if(!scoped(key))return false;
     if(key[0]==='repository'&&pin.current&&key[4]==='pull'&&key.length===6)return false;
+    if(key[0]==='repository'&&key[4]==='pull-checks')return topics.includes('pulls')||topics.includes('actions');
     if(key[0]==='repository')return topics.includes('issues')&&['issue','issues'].includes(String(key[4]))||topics.includes('pulls')&&['pull','pulls','pull-discussion'].includes(String(key[4]));
     return topics.includes('actions')&&['workflow-runs','workflow-run','workflow-run-logs'].includes(String(key[0]))||topics.includes('agents')&&['agent-tasks','agent-task'].includes(String(key[0]))||topics.includes('pulls')&&key[0]==='reviewer-runs';
    }});

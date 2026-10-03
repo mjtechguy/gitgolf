@@ -30,6 +30,10 @@ build:
 	npm --prefix web run build
 cli:
 	go build -o bin/golf ./cmd/golfctl
+.PHONY: qualify-pull-workspace
+qualify-pull-workspace:
+	python3 scripts/pull-workspace-smoke.py
+
 .PHONY: qualify-issue-updates
 qualify-issue-updates:
 	python3 scripts/issue-updates-smoke.py
