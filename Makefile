@@ -140,3 +140,7 @@ qualify-pull-inline-publication-native:
 	python3 scripts/pull-inline-review-publication-native-proof.py --stack-root "$(CURDIR)"
 qualify-pull-inline-publication-browser:
 	python3 scripts/pull-inline-review-publication-smoke.py --stack-root "$(CURDIR)"
+
+.PHONY: qualify-source-identity
+qualify-source-identity: cli
+	python3 scripts/source-identity-smoke.py --stack-root "$(CURDIR)" --cli bin/golf
