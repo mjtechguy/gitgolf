@@ -43,8 +43,8 @@ try{
   await page.screenshot({path:join(config.screenshots,'native-pr-'+view+'-'+theme+'-'+width+'.png'),fullPage:true});
  }
  stage='permission revocation';await context.request.delete(config.gitea+'/api/v1/repos/'+config.repository+'/collaborators/'+config.reader,{headers:{Authorization:'token '+config.ownerToken}}).then(r=>check(r.status()===204));
- stage='revocation refresh';const alert=page.getByRole('alert');if(!await alert.count()){try{await page.getByRole('button',{name:'Refresh repository access',exact:true}).click({timeout:1500});}catch{check(await alert.count()>0);}}
- stage='revocation alert';await alert.waitFor();stage='revoked row cleanup';check(await page.getByRole('cell',{name:'Pending',exact:true}).count()===0);
+ stage='live revoked row removal';await page.getByRole('cell',{name:'Pending',exact:true}).waitFor({state:'detached',timeout:15000});
+ stage='revocation alert';await page.getByRole('alert').first().waitFor();stage='revoked row cleanup';for(const state of ['Pending','Failure','Success'])check(await page.getByRole('cell',{name:state,exact:true}).count()===0);
  stage='page runtime errors';check(errors.length===0);console.log('PASS: production-served PR commits/checks, exact links, dark/light/mobile and revoked-access cleanup');
 }catch{console.error('PR workspace browser failed at '+stage+'; private diagnostics withheld');process.exitCode=1;}
 finally{
