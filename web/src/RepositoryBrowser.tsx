@@ -1,3 +1,5 @@
+import { RepositoryCommitSummary } from './RepositoryCommitSummary';
+import { RepositoryRefs } from './RepositoryRefs';
 import { SourceEntryCommit } from './SourceEntryCommit';
 import { SourceActions } from './SourceActions';
 import { CommitList } from './CommitList';
@@ -5,9 +7,9 @@ import { useRepositoryLive, RepositoryLiveStatus, RepositoryLiveContext } from '
 import { DiffViewer } from './DiffViewer';
 import { RepositoryReadme } from './RepositoryReadme';
 import { CodePreview, FileContent, isMarkdownPath } from './RepositoryContent';
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { ArrowLeft, BookOpen, ChevronRight, CircleDot, Code2, File, Folder, GitBranch, GitCommitHorizontal, GitPullRequest, Link2, LockKeyhole, Play, RefreshCw, Settings, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, BookOpen, ChevronRight, CircleDot, Code2, File, Folder, GitBranch, GitCommitHorizontal, GitPullRequest, Link2, LockKeyhole, Play, RefreshCw, Settings } from 'lucide-react';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { repositoryClient } from './api';
@@ -38,30 +40,6 @@ function entryTypeLabel(type: SourceEntryType) {
 }
 
 
-function BranchSelector({ repositoryKey, queryKey, location, defaultBranch }: { repositoryKey: Pick<RepositoryKey, 'owner' | 'name'>; queryKey: readonly unknown[]; location: RepositoryLocation; defaultBranch: string }) {
-  const navigate = useNavigate();
-  const details = useRef<HTMLDetailsElement>(null);
-  const [search, setSearch] = useState('');
-  const query = useInfiniteQuery({ ...privateQuery, queryKey: [...queryKey, 'branches'], initialPageParam: 1,
-    queryFn: ({ pageParam, signal }) => repositoryClient.listBranches({ repository: repositoryKey, page: { page: pageParam } }, { signal }), getNextPageParam: nextPage });
-  const branches = [...new Map(query.data?.pages.flatMap((page) => page.branches).map((branch) => [branch.name, branch])).values()];
-  const shown = branches.filter(branch => branch.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
-  const branchName = location.branch || (!location.ref ? defaultBranch : '');
-  return <div className="ref-controls">
-    <details className="ref-picker branch-picker" ref={details} {...disclosureDismiss} onToggle={event => { if (!event.currentTarget.open) setSearch(''); }}>
-      <summary><GitBranch size={16} /><span>{branchName || (isCommit(location.ref) ? 'Selected commit' : location.ref) || defaultBranch}</span><ChevronRight size={14} /></summary>
-      <div className="branch-options"><strong>Choose a branch</strong><input className="branch-search" type="search" aria-label="Search loaded branches" placeholder="Search loaded branches…" autoComplete="off" value={search} onChange={event => setSearch(event.target.value)}/><p className="field-help">Search covers loaded branches. Selection opens its current commit.</p>
-        {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : query.isPending || (query.isFetching && !query.isFetchingNextPage) ? <Loading label="Loading branches…" /> : <>
-          <ul>{shown.map((branch) => <li key={branch.name}><Link {...repositoryOptions(location, { ref: branch.name, branch: branch.name, path: '',historyPath:undefined })} onClick={() => { if (details.current) details.current.open = false; }}><GitBranch size={15} /><span>{branch.name}<small>Listed at {shortSHA(branch.commitId)}</small></span>{branch.protected ? <ShieldCheck size={15} aria-label="Protected branch" /> : null}</Link></li>)}</ul>
-          {!shown.length ? <p className="muted">{search ? 'No loaded branches match your search.' : 'No branches available.'}</p> : null}
-          <More hasMore={query.hasNextPage} loading={query.isFetchingNextPage} load={() => void query.fetchNextPage()} label="branches" />
-        </>}
-      </div>
-    </details>
-    {location.ref && isCommit(location.ref) ? <span className="commit-pin" title={location.ref}><LockKeyhole size={12} />{shortSHA(location.ref)}</span> : <span className="field-help">Resolving a commit…</span>}
-    {branchName ? <button className="text-button branch-refresh" onClick={() => void navigate(repositoryOptions(location, { ref: branchName, branch: branchName }))}><RefreshCw size={14} />Latest branch head</button> : null}
-  </div>;
-}
 
 function CloneMenu({ https, ssh }: { https: string; ssh: string }) {
   const [protocol, setProtocol] = useState(https ? 'https' : 'ssh');
@@ -82,12 +60,12 @@ function SourcePanel({ repositoryKey, queryKey, location, defaultBranch,reposito
     queryFn: ({ signal }) => repositoryClient.getContents({ repository: repositoryKey, ref, path: location.path }, { signal }) });
   const source = query.isSuccess && !query.isFetching ? query.data : undefined;
   useEffect(() => {
-    if (source && source.commitId !== location.ref) void navigate({ ...repositoryOptions(location, { ref: source.commitId, branch: location.branch || (!location.ref ? defaultBranch : isCommit(location.ref) ? '' : location.ref) }), replace: true });
+    if (source && source.commitId !== location.ref) void navigate({ ...repositoryOptions(location, { ref: source.commitId, branch: location.tag ? '' : location.branch || (!location.ref ? defaultBranch : isCommit(location.ref) ? '' : location.ref) }), replace: true });
   }, [source, location, defaultBranch, navigate]);
   const selectedRef = source?.commitId || ref;
   const crumbs = location.path.split('/').filter(Boolean);
   return <div className={location.path?"source-file-layout":undefined}>{location.path&&source?<Suspense fallback={<Loading label="Opening file navigation…"/>}><SourceNavigator location={location} commitId={source.commitId} repositoryId={repositoryId} userId={String(queryKey[1]||'')}/></Suspense>:null}<section aria-labelledby="source-title" className="browser-panel">
-    <div className="browser-panel-heading source-panel-heading"><h2 id="source-title">Source</h2>{source?<SourceActions location={location} commitId={source.commitId} path={source.path} file={source.kind!==SourceEntryType.DIRECTORY} text={source.file?.entry?.type===SourceEntryType.FILE&&!source.file.previewReason&&source.file.entry.size<=256n*1024n?source.file.content:undefined}/>:null}<button className="icon-button manual-refresh" aria-label="Refresh source" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} className={query.isFetching ? 'spin' : ''} /></button></div>
+    <div className="browser-panel-heading source-panel-heading"><h2 id="source-title" className="sr-only">Source</h2>{source?<RepositoryCommitSummary location={location} repositoryId={repositoryId} commitId={source.commitId} userId={String(queryKey[1]||'')}/>:null}{source?<SourceActions location={location} commitId={source.commitId} path={source.path} file={source.kind!==SourceEntryType.DIRECTORY} text={source.file?.entry?.type===SourceEntryType.FILE&&!source.file.previewReason&&source.file.entry.size<=256n*1024n?source.file.content:undefined}/>:null}<button className="icon-button manual-refresh" aria-label="Refresh source" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} className={query.isFetching ? 'spin' : ''} /></button></div>
     <nav className={`source-breadcrumbs ${location.path ? "" : "source-root-path"}`} aria-label="Source path"><Link {...repositoryOptions(location, { ref: selectedRef, path: '' })}>{location.name}</Link>{crumbs.map((crumb, index) => <span key={index}><ChevronRight size={13} /><Link {...repositoryOptions(location, { ref: selectedRef, path: crumbs.slice(0, index + 1).join('/') })} aria-current={index === crumbs.length - 1 ? 'page' : undefined}>{crumb}</Link></span>)}</nav>
     {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : !source ? <Loading label="Reading source…" /> : source.kind === SourceEntryType.DIRECTORY ? <>
       {source.entries?.length ? <ul className="source-tree source-tree-with-commits">{[...source.entries].sort((a,b)=>Number(b.type===SourceEntryType.DIRECTORY)-Number(a.type===SourceEntryType.DIRECTORY)||a.name.localeCompare(b.name)).map((entry) => <li key={entry.path}><Link title={entry.path} {...repositoryOptions(location, { ref: source.commitId, path: entry.path },entry.type===SourceEntryType.FILE?'file':undefined)}><EntryIcon type={entry.type} /><span className="source-name">{entry.name}</span><span className="entry-type sr-only">{entryTypeLabel(entry.type)}</span>{entry.type !== SourceEntryType.DIRECTORY ? <Size value={entry.size} className="sr-only" /> : <span className="sr-only" /> }<ChevronRight size={14} /></Link><SourceEntryCommit userId={String(queryKey[1]||'')} repositoryId={repositoryId} commitId={source.commitId} path={entry.path} location={location}/></li>)}</ul> : <div className="empty-state"><Folder size={25} /><h3>This directory is empty.</h3></div>}
@@ -105,7 +83,7 @@ function CommitsPanel({ repositoryKey, queryKey, location, defaultBranch,reposit
   const navigate = useNavigate();
   const ref = location.ref || defaultBranch;
   const query = useInfiniteQuery({ ...privateQuery, queryKey: [...queryKey, 'commits', ref,location.historyPath||'',repositoryId], initialPageParam: 1,
-    queryFn: async({ pageParam, signal }) => {const path=location.historyPath||'';const response=await repositoryClient.listCommits({ repository: repositoryKey, ref,path,repositoryId, page: { page: pageParam } }, { signal });if(path&&(response.path!==path||response.commitId!==ref||response.repositoryId!==repositoryId))throw new ConnectError('The returned history does not match this path and snapshot.',Code.FailedPrecondition);return response;}, getNextPageParam: nextPage });
+    queryFn: async({ pageParam, signal }) => {const path=location.historyPath||'';const response=await repositoryClient.listCommits({ repository: repositoryKey, ref,path,repositoryId: isCommit(ref) ? repositoryId : '', page: { page: pageParam } }, { signal });if(path&&(response.path!==path||response.commitId!==ref||response.repositoryId!==repositoryId))throw new ConnectError('The returned history does not match this path and snapshot.',Code.FailedPrecondition);return response;}, getNextPageParam: nextPage });
   const commits = query.isSuccess && (!query.isFetching || query.isFetchingNextPage) ? [...new Map(query.data.pages.flatMap((page) => page.commits).map((commit) => [commit.sha, commit])).values()] : [];
   const head = commits[0]?.sha;
   useEffect(() => {
@@ -163,7 +141,7 @@ export function RepositoryBrowser({ location, userId }: { location: RepositoryLo
       {live.newSource?<p className="source-update-notice" role="status"><GitCommitHorizontal size={15}/>{location.view==='compare'||location.view==='pulls'&&Boolean(location.pull)&&location.pullView!==undefined&&location.pullView!=='conversation'?<>Repository activity changed. This comparison stays pinned.<button className="text-button" onClick={live.refreshComparison}>Refresh comparison</button></>:<>New repository activity is available. This source snapshot stays pinned; choose Latest branch head to view new code.</>}</p>:null}
       <RepositoryTabs label="Repository" selection={location.view}><Link {...repositoryOptions(location, { view: 'source', issue: undefined })} aria-current={location.view === 'source' ? 'page' : undefined}><Code2 size={16} />Code</Link><Link {...repositoryOptions(location, { view: 'commits', issue: undefined, commit: undefined,historyPath:undefined })} aria-current={location.view === 'commits' ? 'page' : undefined}><GitCommitHorizontal size={17} />Commits</Link><Link {...repositoryOptions(location, { view: 'issues', issue: undefined,issueNew:undefined })} aria-current={location.view === 'issues' ? 'page' : undefined}><CircleDot size={16} />Issues</Link><Link {...repositoryOptions(location, { view: 'pulls', pull: undefined })} aria-current={location.view === 'pulls' || location.view === 'compare' ? 'page' : undefined}><GitPullRequest size={16} />Pull requests</Link><Link {...repositoryOptions(location, { view: 'actions',run:undefined })} aria-current={location.view === 'actions' ? 'page' : undefined}><Play size={16}/>Actions</Link><Link to="/repositories/$owner/$name/settings" params={{owner:location.owner,name:location.name}}><Settings size={16}/>Settings</Link></RepositoryTabs>
       {(location.view === 'source' || location.view === 'commits') && repository.empty ? <section className="browser-panel empty-state"><GitBranch size={29} /><h2>No commits yet.</h2><p>This repository is empty. Push your first commit through Git to add source and branches.</p>{repository.cloneUrl ? <div className="clone-address"><span>HTTPS clone URL</span><code>{repository.cloneUrl}</code></div> : null}{repository.sshUrl ? <div className="clone-address"><span>SSH clone URL</span><code>{repository.sshUrl}</code></div> : null}</section> : <>
-        {location.view === 'source' || location.view === 'commits' && !location.commit && !location.historyPath ? <div className="repository-code-toolbar"><BranchSelector {...panelProps}/>{location.view === 'source' && (repository.cloneUrl || repository.sshUrl) ? <CloneMenu https={repository.cloneUrl} ssh={repository.sshUrl}/> : null}</div> : null}
+        {location.view === 'source' || location.view === 'commits' && !location.commit && !location.historyPath ? <div className="repository-code-toolbar"><RepositoryRefs {...panelProps}/>{location.view === 'source' && (repository.cloneUrl || repository.sshUrl) ? <CloneMenu https={repository.cloneUrl} ssh={repository.sshUrl}/> : null}</div> : null}
         {location.view==='compare'?<Suspense fallback={<Loading label="Opening comparison…"/>}><RepositoryCompare key={repository.id} {...panelProps} repository={repository} userId={userId}/></Suspense>:location.view === 'source' ? <div className={!location.path ? 'repository-source-layout' : undefined}><SourcePanel {...panelProps}/>{!location.path ? <aside className="repository-about" aria-label="About this repository"><h2>About</h2><p>{repository.description || 'No description provided.'}</p><dl><div><dt>Visibility</dt><dd>{repository.private ? 'Private' : 'Public'}</dd></div><div><dt>Default branch</dt><dd><GitBranch size={14}/>{repository.defaultBranch}</dd></div><div><dt>Updated</dt><dd><DateLabel value={repository.updatedAt}/></dd></div></dl><Link className="text-button" {...repositoryOptions(location,{view:'commits',commit:undefined,historyPath:undefined})}><GitCommitHorizontal size={15}/>Commit history</Link></aside> : null}</div> : location.view === 'commits' ? location.commit ? <CommitDiffPanel key={location.commit} {...panelProps} repositoryId={repository.id} /> : <CommitsPanel {...panelProps} /> : location.view === 'actions' ? <Suspense fallback={<Loading label="Opening Actions…"/>}>{location.run ? <WorkflowRunPage key={location.run} userId={userId} owner={location.owner} name={location.name} repositoryId={repository.id} runId={location.run} selectedStep={location.step} signingOut={false}/> : <Actions userId={userId} owner={location.owner} name={location.name} signingOut={false} workView/>}</Suspense> : location.view === 'pulls' ? <Suspense fallback={<Loading label="Opening pull requests…" />}><PullRequestBrowser {...panelProps} repositoryId={repository.id} userId={userId}/></Suspense> : <Suspense fallback={<Loading label="Opening issues…" />}><IssueBrowser key={repository.id} {...panelProps} repositoryId={repository.id} userId={userId} /></Suspense>}
       </>}
     </div></>}

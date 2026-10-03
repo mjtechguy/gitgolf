@@ -128,6 +128,7 @@ service RepositoryService {
   rpc GetRepositoryCreation(GetRepositoryCreationRequest) returns (GetRepositoryCreationResponse);
   rpc GetRepository(GetRepositoryRequest) returns (GetRepositoryResponse);
   rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse);
+  rpc ListTags(ListTagsRequest) returns (ListTagsResponse);
   rpc ListCommits(ListCommitsRequest) returns (ListCommitsResponse);
   rpc GetCommitDiff(GetCommitDiffRequest) returns (GetCommitDiffResponse);
   rpc ListPullRequestCommits(ListPullRequestCommitsRequest) returns (ListPullRequestCommitsResponse);
@@ -321,10 +322,35 @@ message Branch {
 message ListBranchesRequest {
   RepositoryKey repository = 1;
   PageRequest page = 2;
+  // Optional exact native identity. Bound reads recheck current authority.
+  string repository_id = 3;
 }
 message ListBranchesResponse {
   repeated Branch branches = 1;
   PageResponse page = 2;
+  // Native observed inventory count, never the number of loaded rows. Absent
+  // when no verified native count is available; separate reads are not atomic.
+  optional string total_count = 3;
+  string repository_id = 4;
+}
+message Tag {
+  string name = 1;
+  // Peeled commit used for source selection, separate from the tag object ID.
+  string commit_id = 2;
+  string id = 3;
+  string message = 4;
+}
+message ListTagsRequest {
+  RepositoryKey repository = 1;
+  PageRequest page = 2;
+  // Required current canonical native repository identity.
+  string repository_id = 3;
+}
+message ListTagsResponse {
+  repeated Tag tags = 1;
+  PageResponse page = 2;
+  optional string total_count = 3;
+  string repository_id = 4;
 }
 message Commit {
   string sha = 1;
@@ -339,12 +365,14 @@ message ListCommitsRequest {
   // Optional literal repository-relative file/directory path. Requires a full
   // lowercase immutable ref and current canonical native repository_id.
   string path = 4;
+  // If supplied, requires a full immutable ref even without a path.
   string repository_id = 5;
 }
 message ListCommitsResponse {
   repeated Commit commits = 1;
   PageResponse page = 2;
-  // Selection receipt populated only for path-filtered history.
+  // Selection receipt populated for exact repository-ID/full-ref reads,
+  // including empty-path history. Does not claim a branch remains at that ref.
   string commit_id = 3;
   string path = 4;
   string repository_id = 5;

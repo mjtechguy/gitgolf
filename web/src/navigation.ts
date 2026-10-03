@@ -3,6 +3,7 @@ export type RepositorySearch = {
   ref: string;
   path: string;
   branch: string;
+  tag?: string;
   state: 'open' | 'closed' | 'all';
   issue?: number;
   issueNew?: boolean;
@@ -31,7 +32,7 @@ export function organizationOptions({ organization, team }: { organization: stri
 export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | 'name'> & Partial<RepositorySearch>, changes: Partial<RepositorySearch> = {}, sourceKind?:'file') {
   const next = { ...defaultRepositorySearch, ...location, ...changes };
   const search: RepositorySearch = {
-    view: next.view, ref: next.ref, path: next.view === 'source' ? next.path : '', branch: next.branch,
+    view: next.view, ref: next.ref, path: next.view === 'source' ? next.path : '', branch: next.branch, tag: next.tag,
     state: next.state, issue: next.view === 'issues' ? next.issue : undefined,
     issueNew:next.view==='issues'&&!next.issue?next.issueNew:undefined,
     pull: next.view === 'pulls' ? next.pull : undefined,

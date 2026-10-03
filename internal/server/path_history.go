@@ -47,7 +47,7 @@ func (s *Server) listPathCommits(ctx context.Context, session string, token forg
 			}
 			seen := map[string]bool{}
 			for _, row := range rows {
-				if !objectID.MatchString(row.SHA) || len(row.SHA) != len(ref) || seen[row.SHA] || !discussionText(row.Commit.Message, 256<<10) || !validPullTime(row.Commit.Author.Date) || !utf8.ValidString(row.Commit.Author.Name) || len(row.Commit.Author.Name) > 1024 || strings.IndexFunc(row.Commit.Author.Name, unicode.IsControl) >= 0 {
+				if !objectID.MatchString(row.SHA) || len(row.SHA) != len(ref) || seen[row.SHA] || !validHistoryCommit(row) {
 					return nil, 0, errInvalidForgeResponse
 				}
 				seen[row.SHA] = true
@@ -95,4 +95,8 @@ func (s *Server) listPathCommits(ctx context.Context, session string, token forg
 		return nil
 	})
 	return result, next, err
+}
+
+func validHistoryCommit(row forgeCommit) bool {
+	return discussionText(row.Commit.Message, 256<<10) && validPullTime(row.Commit.Author.Date) && utf8.ValidString(row.Commit.Author.Name) && len(row.Commit.Author.Name) <= 1024 && strings.IndexFunc(row.Commit.Author.Name, unicode.IsControl) < 0
 }

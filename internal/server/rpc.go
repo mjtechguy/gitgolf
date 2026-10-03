@@ -144,7 +144,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.SessionServiceListSessionsProcedure, golfv1connect.SessionServiceRevokeSessionProcedure, golfv1connect.SessionServiceRevokeOtherSessionsProcedure,
 			golfv1connect.RepositoryActivityServiceWatchRepositoryProcedure,
 			golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryCreationProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure,
-			golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure,
+			golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListTagsProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure,
 			golfv1connect.RepositoryServiceGetCommitDiffProcedure, golfv1connect.RepositoryServiceGetPullRequestDiffProcedure, golfv1connect.RepositoryServiceGetRepositoryComparisonProcedure, golfv1connect.RepositoryServiceListPullRequestCommitsProcedure, golfv1connect.RepositoryServiceListPullRequestChecksProcedure, golfv1connect.RepositoryServiceGetRepositoryImageProcedure,
 			golfv1connect.RepositoryServiceListIssuesProcedure, golfv1connect.RepositoryServiceGetIssueProcedure,
 			golfv1connect.RepositoryServiceGetPullRequestDiscussionProcedure, golfv1connect.RepositoryServiceListIssueCommentsProcedure, golfv1connect.RepositoryServiceGetIssueMutationProcedure, golfv1connect.RepositoryServiceCreateIssueProcedure, golfv1connect.RepositoryServiceCreateIssueCommentProcedure, golfv1connect.RepositoryServiceUpdateIssueProcedure, golfv1connect.RepositoryServiceCreatePullRequestProcedure, golfv1connect.RepositoryServiceUpdatePullRequestProcedure,
@@ -381,13 +381,48 @@ func (s *Server) ListBranches(ctx context.Context, req *connect.Request[golfv1.L
 	if err != nil {
 		return nil, err
 	}
-	rows, next, err := s.listBranches(ctx, token, keyFrom(req.Msg.Repository), pageFrom(req.Msg.Page))
+	var rows []branch
+	var next uint32
+	var total int64 = -1
+	if req.Msg.RepositoryId != "" {
+		var id int64
+		id, err = discussionID(req.Msg.RepositoryId)
+		if err == nil {
+			rows, next, total, err = s.listBoundBranches(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), id, pageFrom(req.Msg.Page))
+		}
+	} else {
+		rows, next, err = s.listBranches(ctx, token, keyFrom(req.Msg.Repository), pageFrom(req.Msg.Page))
+	}
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	response := &golfv1.ListBranchesResponse{Page: wirePage(next)}
+	response := &golfv1.ListBranchesResponse{Page: wirePage(next), RepositoryId: req.Msg.RepositoryId}
+	if total >= 0 {
+		value := strconv.FormatInt(total, 10)
+		response.TotalCount = &value
+	}
 	for _, row := range rows {
 		response.Branches = append(response.Branches, &golfv1.Branch{Name: row.Name, CommitId: row.CommitID, Protected: row.Protected})
+	}
+	return connect.NewResponse(response), nil
+}
+func (s *Server) ListTags(ctx context.Context, req *connect.Request[golfv1.ListTagsRequest]) (*connect.Response[golfv1.ListTagsResponse], error) {
+	token, err := rpcToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	id, err := discussionID(req.Msg.RepositoryId)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	rows, next, total, err := s.listTags(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), id, pageFrom(req.Msg.Page))
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	count := strconv.FormatInt(total, 10)
+	response := &golfv1.ListTagsResponse{Page: wirePage(next), TotalCount: &count, RepositoryId: req.Msg.RepositoryId}
+	for _, row := range rows {
+		response.Tags = append(response.Tags, &golfv1.Tag{Name: row.Name, CommitId: row.Commit.SHA, Id: row.ID, Message: row.Message})
 	}
 	return connect.NewResponse(response), nil
 }
@@ -404,6 +439,12 @@ func (s *Server) ListCommits(ctx context.Context, req *connect.Request[golfv1.Li
 		if err == nil {
 			rows, next, err = s.listPathCommits(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), id, req.Msg.Ref, req.Msg.Path, pageFrom(req.Msg.Page))
 		}
+	} else if req.Msg.RepositoryId != "" {
+		var id int64
+		id, err = discussionID(req.Msg.RepositoryId)
+		if err == nil {
+			rows, next, err = s.listBoundCommits(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), id, req.Msg.Ref, pageFrom(req.Msg.Page))
+		}
 	} else {
 		rows, next, err = s.listCommits(ctx, token, keyFrom(req.Msg.Repository), req.Msg.Ref, pageFrom(req.Msg.Page))
 	}
@@ -411,7 +452,7 @@ func (s *Server) ListCommits(ctx context.Context, req *connect.Request[golfv1.Li
 		return nil, rpcError(err)
 	}
 	response := &golfv1.ListCommitsResponse{Page: wirePage(next)}
-	if req.Msg.Path != "" {
+	if req.Msg.RepositoryId != "" {
 		response.CommitId, response.Path, response.RepositoryId = req.Msg.Ref, req.Msg.Path, req.Msg.RepositoryId
 	}
 	for _, row := range rows {

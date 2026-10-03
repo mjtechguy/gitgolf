@@ -4,7 +4,7 @@ import { create } from '@bufbuild/protobuf';
 import {
   GetAuthenticationOptionsResponseSchema, GetRepositoryImageResponseSchema, GetContentsRequestSchema, GetContentsResponseSchema, GetIssueRequestSchema, GetIssueResponseSchema, GetRepositoryResponseSchema,
   GetSessionResponseSchema, IssueSchema, IssueState, ListBranchesRequestSchema, ListBranchesResponseSchema, ListCapabilitiesResponseSchema,
-  ListCommitsRequestSchema, ListCommitsResponseSchema, ListIssueCommentsResponseSchema, ListIssuesRequestSchema, ListIssuesResponseSchema, ListRepositoriesResponseSchema,
+  ListCommitsRequestSchema, ListCommitsResponseSchema, ListTagsRequestSchema, ListTagsResponseSchema, ListIssueCommentsResponseSchema, ListIssuesRequestSchema, ListIssuesResponseSchema, ListRepositoriesResponseSchema,
   LoginWithGiteaTokenResponseSchema, LogoutResponseSchema, RepositorySchema, SourceEntrySchema, SourceEntryType, UserSchema,
 } from '../src/gen/golf/v1/golf_pb';
 import type { GetContentsRequest } from '../src/gen/golf/v1/golf_pb';
@@ -62,6 +62,7 @@ async function backend(page: Page) {
     }
     if (method === 'ListCommits') {
       const input = request(route, ListCommitsRequestSchema);
+      if (!input.path && input.repositoryId && input.page?.limit === 1) return respond(route, ListCommitsResponseSchema, { repositoryId: input.repositoryId, commitId: input.ref, commits: [{ sha: input.ref, message: 'Improve keyboard navigation', authorName: 'Alex', authoredAt: '2026-10-01T12:00:00Z' }] });
       if(input.path){state.historyRequests.push(input);if(state.historyStatus!==200)return error(state.historyStatus,'History not found or inaccessible.');return respond(route,ListCommitsResponseSchema,{path:state.historyBinding?input.path:'another.txt',commitId:input.ref,repositoryId:input.repositoryId,commits:[{sha:head,message:'Exact file change',authorName:'Alex',authoredAt:'2026-10-01T12:00:00Z'}]});}
       const sha = input.ref === feature ? feature : head;
       return respond(route, ListCommitsResponseSchema, input.page?.page === 2 ? { commits: [{ sha: older, message: 'Initial repository', authorName: 'Alex', authoredAt: '2026-09-30T12:00:00Z' }] } : { commits: [{ sha, message: 'Improve keyboard navigation\n\nKeep focus visible everywhere.', authorName: 'Alex', authoredAt: '2026-10-01T12:00:00Z' }], page: { nextPage: 2 } });
@@ -489,4 +490,72 @@ test('invalid line fragments and empty/large preview limits',async({page})=>{
  const state=await backend(page);state.sourceText='one\ntwo\n';await page.goto(`/alex/design-system/blob/${head}/src/index.ts#L1-L999`);await expect(page.locator('.numbered-source tr')).toHaveCount(2);await expect(page.locator('.source-line-selected')).toHaveCount(0);
  state.sourceText='\n'.repeat(12001);await page.getByLabel('Refresh source',{exact:true}).click();await expect(page.locator('.code-preview')).toBeVisible();await expect(page.locator('.numbered-source')).toHaveCount(0);
  await page.goto(`/alex/design-system/blob/${head}/empty.txt`);await expect(page.getByLabel('Plain text preview of empty.txt')).toContainText('(Empty text file)');await page.getByLabel('Source actions',{exact:true}).click();await expect(page.getByRole('button',{name:'Download text',exact:true})).toBeEnabled();await page.goto(`/alex/design-system/blob/${head}/binary.png`);await page.getByLabel('Source actions',{exact:true}).click();await expect(page.getByRole('button',{name:'Download text',exact:true})).toBeDisabled();
+});
+
+for (const width of [320, 1280, 1920]) for (const theme of ['dark', 'light']) test(`Code latest commit and native tags fit bounded workspace at ${width}px ${theme}`, async ({ page }) => {
+  await backend(page);
+  const tagReads: ReturnType<typeof request<typeof ListTagsRequestSchema>>[] = [];
+  await page.route('**/rpc/golf.v1.RepositoryService/ListTags', async route => {
+    const input = request(route, ListTagsRequestSchema); tagReads.push(input);
+    return respond(route, ListTagsResponseSchema, { repositoryId: repository.id, totalCount: '2',
+      tags: input.page?.page === 2 ? [{ name: 'release/2.0', commitId: older, id: feature }] : [{ name: 'v1.0', commitId: feature, id: older }],
+      page: input.page?.page === 2 ? undefined : { nextPage: 2 } });
+  });
+  await page.setViewportSize({ width, height: 1000 }); await page.goto(`/alex/design-system/tree/${head}?branch=main`);
+  await page.evaluate(value => { document.documentElement.dataset.theme = value; localStorage.setItem('golf.theme', value); }, theme);
+  const banner = page.getByLabel('Latest commit', { exact: true });
+  await expect(banner).toContainText('Alex'); await expect(banner.getByRole('link', { name: 'Improve keyboard navigation', exact: true })).toBeVisible();
+  await expect(banner.locator('time')).toHaveAttribute('datetime', '2026-10-01T12:00:00Z');
+  await expect(banner.locator('time')).toHaveAttribute('title', /2026/);
+  expect(tagReads).toHaveLength(0);
+  const tags = page.locator('.ref-controls>.ref-inventory-button').filter({ hasText: 'Tags' });
+  await expect(tags).toHaveText('Tags'); await tags.click();
+  await expect(page.getByRole('link', { name: /v1.0 Listed at/ })).toBeVisible();
+  expect(tagReads[0]).toMatchObject({ repository: { owner: 'alex', name: 'design-system' }, repositoryId: repository.id, page: { page: 1 } });
+  await expect(tags).toHaveText('2 Tags');
+  await page.getByRole('button', { name: 'Load more tags', exact: true }).click();
+  await page.getByRole('link', { name: /release\/2.0 Listed at/ }).click();
+  await expect(page).toHaveURL(new RegExp(`/tree/${older}`));
+  expect(new URL(page.url()).searchParams.get('tag')).toBe('release/2.0');
+  expect(new URL(page.url()).searchParams.get('branch')).toBeNull();
+  await expect(page.locator('.branch-picker>summary')).toHaveText('release/2.0');
+  await expect(page.getByRole('button', { name: 'Latest branch head', exact: true })).toHaveCount(0);
+  await expect(banner.locator('.latest-commit-sha')).toHaveAttribute('title', older);
+  await page.reload(); await expect(page.locator('.branch-picker>summary')).toHaveText('release/2.0');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+  const main = await page.locator('main').boundingBox();
+  expect(main!.width).toBe(Math.min(width, 1440)); expect(main!.x).toBe((width - main!.width) / 2);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+  await page.screenshot({ path: `test-results/repository-code-summary-${theme}-${width}.png` });
+});
+
+for (const invalid of ['repository', 'snapshot', 'sha', 'empty', 'date', 'denied']) test(`latest commit banner refuses ${invalid} evidence`, async ({ page }) => {
+  await backend(page);
+  await page.route('**/rpc/golf.v1.RepositoryService/ListCommits', async route => {
+    const input = request(route, ListCommitsRequestSchema);
+    if (input.path || input.page?.limit !== 1) return route.fallback();
+    if (invalid === 'denied') return reject(route, 'permission_denied', 'Not authorized.');
+    return respond(route, ListCommitsResponseSchema, { repositoryId: invalid === 'repository' ? '7' : input.repositoryId,
+      commitId: invalid === 'snapshot' ? feature : input.ref, commits: invalid === 'empty' ? [] : [{ sha: invalid === 'sha' ? feature : input.ref,
+        message: 'PRIVATE mismatched commit', authorName: 'PRIVATE author', authoredAt: invalid === 'date' ? 'invalid' : '2026-10-01T12:00:00Z' }] });
+  });
+  await page.goto(`/alex/design-system/tree/${head}`);
+  await expect(page.getByLabel('Latest commit', { exact: true })).toHaveText('Latest commit unavailable');
+  await expect(page.getByLabel('Latest commit', { exact: true })).not.toContainText('PRIVATE');
+  await expect(page.getByLabel('Latest commit', { exact: true }).getByRole('link')).toHaveCount(0);
+});
+
+test('tag inventory rejects wrong identity and never substitutes loaded-page count for native total', async ({ page }) => {
+  await backend(page); let bad = true;
+  await page.route('**/rpc/golf.v1.RepositoryService/ListTags', async route => respond(route, ListTagsResponseSchema, {
+    repositoryId: bad ? '7' : repository.id, tags: [{ name: 'PRIVATE tag', commitId: feature, id: older }],
+  }));
+  await page.goto(`/alex/design-system/tree/${head}`);
+  const tags = page.locator('.ref-controls>.ref-inventory-button').filter({ hasText: 'Tags' });
+  await tags.click(); await expect(page.getByRole('alert')).toContainText('do not match');
+  await expect(page.locator('.branch-picker>.branch-options')).not.toContainText('PRIVATE tag');
+  bad = false; await page.getByRole('button', { name: 'Try again', exact: true }).click();
+  await expect(page.getByRole('link', { name: /PRIVATE tag Listed at/ })).toBeVisible();
+  await expect(tags).toHaveText('Tags');
+  await page.locator('.branch-picker>summary').press('Escape'); await expect(page.locator('.branch-picker>summary')).toBeFocused();
 });

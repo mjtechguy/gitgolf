@@ -97,6 +97,7 @@ const validateRepositorySearch = (search: Record<string, unknown>): RepositorySe
       ref: typeof search.ref === 'string' ? search.ref : '', path: typeof search.path === 'string' ? search.path : '',
       base:typeof search.base==='string'?search.base:undefined,head:typeof search.head==='string'?search.head:undefined,sourceOwner:typeof search.sourceOwner==='string'?search.sourceOwner:undefined,sourceName:typeof search.sourceName==='string'?search.sourceName:undefined,
       branch: typeof search.branch === 'string' ? search.branch : '',
+      tag: typeof search.tag === 'string' ? search.tag : undefined,
       historyPath:typeof search.historyPath==='string'?search.historyPath:undefined,
       issueNew:search.issueNew===true?true:undefined,
       state: search.state === 'closed' || search.state === 'all' ? search.state : 'open', issue, pull,

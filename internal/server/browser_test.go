@@ -100,7 +100,7 @@ func TestBrowserRequiresSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, procedure := range []string{golfv1connect.SessionServiceGetSessionProcedure, golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure, golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure, golfv1connect.RepositoryServiceListIssuesProcedure, golfv1connect.RepositoryServiceGetIssueProcedure} {
+	for _, procedure := range []string{golfv1connect.SessionServiceGetSessionProcedure, golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure, golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListTagsProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure, golfv1connect.RepositoryServiceListIssuesProcedure, golfv1connect.RepositoryServiceGetIssueProcedure} {
 		body := &unreadBody{t: t}
 		r := httptest.NewRequest("POST", "/rpc"+procedure, body)
 		r.Header.Set("Origin", s.config.PublicURL)

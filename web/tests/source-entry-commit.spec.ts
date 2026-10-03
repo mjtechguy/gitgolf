@@ -31,7 +31,9 @@ async function fixture(page: Page, count = 1) {
       return respond(route, GetContentsResponseSchema, { commitId: ref, path: input.path, kind: SourceEntryType.DIRECTORY, entries });
     }
     if (method === 'ListCommits') {
-      const input = request(route, ListCommitsRequestSchema); state.calls.push(input); state.active++; state.peak = Math.max(state.peak, state.active);
+      const input = request(route, ListCommitsRequestSchema);
+      if (!input.path) return respond(route, ListCommitsResponseSchema, { repositoryId: input.repositoryId, commitId: input.ref, commits: [{ sha: input.ref, message: 'Latest repository commit', authorName: 'Alex', authoredAt: '2026-10-01T12:00:00Z' }] });
+      state.calls.push(input); state.active++; state.peak = Math.max(state.peak, state.active);
       const commit = { sha: state.invalid === 'sha' ? 'not-an-object-id' : latest, message: `${state.titlePrefix} ${state.user.login}: ${input.path}\n\nFull commit body`, authorName: 'Alex', authoredAt: state.invalid === 'date' ? 'invalid' : '2026-10-01T12:00:00Z' };
       const result = { path: state.invalid === 'path' ? 'wrong.ts' : input.path, commitId: state.invalid === 'ref' ? latest : input.ref, repositoryId: state.invalid === 'repository' ? '7' : input.repositoryId, commits: state.invalid === 'empty' ? [] : state.invalid === 'multiple' ? [commit, { ...commit, sha: 'c'.repeat(40) }] : [commit] };
       try {
@@ -129,7 +131,7 @@ for (const theme of ['light', 'dark']) test(`directory change metadata fits mobi
 
 
 for (const theme of ['dark', 'light']) for (const width of [320, 390, 1280, 1920, 2560]) {
-  test(`repository work surface uses available width and bounds long filenames at ${width}px ${theme}`, async ({ page }) => {
+  test(`repository work surface stays centered and bounds long filenames at ${width}px ${theme}`, async ({ page }) => {
     await fixture(page);
     const path = 'a-very-long-literal-filename-' + 'detail-'.repeat(27) + '.ts';
     await page.route('**/rpc/golf.v1.RepositoryService/GetContents', async route => respond(route, GetContentsResponseSchema, {
@@ -154,7 +156,9 @@ for (const theme of ['dark', 'light']) for (const width of [320, 390, 1280, 1920
         nameFont: parseFloat(getComputedStyle(name).fontSize), ellipsis: getComputedStyle(name).textOverflow };
     });
     expect(measurements.pageWidth).toBe(width);
-    expect(measurements.main).toBe(width);
+    expect(measurements.main).toBe(Math.min(width, 1440));
+    const centered = await page.locator('main').boundingBox();
+    expect(centered!.x).toBe((width - measurements.main) / 2);
     expect(measurements.bodyFont).toBeGreaterThanOrEqual(14);
     expect(measurements.nameFont).toBeGreaterThanOrEqual(14);
     expect(measurements.ellipsis).toBe('ellipsis');
@@ -165,3 +169,49 @@ for (const theme of ['dark', 'light']) for (const width of [320, 390, 1280, 1920
     await page.screenshot({ path: `test-results/repository-density-${theme}-${width}.png` });
   });
 }
+
+// Date-only cases deliberately leave density fixtures unchanged.
+async function datedSource(page: Page, authoredAt: string) {
+  await fixture(page);
+  await page.clock.setFixedTime(new Date('2026-10-03T12:00:00Z'));
+  await page.route('**/rpc/golf.v1.RepositoryService/ListCommits', async route => {
+    const input = request(route, ListCommitsRequestSchema);
+    return respond(route, ListCommitsResponseSchema, {
+      path: input.path, commitId: input.ref, repositoryId: input.repositoryId,
+      commits: [{ sha: latest, message: 'Exact latest change', authorName: 'Alex', authoredAt }],
+    });
+  });
+}
+
+for (const [seconds, label] of [
+  [-2, 'just now'], [2, 'in a moment'], [-15, '15 seconds ago'], [-75, '1 minute ago'],
+  [-7200, '2 hours ago'], [-172800, '2 days ago'], [-5184000, '2 months ago'],
+  [-34560000, '1 year ago'], [172800, 'in 2 days'],
+] as const) test(`source edit time renders ${label} with exact timestamp and tooltip`, async ({ page }) => {
+  const authoredAt = new Date(Date.parse('2026-10-03T12:00:00Z') + seconds * 1000).toISOString();
+  await datedSource(page, authoredAt);
+  await page.goto(`/alex/entry-history/tree/${ref}`);
+  const time = entry(page).locator('time');
+  await expect(time).toHaveText(label);
+  await expect(time).toHaveAttribute('datetime', authoredAt);
+  await expect(time).toHaveAttribute('title', await page.evaluate(value => new Date(value).toLocaleString(), authoredAt));
+  await expect(entry(page).locator('.source-entry-commit-date')).toHaveText(label);
+  await expect(entry(page).locator('.source-entry-commit-author')).toHaveCount(0);
+});
+
+test('commit history keeps absolute dates by default', async ({ page }) => {
+  const authoredAt = '2026-10-01T12:00:00Z';
+  await datedSource(page, authoredAt);
+  await page.goto(`/alex/entry-history/commits?ref=${ref}`);
+  const time = page.locator('.commit-list time');
+  await expect(time).toHaveText(await page.evaluate(value => new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }), authoredAt));
+  await expect(time).toHaveAttribute('datetime', authoredAt);
+  await expect(time).toHaveAttribute('title', await page.evaluate(value => new Date(value).toLocaleString(), authoredAt));
+});
+
+test('invalid commit dates retain the unavailable fallback without inventing a relative age', async ({ page }) => {
+  await datedSource(page, 'invalid');
+  await page.goto(`/alex/entry-history/commits?ref=${ref}`);
+  await expect(page.locator('.commit-list')).toContainText('Date unavailable');
+  await expect(page.locator('.commit-list time')).toHaveCount(0);
+});

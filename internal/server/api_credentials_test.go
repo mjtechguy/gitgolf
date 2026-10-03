@@ -104,20 +104,55 @@ func TestApiCredentialBoundary(t *testing.T) {
 			t.Fatal("origin boundary lost")
 		}
 	}
-	// Exactly thirty allowlisted methods: the generated descriptor catches any
-	// accidental broadening when a new procedure is later added to a service.
-	count := 0
+	// Exact reviewed read-only delegation surface, including bounded tags.
+	// Every new generated procedure remains denied unless named here.
+	expected := map[string]bool{
+		golfv1connect.RepositoryActivityServiceWatchRepositoryProcedure:      true,
+		golfv1connect.SessionServiceGetSessionProcedure:                      true,
+		golfv1connect.AuditServiceListAuditEventsProcedure:                   true,
+		golfv1connect.RepositoryServiceListRepositoriesProcedure:             true,
+		golfv1connect.RepositoryServiceGetRepositoryProcedure:                true,
+		golfv1connect.RepositoryServiceGetRepositoryCreationProcedure:        true,
+		golfv1connect.RepositoryServiceListBranchesProcedure:                 true,
+		golfv1connect.RepositoryServiceListCommitsProcedure:                  true,
+		golfv1connect.RepositoryServiceListTagsProcedure:                     true,
+		golfv1connect.RepositoryServiceGetContentsProcedure:                  true,
+		golfv1connect.RepositoryServiceGetCommitDiffProcedure:                true,
+		golfv1connect.RepositoryServiceGetPullRequestDiffProcedure:           true,
+		golfv1connect.RepositoryServiceGetRepositoryComparisonProcedure:      true,
+		golfv1connect.RepositoryServiceListPullRequestCommitsProcedure:       true,
+		golfv1connect.RepositoryServiceListPullRequestChecksProcedure:        true,
+		golfv1connect.RepositoryServiceGetRepositoryImageProcedure:           true,
+		golfv1connect.RepositoryServiceListIssuesProcedure:                   true,
+		golfv1connect.RepositoryServiceGetIssueProcedure:                     true,
+		golfv1connect.RepositoryServiceListPullRequestsProcedure:             true,
+		golfv1connect.RepositoryServiceListIssueCommentsProcedure:            true,
+		golfv1connect.RepositoryServiceGetIssueMutationProcedure:             true,
+		golfv1connect.RepositoryServiceGetPullRequestProcedure:               true,
+		golfv1connect.RepositoryServiceListPullRequestReviewsProcedure:       true,
+		golfv1connect.RepositoryServiceGetPullRequestReviewCommentsProcedure: true,
+		golfv1connect.RepositoryServiceGetPullRequestReviewMutationProcedure: true,
+		golfv1connect.OrganizationServiceListOrganizationsProcedure:          true,
+		golfv1connect.OrganizationServiceGetOrganizationProcedure:            true,
+		golfv1connect.OrganizationServiceListTeamsProcedure:                  true,
+		golfv1connect.OrganizationServiceGetTeamProcedure:                    true,
+		golfv1connect.OrganizationServiceListTeamMembersProcedure:            true,
+		golfv1connect.OrganizationServiceListTeamRepositoriesProcedure:       true,
+	}
 	services := golfv1.File_golf_v1_golf_proto.Services()
 	for i := 0; i < services.Len(); i++ {
 		service := services.Get(i)
 		for j := 0; j < service.Methods().Len(); j++ {
-			if apiReadProcedure("/" + string(service.FullName()) + "/" + string(service.Methods().Get(j).Name())) {
-				count++
+			procedure := "/" + string(service.FullName()) + "/" + string(service.Methods().Get(j).Name())
+			allowed := apiReadProcedure(procedure)
+			if allowed != expected[procedure] {
+				t.Fatal("unexpected bearer delegation contract", procedure, allowed)
 			}
+			delete(expected, procedure)
 		}
 	}
-	if count != 30 {
-		t.Fatal("unexpected bearer allowlist size", count)
+	if len(expected) != 0 {
+		t.Fatal("reviewed API procedures missing from descriptor", expected)
 	}
 	if !apiReadProcedure(golfv1connect.RepositoryServiceGetRepositoryComparisonProcedure) || apiReadProcedure(golfv1connect.RepositoryServiceCreatePullRequestProcedure) {
 		t.Fatal("comparison read versus PR write delegation boundary lost")
