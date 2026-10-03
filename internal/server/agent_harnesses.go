@@ -26,7 +26,7 @@ func selectAgent(ctx context.Context, harness, provider string) (context.Context
 			provider = "opencode"
 		}
 	}
-	if !((harness == "codex" && provider == "openai") || (harness == "claude-code" && provider == "anthropic") || (harness == "opencode" && (provider == "anthropic" || provider == "openai" || provider == "opencode"))) {
+	if !((harness == "codex" && provider == "openai") || (harness == "claude-code" && provider == "anthropic") || (harness == "opencode" && (provider == "anthropic" || provider == "openai" || provider == "opencode" || provider == "opencode-go"))) {
 		return ctx, invalid("Select a supported harness and provider.")
 	}
 	return context.WithValue(ctx, agentSelectionKey{}, agentSelection{harness, provider}), nil

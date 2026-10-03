@@ -41,7 +41,7 @@ func ValidNativeKey(key string) bool {
 	return len(key) >= 20 && len(key) <= 4096 && strings.TrimSpace(key) == key && !strings.ContainsAny(key, "\r\n\x00\t ")
 }
 func NewNative(binary, harness, provider string, initial []byte) (*Native, error) {
-	if !filepath.IsAbs(binary) || !((harness == "claude-code" && provider == "anthropic") || (harness == "opencode" && (provider == "openai" || provider == "anthropic" || provider == "opencode"))) || len(initial) > maxAuth {
+	if !filepath.IsAbs(binary) || !((harness == "claude-code" && provider == "anthropic") || (harness == "opencode" && (provider == "openai" || provider == "anthropic" || provider == "opencode" || provider == "opencode-go"))) || len(initial) > maxAuth {
 		return nil, ErrInvalidCredential
 	}
 	info, e := os.Stat(binary)
@@ -108,10 +108,17 @@ func (p *Native) command(ctx context.Context, args ...string) *exec.Cmd {
 	return cmd
 }
 
-type boundedOutput struct{ bytes.Buffer }
+type boundedOutput struct {
+	bytes.Buffer
+	limit int
+}
 
 func (b *boundedOutput) Write(v []byte) (int, error) {
-	if b.Len()+len(v) > maxAuth {
+	limit := b.limit
+	if limit == 0 {
+		limit = maxAuth
+	}
+	if b.Len()+len(v) > limit {
 		return 0, ErrUnavailable
 	}
 	return b.Buffer.Write(v)
@@ -125,6 +132,17 @@ func (p *Native) output(ctx context.Context, args ...string) ([]byte, error) {
 	e := cmd.Run()
 	if e != nil {
 		return nil, ErrAuthentication
+	}
+	return out.Bytes(), nil
+}
+func (p *Native) modelOutput(ctx context.Context, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	cmd := p.command(ctx, args...)
+	out := boundedOutput{limit: 1024 * 1024}
+	cmd.Stdout = &out
+	if cmd.Run() != nil {
+		return nil, ErrUnavailable
 	}
 	return out.Bytes(), nil
 }

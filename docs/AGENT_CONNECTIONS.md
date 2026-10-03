@@ -6,9 +6,9 @@ Golf account settings (`/account/agents`) manage personal accounts. Instance adm
 | --- | --- | --- | --- |
 | Codex | 0.160.0 | Native ChatGPT device login or OpenAI API key | Native account read; provider-reported plan/quota when available |
 | Claude Code | 2.1.288 | Native `claude auth login --claudeai`, returned authorization code, or Anthropic API key | Native `claude auth status`; email/plan only when reported. No usage endpoint is invented. |
-| OpenCode | 1.18.34 | OpenCode Zen, Anthropic or OpenAI API key, with a distinct connection per provider | Native `opencode auth list` confirms credential-store configuration; no account identity, subscription validity or model access is inferred. |
+| OpenCode | 1.18.34 | OpenCode Zen, Go, Anthropic or OpenAI API key, with a distinct connection per provider | Native `opencode auth list` confirms credential-store configuration; no account identity, subscription validity or model access is inferred. |
 
-OpenCode provider OAuth, Claude Console/cloud/gateway sign-in and additional providers remain separate qualification steps. Golf never imports a host `~/.claude`, `~/.codex`, OpenCode directory or macOS Keychain. Saving an API key is configuration evidence, not proof that the key works or a paid model request succeeded. Native account status is the CLI's report; it is not a promise that every token has been remotely revalidated or renewed.
+`opencode auth login --provider opencode` in the pinned CLI prompts for an API key. Go uses its separate `opencode-go` provider and the documented console/API-key setup; the existence of an auth command does not imply browser OAuth. OpenCode provider OAuth, Claude Console/cloud/gateway sign-in and additional providers remain separate qualification steps. Golf never imports a host `~/.claude`, `~/.codex`, OpenCode directory or macOS Keychain. Saving an API key is configuration evidence, not proof that the key works or a paid model request succeeded. Native account status is the CLI's report; it is not a promise that every token has been remotely revalidated or renewed.
 
 ## Native authentication and persistence
 
@@ -35,3 +35,5 @@ Schema024 is **not** covered by the previously qualified canonical recovery arch
 Run `make check helm-check`, browser account/capability/audit tests, `go test -race ./internal/codexaccount`, and the real-PostgreSQL Codex/additional-harness tests with a private `GOLF_TEST_DATABASE_URL`. `TestPinnedAdditionalNativeAccounts` accepts explicit `GOLF_TEST_CLAUDE_BINARY`/`GOLF_TEST_OPENCODE_BINARY`; invalid keys prove isolated native cache transport/restoration, without inference. Opt-in `TestPinnedClaudeBrowserIssueCancel` additionally requires `GOLF_TEST_NATIVE_BROWSER=1` and only issues/cancels a real authorization link. Human-approved Claude login, refresh/revocation during actual model use, successful repository tasks and managed execution require separate evidence.
 
 Sources: [Claude CLI reference](https://code.claude.com/docs/en/cli-reference), [Claude authentication](https://code.claude.com/docs/en/authentication), [OpenCode providers](https://opencode.ai/docs/providers/), [OpenCode CLI](https://opencode.ai/docs/cli/), [OpenCode server](https://opencode.ai/docs/server/).
+
+Scoped defaults, model/variant discovery, budgets, trigger ceilings and no-dispatch task preview are specified in [AGENT_USAGE.md](AGENT_USAGE.md).

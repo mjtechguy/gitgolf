@@ -190,3 +190,27 @@ func TestPinnedClaudeBrowserIssueCancel(t *testing.T) {
 		t.Fatal("private browser state survived close")
 	}
 }
+
+func TestPinnedOpenCodeGoModels(t *testing.T) {
+	binary := os.Getenv("GOLF_TEST_OPENCODE_BINARY")
+	if binary == "" {
+		t.Skip("explicit packaged native binary required")
+	}
+	p, e := NewNative(binary, "opencode", "opencode-go", nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer p.Close()
+	if _, e = p.StartLogin(context.Background(), LoginRequest{Type: "apiKey", APIKey: "invalid-golf-go-catalog-check-00000"}); e != nil {
+		t.Fatal(e)
+	}
+	models, e := p.Models(context.Background())
+	if e != nil || len(models) == 0 {
+		t.Fatal("native Go catalog unavailable", e)
+	}
+	for _, m := range models {
+		if !strings.HasPrefix(m.ID, "opencode-go/") {
+			t.Fatal("provider catalog crossed account boundary")
+		}
+	}
+}

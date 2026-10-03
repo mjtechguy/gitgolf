@@ -1,3 +1,4 @@
+import { disabledAgentUsage } from './rpc';
 import { test, expect } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import { CodexConnectionSchema, CodexConnectionState, CodexConnectionScope, CodexLoginMethod, GetCodexConnectionRequestSchema, GetCodexConnectionResponseSchema, StartCodexLoginRequestSchema, StartCodexLoginResponseSchema, CompleteAgentLoginRequestSchema, CompleteAgentLoginResponseSchema, RefreshCodexConnectionRequestSchema, RefreshCodexConnectionResponseSchema, DisconnectCodexConnectionRequestSchema, DisconnectCodexConnectionResponseSchema, GetSessionResponseSchema, UserSchema, ListCodexConnectionsResponseSchema } from '../src/gen/golf/v1/golf_pb';
@@ -9,6 +10,7 @@ test('Claude native browser code and OpenCode providers remain separate and keep
  const completions: ReturnType<typeof request<typeof CompleteAgentLoginRequestSchema>>[] = [];
  await page.route('**/rpc/**', route => {
   const method = new URL(route.request().url()).pathname.split('/').at(-1);
+ if(method === 'GetAgentUsage') return disabledAgentUsage(route);
   if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: create(UserSchema, { id: '42', login: 'alex' }) });
   if (method === 'ListCodexConnections') return respond(route, ListCodexConnectionsResponseSchema, { connections: [] });
   if (method === 'GetCodexConnection') {

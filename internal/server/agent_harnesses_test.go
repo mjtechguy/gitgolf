@@ -49,7 +49,7 @@ func TestAgentHarnessConnectionsPostgres(t *testing.T) {
 	bob := localLogin(t, f, "bob")
 	key := "fixture-agent-key-no-provider-value"
 	ids := map[string]bool{}
-	for _, pair := range [][2]string{{"claude-code", "anthropic"}, {"opencode", "opencode"}, {"opencode", "openai"}, {"opencode", "anthropic"}} {
+	for _, pair := range [][2]string{{"claude-code", "anthropic"}, {"opencode", "opencode"}, {"opencode", "openai"}, {"opencode", "anthropic"}, {"opencode", "opencode-go"}} {
 		body, _ := json.Marshal(map[string]any{"harness": pair[0], "provider": pair[1], "method": "CODEX_LOGIN_METHOD_API_KEY", "apiKey": key, "expectedVersion": "0"})
 		current := codexResponse(t, codexCall(f.s, owner, "StartCodexLogin", string(body)))
 		id := current["id"].(string)
@@ -78,7 +78,7 @@ func TestAgentHarnessConnectionsPostgres(t *testing.T) {
 	if row := codexResponse(t, codexCall(f.s, owner, "GetCodexConnection", `{}`)); row["state"] != "CODEX_CONNECTION_STATE_UNCONFIGURED" {
 		t.Fatal("new harness changed Codex")
 	}
-	if list := sharedCodexList(t, f, owner, false); len(list) != 5 {
+	if list := sharedCodexList(t, f, owner, false); len(list) != 6 {
 		t.Fatal("personal harness inventory omitted", len(list))
 	}
 	if list := sharedCodexList(t, f, bob, false); len(list) != 1 {

@@ -1,3 +1,4 @@
+import { disabledAgentUsage } from './rpc';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
@@ -8,6 +9,7 @@ async function backend(page: Page, admin = true) {
   const state = { user: create(UserSchema, { id: '9007199254740993', login: 'alex', fullName: 'Alex', isInstanceAdmin: admin }), settings: create(RepositorySettingsSchema, { repositoryId: '9007199254740997', ownerId: '9007199254740993', description: 'Original description', defaultBranch: 'main', hasIssues: true, hasWiki: false, hasPullRequests: true, canEdit: admin, revision: 'original-revision' }), writes: [] as unknown[], dropped: false, denied: false, barrier: undefined as Promise<void> | undefined };
   await page.route('**/rpc/**', async (route) => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
+ if(method === 'GetAgentUsage') return disabledAgentUsage(route);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: state.user });
     if (method === 'GetProfile') return respond(route, GetProfileResponseSchema, { profile: { userId: state.user.id, login: state.user.login, fullName: state.user.fullName, revision: 'profile-revision', canEdit: true } });

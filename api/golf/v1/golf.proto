@@ -1362,3 +1362,92 @@ message SetCodexConnectionAccessResponse { CodexConnection connection = 1; }
 
 message CompleteAgentLoginRequest { string connection_id = 1; string expected_version = 2; string login_id = 3; string authorization_code = 4; }
 message CompleteAgentLoginResponse { CodexConnection connection = 1; }
+
+// Saved agent defaults and policy ceilings; this service never dispatches tasks.
+service AgentUsageService {
+ rpc GetAgentUsage(GetAgentUsageRequest) returns (GetAgentUsageResponse);
+ rpc SaveAgentUsage(SaveAgentUsageRequest) returns (SaveAgentUsageResponse);
+ rpc ListAgentModels(ListAgentModelsRequest) returns (ListAgentModelsResponse);
+ rpc PreviewAgentTask(PreviewAgentTaskRequest) returns (PreviewAgentTaskResponse);
+}
+enum AgentUsageScope {
+ AGENT_USAGE_SCOPE_UNSPECIFIED = 0;
+ AGENT_USAGE_SCOPE_PERSONAL = 1;
+ AGENT_USAGE_SCOPE_INSTANCE = 2;
+ AGENT_USAGE_SCOPE_ORGANIZATION = 3;
+ AGENT_USAGE_SCOPE_REPOSITORY = 4;
+}
+message AgentUsageConfig {
+ bool enabled = 1;
+ string connection_id = 2;
+ string model_id = 3;
+ string reasoning = 4;
+ string instructions = 5;
+ repeated string triggers = 6;
+ bool allow_all_models = 7;
+ repeated string allowed_models = 8;
+ uint32 timeout_seconds = 9;
+ uint32 token_budget = 10;
+ uint32 spend_limit_cents = 11;
+ uint32 max_concurrent = 12;
+ bool allow_task_overrides = 13;
+}
+message AgentUsageSettings {
+ AgentUsageScope scope = 1;
+ string scope_id = 2;
+ string revision = 3;
+ string authority_revision = 4;
+ bool can_edit = 5;
+ AgentUsageConfig config = 6;
+ AgentUsageConfig effective = 7;
+ repeated string blocked_reasons = 8;
+ bool execution_available = 9;
+}
+message GetAgentUsageRequest {
+ AgentUsageScope scope = 1;
+ string organization = 2;
+ RepositoryKey repository = 3;
+}
+message GetAgentUsageResponse { AgentUsageSettings settings = 1; }
+message SaveAgentUsageRequest {
+ AgentUsageScope scope = 1;
+ string organization = 2;
+ RepositoryKey repository = 3;
+ string scope_id = 4;
+ string expected_revision = 5;
+ string expected_authority_revision = 6;
+ AgentUsageConfig config = 7;
+}
+message SaveAgentUsageResponse { AgentUsageSettings settings = 1; }
+message AgentModel {
+ string id = 1;
+ string name = 2;
+ repeated string reasoning = 3;
+ string source = 4;
+ bool access_verified = 5;
+}
+message ListAgentModelsRequest { string connection_id = 1; bool refresh = 2; }
+message ListAgentModelsResponse {
+ repeated AgentModel models = 1;
+ string checked_at = 2;
+ string reason = 3;
+}
+
+message AgentTaskSelection {
+ string connection_id = 1;
+ string model_id = 2;
+ string reasoning = 3;
+ string instructions = 4;
+ string trigger = 5;
+ optional uint32 timeout_seconds = 6;
+ optional uint32 token_budget = 7;
+ optional uint32 spend_limit_cents = 8;
+ optional uint32 max_concurrent = 9;
+}
+message PreviewAgentTaskRequest {
+ AgentUsageScope scope = 1;
+ string organization = 2;
+ RepositoryKey repository = 3;
+ AgentTaskSelection selection = 4;
+}
+message PreviewAgentTaskResponse { AgentUsageSettings settings = 1; }

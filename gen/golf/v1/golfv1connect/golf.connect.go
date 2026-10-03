@@ -64,6 +64,8 @@ const (
 	AutomationGrantServiceName = "golf.v1.AutomationGrantService"
 	// CodexAccountServiceName is the fully-qualified name of the CodexAccountService service.
 	CodexAccountServiceName = "golf.v1.CodexAccountService"
+	// AgentUsageServiceName is the fully-qualified name of the AgentUsageService service.
+	AgentUsageServiceName = "golf.v1.AgentUsageService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -337,6 +339,18 @@ const (
 	// CodexAccountServiceDisconnectCodexConnectionProcedure is the fully-qualified name of the
 	// CodexAccountService's DisconnectCodexConnection RPC.
 	CodexAccountServiceDisconnectCodexConnectionProcedure = "/golf.v1.CodexAccountService/DisconnectCodexConnection"
+	// AgentUsageServiceGetAgentUsageProcedure is the fully-qualified name of the AgentUsageService's
+	// GetAgentUsage RPC.
+	AgentUsageServiceGetAgentUsageProcedure = "/golf.v1.AgentUsageService/GetAgentUsage"
+	// AgentUsageServiceSaveAgentUsageProcedure is the fully-qualified name of the AgentUsageService's
+	// SaveAgentUsage RPC.
+	AgentUsageServiceSaveAgentUsageProcedure = "/golf.v1.AgentUsageService/SaveAgentUsage"
+	// AgentUsageServiceListAgentModelsProcedure is the fully-qualified name of the AgentUsageService's
+	// ListAgentModels RPC.
+	AgentUsageServiceListAgentModelsProcedure = "/golf.v1.AgentUsageService/ListAgentModels"
+	// AgentUsageServicePreviewAgentTaskProcedure is the fully-qualified name of the AgentUsageService's
+	// PreviewAgentTask RPC.
+	AgentUsageServicePreviewAgentTaskProcedure = "/golf.v1.AgentUsageService/PreviewAgentTask"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -3519,4 +3533,152 @@ func (UnimplementedCodexAccountServiceHandler) RefreshCodexConnection(context.Co
 
 func (UnimplementedCodexAccountServiceHandler) DisconnectCodexConnection(context.Context, *connect.Request[v1.DisconnectCodexConnectionRequest]) (*connect.Response[v1.DisconnectCodexConnectionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.CodexAccountService.DisconnectCodexConnection is not implemented"))
+}
+
+// AgentUsageServiceClient is a client for the golf.v1.AgentUsageService service.
+type AgentUsageServiceClient interface {
+	GetAgentUsage(context.Context, *connect.Request[v1.GetAgentUsageRequest]) (*connect.Response[v1.GetAgentUsageResponse], error)
+	SaveAgentUsage(context.Context, *connect.Request[v1.SaveAgentUsageRequest]) (*connect.Response[v1.SaveAgentUsageResponse], error)
+	ListAgentModels(context.Context, *connect.Request[v1.ListAgentModelsRequest]) (*connect.Response[v1.ListAgentModelsResponse], error)
+	PreviewAgentTask(context.Context, *connect.Request[v1.PreviewAgentTaskRequest]) (*connect.Response[v1.PreviewAgentTaskResponse], error)
+}
+
+// NewAgentUsageServiceClient constructs a client for the golf.v1.AgentUsageService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewAgentUsageServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AgentUsageServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	agentUsageServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("AgentUsageService").Methods()
+	return &agentUsageServiceClient{
+		getAgentUsage: connect.NewClient[v1.GetAgentUsageRequest, v1.GetAgentUsageResponse](
+			httpClient,
+			baseURL+AgentUsageServiceGetAgentUsageProcedure,
+			connect.WithSchema(agentUsageServiceMethods.ByName("GetAgentUsage")),
+			connect.WithClientOptions(opts...),
+		),
+		saveAgentUsage: connect.NewClient[v1.SaveAgentUsageRequest, v1.SaveAgentUsageResponse](
+			httpClient,
+			baseURL+AgentUsageServiceSaveAgentUsageProcedure,
+			connect.WithSchema(agentUsageServiceMethods.ByName("SaveAgentUsage")),
+			connect.WithClientOptions(opts...),
+		),
+		listAgentModels: connect.NewClient[v1.ListAgentModelsRequest, v1.ListAgentModelsResponse](
+			httpClient,
+			baseURL+AgentUsageServiceListAgentModelsProcedure,
+			connect.WithSchema(agentUsageServiceMethods.ByName("ListAgentModels")),
+			connect.WithClientOptions(opts...),
+		),
+		previewAgentTask: connect.NewClient[v1.PreviewAgentTaskRequest, v1.PreviewAgentTaskResponse](
+			httpClient,
+			baseURL+AgentUsageServicePreviewAgentTaskProcedure,
+			connect.WithSchema(agentUsageServiceMethods.ByName("PreviewAgentTask")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// agentUsageServiceClient implements AgentUsageServiceClient.
+type agentUsageServiceClient struct {
+	getAgentUsage    *connect.Client[v1.GetAgentUsageRequest, v1.GetAgentUsageResponse]
+	saveAgentUsage   *connect.Client[v1.SaveAgentUsageRequest, v1.SaveAgentUsageResponse]
+	listAgentModels  *connect.Client[v1.ListAgentModelsRequest, v1.ListAgentModelsResponse]
+	previewAgentTask *connect.Client[v1.PreviewAgentTaskRequest, v1.PreviewAgentTaskResponse]
+}
+
+// GetAgentUsage calls golf.v1.AgentUsageService.GetAgentUsage.
+func (c *agentUsageServiceClient) GetAgentUsage(ctx context.Context, req *connect.Request[v1.GetAgentUsageRequest]) (*connect.Response[v1.GetAgentUsageResponse], error) {
+	return c.getAgentUsage.CallUnary(ctx, req)
+}
+
+// SaveAgentUsage calls golf.v1.AgentUsageService.SaveAgentUsage.
+func (c *agentUsageServiceClient) SaveAgentUsage(ctx context.Context, req *connect.Request[v1.SaveAgentUsageRequest]) (*connect.Response[v1.SaveAgentUsageResponse], error) {
+	return c.saveAgentUsage.CallUnary(ctx, req)
+}
+
+// ListAgentModels calls golf.v1.AgentUsageService.ListAgentModels.
+func (c *agentUsageServiceClient) ListAgentModels(ctx context.Context, req *connect.Request[v1.ListAgentModelsRequest]) (*connect.Response[v1.ListAgentModelsResponse], error) {
+	return c.listAgentModels.CallUnary(ctx, req)
+}
+
+// PreviewAgentTask calls golf.v1.AgentUsageService.PreviewAgentTask.
+func (c *agentUsageServiceClient) PreviewAgentTask(ctx context.Context, req *connect.Request[v1.PreviewAgentTaskRequest]) (*connect.Response[v1.PreviewAgentTaskResponse], error) {
+	return c.previewAgentTask.CallUnary(ctx, req)
+}
+
+// AgentUsageServiceHandler is an implementation of the golf.v1.AgentUsageService service.
+type AgentUsageServiceHandler interface {
+	GetAgentUsage(context.Context, *connect.Request[v1.GetAgentUsageRequest]) (*connect.Response[v1.GetAgentUsageResponse], error)
+	SaveAgentUsage(context.Context, *connect.Request[v1.SaveAgentUsageRequest]) (*connect.Response[v1.SaveAgentUsageResponse], error)
+	ListAgentModels(context.Context, *connect.Request[v1.ListAgentModelsRequest]) (*connect.Response[v1.ListAgentModelsResponse], error)
+	PreviewAgentTask(context.Context, *connect.Request[v1.PreviewAgentTaskRequest]) (*connect.Response[v1.PreviewAgentTaskResponse], error)
+}
+
+// NewAgentUsageServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewAgentUsageServiceHandler(svc AgentUsageServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	agentUsageServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("AgentUsageService").Methods()
+	agentUsageServiceGetAgentUsageHandler := connect.NewUnaryHandler(
+		AgentUsageServiceGetAgentUsageProcedure,
+		svc.GetAgentUsage,
+		connect.WithSchema(agentUsageServiceMethods.ByName("GetAgentUsage")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentUsageServiceSaveAgentUsageHandler := connect.NewUnaryHandler(
+		AgentUsageServiceSaveAgentUsageProcedure,
+		svc.SaveAgentUsage,
+		connect.WithSchema(agentUsageServiceMethods.ByName("SaveAgentUsage")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentUsageServiceListAgentModelsHandler := connect.NewUnaryHandler(
+		AgentUsageServiceListAgentModelsProcedure,
+		svc.ListAgentModels,
+		connect.WithSchema(agentUsageServiceMethods.ByName("ListAgentModels")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentUsageServicePreviewAgentTaskHandler := connect.NewUnaryHandler(
+		AgentUsageServicePreviewAgentTaskProcedure,
+		svc.PreviewAgentTask,
+		connect.WithSchema(agentUsageServiceMethods.ByName("PreviewAgentTask")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.AgentUsageService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case AgentUsageServiceGetAgentUsageProcedure:
+			agentUsageServiceGetAgentUsageHandler.ServeHTTP(w, r)
+		case AgentUsageServiceSaveAgentUsageProcedure:
+			agentUsageServiceSaveAgentUsageHandler.ServeHTTP(w, r)
+		case AgentUsageServiceListAgentModelsProcedure:
+			agentUsageServiceListAgentModelsHandler.ServeHTTP(w, r)
+		case AgentUsageServicePreviewAgentTaskProcedure:
+			agentUsageServicePreviewAgentTaskHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedAgentUsageServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedAgentUsageServiceHandler struct{}
+
+func (UnimplementedAgentUsageServiceHandler) GetAgentUsage(context.Context, *connect.Request[v1.GetAgentUsageRequest]) (*connect.Response[v1.GetAgentUsageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AgentUsageService.GetAgentUsage is not implemented"))
+}
+
+func (UnimplementedAgentUsageServiceHandler) SaveAgentUsage(context.Context, *connect.Request[v1.SaveAgentUsageRequest]) (*connect.Response[v1.SaveAgentUsageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AgentUsageService.SaveAgentUsage is not implemented"))
+}
+
+func (UnimplementedAgentUsageServiceHandler) ListAgentModels(context.Context, *connect.Request[v1.ListAgentModelsRequest]) (*connect.Response[v1.ListAgentModelsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AgentUsageService.ListAgentModels is not implemented"))
+}
+
+func (UnimplementedAgentUsageServiceHandler) PreviewAgentTask(context.Context, *connect.Request[v1.PreviewAgentTaskRequest]) (*connect.Response[v1.PreviewAgentTaskResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AgentUsageService.PreviewAgentTask is not implemented"))
 }

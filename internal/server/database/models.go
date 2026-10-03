@@ -19,6 +19,33 @@ type GolfActiveObjectConnection struct {
 	Revision  int64
 }
 
+type GolfAgentModelCatalog struct {
+	ConnectionID      uuid.UUID
+	ConnectionVersion int64
+	Models            json.RawMessage
+	CheckedAt         time.Time
+}
+
+type GolfAgentUsageEvent struct {
+	ID          int64
+	ForgeURL    string
+	Scope       string
+	ScopeID     string
+	Revision    int64
+	ActorUserID int64
+	CreatedAt   time.Time
+}
+
+type GolfAgentUsageSetting struct {
+	ForgeURL  string
+	Scope     string
+	ScopeID   string
+	OwnerID   int64
+	Revision  int64
+	Config    json.RawMessage
+	UpdatedAt time.Time
+}
+
 type GolfApiCredential struct {
 	ID              int64
 	UserID          int64
