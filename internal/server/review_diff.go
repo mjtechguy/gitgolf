@@ -163,6 +163,15 @@ func reviewSidePath(s, prefix string) (string, bool, error) {
 	if s == "/dev/null" {
 		return "", true, nil
 	}
+	// Native Git terminates an unquoted whitespace-containing side path with
+	// an empty TAB delimiter. Admit exactly that delimiter, never timestamps,
+	// additional delimiters or literal path controls.
+	if tab := strings.IndexByte(s, '\t'); tab >= 0 {
+		if tab != len(s)-1 {
+			return "", false, errInvalidForgeResponse
+		}
+		s = s[:tab]
+	}
 	p, e := reviewGitPath(s)
 	if e != nil || !strings.HasPrefix(p, prefix) {
 		return "", false, errInvalidForgeResponse

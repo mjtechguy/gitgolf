@@ -413,3 +413,29 @@ func TestReviewComparisonNativeContextBinding(t *testing.T) {
 		t.Fatal("trailing source space repaired")
 	}
 }
+
+func TestReviewComparisonNativeEmptySideDelimiter(t *testing.T) {
+	const path = "src/context ü.txt"
+	patch := "diff --git a/" + path + " b/" + path + "\nindex 1234..abcd 100644\n--- a/" + path + "\t\n+++ b/" + path + "\t\n@@ -1,3 +1,3 @@\n context\n-old\n+new\n stable\n"
+	c, err := parseReviewComparison(patch)
+	if err != nil || len(c.files) != 1 || c.files[0].oldPath != path || c.files[0].newPath != path || !c.Allows(path, 2) || c.Allows(path+"\t", 2) {
+		t.Fatalf("native empty delimiter changed literal identities or admission: %v", err)
+	}
+	h := c.files[0].hunks[0]
+	if h.rows[1].oldLine != 2 || h.rows[2].newLine != 2 || h.rows[2].text != "new" || !c.MatchesNativeContext(path, 2, "@@ -1,3 +1,3 @@\n context\n-old\n+new\n stable\n") {
+		t.Fatal("native empty delimiter changed retained coordinates/context")
+	}
+	for _, suffix := range []string{"\t\t", "\t2026-10-03 12:00:00", "\tother/path", "\t ", "\t\r", "\tother/path\t"} {
+		for _, side := range []string{"--- a/", "+++ b/"} {
+			bad := strings.Replace(patch, side+path+"\t\n", side+path+suffix+"\n", 1)
+			if parsed, err := parseReviewComparison(bad); err == nil || parsed.Allows(path, 2) {
+				t.Fatalf("nonempty/ambiguous side suffix admitted: %q %q", side, suffix)
+			}
+		}
+	}
+	// An encoded TAB remains a forbidden path byte, even with an empty delimiter.
+	quotedControl := "diff --git a/ordinary b/ordinary\n--- a/ordinary\n+++ \"b/ordinary\\t\"\t\n@@ -1 +1 @@\n-old\n+new\n"
+	if _, err := parseReviewComparison(quotedControl); err == nil {
+		t.Fatal("quoted path control admitted as a side delimiter")
+	}
+}
