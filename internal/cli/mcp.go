@@ -41,6 +41,7 @@ var mcpReads = []mcpRead{
 	{"golf_issue_operation", "Inspect your recorded issue/comment operation by key. Unknown/rejected is not success. Never posts, retries or adopts an outcome.", "issue operation", []string{"idempotency_key"}, nil},
 	{"golf_pr_list", "List pull requests. Native list heads are retained snapshots, not freshness evidence.", "pr list", []string{"repository"}, []string{"state", "page", "limit"}},
 	{"golf_pr_view", "Read pull-request metadata. Native review/check state does not establish Golf merge eligibility.", "pr view", []string{"repository", "number"}, nil},
+	{"golf_pr_diff", "Read a bounded native PR diff with exact repository/PR IDs and selected base/head commits. mergeBaseCommitId identifies the old side, distinct from base tip. No lookup, pagination, completeness or merge readiness.", "pr diff", []string{"repository", "number"}, []string{"repository_id", "pull_request_id", "base_commit_id", "head_commit_id"}},
 	{"golf_pr_reviews", "Read native reviews; continue page.nextPage even on an empty filtered page. No Golf approval eligibility claim.", "pr reviews", []string{"repository", "number"}, []string{"page", "limit"}},
 	{"golf_pr_review_comments", "Read an entire bounded native review-comment collection at explicit repository/PR/review IDs and reviewed commit. No inferred threads, pagination, source freshness or merge eligibility.", "pr review-comments", []string{"repository", "number", "review_id"}, []string{"repository_id", "pull_request_id", "review_commit_id"}},
 	{"golf_org_list", "List your current native organization memberships.", "org list", nil, []string{"page", "limit"}},
@@ -81,7 +82,7 @@ func (tool mcpRead) schema() map[string]any {
 			field["minLength"] = 3
 		case "team_id", "before_id", "snapshot_id", "review_id", "repository_id", "pull_request_id":
 			field["pattern"] = "^[1-9][0-9]*$"
-		case "commit_id", "review_commit_id":
+		case "commit_id", "review_commit_id", "base_commit_id", "head_commit_id":
 			field["pattern"] = commitID.String()
 		case "idempotency_key":
 			field["pattern"] = creationKey.String()
@@ -89,7 +90,7 @@ func (tool mcpRead) schema() map[string]any {
 		properties[key] = field
 	}
 	required := tool.positions
-	if tool.command == "pr review-comments" {
+	if tool.command == "pr review-comments" || tool.command == "pr diff" {
 		required = append(append([]string{}, tool.positions...), tool.flags...)
 	}
 	if required == nil {
@@ -151,8 +152,8 @@ func (tool mcpRead) parse(raw json.RawMessage) (command, error) {
 	for _, key := range tool.flags {
 		if value, ok := values[key]; ok {
 			flag := strings.ReplaceAll(key, "_", "-")
-			if tool.command == "pr review-comments" {
-				flag = map[string]string{"repository_id": "repo-id", "pull_request_id": "pull-id", "review_commit_id": "review-commit"}[key]
+			if tool.command == "pr review-comments" || tool.command == "pr diff" {
+				flag = map[string]string{"repository_id": "repo-id", "pull_request_id": "pull-id", "review_commit_id": "review-commit", "base_commit_id": "base", "head_commit_id": "head"}[key]
 			}
 			args = append(args, "--"+flag, value)
 		}

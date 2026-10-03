@@ -120,3 +120,9 @@ local-agents-up: local-up
 .PHONY: qualify-path-history
 qualify-path-history: cli
 	python3 scripts/path-history-smoke.py
+
+.PHONY: qualify-pull-diff-binding qualify-pull-inline-native
+qualify-pull-diff-binding: cli
+	python3 scripts/pull-diff-binding-smoke.py
+qualify-pull-inline-native:
+	python3 scripts/pull-inline-write-native-probe.py

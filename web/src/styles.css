@@ -520,7 +520,8 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .markdown-body th,.markdown-body td { border: 1px solid var(--line); padding: .5rem .75rem; }
 .markdown-body input[type=checkbox] { margin-right: .5rem; }
 .markdown-image-placeholder { color: var(--muted); font-size: .875rem; }
-.content-view-controls { gap:12px; display: flex; justify-content: flex-end; padding: .5rem 1rem; border-bottom: 1px solid var(--line); }
+.content-view-controls { gap:12px; display:flex; flex-wrap:wrap; min-width:0; max-width:100%; justify-content:flex-end; padding:.5rem 1rem; border-bottom:1px solid var(--line); }
+.content-view-controls > button { flex-shrink:0; white-space:nowrap; }
 :root { --syntax-keyword:#8c2454; --syntax-string:#27632c; --syntax-number:#80560b; --syntax-comment:#61616d; }
 :root[data-theme=dark] { --syntax-keyword:#e993b5; --syntax-string:#9acc91; --syntax-number:#dfbc78; --syntax-comment:#a4a4ae; }
 @media(prefers-color-scheme:dark) { :root[data-theme=system] { --syntax-keyword:#e993b5; --syntax-string:#9acc91; --syntax-number:#dfbc78; --syntax-comment:#a4a4ae; } }

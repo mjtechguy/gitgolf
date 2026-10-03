@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -20,37 +21,26 @@ const maxCommitDiffParents = 1000
 // Native PR output is a merge-base comparison. Bind it to the selected PR
 // before and after the provider wait. This observes freshness, not an atomic
 // native lock or trusted merge/check evidence.
-func (s *Server) getPullRequestDiff(ctx context.Context, value string, token forgeCredential, key repositoryKey, number uint32, baseID, headID string) (*golfv1.GetPullRequestDiffResponse, error) {
-	if err := pullNumber(number); err != nil {
-		return nil, err
-	}
-	if !objectID.MatchString(baseID) || !objectID.MatchString(headID) || len(baseID) != len(headID) {
-		return nil, invalid("Select full lowercase base and head commit IDs.")
-	}
+func (s *Server) getPullRequestDiff(ctx context.Context, session string, token forgeCredential, m *golfv1.GetPullRequestDiffRequest) (*golfv1.GetPullRequestDiffResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
 	var result *golfv1.GetPullRequestDiffResponse
-	err := s.withRepositoryRead(ctx, value, token, key, func(base string, repo Repository) error {
-		before, err := s.readPull(ctx, token, base, repo, number)
-		if err != nil {
-			return err
-		}
-		if before.Base.SHA != baseID || before.Head.SHA != headID {
+	selected := &golfv1.PullRequestSelection{Repository: m.Repository, RepositoryId: m.RepositoryId, PullRequestId: m.PullRequestId, Number: m.Number, BaseCommitId: m.BaseCommitId, HeadCommitId: m.HeadCommitId}
+	err := s.withPullSelection(ctx, session, token, selected, func(base string, repo Repository, pull forgePull) error {
+		if pull.MergeBase == "" {
 			return errPullSnapshotChanged
 		}
-		diff, err := s.readCommitDiff(ctx, base+"/pulls/"+strconv.FormatUint(uint64(number), 10)+".diff", token)
+		diff, err := s.readCommitDiff(ctx, base+"/pulls/"+strconv.FormatUint(uint64(m.Number), 10)+".diff", token)
 		if err != nil {
 			return err
 		}
-		after, err := s.readPull(ctx, token, base, repo, number)
-		if err != nil {
-			return err
-		}
-		if after.ID != before.ID || after.Base.RepositoryID != before.Base.RepositoryID || after.Head.RepositoryID != before.Head.RepositoryID || after.Base.SHA != baseID || after.Head.SHA != headID {
-			return errPullSnapshotChanged
-		}
-		result = &golfv1.GetPullRequestDiffResponse{BaseCommitId: baseID, HeadCommitId: headID, RawDiff: diff, ByteSize: uint32(len(diff))}
+		result = &golfv1.GetPullRequestDiffResponse{RepositoryId: m.RepositoryId, PullRequestId: m.PullRequestId, BaseCommitId: m.BaseCommitId, HeadCommitId: m.HeadCommitId, MergeBaseCommitId: pull.MergeBase, RawDiff: diff, ByteSize: uint32(len(diff))}
 		return nil
 	})
-	return result, err
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // getCommitDiff fixes both sides to commit objects. Gitea 1.27.3's supported

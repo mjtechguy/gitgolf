@@ -19,9 +19,29 @@ func newPullDiffFixture(t *testing.T) *pullFixture {
 	t.Helper()
 	f := &pullFixture{db: testDatabase(t), entered: make(chan struct{}, 1), resume: make(chan struct{})}
 	f.mode.Store("")
-	var reads atomic.Int32
+	var reads, retainedReads atomic.Int32
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mode := f.mode.Load().(string)
+		if r.URL.Path == "/api/v1/repos/alice/private/commits" {
+			if r.Method != "GET" || r.URL.Query().Get("sha") != "refs/pull/7/head" || r.URL.Query().Get("limit") != "1" || r.URL.Query().Get("page") != "1" || r.URL.Query().Get("files") != "false" || r.URL.Query().Get("verification") != "false" || r.URL.Query().Get("stat") != "false" {
+				t.Error("unexpected retained-head request")
+			}
+			n := retainedReads.Add(1)
+			if mode == "retained-denied" {
+				w.WriteHeader(403)
+				return
+			}
+			rows := []forgeCommit{{SHA: strings.Repeat("a", 40)}}
+			if mode == "retained-missing" {
+				rows = []forgeCommit{}
+			}
+			if mode == "retained-wrong" || mode == "retained-drift" && n > 1 {
+				rows[0].SHA = strings.Repeat("d", 40)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(rows)
+			return
+		}
 		if r.URL.Path == "/api/v1/repos/alice/private/pulls/7.diff" {
 			if r.Method != http.MethodGet || r.Header.Get("Accept") != "text/plain" || r.URL.RawQuery != "" {
 				t.Error("unexpected native diff request")
@@ -49,16 +69,31 @@ func newPullDiffFixture(t *testing.T) *pullFixture {
 			_, _ = w.Write([]byte(diffFixtureText))
 			return
 		}
-		if r.URL.Path == "/api/v1/repos/alice/private/pulls/7" && (mode == "changed-head" || mode == "changed-base") {
+		if r.URL.Path == "/api/v1/repos/alice/private/pulls/7" {
 			recorder := httptest.NewRecorder()
 			f.serveProvider(recorder, r)
 			var row forgePull
 			_ = json.Unmarshal(recorder.Body.Bytes(), &row)
+			row.MergeBase = strings.Repeat("c", 40)
+			if mode == "missing-merge-base" {
+				row.MergeBase = ""
+			}
+			if mode == "bad-merge-base" {
+				row.MergeBase = "main"
+			}
+			if mode == "wrong-hash-family" {
+				row.MergeBase = strings.Repeat("c", 64)
+			}
 			if reads.Add(1) > 1 {
-				if mode == "changed-head" {
+				switch mode {
+				case "changed-head":
 					row.Head.SHA = strings.Repeat("c", 40)
-				} else {
+				case "changed-base":
 					row.Base.SHA = strings.Repeat("c", 40)
+				case "changed-merge-base":
+					row.MergeBase = strings.Repeat("d", 40)
+				case "changed-pull-id":
+					row.ID++
 				}
 			}
 			_ = json.NewEncoder(w).Encode(row)
@@ -106,7 +141,7 @@ func TestPullDiffSessionWaitPostgres(t *testing.T) {
 }
 
 func pullDiffRequest() *connect.Request[golfv1.GetPullRequestDiffRequest] {
-	return connect.NewRequest(&golfv1.GetPullRequestDiffRequest{Repository: pullKey, Number: 7, BaseCommitId: strings.Repeat("b", 40), HeadCommitId: strings.Repeat("a", 40)})
+	return connect.NewRequest(&golfv1.GetPullRequestDiffRequest{Repository: pullKey, RepositoryId: "11", PullRequestId: "9007199254740993", Number: 7, BaseCommitId: strings.Repeat("b", 40), HeadCommitId: strings.Repeat("a", 40)})
 }
 
 func TestPullDiffRPCPostgres(t *testing.T) {
@@ -117,7 +152,7 @@ func TestPullDiffRPCPostgres(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if response.Msg.RawDiff != diffFixtureText || response.Msg.ByteSize != uint32(len(diffFixtureText)) || response.Msg.HeadCommitId != strings.Repeat("a", 40) || response.Msg.BaseCommitId != strings.Repeat("b", 40) || response.Header().Get("Cache-Control") != "no-store" {
+			if response.Msg.RepositoryId != "11" || response.Msg.PullRequestId != "9007199254740993" || response.Msg.MergeBaseCommitId != strings.Repeat("c", 40) || response.Msg.MergeBaseCommitId == response.Msg.BaseCommitId || response.Msg.RawDiff != diffFixtureText || response.Msg.ByteSize != uint32(len(diffFixtureText)) || response.Msg.HeadCommitId != strings.Repeat("a", 40) || response.Msg.BaseCommitId != strings.Repeat("b", 40) || response.Header().Get("Cache-Control") != "no-store" {
 				t.Fatal("PR snapshot/diff/private response binding lost")
 			}
 		})
@@ -127,6 +162,9 @@ func TestPullDiffRPCPostgres(t *testing.T) {
 func TestPullDiffDenialsPostgres(t *testing.T) {
 	for mode, want := range map[string]connect.Code{
 		"changed-head": connect.CodeFailedPrecondition, "changed-base": connect.CodeFailedPrecondition,
+		"changed-pull-id": connect.CodeFailedPrecondition, "changed-merge-base": connect.CodeFailedPrecondition,
+		"missing-merge-base": connect.CodeFailedPrecondition, "bad-merge-base": connect.CodeUnavailable, "wrong-hash-family": connect.CodeUnavailable,
+		"retained-missing": connect.CodeFailedPrecondition, "retained-wrong": connect.CodeFailedPrecondition, "retained-drift": connect.CodeFailedPrecondition, "retained-denied": connect.CodePermissionDenied,
 		"repository-denied": connect.CodeNotFound, "access-removed": connect.CodeNotFound,
 		"repository-rebound": connect.CodeUnavailable, "wrong-base": connect.CodeUnavailable,
 		"wrong-identity": connect.CodeUnauthenticated, "revoked": connect.CodeUnauthenticated,
@@ -154,6 +192,35 @@ func TestPullDiffDenialsPostgres(t *testing.T) {
 		request.Msg.HeadCommitId = id
 		if _, err := client.GetPullRequestDiff(context.Background(), request); connect.CodeOf(err) != connect.CodeInvalidArgument {
 			t.Fatal("invalid snapshot accepted", err)
+		}
+	}
+}
+
+func TestPullDiffExactIdentityPostgres(t *testing.T) {
+	f := newPullDiffFixture(t)
+	client := f.client(t, f.session(t, "pat"))
+	for _, field := range []string{"repository", "pull"} {
+		for _, value := range []string{"", "0", "01", "+11", "-1", "9223372036854775808"} {
+			input := pullDiffRequest()
+			if field == "repository" {
+				input.Msg.RepositoryId = value
+			} else {
+				input.Msg.PullRequestId = value
+			}
+			result, err := client.GetPullRequestDiff(context.Background(), input)
+			if connect.CodeOf(err) != connect.CodeInvalidArgument || result != nil {
+				t.Fatal("noncanonical target accepted", field, value, err)
+			}
+		}
+		input := pullDiffRequest()
+		if field == "repository" {
+			input.Msg.RepositoryId = "12"
+		} else {
+			input.Msg.PullRequestId = "9007199254740994"
+		}
+		result, err := client.GetPullRequestDiff(context.Background(), input)
+		if connect.CodeOf(err) != connect.CodeFailedPrecondition || result != nil {
+			t.Fatal("wrong native target accepted", field, err)
 		}
 	}
 }

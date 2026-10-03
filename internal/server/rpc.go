@@ -421,7 +421,7 @@ func (s *Server) GetPullRequestDiff(ctx context.Context, req *connect.Request[go
 	if err != nil {
 		return nil, err
 	}
-	result, err := s.getPullRequestDiff(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), req.Msg.Number, req.Msg.BaseCommitId, req.Msg.HeadCommitId)
+	result, err := s.getPullRequestDiff(ctx, s.cookieValue(req.Header()), token, req.Msg)
 	if err != nil {
 		return nil, rpcError(err)
 	}

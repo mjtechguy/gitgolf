@@ -10,7 +10,7 @@ Directory presentation is bounded to32 levels; deeper names remain visible as a 
 
 Text search, file-type checkboxes and All/Not viewed/Viewed only operate on loaded native entries. File types use the final filename suffix, case folded; suffix-less and simple dotfiles share No extension. The status reports Showing X of Y changed files while filtering. Clear/reset restores the loaded inventory without changing source commits, native text or per-file anchors. Filtered-out entries are not claimed absent from the repository or PR.
 
-Viewed remains private in-memory state for this mounted actor/repository/comparison. It collapses a file and can be undone. It is not server-persisted, a submitted review or an approval. Reload, a new comparison, account change and access denial discard it. PR keys include immutable repository and PR IDs plus the selected base/head; commit keys include immutable repository ID and exact commit. Session/authentication and private query cleanup remain separate.
+Viewed remains private in-memory state for this mounted actor/repository/comparison. It collapses a file and can be undone. It is not server-persisted, a submitted review or an approval. Reload, a new comparison, account change and access denial discard it. PR keys include immutable repository and PR IDs plus the selected base tip, actual merge base and head; line anchors bind the actual merge-base/head pair, not the base tip; commit keys include immutable repository ID and exact commit. Session/authentication and private query cleanup remain separate.
 
 ## Display preferences and syntax
 

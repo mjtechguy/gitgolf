@@ -132,7 +132,7 @@ def main():
         commits=paginated(owner,'ListPullRequestCommits','commits')
         assert len(commits)==2 and {c['message'].strip() for c in commits}=={'First feature commit','Second feature commit'}
         assert len({c['sha'] for c in commits})==2 and head in {c['sha'] for c in commits}
-        diff=call(owner,'GetPullRequestDiff',{**request,'baseCommitId':selection['baseCommitId'],'headCommitId':head})
+        diff=call(owner,'GetPullRequestDiff',{**request,'repositoryId':selection['repositoryId'],'pullRequestId':selection['pullRequestId'],'baseCommitId':selection['baseCommitId'],'headCommitId':head})
         assert diff['headCommitId']==head and '+second' in diff['rawDiff']
         provider(owner['read'],'GET',fork_route,expected=404)
         print('PASS: private-fork commits paginate; base-only reader can read retained comparison and diff without source access',flush=True)

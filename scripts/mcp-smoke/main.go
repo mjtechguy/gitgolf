@@ -187,7 +187,7 @@ func sessionIDs(client *http.Client) []string {
 	return ids
 }
 
-var names = []string{"golf_repo_list", "golf_repo_view", "golf_repo_creation", "golf_repo_branches", "golf_repo_commits", "golf_repo_contents", "golf_commit_diff", "golf_issue_list", "golf_issue_view", "golf_issue_comments", "golf_issue_operation", "golf_pr_list", "golf_pr_view", "golf_pr_reviews", "golf_pr_review_comments", "golf_org_list", "golf_org_view", "golf_org_teams", "golf_team_view", "golf_team_members", "golf_team_repos", "golf_audit_list"}
+var names = []string{"golf_repo_list", "golf_repo_view", "golf_repo_creation", "golf_repo_branches", "golf_repo_commits", "golf_repo_contents", "golf_commit_diff", "golf_issue_list", "golf_issue_view", "golf_issue_comments", "golf_issue_operation", "golf_pr_list", "golf_pr_view", "golf_pr_diff", "golf_pr_reviews", "golf_pr_review_comments", "golf_org_list", "golf_org_view", "golf_org_teams", "golf_team_view", "golf_team_members", "golf_team_repos", "golf_audit_list"}
 
 func catalogue(ctx context.Context, session *mcp.ClientSession) {
 	result, err := session.ListTools(ctx, &mcp.ListToolsParams{})
@@ -259,6 +259,11 @@ func exercise(ctx context.Context, session *mcp.ClientSession) {
 	check(obj(first(pulls, "pullRequests")["head"])["retainedSnapshot"] == true)
 	pull := obj(call(ctx, session, "golf_pr_view", object{"repository": repo, "number": cfg.Pull})["pullRequest"])
 	check(obj(pull["head"])["commitId"] == cfg.Revision && strings.Contains(pull["body"].(string), "<script>"))
+	pullDiff := call(ctx, session, "golf_pr_diff", object{"repository": repo, "number": cfg.Pull,
+		"repository_id": cfg.RepositoryID, "pull_request_id": pull["id"], "base_commit_id": obj(pull["base"])["commitId"], "head_commit_id": obj(pull["head"])["commitId"]})
+	check(pullDiff["repositoryId"] == cfg.RepositoryID && pullDiff["pullRequestId"] == pull["id"] && pullDiff["baseCommitId"] == obj(pull["base"])["commitId"] && pullDiff["headCommitId"] == obj(pull["head"])["commitId"])
+	mergeBase, ok := pullDiff["mergeBaseCommitId"].(string)
+	check(ok && mergeBase == pull["mergeBaseCommitId"] && (len(mergeBase) == 40 || len(mergeBase) == 64) && pullDiff["byteSize"] == float64(len([]byte(pullDiff["rawDiff"].(string)))))
 	reviews := call(ctx, session, "golf_pr_reviews", object{"repository": repo, "number": cfg.Pull, "limit": 1})
 	check(first(reviews, "reviews")["id"] == cfg.ReviewID && obj(reviews["page"])["nextPage"] == float64(2))
 	reviewComments := call(ctx, session, "golf_pr_review_comments", object{"repository": repo, "number": cfg.Pull,
@@ -416,7 +421,7 @@ func nativeCLI(ctx context.Context, token string, api, stdin, failure bool, reso
 }
 
 func bearerQualification(ctx context.Context, control *http.Client, baseline []string) (*mcp.ClientSession, func()) {
-	phase("owner-issued API credential: all 22 tools in both protocol revisions and CLI stdin/environment")
+	phase("owner-issued API credential: all 23 tools in both protocol revisions and CLI stdin/environment")
 	token, id := issueAPI(control)
 	before := rpc(control, "AuditService/ListAuditEvents", object{"limit": 1})["snapshotId"]
 	for _, version := range []string{"2026-07-28", "2025-11-25"} {
@@ -461,7 +466,7 @@ func bearerQualification(ctx context.Context, control *http.Client, baseline []s
 		denied(ctx, session, "golf_repo_view", object{"repository": cfg.Repository}, "unauthenticated")
 	}()
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
-	fmt.Println("PASS: API bearer all 22 tools under both revisions, CLI stdin/environment, unchanged session/audit snapshots, cancellation/SIGTERM, direct revocation and source logout")
+	fmt.Println("PASS: API bearer all 23 tools under both revisions, CLI stdin/environment, unchanged session/audit snapshots, cancellation/SIGTERM, direct revocation and source logout")
 	// Keep one live bearer process for the later real provider membership removal.
 	activeToken, _ := issueAPI(control)
 	session, closeSession, _ := connect(ctx, cfg.Golf, activeToken, "2026-07-28", true)
@@ -492,13 +497,13 @@ func run() (err error) {
 	nativeCLI(ctx, cfg.ReaderToken, false, true, false, "issue", "comments", cfg.Repository, strconv.Itoa(cfg.Issue), "--page", "2", "--limit", "1")
 	nativeCLI(ctx, cfg.ReaderToken, false, false, false, "issue", "operation", cfg.CommentMutationKey)
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
-	phase("modern discovery and all 22 native tools")
+	phase("modern discovery and all 23 native tools")
 	modern, closeModern, _ := connect(ctx, cfg.Golf, cfg.ReaderToken, "2026-07-28", false)
 	defer closeModern()
 	catalogue(ctx, modern)
 	exercise(ctx, modern)
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
-	fmt.Println("PASS: 2026-07-28 discovery, exact 22-tool catalogue, honest annotations, structured/text parity, private native reads, pagination and temporary-session cleanup")
+	fmt.Println("PASS: 2026-07-28 discovery, exact 23-tool catalogue, honest annotations, structured/text parity, private native reads, pagination and temporary-session cleanup")
 	phase("legacy initialization and native reads")
 	func() {
 		legacy, closeLegacy, _ := connect(ctx, cfg.Golf, cfg.ReaderToken, "2025-11-25", false)
@@ -507,7 +512,7 @@ func run() (err error) {
 		exercise(ctx, legacy)
 	}()
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
-	fmt.Println("PASS: explicit 2025-11-25 initialization and all 22 native tools with JSON parity, pagination and session cleanup")
+	fmt.Println("PASS: explicit 2025-11-25 initialization and all 23 native tools with JSON parity, pagination and session cleanup")
 	phase("strict invalid input before authentication")
 	before := rpc(control, "AuditService/ListAuditEvents", object{"limit": 1})["snapshotId"]
 	for _, input := range []object{{"repository": cfg.Repository, "token": "DO-NOT-ECHO"}, {"repository": cfg.Repository, "origin": "http://DO-NOT-ECHO.invalid"}, {"repository": cfg.Repository, "command": "DO-NOT-ECHO"}, {"repository": "../private"}} {

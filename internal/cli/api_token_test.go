@@ -184,7 +184,7 @@ func TestMCPAPICredentialBothProtocolsAndRevocation(t *testing.T) {
 			defer upstream.Close()
 			client := mcpTestCredentialSession(t, upstream.URL, version, context.Background(), credential{token: fixtureAPIToken, api: true})
 			catalogue, err := client.ListTools(context.Background(), &mcp.ListToolsParams{})
-			if err != nil || len(catalogue.Tools) != 22 || reads.Load() != 0 {
+			if err != nil || len(catalogue.Tools) != 23 || reads.Load() != 0 {
 				t.Fatal("bearer discovery made an HTTP request")
 			}
 			for _, tool := range catalogue.Tools {

@@ -375,6 +375,8 @@ message GetPullRequestDiffRequest {
   // Full immutable IDs observed in the selected PR. A changed snapshot is refused.
   string base_commit_id = 3;
   string head_commit_id = 4;
+  string repository_id = 5;
+  string pull_request_id = 6;
 }
 message GetPullRequestDiffResponse {
   string base_commit_id = 1;
@@ -382,6 +384,10 @@ message GetPullRequestDiffResponse {
   // Native PR merge-base diff, bounded UTF-8 text. This is not merge eligibility.
   string raw_diff = 3;
   uint32 byte_size = 4;
+  string repository_id = 5;
+  string pull_request_id = 6;
+  // Actual native old-side comparison object, distinct from the base branch tip.
+  string merge_base_commit_id = 7;
 }
 
 message GetRepositoryImageRequest {
@@ -606,6 +612,8 @@ message PullRequest {
   PullRequestRef base = 15;
   // Displayed metadata/content-version observation; not an atomic native CAS.
   string revision = 16;
+  // May be empty while native comparison metadata is unavailable.
+  string merge_base_commit_id = 17;
 }
 message ListPullRequestsRequest {
   RepositoryKey repository = 1;

@@ -4584,6 +4584,8 @@ type GetPullRequestDiffRequest struct {
 	// Full immutable IDs observed in the selected PR. A changed snapshot is refused.
 	BaseCommitId  string `protobuf:"bytes,3,opt,name=base_commit_id,json=baseCommitId,proto3" json:"base_commit_id,omitempty"`
 	HeadCommitId  string `protobuf:"bytes,4,opt,name=head_commit_id,json=headCommitId,proto3" json:"head_commit_id,omitempty"`
+	RepositoryId  string `protobuf:"bytes,5,opt,name=repository_id,json=repositoryId,proto3" json:"repository_id,omitempty"`
+	PullRequestId string `protobuf:"bytes,6,opt,name=pull_request_id,json=pullRequestId,proto3" json:"pull_request_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4646,6 +4648,20 @@ func (x *GetPullRequestDiffRequest) GetHeadCommitId() string {
 	return ""
 }
 
+func (x *GetPullRequestDiffRequest) GetRepositoryId() string {
+	if x != nil {
+		return x.RepositoryId
+	}
+	return ""
+}
+
+func (x *GetPullRequestDiffRequest) GetPullRequestId() string {
+	if x != nil {
+		return x.PullRequestId
+	}
+	return ""
+}
+
 type GetPullRequestDiffResponse struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	BaseCommitId string                 `protobuf:"bytes,1,opt,name=base_commit_id,json=baseCommitId,proto3" json:"base_commit_id,omitempty"`
@@ -4653,8 +4669,12 @@ type GetPullRequestDiffResponse struct {
 	// Native PR merge-base diff, bounded UTF-8 text. This is not merge eligibility.
 	RawDiff       string `protobuf:"bytes,3,opt,name=raw_diff,json=rawDiff,proto3" json:"raw_diff,omitempty"`
 	ByteSize      uint32 `protobuf:"varint,4,opt,name=byte_size,json=byteSize,proto3" json:"byte_size,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	RepositoryId  string `protobuf:"bytes,5,opt,name=repository_id,json=repositoryId,proto3" json:"repository_id,omitempty"`
+	PullRequestId string `protobuf:"bytes,6,opt,name=pull_request_id,json=pullRequestId,proto3" json:"pull_request_id,omitempty"`
+	// Actual native old-side comparison object, distinct from the base branch tip.
+	MergeBaseCommitId string `protobuf:"bytes,7,opt,name=merge_base_commit_id,json=mergeBaseCommitId,proto3" json:"merge_base_commit_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *GetPullRequestDiffResponse) Reset() {
@@ -4713,6 +4733,27 @@ func (x *GetPullRequestDiffResponse) GetByteSize() uint32 {
 		return x.ByteSize
 	}
 	return 0
+}
+
+func (x *GetPullRequestDiffResponse) GetRepositoryId() string {
+	if x != nil {
+		return x.RepositoryId
+	}
+	return ""
+}
+
+func (x *GetPullRequestDiffResponse) GetPullRequestId() string {
+	if x != nil {
+		return x.PullRequestId
+	}
+	return ""
+}
+
+func (x *GetPullRequestDiffResponse) GetMergeBaseCommitId() string {
+	if x != nil {
+		return x.MergeBaseCommitId
+	}
+	return ""
 }
 
 type GetRepositoryImageRequest struct {
@@ -6475,9 +6516,11 @@ type PullRequest struct {
 	Head          *PullRequestRef `protobuf:"bytes,14,opt,name=head,proto3" json:"head,omitempty"`
 	Base          *PullRequestRef `protobuf:"bytes,15,opt,name=base,proto3" json:"base,omitempty"`
 	// Displayed metadata/content-version observation; not an atomic native CAS.
-	Revision      string `protobuf:"bytes,16,opt,name=revision,proto3" json:"revision,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Revision string `protobuf:"bytes,16,opt,name=revision,proto3" json:"revision,omitempty"`
+	// May be empty while native comparison metadata is unavailable.
+	MergeBaseCommitId string `protobuf:"bytes,17,opt,name=merge_base_commit_id,json=mergeBaseCommitId,proto3" json:"merge_base_commit_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *PullRequest) Reset() {
@@ -6618,6 +6661,13 @@ func (x *PullRequest) GetBase() *PullRequestRef {
 func (x *PullRequest) GetRevision() string {
 	if x != nil {
 		return x.Revision
+	}
+	return ""
+}
+
+func (x *PullRequest) GetMergeBaseCommitId() string {
+	if x != nil {
+		return x.MergeBaseCommitId
 	}
 	return ""
 }
@@ -20430,19 +20480,24 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x0ebase_commit_id\x18\x03 \x01(\tR\fbaseCommitId\x12+\n" +
 	"\x04base\x18\x04 \x01(\x0e2\x17.golf.v1.CommitDiffBaseR\x04base\x12\x19\n" +
 	"\braw_diff\x18\x05 \x01(\tR\arawDiff\x12\x1b\n" +
-	"\tbyte_size\x18\x06 \x01(\rR\bbyteSize\"\xb7\x01\n" +
+	"\tbyte_size\x18\x06 \x01(\rR\bbyteSize\"\x84\x02\n" +
 	"\x19GetPullRequestDiffRequest\x126\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x16.golf.v1.RepositoryKeyR\n" +
 	"repository\x12\x16\n" +
 	"\x06number\x18\x02 \x01(\rR\x06number\x12$\n" +
 	"\x0ebase_commit_id\x18\x03 \x01(\tR\fbaseCommitId\x12$\n" +
-	"\x0ehead_commit_id\x18\x04 \x01(\tR\fheadCommitId\"\xa0\x01\n" +
+	"\x0ehead_commit_id\x18\x04 \x01(\tR\fheadCommitId\x12#\n" +
+	"\rrepository_id\x18\x05 \x01(\tR\frepositoryId\x12&\n" +
+	"\x0fpull_request_id\x18\x06 \x01(\tR\rpullRequestId\"\x9e\x02\n" +
 	"\x1aGetPullRequestDiffResponse\x12$\n" +
 	"\x0ebase_commit_id\x18\x01 \x01(\tR\fbaseCommitId\x12$\n" +
 	"\x0ehead_commit_id\x18\x02 \x01(\tR\fheadCommitId\x12\x19\n" +
 	"\braw_diff\x18\x03 \x01(\tR\arawDiff\x12\x1b\n" +
-	"\tbyte_size\x18\x04 \x01(\rR\bbyteSize\"\xb2\x01\n" +
+	"\tbyte_size\x18\x04 \x01(\rR\bbyteSize\x12#\n" +
+	"\rrepository_id\x18\x05 \x01(\tR\frepositoryId\x12&\n" +
+	"\x0fpull_request_id\x18\x06 \x01(\tR\rpullRequestId\x12/\n" +
+	"\x14merge_base_commit_id\x18\a \x01(\tR\x11mergeBaseCommitId\"\xb2\x01\n" +
 	"\x19GetRepositoryImageRequest\x126\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x16.golf.v1.RepositoryKeyR\n" +
@@ -20606,7 +20661,7 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x10\n" +
 	"\x03ref\x18\x03 \x01(\tR\x03ref\x12\x1b\n" +
 	"\tcommit_id\x18\x04 \x01(\tR\bcommitId\x12+\n" +
-	"\x11retained_snapshot\x18\x05 \x01(\bR\x10retainedSnapshot\"\xef\x03\n" +
+	"\x11retained_snapshot\x18\x05 \x01(\bR\x10retainedSnapshot\"\xa0\x04\n" +
 	"\vPullRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06number\x18\x02 \x01(\rR\x06number\x12\x14\n" +
@@ -20626,7 +20681,8 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x0fmerge_commit_id\x18\r \x01(\tR\rmergeCommitId\x12+\n" +
 	"\x04head\x18\x0e \x01(\v2\x17.golf.v1.PullRequestRefR\x04head\x12+\n" +
 	"\x04base\x18\x0f \x01(\v2\x17.golf.v1.PullRequestRefR\x04base\x12\x1a\n" +
-	"\brevision\x18\x10 \x01(\tR\brevision\"\xa6\x01\n" +
+	"\brevision\x18\x10 \x01(\tR\brevision\x12/\n" +
+	"\x14merge_base_commit_id\x18\x11 \x01(\tR\x11mergeBaseCommitId\"\xa6\x01\n" +
 	"\x17ListPullRequestsRequest\x126\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x16.golf.v1.RepositoryKeyR\n" +

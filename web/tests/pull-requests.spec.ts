@@ -20,7 +20,7 @@ const head = 'b'.repeat(40);
 const merged = 'c'.repeat(40);
 const user = create(UserSchema, { id: '9007199254740993', login: 'alex', fullName: 'Alex' });
 const repository = create(RepositorySchema, { id: '9007199254740993', name: 'design-system', fullName: 'alex/design-system', private: true, defaultBranch: 'main', description: 'A private repository.', htmlUrl: 'https://forge.example/alex/design-system' });
-const pull = create(PullRequestSchema, { revision:'e'.repeat(64), id: '9007199254740994', number: 12, title: 'Make every control keyboard accessible', body: '# PRIVATE PULL\n<img src=x onerror="window.executed=true">\n[Unsafe](javascript:alert(1))', state: IssueState.OPEN, user, draft: true,
+const pull = create(PullRequestSchema, { mergeBaseCommitId:base, revision:'e'.repeat(64), id: '9007199254740994', number: 12, title: 'Make every control keyboard accessible', body: '# PRIVATE PULL\n<img src=x onerror="window.executed=true">\n[Unsafe](javascript:alert(1))', state: IssueState.OPEN, user, draft: true,
   createdAt: '2026-10-01T12:00:00Z', updatedAt: '2026-10-02T12:00:00Z', htmlUrl: 'https://forge.example/alex/design-system/pulls/12',
   base: { repositoryId: repository.id, label: 'alex:main', ref: 'main', commitId: base },
   head: { repositoryId: '9007199254740995', label: 'contributor:feature/keyboard', ref: 'feature/keyboard', commitId: head },
@@ -31,7 +31,7 @@ const review = create(PullRequestReviewSchema, { id: '9007199254740998', user, b
 const pending = create(PullRequestReviewSchema, { ...review, id: '9007199254740999', user: undefined, body: '', state: PullRequestReviewState.PENDING, stale: false, dismissed: false, official: false, htmlUrl: 'javascript:alert(1)' });
 
 async function backend(page: Page) {
-  const state = { pull:clone(PullRequestSchema,pull),updates:[] as UpdatePullRequestRequest[],inspections:[] as string[],mutation:undefined as IssueMutation|undefined,updateFailure:"",unknown:false,wrongMutation:false,wrongObject:false,missingObject:false,dropUpdate:false,updateWait:undefined as Promise<void>|undefined, signedIn: true, metadataStatus: 200, listStatus: 200, detailStatus: 200, reviewStatus: 200, diffStatus: 200, empty: false,
+  const state = { pull:clone(PullRequestSchema,pull),updates:[] as UpdatePullRequestRequest[],inspections:[] as string[],mutation:undefined as IssueMutation|undefined,updateFailure:"",unknown:false,wrongMutation:false,wrongObject:false,missingObject:false,dropUpdate:false,updateWait:undefined as Promise<void>|undefined, signedIn: true, metadataStatus: 200, listStatus: 200, detailStatus: 200, reviewStatus: 200, diffStatus: 200, wrongDiff:'', empty: false,
     workspaceStatus: 200, workspaceWait: undefined as Promise<void>|undefined, mismatched: false, badPage: false, emptyWorkspace: false, duplicateContext: false,
     commitPages: [] as number[], checkPages: [] as number[],
     reviewWait: undefined as Promise<void> | undefined, detailWait: undefined as Promise<void> | undefined,
@@ -80,10 +80,10 @@ async function backend(page: Page) {
     }
     if(method==='GetPullRequestDiff') {
       const input=request(route,GetPullRequestDiffRequestSchema);
-      expect(input).toMatchObject({number:12,baseCommitId:base,headCommitId:head});
+      expect(input).toMatchObject({repositoryId:repository.id,pullRequestId:state.pull.id,number:12,baseCommitId:state.pull.base!.commitId,headCommitId:state.pull.head!.commitId});
       if(state.diffStatus!==200)return error(state.diffStatus,'PR comparison is unavailable.');
       const rawDiff='diff --git a/control.ts b/control.ts\n--- a/control.ts\n+++ b/control.ts\n@@ -1 +1,2 @@\n-old control\n+new control\n+<script>window.executed=true</script>\n';
-      return respond(route,GetPullRequestDiffResponseSchema,{baseCommitId:base,headCommitId:head,rawDiff,byteSize:new TextEncoder().encode(rawDiff).byteLength});
+      return respond(route,GetPullRequestDiffResponseSchema,{repositoryId:state.wrongDiff==='repository'?'999':repository.id,pullRequestId:state.wrongDiff==='pull'?'999':state.pull.id,mergeBaseCommitId:state.wrongDiff==='merge-base'?'f'.repeat(40):state.pull.mergeBaseCommitId,baseCommitId:state.pull.base!.commitId,headCommitId:state.pull.head!.commitId,rawDiff,byteSize:new TextEncoder().encode(rawDiff).byteLength});
     }
     if (method === 'GetPullRequest') {
       const input = request(route, GetPullRequestRequestSchema); state.numbers.push(input.number);
@@ -345,6 +345,34 @@ test('PR changed-files workspace binds comparison, toggles split, filters, marks
  await expect(page.getByRole('alert')).toHaveText('PR comparison is unavailable.');
  await expect(page.locator('.diff-workspace')).toHaveCount(0);
  expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain('new control');
+});
+
+test('PR diff names actual merge-base old side separately from a diverged base tip',async({page})=>{
+ const state=await backend(page);const old='d'.repeat(40);state.pull.mergeBaseCommitId=old;
+ await page.goto('/alex/design-system/pull/12/files');
+ await expect(page.locator('.diff-file')).toHaveCount(1);
+ await expect(page.getByRole('link',{name:'Line 2',exact:true})).toHaveAttribute('href',new RegExp(`diff-${old}-${head}-file-0-R2`));
+ const footer=page.locator('.panel-footnote').filter({hasText:'Old side'});
+ await expect(footer).toContainText(`Old side ${old.slice(0,12)}`);await expect(footer).toContainText(`Base branch tip ${base.slice(0,12)}`);
+ await expect(footer.locator('code').first()).toHaveAttribute('title',old);
+ await page.getByLabel('Viewed',{exact:true}).check();
+ state.pull.mergeBaseCommitId='f'.repeat(40);
+ await page.getByRole('button',{name:'Refresh pull request',exact:true}).click();
+ await expect(page.locator('.diff-lines')).toBeVisible();await expect(page.getByLabel('Viewed',{exact:true})).not.toBeChecked();
+ await expect(page.getByRole('link',{name:'Line 2',exact:true})).toHaveAttribute('href',new RegExp(`diff-${'f'.repeat(40)}-${head}-file-0-R2`));
+});
+
+for(const wrong of ['repository','pull','merge-base'])test(`PR diff refuses mismatched ${wrong} receipt and clears previously shown private bytes`,async({page})=>{
+ const state=await backend(page);await page.goto('/alex/design-system/pull/12/files');await expect(page.locator('.diff-lines')).toContainText('new control');
+ state.wrongDiff=wrong;await page.getByRole('button',{name:'Refresh PR diff',exact:true}).click();
+ await expect(page.getByRole('alert')).toHaveText('The PR diff does not match the selected comparison.');
+ await expect(page.locator('.diff-workspace')).toHaveCount(0);await expect(page.getByText('new control',{exact:true})).toHaveCount(0);
+});
+
+for(const old of ['', 'main', 'd'.repeat(64)])test(`PR diff refuses unavailable or invalid old-side metadata (${old.length||'empty'}) before dispatch`,async({page})=>{
+ const state=await backend(page);state.pull.mergeBaseCommitId=old;await page.goto('/alex/design-system/pull/12/files');
+ await expect(page.getByRole('alert')).toHaveText('Refresh pull request metadata to select a complete old-side comparison.');
+ expect(state.methods).not.toContain('GetPullRequestDiff');await expect(page.locator('.diff-workspace')).toHaveCount(0);
 });
 
 test('PR workspace exposes four canonical tabs, shared commit rows and latest reported checks without aggregate readiness',async({page})=>{

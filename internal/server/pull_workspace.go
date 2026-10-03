@@ -16,7 +16,7 @@ import (
 // Both native endpoints use retained PR objects. Verify that reference as well
 // as the displayed metadata around every page. These are observations, not an
 // atomic native lock or proof of provider-internal comparison completeness.
-func (s *Server) withPullSelection(ctx context.Context, session string, token forgeCredential, selected *golfv1.PullRequestSelection, operation func(string, Repository) error) error {
+func (s *Server) withPullSelection(ctx context.Context, session string, token forgeCredential, selected *golfv1.PullRequestSelection, operation func(string, Repository, forgePull) error) error {
 	repoID, err := discussionID(selected.GetRepositoryId())
 	if err != nil {
 		return err
@@ -56,7 +56,7 @@ func (s *Server) withPullSelection(ctx context.Context, session string, token fo
 		if err = retained(); err != nil {
 			return err
 		}
-		if err = operation(base, repo); err != nil {
+		if err = operation(base, repo, before); err != nil {
 			return err
 		}
 		if err = retained(); err != nil {
@@ -66,7 +66,7 @@ func (s *Server) withPullSelection(ctx context.Context, session string, token fo
 		if err != nil {
 			return err
 		}
-		if after.ID != before.ID || after.Base.SHA != baseID || after.Head.SHA != head || after.Base.Ref != before.Base.Ref || after.Head.Ref != before.Head.Ref || after.Head.RepositoryID != before.Head.RepositoryID || after.State != before.State || *after.Merged != *before.Merged {
+		if after.ID != before.ID || after.MergeBase != before.MergeBase || after.Base.SHA != baseID || after.Head.SHA != head || after.Base.Ref != before.Base.Ref || after.Head.Ref != before.Head.Ref || after.Head.RepositoryID != before.Head.RepositoryID || after.State != before.State || *after.Merged != *before.Merged {
 			return errPullSnapshotChanged
 		}
 		return nil
@@ -88,7 +88,7 @@ func (s *Server) ListPullRequestCommits(ctx context.Context, req *connect.Reques
 		return nil, rpcError(err)
 	}
 	result := &golfv1.ListPullRequestCommitsResponse{Selection: req.Msg.Selection}
-	err = s.withPullSelection(ctx, s.cookieValue(req.Header()), token, req.Msg.Selection, func(base string, repo Repository) error {
+	err = s.withPullSelection(ctx, s.cookieValue(req.Header()), token, req.Msg.Selection, func(base string, repo Repository, _ forgePull) error {
 		query := pageQuery(page, limit)
 		query.Set("files", "false")
 		query.Set("verification", "false")
@@ -168,7 +168,7 @@ func (s *Server) ListPullRequestChecks(ctx context.Context, req *connect.Request
 		return nil, rpcError(err)
 	}
 	result := &golfv1.ListPullRequestChecksResponse{Selection: req.Msg.Selection}
-	err = s.withPullSelection(ctx, s.cookieValue(req.Header()), token, req.Msg.Selection, func(base string, repo Repository) error {
+	err = s.withPullSelection(ctx, s.cookieValue(req.Header()), token, req.Msg.Selection, func(base string, repo Repository, _ forgePull) error {
 		var combined struct {
 			SHA        string               `json:"sha"`
 			Repository *Repository          `json:"repository"`

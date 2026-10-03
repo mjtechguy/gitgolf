@@ -251,6 +251,10 @@ func TestAdditionalReadCommandsAndEphemeralSession(t *testing.T) {
 			`{"repository":{"owner":"alice","name":"private"},"state":"ISSUE_STATE_ALL","page":{"page":2,"limit":1}}`, `{"pullRequests":[{"id":"9007199254740993","number":7,"head":{"repositoryId":"9223372036854775807","retainedSnapshot":true}}],"page":{"nextPage":3}}`, `"retainedSnapshot":true`},
 		{[]string{"pr", "view", "alice/private", "2147483647"}, golfv1connect.RepositoryServiceGetPullRequestProcedure,
 			`{"repository":{"owner":"alice","name":"private"},"number":2147483647}`, `{"pullRequest":{"id":"9007199254740993","number":2147483647,"body":"<script>plain text</script>","merged":true}}`, `"id":"9007199254740993"`},
+		{[]string{"pr", "diff", "alice/private", "7", "--repo-id", "9007199254740994", "--pull-id", "9223372036854775807", "--base", strings.Repeat("b", 40), "--head", strings.Repeat("a", 40)}, golfv1connect.RepositoryServiceGetPullRequestDiffProcedure,
+			`{"repository":{"owner":"alice","name":"private"},"repositoryId":"9007199254740994","pullRequestId":"9223372036854775807","number":7,"baseCommitId":"` + strings.Repeat("b", 40) + `","headCommitId":"` + strings.Repeat("a", 40) + `"}`, `{"repositoryId":"9007199254740994","pullRequestId":"9223372036854775807","baseCommitId":"` + strings.Repeat("b", 40) + `","headCommitId":"` + strings.Repeat("a", 40) + `","mergeBaseCommitId":"` + strings.Repeat("c", 40) + `","rawDiff":"<script>plain</script>\u001b[31m","byteSize":25}`, `"mergeBaseCommitId":"` + strings.Repeat("c", 40) + `"`},
+		{[]string{"pr", "diff", "alice/private", "7", "--repo-id", "9007199254740994", "--pull-id", "9223372036854775807", "--base", strings.Repeat("b", 64), "--head", strings.Repeat("a", 64)}, golfv1connect.RepositoryServiceGetPullRequestDiffProcedure,
+			`{"repository":{"owner":"alice","name":"private"},"repositoryId":"9007199254740994","pullRequestId":"9223372036854775807","number":7,"baseCommitId":"` + strings.Repeat("b", 64) + `","headCommitId":"` + strings.Repeat("a", 64) + `"}`, `{"repositoryId":"9007199254740994","pullRequestId":"9223372036854775807","baseCommitId":"` + strings.Repeat("b", 64) + `","headCommitId":"` + strings.Repeat("a", 64) + `","mergeBaseCommitId":"` + strings.Repeat("c", 64) + `"}`, `"rawDiff":""`},
 		{[]string{"pr", "review-comments", "alice/private", "7", "9007199254740993", "--repo-id", "9007199254740994", "--pull-id", "9223372036854775807", "--review-commit", strings.Repeat("a", 64)}, golfv1connect.RepositoryServiceGetPullRequestReviewCommentsProcedure,
 			`{"repository":{"owner":"alice","name":"private"},"repositoryId":"9007199254740994","pullRequestId":"9223372036854775807","number":7,"reviewId":"9007199254740993","reviewCommitId":"` + strings.Repeat("a", 64) + `"}`, `{"repositoryId":"9007199254740994","pullRequestId":"9223372036854775807","review":{"id":"9007199254740993","commitId":"` + strings.Repeat("a", 64) + `"},"comments":[{"id":"9223372036854775807","body":"<script>literal</script>\u001b[31m","path":"src/[literal]* 世界.ts","oldLine":3,"reviewId":"9007199254740993","resolved":true}],"currentHeadCommitId":"` + strings.Repeat("b", 64) + `"}`, `"oldLine":3`},
 		{[]string{"pr", "reviews", "alice/private", "7", "--page", "2", "--limit", "1"}, golfv1connect.RepositoryServiceListPullRequestReviewsProcedure,
@@ -431,6 +435,50 @@ func TestReviewCommentExplicitSelectionBeforeAuthentication(t *testing.T) {
 		})
 		if code != 2 || output.Len() != 0 || calls.Load() != 0 || strings.Contains(diagnostics.String(), "fixture-private-token") {
 			t.Fatal("invalid review selection authenticated or leaked input")
+		}
+	}
+}
+
+func TestPullDiffExplicitSelectionBeforeAuthentication(t *testing.T) {
+	valid := []string{"pr", "diff", "alice/private", "7", "--repo-id", "9007199254740994", "--pull-id", "9223372036854775807", "--base", strings.Repeat("b", 40), "--head", strings.Repeat("a", 40)}
+	parsed, err := parseCommand(valid)
+	if err != nil || parsed.repositoryID != valid[5] || parsed.pullID != valid[7] || parsed.baseCommit != valid[9] || parsed.headCommit != valid[11] || parsed.page != nil {
+		t.Fatal("explicit diff bindings lost or invented pagination")
+	}
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls.Add(1) }))
+	defer server.Close()
+	cases := [][]string{valid[:4], valid[:8], valid[:10]}
+	for _, flag := range []string{"--page", "--limit", "--ref", "--review-commit"} {
+		cases = append(cases, append(append([]string{}, valid...), flag, "1"))
+	}
+	for _, index := range []int{3, 5, 7} {
+		for _, value := range []string{"", "0", "01", "+1", "-1", "1 ", "9223372036854775808", "2147483648"} {
+			if index != 3 && value == "2147483648" {
+				continue
+			}
+			args := append([]string{}, valid...)
+			args[index] = value
+			cases = append(cases, args)
+		}
+	}
+	for _, index := range []int{9, 11} {
+		for _, value := range []string{"", "main", strings.Repeat("A", 40), strings.Repeat("a", 39), strings.Repeat("a", 41), strings.Repeat("a", 64), " " + strings.Repeat("a", 40)} {
+			args := append([]string{}, valid...)
+			args[index] = value
+			cases = append(cases, args)
+		}
+	}
+	for _, args := range cases {
+		var output, diagnostics bytes.Buffer
+		code := Run(context.Background(), append([]string{"--url", server.URL}, args...), strings.NewReader(""), &output, &diagnostics, func(name string) string {
+			if name == "GOLF_GITEA_TOKEN" {
+				return "fixture-private-token"
+			}
+			return ""
+		})
+		if code != 2 || output.Len() != 0 || calls.Load() != 0 || strings.Contains(diagnostics.String(), "fixture-private-token") {
+			t.Fatal("invalid diff selection authenticated or leaked input")
 		}
 	}
 }

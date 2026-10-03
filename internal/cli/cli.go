@@ -44,6 +44,7 @@ Usage: golf [--url ORIGIN] [--token-stdin | --api-token-stdin] COMMAND
   issue operation IDEMPOTENCY_KEY
   pr list OWNER/REPO [--state open|closed|all] [--page N] [--limit N]
   pr view OWNER/REPO NUMBER
+  pr diff OWNER/REPO NUMBER --repo-id ID --pull-id ID --base SHA --head SHA
   pr reviews OWNER/REPO NUMBER [--page N] [--limit N]
   pr review-comments OWNER/REPO NUMBER REVIEW_ID --repo-id ID --pull-id ID --review-commit SHA
   org list [--page N] [--limit N]
@@ -74,6 +75,7 @@ Diffs preserve bounded native Gitea text; merges compare only the first parent.
 Repository creation inspection needs a canonical UUID v4 key from a prior create request.
 It never creates or retries a repository; OUTCOME_UNKNOWN can include in-flight work.
 Issue comments need read:repository and read:issue; empty pages can have a next page.
+PR diffs require exact native repository/PR IDs and full base/head commits; old-side mergeBaseCommitId is distinct from the base tip.
 Review comments require exact native repository/PR/review IDs and a full reviewed commit; no lookup or pagination.
 Issue operation inspection takes a canonical UUID v4 and never posts or retries a write.
 An observed result ID is a provisional receipt; OUTCOME_UNKNOWN still means unconfirmed.
@@ -213,6 +215,8 @@ type command struct {
 	teamID       string
 	repositoryID string
 	pullID       string
+	baseCommit   string
+	headCommit   string
 	reviewID     string
 	reviewCommit string
 	repository   *golfv1.RepositoryKey
@@ -260,7 +264,7 @@ func parseCommand(args []string) (command, error) {
 			result.teamID = rest[0]
 			rest = rest[1:]
 		}
-	case "repo view", "repo branches", "repo commits", "repo contents", "commit diff", "issue list", "issue view", "issue comments", "pr list", "pr view", "pr reviews", "pr review-comments":
+	case "repo view", "repo branches", "repo commits", "repo contents", "commit diff", "issue list", "issue view", "issue comments", "pr list", "pr view", "pr reviews", "pr review-comments", "pr diff":
 		if len(rest) == 0 {
 			return result, invalid
 		}
@@ -282,7 +286,7 @@ func parseCommand(args []string) (command, error) {
 			result.commitID = rest[0]
 			rest = rest[1:]
 		}
-		if result.name == "issue view" || result.name == "issue comments" || result.name == "pr view" || result.name == "pr reviews" || result.name == "pr review-comments" {
+		if result.name == "issue view" || result.name == "issue comments" || result.name == "pr view" || result.name == "pr reviews" || result.name == "pr review-comments" || result.name == "pr diff" {
 			if len(rest) == 0 {
 				return result, invalid
 			}
@@ -322,10 +326,15 @@ func parseCommand(args []string) (command, error) {
 	if result.name == "repo contents" || result.name == "repo commits" {
 		flags.StringVar(&filePath, "path", "", "repository-relative file or directory")
 	}
-	if result.name == "pr review-comments" {
+	if result.name == "pr review-comments" || result.name == "pr diff" {
 		flags.StringVar(&result.repositoryID, "repo-id", "", "expected native repository ID")
 		flags.StringVar(&result.pullID, "pull-id", "", "expected native pull-request ID")
-		flags.StringVar(&result.reviewCommit, "review-commit", "", "full reviewed commit")
+		if result.name == "pr review-comments" {
+			flags.StringVar(&result.reviewCommit, "review-commit", "", "full reviewed commit")
+		} else {
+			flags.StringVar(&result.baseCommit, "base", "", "full selected base tip")
+			flags.StringVar(&result.headCommit, "head", "", "full selected head")
+		}
 	}
 	if result.name == "issue list" || result.name == "pr list" {
 		flags.StringVar(&state, "state", "open", "open, closed or all")
@@ -337,6 +346,9 @@ func parseCommand(args []string) (command, error) {
 		return result, invalid
 	}
 	if result.name == "pr review-comments" && (!canonicalNativeID(result.repositoryID) || !canonicalNativeID(result.pullID) || !commitID.MatchString(result.reviewCommit)) {
+		return result, invalid
+	}
+	if result.name == "pr diff" && (!canonicalNativeID(result.repositoryID) || !canonicalNativeID(result.pullID) || !commitID.MatchString(result.baseCommit) || !commitID.MatchString(result.headCommit) || len(result.baseCommit) != len(result.headCommit)) {
 		return result, invalid
 	}
 	if result.name == "audit list" {
@@ -587,6 +599,15 @@ func (command command) read(ctx context.Context, client golfv1connect.Repository
 		return response.Msg, nil
 	case "pr view":
 		response, err := client.GetPullRequest(ctx, connect.NewRequest(&golfv1.GetPullRequestRequest{Repository: command.repository, Number: command.number}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "pr diff":
+		response, err := client.GetPullRequestDiff(ctx, connect.NewRequest(&golfv1.GetPullRequestDiffRequest{
+			Repository: command.repository, RepositoryId: command.repositoryID, PullRequestId: command.pullID,
+			Number: command.number, BaseCommitId: command.baseCommit, HeadCommitId: command.headCommit,
+		}))
 		if err != nil {
 			return nil, err
 		}

@@ -18,7 +18,7 @@ import { IssueState, PullRequestReviewState } from './gen/golf/v1/golf_pb';
 import type { PageResponse, PullRequest, PullRequestRef, RepositoryKey } from './gen/golf/v1/golf_pb';
 import { repositoryOptions } from './navigation';
 import type { RepositoryLocation } from './navigation';
-import { DateLabel, RepositoryTabs, Loading, More, PanelError, privateQuery } from './RepositoryUI';
+import { DateLabel, RepositoryTabs, Loading, More, PanelError, privateQuery, shortSHA } from './RepositoryUI';
 
 type Props = { repositoryKey: Pick<RepositoryKey, 'owner' | 'name'>; queryKey: readonly unknown[]; location: RepositoryLocation; repositoryId:string;userId:string };
 const followingPage = (response: { page?: PageResponse }, _pages: unknown[], current: number) => {
@@ -71,16 +71,17 @@ function PullDiscussion(props:Props){
 function PullFiles(props: Props & { pull: PullRequest; onReview:()=>void }) {
   const { pull, repositoryKey, queryKey, location, repositoryId, onReview }=props;
   const [commentsOpen,setCommentsOpen]=useState(false);const commentsId=useId();
-  const base = pull.base?.commitId || '', head = pull.head?.commitId || '';
-  const query = useQuery({ ...privateQuery, queryKey: [...queryKey, 'pull-diff', location.pull, base, head],
+  const base = pull.base?.commitId || '', head = pull.head?.commitId || '', mergeBase = pull.mergeBaseCommitId;
+  const query = useQuery({ ...privateQuery, queryKey: [...queryKey, 'pull-diff', repositoryId, pull.id, location.pull, base, mergeBase, head],
     queryFn: async ({signal}) => {
-      const result = await repositoryClient.getPullRequestDiff({repository:repositoryKey,number:location.pull,baseCommitId:base,headCommitId:head},{signal,timeoutMs:8000});
-      if(result.baseCommitId !== base || result.headCommitId !== head) throw new ConnectError('The PR diff does not match the selected comparison.',Code.Internal);
+      if(!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(mergeBase) || mergeBase.length !== base.length || mergeBase.length !== head.length) throw new ConnectError('Refresh pull request metadata to select a complete old-side comparison.',Code.FailedPrecondition);
+      const result = await repositoryClient.getPullRequestDiff({repository:repositoryKey,repositoryId,pullRequestId:pull.id,number:location.pull,baseCommitId:base,headCommitId:head},{signal,timeoutMs:8000});
+      if(result.repositoryId !== repositoryId || result.pullRequestId !== pull.id || result.mergeBaseCommitId !== mergeBase || result.baseCommitId !== base || result.headCommitId !== head) throw new ConnectError('The PR diff does not match the selected comparison.',Code.Internal);
       if(result.byteSize > 512*1024 || new TextEncoder().encode(result.rawDiff).byteLength !== result.byteSize) throw new ConnectError('The PR diff exceeds its supported text bounds.',Code.ResourceExhausted);
       return result;
     }});
   return <section className="browser-panel" aria-label="Pull request diff">
-    {query.isError ? <PanelError error={query.error} retry={()=>void query.refetch()}/> : !query.isSuccess || query.isFetching ? <Loading label="Reading changed files…"/> : <><DiffViewer key={`${String(queryKey[1])}-${repositoryId}-${pull.id}-${base}-${head}`} text={query.data.rawDiff} snapshotId={`${base}-${head}`} toolbarAction={<><button type="button" className="button secondary" aria-expanded={commentsOpen} aria-controls={commentsId} onClick={()=>setCommentsOpen(value=>!value)}><MessageSquare size={15} aria-hidden="true"/>{commentsOpen?'Hide':'Show'} review comments</button><button className="button secondary" data-review-trigger onClick={onReview}>Review changes</button><button className="icon-button manual-refresh" aria-label="Refresh PR diff" disabled={query.isFetching} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button></>}/><p className="panel-footnote">PR merge-base comparison · {query.data.byteSize.toLocaleString()} bytes. Viewed markers belong to this browser session and snapshot. This observation does not establish merge readiness.</p><div id={commentsId}>{commentsOpen?<section className="pull-files-comments" aria-label="Files changed comments"><Reviews {...props} reviewActionLabel="Review changes from comments"/><PullDiscussion {...props}/></section>:null}</div></>}
+    {query.isError ? <PanelError error={query.error} retry={()=>void query.refetch()}/> : !query.isSuccess || query.isFetching ? <Loading label="Reading changed files…"/> : <><DiffViewer key={`${String(queryKey[1])}-${repositoryId}-${pull.id}-${base}-${mergeBase}-${head}`} text={query.data.rawDiff} snapshotId={`${mergeBase}-${head}`} toolbarAction={<><button type="button" className="button secondary" aria-expanded={commentsOpen} aria-controls={commentsId} onClick={()=>setCommentsOpen(value=>!value)}><MessageSquare size={15} aria-hidden="true"/>{commentsOpen?'Hide':'Show'} review comments</button><button className="button secondary" data-review-trigger onClick={onReview}>Review changes</button><button className="icon-button manual-refresh" aria-label="Refresh PR diff" disabled={query.isFetching} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button></>}/><p className="panel-footnote">Old side <code title={mergeBase}>{shortSHA(mergeBase)}</code> · Head <code title={head}>{shortSHA(head)}</code>{base!==mergeBase?<> · Base branch tip <code title={base}>{shortSHA(base)}</code></>:null} · {query.data.byteSize.toLocaleString()} bytes. Viewed markers belong to this browser session and snapshot. This observation does not establish merge readiness.</p><div id={commentsId}>{commentsOpen?<section className="pull-files-comments" aria-label="Files changed comments"><Reviews {...props} reviewActionLabel="Review changes from comments"/><PullDiscussion {...props}/></section>:null}</div></>}
   </section>;
 }
 function PullDetail(props: Props) {

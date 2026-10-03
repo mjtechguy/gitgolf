@@ -15,7 +15,7 @@ import { reject, request, respond } from './rpc';
 const base='a'.repeat(40),head='b'.repeat(40),revision='c'.repeat(64);
 const user=create(UserSchema,{id:'2',login:'reader'});
 const repository=create(RepositorySchema,{id:'7',name:'sample',fullName:'owner/sample',private:true,defaultBranch:'main'});
-const pull=create(PullRequestSchema,{id:'13',number:3,title:'Refine keyboard controls',body:'Private PR description',revision,state:IssueState.OPEN,user:{id:'9',login:'owner'},base:{repositoryId:'7',ref:'main',commitId:base},head:{repositoryId:'7',ref:'feature',commitId:head}});
+const pull=create(PullRequestSchema,{mergeBaseCommitId:base,id:'13',number:3,title:'Refine keyboard controls',body:'Private PR description',revision,state:IssueState.OPEN,user:{id:'9',login:'owner'},base:{repositoryId:'7',ref:'main',commitId:base},head:{repositoryId:'7',ref:'feature',commitId:head}});
 async function backend(page:Page){
  const s={pull:clone(PullRequestSchema,pull),user:clone(UserSchema,user),signedIn:true,creates:[] as CreatePullRequestReviewRequest[],inspections:[] as string[],mutation:null as PullRequestReviewMutation|null,unknown:false,rejectCode:'',denial:false,unauthenticated:false,missingReview:false,wrong:'',reviewReads:0,detailDenied:false,listReview:false,hold:undefined as Promise<void>|undefined,logoutHold:undefined as Promise<void>|undefined};
  await page.route('**/rpc/**',async route=>{
@@ -32,7 +32,7 @@ async function backend(page:Page){
   if(method==='GetPullRequestDiscussion')return respond(route,GetPullRequestDiscussionResponseSchema,{issue:{id:'14',number:3,title:pull.title,state:IssueState.OPEN}});
   if(method==='ListIssueComments')return respond(route,ListIssueCommentsResponseSchema,{});
   if(method==='ListReviewerRuns')return respond(route,ListReviewerRunsResponseSchema,{});
-  if(method==='GetPullRequestDiff'){const rawDiff='diff --git a/file.ts b/file.ts\n--- a/file.ts\n+++ b/file.ts\n@@ -1 +1 @@\n-old\n+new\n';return respond(route,GetPullRequestDiffResponseSchema,{baseCommitId:s.pull.base!.commitId,headCommitId:s.pull.head!.commitId,rawDiff,byteSize:new TextEncoder().encode(rawDiff).byteLength});}
+  if(method==='GetPullRequestDiff'){const rawDiff='diff --git a/file.ts b/file.ts\n--- a/file.ts\n+++ b/file.ts\n@@ -1 +1 @@\n-old\n+new\n';return respond(route,GetPullRequestDiffResponseSchema,{repositoryId:repository.id,pullRequestId:s.pull.id,mergeBaseCommitId:s.pull.mergeBaseCommitId,baseCommitId:s.pull.base!.commitId,headCommitId:s.pull.head!.commitId,rawDiff,byteSize:new TextEncoder().encode(rawDiff).byteLength});}
   if(method==='CreatePullRequestReview'||method==='GetPullRequestReviewMutation'){
    if(method==='CreatePullRequestReview'){
     const input=request(route,CreatePullRequestReviewRequestSchema);s.creates.push(input);

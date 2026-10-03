@@ -40,6 +40,7 @@ type forgePull struct {
 	MergeCommitID  *string       `json:"merge_commit_sha"`
 	Head           *forgePullRef `json:"head"`
 	Base           *forgePullRef `json:"base"`
+	MergeBase      string        `json:"merge_base"`
 }
 
 type forgePullReview struct {
@@ -133,6 +134,9 @@ func validPull(row forgePull, repo Repository) bool {
 		row.Draft == nil || row.Merged == nil || !validPullRef(row.Head) || !validPullRef(row.Base) {
 		return false
 	}
+	if row.MergeBase != "" && (!objectID.MatchString(row.MergeBase) || row.Head.SHA != "" && len(row.MergeBase) != len(row.Head.SHA) || row.Base.SHA != "" && len(row.MergeBase) != len(row.Base.SHA)) {
+		return false
+	}
 	if row.Base.RepositoryID != repo.ID || row.HTMLURL != strings.TrimRight(repo.HTMLURL, "/")+"/pulls/"+strconv.FormatInt(row.Number, 10) {
 		return false
 	}
@@ -164,7 +168,7 @@ func wirePull(row forgePull, listed bool) *golfv1.PullRequest {
 	}
 	result := &golfv1.PullRequest{Id: strconv.FormatInt(row.ID, 10), Number: uint32(row.Number), Title: row.Title, Body: row.Body,
 		State: state, User: wirePullUser(row.User), CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, HtmlUrl: row.HTMLURL,
-		Revision: pullRevision(row), Draft: *row.Draft, Merged: *row.Merged, Head: wirePullRef(row.Head, listed || row.Head.Ref == "refs/pull/"+strconv.FormatInt(row.Number, 10)+"/head"), Base: wirePullRef(row.Base, false)}
+		Revision: pullRevision(row), MergeBaseCommitId: row.MergeBase, Draft: *row.Draft, Merged: *row.Merged, Head: wirePullRef(row.Head, listed || row.Head.Ref == "refs/pull/"+strconv.FormatInt(row.Number, 10)+"/head"), Base: wirePullRef(row.Base, false)}
 	if row.MergedAt != nil {
 		result.MergedAt = *row.MergedAt
 	}
