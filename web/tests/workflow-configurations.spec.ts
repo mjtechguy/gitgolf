@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetRepositorySettingsResponseSchema, GetSessionResponseSchema, InspectWorkflowsRequestSchema, InspectWorkflowsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ExecutionScope, ExecutionMode, GetExecutionPolicyResponseSchema, ListWorkflowRunsResponseSchema, ListWorkflowRunsRequestSchema, WorkflowRunState, WorkflowConfigurationSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
+import { GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetRepositorySettingsResponseSchema, GetSessionResponseSchema, InspectWorkflowsRequestSchema, InspectWorkflowsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ExecutionScope, ExecutionMode, GetExecutionPolicyResponseSchema, ListWorkflowRunsResponseSchema, ListWorkflowRunsRequestSchema, WorkflowRunState, WorkflowRunOrigin, WorkflowConfigurationSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 const path = '/repositories/alex/private/settings/workflows';
@@ -22,7 +22,7 @@ async function backend(page: Page) {
       if (state.denyRuns) return reject(route, 'permission_denied', 'Workflow runs require repository read access.');
       if (!state.runPages) return respond(route, ListWorkflowRunsResponseSchema, {});
       const current = input.page?.page || 1;
-      return respond(route, ListWorkflowRunsResponseSchema, { runs: Array.from({ length: current === 1 ? 20 : 1 }, (_, index) => ({ id: `run-${current}-${index}`, workflowPath: current === 2 ? '.github/workflows/later.yml' : `.github/workflows/job-${index}.yml`, state: WorkflowRunState.SUCCEEDED, commitId: commit })), page: { nextPage: current === 1 ? 2 : 0 } });
+      return respond(route, ListWorkflowRunsResponseSchema, { runs: Array.from({ length: current === 1 ? 20 : 1 }, (_, index) => ({ id: `run-${current}-${index}`, workflowPath: current === 2 ? '.github/workflows/later.yml' : `.github/workflows/job-${index}.yml`, state: WorkflowRunState.SUCCEEDED, origin: index === 0 ? WorkflowRunOrigin.PUSH : WorkflowRunOrigin.MANUAL, commitId: commit })), page: { nextPage: current === 1 ? 2 : 0 } });
     }
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, {});
     if (method === 'InspectWorkflows') {
@@ -103,6 +103,9 @@ test('run inventory loads the next server page and clears private rows on denial
   const state = await backend(page); state.runPages = true; await open(page);
   const table = page.getByRole('table', { name: 'Workflow runs', exact: true });
   await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(20);
+  await expect(table.getByRole('columnheader', { name: 'Trigger' })).toBeVisible();
+  await expect(table.getByRole('cell', { name: 'Push', exact: true })).toHaveCount(1);
+  await expect(table.getByRole('cell', { name: 'Manual', exact: true })).toHaveCount(19);
   await page.getByRole('button', { name: 'Load more workflow runs', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Load more workflow runs', exact: true })).toHaveCount(0);
   await page.getByRole('searchbox', { name: 'Search loaded Workflow runs', exact: true }).fill('later.yml');

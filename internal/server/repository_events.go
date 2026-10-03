@@ -294,6 +294,17 @@ func (s *Server) repositoryEventWebhook(w http.ResponseWriter, r *http.Request) 
 		}
 		status = http.StatusNoContent
 	}
+	if err == nil && status != http.StatusNoContent {
+		var canonical int64
+		err = tx.QueryRowContext(r.Context(), `INSERT INTO golf_repository_event_payloads(connection_id,payload_sha256,event_id,push_admission_requested) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING event_id`, connection.ID, payloadHash, id, s.config.PushCIEnabled).Scan(&canonical)
+		if errors.Is(err, sql.ErrNoRows) {
+			// A relabeled native redelivery is the same signed payload. Roll back
+			// this extra receipt rather than manufacture another admission.
+			_ = tx.Rollback()
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	}
 	if err != nil || tx.Commit() != nil {
 		fail(http.StatusServiceUnavailable)
 		return

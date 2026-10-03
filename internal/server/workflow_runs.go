@@ -93,6 +93,13 @@ func (s *Server) loadWorkflowRun(ctx context.Context, id string) (workflowRunRec
 }
 func wireWorkflowRun(r workflowRunRecord, canCancel bool) *golfv1.WorkflowRun {
 	w := &golfv1.WorkflowRun{Id: r.ID, RepositoryId: strconv.FormatInt(r.RepositoryID, 10), OwnerId: strconv.FormatInt(r.OwnerID, 10), CommitId: r.CommitID, WorkflowPath: r.WorkflowPath, WorkflowBlobId: r.BlobID, Format: golfv1.WorkflowFormat(r.Format), State: golfv1.WorkflowRunState(golfv1.WorkflowRunState_value["WORKFLOW_RUN_STATE_"+strings.ToUpper(r.State)]), Version: strconv.FormatInt(r.Version, 10), CreatedAt: r.CreatedAt.Format(time.RFC3339Nano), Reason: r.Reason, RunnerId: r.RunnerID, SourceSha256: r.SourceSHA256, LogsTruncated: r.LogsTruncated, CanCancel: canCancel && (r.State == "queued" || r.State == "running")}
+	w.Origin = golfv1.WorkflowRunOrigin_WORKFLOW_RUN_ORIGIN_MANUAL
+	if r.Origin == "push" {
+		w.Origin = golfv1.WorkflowRunOrigin_WORKFLOW_RUN_ORIGIN_PUSH
+		w.EventRef = r.EventRef
+		w.RepositoryEventId = strconv.FormatInt(r.RepositoryEventID.Int64, 10)
+		w.AutomationGrantId = r.AutomationGrantID.String
+	}
 	if r.StartedAt.Valid {
 		v := r.StartedAt.Time.Format(time.RFC3339Nano)
 		w.StartedAt = &v
@@ -382,6 +389,10 @@ func (s *Server) workflowSource(ctx context.Context, credential forgeCredential,
 	return data, nil
 }
 func (s *Server) prepareWorkflowRun(ctx context.Context, credential forgeCredential, key repositoryKey, ref, file string) (string, string, *workflowExecutionPlan, []byte, error) {
+	return s.prepareWorkflowRunForEvent(ctx, credential, key, ref, file, "")
+}
+
+func (s *Server) prepareWorkflowRunForEvent(ctx context.Context, credential forgeCredential, key repositoryKey, ref, file, pushRef string) (string, string, *workflowExecutionPlan, []byte, error) {
 	base, _ := repositoryPath(key)
 	commits, _, err := s.readCommits(ctx, base, credential, ref, 1, 1)
 	if err != nil {
@@ -418,7 +429,16 @@ func (s *Server) prepareWorkflowRun(ctx context.Context, credential forgeCredent
 	if file == ".gitlab-ci.yml" {
 		format = golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITLAB_CI
 	}
-	plan, err := compileWorkflowExecution(format, data)
+	var plan *workflowExecutionPlan
+	if pushRef == "" {
+		plan, err = compileWorkflowExecution(format, data)
+	} else {
+		var matched bool
+		plan, matched, err = compileWorkflowPushExecution(format, data, pushRef)
+		if err == nil && !matched {
+			return "", "", nil, nil, errWorkflowTriggerNotMatched
+		}
+	}
 	if err != nil {
 		return "", "", nil, nil, err
 	}

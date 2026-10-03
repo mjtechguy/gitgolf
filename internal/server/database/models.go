@@ -291,6 +291,25 @@ type GolfOrganizationCreationSelection struct {
 	UserID   int64
 }
 
+type GolfPushMaterialization struct {
+	ID                uuid.UUID
+	EventID           int64
+	GrantID           uuid.UUID
+	GrantRevision     int64
+	GrantEpoch        int64
+	CredentialVersion int64
+	WorkflowPath      string
+	State             string
+	Attempts          int32
+	LeaseID           uuid.NullUUID
+	LeaseExpiresAt    sql.NullTime
+	NativeActivityID  sql.NullInt64
+	RunID             uuid.NullUUID
+	Reason            string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
 type GolfRecoveryEvent struct {
 	ID                         int64
 	BackupID                   string
@@ -347,6 +366,13 @@ type GolfRepositoryEventConnection struct {
 	OwnerID      int64
 	Repository   string
 	CreatedAt    time.Time
+}
+
+type GolfRepositoryEventPayload struct {
+	ConnectionID           uuid.UUID
+	PayloadSha256          string
+	EventID                int64
+	PushAdmissionRequested bool
 }
 
 type GolfRunnerPresence struct {

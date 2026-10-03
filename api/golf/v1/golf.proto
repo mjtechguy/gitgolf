@@ -976,6 +976,11 @@ enum WorkflowRunState {
   WORKFLOW_RUN_STATE_TIMED_OUT = 6;
   WORKFLOW_RUN_STATE_LOST = 7;
 }
+enum WorkflowRunOrigin {
+  WORKFLOW_RUN_ORIGIN_UNSPECIFIED = 0;
+  WORKFLOW_RUN_ORIGIN_MANUAL = 1;
+  WORKFLOW_RUN_ORIGIN_PUSH = 2;
+}
 message WorkflowRun {
   string id = 1;
   string repository_id = 2;
@@ -995,6 +1000,10 @@ message WorkflowRun {
   string source_sha256 = 16;
   bool logs_truncated = 17;
   bool can_cancel = 18;
+  WorkflowRunOrigin origin = 19;
+  string event_ref = 20;
+  string repository_event_id = 21;
+  string automation_grant_id = 22;
 }
 message DispatchWorkflowRequest { RepositoryKey repository = 1; string ref = 2; string workflow_path = 3; string idempotency_key = 4; }
 message DispatchWorkflowResponse { WorkflowRun run = 1; }

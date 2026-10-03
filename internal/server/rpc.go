@@ -475,12 +475,20 @@ func (s *Server) ListCapabilities(ctx context.Context, _ *connect.Request[golfv1
 	if len(s.repositoryEventConnections) > 0 {
 		eventState, eventReason = golfv1.CapabilityState_CAPABILITY_STATE_DEGRADED, "Native push intake is configured; its database is unavailable."
 		if s.db != nil && s.db.PingContext(ctx) == nil {
-			eventState, eventReason = golfv1.CapabilityState_CAPABILITY_STATE_READY, "Authenticated native push deliveries can be recorded and deduplicated. Automatic pipelines, agent tasks and outbound notification delivery are not implemented."
+			eventState, eventReason = golfv1.CapabilityState_CAPABILITY_STATE_READY, "Authenticated native push deliveries can be recorded and deduplicated by signed payload. Push execution requires its separate operator switch, grants and policy ceilings."
 		}
 	}
 	capabilities = append(capabilities, &golfv1.Capability{Id: "events.native", Label: "Native push event intake", State: eventState, Reason: eventReason})
+	automaticState, automaticReason := golfv1.CapabilityState_CAPABILITY_STATE_DISABLED, "Automatic push admission is disabled by the operator. Existing admitted runs retain their grant and policy fences; disable push policy or revoke the grant to stop them."
+	if s.config.PushCIEnabled {
+		automaticState, automaticReason = golfv1.CapabilityState_CAPABILITY_STATE_DEGRADED, "Push execution is enabled, but the coordinator or enrolled worker is not currently healthy."
+		seen := s.pushCoordinatorSeen.Load()
+		if seen > 0 && time.Since(time.Unix(0, seen)) < 5*time.Second && pipelineState == golfv1.CapabilityState_CAPABILITY_STATE_READY {
+			automaticState, automaticReason = golfv1.CapabilityState_CAPABILITY_STATE_READY, "The coordinator and Docker worker are active. Only sponsor-authored branch pushes with fresh native activity, an unexpired grant, approved image and every push policy ceiling can run. Native engine parity remains unavailable."
+		}
+	}
+	capabilities = append(capabilities, &golfv1.Capability{Id: "pipelines.automatic", Label: "Automatic push pipelines", State: automaticState, Reason: automaticReason})
 	for _, entry := range []struct{ id, label, reason string }{
-		{"pipelines.automatic", "Automatic pipelines", "Durable grants, push policies and grant-bound worker fences are implemented. Event-to-run materialization and native push-to-executor qualification are not complete; manual worker readiness does not enable push execution."},
 		{"webhooks.outbound", "Outbound webhooks and Slack notifications", "Planned. Event subscriptions, protected destinations, durable delivery history and retries are not implemented."},
 		{"email.outbound", "Outbound email", "Planned. Configurable SMTP/API delivery, verified addresses and notification preferences are not implemented."},
 		{"email.inbound", "Inbound email", "Planned. Authorized email-to-comment, issue and task routing is not implemented."},

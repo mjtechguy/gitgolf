@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import { workflowRunClient, errorMessage } from './api';
-import { WorkflowRunState, type WorkflowRun } from './gen/golf/v1/golf_pb';
+import { WorkflowRunOrigin, WorkflowRunState, type WorkflowRun } from './gen/golf/v1/golf_pb';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { DateLabel, Loading, More, PanelError, privateQuery } from './RepositoryUI';
 
@@ -38,6 +38,7 @@ export function WorkflowRuns({ userId, owner, name, signingOut }: { userId: stri
  }
  const columns = useMemo<DataTableColumn<WorkflowRun>[]>(() => [
   { id: 'workflow', accessorFn: row => row.workflowPath, header: 'Workflow', cell: ({ row }) => <><button className="text-button" disabled={pending || signingOut} onClick={() => { setSelected(row.original.id); setNotice(''); }}>{row.original.workflowPath}</button><small>{row.original.id}</small></> },
+  { id: 'origin', accessorFn: row => row.origin === WorkflowRunOrigin.PUSH ? 'Push' : row.origin === WorkflowRunOrigin.MANUAL ? 'Manual' : 'Unknown', header: 'Trigger' },
   { id: 'state', accessorFn: row => runState(row.state), header: 'State' },
   { accessorKey: 'commitId', header: 'Commit', cell: ({ row }) => <code title={row.original.commitId}>{row.original.commitId.slice(0, 12)}</code> },
   { accessorKey: 'createdAt', header: 'Created', cell: ({ row }) => <DateLabel value={row.original.createdAt} /> },
@@ -50,6 +51,7 @@ export function WorkflowRuns({ userId, owner, name, signingOut }: { userId: stri
   {notice && !signingOut ? <p role="status" className="panel-footnote">{notice}</p> : null}
   {selected && !signingOut && !query.error ? <section aria-label="Selected workflow run">{detail.error ? <PanelError error={detail.error} retry={() => void refresh()} /> : !run ? <Loading label="Loading selected run…" /> : <>
    <div className="browser-panel-heading"><h3>{runState(run.state)}</h3>{run.canCancel ? <button className="button secondary" disabled={pending || signingOut} onClick={() => void cancel()}>Cancel run</button> : null}</div>
+   {run.origin === WorkflowRunOrigin.PUSH ? <p className="panel-footnote">Push · <code>{run.eventRef}</code> · Event {run.repositoryEventId} · Grant <code>{run.automationGrantId}</code></p> : null}
    <p className="panel-footnote">Commit <code>{run.commitId}</code> · Workflow blob <code>{run.workflowBlobId}</code> · Source archive <code>{run.sourceSha256}</code></p>
    {run.reason ? <p className="panel-footnote">{run.reason}</p> : null}
    {logs.error ? <PanelError error={logs.error} retry={() => void logs.refetch()} /> : logs.isSuccess && !logs.isFetching ? <><pre className="source-code" aria-label="Workflow run log">{logs.data.logs.map(chunk => chunk.text).join('') || 'No log output yet.'}</pre>{logs.data.hasMore ? <p className="panel-footnote">Additional log output is available through the run log API.</p> : null}</> : <Loading label="Loading log…" />}

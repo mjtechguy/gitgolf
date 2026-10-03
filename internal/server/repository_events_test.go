@@ -262,10 +262,13 @@ func TestRepositoryEventDeduplicationPostgres(t *testing.T) {
 	if response := eventResponse(restarted, eventRequest(connection, delivery, changed)); response.Code != 409 {
 		t.Fatal("delivery ID accepted different payload", response.Code)
 	}
-	// Native delivery IDs are not covered by the signature. This proves the
-	// documented limitation, not replay/freshness or execution authority.
-	if response := eventResponse(restarted, eventRequest(connection, uuid.NewString(), body)); response.Code != 202 {
-		t.Fatal("distinct delivery receipt failed", response.Code)
+	// Native delivery IDs are unsigned. The canonical signed-payload ledger
+	// prevents relabeled redelivery from appending another receipt.
+	if response := eventResponse(restarted, eventRequest(connection, uuid.NewString(), body)); response.Code != 204 {
+		t.Fatal("relabeled payload was not deduplicated", response.Code)
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM golf_repository_events`).Scan(&count); err != nil || count != 1 {
+		t.Fatal("relabeled payload appended another receipt", err)
 	}
 	connection.Secret = strings.Repeat("rotated", 8)
 	rotated := eventFixtureServer(t, db, connection)
@@ -275,7 +278,7 @@ func TestRepositoryEventDeduplicationPostgres(t *testing.T) {
 	if response := eventResponse(rotated, eventRequest(connection, delivery, body)); response.Code != 204 {
 		t.Fatal("secret rotation discarded deduplication", response.Code)
 	}
-	for _, query := range []string{"UPDATE golf_repository_events SET sender_id=99", "DELETE FROM golf_repository_events", "TRUNCATE golf_repository_events", "UPDATE golf_repository_event_connections SET repository='other/name'", "DELETE FROM golf_repository_event_connections", "TRUNCATE golf_repository_event_connections CASCADE"} {
+	for _, query := range []string{"UPDATE golf_repository_event_payloads SET push_admission_requested=true", "DELETE FROM golf_repository_event_payloads", "TRUNCATE golf_repository_event_payloads", "UPDATE golf_repository_events SET sender_id=99", "DELETE FROM golf_repository_events", "TRUNCATE golf_repository_events", "UPDATE golf_repository_event_connections SET repository='other/name'", "DELETE FROM golf_repository_event_connections", "TRUNCATE golf_repository_event_connections CASCADE"} {
 		if _, err := db.Exec(query); err == nil {
 			t.Fatal("append-only binding/ledger guard absent")
 		}

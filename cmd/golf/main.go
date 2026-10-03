@@ -69,6 +69,7 @@ func serverConfig() server.Config {
 		databaseTLS = parsed.Query().Get("sslmode")
 	}
 	return server.Config{
+		PushCIEnabled:    os.Getenv("GOLF_PUSH_CI_ENABLED") == "true",
 		DatabaseEndpoint: databaseEndpoint, DatabaseTLSMode: databaseTLS, NativeDatabaseEndpoint: os.Getenv("GOLF_NATIVE_DATABASE_ENDPOINT"),
 		ObjectStoreConfig:              objectstore.Config{Endpoint: os.Getenv("GOLF_OBJECT_ENDPOINT"), Bucket: os.Getenv("GOLF_OBJECT_BUCKET"), Region: env("GOLF_OBJECT_REGION", "us-east-1"), Prefix: os.Getenv("GOLF_OBJECT_PREFIX"), AccessKeyID: os.Getenv("GOLF_OBJECT_ACCESS_KEY_ID"), SecretAccessKey: os.Getenv("GOLF_OBJECT_SECRET_ACCESS_KEY"), SessionToken: os.Getenv("GOLF_OBJECT_SESSION_TOKEN"), PathStyle: os.Getenv("GOLF_OBJECT_PATH_STYLE") == "true", AllowHTTP: os.Getenv("GOLF_OBJECT_ALLOW_HTTP") == "true"},
 		RepositoryEventConnectionsJSON: os.Getenv("GOLF_REPOSITORY_EVENT_CONNECTIONS"),
@@ -143,6 +144,10 @@ func serve(ctx context.Context, logger zerolog.Logger) error {
 	for i, srv := range servers {
 		go func() { finished <- srv.Serve(listeners[i]) }()
 	}
+	coordinator, stopCoordinator := context.WithCancel(ctx)
+	coordinatorDone := make(chan struct{})
+	go func() { defer close(coordinatorDone); app.RunPushAutomation(coordinator) }()
+	defer func() { stopCoordinator(); <-coordinatorDone }()
 	logger.Info().Bool("metrics_enabled", metricsAddress != "").Msg("Golf listening")
 	var serveError error
 	select {
@@ -152,6 +157,7 @@ func serve(ctx context.Context, logger zerolog.Logger) error {
 		}
 	case <-ctx.Done():
 	}
+	stopCoordinator()
 	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	for _, srv := range servers {

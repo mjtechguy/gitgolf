@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -19,6 +20,7 @@ import (
 )
 
 type Config struct {
+	PushCIEnabled                                              bool
 	ObjectStoreConfig                                          objectstore.Config
 	DatabaseEndpoint, DatabaseTLSMode, NativeDatabaseEndpoint  string
 	PublicURL, GiteaURL, EncryptionKey                         string
@@ -31,6 +33,7 @@ type Config struct {
 	Telemetry                                                  *telemetry.Runtime
 }
 type Server struct {
+	pushCoordinatorSeen           atomic.Int64
 	config                        Config
 	db                            *sql.DB
 	keyring                       *Keyring
@@ -92,6 +95,9 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	}
 	if err := s.configureRunners(); err != nil {
 		return nil, err
+	}
+	if config.PushCIEnabled && (len(s.repositoryEventConnections) == 0 || len(s.runnerImages) == 0 || len(s.runnerKeys) == 0) {
+		return nil, errors.New("push CI requires repository event connections and enrolled runner images")
 	}
 	r := chi.NewRouter()
 	r.Use(middleware.Timeout(15 * time.Second))

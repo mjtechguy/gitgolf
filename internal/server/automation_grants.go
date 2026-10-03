@@ -43,8 +43,13 @@ func scanAutomationGrant(row workflowRunScanner) (automationGrantRecord, error) 
 	}
 	return g, err
 }
-func wireAutomationGrant(g automationGrantRecord) *golfv1.AutomationGrant {
-	return &golfv1.AutomationGrant{Id: g.ID, RepositoryId: strconv.FormatInt(g.RepositoryID, 10), OwnerId: strconv.FormatInt(g.OwnerID, 10), SponsorNativeUserId: strconv.FormatInt(g.SponsorNativeUserID, 10), Revision: strconv.FormatInt(g.Revision, 10), RevocationEpoch: strconv.FormatInt(g.RevocationEpoch, 10), Enabled: g.Enabled, ExpiresAt: g.ExpiresAt.UTC().Format(time.RFC3339Nano), CreatedAt: g.CreatedAt.UTC().Format(time.RFC3339Nano), Branches: g.Branches, WorkflowPaths: g.WorkflowPaths, ExecutionState: "unavailable"}
+func (s *Server) wireAutomationGrant(g automationGrantRecord) *golfv1.AutomationGrant {
+	state := "unavailable"
+	if s.config.PushCIEnabled && g.Enabled && g.ExpiresAt.After(time.Now()) {
+		state = "requires_push_admission"
+	}
+
+	return &golfv1.AutomationGrant{Id: g.ID, RepositoryId: strconv.FormatInt(g.RepositoryID, 10), OwnerId: strconv.FormatInt(g.OwnerID, 10), SponsorNativeUserId: strconv.FormatInt(g.SponsorNativeUserID, 10), Revision: strconv.FormatInt(g.Revision, 10), RevocationEpoch: strconv.FormatInt(g.RevocationEpoch, 10), Enabled: g.Enabled, ExpiresAt: g.ExpiresAt.UTC().Format(time.RFC3339Nano), CreatedAt: g.CreatedAt.UTC().Format(time.RFC3339Nano), Branches: g.Branches, WorkflowPaths: g.WorkflowPaths, ExecutionState: state}
 }
 func automationCredentialBinding(id, forge string, nativeID int64) []byte {
 	raw, _ := json.Marshal([]string{automationRepositoryDomain, id, "1", forge, strconv.FormatInt(nativeID, 10)})
@@ -185,7 +190,7 @@ func (s *Server) ListAutomationGrants(ctx context.Context, req *connect.Request[
 				result.NextAfterId = result.Grants[24].Id
 				break
 			}
-			result.Grants = append(result.Grants, wireAutomationGrant(g))
+			result.Grants = append(result.Grants, s.wireAutomationGrant(g))
 		}
 		if rows.Err() != nil {
 			return errStorageUnavailable
@@ -303,7 +308,7 @@ func (s *Server) CreateAutomationGrant(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	return connect.NewResponse(&golfv1.CreateAutomationGrantResponse{Grant: wireAutomationGrant(result)}), nil
+	return connect.NewResponse(&golfv1.CreateAutomationGrantResponse{Grant: s.wireAutomationGrant(result)}), nil
 }
 func (s *Server) RevokeAutomationGrant(ctx context.Context, req *connect.Request[golfv1.RevokeAutomationGrantRequest]) (*connect.Response[golfv1.RevokeAutomationGrantResponse], error) {
 	token, err := workflowBrowserToken(ctx)
@@ -356,5 +361,5 @@ func (s *Server) RevokeAutomationGrant(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	return connect.NewResponse(&golfv1.RevokeAutomationGrantResponse{Grant: wireAutomationGrant(result)}), nil
+	return connect.NewResponse(&golfv1.RevokeAutomationGrantResponse{Grant: s.wireAutomationGrant(result)}), nil
 }
