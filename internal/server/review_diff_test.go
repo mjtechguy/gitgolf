@@ -439,3 +439,32 @@ func TestReviewComparisonNativeEmptySideDelimiter(t *testing.T) {
 		t.Fatal("quoted path control admitted as a side delimiter")
 	}
 }
+
+func TestReviewComparisonOldSidePublication(t *testing.T) {
+	raw := "diff --git a/src/context.txt b/src/context.txt\n--- a/src/context.txt\n+++ b/src/context.txt\n@@ -10,3 +10,2 @@\n context\n-deleted\n-last old\n+replacement\n"
+	c, err := parseReviewComparison(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.allowsSide("src/context.txt", 12, true) || c.allowsSide("src/context.txt", 12, false) || c.allowsSide("src/context.txt", 13, true) {
+		t.Fatal("old-side coordinates confused with new/source-adjacent rows")
+	}
+	hunk := "@@ -10,3 +10,2 @@\n context\n-deleted\n-last old\n+replacement\n"
+	if !c.matchesNativeContextSide("src/context.txt", 12, true, hunk) || c.matchesNativeContextSide("src/context.txt", 12, false, hunk) {
+		t.Fatal("old context selection not exact")
+	}
+	if c.matchesNativeContextSide("src/context.txt", 12, true, strings.Replace(hunk, "last old", "different", 1)) {
+		t.Fatal("mixed old context authorized")
+	}
+	if n, ok := c.nativeContextJSONBoundSide("src/context.txt", 12, true); !ok || n <= len(hunk) {
+		t.Fatal("old-side context budget absent")
+	}
+	deletion := "diff --git a/gone.txt b/gone.txt\ndeleted file mode 100644\n--- a/gone.txt\n+++ /dev/null\n@@ -1 +0,0 @@\n-old\n"
+	c, err = parseReviewComparison(deletion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.files) != 1 || c.files[0].hunks[0].rows[0].oldLine != 1 || c.allowsSide("gone.txt", 1, true) {
+		t.Fatal("unqualified deletion inventory was lost or became write authority")
+	}
+}

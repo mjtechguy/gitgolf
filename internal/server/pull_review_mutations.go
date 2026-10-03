@@ -239,6 +239,9 @@ func (s *Server) CreatePullRequestReview(ctx context.Context, req *connect.Reque
 			return nil
 		}
 		if err != nil {
+			if errors.Is(reviewAdmissionError(err), errInlineReviewBlocked) {
+				return errInlineReviewBlocked
+			}
 			return errStorageUnavailable
 		}
 		if err = q.AppendPullReviewMutationEvent(ctx, database.AppendPullReviewMutationEventParams{MutationID: record.ID, Phase: "RESERVED", State: record.State}); err != nil {

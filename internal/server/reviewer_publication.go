@@ -102,7 +102,7 @@ func (s *Server) reserveReviewerPublication(ctx context.Context, p reviewerRecor
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO golf_reviewer_publications(run_id,forge_url,repository_id,pull_request_id,pull_number,publisher_id,payload_fingerprint,state) VALUES($1,$2,$3,$4,$5,$6,$7,'reserved')`, r.ID, s.config.GiteaURL, r.RepositoryID, r.PullID, r.Number, r.PublisherID, reviewerPayloadFingerprint(input))
 	if err != nil {
-		return false, err
+		return false, reviewAdmissionError(err)
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO golf_reviewer_publication_events(run_id,phase) VALUES($1,'reserved')`, r.ID); err != nil {
 		return false, err

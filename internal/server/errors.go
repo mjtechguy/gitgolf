@@ -78,6 +78,8 @@ func rpcError(err error) error {
 		code, message = connect.CodeFailedPrecondition, "Workflow is outside the bounded manual Linux shell catalog."
 	case errors.Is(err, errRunnerUnavailable):
 		code, message = connect.CodeFailedPrecondition, "No operator-enrolled worker image supports this workflow. Ask your instance administrator to configure a worker and approved image."
+	case errors.Is(err, errInlineReviewBlocked):
+		code, message = connect.CodeFailedPrecondition, "This actor’s review publication is blocked by an existing or uncertain operation. Inspect the original outcome before continuing."
 	case errors.Is(err, errExecutionPolicyConflict):
 		code, message = connect.CodeFailedPrecondition, "Execution policy or authority changed. Refresh and review it before continuing."
 	case errors.Is(err, errAdminAccountConflict):

@@ -154,6 +154,8 @@ service RepositoryService {
   rpc GetPullRequestReviewDraft(GetPullRequestReviewDraftRequest) returns (GetPullRequestReviewDraftResponse);
   rpc SavePullRequestReviewDraft(SavePullRequestReviewDraftRequest) returns (SavePullRequestReviewDraftResponse);
   rpc DeletePullRequestReviewDraft(DeletePullRequestReviewDraftRequest) returns (DeletePullRequestReviewDraftResponse);
+  rpc PublishPullRequestReviewDraft(PublishPullRequestReviewDraftRequest) returns (PublishPullRequestReviewDraftResponse);
+  rpc GetPullRequestInlineReviewMutation(GetPullRequestInlineReviewMutationRequest) returns (GetPullRequestInlineReviewMutationResponse);
   rpc CreatePullRequestReview(CreatePullRequestReviewRequest) returns (CreatePullRequestReviewResponse);
   rpc GetPullRequestReviewMutation(GetPullRequestReviewMutationRequest) returns (GetPullRequestReviewMutationResponse);
 }
@@ -1980,4 +1982,53 @@ message DeletePullRequestReviewDraftResponse {
   string current_version = 2;
   bool deleted = 3;
   string target_generation = 4;
+}
+
+// Managed-browser publication of one exact saved version. No delegated write.
+message PublishPullRequestReviewDraftRequest {
+  PullReviewDraftTarget target = 1;
+  string draft_id = 2;
+  string expected_version = 3;
+  string expected_target_generation = 4;
+  string comparison_id = 5;
+  string operation_id = 6;
+  PullRequestReviewState decision = 7;
+}
+enum PullInlineReviewPhase {
+  PULL_INLINE_REVIEW_PHASE_UNSPECIFIED = 0;
+  PULL_INLINE_REVIEW_PHASE_RESERVED = 1;
+  PULL_INLINE_REVIEW_PHASE_DISPATCH_UNKNOWN = 2;
+  PULL_INLINE_REVIEW_PHASE_SUCCEEDED = 3;
+  PULL_INLINE_REVIEW_PHASE_REJECTED = 4;
+}
+message PullInlineReviewMutation {
+  string operation_id = 1;
+  PullReviewDraftTarget target = 2;
+  string draft_id = 3;
+  string accepted_version = 4;
+  string accepted_target_generation = 5;
+  string comparison_id = 6;
+  PullRequestReviewState decision = 7;
+  PullInlineReviewPhase phase = 8;
+  string observed_review_id = 9;
+  // Exact intended entry order, only filled after complete independent proof.
+  repeated string verified_comment_ids = 10;
+  string failure_code = 11;
+  string base_tip_commit_id = 12;
+  string merge_base_commit_id = 13;
+  string head_commit_id = 14;
+  string diff_sha256 = 15;
+  string created_at = 16;
+  string updated_at = 17;
+}
+message PublishPullRequestReviewDraftResponse {
+  PullInlineReviewMutation mutation = 1;
+}
+message GetPullRequestInlineReviewMutationRequest {
+  PullReviewDraftTarget target = 1;
+  string draft_id = 2;
+  string operation_id = 3;
+}
+message GetPullRequestInlineReviewMutationResponse {
+  PullInlineReviewMutation mutation = 1;
 }

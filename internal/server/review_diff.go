@@ -426,6 +426,12 @@ func parseReviewComparison(diff string) (reviewComparison, error) {
 }
 
 func (c reviewComparison) Allows(path string, line int) bool {
+	return c.allowsSide(path, line, false)
+}
+
+// Initial old-side publication is limited to ordinary same-path files.
+// Deleted and renamed file path-limited native context still needs qualification.
+func (c reviewComparison) allowsSide(path string, line int, old bool) bool {
 	if line < 1 || line > 2147483647 {
 		return false
 	}
@@ -433,7 +439,7 @@ func (c reviewComparison) Allows(path string, line int) bool {
 		// Native path-limited retained context for renames is not qualified.
 		// Keep their typed inventory, but deny before dispatch rather than
 		// knowingly creating an unverifiable batch.
-		if f.newPath != path || f.newMissing || f.unsupported || f.oldPath != f.newPath {
+		if f.newPath != path || f.newMissing || old && f.oldMissing || f.unsupported || f.oldPath != f.newPath {
 			continue
 		}
 		for _, h := range f.hunks {
@@ -441,7 +447,11 @@ func (c reviewComparison) Allows(path string, line int) bool {
 				continue
 			}
 			for _, r := range h.rows {
-				if r.newLine == line {
+				selected := r.newLine
+				if old {
+					selected = r.oldLine
+				}
+				if selected == line {
 					return true
 				}
 			}
@@ -454,7 +464,11 @@ func (c reviewComparison) Allows(path string, line int) bool {
 // for any supported cut of this selected hunk. Consumers must also bound the
 // body/path/identity envelope and aggregate all children against transport size.
 func (c reviewComparison) NativeContextJSONBound(path string, line int) (int, bool) {
-	if !c.Allows(path, line) {
+	return c.nativeContextJSONBoundSide(path, line, false)
+}
+
+func (c reviewComparison) nativeContextJSONBoundSide(path string, line int, old bool) (int, bool) {
+	if !c.allowsSide(path, line, old) {
 		return 0, false
 	}
 	for _, f := range c.files {
@@ -466,7 +480,11 @@ func (c reviewComparison) NativeContextJSONBound(path string, line int) (int, bo
 				continue
 			}
 			for _, r := range h.rows {
-				if r.newLine == line {
+				selected := r.newLine
+				if old {
+					selected = r.oldLine
+				}
+				if selected == line {
 					return h.nativeJSONBytes, true
 				}
 			}
@@ -479,7 +497,11 @@ func (c reviewComparison) NativeContextJSONBound(path string, line int) (int, bo
 // exact prefix, or a correctly declared contiguous cut from ONE known hunk.
 // Broken native cut headers and context absent from this comparison are denied.
 func (c reviewComparison) MatchesNativeContext(path string, line int, patch string) bool {
-	if !c.Allows(path, line) || len(patch) == 0 || len(patch) > 64*1024 || !utf8.ValidString(patch) || strings.ContainsRune(patch, '\x00') {
+	return c.matchesNativeContextSide(path, line, false, patch)
+}
+
+func (c reviewComparison) matchesNativeContextSide(path string, line int, old bool, patch string) bool {
+	if !c.allowsSide(path, line, old) || len(patch) == 0 || len(patch) > 64*1024 || !utf8.ValidString(patch) || strings.ContainsRune(patch, '\x00') {
 		return false
 	}
 	lines := strings.Split(strings.TrimSuffix(patch, "\n"), "\n")
@@ -496,7 +518,7 @@ func (c reviewComparison) MatchesNativeContext(path string, line int, patch stri
 		return false
 	}
 	for _, f := range c.files {
-		if f.newPath != path || f.newMissing || f.unsupported || f.oldPath != f.newPath {
+		if f.newPath != path || f.newMissing || old && f.oldMissing || f.unsupported || f.oldPath != f.newPath {
 			continue
 		}
 		if at != 0 {
@@ -530,7 +552,11 @@ func (c reviewComparison) MatchesNativeContext(path string, line int, patch stri
 			}
 			contains := false
 			for _, r := range h.rows {
-				if r.newLine == line {
+				selected := r.newLine
+				if old {
+					selected = r.oldLine
+				}
+				if selected == line {
 					contains = true
 				}
 			}

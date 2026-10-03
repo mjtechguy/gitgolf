@@ -297,6 +297,47 @@ type GolfInfrastructureConnectionVersion struct {
 	CreatedAt           time.Time
 }
 
+type GolfInlineReviewEvent struct {
+	ID               int64
+	UserID           int64
+	OperationID      uuid.UUID
+	Phase            string
+	ObservedReviewID int64
+	FailureCode      string
+	OccurredAt       time.Time
+}
+
+type GolfInlineReviewMutation struct {
+	OperationID        uuid.UUID
+	UserID             int64
+	ForgeURL           string
+	ActorID            int64
+	RepositoryID       int64
+	PullRequestID      int64
+	PullNumber         int32
+	RepositoryOwner    string
+	RepositoryName     string
+	DraftID            uuid.UUID
+	DraftVersion       int64
+	TargetGeneration   int64
+	ComparisonID       uuid.UUID
+	RequestFingerprint []byte
+	PayloadFingerprint []byte
+	ExpectedRevision   string
+	BaseTip            string
+	MergeBase          string
+	HeadCommit         string
+	DiffSha256         string
+	Decision           string
+	EntryCount         int32
+	Phase              string
+	ObservedReviewID   int64
+	VerifiedCommentIds json.RawMessage
+	FailureCode        string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
 type GolfIssueMutation struct {
 	ID                 int64
 	UserID             int64
