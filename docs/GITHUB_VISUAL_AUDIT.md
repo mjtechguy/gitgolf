@@ -4,7 +4,7 @@ Reviewed 2026-10-03 against actual public GitHub pages and the running local Gol
 
 ## Evidence and scope
 
-The initial paired capture contains 18 screenshots at 1280 × 900: repository Code, README file, issue list, PR list, PR conversation, PR Files changed, commit history, commit diff and Actions. Additional captures cover the public issue conversation, Actions run summary, branch and clone menus, and Golf profile/infrastructure settings. GitHub was signed out. Authenticated GitHub settings, write menus, approval/merge controls and private data were not exercised or claimed verified.
+The initial paired capture contains 18 screenshots at 1280 × 900: repository Code, README file, issue list, PR list, PR conversation, PR Files changed, commit history, commit diff and Actions. Additional captures cover the public issue conversation, Actions run summary, branch and clone menus, and Golf profile/infrastructure settings. GitHub was signed out. Its run summary was visible, but job logs required sign-in and were not visually exercised. Authenticated GitHub settings, write menus, approval/merge controls and private data were not exercised or claimed verified.
 
 Primary reference pages:
 
@@ -29,7 +29,7 @@ Ignored local artifacts are retained under `.tmp/github-visual-audit/`. `manifes
 | PR conversation | Workspace tabs above discussion; metadata sidebar; chronological activity | Tabs above description; native reviews/discussion before automation inventory; comparison details at right | Unified event timeline, Commits/Checks tabs, reviewers/assignment, human review submission and draft/ready transitions |
 | PR Files changed | File navigation, compact hunk rows, Viewed, view preferences and file menu | Existing file navigation/filter, split/unified, collapse, line anchors and session Viewed; shorter header | Inline threads/suggestions, persistent Viewed, whitespace/context controls, syntax in diffs, accessible file actions and trusted checks |
 | Commits | Concise grouped history and direct SHA/source/diff actions | Existing exact source/diff links and shared compact list rules | Grouped dates, verification/author avatars, history search, comparison and per-path commits |
-| Actions | Contextual workflow sidebar; runs before configuration; run/job/step/log workspace | Runs and coding tasks before inspection; settings/policies remain separate; shared live invalidations refresh authorized observations | Workflow navigation/server filters, full-page run routes, job/step graph, paged live log UX, rerun, artifacts/cache and broader execution engine |
+| Actions | Contextual workflow sidebar; runs before configuration; run/job/step/log workspace | Runs and coding tasks before inspection; canonical run workspace, summary/source receipts and sequence-paged log search/download; settings/policies remain separate; shared live invalidations refresh authorized observations | Workflow navigation/server filters, job/step graph/events, high-volume logs/line permalinks, rerun, artifacts/cache and broader execution engine |
 | Settings | Contextual navigation and scoped current values rather than work-page clutter | Existing account/repository/org/admin layouts and shared searchable inventories; profile and infrastructure screenshots retained | Authenticated GitHub reference pass and remaining supported policy/lifecycle wiring |
 | Live status | Work changes appear without repetitive refresh controls | Shared private Connect stream; refresh controls hidden when connected, visible on disconnection; immutable source/comparison remain pinned | Multi-replica/proxy/load qualification, retention and safe native/ACP progress logs |
 
@@ -52,3 +52,7 @@ Final served-image qualification captures ten Golf pages in both themes at1280×
 These are vertical positions within the viewport, not row heights. Golf source rows remain40px versus approximately41px in the reference. PR list rows tighten from107px to94px; further metadata/control alignment remains open. Different data, permissions and signed-out GitHub controls prevent pixel equality from being a functional acceptance test.
 
 Measured acceptance and test/image revisions are recorded in [implementation status](IMPLEMENTATION_STATUS.md). The full requirements remain in [repository experience parity](REPOSITORY_EXPERIENCE_PARITY.md); this audit supplements GX-1 through GX-8 rather than completing them.
+
+### Actions run follow-up
+
+The actual retained automatic shell run now opens in the full-page workspace; desktop/mobile dark/light captures are retained as `golf-action-run-*-after.png`. The first screenshot exposed search/action wrappers missing the shared classes; final markup uses the existing `search-input` and `row-actions` styles. The current worker produces no structured per-step events, so the workspace does not infer a job graph from stdout.

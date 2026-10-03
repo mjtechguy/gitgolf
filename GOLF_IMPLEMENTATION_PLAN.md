@@ -1775,3 +1775,7 @@ Remaining implementation tasks: qualify Claude/OpenCode/Grok/Pi and API-billed e
 ### 2026-10-03 visual and live implementation references
 
 The [GitHub visual audit](docs/GITHUB_VISUAL_AUDIT.md) records actual page/row/menu comparisons and remaining controls under GX-1–GX-8. The [repository activity contract](docs/REPOSITORY_ACTIVITY_CONTRACT.md) defines the initial private Connect invalidation stream, immutable snapshot behavior, bounded admission/replay and unqualified distributed/proxy/log acceptance. The implementation ledger records tests and served-image qualification; neither reference completes full GitHub parity or protected merge enforcement.
+
+### Actions run and log continuation implementation reference
+
+Canonical full-page run detail and sequence-paged loaded logs now implement another GX-2/GX-5 slice. Current scope, cursor/privacy/cancellation boundaries and remaining job/step/engine/ACP work are documented in [pipeline execution compatibility](docs/PIPELINE_EXECUTION_COMPATIBILITY.md#current-actions-run-workspace). This does not replace P4/P6 requirements or establish protected merge authority.

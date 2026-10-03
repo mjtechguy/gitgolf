@@ -142,6 +142,7 @@ def main():
               '.gitlab-ci.yml': 'proof:\n  image: '+IMAGE+'\n  script:\n    - value=shared\n    - test "$value" = shared\n    - test -f README.md\n    - printf "gitlab proof\\n"\n',
               '.github/workflows/failure.yml': 'on: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: exit 7\n      - run: printf "must not execute\\n"\n',
               '.github/workflows/slow.yml': 'on: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: sleep 60\n',
+              '.github/workflows/logs.yml': 'on: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: |\n          i=0\n          while [ "$i" -lt 24 ]; do\n            printf "%8192s\\n" "bounded log page"\n            i=$((i + 1))\n          done\n          printf "GOLF_LOG_FINAL\\n"\n',
             }
             for file,content in files.items():smoke.provider(token,'POST',base+'/contents/'+file,{'content':base64.b64encode(content.encode()).decode(),'message':'Add controlled pipeline fixture'},expected=201)
             rpc('WorkflowRunService/DispatchWorkflow',{'repository':repository,'workflowPath':'.github/workflows/actions.yml','idempotencyKey':str(uuid.uuid4())},expected=403)
@@ -172,6 +173,21 @@ def main():
             assert 'gitlab proof' in ''.join(row['text'] for row in rpc('WorkflowRunService/GetWorkflowRunLogs',{'runId':gitlab['id']}).get('logs',[]))
             failure=dispatch('.github/workflows/failure.yml');failed=wait_run(failure['id']);assert failed['state']=='WORKFLOW_RUN_STATE_FAILED' and failed['exitCode']==7
             assert 'must not execute' not in ''.join(row['text'] for row in rpc('WorkflowRunService/GetWorkflowRunLogs',{'runId':failure['id']}).get('logs',[]))
+            stage('actual worker output continues through every bounded log page')
+            paged_run=dispatch('.github/workflows/logs.yml');assert wait_run(paged_run['id'])['state']=='WORKFLOW_RUN_STATE_SUCCEEDED'
+            after=0;chunks=[];pages=0
+            while True:
+                page=rpc('WorkflowRunService/GetWorkflowRunLogs',{'runId':paged_run['id'],'afterSequence':str(after)})
+                entries=page.get('logs',[]);assert len(entries)<=16, 'Log page exceeds its bound'
+                assert not page.get('truncated'), 'Controlled output unexpectedly truncated'
+                for entry in entries:
+                    sequence=int(entry['sequence']);assert sequence==after+1, 'Log continuation duplicated or skipped output'
+                    after=sequence;chunks.append(entry['text'])
+                pages+=1
+                if not page.get('hasMore'):break
+                assert entries and pages<100, 'Log continuation failed to advance'
+            assert pages>1 and 'GOLF_LOG_FINAL' in ''.join(chunks), 'Final output was inaccessible beyond the first page'
+            print('PASS: real ordered log continuation across '+str(pages)+' pages / '+str(after)+' chunks.',flush=True)
             stage('running cancellation and policy revocation fence worker results')
             slow=dispatch('.github/workflows/slow.yml');running=wait_run(slow['id'],'WORKFLOW_RUN_STATE_RUNNING')
             cancelled=rpc('WorkflowRunService/CancelWorkflowRun',{'runId':slow['id'],'expectedVersion':running['version']})['run'];assert cancelled['state']=='WORKFLOW_RUN_STATE_CANCELLED'
@@ -182,7 +198,7 @@ def main():
             rpc('WorkflowRunService/DispatchWorkflow',{'repository':repository,'workflowPath':'.gitlab-ci.yml','idempotencyKey':str(uuid.uuid4())},expected=403)
             if args.objects:
                 stage('all actual Actions and GitLab jobs retain verified S3 locators and no PostgreSQL source bytes')
-                for item in [actions,gitlab,failure,slow,revoked]:
+                for item in [actions,gitlab,failure,paged_run,slow,revoked]:
                     object_source(item['id'])
                 assert object_source(actions['id']) == original_source
                 query = "SELECT count(*) FROM golf_workflow_runs WHERE source_storage<>'env_s3' OR source_archive IS NOT NULL"

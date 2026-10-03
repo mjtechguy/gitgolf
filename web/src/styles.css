@@ -697,3 +697,28 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 @media(max-width:720px) { .repository-code-toolbar { flex-wrap:wrap; } .repository-code-toolbar>.ref-controls { flex-basis:100%; } .clone-options { left:0; right:auto; } }
 
 .issue-discussion-layout { margin-top:20px; }
+
+/* Shared automation run surfaces use the repository work density. */
+.run-state { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+.run-state-succeeded { color:var(--accent); }
+.run-state-failed { color:var(--error); }
+.run-state-queued,.run-state-cancelled { color:var(--muted); }
+.workflow-run-summary { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
+.workflow-run-summary h2 { font-size:1.5rem; overflow-wrap:anywhere; }
+.workflow-run-summary p,.workflow-run-summary p>span { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.workflow-run-summary p { margin-top:8px; color:var(--muted); gap:16px; }
+.workflow-run-metadata { padding:var(--panel-padding); }
+.workflow-run-metadata>dl { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; margin:0 0 16px; }
+.workflow-run-metadata dt { color:var(--muted); font-size:.8125rem; }
+.workflow-run-metadata dd { margin:4px 0 0; overflow-wrap:anywhere; }
+.workflow-run-metadata dd>a { display:inline-flex; align-items:center; gap:6px; }
+.workflow-run-metadata details { border-top:1px solid var(--line); padding-top:12px; }
+.workflow-run-metadata details dl { display:grid; gap:8px; margin-bottom:0; }
+.workflow-run-metadata details dl>div { display:grid; grid-template-columns:140px minmax(0,1fr); gap:12px; }
+.workflow-log-panel .execution-log { margin:0; padding:16px; max-height:70vh; overflow:auto; white-space:pre; font-size:.8125rem; line-height:1.6; }
+.execution-log mark { background:var(--accent-bg); color:var(--accent-text); }
+@media(max-width:700px) {
+ .workflow-run-summary { flex-direction:column; }
+ .workflow-run-metadata>dl { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .workflow-run-metadata details dl>div { grid-template-columns:1fr; gap:0; }
+}

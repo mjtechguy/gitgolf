@@ -50,3 +50,15 @@ This compiler does not complete P4, all Compose CI, GitHub/GitLab parity or eith
 ## Runnable compiler evidence
 
 `go test ./internal/server -run '^TestCompileWorkflowExecution' -count=1` checks exact decoded command text, ordered independent Actions steps, omitted/explicit shell distinction, GitLab shared-shell preservation, image/stage metadata, public inspection redaction and whole-input denial for unsupported policy/events/actions/includes/inheritance, unsafe YAML/encoding, non-Linux labels and step bounds. These tests compile source without executing a host command. Executor, persistence/admission, real PostgreSQL and actual Docker/native browser checks are recorded separately when run.
+
+## Current Actions run workspace
+
+Run rows open `/OWNER/REPOSITORY/actions/runs/UUID` with a canonical lowercase UUID v4. Direct links, reload, source/commit links and contextual Actions breadcrumbs work. The detail response must match both the selected run and currently loaded native repository ID before the UI requests logs. The server independently resolves each run's original repository/owner identity and rechecks current native authority. A run from another repository is not displayed under the selected repository.
+
+The summary exposes observed state, trigger/ref, stored start/finish duration, worker and optional exit code. Exact workflow blob/source/archive and automation receipt fields live in a disclosure. A running duration is labeled in progress; no invented step timing or check eligibility is supplied. Cancellation sends the observed run version once and reports an uncertain response without retry; navigation aborts local handling.
+
+**Load more log output** follows the API's ordered sequence cursor, at most16 chunks per read. The UI rejects nonadvancing/overflow sequences and an empty page claiming continuation. Private query pages preserve chunk order and boundaries, including text spanning chunks. Live invalidations revalidate selected run and loaded log pages; denial hides output, and logout/navigation discard private state. Search highlights up to200 occurrences within loaded text, without treating log text as HTML or commands. An explicit download produces the loaded plain-text log only; a partial filename carries `-loaded`. Neither search nor download implicitly loads unseen pages. Worker truncation is explicitly distinct from an unloaded continuation page.
+
+Loaded-page replay uses the existing TanStack infinite-query behavior; this is not a tail-only transport or high-volume log viewer. The current worker stores at most256KiB of output. Capacity/retention, stable line permalinks, job/step events and graph, rerun, artifacts/cache, safe native agent events and actual ACP sessions remain required work. Do not parse untrusted stdout into invented trusted step events. CI results remain separate from protected merge authority.
+
+Reference: [GitHub workflow logs](https://docs.github.com/en/actions/how-tos/monitor-workflows/use-workflow-run-logs). Golf adopts applicable run/log interactions while qualifying execution contracts independently.

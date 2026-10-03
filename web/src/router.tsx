@@ -1,6 +1,6 @@
 import { createRootRoute, createRoute, createRouter, notFound, Outlet, stripSearchParams } from '@tanstack/react-router';
 import { App } from './App';
-import { defaultRepositorySearch, isCommitID } from './navigation';
+import { defaultRepositorySearch, isCommitID, isRunID } from './navigation';
 import type { RepositorySearch } from './navigation';
 
 const rootRoute = createRootRoute({
@@ -99,6 +99,7 @@ const validateRepositorySearch = (search: Record<string, unknown>): RepositorySe
       state: search.state === 'closed' || search.state === 'all' ? search.state : 'open', issue, pull,
       pullView: search.pullView === 'files' ? 'files' : undefined,
       commit: search.commit === undefined ? undefined : typeof search.commit === 'string' ? search.commit : '',
+      run: search.run === undefined ? undefined : typeof search.run === 'string' ? search.run : '',
     };
   };
 const repositoryRoute = createRoute({
@@ -110,6 +111,7 @@ const repositoryRoute = createRoute({
     if (search.pull !== undefined && (!Number.isSafeInteger(search.pull) || search.pull <= 0 || search.pull > 0x7fffffff)) throw notFound();
     if (search.issue !== undefined && (!Number.isSafeInteger(search.issue) || search.issue <= 0 || search.issue > 0xffffffff)) throw notFound();
     if (search.commit !== undefined && !isCommitID(search.commit)) throw notFound();
+    if (search.run !== undefined && !isRunID(search.run)) throw notFound();
   },
   search: { middlewares: [stripSearchParams(defaultRepositorySearch)] },
   component: RepositoryPage,
@@ -119,6 +121,7 @@ const repositoryRoute = createRoute({
 // repository paths; immutable source IDs avoid slash-ref ambiguity.
 function canonicalLocation(owner:string,name:string,tail:string,search:RepositorySearch) {
   if(!owner||!name||/[\/\\]/.test(owner+name)) throw notFound();
+  if(search.run!==undefined&&!isRunID(search.run))throw notFound();
   const location={...search,owner,name,kind:'repository' as const};
   if(!tail) return location;
   const parts=tail.split('/');
@@ -135,12 +138,13 @@ function canonicalLocation(owner:string,name:string,tail:string,search:Repositor
     if(/^[1-9][0-9]*$/.test(item)&&Number(parts[1])<=0x7fffffff)return {...location,view:'issues' as const,issue:Number(parts[1])};
   }
   if(parts[0]==='pull'&&parts.length>=2&&parts.length<=3&&/^[1-9][0-9]*$/.test(item)&&Number(parts[1])<=0x7fffffff&&(!parts[2]||parts[2]==='files')) return {...location,view:'pulls' as const,pull:Number(parts[1]),pullView:parts[2]==='files'?'files' as const:undefined};
-  if(parts.length===1&&['pulls','commits','actions'].includes(tail))return {...location,view:tail as 'pulls'|'commits'|'actions',pull:undefined,commit:undefined};
+  if(parts[0]==='actions'&&parts[1]==='runs'&&parts.length===3&&isRunID(parts[2]||''))return {...location,view:'actions' as const,run:parts[2]};
+  if(parts.length===1&&['pulls','commits','actions'].includes(tail))return {...location,view:tail as 'pulls'|'commits'|'actions',pull:undefined,commit:undefined,run:undefined};
   throw notFound();
 }
 const canonicalRepositoryPageRoute=createRoute({getParentRoute:()=>rootRoute,path:'/$owner/$name/$',validateSearch:validateRepositorySearch,
   beforeLoad:({params,search})=>{canonicalLocation(params.owner,params.name,params._splat||'',search);},
-  search:{middlewares:[({search,next})=>{const clean:Partial<RepositorySearch>={...next(search)};delete clean.view;delete clean.path;delete clean.issue;delete clean.pull;delete clean.pullView;delete clean.commit;return clean as RepositorySearch;},stripSearchParams(defaultRepositorySearch)]},
+  search:{middlewares:[({search,next})=>{const clean:Partial<RepositorySearch>={...next(search)};delete clean.view;delete clean.path;delete clean.issue;delete clean.pull;delete clean.pullView;delete clean.commit;delete clean.run;return clean as RepositorySearch;},stripSearchParams(defaultRepositorySearch)]},
   component:()=>{const p=canonicalRepositoryPageRoute.useParams();return <App location={canonicalLocation(p.owner,p.name,p._splat||'',canonicalRepositoryPageRoute.useSearch())}/>;}});
 
 function RepositorySettingsPage() {
