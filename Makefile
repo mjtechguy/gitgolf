@@ -128,3 +128,9 @@ qualify-pull-inline-native:
 	python3 scripts/pull-inline-write-native-probe.py
 qualify-reviewer-publication-native:
 	python3 scripts/reviewer-publication-native-proof.py
+
+.PHONY: qualify-pull-review-drafts qualify-pull-review-drafts-browser
+qualify-pull-review-drafts:
+	python3 scripts/pull-review-drafts-smoke.py --stack-root "$(CURDIR)"
+qualify-pull-review-drafts-browser:
+	python3 scripts/pull-review-drafts-smoke.py --stack-root "$(CURDIR)" --browser
