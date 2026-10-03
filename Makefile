@@ -121,8 +121,10 @@ local-agents-up: local-up
 qualify-path-history: cli
 	python3 scripts/path-history-smoke.py
 
-.PHONY: qualify-pull-diff-binding qualify-pull-inline-native
+.PHONY: qualify-pull-diff-binding qualify-pull-inline-native qualify-reviewer-publication-native
 qualify-pull-diff-binding: cli
 	python3 scripts/pull-diff-binding-smoke.py
 qualify-pull-inline-native:
 	python3 scripts/pull-inline-write-native-probe.py
+qualify-reviewer-publication-native:
+	python3 scripts/reviewer-publication-native-proof.py
