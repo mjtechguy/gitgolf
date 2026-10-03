@@ -241,16 +241,16 @@ test('changed-file tree preserves native identities, nested folders, renames, de
 
 test('file-type and Viewed filters cover only loaded native entries without changing file anchors or raw output',async({page})=>{
  const state=await backend(page);state.raw=multiPatch();await page.goto(diffURL(head));
- await page.getByText('File filter',{exact:true}).click();await page.getByLabel('.ts',{exact:true}).uncheck();
+ await page.getByLabel('File filter',{exact:true}).click();await page.getByLabel('.ts',{exact:true}).uncheck();
  await expect(page.locator('.diff-file')).toHaveCount(4);
  await expect(page.getByRole('status').filter({hasText:'Showing 4 of 7 changed files'})).toBeVisible();
  await page.getByLabel('.ts',{exact:true}).check();await page.getByLabel('Viewed files visibility').selectOption('unviewed');
- await page.getByText('File filter',{exact:true}).press('Escape');
+ await page.getByLabel('File filter',{exact:true}).press('Escape');
  const selected=page.locator(`#diff-${head}-file-1`);await selected.getByLabel('Viewed',{exact:true}).click();
  await expect(page.locator('.diff-file')).toHaveCount(6);await expect(page.getByText('1/7 viewed this session',{exact:true})).toBeVisible();
- await page.getByText('File filter',{exact:true}).click();await page.getByLabel('Viewed files visibility').selectOption('viewed');
+ await page.getByLabel('File filter',{exact:true}).click();await page.getByLabel('Viewed files visibility').selectOption('viewed');
  await expect(page.locator('.diff-file')).toHaveCount(1);await expect(page.getByRole('link',{name:'src/nested/alpha.ts',exact:true})).toHaveAttribute('href',`#diff-${head}-file-1`);
- await page.getByRole('button',{name:'Reset file filters',exact:true}).click();await page.getByText('File filter',{exact:true}).press('Escape');
+ await page.getByRole('button',{name:'Reset file filters',exact:true}).click();await page.getByLabel('File filter',{exact:true}).press('Escape');
  await expect(page.locator('.diff-file')).toHaveCount(7);await expect(selected.getByLabel('Viewed',{exact:true})).toBeChecked();
  await expect(page.getByLabel('Unified diff, plain text')).toHaveText(state.raw);
  await page.reload();await expect(page.getByText('0/7 viewed this session',{exact:true})).toBeVisible();

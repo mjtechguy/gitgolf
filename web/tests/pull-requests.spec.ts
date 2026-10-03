@@ -538,7 +538,7 @@ test('diff disclosures fit mobile viewports, return keyboard focus, and close sa
  for(const theme of ['dark','light'])for(const width of [320,390]) {
   await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);await page.setViewportSize({width,height:560});
   for(const name of ['Diff settings','File filter']) {
-   const trigger=name==='Diff settings'?page.getByLabel(name,{exact:true}):page.getByText(name,{exact:true});
+   const trigger=page.getByLabel(name,{exact:true});
    await trigger.click();const popup=page.locator('.diff-options[open] .diff-options-content');await expect(popup).toBeVisible();
    await expect.poll(async()=>{const box=await popup.boundingBox();return Boolean(box&&box.y>=0&&box.y+box.height<=560);}).toBe(true);
    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

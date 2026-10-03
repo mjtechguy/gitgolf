@@ -123,8 +123,14 @@ for(const theme of ['dark','light'])for(const width of [1280,390,320])test(`File
  for(const label of ['Unified','Split','Show review comments','Review changes']){
   const button=page.locator('.diff-toolbar').getByRole('button',{name:label,exact:true});await expect(button).toBeVisible();
   const lines=await button.evaluate(el=>{const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);const tops:number[]=[];while(walker.nextNode()){const node=walker.currentNode;if(!node.textContent?.trim())continue;const range=document.createRange();range.selectNodeContents(node);for(const rect of range.getClientRects())if(rect.width)tops.push(Math.round(rect.top));}const box=el.getBoundingClientRect();return{lines:new Set(tops).size,inside:box.left>=0&&box.right<=innerWidth,clipped:el.scrollWidth>el.clientWidth};});
-  expect(lines).toEqual({lines:1,inside:true,clipped:false});
+  expect(lines).toEqual({lines:label==='Show review comments'?0:1,inside:true,clipped:false});
+  if(width<=760)expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
  }
+ const toolbar=await page.locator('.diff-toolbar').boundingBox();const firstCode=await page.locator('.diff-code').first().boundingBox();
+ // Offline fixtures retain an additional 44px manual-refresh action.
+ if(width<=390){expect(toolbar!.height).toBeLessThanOrEqual(200);expect(firstCode!.y).toBeLessThan(900);}
+ console.log('Fixture diff density '+JSON.stringify({theme,width,toolbar:toolbar!.height,firstCode:firstCode!.y}));
+ await page.screenshot({path:`test-results/compact-review-toolbar-${theme}-${width}.png`});
  await page.getByRole('button',{name:'Split',exact:true}).click();await expect(page.getByRole('button',{name:'Split',exact:true})).toHaveAttribute('aria-pressed','true');
  await page.getByRole('button',{name:'Unified',exact:true}).click();await expect(page.getByRole('button',{name:'Unified',exact:true})).toHaveAttribute('aria-pressed','true');
  const show=page.getByRole('button',{name:'Show review comments',exact:true});await show.focus();await page.keyboard.press('Enter');const scope=page.getByRole('region',{name:'Files changed comments',exact:true});await scope.getByRole('button',{name:'Show inline comments (3)',exact:true}).click();await expect(panel(page).getByRole('article')).toHaveCount(3);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await scope.getByRole('button',{name:'Review changes from comments',exact:true}).click();await expect(page.getByRole('heading',{name:'Review changes',exact:true})).toBeVisible();await expect(page.getByRole('textbox',{name:'Review summary, Markdown',exact:true})).toBeVisible();await expect(page.getByRole('dialog')).toHaveCount(0);

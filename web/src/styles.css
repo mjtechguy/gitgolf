@@ -540,6 +540,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 /* Shared repository diff workspace, used by commits and pull requests. */
 .diff-workspace { min-width:0; }
 .diff-toolbar { position:relative; display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; padding:8px 12px; border-bottom:1px solid var(--line); }
+.diff-summary { display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-width:0; }
 .diff-toolbar h2 { margin:0; font-size:1rem; }
 .diff-toolbar strong, .diff-stats { display:inline-flex; align-items:center; gap:8px; }
 .diff-toolbar .content-view-controls { margin-left:auto; padding:0; border:0; }
@@ -1031,3 +1032,15 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .pull-action-menu-content>button>svg { flex-shrink:0; }
 .pull-action-menu-content>button:not(:disabled):hover { background:var(--hover); }
 @media(max-width:720px) { .pull-desktop-actions { display:none; } .pull-action-menu { display:block; width:fit-content; margin-left:auto; } }
+
+/* Shared mobile diff controls retain labels for assistive technology and 44px targets. */
+@media(max-width:760px) {
+ .diff-toolbar { gap:6px 8px; padding:8px; }
+ .diff-summary { flex-basis:100%; gap:6px 8px; }
+ .diff-toolbar .content-view-controls { gap:6px; flex-wrap:wrap; }
+ .diff-toolbar .content-view-controls > .button { font-size:13px; padding-inline:10px; }
+ .diff-toolbar .content-view-controls > .icon-button,.diff-toolbar .content-view-controls > .text-button { min-width:44px; min-height:44px; }
+ .diff-toolbar .diff-controls { gap:6px; margin-left:auto; }
+ .diff-toolbar .diff-options > summary { min-width:44px; justify-content:center; }
+ .diff-mode-label,.diff-filter-label,.diff-session-label { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+}

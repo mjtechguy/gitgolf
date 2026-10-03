@@ -1,5 +1,13 @@
 # Golf implementation status
 
+## Compact shared diff controls (source qualification, 2026-10-03)
+
+The shared commit/PR diff toolbar now groups comparison counts and uses accessible icon controls for diff modes, file filtering, review comments and private drafts. The explicit Review changes action remains labeled. Global CSS preserves 44px mobile touch targets, keyboard disclosure focus and both Golf themes without reducing source text sizes.
+
+Affected commit, PR, inline-reader and private-draft browser suites pass141 cases in1.1m (`.tmp/compact-review-toolbar-verified.log`); the corrected focused selection passes10 in8.9s. `make check` and whitespace checks pass. Browser fixtures at390px in both themes show a188px offline toolbar and first code aroundy826, with320px first code aroundy878; desktop toolbar remains49px. Fixtures include the additional manual offline refresh control and are not served/native measurements. The first two source runs exposed hidden-label locator assumptions and an unsupported175px offline bound; corrected assertions target accessible disclosure labels and require44px controls, no overflow and code within the900px fixture viewport.
+
+This source increment is not yet deployed. The current c385 runtime and its235px served mobile toolbar measurements below remain authoritative until a replacement image is qualified. Isolated migration037/native inline publication work remains separate and unqualified for the served UI; no native review, inference, CI, remote push or full-parity completion is implied.
+
 ## Repository URL and enabled-unit integration (2026-10-03)
 
 Product source `bfbb5deba7d86c298cc18b81e9326b402da9d533` adds canonical `/OWNER/REPO/settings`, `/settings/access` and `/settings/workflows` with supported legacy aliases. Source/path-history SHA routes omit redundant `ref` and path-owned query selectors; issue/PR filters and deliberate source/history return context remain separate. Incoming deep selectors are validated before any cleanup or authority request. A conflicting query ref cannot select another snapshot. Authorized source reads normalize old file links and tree/blob aliases using the returned kind, preserve fragments, and cannot overwrite navigation with a stale source receipt. Readable branch/tag path entry still needs a qualified slash-ref/path resolver.
