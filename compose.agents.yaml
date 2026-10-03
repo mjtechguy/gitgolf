@@ -3,12 +3,16 @@
 services:
   golf:
     environment:
+      GOLF_REVIEW_IMAGE: ${GOLF_REVIEW_IMAGE:-}
+      GOLF_REVIEW_PUBLISHER_TOKEN: ${GOLF_REVIEW_PUBLISHER_TOKEN:-}
       GOLF_AGENT_IMAGE: ${GOLF_AGENT_IMAGE:?Run scripts/init-agent-env.py}
   agent-worker:
     build:
       context: .
       dockerfile: Dockerfile.agent-worker
     environment:
+      GOLF_REVIEW_IMAGE: ${GOLF_REVIEW_IMAGE:-}
+      GOLF_REVIEW_PUBLISHER_TOKEN: ${GOLF_REVIEW_PUBLISHER_TOKEN:-}
       GOLF_AGENT_IMAGE: ${GOLF_AGENT_IMAGE:?Run scripts/init-agent-env.py}
       GOLF_AGENT_WORKER_ID: local-agents
       GOLF_AGENT_SECCOMP: /app/seccomp.json

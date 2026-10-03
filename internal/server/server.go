@@ -22,7 +22,7 @@ import (
 )
 
 type Config struct {
-	AgentImage                                                 string
+	AgentImage, ReviewImage, ReviewPublisherToken              string
 	ClaudeBinary, OpenCodeBinary, CodexBinary                  string
 	PushCIEnabled                                              bool
 	ObjectStoreConfig                                          objectstore.Config
@@ -53,6 +53,9 @@ type Server struct {
 }
 
 func New(config Config, db *sql.DB) (*Server, error) {
+	if config.ReviewImage != "" && !regexp.MustCompile(`^sha256:[a-f0-9]{64}$`).MatchString(config.ReviewImage) {
+		return nil, errors.New("GOLF_REVIEW_IMAGE must identify an exact local image")
+	}
 	if config.AgentImage != "" && !regexp.MustCompile(`^sha256:[a-f0-9]{64}$`).MatchString(config.AgentImage) {
 		return nil, errors.New("GOLF_AGENT_IMAGE must identify an exact local image")
 	}

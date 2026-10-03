@@ -62,11 +62,24 @@ func discussionURL(value, repoURL, suffix, fragment string) bool {
 
 func issueSuffix(number int64) string { return "/issues/" + strconv.FormatInt(number, 10) }
 
-func validDiscussionIssue(issue discussionIssue, repo Repository, number uint32) bool {
-	return validIssue(issue.Issue) && issue.Number == int64(number) && !issue.isPullRequest() &&
+type pullDiscussionKey struct{}
+
+func isPullDiscussion(ctx context.Context) bool {
+	value, _ := ctx.Value(pullDiscussionKey{}).(bool)
+	return value
+}
+func discussionSuffix(number int64, pull bool) string {
+	if pull {
+		return "/pulls/" + strconv.FormatInt(number, 10)
+	}
+	return issueSuffix(number)
+}
+func validDiscussionIssue(issue discussionIssue, repo Repository, number uint32, pull ...bool) bool {
+	expected := len(pull) > 0 && pull[0]
+	return validIssue(issue.Issue) && issue.Number == int64(number) && issue.isPullRequest() == expected &&
 		issue.Repository != nil && issue.Repository.ID == repo.ID &&
 		discussionText(issue.Title, 1024) && discussionText(issue.Body, 256<<10) && validPullTime(issue.CreatedAt) && validPullTime(issue.UpdatedAt) &&
-		discussionURL(issue.HTMLURL, repo.HTMLURL, issueSuffix(issue.Number), "")
+		discussionURL(issue.HTMLURL, repo.HTMLURL, discussionSuffix(issue.Number, expected), "")
 }
 
 func (s *Server) readDiscussionIssue(ctx context.Context, token forgeCredential, base string, repo Repository, number uint32) (discussionIssue, error) {
@@ -75,22 +88,29 @@ func (s *Server) readDiscussionIssue(ctx context.Context, token forgeCredential,
 	if err != nil {
 		return issue, err
 	}
-	if issue.isPullRequest() {
+	if issue.isPullRequest() != isPullDiscussion(ctx) {
 		return issue, errResourceNotFound
 	}
 	if len(issue.Body) > 256<<10 || len(issue.Title) > 1024 {
 		return issue, errForgeResponseTooLarge
 	}
-	if !validDiscussionIssue(issue, repo, number) {
+	if !validDiscussionIssue(issue, repo, number, isPullDiscussion(ctx)) {
 		return issue, errInvalidForgeResponse
 	}
 	return issue, nil
 }
 
-func validIssueComment(comment forgeIssueComment, repo Repository, number uint32) bool {
+func validIssueComment(comment forgeIssueComment, repo Repository, number uint32, pull ...bool) bool {
+	expected := len(pull) > 0 && pull[0]
+	suffix := discussionSuffix(int64(number), expected)
+	association := comment.PullRequestURL == "" && discussionURL(comment.IssueURL, repo.HTMLURL, issueSuffix(int64(number)), "")
+	if expected {
+		association = (comment.IssueURL == "" || discussionURL(comment.IssueURL, repo.HTMLURL, suffix, "") || discussionURL(comment.IssueURL, repo.HTMLURL, issueSuffix(int64(number)), "")) && discussionURL(comment.PullRequestURL, repo.HTMLURL, suffix, "")
+	}
+
 	return comment.ID > 0 && validPullUser(comment.User) && discussionText(comment.Body, 256<<10) && validPullTime(comment.CreatedAt) && validPullTime(comment.UpdatedAt) &&
-		comment.PullRequestURL == "" && discussionURL(comment.IssueURL, repo.HTMLURL, issueSuffix(int64(number)), "") &&
-		discussionURL(comment.HTMLURL, repo.HTMLURL, issueSuffix(int64(number)), "issuecomment-"+strconv.FormatInt(comment.ID, 10))
+		association &&
+		discussionURL(comment.HTMLURL, repo.HTMLURL, suffix, "issuecomment-"+strconv.FormatInt(comment.ID, 10))
 }
 
 func wireIssueComment(comment forgeIssueComment) *golfv1.IssueComment {
@@ -103,7 +123,7 @@ func (s *Server) readDiscussionComment(ctx context.Context, token forgeCredentia
 	if err == nil && len(comment.Body) > 256<<10 {
 		return comment, errForgeResponseTooLarge
 	}
-	if err == nil && (comment.ID != id || !validIssueComment(comment, repo, number)) {
+	if err == nil && (comment.ID != id || !validIssueComment(comment, repo, number, isPullDiscussion(ctx))) {
 		err = errInvalidForgeResponse
 	}
 	return comment, err
@@ -150,13 +170,18 @@ func (s *Server) listIssueComments(ctx context.Context, session string, token fo
 			seen[comment.ID] = true
 			// Exactly one native repository-wide page. Unrelated issues and PRs
 			// never enter Golf's response; an empty filtered page may advance.
-			if !discussionURL(comment.IssueURL, repo.HTMLURL, issueSuffix(int64(number)), "") {
+			related := discussionURL(comment.IssueURL, repo.HTMLURL, issueSuffix(int64(number)), "")
+			if isPullDiscussion(ctx) {
+				related = discussionURL(comment.PullRequestURL, repo.HTMLURL, discussionSuffix(int64(number), true), "")
+			}
+			if !related {
 				continue
 			}
+
 			if len(comment.Body) > 256<<10 {
 				return errForgeResponseTooLarge
 			}
-			if !validIssueComment(comment, repo, number) {
+			if !validIssueComment(comment, repo, number, isPullDiscussion(ctx)) {
 				return errInvalidForgeResponse
 			}
 			result = append(result, wireIssueComment(comment))
@@ -189,9 +214,31 @@ func (s *Server) ListIssueComments(ctx context.Context, req *connect.Request[gol
 	if err != nil {
 		return nil, rpcError(err)
 	}
+	ctx = context.WithValue(ctx, pullDiscussionKey{}, req.Msg.PullRequest)
 	rows, next, err := s.listIssueComments(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), repoID, issueID, req.Msg.Number, pageFrom(req.Msg.Page))
 	if err != nil {
 		return nil, rpcError(err)
 	}
 	return connect.NewResponse(&golfv1.ListIssueCommentsResponse{Comments: rows, Page: wirePage(next)}), nil
+}
+
+func (s *Server) GetPullRequestDiscussion(ctx context.Context, req *connect.Request[golfv1.GetPullRequestDiscussionRequest]) (*connect.Response[golfv1.GetPullRequestDiscussionResponse], error) {
+	token, e := rpcToken(ctx)
+	if e != nil {
+		return nil, e
+	}
+	if e = pullNumber(req.Msg.Number); e != nil {
+		return nil, rpcError(e)
+	}
+	ctx = context.WithValue(ctx, pullDiscussionKey{}, true)
+	var issue discussionIssue
+	e = s.withRepositoryRead(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), func(base string, repo Repository) error {
+		var err error
+		issue, err = s.readDiscussionIssue(ctx, token, base, repo, req.Msg.Number)
+		return err
+	})
+	if e != nil {
+		return nil, rpcError(e)
+	}
+	return connect.NewResponse(&golfv1.GetPullRequestDiscussionResponse{Issue: wireIssue(issue.Issue)}), nil
 }

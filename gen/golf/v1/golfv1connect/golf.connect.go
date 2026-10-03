@@ -68,6 +68,8 @@ const (
 	AgentUsageServiceName = "golf.v1.AgentUsageService"
 	// AgentTaskServiceName is the fully-qualified name of the AgentTaskService service.
 	AgentTaskServiceName = "golf.v1.AgentTaskService"
+	// ReviewerServiceName is the fully-qualified name of the ReviewerService service.
+	ReviewerServiceName = "golf.v1.ReviewerService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -155,6 +157,9 @@ const (
 	// RepositoryServiceListIssuesProcedure is the fully-qualified name of the RepositoryService's
 	// ListIssues RPC.
 	RepositoryServiceListIssuesProcedure = "/golf.v1.RepositoryService/ListIssues"
+	// RepositoryServiceGetPullRequestDiscussionProcedure is the fully-qualified name of the
+	// RepositoryService's GetPullRequestDiscussion RPC.
+	RepositoryServiceGetPullRequestDiscussionProcedure = "/golf.v1.RepositoryService/GetPullRequestDiscussion"
 	// RepositoryServiceGetIssueProcedure is the fully-qualified name of the RepositoryService's
 	// GetIssue RPC.
 	RepositoryServiceGetIssueProcedure = "/golf.v1.RepositoryService/GetIssue"
@@ -365,6 +370,18 @@ const (
 	// AgentTaskServiceCancelAgentTaskProcedure is the fully-qualified name of the AgentTaskService's
 	// CancelAgentTask RPC.
 	AgentTaskServiceCancelAgentTaskProcedure = "/golf.v1.AgentTaskService/CancelAgentTask"
+	// ReviewerServiceGetReviewerProcedure is the fully-qualified name of the ReviewerService's
+	// GetReviewer RPC.
+	ReviewerServiceGetReviewerProcedure = "/golf.v1.ReviewerService/GetReviewer"
+	// ReviewerServiceSaveReviewerProcedure is the fully-qualified name of the ReviewerService's
+	// SaveReviewer RPC.
+	ReviewerServiceSaveReviewerProcedure = "/golf.v1.ReviewerService/SaveReviewer"
+	// ReviewerServiceListReviewerRunsProcedure is the fully-qualified name of the ReviewerService's
+	// ListReviewerRuns RPC.
+	ReviewerServiceListReviewerRunsProcedure = "/golf.v1.ReviewerService/ListReviewerRuns"
+	// ReviewerServiceRequestReviewProcedure is the fully-qualified name of the ReviewerService's
+	// RequestReview RPC.
+	ReviewerServiceRequestReviewProcedure = "/golf.v1.ReviewerService/RequestReview"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -997,6 +1014,7 @@ type RepositoryServiceClient interface {
 	GetCommitDiff(context.Context, *connect.Request[v1.GetCommitDiffRequest]) (*connect.Response[v1.GetCommitDiffResponse], error)
 	GetContents(context.Context, *connect.Request[v1.GetContentsRequest]) (*connect.Response[v1.GetContentsResponse], error)
 	ListIssues(context.Context, *connect.Request[v1.ListIssuesRequest]) (*connect.Response[v1.ListIssuesResponse], error)
+	GetPullRequestDiscussion(context.Context, *connect.Request[v1.GetPullRequestDiscussionRequest]) (*connect.Response[v1.GetPullRequestDiscussionResponse], error)
 	GetIssue(context.Context, *connect.Request[v1.GetIssueRequest]) (*connect.Response[v1.GetIssueResponse], error)
 	ListIssueComments(context.Context, *connect.Request[v1.ListIssueCommentsRequest]) (*connect.Response[v1.ListIssueCommentsResponse], error)
 	CreateIssue(context.Context, *connect.Request[v1.CreateIssueRequest]) (*connect.Response[v1.CreateIssueResponse], error)
@@ -1072,6 +1090,12 @@ func NewRepositoryServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(repositoryServiceMethods.ByName("ListIssues")),
 			connect.WithClientOptions(opts...),
 		),
+		getPullRequestDiscussion: connect.NewClient[v1.GetPullRequestDiscussionRequest, v1.GetPullRequestDiscussionResponse](
+			httpClient,
+			baseURL+RepositoryServiceGetPullRequestDiscussionProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("GetPullRequestDiscussion")),
+			connect.WithClientOptions(opts...),
+		),
 		getIssue: connect.NewClient[v1.GetIssueRequest, v1.GetIssueResponse](
 			httpClient,
 			baseURL+RepositoryServiceGetIssueProcedure,
@@ -1125,23 +1149,24 @@ func NewRepositoryServiceClient(httpClient connect.HTTPClient, baseURL string, o
 
 // repositoryServiceClient implements RepositoryServiceClient.
 type repositoryServiceClient struct {
-	listRepositories       *connect.Client[v1.ListRepositoriesRequest, v1.ListRepositoriesResponse]
-	createRepository       *connect.Client[v1.CreateRepositoryRequest, v1.CreateRepositoryResponse]
-	getRepositoryCreation  *connect.Client[v1.GetRepositoryCreationRequest, v1.GetRepositoryCreationResponse]
-	getRepository          *connect.Client[v1.GetRepositoryRequest, v1.GetRepositoryResponse]
-	listBranches           *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
-	listCommits            *connect.Client[v1.ListCommitsRequest, v1.ListCommitsResponse]
-	getCommitDiff          *connect.Client[v1.GetCommitDiffRequest, v1.GetCommitDiffResponse]
-	getContents            *connect.Client[v1.GetContentsRequest, v1.GetContentsResponse]
-	listIssues             *connect.Client[v1.ListIssuesRequest, v1.ListIssuesResponse]
-	getIssue               *connect.Client[v1.GetIssueRequest, v1.GetIssueResponse]
-	listIssueComments      *connect.Client[v1.ListIssueCommentsRequest, v1.ListIssueCommentsResponse]
-	createIssue            *connect.Client[v1.CreateIssueRequest, v1.CreateIssueResponse]
-	createIssueComment     *connect.Client[v1.CreateIssueCommentRequest, v1.CreateIssueCommentResponse]
-	getIssueMutation       *connect.Client[v1.GetIssueMutationRequest, v1.GetIssueMutationResponse]
-	listPullRequests       *connect.Client[v1.ListPullRequestsRequest, v1.ListPullRequestsResponse]
-	getPullRequest         *connect.Client[v1.GetPullRequestRequest, v1.GetPullRequestResponse]
-	listPullRequestReviews *connect.Client[v1.ListPullRequestReviewsRequest, v1.ListPullRequestReviewsResponse]
+	listRepositories         *connect.Client[v1.ListRepositoriesRequest, v1.ListRepositoriesResponse]
+	createRepository         *connect.Client[v1.CreateRepositoryRequest, v1.CreateRepositoryResponse]
+	getRepositoryCreation    *connect.Client[v1.GetRepositoryCreationRequest, v1.GetRepositoryCreationResponse]
+	getRepository            *connect.Client[v1.GetRepositoryRequest, v1.GetRepositoryResponse]
+	listBranches             *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
+	listCommits              *connect.Client[v1.ListCommitsRequest, v1.ListCommitsResponse]
+	getCommitDiff            *connect.Client[v1.GetCommitDiffRequest, v1.GetCommitDiffResponse]
+	getContents              *connect.Client[v1.GetContentsRequest, v1.GetContentsResponse]
+	listIssues               *connect.Client[v1.ListIssuesRequest, v1.ListIssuesResponse]
+	getPullRequestDiscussion *connect.Client[v1.GetPullRequestDiscussionRequest, v1.GetPullRequestDiscussionResponse]
+	getIssue                 *connect.Client[v1.GetIssueRequest, v1.GetIssueResponse]
+	listIssueComments        *connect.Client[v1.ListIssueCommentsRequest, v1.ListIssueCommentsResponse]
+	createIssue              *connect.Client[v1.CreateIssueRequest, v1.CreateIssueResponse]
+	createIssueComment       *connect.Client[v1.CreateIssueCommentRequest, v1.CreateIssueCommentResponse]
+	getIssueMutation         *connect.Client[v1.GetIssueMutationRequest, v1.GetIssueMutationResponse]
+	listPullRequests         *connect.Client[v1.ListPullRequestsRequest, v1.ListPullRequestsResponse]
+	getPullRequest           *connect.Client[v1.GetPullRequestRequest, v1.GetPullRequestResponse]
+	listPullRequestReviews   *connect.Client[v1.ListPullRequestReviewsRequest, v1.ListPullRequestReviewsResponse]
 }
 
 // ListRepositories calls golf.v1.RepositoryService.ListRepositories.
@@ -1187,6 +1212,11 @@ func (c *repositoryServiceClient) GetContents(ctx context.Context, req *connect.
 // ListIssues calls golf.v1.RepositoryService.ListIssues.
 func (c *repositoryServiceClient) ListIssues(ctx context.Context, req *connect.Request[v1.ListIssuesRequest]) (*connect.Response[v1.ListIssuesResponse], error) {
 	return c.listIssues.CallUnary(ctx, req)
+}
+
+// GetPullRequestDiscussion calls golf.v1.RepositoryService.GetPullRequestDiscussion.
+func (c *repositoryServiceClient) GetPullRequestDiscussion(ctx context.Context, req *connect.Request[v1.GetPullRequestDiscussionRequest]) (*connect.Response[v1.GetPullRequestDiscussionResponse], error) {
+	return c.getPullRequestDiscussion.CallUnary(ctx, req)
 }
 
 // GetIssue calls golf.v1.RepositoryService.GetIssue.
@@ -1240,6 +1270,7 @@ type RepositoryServiceHandler interface {
 	GetCommitDiff(context.Context, *connect.Request[v1.GetCommitDiffRequest]) (*connect.Response[v1.GetCommitDiffResponse], error)
 	GetContents(context.Context, *connect.Request[v1.GetContentsRequest]) (*connect.Response[v1.GetContentsResponse], error)
 	ListIssues(context.Context, *connect.Request[v1.ListIssuesRequest]) (*connect.Response[v1.ListIssuesResponse], error)
+	GetPullRequestDiscussion(context.Context, *connect.Request[v1.GetPullRequestDiscussionRequest]) (*connect.Response[v1.GetPullRequestDiscussionResponse], error)
 	GetIssue(context.Context, *connect.Request[v1.GetIssueRequest]) (*connect.Response[v1.GetIssueResponse], error)
 	ListIssueComments(context.Context, *connect.Request[v1.ListIssueCommentsRequest]) (*connect.Response[v1.ListIssueCommentsResponse], error)
 	CreateIssue(context.Context, *connect.Request[v1.CreateIssueRequest]) (*connect.Response[v1.CreateIssueResponse], error)
@@ -1311,6 +1342,12 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 		connect.WithSchema(repositoryServiceMethods.ByName("ListIssues")),
 		connect.WithHandlerOptions(opts...),
 	)
+	repositoryServiceGetPullRequestDiscussionHandler := connect.NewUnaryHandler(
+		RepositoryServiceGetPullRequestDiscussionProcedure,
+		svc.GetPullRequestDiscussion,
+		connect.WithSchema(repositoryServiceMethods.ByName("GetPullRequestDiscussion")),
+		connect.WithHandlerOptions(opts...),
+	)
 	repositoryServiceGetIssueHandler := connect.NewUnaryHandler(
 		RepositoryServiceGetIssueProcedure,
 		svc.GetIssue,
@@ -1379,6 +1416,8 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 			repositoryServiceGetContentsHandler.ServeHTTP(w, r)
 		case RepositoryServiceListIssuesProcedure:
 			repositoryServiceListIssuesHandler.ServeHTTP(w, r)
+		case RepositoryServiceGetPullRequestDiscussionProcedure:
+			repositoryServiceGetPullRequestDiscussionHandler.ServeHTTP(w, r)
 		case RepositoryServiceGetIssueProcedure:
 			repositoryServiceGetIssueHandler.ServeHTTP(w, r)
 		case RepositoryServiceListIssueCommentsProcedure:
@@ -1438,6 +1477,10 @@ func (UnimplementedRepositoryServiceHandler) GetContents(context.Context, *conne
 
 func (UnimplementedRepositoryServiceHandler) ListIssues(context.Context, *connect.Request[v1.ListIssuesRequest]) (*connect.Response[v1.ListIssuesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.ListIssues is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) GetPullRequestDiscussion(context.Context, *connect.Request[v1.GetPullRequestDiscussionRequest]) (*connect.Response[v1.GetPullRequestDiscussionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.GetPullRequestDiscussion is not implemented"))
 }
 
 func (UnimplementedRepositoryServiceHandler) GetIssue(context.Context, *connect.Request[v1.GetIssueRequest]) (*connect.Response[v1.GetIssueResponse], error) {
@@ -3843,4 +3886,152 @@ func (UnimplementedAgentTaskServiceHandler) GetAgentTask(context.Context, *conne
 
 func (UnimplementedAgentTaskServiceHandler) CancelAgentTask(context.Context, *connect.Request[v1.CancelAgentTaskRequest]) (*connect.Response[v1.CancelAgentTaskResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AgentTaskService.CancelAgentTask is not implemented"))
+}
+
+// ReviewerServiceClient is a client for the golf.v1.ReviewerService service.
+type ReviewerServiceClient interface {
+	GetReviewer(context.Context, *connect.Request[v1.GetReviewerRequest]) (*connect.Response[v1.GetReviewerResponse], error)
+	SaveReviewer(context.Context, *connect.Request[v1.SaveReviewerRequest]) (*connect.Response[v1.SaveReviewerResponse], error)
+	ListReviewerRuns(context.Context, *connect.Request[v1.ListReviewerRunsRequest]) (*connect.Response[v1.ListReviewerRunsResponse], error)
+	RequestReview(context.Context, *connect.Request[v1.RequestReviewRequest]) (*connect.Response[v1.RequestReviewResponse], error)
+}
+
+// NewReviewerServiceClient constructs a client for the golf.v1.ReviewerService service. By default,
+// it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and
+// sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC()
+// or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewReviewerServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ReviewerServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	reviewerServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("ReviewerService").Methods()
+	return &reviewerServiceClient{
+		getReviewer: connect.NewClient[v1.GetReviewerRequest, v1.GetReviewerResponse](
+			httpClient,
+			baseURL+ReviewerServiceGetReviewerProcedure,
+			connect.WithSchema(reviewerServiceMethods.ByName("GetReviewer")),
+			connect.WithClientOptions(opts...),
+		),
+		saveReviewer: connect.NewClient[v1.SaveReviewerRequest, v1.SaveReviewerResponse](
+			httpClient,
+			baseURL+ReviewerServiceSaveReviewerProcedure,
+			connect.WithSchema(reviewerServiceMethods.ByName("SaveReviewer")),
+			connect.WithClientOptions(opts...),
+		),
+		listReviewerRuns: connect.NewClient[v1.ListReviewerRunsRequest, v1.ListReviewerRunsResponse](
+			httpClient,
+			baseURL+ReviewerServiceListReviewerRunsProcedure,
+			connect.WithSchema(reviewerServiceMethods.ByName("ListReviewerRuns")),
+			connect.WithClientOptions(opts...),
+		),
+		requestReview: connect.NewClient[v1.RequestReviewRequest, v1.RequestReviewResponse](
+			httpClient,
+			baseURL+ReviewerServiceRequestReviewProcedure,
+			connect.WithSchema(reviewerServiceMethods.ByName("RequestReview")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// reviewerServiceClient implements ReviewerServiceClient.
+type reviewerServiceClient struct {
+	getReviewer      *connect.Client[v1.GetReviewerRequest, v1.GetReviewerResponse]
+	saveReviewer     *connect.Client[v1.SaveReviewerRequest, v1.SaveReviewerResponse]
+	listReviewerRuns *connect.Client[v1.ListReviewerRunsRequest, v1.ListReviewerRunsResponse]
+	requestReview    *connect.Client[v1.RequestReviewRequest, v1.RequestReviewResponse]
+}
+
+// GetReviewer calls golf.v1.ReviewerService.GetReviewer.
+func (c *reviewerServiceClient) GetReviewer(ctx context.Context, req *connect.Request[v1.GetReviewerRequest]) (*connect.Response[v1.GetReviewerResponse], error) {
+	return c.getReviewer.CallUnary(ctx, req)
+}
+
+// SaveReviewer calls golf.v1.ReviewerService.SaveReviewer.
+func (c *reviewerServiceClient) SaveReviewer(ctx context.Context, req *connect.Request[v1.SaveReviewerRequest]) (*connect.Response[v1.SaveReviewerResponse], error) {
+	return c.saveReviewer.CallUnary(ctx, req)
+}
+
+// ListReviewerRuns calls golf.v1.ReviewerService.ListReviewerRuns.
+func (c *reviewerServiceClient) ListReviewerRuns(ctx context.Context, req *connect.Request[v1.ListReviewerRunsRequest]) (*connect.Response[v1.ListReviewerRunsResponse], error) {
+	return c.listReviewerRuns.CallUnary(ctx, req)
+}
+
+// RequestReview calls golf.v1.ReviewerService.RequestReview.
+func (c *reviewerServiceClient) RequestReview(ctx context.Context, req *connect.Request[v1.RequestReviewRequest]) (*connect.Response[v1.RequestReviewResponse], error) {
+	return c.requestReview.CallUnary(ctx, req)
+}
+
+// ReviewerServiceHandler is an implementation of the golf.v1.ReviewerService service.
+type ReviewerServiceHandler interface {
+	GetReviewer(context.Context, *connect.Request[v1.GetReviewerRequest]) (*connect.Response[v1.GetReviewerResponse], error)
+	SaveReviewer(context.Context, *connect.Request[v1.SaveReviewerRequest]) (*connect.Response[v1.SaveReviewerResponse], error)
+	ListReviewerRuns(context.Context, *connect.Request[v1.ListReviewerRunsRequest]) (*connect.Response[v1.ListReviewerRunsResponse], error)
+	RequestReview(context.Context, *connect.Request[v1.RequestReviewRequest]) (*connect.Response[v1.RequestReviewResponse], error)
+}
+
+// NewReviewerServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewReviewerServiceHandler(svc ReviewerServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	reviewerServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("ReviewerService").Methods()
+	reviewerServiceGetReviewerHandler := connect.NewUnaryHandler(
+		ReviewerServiceGetReviewerProcedure,
+		svc.GetReviewer,
+		connect.WithSchema(reviewerServiceMethods.ByName("GetReviewer")),
+		connect.WithHandlerOptions(opts...),
+	)
+	reviewerServiceSaveReviewerHandler := connect.NewUnaryHandler(
+		ReviewerServiceSaveReviewerProcedure,
+		svc.SaveReviewer,
+		connect.WithSchema(reviewerServiceMethods.ByName("SaveReviewer")),
+		connect.WithHandlerOptions(opts...),
+	)
+	reviewerServiceListReviewerRunsHandler := connect.NewUnaryHandler(
+		ReviewerServiceListReviewerRunsProcedure,
+		svc.ListReviewerRuns,
+		connect.WithSchema(reviewerServiceMethods.ByName("ListReviewerRuns")),
+		connect.WithHandlerOptions(opts...),
+	)
+	reviewerServiceRequestReviewHandler := connect.NewUnaryHandler(
+		ReviewerServiceRequestReviewProcedure,
+		svc.RequestReview,
+		connect.WithSchema(reviewerServiceMethods.ByName("RequestReview")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.ReviewerService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case ReviewerServiceGetReviewerProcedure:
+			reviewerServiceGetReviewerHandler.ServeHTTP(w, r)
+		case ReviewerServiceSaveReviewerProcedure:
+			reviewerServiceSaveReviewerHandler.ServeHTTP(w, r)
+		case ReviewerServiceListReviewerRunsProcedure:
+			reviewerServiceListReviewerRunsHandler.ServeHTTP(w, r)
+		case ReviewerServiceRequestReviewProcedure:
+			reviewerServiceRequestReviewHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedReviewerServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedReviewerServiceHandler struct{}
+
+func (UnimplementedReviewerServiceHandler) GetReviewer(context.Context, *connect.Request[v1.GetReviewerRequest]) (*connect.Response[v1.GetReviewerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ReviewerService.GetReviewer is not implemented"))
+}
+
+func (UnimplementedReviewerServiceHandler) SaveReviewer(context.Context, *connect.Request[v1.SaveReviewerRequest]) (*connect.Response[v1.SaveReviewerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ReviewerService.SaveReviewer is not implemented"))
+}
+
+func (UnimplementedReviewerServiceHandler) ListReviewerRuns(context.Context, *connect.Request[v1.ListReviewerRunsRequest]) (*connect.Response[v1.ListReviewerRunsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ReviewerService.ListReviewerRuns is not implemented"))
+}
+
+func (UnimplementedReviewerServiceHandler) RequestReview(context.Context, *connect.Request[v1.RequestReviewRequest]) (*connect.Response[v1.RequestReviewResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ReviewerService.RequestReview is not implemented"))
 }

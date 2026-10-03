@@ -132,6 +132,7 @@ service RepositoryService {
   rpc GetCommitDiff(GetCommitDiffRequest) returns (GetCommitDiffResponse);
   rpc GetContents(GetContentsRequest) returns (GetContentsResponse);
   rpc ListIssues(ListIssuesRequest) returns (ListIssuesResponse);
+  rpc GetPullRequestDiscussion(GetPullRequestDiscussionRequest) returns (GetPullRequestDiscussionResponse);
   rpc GetIssue(GetIssueRequest) returns (GetIssueResponse);
   rpc ListIssueComments(ListIssueCommentsRequest) returns (ListIssueCommentsResponse);
   rpc CreateIssue(CreateIssueRequest) returns (CreateIssueResponse);
@@ -433,6 +434,8 @@ message ListIssueCommentsRequest {
   uint32 number = 3;
   string issue_id = 4;
   PageRequest page = 5;
+  // Explicit discussion type; false retains the issue-only contract.
+  bool pull_request = 6;
 }
 message ListIssueCommentsResponse {
   repeated IssueComment comments = 1;
@@ -488,6 +491,7 @@ message CreateIssueCommentRequest {
   string issue_id = 4;
   string body = 5;
   string idempotency_key = 6;
+  bool pull_request = 7;
 }
 message CreateIssueCommentResponse {
   IssueMutation mutation = 1;
@@ -1496,3 +1500,55 @@ message CancelAgentTaskRequest { string task_id = 1; string expected_version = 2
 message CreateAgentTaskResponse { AgentTask task = 1; }
 message GetAgentTaskResponse { AgentTask task = 1; }
 message CancelAgentTaskResponse { AgentTask task = 1; }
+
+service ReviewerService {
+  rpc GetReviewer(GetReviewerRequest) returns (GetReviewerResponse);
+  rpc SaveReviewer(SaveReviewerRequest) returns (SaveReviewerResponse);
+  rpc ListReviewerRuns(ListReviewerRunsRequest) returns (ListReviewerRunsResponse);
+  rpc RequestReview(RequestReviewRequest) returns (RequestReviewResponse);
+}
+message Reviewer {
+  string id = 1;
+  RepositoryKey repository = 2;
+  string name = 3;
+  string description = 4;
+  string instructions = 5;
+  string connection_id = 6;
+  string model_id = 7;
+  string reasoning = 8;
+  bool enabled = 9;
+  bool review_on_open = 10;
+  bool review_on_push = 11;
+  bool respond_to_mentions = 12;
+  string revision = 13;
+  string authority_revision = 14;
+  string expires_at = 15;
+  string publisher_login = 16;
+  string publisher_avatar_url = 17;
+  bool can_edit = 18;
+}
+message GetReviewerRequest { RepositoryKey repository = 1; }
+message GetReviewerResponse { Reviewer reviewer = 1; bool execution_available = 2; string reason = 3; }
+message SaveReviewerRequest { Reviewer reviewer = 1; string expected_revision = 2; string expected_authority_revision = 3; }
+message SaveReviewerResponse { Reviewer reviewer = 1; }
+message ReviewerRun {
+  string id = 1;
+  uint32 pull_number = 2;
+  string base_commit = 3;
+  string head_commit = 4;
+  string task_id = 5;
+  string state = 6;
+  string reason = 7;
+  string review_id = 8;
+  string findings_json = 9;
+  string created_at = 10;
+  bool outdated = 11;
+  string trigger = 12;
+}
+message ListReviewerRunsRequest { RepositoryKey repository = 1; uint32 pull_number = 2; string after_id = 3; }
+message ListReviewerRunsResponse { repeated ReviewerRun runs = 1; string next_after_id = 2; }
+message RequestReviewRequest { RepositoryKey repository = 1; uint32 pull_number = 2; string expected_revision = 3; string idempotency_key = 4; }
+message RequestReviewResponse { ReviewerRun run = 1; }
+
+message GetPullRequestDiscussionRequest { RepositoryKey repository = 1; uint32 number = 2; }
+message GetPullRequestDiscussionResponse { Issue issue = 1; }

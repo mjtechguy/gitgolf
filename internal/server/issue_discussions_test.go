@@ -709,3 +709,15 @@ func TestIssueDiscussionCancellationPostgres(t *testing.T) {
 		t.Fatal("cancelled post repeated", err)
 	}
 }
+
+func TestPullDiscussionCommentAssociation(t *testing.T) {
+	repo := Repository{ID: 1, HTMLURL: "http://native.invalid/alice/repo"}
+	comment := forgeIssueComment{ID: 2, User: &User{ID: 3, Login: "alice"}, Body: "@bot review", CreatedAt: "2026-10-03T00:00:00Z", UpdatedAt: "2026-10-03T00:00:00Z", HTMLURL: "http://native.invalid/alice/repo/pulls/4#issuecomment-2", PullRequestURL: "http://native.invalid/alice/repo/pulls/4"}
+	if !validIssueComment(comment, repo, 4, true) || validIssueComment(comment, repo, 4) || validIssueComment(comment, repo, 5, true) {
+		t.Fatal("explicit PR association boundary")
+	}
+	comment.PullRequestURL = "http://native.invalid/alice/repo/pulls/5"
+	if validIssueComment(comment, repo, 4, true) {
+		t.Fatal("cross-PR association accepted")
+	}
+}

@@ -1,11 +1,14 @@
-# Optional native task image. Account/task admission is a separate Golf boundary.
+# Exact native binary, without a launcher that can download a different runtime.
 FROM node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install --global opencode-ai@1.18.34 \
-    && npm cache clean --force \
-    && mkdir -p /workspace /auth && chown node:node /workspace /auth
-ENV HOME=/auth
+    && case "$TARGETARCH" in amd64) arch=x64 ;; arm64) arch=arm64 ;; *) exit 1 ;; esac \
+    && npm install --prefix /opt/opencode "opencode-linux-$arch@1.18.34" \
+    && cp "/opt/opencode/node_modules/opencode-linux-$arch/bin/opencode" /usr/local/bin/opencode \
+    && chmod 755 /usr/local/bin/opencode \
+    && rm -rf /opt/opencode /root/.npm \
+    && mkdir /auth && chown node:node /auth
 USER 1000:1000
-WORKDIR /workspace
+WORKDIR /auth
 ENTRYPOINT ["opencode"]

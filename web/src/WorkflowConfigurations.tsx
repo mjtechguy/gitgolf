@@ -1,3 +1,4 @@
+import { ReviewerPanel } from './ReviewerPanel';
 import { AgentTasks } from './AgentTasks';
 import { AgentUsagePanel } from './AgentUsagePanel';
 import { AgentUsageScope } from './gen/golf/v1/golf_pb';
@@ -88,7 +89,7 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut }: { us
         <p className="panel-footnote">Limits: 20 files, 64 KiB per inspected file and 512 KiB in total. Oversized files stay metadata-only; an overfull inventory fails visibly. Scripts and provider-specific semantics remain untrusted. Automatic triggers and deployments remain unavailable.</p>
       </section>
       {result ? <><ExecutionPolicyPanel key={`${userId}/${owner}/${name}`} userId={userId} signingOut={signingOut} scope={ExecutionScope.REPOSITORY} repository={{ owner, name }} />
-      <AgentTasks userId={userId} owner={owner} name={name} signingOut={signingOut}/><AgentUsagePanel userId={userId} signingOut={signingOut} scope={AgentUsageScope.REPOSITORY} repository={{ owner, name }} /><AutomationGrantPanel userId={userId} owner={owner} name={name} signingOut={signingOut} />
+      <ReviewerPanel userId={userId} owner={owner} name={name} signingOut={signingOut}/><AgentTasks userId={userId} owner={owner} name={name} signingOut={signingOut}/><AgentUsagePanel userId={userId} signingOut={signingOut} scope={AgentUsageScope.REPOSITORY} repository={{ owner, name }} /><AutomationGrantPanel userId={userId} owner={owner} name={name} signingOut={signingOut} />
       <WorkflowRuns key={`runs/${userId}/${owner}/${name}`} userId={userId} owner={owner} name={name} signingOut={signingOut} /></> : null}
     </section>
   </RepositorySettingsLayout>;

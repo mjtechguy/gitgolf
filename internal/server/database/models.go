@@ -315,6 +315,7 @@ type GolfIssueMutation struct {
 	FailureCode        string
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+	PullRequest        bool
 }
 
 type GolfIssueMutationEvent struct {
@@ -475,6 +476,43 @@ type GolfRepositoryEventPayload struct {
 	PayloadSha256          string
 	EventID                int64
 	PushAdmissionRequested bool
+}
+
+type GolfReviewer struct {
+	ID              uuid.UUID
+	ForgeURL        string
+	RepositoryID    int64
+	OwnerID         int64
+	RepositoryOwner string
+	RepositoryName  string
+	SponsorUserID   int64
+	SponsorNativeID int64
+	LocalAccountID  int64
+	LocalVersion    int64
+	PublisherID     int64
+	Config          json.RawMessage
+	Revision        int64
+	Enabled         bool
+	ExpiresAt       time.Time
+}
+
+type GolfReviewerRun struct {
+	ID               uuid.UUID
+	ReviewerID       uuid.UUID
+	ReviewerRevision int64
+	PullNumber       int64
+	BaseCommit       string
+	HeadCommit       string
+	Trigger          string
+	Intent           string
+	TaskID           uuid.NullUUID
+	State            string
+	Reason           string
+	Diff             string
+	Findings         json.RawMessage
+	ReviewID         sql.NullInt64
+	PublisherID      int64
+	CreatedAt        time.Time
 }
 
 type GolfRunnerPresence struct {

@@ -1,7 +1,7 @@
 -- Caller holds its managed account/session locks for reservation only.
 -- name: ReserveIssueMutation :one
-INSERT INTO golf_issue_mutations (user_id,actor_forge_user_id,idempotency_key,payload_fingerprint,kind,repository_id,repository_owner,repository_name,issue_id,issue_number,state)
-SELECT u.id,u.forge_user_id,sqlc.arg(idempotency_key),sqlc.arg(payload_fingerprint),sqlc.arg(kind),sqlc.arg(repository_id),sqlc.arg(repository_owner),sqlc.arg(repository_name),sqlc.arg(issue_id),sqlc.arg(issue_number),'OUTCOME_UNKNOWN'
+INSERT INTO golf_issue_mutations (user_id,actor_forge_user_id,idempotency_key,payload_fingerprint,kind,repository_id,repository_owner,repository_name,issue_id,issue_number,state,pull_request)
+SELECT u.id,u.forge_user_id,sqlc.arg(idempotency_key),sqlc.arg(payload_fingerprint),sqlc.arg(kind),sqlc.arg(repository_id),sqlc.arg(repository_owner),sqlc.arg(repository_name),sqlc.arg(issue_id),sqlc.arg(issue_number),'OUTCOME_UNKNOWN',sqlc.arg(pull_request)
 FROM golf_users u WHERE u.id=sqlc.arg(user_id) AND u.forge_url=sqlc.arg(forge_url)
 ON CONFLICT(user_id,idempotency_key) DO NOTHING RETURNING *;
 

@@ -703,6 +703,24 @@ The scoped usage increment provides personal, instance, organization and reposit
 
 Resolve nearest defaults while intersecting every required scope's enabled/model/trigger rules, taking minimum budgets and retaining higher instructions. Read-only task preview validates explicit choices without dispatch/inference. Missing policies default-deny; preview is not admission evidence. Managed Docker/Kubernetes/Cloudflare execution must add current repository/account admission, tool/egress restrictions, cancellation, aggregate metering, trigger assignment and proposal publication. Schema025 stays outside qualified recovery until an expanded complete restore drill.
 
+### 9.5.2 Named PR review bots and local qualification
+
+Local advisory slice verified on 2026-10-03: actual OpenCode Go/DeepSeek V4 Pro PR-open, push and authorized-mention reviews, native bot inline publication, clean fix result, duplicate polling and disabled admission. [Evidence](docs/IMPLEMENTATION_STATUS.md#managed-opencode-go-pr-review-persona-2026-10-03). Full protected publication, fork support, fair scheduling and Kubernetes/Cloudflare execution remain open.
+
+The first CodeRabbit/Greptile-style use case is an explicitly named, advisory security reviewer powered by a connected OpenCode Go account and an exact DeepSeek V4 catalog model. Both infrastructure tracks retain the same product contract: model access, repository permissions, expiring automation sponsorship, a separate nonadministrator publishing bot and a read-only model harness. See [the executable contract and qualification boundary](docs/PR_REVIEWERS.md).
+
+Implementation sequence:
+
+1. Persist repository persona, exact account/model/variant, enable/open/push/mention controls, sponsor/version/expiry and configuration CAS. Keep current-value tables and explicit New/Edit forms.
+2. Admit a pinned base/head/diff under current native repository administration and all required usage ceilings. Bind durable automatic receipts to the commit pair and explicit/comment intents once across later heads. Bound paid fan-out; never silently retry failed inference.
+3. Run the pinned native OpenCode binary in the dedicated local Docker daemon with model tools disabled, private credentials/cache and no project config/MCP/forge publishing credentials. Qualify the actual resolved tool configuration at worker startup.
+4. Validate bounded typed findings against real new-side diff paths/lines. The trusted publisher posts an exact-head native COMMENT review with inline findings and advisory checks. Revalidate current sponsor, account, policy, reviewer and PR authority; reserve publication first and retain ambiguous outcomes without reposting.
+5. Expose results and historical snapshots in Golf's PR/workflow tables and details. Extend the existing durable comment journal with explicit immutable PR association, resolving issue IDs independently of pull IDs. Authorized mentions produce follow-up reviews without general shell access.
+6. Run the actual flaw → inline finding/failed check → pushed fix/clean review → mention → duplicate-suppression test on pinned licensed public source imported into a private owned local repository. Record provider/runtime failures honestly and retain the demo for inspection.
+7. Expand only after the first loop is qualified: signed event intake/pagination/fair scheduling, fork boundaries, collaborator mention roles, durable publisher reconciliation, thread resolution, richer context retrieval and measured precision/latency/cost. Qualify Kubernetes and Cloudflare task executors independently; no Cloudflare service is required locally.
+
+The initial poller deliberately supports at most 25 configured repositories per pass, the first 50 open PRs/comments, same-repository nondraft PRs and 20 hourly/outstanding admissions per repository. These limits, operator-enrolled publishing credentials and native preflight races are explicit initial boundaries, not a claim of complete CodeRabbit/GitHub parity or protected integration readiness.
+
 ### 9.6 Agent access to Golf and previews
 
 Current bounded foundation: [owner-issued read-only API credentials](docs/API_CREDENTIAL_CONTRACT.md) delegate an existing source session for CLI/local MCP, with once-only secrets, digest storage, explicit current-read allowlisting and source-expiry/revocation coupling. This does not complete long-lived service accounts, OAuth/device login, remote MCP, ACP, tenant roles or named harness execution. Verification and remaining gates belong in the [implementation ledger](docs/IMPLEMENTATION_STATUS.md).

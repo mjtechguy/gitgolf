@@ -55,7 +55,11 @@ func (s *Server) RunAgentWorker(ctx context.Context, worker, seccomp string) err
 			}
 		}
 	}()
-	executor, e := runner.New(runner.Config{WorkerID: worker, ApprovedImages: []string{s.config.AgentImage}})
+	images := []string{s.config.AgentImage}
+	if s.config.ReviewImage != "" {
+		images = append(images, s.config.ReviewImage)
+	}
+	executor, e := runner.New(runner.Config{WorkerID: worker, ApprovedImages: images})
 	if e != nil {
 		return e
 	}
@@ -74,6 +78,14 @@ func (s *Server) RunAgentWorker(ctx context.Context, worker, seccomp string) err
 	if e != nil {
 		return errors.New("Native task sandbox qualification failed; worker remains unavailable")
 	}
+	if s.config.ReviewImage != "" {
+		check, cancel := context.WithTimeout(ctx, 30*time.Second)
+		err := executor.QualifyReview(check, s.config.ReviewImage)
+		cancel()
+		if err != nil {
+			return errors.New("Native read-only reviewer qualification failed; worker remains unavailable")
+		}
+	}
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -90,7 +102,12 @@ func (s *Server) RunAgentWorker(ctx context.Context, worker, seccomp string) err
 		if e != nil {
 			return errStorageUnavailable
 		}
-		t, e := scanAgentTask(s.db.QueryRowContext(ctx, `SELECT `+agentTaskColumns+` FROM golf_agent_tasks WHERE forge_url=$1 AND state='queued' ORDER BY created_at,id LIMIT 1`, s.config.GiteaURL))
+		if s.config.ReviewImage != "" && s.config.ReviewPublisherToken != "" {
+			s.coordinateReviews(ctx)
+			s.publishReviews(ctx)
+		}
+		// A reviewer task is dispatchable only after its durable review receipt is linked.
+		t, e := scanAgentTask(s.db.QueryRowContext(ctx, `SELECT `+agentTaskColumns+` FROM golf_agent_tasks WHERE forge_url=$1 AND state='queued' AND (COALESCE(config->>'model_id','') NOT LIKE 'opencode-go/%' OR EXISTS(SELECT 1 FROM golf_reviewer_runs rr WHERE rr.task_id=golf_agent_tasks.id AND rr.state IN ('queued','running'))) ORDER BY created_at,id LIMIT 1`, s.config.GiteaURL))
 		if e == nil {
 			_ = s.executeAgentTask(ctx, executor, worker, seccomp, t)
 		} else if !errors.Is(e, sql.ErrNoRows) {
@@ -124,6 +141,9 @@ func (s *Server) rejectAgentTask(ctx context.Context, t agentTaskRecord, reason 
 }
 func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor, worker, seccomp string, t agentTaskRecord) error {
 	a, e := s.taskActor(ctx, t)
+	if e == nil {
+		e = s.reviewTaskAccess(ctx, t)
+	}
 	if e != nil {
 		s.rejectAgentTask(ctx, t, "Current repository/session authority is unavailable.")
 		return e
@@ -213,6 +233,9 @@ func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor
 					alive = false
 				}
 				fresh, err := s.taskActor(check, t)
+				if err == nil {
+					err = s.reviewTaskAccess(check, t)
+				}
 				if err != nil {
 					alive = false
 				}
@@ -261,7 +284,15 @@ func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor
 		return e
 	}
 	source.Close()
-	result, executionErr := executor.ExecuteAgent(run, runner.AgentJob{Job: runner.Job{AttemptID: attempt, JobID: t.ID, SourceCommit: t.Commit, ImageDigest: s.config.AgentImage, Timeout: time.Duration(min(c.TimeoutSeconds, 900)) * time.Second, SourceArchivePath: source.Name()}, Auth: []byte(plain), Model: c.ModelId, Reasoning: c.Reasoning, Instructions: c.Instructions, TokenBudget: c.TokenBudget, SeccompPath: seccomp})
+	job := runner.AgentJob{Job: runner.Job{AttemptID: attempt, JobID: t.ID, SourceCommit: t.Commit, ImageDigest: s.config.AgentImage, Timeout: time.Duration(min(c.TimeoutSeconds, 900)) * time.Second, SourceArchivePath: source.Name()}, Auth: []byte(plain), Model: c.ModelId, Reasoning: c.Reasoning, Instructions: c.Instructions, TokenBudget: c.TokenBudget, SeccompPath: seccomp}
+	var result runner.AgentResult
+	var executionErr error
+	if r.Harness == "opencode" && r.Provider == "opencode-go" {
+		job.ImageDigest = s.config.ReviewImage
+		result, executionErr = executor.ExecuteReview(run, job)
+	} else {
+		result, executionErr = executor.ExecuteAgent(run, job)
+	}
 	stop()
 	<-heartbeatDone
 	if executionErr != nil {
@@ -326,6 +357,9 @@ func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor
 		reason := ""
 		if executionErr != nil {
 			reason = "Native task or Docker execution failed; private diagnostics withheld. No automatic retry."
+			if strings.HasPrefix(result.Stage, "review-") && regexp.MustCompile(`^[a-z0-9-]{1,80}$`).MatchString(result.Stage) {
+				reason = "Read-only review failed (" + result.Stage + "). No automatic task replay."
+			}
 		}
 		_, e := tx.ExecContext(finish, `UPDATE golf_agent_tasks SET state=$2,version=version+1,finished_at=clock_timestamp(),summary=$3,patch=$4,tokens=$5,reason=$6 WHERE id=$1`, t.ID, result.State, result.Summary, result.Patch, result.Tokens, reason)
 		return e

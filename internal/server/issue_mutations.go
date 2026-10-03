@@ -21,6 +21,7 @@ import (
 // Fixed field order fingerprints the exact intent, including kind and immutable
 // target IDs. The journal retains the digest, never the private title/body.
 type issueMutationInput struct {
+	PullRequest  bool   `json:"pull_request,omitempty"`
 	Kind         string `json:"kind"`
 	Owner        string `json:"owner"`
 	Repository   string `json:"repository"`
@@ -43,7 +44,7 @@ func (input issueMutationInput) validate(key string) error {
 	}
 	switch input.Kind {
 	case "CREATE_ISSUE":
-		if input.Title == "" || strings.TrimSpace(input.Title) != input.Title || !discussionText(input.Title, 255) || strings.IndexFunc(input.Title, unicode.IsControl) >= 0 || input.IssueID != 0 || input.Number != 0 {
+		if input.PullRequest || input.Title == "" || strings.TrimSpace(input.Title) != input.Title || !discussionText(input.Title, 255) || strings.IndexFunc(input.Title, unicode.IsControl) >= 0 || input.IssueID != 0 || input.Number != 0 {
 			return invalid("Issue title must be trimmed nonempty UTF-8, at most 255 bytes, without controls.")
 		}
 	case "CREATE_COMMENT":
@@ -74,6 +75,7 @@ func wireIssueMutation(record database.GolfIssueMutation) *golfv1.IssueMutation 
 // All provider calls happen outside account locks. These are repeated native
 // observations, not atomic expected-ID predicates on Gitea's slug-based POST.
 func (s *Server) observeIssueMutationTarget(ctx context.Context, session string, token forgeCredential, record database.GolfIssueMutation) (Repository, *Issue, *golfv1.IssueComment, error) {
+	ctx = context.WithValue(ctx, pullDiscussionKey{}, record.PullRequest)
 	var repository Repository
 	var issue *Issue
 	var comment *golfv1.IssueComment
@@ -191,7 +193,7 @@ func (s *Server) createIssueMutation(ctx context.Context, session string, token 
 	dispatch := false
 	err := s.withManagedSession(ctx, session, token, func(queries *database.Queries, caller database.LockManagedSessionRow, _ []byte) error {
 		var err error
-		record, err = queries.ReserveIssueMutation(ctx, database.ReserveIssueMutationParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: key, PayloadFingerprint: fingerprint[:], Kind: input.Kind, RepositoryID: input.RepositoryID, RepositoryOwner: input.Owner, RepositoryName: input.Repository, IssueID: input.IssueID, IssueNumber: int64(input.Number)})
+		record, err = queries.ReserveIssueMutation(ctx, database.ReserveIssueMutationParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: key, PayloadFingerprint: fingerprint[:], Kind: input.Kind, RepositoryID: input.RepositoryID, RepositoryOwner: input.Owner, RepositoryName: input.Repository, IssueID: input.IssueID, IssueNumber: int64(input.Number), PullRequest: input.PullRequest})
 		if errors.Is(err, sql.ErrNoRows) {
 			record, err = queries.GetIssueMutation(ctx, database.GetIssueMutationParams{UserID: caller.UserID, ForgeURL: s.config.GiteaURL, IdempotencyKey: key})
 			if err != nil {
@@ -253,7 +255,7 @@ func (s *Server) createIssueMutation(ctx context.Context, session string, token 
 					Body string `json:"body"`
 				}{input.Body}, &receipt, http.StatusCreated)
 				if providerErr == nil {
-					if !validIssueComment(receipt, repo, uint32(record.IssueNumber)) || receipt.User == nil || receipt.User.ID != record.ActorForgeUserID || receipt.Body != input.Body {
+					if !validIssueComment(receipt, repo, uint32(record.IssueNumber), record.PullRequest) || receipt.User == nil || receipt.User.ID != record.ActorForgeUserID || receipt.Body != input.Body {
 						providerErr = errInvalidForgeResponse
 					} else {
 						candidate.CommentID = receipt.ID
@@ -368,7 +370,7 @@ func (s *Server) CreateIssueComment(ctx context.Context, req *connect.Request[go
 		return nil, rpcError(err)
 	}
 	key := keyFrom(req.Msg.Repository)
-	result, err := s.createIssueMutation(ctx, s.cookieValue(req.Header()), token, req.Msg.IdempotencyKey, issueMutationInput{Kind: "CREATE_COMMENT", Owner: key.Owner, Repository: key.Name, RepositoryID: repoID, IssueID: issueID, Number: req.Msg.Number, Body: req.Msg.Body})
+	result, err := s.createIssueMutation(ctx, s.cookieValue(req.Header()), token, req.Msg.IdempotencyKey, issueMutationInput{Kind: "CREATE_COMMENT", PullRequest: req.Msg.PullRequest, Owner: key.Owner, Repository: key.Name, RepositoryID: repoID, IssueID: issueID, Number: req.Msg.Number, Body: req.Msg.Body})
 	if err != nil {
 		return nil, rpcError(err)
 	}

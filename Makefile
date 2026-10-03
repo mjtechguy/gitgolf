@@ -1,7 +1,8 @@
 .PHONY: setup dev build cli test test-integration check helm-check fmt vet web-check generate generate-check qualify-git qualify-settings qualify-organization-admin qualify-public-repositories qualify-repository-access qualify-workflow-inspection qualify-instance-admin qualify-account-security qualify-repository-events qualify-automation-grants up down local-up local-stop local-status
+REVIEW_ENV = $(if $(wildcard .env.review),--env-file .env.review,)
 AGENT_COMPOSE = $(if $(wildcard .env.agents),--env-file .env.agents -f compose.agents.yaml,)
 AGENT_SERVICE = $(if $(wildcard .env.agents),agent-worker,)
-LOCAL_COMPOSE = docker compose --env-file .env --env-file .env.ci --env-file .env.storage -f compose.yaml -f compose.ci.yaml -f compose.storage.yaml $(AGENT_COMPOSE)
+LOCAL_COMPOSE = docker compose --env-file .env --env-file .env.ci --env-file .env.storage -f compose.yaml -f compose.ci.yaml -f compose.storage.yaml $(AGENT_COMPOSE) $(REVIEW_ENV)
 .DEFAULT_GOAL := setup
 HTTPS_COMPOSE = $(LOCAL_COMPOSE) --env-file .env.https -f compose.https.yaml
 ACTIVE_LOCAL_COMPOSE = $(LOCAL_COMPOSE)

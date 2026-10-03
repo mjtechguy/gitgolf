@@ -13,7 +13,7 @@ import { DateLabel, Loading, More, PanelError, privateQuery } from './Repository
 import { issueIntentKey, readIssueIntent } from './issueIntents';
 import type { IssueIntent } from './issueIntents';
 
-type Props = { repositoryKey: Pick<RepositoryKey, 'owner' | 'name'>; repositoryId: string; queryKey: readonly unknown[]; location: RepositoryLocation; userId: string };
+type Props = { repositoryKey: Pick<RepositoryKey, 'owner' | 'name'>; repositoryId: string; queryKey: readonly unknown[]; location: RepositoryLocation; userId: string; pullRequest?: boolean };
 type Observation = Pick<GetIssueMutationResponse, 'mutation' | 'issue' | 'comment'>;
 const followingPage = (response: { page?: PageResponse }, _pages: unknown[], current: number) => {
   const next = response.page?.nextPage ?? 0;
@@ -29,7 +29,7 @@ function Comment({ comment }: { comment: IssueComment }) {
   return <article className="issue-comment"><div className="issue-comment-heading"><h3>{comment.user?.login || 'Deleted or unavailable author'}</h3><span>Comment <code>{comment.id}</code></span></div><p className="muted">Posted <DateLabel value={comment.createdAt} /> · Updated <DateLabel value={comment.updatedAt} /></p><pre className="issue-body" tabIndex={0} aria-label={`Comment ${comment.id}, plain text`}>{comment.body || 'No comment text provided.'}</pre>{external ? <a className="text-button" href={external} target="_blank" rel="noopener noreferrer">Open original comment<ExternalLink size={14} /></a> : null}</article>;
 }
 
-function Composer({ repositoryKey, repositoryId, queryKey, userId, issue, onCreated, onPending, onPosted }: Props & { issue?: Issue; onCreated?: (issue: Issue) => void; onPending?: (value: boolean) => void; onPosted?: () => void }) {
+function Composer({ repositoryKey, repositoryId, queryKey, userId, pullRequest, issue, onCreated, onPending, onPosted }: Props & { issue?: Issue; onCreated?: (issue: Issue) => void; onPending?: (value: boolean) => void; onPosted?: () => void }) {
   const kind = issue ? 'comment' : 'issue';
   const storageKey = issueIntentKey(userId, repositoryId, issue?.id);
   const [intent, setIntent] = useState(() => readIssueIntent(storageKey, repositoryId, issue?.id, issue?.number));
@@ -75,7 +75,7 @@ function Composer({ repositoryKey, repositoryId, queryKey, userId, issue, onCrea
       controller.current = new AbortController();
       const options = { signal: controller.current.signal, timeoutMs: inspect ? 8_000 : 15_000 };
       if (inspect) await observe(await repositoryClient.getIssueMutation({ idempotencyKey: pending.key }, options), pending);
-      else if (issue && frozen.current) await observe(await repositoryClient.createIssueComment({ repository: repositoryKey, repositoryId, number: issue.number, issueId: issue.id, body: frozen.current.body, idempotencyKey: pending.key }, options), pending);
+      else if (issue && frozen.current) await observe(await repositoryClient.createIssueComment({ repository: repositoryKey, repositoryId, number: issue.number, issueId: issue.id, body: frozen.current.body, pullRequest, idempotencyKey: pending.key }, options), pending);
       else if (frozen.current && 'title' in frozen.current) await observe(await repositoryClient.createIssue({ repository: repositoryKey, repositoryId, title: frozen.current.title, body: frozen.current.body, idempotencyKey: pending.key }, options), pending);
       else throw new ConnectError('This resumed request supports status inspection only.', Code.FailedPrecondition);
     },
@@ -148,14 +148,14 @@ function NewIssue({ onClose, ...props }: Props & { onClose: () => void; onPendin
   return <dialog ref={dialog} className="create-dialog new-issue-dialog" aria-labelledby="new-issue-title" onClose={onClose}><div className="dialog-header"><span className="small-icon"><CircleDot size={21} /></span><button className="icon-button" aria-label="Close new issue" onClick={onClose}><X size={19} /></button></div><h2 id="new-issue-title">New issue</h2><Composer {...props} /><div className="dialog-actions"><button className="button secondary" onClick={onClose}>Close</button></div></dialog>;
 }
 
-function Comments(props: Props & { issue: Issue; onDenied: (error: Error) => void }) {
+export function Comments(props: Props & { issue: Issue; onDenied: (error: Error) => void }) {
   const { issue, repositoryKey, repositoryId, queryKey } = props;
   const client = useQueryClient();
   const [composing, setComposing] = useState(() => Boolean(readIssueIntent(issueIntentKey(props.userId, repositoryId, issue.id), repositoryId, issue.id, issue.number)));
   const addButton = useRef<HTMLButtonElement>(null);
-  const key = [...queryKey, 'issue', issue.number, issue.id, 'comments'];
+  const key = [...queryKey, props.pullRequest?'pull':'issue', issue.number, issue.id, 'comments'];
   const query = useInfiniteQuery({ ...privateQuery, queryKey: key, initialPageParam: 1,
-    queryFn: ({ pageParam, signal }) => repositoryClient.listIssueComments({ repository: repositoryKey, repositoryId, number: issue.number, issueId: issue.id, page: { page: pageParam, limit: 20 } }, { signal, timeoutMs: 8_000 }), getNextPageParam: followingPage });
+    queryFn: ({ pageParam, signal }) => repositoryClient.listIssueComments({ repository: repositoryKey, repositoryId, number: issue.number, issueId: issue.id, pullRequest:props.pullRequest, page: { page: pageParam, limit: 20 } }, { signal, timeoutMs: 8_000 }), getNextPageParam: followingPage });
   useEffect(() => { if (denied(query.error)) props.onDenied(query.error!); }, [query.error, props.onDenied]);
   const comments = query.isSuccess && (!query.isFetching || query.isFetchingNextPage) ? [...new Map(query.data.pages.flatMap((page) => page.comments).map((comment) => [comment.id, comment])).values()] : [];
   const refresh = () => { void client.resetQueries({ queryKey: key, exact: true }); };

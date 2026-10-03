@@ -1,3 +1,5 @@
+import { Comments } from './IssueBrowser';
+import { ReviewerRuns } from './ReviewerPanel';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -9,7 +11,7 @@ import { repositoryOptions } from './navigation';
 import type { RepositoryLocation } from './navigation';
 import { DateLabel, Loading, More, PanelError, privateQuery } from './RepositoryUI';
 
-type Props = { repositoryKey: Pick<RepositoryKey, 'owner' | 'name'>; queryKey: readonly unknown[]; location: RepositoryLocation };
+type Props = { repositoryKey: Pick<RepositoryKey, 'owner' | 'name'>; queryKey: readonly unknown[]; location: RepositoryLocation; repositoryId:string;userId:string };
 const followingPage = (response: { page?: PageResponse }, _pages: unknown[], current: number) => {
   const next = response.page?.nextPage || 0;
   return next > current && next <= 10_000 ? next : undefined;
@@ -52,6 +54,10 @@ function Reviews({ repositoryKey, queryKey, location }: Props) {
     </>}
   </section>;
 }
+function PullDiscussion(props:Props){
+ const query=useQuery({...privateQuery,queryKey:[...props.queryKey,'pull-discussion',props.location.pull],queryFn:({signal})=>repositoryClient.getPullRequestDiscussion({repository:props.repositoryKey,number:props.location.pull},{signal,timeoutMs:8000})});
+ return query.isError?<PanelError error={query.error} retry={()=>void query.refetch()}/>:query.isSuccess&&query.data.issue?<Comments {...props} issue={query.data.issue} pullRequest onDenied={()=>{}}/>:<Loading label="Reading PR discussion…"/>;
+}
 function PullDetail(props: Props) {
   const { repositoryKey, queryKey, location } = props;
   const query = useQuery({ ...privateQuery, queryKey: [...queryKey, 'pull', location.pull], queryFn: async ({ signal }) => {
@@ -74,7 +80,7 @@ function PullDetail(props: Props) {
         <p className="panel-footnote">Read-only, plain-text view. Reviews below show native records; protected integration remains unavailable.</p>
       </>}
     </section>
-    {pull ? <Reviews {...props} /> : null}
+    {pull ? <><ReviewerRuns userId={String(queryKey[1]||'')} owner={repositoryKey.owner} name={repositoryKey.name} signingOut={false} pullNumber={pull.number}/><Reviews {...props} /><PullDiscussion {...props}/></> : null}
   </>;
 }
 function PullList({ repositoryKey, queryKey, location }: Props) {

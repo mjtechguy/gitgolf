@@ -1,0 +1,27 @@
+import { expect, test } from '@playwright/test';
+import { GetAuthenticationOptionsResponseSchema,GetSessionResponseSchema,ListCapabilitiesResponseSchema,GetRepositoryAccessResponseSchema,GetRepositorySettingsResponseSchema,GetExecutionPolicyResponseSchema,ListWorkflowRunsResponseSchema,InspectWorkflowsResponseSchema,ListAgentTasksResponseSchema,GetAgentUsageResponseSchema,GetReviewerResponseSchema,SaveReviewerRequestSchema,SaveReviewerResponseSchema,ListReviewerRunsResponseSchema,ListCodexConnectionsResponseSchema,ListAgentModelsResponseSchema,AgentUsageScope,CodexConnectionState } from '../src/gen/golf/v1/golf_pb';
+import { request,respond,reject } from './rpc';
+test('reviewer settings require explicit edit, bind revision and show only authorized plain-text results',async({page})=>{
+ const repository={owner:'alex',name:'private'};const account='208c39b0-a49d-574f-9130-caf6cf452991';let saves=0;let denied=false;let reviewer={id:'00000000-0000-4000-8000-000000000001',repository,name:'Security Reviewer',description:'Read-only review',instructions:'SQL injection',connectionId:account,modelId:'opencode-go/deepseek-v4-pro',reasoning:'high',revision:'7',authorityRevision:'owner-authority',expiresAt:'2026-10-09T12:00:00Z',publisherLogin:'review-bot',enabled:true,reviewOnOpen:true,reviewOnPush:true,respondToMentions:true,canEdit:true};
+ await page.route('**/rpc/**',async route=>{
+ const method=new URL(route.request().url()).pathname.split('/').at(-1);
+ if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{localPasswordEnabled:true});
+ if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user:{id:'42',login:'alex'}});
+ if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
+ if(method==='GetRepositoryAccess')return respond(route,GetRepositoryAccessResponseSchema,{access:{repositoryId:'12',ownerId:'42',currentPermission:'owner'}});
+ if(method==='GetRepositorySettings')return respond(route,GetRepositorySettingsResponseSchema,{settings:{repositoryId:'12',ownerId:'42',canEdit:true}});
+ if(method==='GetExecutionPolicy')return respond(route,GetExecutionPolicyResponseSchema,{});
+ if(method==='ListWorkflowRuns')return respond(route,ListWorkflowRunsResponseSchema,{});
+ if(method==='InspectWorkflows')return respond(route,InspectWorkflowsResponseSchema,{});
+ if(method==='ListAgentTasks')return respond(route,ListAgentTasksResponseSchema,{});
+ if(method==='GetAgentUsage')return respond(route,GetAgentUsageResponseSchema,{settings:{scope:AgentUsageScope.REPOSITORY,scopeId:'12',revision:'1',authorityRevision:'owner-authority',config:{timeoutSeconds:60,tokenBudget:1000,maxConcurrent:1},effective:{timeoutSeconds:60,tokenBudget:1000,maxConcurrent:1}}});
+ if(method==='GetReviewer')return denied?reject(route,'permission_denied','Reviewer access denied'):respond(route,GetReviewerResponseSchema,{reviewer,executionAvailable:true});
+ if(method==='ListReviewerRuns')return denied?reject(route,'permission_denied','Review access denied'):respond(route,ListReviewerRunsResponseSchema,{runs:[{id:'00000000-0000-4000-8000-000000000002',pullNumber:1,state:'published',headCommit:'a'.repeat(40),baseCommit:'b'.repeat(40),reviewId:'8',findingsJson:JSON.stringify({summary:'<script>untrusted content</script>',findings:[{path:'app.py',line:2,severity:'high',title:'SQL injection',evidence:'Query text is interpolated.',suggestion:'Use parameters.'}]})}]});
+ if(method==='ListCodexConnections')return respond(route,ListCodexConnectionsResponseSchema,{connections:[{id:account,name:'OpenCode Go',harness:'opencode',provider:'opencode-go',canUse:true,state:CodexConnectionState.CONNECTED}]});
+ if(method==='ListAgentModels')return respond(route,ListAgentModelsResponseSchema,{models:[{id:'opencode-go/deepseek-v4-pro',name:'DeepSeek V4 Pro',reasoning:['high','max']}]});
+ if(method==='SaveReviewer'){const input=request(route,SaveReviewerRequestSchema);expect(input.expectedRevision).toBe('7');expect(input.expectedAuthorityRevision).toBe('owner-authority');expect(input.reviewer?.connectionId).toBe(account);expect(input.reviewer?.name).toBe('Golf Security');saves++;reviewer={...reviewer,name:'Golf Security',revision:'8'};return respond(route,SaveReviewerResponseSchema,{reviewer});}
+ return reject(route,'not_found','Unused fixture');
+ });
+ await page.goto('/repositories/alex/private/settings/workflows');const panel=page.getByRole('region',{name:'PR reviewer configuration'});await expect(panel.getByRole('form')).toHaveCount(0);await panel.getByRole('button',{name:'Edit reviewer'}).click();const form=panel.getByRole('form',{name:'Edit PR reviewer'});await expect(form.getByRole('combobox',{name:'Model',exact:true})).toHaveValue('opencode-go/deepseek-v4-pro');await form.getByLabel('Name',{exact:true}).fill('Golf Security');await form.getByRole('button',{name:'Save reviewer'}).click();await expect(panel.getByRole('table')).toContainText('Golf Security');expect(saves).toBe(1);
+ const runs=page.getByRole('region',{name:'Automated PR reviews'});await runs.getByRole('button',{name:'#1 · 00000000'}).click();const dialog=page.getByRole('dialog',{name:'Review #1 · published'});await expect(dialog).toContainText('<script>untrusted content</script>');await expect(dialog.locator('script')).toHaveCount(0);await page.keyboard.press('Escape');denied=true;await runs.getByRole('button',{name:'Refresh automated reviews'}).click();await expect(runs.getByRole('table')).toHaveCount(0);await expect(page.getByRole('dialog')).toHaveCount(0);
+});

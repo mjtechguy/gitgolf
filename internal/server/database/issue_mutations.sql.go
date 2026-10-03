@@ -37,7 +37,7 @@ UPDATE golf_issue_mutations m SET state=$1,failure_code=$2,
     issue_id=$3,issue_number=$4,comment_id=$5,updated_at=clock_timestamp()
 FROM golf_users u WHERE m.user_id=u.id AND u.id=$6 AND u.forge_url=$7
     AND m.id=$8 AND m.state='OUTCOME_UNKNOWN'
-RETURNING m.id, m.user_id, m.actor_forge_user_id, m.idempotency_key, m.payload_fingerprint, m.kind, m.repository_id, m.repository_owner, m.repository_name, m.issue_id, m.issue_number, m.comment_id, m.observed_result_id, m.observed_number, m.state, m.failure_code, m.created_at, m.updated_at
+RETURNING m.id, m.user_id, m.actor_forge_user_id, m.idempotency_key, m.payload_fingerprint, m.kind, m.repository_id, m.repository_owner, m.repository_name, m.issue_id, m.issue_number, m.comment_id, m.observed_result_id, m.observed_number, m.state, m.failure_code, m.created_at, m.updated_at, m.pull_request
 `
 
 type CompleteIssueMutationParams struct {
@@ -84,12 +84,13 @@ func (q *Queries) CompleteIssueMutation(ctx context.Context, arg CompleteIssueMu
 		&i.FailureCode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PullRequest,
 	)
 	return i, err
 }
 
 const getIssueMutation = `-- name: GetIssueMutation :one
-SELECT m.id, m.user_id, m.actor_forge_user_id, m.idempotency_key, m.payload_fingerprint, m.kind, m.repository_id, m.repository_owner, m.repository_name, m.issue_id, m.issue_number, m.comment_id, m.observed_result_id, m.observed_number, m.state, m.failure_code, m.created_at, m.updated_at FROM golf_issue_mutations m JOIN golf_users u ON u.id=m.user_id
+SELECT m.id, m.user_id, m.actor_forge_user_id, m.idempotency_key, m.payload_fingerprint, m.kind, m.repository_id, m.repository_owner, m.repository_name, m.issue_id, m.issue_number, m.comment_id, m.observed_result_id, m.observed_number, m.state, m.failure_code, m.created_at, m.updated_at, m.pull_request FROM golf_issue_mutations m JOIN golf_users u ON u.id=m.user_id
 WHERE u.id=$1 AND u.forge_url=$2 AND m.idempotency_key=$3
 `
 
@@ -121,6 +122,7 @@ func (q *Queries) GetIssueMutation(ctx context.Context, arg GetIssueMutationPara
 		&i.FailureCode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PullRequest,
 	)
 	return i, err
 }
@@ -130,7 +132,7 @@ UPDATE golf_issue_mutations m SET observed_result_id=$1,
     observed_number=$2,updated_at=clock_timestamp()
 FROM golf_users u WHERE m.user_id=u.id AND u.id=$3 AND u.forge_url=$4
     AND m.id=$5 AND m.state='OUTCOME_UNKNOWN' AND m.observed_result_id=0
-RETURNING m.id, m.user_id, m.actor_forge_user_id, m.idempotency_key, m.payload_fingerprint, m.kind, m.repository_id, m.repository_owner, m.repository_name, m.issue_id, m.issue_number, m.comment_id, m.observed_result_id, m.observed_number, m.state, m.failure_code, m.created_at, m.updated_at
+RETURNING m.id, m.user_id, m.actor_forge_user_id, m.idempotency_key, m.payload_fingerprint, m.kind, m.repository_id, m.repository_owner, m.repository_name, m.issue_id, m.issue_number, m.comment_id, m.observed_result_id, m.observed_number, m.state, m.failure_code, m.created_at, m.updated_at, m.pull_request
 `
 
 type RecordIssueMutationReceiptParams struct {
@@ -170,15 +172,16 @@ func (q *Queries) RecordIssueMutationReceipt(ctx context.Context, arg RecordIssu
 		&i.FailureCode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PullRequest,
 	)
 	return i, err
 }
 
 const reserveIssueMutation = `-- name: ReserveIssueMutation :one
-INSERT INTO golf_issue_mutations (user_id,actor_forge_user_id,idempotency_key,payload_fingerprint,kind,repository_id,repository_owner,repository_name,issue_id,issue_number,state)
-SELECT u.id,u.forge_user_id,$1,$2,$3,$4,$5,$6,$7,$8,'OUTCOME_UNKNOWN'
-FROM golf_users u WHERE u.id=$9 AND u.forge_url=$10
-ON CONFLICT(user_id,idempotency_key) DO NOTHING RETURNING id, user_id, actor_forge_user_id, idempotency_key, payload_fingerprint, kind, repository_id, repository_owner, repository_name, issue_id, issue_number, comment_id, observed_result_id, observed_number, state, failure_code, created_at, updated_at
+INSERT INTO golf_issue_mutations (user_id,actor_forge_user_id,idempotency_key,payload_fingerprint,kind,repository_id,repository_owner,repository_name,issue_id,issue_number,state,pull_request)
+SELECT u.id,u.forge_user_id,$1,$2,$3,$4,$5,$6,$7,$8,'OUTCOME_UNKNOWN',$9
+FROM golf_users u WHERE u.id=$10 AND u.forge_url=$11
+ON CONFLICT(user_id,idempotency_key) DO NOTHING RETURNING id, user_id, actor_forge_user_id, idempotency_key, payload_fingerprint, kind, repository_id, repository_owner, repository_name, issue_id, issue_number, comment_id, observed_result_id, observed_number, state, failure_code, created_at, updated_at, pull_request
 `
 
 type ReserveIssueMutationParams struct {
@@ -190,6 +193,7 @@ type ReserveIssueMutationParams struct {
 	RepositoryName     string
 	IssueID            int64
 	IssueNumber        int64
+	PullRequest        bool
 	UserID             int64
 	ForgeURL           string
 }
@@ -205,6 +209,7 @@ func (q *Queries) ReserveIssueMutation(ctx context.Context, arg ReserveIssueMuta
 		arg.RepositoryName,
 		arg.IssueID,
 		arg.IssueNumber,
+		arg.PullRequest,
 		arg.UserID,
 		arg.ForgeURL,
 	)
@@ -228,6 +233,7 @@ func (q *Queries) ReserveIssueMutation(ctx context.Context, arg ReserveIssueMuta
 		&i.FailureCode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PullRequest,
 	)
 	return i, err
 }
