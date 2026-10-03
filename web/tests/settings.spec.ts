@@ -61,11 +61,13 @@ test('repository general editor cancels drafts and sends exact IDs/revision with
   await page.getByRole('button', { name: 'Edit general settings', exact: true }).click();
   await expect(page.getByLabel('Description', { exact: true })).toHaveValue('Original description');
   await page.getByLabel('Description', { exact: true }).fill('<b>Literal description</b>');
-  await page.getByLabel('Wiki', { exact: true }).selectOption('true');
+  await expect(page.getByLabel('Wiki', { exact: true })).toHaveCount(0);
+  await page.getByLabel('Pull requests', { exact: true }).selectOption('false');
   await page.getByRole('button', { name: 'Save repository settings', exact: true }).click();
   await expect(page.getByText('Repository settings saved.', { exact: true })).toBeVisible();
   await expect(page.getByText('<b>Literal description</b>', { exact: true })).toBeVisible();
-  expect(state.writes).toMatchObject([{ repository: { owner: 'alex', name: 'demo' }, repositoryId: '9007199254740997', ownerId: '9007199254740993', expectedRevision: 'original-revision', description: '<b>Literal description</b>', hasWiki: true }]);
+  expect(state.writes).toMatchObject([{ repository: { owner: 'alex', name: 'demo' }, repositoryId: '9007199254740997', ownerId: '9007199254740993', expectedRevision: 'original-revision', description: '<b>Literal description</b>', hasPullRequests: false }]);
+  expect((state.writes[0] as Record<string, unknown>).hasWiki).toBeUndefined();
   expect((state.writes[0] as Record<string, unknown>).hasIssues).toBeUndefined();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });

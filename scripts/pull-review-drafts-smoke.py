@@ -218,6 +218,21 @@ def main():
         smoke.wait_for_push(owner['token'], full)
         for actor in [reader, other]:
             smoke.provider(owner['token'], 'PUT', route+'/collaborators/'+actor['name'], {'permission': 'read'}, 204)
+        stage = 'served native unit configuration receipts'
+        repository_key = {'owner': owner['name'], 'name': 'private'}
+        original_units = {field: repo[field] for field in ['has_issues', 'has_pull_requests', 'has_wiki']}
+        assert all(isinstance(value, bool) for value in original_units.values())
+        for configured in [dict.fromkeys(original_units, False), dict.fromkeys(original_units, True), {'has_issues': False, 'has_pull_requests': True, 'has_wiki': False}]:
+            smoke.provider(owner['token'], 'PATCH', route, configured)
+            native_units = smoke.provider(reader['token'], 'GET', route)
+            projected = call(reader, 'GetRepository', {'repository': repository_key})['repository']
+            assert projected['id'] == str(repo['id'])
+            for native_field, golf_field in [('has_issues', 'issuesEnabled'), ('has_pull_requests', 'pullRequestsEnabled'), ('has_wiki', 'wikiEnabled')]:
+                assert native_units[native_field] is configured[native_field] and projected[golf_field] is configured[native_field]
+        call(outsider, 'GetRepository', {'repository': repository_key}, 404)
+        smoke.provider(owner['token'], 'PATCH', route, original_units)
+        print('PASS: actual served optional unit configuration matches native true/false/mixed receipts; private outsider denied; original configuration restored', flush=True)
+        stage = 'divergent native M B H comparison'
         content_route = route+'/contents/'+quote(path, safe='/')
         def contents(method, branch, text, sha=None):
             payload = {'branch': branch, 'message': 'Private draft qualification fixture', 'content': base64.b64encode(text.encode()).decode()}

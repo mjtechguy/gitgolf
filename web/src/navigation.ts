@@ -33,7 +33,7 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
   const next = { ...defaultRepositorySearch, ...location, ...changes };
   const search: RepositorySearch = {
     view: next.view, ref: next.ref, path: next.view === 'source' ? next.path : '', branch: next.branch, tag: next.tag,
-    state: next.state, issue: next.view === 'issues' ? next.issue : undefined,
+    state: next.view === 'issues' || next.view === 'pulls' ? next.state : 'open', issue: next.view === 'issues' ? next.issue : undefined,
     issueNew:next.view==='issues'&&!next.issue?next.issueNew:undefined,
     pull: next.view === 'pulls' ? next.pull : undefined,
     pullView: next.view === 'pulls' && next.pull ? next.pullView : undefined,
@@ -52,5 +52,12 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
   else if(next.view==='actions') path=next.run?`actions/runs/${next.run}`:'actions';
   else if(next.view==='commits') path=next.commit?`commit/${next.commit}`:next.historyPath&&isCommitID(next.ref)?`commits/${next.ref}/${next.historyPath}`:'commits';
   else if(isCommitID(next.ref)) path=`${sourceKind==='file'?'blob':'tree'}/${next.ref}${next.path?`/${next.path}`:''}`;
+  // Canonical paths carry their own view and detail selectors. Keep only
+  // deliberate source/history return context and relevant list filters.
+  search.view = 'source'; search.path = '';
+  search.issue = undefined; search.issueNew = undefined; search.pull = undefined; search.pullView = undefined; search.commit = undefined; search.run = undefined;
+  if (next.view === 'commits' && next.historyPath && isCommitID(next.ref)) search.historyPath = undefined;
+  // The path is authoritative for source and path-history snapshots.
+  if ((next.view === 'source' && isCommitID(next.ref)) || (next.view === 'commits' && !next.commit && next.historyPath && isCommitID(next.ref))) search.ref = '';
   return {to:'/$owner/$name/$' as const,params:{...params,_splat:path},search,activeOptions:{exact:true}};
 }

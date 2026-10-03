@@ -7,7 +7,7 @@ import {GetSessionResponseSchema,GetRepositoryResponseSchema,ListRepositoriesRes
 const head='a'.repeat(40);
 function envelope(flag:number,body:unknown){const text=Buffer.from(JSON.stringify(body));const size=Buffer.alloc(5);size[0]=flag;size.writeUInt32BE(text.length,1);return Buffer.concat([size,text]);}
 async function fixture(page:Page){
- const state={cursor:1,title:'Original issue',topics:[] as string[],denied:false,offline:false,cursors:[] as string[],sources:0,pullHead:head,pullReads:0,checkState:ReportedCheckState.PENDING,commitReads:0,checkReads:0};
+ const state={cursor:1,title:'Original issue',topics:[] as string[],denied:false,offline:false,cursors:[] as string[],sources:0,pullHead:head,pullReads:0,checkState:ReportedCheckState.PENDING,commitReads:0,checkReads:0,issuesEnabled:undefined as boolean|undefined,metadataReads:0};
  await page.route('**/rpc/**',async(route:Route)=>{
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
   if(method==='WatchRepository'){
@@ -24,7 +24,7 @@ async function fixture(page:Page){
   if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user});
   if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{repositories:[repository]});
-  if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository});
+  if(method==='GetRepository'){state.metadataReads++;return respond(route,GetRepositoryResponseSchema,{repository:{...repository,issuesEnabled:state.issuesEnabled}});}
   if(method==='GetContents'){state.sources++;return respond(route,GetContentsResponseSchema,{kind:SourceEntryType.DIRECTORY,commitId:head,entries:[{name:'src',path:'src',type:SourceEntryType.DIRECTORY}]});}
   if(method==='ListBranches')return respond(route,ListBranchesResponseSchema,{branches:[{name:'main',commitId:head}]});
   if(method==='GetPullRequest'){state.pullReads++;return respond(route,GetPullRequestResponseSchema,{pullRequest:{id:'4',number:1,title:'Live contribution',state:IssueState.OPEN,user,base:{repositoryId:'11',ref:'main',commitId:'b'.repeat(40)},head:{repositoryId:'11',ref:'feature',commitId:state.pullHead}}});}
@@ -89,4 +89,34 @@ test('PR commit pages remain pinned across pull activity and only move after exp
  await expect(page.getByRole('link',{name:'Pinned private commit',exact:true})).toHaveAttribute('href',`/alex/demo/commit/${state.pullHead}`);
  state.denied=true;await expect(page.getByRole('alert')).toContainText('Repository access removed');
  await expect(page.getByRole('link',{name:'Pinned private commit',exact:true})).toHaveCount(0);
+});
+
+
+test('live repository revalidation hides a disabled unit and removes its private editor', async ({ page }) => {
+ const state=await fixture(page);await page.goto('/alex/demo/issues/1');
+ await expect(page.getByText('Live',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Add a comment',exact:true}).click();
+ await page.getByLabel('Comment, plain text',{exact:true}).fill('Private editor before configuration change');
+ const reads=state.metadataReads;state.issuesEnabled=false;state.topics=['issues'];state.cursor++;
+ await expect(page.getByRole('heading',{name:'Issues are disabled',exact:true})).toBeVisible();
+ await expect(page.getByLabel('Comment, plain text',{exact:true})).toHaveCount(0);
+ await expect(page.getByRole('navigation',{name:'Repository',exact:true}).getByRole('link',{name:'Issues',exact:true})).toHaveCount(0);
+ expect(state.metadataReads).toBeGreaterThan(reads);
+ state.issuesEnabled=true;state.cursor++;
+ await expect(page.getByRole('heading',{name:'Original issue #1',exact:true})).toBeVisible();
+ await expect(page.getByLabel('Comment, plain text',{exact:true})).toHaveCount(0);
+});
+
+
+test('offline reconnect attempts keep source controls stable without repeated metadata hiding', async ({ page }) => {
+ const state=await fixture(page);state.offline=true;await page.goto('/alex/demo');
+ await expect(page.locator('.source-tree')).toBeVisible();
+ await expect(page.getByRole('button',{name:'Reconnect live updates',exact:true})).toBeVisible();
+ const reads=state.metadataReads;
+ await page.getByLabel('Source actions',{exact:true}).click();
+ await expect(page.locator('.source-action-options')).toBeVisible();
+ await expect.poll(()=>state.cursors.length).toBeGreaterThanOrEqual(3);
+ expect(state.metadataReads).toBe(reads);
+ await expect(page.locator('.source-action-options')).toBeVisible();
+ await expect(page.locator('.source-tree')).toBeVisible();
 });

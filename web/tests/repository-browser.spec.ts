@@ -28,7 +28,7 @@ const entries = [
 ];
 
 async function backend(page: Page) {
-  const state = { readme: '# PRIVATE README\n<script>window.executed=true</script>\n<a href="javascript:alert(1)">Untrusted</a>\n', featureHead: feature, signedIn: true, empty: false, metadataStatus: 200, sourceStatus: 200, sourceText:'export const PRIVATE_SOURCE = true;\n',historyBinding:true, historyStatus:200,historyRequests:[] as ReturnType<typeof request<typeof ListCommitsRequestSchema>>[], issueStatus: 200, sourceWait: undefined as Promise<void> | undefined, methods: [] as string[], sourceRequests: [] as GetContentsRequest[] };
+  const state = { readme: '# PRIVATE README\n<script>window.executed=true</script>\n<a href="javascript:alert(1)">Untrusted</a>\n', featureHead: feature, signedIn: true, empty: false, metadataStatus: 200, sourceStatus: 200, sourceText:'export const PRIVATE_SOURCE = true;\n',historyBinding:true, historyStatus:200,historyRequests:[] as ReturnType<typeof request<typeof ListCommitsRequestSchema>>[], issueStatus: 200, issuesEnabled: undefined as boolean | undefined, pullRequestsEnabled: undefined as boolean | undefined, sourceWait: undefined as Promise<void> | undefined, methods: [] as string[], sourceRequests: [] as GetContentsRequest[] };
   await page.route('**/rpc/**', async (route) => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1)!;
     state.methods.push(method);
@@ -42,7 +42,7 @@ async function backend(page: Page) {
     if (!state.signedIn) return error(401, 'Your session expired.');
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, { capabilities: [] });
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
-    if (method === 'GetRepository') return state.metadataStatus === 200 ? respond(route, GetRepositoryResponseSchema, { repository: { ...repository, empty: state.empty } }) : error(state.metadataStatus, 'Repository not found or inaccessible.');
+    if (method === 'GetRepository') return state.metadataStatus === 200 ? respond(route, GetRepositoryResponseSchema, { repository: { ...repository, empty: state.empty, issuesEnabled: state.issuesEnabled, pullRequestsEnabled: state.pullRequestsEnabled } }) : error(state.metadataStatus, 'Repository not found or inaccessible.');
     if (method === 'ListBranches') return respond(route, ListBranchesResponseSchema, request(route, ListBranchesRequestSchema).page?.page === 2 ? { branches: [{ name: 'feature/UI', commitId: feature }] } : { branches: [{ name: 'main', commitId: head, protected: true }], page: { nextPage: 2 } });
     if(method==='GetRepositoryImage') return respond(route,GetRepositoryImageResponseSchema,{mediaType:'image/svg+xml',content:new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 30"><path fill="green" d="M0 0h100v30H0z"/><script>window.executed=true</script><image href="https://tracker.invalid/pixel"/></svg>')});
     if (method === 'GetContents') {
@@ -91,7 +91,7 @@ test('repository navigation pins snapshots, paginates branches, supports slash r
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
   await page.getByRole('link', { name: 'alex/design-system', exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`ref=${head}`));
+  await expect(page).toHaveURL(new RegExp(`tree/${head}`));
   await page.getByRole('link', { name: 'src Directory', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`tree/${head}/src`));
   await page.getByRole('link', { name: 'index.ts File 40 B', exact: true }).click();
@@ -106,15 +106,15 @@ test('repository navigation pins snapshots, paginates branches, supports slash r
   await page.locator('.branch-picker > summary').click();
   await page.getByRole('button', { name: 'Load more branches' }).click();
   await page.getByRole('link', { name: `feature/UI Listed at ${feature.slice(0, 12)}` }).click();
-  await expect(page).toHaveURL(new RegExp(`ref=${feature}&branch=feature%2FUI`));
+  await expect(page).toHaveURL(new RegExp(`tree/${feature}\\?branch=feature%2FUI`));
   await expect(page.getByRole('link', { name: 'README.md File 128 B', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Latest branch head' }).click();
-  await expect(page).toHaveURL(new RegExp(`ref=${feature}&branch=feature%2FUI`));
+  await expect(page).toHaveURL(new RegExp(`tree/${feature}\\?branch=feature%2FUI`));
   expect(state.sourceRequests.some((input) => input.ref === 'feature/UI')).toBe(true);
   state.featureHead = older;
   await page.locator('.branch-picker > summary').click();
   await page.getByRole('link', { name: `feature/UI Listed at ${feature.slice(0, 12)}` }).click();
-  await expect(page).toHaveURL(new RegExp(`ref=${older}&branch=feature%2FUI`));
+  await expect(page).toHaveURL(new RegExp(`tree/${older}\\?branch=feature%2FUI`));
   expect(errors).toEqual([]);
 });
 
@@ -146,7 +146,7 @@ test('commit history paginates and opens the selected immutable source commit', 
   await expect(page.locator('.commit-message pre')).toContainText('Keep focus visible everywhere.');
   await page.getByRole('button', { name: 'Load more commits' }).click();
   await page.getByRole('link', { name: `Browse commit ${older.slice(0, 12)}` }).click();
-  await expect(page).toHaveURL(new RegExp(`ref=${older}`));
+  await expect(page).toHaveURL(new RegExp(`tree/${older}`));
   await expect(page.getByRole('navigation', { name: 'Repository', exact: true }).getByRole('link', { name: 'Code' })).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('.commit-pin')).toHaveText(older.slice(0, 12));
 });
@@ -558,4 +558,38 @@ test('tag inventory rejects wrong identity and never substitutes loaded-page cou
   await expect(page.getByRole('link', { name: /PRIVATE tag Listed at/ })).toBeVisible();
   await expect(tags).toHaveText('Tags');
   await page.locator('.branch-picker>summary').press('Escape'); await expect(page.locator('.branch-picker>summary')).toBeFocused();
+});
+
+
+for (const view of ['issues', 'issues/12', 'issues/new', 'pulls', 'pull/12/files', 'compare']) {
+  test(`disabled repository unit blocks ${view} before feature RPCs`, async ({ page }) => {
+    const state = await backend(page); state.issuesEnabled = false; state.pullRequestsEnabled = false;
+    await page.goto(`/alex/design-system/${view}`);
+    await expect(page.getByRole('heading', { name: /are disabled$/ })).toBeVisible();
+    const tabs = page.getByRole('navigation', { name: 'Repository', exact: true });
+    await expect(tabs.getByRole('link', { name: 'Issues', exact: true })).toHaveCount(0);
+    await expect(tabs.getByRole('link', { name: 'Pull requests', exact: true })).toHaveCount(0);
+    expect(state.methods.filter(method => /Issue|PullRequest|Compare/.test(method))).toEqual([]);
+    await page.getByRole('link', { name: 'Back to code', exact: true }).click();
+    await expect(page.locator('.source-tree')).toBeVisible();
+    await expect(tabs.getByRole('link', { name: 'Settings', exact: true })).toHaveAttribute('href', '/alex/design-system/settings');
+  });
+}
+
+test('source aliases normalize immutable file kinds and preserve snapshot on reload', async ({ page }) => {
+  const state = await backend(page);
+  for (const path of ['src/index.ts', 'link', 'module']) {
+    await page.goto(`/repositories/alex/design-system?ref=${head}&path=${path}`);
+    await expect(page).toHaveURL(`/alex/design-system/blob/${head}/${path}`);
+    await page.reload();
+    await expect(page).toHaveURL(`/alex/design-system/blob/${head}/${path}`);
+    expect(state.sourceRequests.filter(input => input.path === path).every(input => input.ref === head)).toBe(true);
+  }
+  await page.goto(`/repositories/alex/design-system?ref=${head}&path=src/index.ts#L1`);
+  await expect(page).toHaveURL(`/alex/design-system/blob/${head}/src/index.ts#L1`);
+  await expect(page.getByLabel('Plain text preview of index.ts')).toBeVisible();
+  await page.goto(`/alex/design-system/blob/${head}/src?ref=${feature}`);
+  await expect(page).toHaveURL(`/alex/design-system/tree/${head}/src`);
+  await expect(page.getByRole('link', { name: 'index.ts File 40 B', exact: true })).toBeVisible();
+  expect(state.sourceRequests.filter(input => input.path === 'src').every(input => input.ref === head)).toBe(true);
 });

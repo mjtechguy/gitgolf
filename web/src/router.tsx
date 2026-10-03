@@ -1,4 +1,4 @@
-import { createRootRoute, createRoute, createRouter, notFound, Outlet, stripSearchParams } from '@tanstack/react-router';
+import { createRootRoute, createRoute, createRouter, notFound, redirect, Outlet, stripSearchParams } from '@tanstack/react-router';
 import { App } from './App';
 import { defaultRepositorySearch, isCommitID, isRunID } from './navigation';
 import type { RepositorySearch } from './navigation';
@@ -46,20 +46,36 @@ const sshKeysRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/account/ssh-keys',
   component: () => <App location={{ kind: 'ssh-keys' }} />,
 });
+function validateRepositoryIdentity(owner: string, name: string) {
+  if (!owner || !name || /[\/\\]/.test(owner + name)) throw notFound();
+}
+const canonicalRepositorySettingsRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/$owner/$name/settings',
+  beforeLoad: ({ params }) => validateRepositoryIdentity(params.owner, params.name),
+  component: RepositorySettingsPage,
+});
+const canonicalRepositoryAccessSettingsRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/$owner/$name/settings/access',
+  beforeLoad: ({ params }) => validateRepositoryIdentity(params.owner, params.name),
+  component: () => { const { owner, name } = canonicalRepositoryAccessSettingsRoute.useParams(); return <App location={{ kind: 'repository-access-settings', owner, name }} />; },
+});
+const canonicalRepositoryWorkflowsRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/$owner/$name/settings/workflows',
+  beforeLoad: ({ params }) => validateRepositoryIdentity(params.owner, params.name),
+  component: () => { const { owner, name } = canonicalRepositoryWorkflowsRoute.useParams(); return <App location={{ kind: 'repository-workflows', owner, name }} />; },
+});
+// Old links normalize without probing repository data or changing page authority.
 const repositorySettingsRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/repositories/$owner/$name/settings',
-  beforeLoad: ({ params }) => { if (!params.owner || !params.name || /[\/\\]/.test(params.owner + params.name)) throw notFound(); },
-  component: RepositorySettingsPage,
+  beforeLoad: ({ params, location }) => { validateRepositoryIdentity(params.owner, params.name); throw redirect({ to: '/$owner/$name/settings', params, hash: location.hash, replace: true }); },
 });
 const repositoryAccessSettingsRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/repositories/$owner/$name/settings/access',
-  beforeLoad: ({ params }) => { if (!params.owner || !params.name || /[\/\\]/.test(params.owner + params.name)) throw notFound(); },
-  component: () => { const { owner, name } = repositoryAccessSettingsRoute.useParams(); return <App location={{ kind: 'repository-access-settings', owner, name }} />; },
+  beforeLoad: ({ params, location }) => { validateRepositoryIdentity(params.owner, params.name); throw redirect({ to: '/$owner/$name/settings/access', params, hash: location.hash, replace: true }); },
 });
 const repositoryWorkflowsRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/repositories/$owner/$name/settings/workflows',
-  beforeLoad: ({ params }) => { if (!params.owner || !params.name || /[\/\\]/.test(params.owner + params.name)) throw notFound(); },
-  component: () => { const { owner, name } = repositoryWorkflowsRoute.useParams(); return <App location={{ kind: 'repository-workflows', owner, name }} />; },
+  beforeLoad: ({ params, location }) => { validateRepositoryIdentity(params.owner, params.name); throw redirect({ to: '/$owner/$name/settings/workflows', params, hash: location.hash, replace: true }); },
 });
 const organizationSettingsRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/organizations/$organization/settings',
@@ -90,7 +106,7 @@ const organizationRoute = createRoute({
   component: OrganizationPage,
 });
 const validateRepositorySearch = (search: Record<string, unknown>): RepositorySearch => {
-    const issue = search.issue === undefined ? undefined : Number(search.issue);
+    const issue = search.issue === undefined ? undefined : typeof search.issue === 'number' ? search.issue : typeof search.issue === 'string' && /^[1-9][0-9]*$/.test(search.issue) ? Number(search.issue) : NaN;
     const pull = search.pull === undefined ? undefined : typeof search.pull === 'number' ? search.pull : typeof search.pull === 'string' && /^[1-9][0-9]*$/.test(search.pull) ? Number(search.pull) : NaN;
     return {
       view: search.view === 'commits' || search.view === 'issues' || search.view === 'pulls' || search.view === 'actions' || search.view === 'compare' ? search.view : 'source',
@@ -107,17 +123,20 @@ const validateRepositorySearch = (search: Record<string, unknown>): RepositorySe
       step: search.step === undefined ? undefined : typeof search.step === 'number' ? search.step : typeof search.step === 'string' && /^(0|[1-9][0-9]*)$/.test(search.step) ? Number(search.step) : NaN,
     };
   };
+function validateRepositorySelectors(search: RepositorySearch) {
+  if (search.pull !== undefined && (!Number.isSafeInteger(search.pull) || search.pull <= 0 || search.pull > 0x7fffffff)) throw notFound();
+  if (search.issue !== undefined && (!Number.isSafeInteger(search.issue) || search.issue <= 0 || search.issue > 0xffffffff)) throw notFound();
+  if (search.commit !== undefined && !isCommitID(search.commit)) throw notFound();
+  if (search.run !== undefined && !isRunID(search.run)) throw notFound();
+  if (search.step !== undefined && (!Number.isInteger(search.step) || search.step < 0 || search.step > 49)) throw notFound();
+}
 const repositoryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/repositories/$owner/$name',
   validateSearch: validateRepositorySearch,
   beforeLoad: ({ params, search }) => {
-    if (!params.owner || !params.name || /[\/\\]/.test(params.owner + params.name)) throw notFound();
-    if (search.pull !== undefined && (!Number.isSafeInteger(search.pull) || search.pull <= 0 || search.pull > 0x7fffffff)) throw notFound();
-    if (search.issue !== undefined && (!Number.isSafeInteger(search.issue) || search.issue <= 0 || search.issue > 0xffffffff)) throw notFound();
-    if (search.commit !== undefined && !isCommitID(search.commit)) throw notFound();
-    if (search.run !== undefined && !isRunID(search.run)) throw notFound();
-    if (search.step !== undefined && (!Number.isInteger(search.step)||search.step<0||search.step>49)) throw notFound();
+    validateRepositoryIdentity(params.owner, params.name);
+    validateRepositorySelectors(search);
   },
   search: { middlewares: [stripSearchParams(defaultRepositorySearch)] },
   component: RepositoryPage,
@@ -126,9 +145,8 @@ const repositoryRoute = createRoute({
 // Explicitly keep legacy query URLs readable. New navigation uses familiar
 // repository paths; immutable source IDs avoid slash-ref ambiguity.
 function canonicalLocation(owner:string,name:string,tail:string,search:RepositorySearch) {
-  if(!owner||!name||/[\/\\]/.test(owner+name)) throw notFound();
-  if(search.run!==undefined&&!isRunID(search.run))throw notFound();
-  if(search.step!==undefined&&(!Number.isInteger(search.step)||search.step<0||search.step>49))throw notFound();
+  validateRepositoryIdentity(owner, name);
+  validateRepositorySelectors(search);
   const location={...search,owner,name,kind:'repository' as const};
   if(!tail) return location;
   const parts=tail.split('/');
@@ -157,12 +175,27 @@ function canonicalLocation(owner:string,name:string,tail:string,search:Repositor
   throw notFound();
 }
 const canonicalRepositoryPageRoute=createRoute({getParentRoute:()=>rootRoute,path:'/$owner/$name/$',validateSearch:validateRepositorySearch,
-  beforeLoad:({params,search})=>{canonicalLocation(params.owner,params.name,params._splat||'',search);},
-  search:{middlewares:[({search,next})=>{const clean:Partial<RepositorySearch>={...next(search)};delete clean.view;delete clean.path;delete clean.issue;delete clean.pull;delete clean.pullView;delete clean.commit;delete clean.run;delete clean.historyPath;delete clean.issueNew;return clean as RepositorySearch;},stripSearchParams(defaultRepositorySearch)]},
+  beforeLoad:({params,search,location})=>{
+    const tail=params._splat||'';
+    canonicalLocation(params.owner,params.name,tail,search);
+    const parts=tail.split('/');
+    const ownsRef=isCommitID(parts[1]||'') && (parts[0]==='tree'||parts[0]==='blob'||parts[0]==='commits'&&parts.length>=3);
+    // The installed search middleware has no route params. Normalize only
+    // after validating the incoming selectors, keeping empty-tail aliases and
+    // deliberate source return-context on issue, pull and commit pages.
+    const owned=['view','path','issue','pull','pullView','commit','run','historyPath','issueNew'];
+    if(tail && (owned.some(key=>key in location.search) || ownsRef && 'ref' in location.search)) {
+      const clean={...search};
+      for(const key of owned) delete clean[key as keyof RepositorySearch];
+      if(ownsRef) clean.ref='';
+      throw redirect({to:'/$owner/$name/$',params:{owner:params.owner,name:params.name,_splat:tail},search:clean,hash:location.hash,replace:true});
+    }
+  },
+  search:{middlewares:[stripSearchParams(defaultRepositorySearch)]},
   component:()=>{const p=canonicalRepositoryPageRoute.useParams();return <App location={canonicalLocation(p.owner,p.name,p._splat||'',canonicalRepositoryPageRoute.useSearch())}/>;}});
 
 function RepositorySettingsPage() {
-  const { owner, name } = repositorySettingsRoute.useParams();
+  const { owner, name } = canonicalRepositorySettingsRoute.useParams();
   return <App location={{ kind: 'repository-settings', owner, name }} />;
 }
 function OrganizationTeamSettingsPage() {
@@ -192,7 +225,7 @@ function OrganizationPage() {
 
 // Router owns navigation only. Private server data stays in the cancellable Query cache.
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([homeRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountSecurityRoute, accountAgentsRoute, sessionsRoute]),
+  routeTree: rootRoute.addChildren([homeRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountSecurityRoute, accountAgentsRoute, sessionsRoute]),
   defaultPreload: false,
   // Refs and paths are opaque strings, including names such as "1234" or "true".
   parseSearch: (search) => Object.fromEntries(new URLSearchParams(search)),

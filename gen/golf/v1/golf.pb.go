@@ -2693,8 +2693,14 @@ type Repository struct {
 	Empty         bool                   `protobuf:"varint,9,opt,name=empty,proto3" json:"empty,omitempty"`
 	CloneUrl      string                 `protobuf:"bytes,10,opt,name=clone_url,json=cloneUrl,proto3" json:"clone_url,omitempty"`
 	SshUrl        string                 `protobuf:"bytes,11,opt,name=ssh_url,json=sshUrl,proto3" json:"ssh_url,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Native repository-unit configuration; absent means unreported, not false.
+	// These are not permission grants. Native issues/wiki flags can include an
+	// external tracker/wiki; true does not establish an internal Golf surface.
+	IssuesEnabled       *bool `protobuf:"varint,12,opt,name=issues_enabled,json=issuesEnabled,proto3,oneof" json:"issues_enabled,omitempty"`
+	PullRequestsEnabled *bool `protobuf:"varint,13,opt,name=pull_requests_enabled,json=pullRequestsEnabled,proto3,oneof" json:"pull_requests_enabled,omitempty"`
+	WikiEnabled         *bool `protobuf:"varint,14,opt,name=wiki_enabled,json=wikiEnabled,proto3,oneof" json:"wiki_enabled,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *Repository) Reset() {
@@ -2802,6 +2808,27 @@ func (x *Repository) GetSshUrl() string {
 		return x.SshUrl
 	}
 	return ""
+}
+
+func (x *Repository) GetIssuesEnabled() bool {
+	if x != nil && x.IssuesEnabled != nil {
+		return *x.IssuesEnabled
+	}
+	return false
+}
+
+func (x *Repository) GetPullRequestsEnabled() bool {
+	if x != nil && x.PullRequestsEnabled != nil {
+		return *x.PullRequestsEnabled
+	}
+	return false
+}
+
+func (x *Repository) GetWikiEnabled() bool {
+	if x != nil && x.WikiEnabled != nil {
+		return *x.WikiEnabled
+	}
+	return false
 }
 
 type RepositoryKey struct {
@@ -21709,7 +21736,7 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\tfull_name\x18\x03 \x01(\tR\bfullName\x12\x1d\n" +
 	"\n" +
 	"avatar_url\x18\x04 \x01(\tR\tavatarUrl\x12*\n" +
-	"\x11is_instance_admin\x18\x05 \x01(\bR\x0fisInstanceAdmin\"\xb6\x02\n" +
+	"\x11is_instance_admin\x18\x05 \x01(\bR\x0fisInstanceAdmin\"\x81\x04\n" +
 	"\n" +
 	"Repository\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
@@ -21724,7 +21751,13 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x05empty\x18\t \x01(\bR\x05empty\x12\x1b\n" +
 	"\tclone_url\x18\n" +
 	" \x01(\tR\bcloneUrl\x12\x17\n" +
-	"\assh_url\x18\v \x01(\tR\x06sshUrl\"9\n" +
+	"\assh_url\x18\v \x01(\tR\x06sshUrl\x12*\n" +
+	"\x0eissues_enabled\x18\f \x01(\bH\x00R\rissuesEnabled\x88\x01\x01\x127\n" +
+	"\x15pull_requests_enabled\x18\r \x01(\bH\x01R\x13pullRequestsEnabled\x88\x01\x01\x12&\n" +
+	"\fwiki_enabled\x18\x0e \x01(\bH\x02R\vwikiEnabled\x88\x01\x01B\x11\n" +
+	"\x0f_issues_enabledB\x18\n" +
+	"\x16_pull_requests_enabledB\x0f\n" +
+	"\r_wiki_enabled\"9\n" +
 	"\rRepositoryKey\x12\x14\n" +
 	"\x05owner\x18\x01 \x01(\tR\x05owner\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"7\n" +
@@ -24612,6 +24645,7 @@ func file_golf_v1_golf_proto_init() {
 		return
 	}
 	file_golf_v1_golf_proto_msgTypes[17].OneofWrappers = []any{}
+	file_golf_v1_golf_proto_msgTypes[20].OneofWrappers = []any{}
 	file_golf_v1_golf_proto_msgTypes[41].OneofWrappers = []any{}
 	file_golf_v1_golf_proto_msgTypes[50].OneofWrappers = []any{}
 	file_golf_v1_golf_proto_msgTypes[53].OneofWrappers = []any{}

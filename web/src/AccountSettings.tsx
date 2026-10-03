@@ -26,9 +26,9 @@ export function AccountLayout({ children }: { children: ReactNode }) {
 
 export function RepositorySettingsLayout({ children, owner, name }: { children: ReactNode; owner: string; name: string }) {
   return <div className="account-layout"><nav className="account-navigation" aria-label="Repository settings"><span className="eyebrow">REPOSITORY SETTINGS</span>
-    <Link to="/repositories/$owner/$name/settings" params={{ owner, name }} activeOptions={{ exact: true }}><UserRound size={18} />General</Link>
-    <Link to="/repositories/$owner/$name/settings/access" params={{ owner, name }} activeOptions={{ exact: true }}><ShieldCheck size={18} />Access</Link>
-    <Link to="/repositories/$owner/$name/settings/workflows" params={{ owner, name }} activeOptions={{ exact: true }}><History size={18} />Workflows</Link>
+    <Link to="/$owner/$name/settings" params={{ owner, name }} activeOptions={{ exact: true }}><UserRound size={18} />General</Link>
+    <Link to="/$owner/$name/settings/access" params={{ owner, name }} activeOptions={{ exact: true }}><ShieldCheck size={18} />Access</Link>
+    <Link to="/$owner/$name/settings/workflows" params={{ owner, name }} activeOptions={{ exact: true }}><History size={18} />Workflows</Link>
   </nav><div className="account-content">{children}</div></div>;
 }
 

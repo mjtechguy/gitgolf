@@ -37,6 +37,11 @@ type Repository struct {
 	Empty         bool      `json:"empty"`
 	CloneURL      string    `json:"clone_url"`
 	SSHURL        string    `json:"ssh_url"`
+	// Optional native unit configuration, not caller permission or supported UI.
+	// Issues/wiki may represent an external unit; no external URLs are followed.
+	IssuesEnabled       *bool `json:"has_issues,omitempty"`
+	PullRequestsEnabled *bool `json:"has_pull_requests,omitempty"`
+	WikiEnabled         *bool `json:"has_wiki,omitempty"`
 }
 
 type forgeError struct{ status int }

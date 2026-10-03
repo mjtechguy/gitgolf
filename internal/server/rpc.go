@@ -187,7 +187,7 @@ func wireRepository(repo Repository) *golfv1.Repository {
 	if !repo.UpdatedAt.IsZero() {
 		updated = repo.UpdatedAt.Format(time.RFC3339Nano)
 	}
-	return &golfv1.Repository{Id: strconv.FormatInt(repo.ID, 10), Name: repo.Name, FullName: repo.FullName, Description: repo.Description, Private: repo.Private, HtmlUrl: repo.HTMLURL, DefaultBranch: repo.DefaultBranch, UpdatedAt: updated, Empty: repo.Empty, CloneUrl: repo.CloneURL, SshUrl: repo.SSHURL}
+	return &golfv1.Repository{Id: strconv.FormatInt(repo.ID, 10), Name: repo.Name, FullName: repo.FullName, Description: repo.Description, Private: repo.Private, HtmlUrl: repo.HTMLURL, DefaultBranch: repo.DefaultBranch, UpdatedAt: updated, Empty: repo.Empty, CloneUrl: repo.CloneURL, SshUrl: repo.SSHURL, IssuesEnabled: repo.IssuesEnabled, PullRequestsEnabled: repo.PullRequestsEnabled, WikiEnabled: repo.WikiEnabled}
 }
 func keyFrom(key *golfv1.RepositoryKey) repositoryKey {
 	return repositoryKey{key.GetOwner(), key.GetName()}

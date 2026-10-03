@@ -218,6 +218,12 @@ message Repository {
   bool empty = 9;
   string clone_url = 10;
   string ssh_url = 11;
+  // Native repository-unit configuration; absent means unreported, not false.
+  // These are not permission grants. Native issues/wiki flags can include an
+  // external tracker/wiki; true does not establish an internal Golf surface.
+  optional bool issues_enabled = 12;
+  optional bool pull_requests_enabled = 13;
+  optional bool wiki_enabled = 14;
 }
 
 message RepositoryKey {

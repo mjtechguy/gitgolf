@@ -17,9 +17,10 @@ export function useRepositoryLive(userId:string,owner:string,name:string,reposit
   const controller=new AbortController();let cursor='',live=true;let timer:ReturnType<typeof setTimeout>|undefined;let failures=0;
   setStatus('connecting');
   const scoped=(key:readonly unknown[])=>key[1]===userId&&key[2]===owner&&key[3]===name;
-  const refresh=(topics:string[])=>{
+  const refresh=(topics:string[],revalidateMetadata=false)=>{
    void client.invalidateQueries({predicate:query=>{
     const key=query.queryKey;if(!scoped(key))return false;
+    if(key[0]==='repository'&&key[4]==='metadata')return revalidateMetadata && topics.some(topic=>allowedTopics.includes(topic));
     if(key[0]==='repository'&&pin.current&&key[4]==='branches')return topics.includes('source')||topics.includes('pulls');
     if(key[0]==='repository'&&pin.current&&key[4]==='pull'&&key.length===6)return false;
     if(key[0]==='repository'&&key[4]==='pull-checks')return topics.includes('pulls')||topics.includes('actions');
@@ -35,8 +36,8 @@ export function useRepositoryLive(userId:string,owner:string,name:string,reposit
      if(!live||controller.signal.aborted)return;
      if(event.repositoryId!==repositoryId||!['reset','change','heartbeat','reconnect'].includes(event.kind)||event.topics.some(t=>!allowedTopics.includes(t))||event.cursor&&(!/^[1-9][0-9]{0,18}$/.test(event.cursor)||BigInt(event.cursor)>9223372036854775807n)||cursor&&event.cursor&&BigInt(event.cursor)<BigInt(cursor))throw new Error('Invalid live activity response.');
      received=true;failures=0;setStatus('live');
-     if(event.kind==='reset')refresh(['issues','pulls','actions','agents']);
-     else if(event.kind==='change'){if(event.topics.includes('source')||pin.current&&event.topics.includes('pulls'))setNewSource(true);refresh(event.topics);}
+     if(event.kind==='reset')refresh(['issues','pulls','actions','agents'],true);
+     else if(event.kind==='change'){if(event.topics.includes('source')||pin.current&&event.topics.includes('pulls'))setNewSource(true);refresh(event.topics,true);}
      cursor=event.cursor;
      if(event.kind==='reconnect')rotate=true;
     }
