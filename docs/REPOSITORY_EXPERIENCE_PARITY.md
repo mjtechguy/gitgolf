@@ -57,3 +57,5 @@ The [PR workspace contract](PULL_WORKSPACE_CONTRACT.md) defines the selected com
 The [element-level visual acceptance matrix](GITHUB_VISUAL_AUDIT.md#element-level-comparison-and-layout-priorities) adds actual diff-menu, branch-row, tag/release and compare references. Use it when implementing shared toolbars, contextual file navigation, row actions and responsive layouts. Each action needs its own backend and permission evidence; signed-out reference controls do not establish working Golf capabilities.
 
 The [PR mutation contract](PULL_MUTATION_CONTRACT.md) records the separate native identity, selection/revision checks and non-atomic outcome limits for creation and title/body/draft/state changes. Creation still needs the full comparison/composition UI.
+
+The [shared diff workspace](DIFF_WORKSPACE_CONTRACT.md) implements changed-file folder navigation, loaded extension/Viewed filters, display preferences and bounded safe syntax colours for commit/PR views. Full source tree/context retrieval, server Viewed, range selection and human reviews remain requirements; native read/merge gates are unchanged.

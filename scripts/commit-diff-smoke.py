@@ -37,31 +37,62 @@ try {
  await page.getByLabel('Provider access token',{exact:true}).fill(config.memberToken);
  await page.getByRole('button',{name:'Continue to workspace',exact:true}).click();
  await page.getByLabel('Your account', { exact: true }).waitFor();
- const url=config.golf+'/repositories/'+config.owner+'/diffs?view=commits&commit='+config.root;
+ const url=config.golf+'/'+config.owner+'/diffs/commit/'+config.root;
  stage='root diff deep link';await page.goto(url);
- const diff=page.getByLabel('Unified diff, plain text',{exact:true});await diff.waitFor();
- check((await diff.innerText()).includes('<script>window.golfDiffExecuted=true</script>'));
+ const diff=page.getByLabel('Unified diff, plain text',{exact:true});await diff.waitFor({state:'attached'});
+ check((await diff.textContent()).includes('<script>window.golfDiffExecuted=true</script>'));
  check(await page.evaluate(()=>window.golfDiffExecuted!==true));
  check(await page.locator('.branch-picker').count()===0);
  if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
  await page.screenshot({path:join(config.screenshots,'commit-diff-dark.png')});
- stage='reload, source and history';await page.reload();await diff.waitFor();
- check(new URL(page.url()).searchParams.get('commit')===config.root);
- await page.getByRole('link',{name:'Browse this commit',exact:true}).click();
- await page.locator('.source-tree').waitFor();check(new URL(page.url()).searchParams.get('ref')===config.root);
- await page.goBack();await diff.waitFor();
+ stage='shared diff tree/filter/display controls';
+ const navigation=page.getByRole('navigation',{name:'Changed file navigation'});
+ const source=navigation.getByRole('link',{name:'src/example.ts',exact:true});await source.waitFor();
+ const count=await page.locator('.diff-file').count();check(count===5);
+ await page.getByLabel('Folder src',{exact:true}).click();check(!await source.isVisible());
+ await page.getByLabel('Folder src',{exact:true}).click();await source.click();
+ const target=await source.getAttribute('href');check(target&&target.startsWith('#diff-'+config.root+'-file-'));
+ const file=page.locator(target);await file.locator('.hljs-keyword').waitFor();
+ check((await file.locator('.diff-code code').textContent()).includes('const greeting'));
+ check(await file.locator('.diff-code img,.diff-code script').count()===0);
+ await page.getByText('File filter',{exact:true}).click();await page.getByLabel('.ts',{exact:true}).uncheck();check(await page.locator('.diff-file').count()===3);
+ await page.getByLabel('.ts',{exact:true}).check();await page.getByText('File filter',{exact:true}).press('Escape');
+ await file.getByLabel('Viewed',{exact:true}).check();
+ await page.getByText('File filter',{exact:true}).click();await page.getByLabel('Viewed files visibility').selectOption('viewed');
+ check(await page.locator('.diff-file').count()===1);check(await file.count()===1);
+ await page.getByRole('button',{name:'Reset file filters',exact:true}).click();await page.getByText('File filter',{exact:true}).press('Escape');
+ await file.getByLabel('Viewed',{exact:true}).uncheck();
+ await page.getByRole('button',{name:'Split',exact:true}).click();await page.getByLabel('Diff settings',{exact:true}).click();
+ await page.getByLabel('Wrap lines',{exact:true}).check();await page.getByLabel('Diff settings',{exact:true}).press('Escape');
+ await page.getByRole('button',{name:'Hide file tree',exact:true}).click();await page.reload();await diff.waitFor({state:'attached'});
+ check(await page.getByRole('button',{name:'Show file tree',exact:true}).count()===1);check(await page.getByText('0/5 viewed this session',{exact:true}).count()===1);
+ check(await page.locator('.diff-lines.split').count()===5);check(await page.locator('.diff-workspace.wrap-lines').count()===1);
+ const preferences=await page.evaluate(()=>JSON.parse(localStorage.getItem('golf.diff-display.v1')));
+ check(Object.keys(preferences).length===4&&Object.values(preferences).every(value=>typeof value==='boolean'));
+ check(!await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}).includes('src/example.ts')));
+ await page.getByRole('button',{name:'Show file tree',exact:true}).click();
+ for(const theme of ['dark','light'])for(const width of [1280,390]) {
+  await page.setViewportSize({width,height:900});const toggle=page.getByRole('button',{name:'Switch to '+theme+' theme',exact:true});if(await toggle.count())await toggle.click();
+  await page.evaluate(()=>document.fonts.ready);await page.evaluate(()=>scrollTo(0,0));check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await page.screenshot({path:join(config.screenshots,'diff-workspace-'+theme+'-'+width+'.png'),fullPage:true});
+ }
+ stage='reload selected commit';await page.reload();await diff.waitFor({state:'attached'});
+ check(new URL(page.url()).pathname.endsWith('/commit/'+config.root));
+ stage='exact source navigation';await page.getByRole('link',{name:'Browse this commit',exact:true}).click();
+ await page.locator('.source-tree').waitFor();check(new URL(page.url()).pathname.endsWith('/tree/'+config.root));
+ stage='back to selected commit/history';await page.goBack();await diff.waitFor({state:'attached'});
  await page.getByRole('link',{name:'Back to commit history',exact:true}).click();
  await page.locator('.commit-list').waitFor();
- stage='merge diff and mobile';await page.goto(config.golf+'/repositories/'+config.owner+'/diffs?view=commits&commit='+config.merge);
- await diff.waitFor();check((await diff.innerText()).includes('side.txt'));check(!(await diff.innerText()).includes('diff --git a/README.md'));
+ stage='merge diff and mobile';await page.goto(config.golf+'/'+config.owner+'/diffs/commit/'+config.merge);
+ await diff.waitFor({state:'attached'});check((await diff.textContent()).includes('side.txt'));check(!(await diff.textContent()).includes('diff --git a/README.md'));
  if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();await page.setViewportSize({width:390,height:844});
  check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await page.screenshot({path:join(config.screenshots,'commit-diff-light-mobile.png')});
  stage='provider membership revocation';const removed=await context.request.delete(config.gitea+'/api/v1/repos/'+config.owner+'/diffs/collaborators/'+config.member,
  {headers:{Authorization:'token '+config.ownerToken}});check(removed.status()===204);
- await page.getByRole('button',{name:'Refresh diff',exact:true}).click();await page.getByRole('alert').waitFor();
+ await page.getByRole('alert').waitFor({timeout:15000});
  check(await diff.count()===0);check(errors.length===0);
- console.log('PASS: real diff navigation, plain HTML text, exact source, history, reload, first-parent merge, dark/light/mobile and revoked-access cleanup');
+ console.log('PASS: real diff tree/filter/Viewed/display/syntax controls, literal HTML text, exact source/history/reload, first-parent merge, dark/light desktop/mobile and live revoked-access cleanup');
 } catch {console.error('Diff browser failed at '+stage+'; sensitive diagnostics withheld');process.exitCode=1;}
 finally {
  if(context&&config)try {const r=await context.request.post(config.golf+'/rpc/golf.v1.SessionService/Logout',
@@ -101,6 +132,9 @@ def main():
         with tempfile.TemporaryDirectory(prefix='golf-diff-') as directory:
             path=Path(directory); work=path/'work';work.mkdir();command('git','init','-b','main',cwd=work)
             (work/'README.md').write_text('alpha\n<script>window.golfDiffExecuted=true</script>\n')
+            (work/'src/nested').mkdir(parents=True)
+            (work/'src/example.ts').write_text('const greeting = \"<script>window.golfDiffExecuted=true</script>\";\n')
+            (work/'src/nested/test.ts').write_text('const value = 1;\n')
             (work/'rename.txt').write_text('rename fixture\n'*20);(work/'remove.txt').write_text('remove fixture\n')
             command('git','add','.',cwd=work);root=commit(work,'Root native diff fixture')
             command('git','checkout','-b','side',cwd=work);(work/'side.txt').write_text('side first-parent fixture\n')
@@ -188,6 +222,7 @@ def main():
             try:admin('delete','--username',user,'--purge')
             except Exception:failures.append('provider cleanup')
         assert not failures, 'Diff fixture cleanup failed'
+        print('Disposable native diff users/repositories purged.')
 
 
 if __name__=='__main__':

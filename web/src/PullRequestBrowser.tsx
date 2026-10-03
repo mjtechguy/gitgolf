@@ -63,7 +63,7 @@ function PullDiscussion(props:Props){
  const query=useQuery({...privateQuery,queryKey:[...props.queryKey,'pull-discussion',props.location.pull],queryFn:({signal})=>repositoryClient.getPullRequestDiscussion({repository:props.repositoryKey,number:props.location.pull},{signal,timeoutMs:8000})});
  return query.isError?<PanelError error={query.error} retry={()=>void query.refetch()}/>:query.isSuccess&&query.data.issue?<Comments {...props} issue={query.data.issue} pullRequest onDenied={()=>{}}/>:<Loading label="Reading PR discussion…"/>;
 }
-function PullFiles({ pull, repositoryKey, queryKey, location }: Props & { pull: PullRequest }) {
+function PullFiles({ pull, repositoryKey, queryKey, location, repositoryId }: Props & { pull: PullRequest }) {
   const base = pull.base?.commitId || '', head = pull.head?.commitId || '';
   const query = useQuery({ ...privateQuery, queryKey: [...queryKey, 'pull-diff', location.pull, base, head],
     queryFn: async ({signal}) => {
@@ -72,8 +72,8 @@ function PullFiles({ pull, repositoryKey, queryKey, location }: Props & { pull: 
       if(result.byteSize > 512*1024 || new TextEncoder().encode(result.rawDiff).byteLength !== result.byteSize) throw new ConnectError('The PR diff exceeds its supported text bounds.',Code.ResourceExhausted);
       return result;
     }});
-  return <section className="browser-panel"><div className="browser-panel-heading"><h2>Files changed</h2><button className="icon-button manual-refresh" aria-label="Refresh PR diff" disabled={query.isFetching} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button></div>
-    {query.isError ? <PanelError error={query.error} retry={()=>void query.refetch()}/> : !query.isSuccess || query.isFetching ? <Loading label="Reading changed files…"/> : <><DiffViewer key={`${String(queryKey[1])}-${base}-${head}`} text={query.data.rawDiff} snapshotId={`${base}-${head}`}/><p className="panel-footnote">PR merge-base comparison · {query.data.byteSize.toLocaleString()} bytes. Viewed markers belong to this browser session and snapshot. This observation does not establish merge readiness.</p></>}
+  return <section className="browser-panel" aria-label="Pull request diff">
+    {query.isError ? <PanelError error={query.error} retry={()=>void query.refetch()}/> : !query.isSuccess || query.isFetching ? <Loading label="Reading changed files…"/> : <><DiffViewer key={`${String(queryKey[1])}-${repositoryId}-${pull.id}-${base}-${head}`} text={query.data.rawDiff} snapshotId={`${base}-${head}`} toolbarAction={<button className="icon-button manual-refresh" aria-label="Refresh PR diff" disabled={query.isFetching} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button>}/><p className="panel-footnote">PR merge-base comparison · {query.data.byteSize.toLocaleString()} bytes. Viewed markers belong to this browser session and snapshot. This observation does not establish merge readiness.</p></>}
   </section>;
 }
 function PullDetail(props: Props) {

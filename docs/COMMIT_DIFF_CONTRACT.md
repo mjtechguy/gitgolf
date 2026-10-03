@@ -79,3 +79,7 @@ Global flags such as `--url` and `--token-stdin` precede `commit`; use the exist
 The first live attempt exposed a valid provider-origin difference between repository and commit URLs. Exact escaped-path binding now accepts internal API/public root origins while preserving repository identity and SHA checks. Real PostgreSQL/backend fixtures cover those origin differences, foreign paths, invalid schemes/queries, malformed metadata/short reads and post-wait authorization. The final full `go test -race ./... -count=1 -timeout 120s` passes (server 25.308s, database 26.934s); `make check` and all 59 Playwright checks pass, including eight added commit-diff cases. The actual PR/browser/CLI regression also passes after the shared read-boundary changes.
 
 These checks qualify the bounded read workflow, not arbitrary future provider-stream completeness, a structured patch parser, signature verification, SHA-256 repositories, PR comparison, protected writes or merge eligibility. P1.4/P2.1/P2.2/P5.5 and P0.8 remain partial/open. No CI workflow is added.
+
+## Current shared diff presentation
+
+The [shared diff workspace contract](DIFF_WORKSPACE_CONTRACT.md) supersedes earlier presentation-only descriptions: compact native-index-bound folder navigation, loaded file-type/Viewed filters, persisted display booleans, optional wrapping and safe per-hunk syntax tokens now accompany the original native text. Native reads/authorization and protected-write limitations above remain unchanged. Current exact qualification is recorded in the implementation ledger.

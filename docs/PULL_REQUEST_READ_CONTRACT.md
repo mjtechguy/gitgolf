@@ -69,3 +69,7 @@ P0.8 remains open and [ADR 0004](decisions/0004-protected-integration-enforcemen
 The subsequent [PR Commits/Checks contract](PULL_WORKSPACE_CONTRACT.md) adds two selected read-only procedures, canonical four-tab URLs and shared history/latest-status controls. PR Files changed and sanitized Markdown supersede the initial plain-text-only display described above; the older section records its original scope.
 
 The subsequent [PR mutation contract](PULL_MUTATION_CONTRACT.md) adds browser-session creation and single-field title/body/state/draft lifecycle operations, separate native PR IDs, displayed revisions and shared explicit editors. Read scopes and review semantics above remain distinct; human approvals and protected merging remain pending.
+
+## Current shared diff presentation
+
+The [shared diff workspace contract](DIFF_WORKSPACE_CONTRACT.md) supersedes earlier presentation-only descriptions: compact native-index-bound folder navigation, loaded file-type/Viewed filters, persisted display booleans, optional wrapping and safe per-hunk syntax tokens now accompany the original native text. Native reads/authorization and protected-write limitations above remain unchanged. Current exact qualification is recorded in the implementation ledger.

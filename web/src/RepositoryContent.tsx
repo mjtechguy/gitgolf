@@ -7,14 +7,14 @@ import { RepositoryImage, type DocumentContext } from './RepositoryImage';
 import type { Root, Element, RootContent } from 'hast';
 import { Code2, Eye } from 'lucide-react';
 import { CopyButton } from './RepositoryUI';
+import { sourceLanguage } from './sourceLanguage';
 
-const languages: Record<string, string> = { js:'javascript',jsx:'javascript',ts:'typescript',tsx:'typescript',py:'python',go:'go',rs:'rust',sh:'bash',yml:'yaml',yaml:'yaml',json:'json',css:'css',html:'xml',xml:'xml',sql:'sql',md:'markdown',toml:'ini',ini:'ini',java:'java',rb:'ruby',php:'php',c:'c',h:'c',cpp:'cpp',cs:'csharp',dockerfile:'dockerfile' };
+
 export const isMarkdownPath = (path:string) => /\.(md|markdown|mdown)$/i.test(path);
 const Syntax=lazy(()=>import('./SyntaxTokens'));
 function Tokens({text,language}:{text:string;language:string}) {return language?<Suspense fallback={text}><Syntax text={text} language={language}/></Suspense>:text;}
 export function CodePreview({ text, path, label }: {text:string;path:string;label?:string}) {
- const filename=path.split('/').pop()?.toLowerCase()||'';
- const language=languages[filename]||languages[filename.split('.').pop()||'']||'';
+ const language=sourceLanguage(path);
  return <div className="code-block"><CopyButton text={text} label={`Copy source of ${path}`}/><pre className="source-preview code-preview" tabIndex={0} aria-label={label||`Source of ${path}`}><code><Tokens text={text || '(Empty text file)'} language={language}/></code></pre></div>;
 }
 const nodeText=(node:RootContent):string=>node.type==='text'?node.value:node.type==='element'?node.children.map(nodeText).join(''):'';

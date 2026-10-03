@@ -212,3 +212,115 @@ test('large multi-file comparisons retain full native output without an unbounde
  await expect(page.getByLabel('Unified diff, plain text')).toHaveText(state.raw);
  await expect(page.locator('.diff-file')).toHaveCount(0);
 });
+
+const filePatch=(path:string,content='const value = 1;')=>`diff --git ${JSON.stringify('a/'+path)} ${JSON.stringify('b/'+path)}\n--- /dev/null\n+++ ${JSON.stringify('b/'+path)}\n@@ -0,0 +1 @@\n+${content}\n`;
+const multiPatch=()=>filePatch('src/alpha.ts')+filePatch('src/nested/alpha.ts')+filePatch('docs/README.md','# Documentation')+filePatch('__proto__/constructor.ts')+`diff --git a/old-name b/new-name\nsimilarity index 100%\nrename from old-name\nrename to new-name\ndiff --git a/removed.txt b/removed.txt\n--- a/removed.txt\n+++ /dev/null\n@@ -1 +0,0 @@\n-deleted\ndiff --git a/images/logo.bin b/images/logo.bin\nBinary files a/images/logo.bin and b/images/logo.bin differ\n`;
+
+test('changed-file tree preserves native identities, nested folders, renames, deletion and literal special names',async({page})=>{
+ const state=await backend(page);state.raw=multiPatch();await page.goto(diffURL(head));
+ const nav=page.getByRole('navigation',{name:'Changed file navigation'});
+ await expect(nav.getByRole('link')).toHaveCount(7);
+ await expect(page.getByLabel('Folder __proto__',{exact:true})).toBeVisible();
+ await expect(nav.getByRole('link',{name:'src/alpha.ts',exact:true})).toHaveText('alpha.ts');
+ const folder=page.getByLabel('Folder src',{exact:true});await folder.focus();await page.keyboard.press('Enter');
+ await expect(nav.getByRole('link',{name:'src/nested/alpha.ts',exact:true})).toBeHidden();
+ await page.keyboard.press('Enter');await expect(nav.getByRole('link',{name:'src/nested/alpha.ts',exact:true})).toBeVisible();
+ await nav.getByRole('link',{name:'src/nested/alpha.ts',exact:true}).click();
+ await expect(page).toHaveURL(new RegExp(`#diff-${head}-file-1$`));
+ await expect(nav.getByRole('link',{name:'src/nested/alpha.ts',exact:true})).toHaveAttribute('aria-current','location');
+ await page.getByLabel('Filter changed files').fill('old-name');
+ await expect(nav.getByRole('link',{name:'new-name',exact:true})).toBeVisible();
+ await expect(page.locator('.diff-file')).toHaveCount(1);
+ await expect(page.getByRole('status').filter({hasText:'Showing 1 of 7 changed files'})).toBeVisible();
+ await page.getByRole('button',{name:'Clear filters',exact:true}).click();
+ await expect(page.getByRole('link',{name:'removed.txt',exact:true})).toHaveAttribute('href',`#diff-${head}-file-5`);
+ await expect(page.getByText('Binary content changed. No text preview is available.',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('Unified diff, plain text')).toHaveText(state.raw);
+ expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain('constructor.ts');
+});
+
+test('file-type and Viewed filters cover only loaded native entries without changing file anchors or raw output',async({page})=>{
+ const state=await backend(page);state.raw=multiPatch();await page.goto(diffURL(head));
+ await page.getByText('File filter',{exact:true}).click();await page.getByLabel('.ts',{exact:true}).uncheck();
+ await expect(page.locator('.diff-file')).toHaveCount(4);
+ await expect(page.getByRole('status').filter({hasText:'Showing 4 of 7 changed files'})).toBeVisible();
+ await page.getByLabel('.ts',{exact:true}).check();await page.getByLabel('Viewed files visibility').selectOption('unviewed');
+ await page.getByText('File filter',{exact:true}).press('Escape');
+ const selected=page.locator(`#diff-${head}-file-1`);await selected.getByLabel('Viewed',{exact:true}).click();
+ await expect(page.locator('.diff-file')).toHaveCount(6);await expect(page.getByText('1/7 viewed this session',{exact:true})).toBeVisible();
+ await page.getByText('File filter',{exact:true}).click();await page.getByLabel('Viewed files visibility').selectOption('viewed');
+ await expect(page.locator('.diff-file')).toHaveCount(1);await expect(page.getByRole('link',{name:'src/nested/alpha.ts',exact:true})).toHaveAttribute('href',`#diff-${head}-file-1`);
+ await page.getByRole('button',{name:'Reset file filters',exact:true}).click();await page.getByText('File filter',{exact:true}).press('Escape');
+ await expect(page.locator('.diff-file')).toHaveCount(7);await expect(selected.getByLabel('Viewed',{exact:true})).toBeChecked();
+ await expect(page.getByLabel('Unified diff, plain text')).toHaveText(state.raw);
+ await page.reload();await expect(page.getByText('0/7 viewed this session',{exact:true})).toBeVisible();
+});
+
+test('display preferences persist only booleans while private filters and Viewed reset on a new comparison',async({page})=>{
+ const state=await backend(page);state.raw=filePatch('private/customer-secret.ts');await page.goto(diffURL(head));
+ await page.getByRole('button',{name:'Split',exact:true}).click();await page.getByLabel('Diff settings',{exact:true}).click();
+ await page.getByLabel('Wrap lines',{exact:true}).check();await page.getByLabel('Syntax colours',{exact:true}).uncheck();
+ await page.getByLabel('Diff settings',{exact:true}).press('Escape');await expect(page.getByLabel('Diff settings',{exact:true})).toBeFocused();
+ await page.getByLabel('Viewed',{exact:true}).check();await page.getByLabel('Filter changed files').fill('customer-secret');
+ await page.getByRole('button',{name:'Hide file tree',exact:true}).click();
+ await page.reload();await expect(page.getByRole('button',{name:'Show file tree',exact:true})).toBeVisible();
+ await expect(page.locator('.diff-lines')).toHaveClass(/split/);await expect(page.locator('.diff-workspace')).toHaveClass(/wrap-lines/);
+ await expect(page.getByText('0/1 viewed this session',{exact:true})).toBeVisible();await expect(page.getByText('Loaded comparison',{exact:true})).toBeVisible();
+ const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('golf.diff-display.v1')!));expect(stored).toEqual({split:true,wrap:true,syntax:false,tree:false});
+ expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain('customer-secret');
+ await page.goto(diffURL(merge));await expect(page.getByRole('button',{name:'Show file tree',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Show file tree',exact:true}).click();await expect(page.getByLabel('Filter changed files')).toHaveValue('');
+ await expect(page.locator('.diff-code .hljs-keyword')).toHaveCount(0);
+});
+
+test('syntax colours preserve literal text and independent old/new hunk context in unified and split views',async({page})=>{
+ const state=await backend(page);state.raw=`diff --git a/src/example.ts b/src/example.ts\n--- a/src/example.ts\n+++ b/src/example.ts\n@@ -1,2 +1,2 @@\n-/*\n+const image = "<img src=x onerror=window.executed=true>";\n context token\n`;
+ await page.goto(diffURL(head));await expect(page.locator('.diff-code .hljs-keyword')).toContainText('const');
+ await expect(page.locator('.diff-code code')).toHaveText(['/*','const image = "<img src=x onerror=window.executed=true>";','context token']);
+ await expect(page.locator('.diff-code img,.diff-code script,.diff-code a')).toHaveCount(0);expect(await page.evaluate(()=>('executed' in window))).toBe(false);
+ await page.getByRole('button',{name:'Split',exact:true}).click();
+ const contexts=page.locator('.diff-lines tbody tr:last-child .diff-code');
+ await expect(contexts).toHaveCount(2);await expect(contexts.nth(0).locator('.hljs-comment')).toHaveText('context token');
+ await expect(contexts.nth(1).locator('.hljs-comment')).toHaveCount(0);await expect(contexts).toHaveText(['context token','context token']);
+ await page.getByLabel('Diff settings',{exact:true}).click();await page.getByLabel('Syntax colours',{exact:true}).uncheck();
+ await expect(page.locator('.diff-code [class^="hljs-"]')).toHaveCount(0);await expect(contexts).toHaveText(['context token','context token']);
+ await expect(page.locator(`#diff-${head}-file-0-R2`)).toHaveAttribute('href',`#diff-${head}-file-0-R2`);
+ await expect(page.locator(`#diff-${head}-file-0-L2`)).toHaveAttribute('href',`#diff-${head}-file-0-L2`);
+ await expect(page.getByLabel('Unified diff, plain text')).toHaveText(state.raw);
+});
+
+test('folder navigation reveals a selected line inside collapsed folders without moving the selected commit',async({page})=>{
+ const state=await backend(page);state.raw=multiPatch();await page.goto(diffURL(head));
+ await page.locator(`#diff-${head}-file-0`).getByLabel('Viewed',{exact:true}).check();
+ const folder=page.getByLabel('Folder src',{exact:true});await folder.click();
+ await expect(page.getByRole('link',{name:'src/nested/alpha.ts',exact:true})).toBeHidden();
+ await page.locator(`#diff-${head}-file-1-R1`).click();
+ await expect(page.getByRole('link',{name:'src/nested/alpha.ts',exact:true})).toBeVisible();
+ await expect(page.getByRole('link',{name:'src/nested/alpha.ts',exact:true})).toHaveAttribute('aria-current','location');
+ await expect(page.getByText('1/7 viewed this session',{exact:true})).toBeVisible();
+ expect(state.commits.length).toBeGreaterThan(0);expect(new Set(state.commits)).toEqual(new Set([head]));
+});
+
+test('deep and duplicate native paths remain bounded, independently navigable and readable on mobile in both themes',async({page})=>{
+ const state=await backend(page);const path=Array.from({length:80},(_,i)=>'nested'+i).join('/')+'/世界.ts';
+ state.raw=filePatch(path,'const value = "世界";')+filePatch('duplicate.ts')+filePatch('duplicate.ts','const other = 2;');
+ await page.goto(diffURL(head));const nav=page.getByRole('navigation',{name:'Changed file navigation'});
+ await expect(nav.getByRole('link')).toHaveCount(3);await expect(nav.getByRole('link',{name:'duplicate.ts',exact:true})).toHaveCount(2);
+ await expect(nav.locator('.diff-directory')).toHaveCount(1);await nav.getByRole('link',{name:path,exact:true}).click();
+ for(const theme of ['dark','light']) {
+  await page.evaluate(value=>document.documentElement.setAttribute('data-theme',value),theme);await page.setViewportSize({width:320,height:760});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.getByLabel('Diff settings',{exact:true}).click();await page.getByLabel('Wrap lines',{exact:true}).check();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await expect(page.getByLabel('Wrap lines',{exact:true})).toBeInViewport();await page.getByLabel('Diff settings',{exact:true}).press('Escape');
+  await page.screenshot({path:`test-results/diff-tree-${theme}-mobile.png`,fullPage:true});
+ }
+ await expect(page.getByLabel('Unified diff, plain text')).toHaveText(state.raw);
+});
+
+test('prototype-named unknown files retain literal source without breaking the diff workspace',async({page})=>{
+ const state=await backend(page);state.raw=filePatch('constructor','<img src=x onerror=window.executed=true>')+filePatch('__proto__','const value = 1;');
+ const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));await page.goto(diffURL(head));
+ await expect(page.locator('.diff-file')).toHaveCount(2);await expect(page.locator('.diff-code code')).toHaveText(['<img src=x onerror=window.executed=true>','const value = 1;']);
+ await expect(page.locator('.diff-code [class^=hljs],.diff-code img')).toHaveCount(0);await expect(page.getByLabel('Unified diff, plain text')).toHaveText(state.raw);expect(errors).toEqual([]);
+});

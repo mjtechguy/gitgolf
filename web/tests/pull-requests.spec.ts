@@ -500,3 +500,19 @@ test('PR merged/unverified lifecycle is disabled, editors are explicit, and both
  for(const theme of ['dark','light']){if(await page.locator('html').getAttribute('data-theme')!==theme)await page.getByRole('button',{name:`Switch to ${theme} theme`,exact:true}).click();await page.getByRole('button',{name:'Edit pull request description',exact:true}).click();await expect(page.getByLabel('Description, Markdown',{exact:true})).toBeFocused();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/pr-edit-mobile-${theme}.png`,fullPage:true});await page.getByRole('button',{name:'Close editor',exact:true}).click();}
  expect(state.updates).toHaveLength(0);
 });
+
+test('diff disclosures fit mobile viewports, return keyboard focus, and close safely when resizing',async({page})=>{
+ await backend(page);await page.goto('/alex/design-system/pull/12/files');
+ for(const theme of ['dark','light'])for(const width of [320,390]) {
+  await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);await page.setViewportSize({width,height:560});
+  for(const name of ['Diff settings','File filter']) {
+   const trigger=name==='Diff settings'?page.getByLabel(name,{exact:true}):page.getByText(name,{exact:true});
+   await trigger.click();const popup=page.locator('.diff-options[open] .diff-options-content');await expect(popup).toBeVisible();
+   await expect.poll(async()=>{const box=await popup.boundingBox();return Boolean(box&&box.y>=0&&box.y+box.height<=560);}).toBe(true);
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+   await trigger.press('Escape');await expect(popup).toHaveCount(0);await expect(trigger).toBeFocused();
+  }
+ }
+ await page.getByLabel('Diff settings',{exact:true}).click();await page.getByLabel('Wrap lines',{exact:true}).focus();
+ await page.setViewportSize({width:1280,height:900});await expect(page.locator('.diff-options[open]')).toHaveCount(0);await expect(page.getByLabel('Diff settings',{exact:true})).toBeFocused();
+});

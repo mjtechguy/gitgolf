@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { parseDiff, splitLines } from '../src/diff';
+import { sourceLanguage } from '../src/sourceLanguage';
 
 test('maps old/new lines without treating source content as file headers', () => {
   const text = 'commit abc\n\ndiff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1,2 +1,3 @@\n keep\n-old\n+++ b/forged.py\n+new\n\\ No newline at end of file\n';
@@ -36,4 +37,9 @@ test('refuses fabricated line mapping for malformed hunk counts and preserves na
     else expect(file.hunks).toHaveLength(0);
     expect(file.raw).toBe(text);
   }
+});
+
+test('source language mapping treats unknown and prototype-named files as plain text',()=>{
+ for(const path of ['constructor','__proto__','src/constructor','src/file.__proto__','src/file.constructor','unknown.ext'])expect(sourceLanguage(path)).toBe('');
+ expect(sourceLanguage('src/example.TS')).toBe('typescript');expect(sourceLanguage('build/Dockerfile')).toBe('dockerfile');expect(sourceLanguage('blog.py')).toBe('python');
 });
