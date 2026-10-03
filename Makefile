@@ -134,3 +134,9 @@ qualify-pull-review-drafts:
 	python3 scripts/pull-review-drafts-smoke.py --stack-root "$(CURDIR)"
 qualify-pull-review-drafts-browser:
 	python3 scripts/pull-review-drafts-smoke.py --stack-root "$(CURDIR)" --browser
+
+.PHONY: qualify-pull-inline-publication-native qualify-pull-inline-publication-browser
+qualify-pull-inline-publication-native:
+	python3 scripts/pull-inline-review-publication-native-proof.py --stack-root "$(CURDIR)"
+qualify-pull-inline-publication-browser:
+	python3 scripts/pull-inline-review-publication-smoke.py --stack-root "$(CURDIR)"

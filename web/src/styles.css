@@ -97,7 +97,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .branch-options small { display:block; color:var(--muted); margin-top:5px; font:.8125rem var(--mono); }
 .browser-panel { border:1px solid var(--line); border-radius:0; background:var(--panel); overflow:hidden; }
 .browser-panel-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 16px; border-bottom:1px solid var(--line); }
-.browser-panel-heading h2 { font-size:1rem; }
+.browser-panel-heading h2,.browser-panel-heading h3 { font-size:1rem; }
 .panel-actions { display:flex; align-items:center; gap:8px; }
 .panel-actions select { width:auto; font-size:1rem; padding:8px 10px; }
 .browser-loading { display:flex; justify-content:center; align-items:center; gap:10px; min-height:145px; color:var(--muted); font-size:.875rem; padding:25px; }
@@ -544,6 +544,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .diff-toolbar h2 { margin:0; font-size:1rem; }
 .diff-toolbar strong, .diff-stats { display:inline-flex; align-items:center; gap:8px; }
 .diff-toolbar .content-view-controls { margin-left:auto; padding:0; border:0; }
+.diff-toolbar .diff-controls > .text-button { min-height:32px; white-space:nowrap; }
 .diff-toolbar .diff-controls { position:static; margin-left:auto; padding:0; border:0; }
 .diff-added { color:var(--accent); } .diff-deleted { color:#d85b6a; }
 .diff-layout.without-tree { grid-template-columns:minmax(0,1fr); }
@@ -623,7 +624,9 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .pull-review-list .metadata-details .review-metadata { padding-top:8px; }
 .browser-panel-heading.panel-navigation { padding:4px 16px; }
 .diff-file-toggle { display:flex; align-items:center; gap:8px; min-width:0; flex:1; min-height:24px; padding:0; text-align:left; color:var(--text); background:none; border:0; }
-.diff-file-toggle code { min-width:0; font:13px var(--mono); overflow-wrap:anywhere; }
+.diff-file-toggle code { display:flex; min-width:0; font:13px var(--mono); overflow:hidden; white-space:nowrap; }
+.diff-file-toggle code > .diff-path-parent { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.diff-file-toggle code > strong { flex-shrink:0; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
 .diff-file .diff-file-metadata { margin:0; padding:6px 12px; }
 .diff-file .diff-file-metadata summary { padding:4px 0; }
 
@@ -631,7 +634,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .workspace-breadcrumbs { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:16px; font-size:.875rem; color:var(--muted); }
 .workspace-breadcrumbs a:hover { text-decoration:underline; }
 .workspace-breadcrumbs [aria-current=page] { color:var(--text); }
-.browser-panel-heading h2 { display:inline-flex; align-items:center; gap:8px; }
+.browser-panel-heading h2,.browser-panel-heading h3 { display:inline-flex; align-items:center; gap:8px; }
 .markdown-body ul { list-style:disc; } .markdown-body ol { list-style:decimal; }
 .markdown-body li + li { margin-top:.25em; }
 .markdown-body tr:nth-child(2n) { background:var(--raised); }
@@ -1035,11 +1038,12 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 
 /* Shared mobile diff controls retain labels for assistive technology and 44px targets. */
 @media(max-width:760px) {
+ .diff-file-toggle,.diff-viewed { min-height:44px; }
  .diff-toolbar { gap:6px 8px; padding:8px; }
  .diff-summary { flex-basis:100%; gap:6px 8px; }
  .diff-toolbar .content-view-controls { gap:6px; flex-wrap:wrap; }
  .diff-toolbar .content-view-controls > .button { font-size:13px; padding-inline:10px; }
- .diff-toolbar .content-view-controls > .icon-button,.diff-toolbar .content-view-controls > .text-button { min-width:44px; min-height:44px; }
+ .diff-toolbar .content-view-controls > .icon-button,.diff-toolbar .diff-controls > .text-button { min-width:44px; min-height:44px; justify-content:center; }
  .diff-toolbar .diff-controls { gap:6px; margin-left:auto; }
  .diff-toolbar .diff-options > summary { min-width:44px; justify-content:center; }
  .diff-mode-label,.diff-filter-label,.diff-session-label { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }

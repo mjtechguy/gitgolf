@@ -127,8 +127,8 @@ for(const theme of ['dark','light'])for(const width of [1280,390,320])test(`File
   if(width<=760)expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
  }
  const toolbar=await page.locator('.diff-toolbar').boundingBox();const firstCode=await page.locator('.diff-code').first().boundingBox();
- // Offline fixtures retain an additional 44px manual-refresh action.
- if(width<=390){expect(toolbar!.height).toBeLessThanOrEqual(200);expect(firstCode!.y).toBeLessThan(900);}
+ // Offline fixtures retain manual refresh alongside the review actions.
+ if(width<=390){expect(toolbar!.height).toBeLessThanOrEqual(150);expect(firstCode!.y).toBeLessThan(850);}
  console.log('Fixture diff density '+JSON.stringify({theme,width,toolbar:toolbar!.height,firstCode:firstCode!.y}));
  await page.screenshot({path:`test-results/compact-review-toolbar-${theme}-${width}.png`});
  await page.getByRole('button',{name:'Split',exact:true}).click();await expect(page.getByRole('button',{name:'Split',exact:true})).toHaveAttribute('aria-pressed','true');
