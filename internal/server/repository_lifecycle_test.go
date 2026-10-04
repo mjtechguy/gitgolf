@@ -21,7 +21,7 @@ func TestRepositoryLifecycleHTTPBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, method := range []string{"GetRepositoryLifecycle", "ChangeRepositoryArchiveState", "GetRepositoryLifecycleOperation"} {
+	for _, method := range []string{"GetRepositoryLifecycle", "ChangeRepositoryArchiveState", "GetRepositoryLifecycleOperation", "DeleteRepository", "GetRepositoryDeletionOperation"} {
 		path := "/golf.v1.RepositoryLifecycleService/" + method
 		for _, origin := range []string{s.config.PublicURL, "https://other.invalid"} {
 			req := httptest.NewRequest("POST", "/rpc"+path, strings.NewReader("malformed"))

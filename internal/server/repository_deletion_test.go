@@ -112,6 +112,7 @@ func newRepositoryDeletionFixture(t *testing.T, organization bool) *repositoryDe
 		f.row.Owner = &User{ID: 77, Login: "acme"}
 		f.row.FullName = "acme/example"
 	}
+	f.row.HTMLURL = "http://forge.invalid/" + f.row.FullName
 	db := testDatabase(t)
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
@@ -284,7 +285,7 @@ func TestRepositoryDeletionExactReceiptPostgres(t *testing.T) {
 			key := uuid.NewString()
 			q := f.request(l, key)
 			q.Msg.CurrentPassword = "wrong"
-			if _, e := f.s.DeleteRepository(f.ctx(t), q); !errors.Is(e, errPasswordConfirmation) || f.deletes != 0 {
+			if _, e := f.s.DeleteRepository(f.ctx(t), q); connect.CodeOf(e) != connect.CodePermissionDenied || f.deletes != 0 {
 				t.Fatal("step-up", e)
 			}
 			q.Msg.CurrentPassword = localTestPassword

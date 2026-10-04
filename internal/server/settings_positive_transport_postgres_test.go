@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -14,6 +15,41 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
+
+func TestSettingsPositiveDeletionOuterTransportPostgres(t *testing.T) {
+	for _, organization := range []bool{false, true} {
+		t.Run(strconv.FormatBool(organization), func(t *testing.T) {
+			f := newRepositoryDeletionFixture(t, organization)
+			cookie := f.s.sessionCookie(f.session.Value, f.session.Expires, 3600).String()
+			lifecycle := f.get(t)
+			request := f.request(lifecycle, uuid.NewString()).Msg
+			// Real routing must reach the unavailable boundary without reserving or
+			// dispatching. The positive profile below is only a synthetic fixture.
+			positiveSettingsTransport(t, f.s, cookie, golfv1connect.RepositoryLifecycleServiceDeleteRepositoryProcedure, request, nil, 400, "failed_precondition")
+			if f.deletes != 0 {
+				t.Fatal("unqualified HTTP request dispatched deletion")
+			}
+			f.profile(t)
+			response := &golfv1.DeleteRepositoryResponse{}
+			positiveSettingsTransport(t, f.s, cookie, golfv1connect.RepositoryLifecycleServiceDeleteRepositoryProcedure, request, response, 200, "")
+			if response.Operation == nil || response.Operation.Phase != "SUCCEEDED" || response.Operation.Action != "delete" || response.Operation.RepositoryId != lifecycle.RepositoryId || response.Operation.OwnerId != lifecycle.OwnerId || response.Operation.IdempotencyKey != request.IdempotencyKey || f.deletes != 1 {
+				t.Fatal("HTTP deletion receipt did not retain the original exact target")
+			}
+			f.mode = "replacement"
+			status := &golfv1.GetRepositoryDeletionOperationResponse{}
+			inspection := &golfv1.GetRepositoryDeletionOperationRequest{Repository: lifecycle.Repository, RepositoryId: lifecycle.RepositoryId, OwnerId: lifecycle.OwnerId, IdempotencyKey: request.IdempotencyKey}
+			positiveSettingsTransport(t, f.s, cookie, golfv1connect.RepositoryLifecycleServiceGetRepositoryDeletionOperationProcedure, inspection, status, 200, "")
+			if !proto.Equal(status.Operation, response.Operation) || f.repoReadsAfterDelete != 0 || f.deletes != 1 {
+				t.Fatal("HTTP original status adopted a replacement or repeated deletion")
+			}
+			request.CurrentPassword = "historical replay is inspection only"
+			positiveSettingsTransport(t, f.s, cookie, golfv1connect.RepositoryLifecycleServiceDeleteRepositoryProcedure, request, response, 200, "")
+			if f.deletes != 1 || f.repoReadsAfterDelete != 0 || !proto.Equal(status.Operation, response.Operation) {
+				t.Fatal("HTTP replay performed new work")
+			}
+		})
+	}
+}
 
 // Exercise the public /rpc routing boundary as well as the generated handlers.
 // Direct RPC calls alone cannot detect an omitted outer allowlist entry.
