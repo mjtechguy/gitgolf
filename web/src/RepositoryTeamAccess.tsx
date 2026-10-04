@@ -7,6 +7,7 @@ import { errorMessage, repositoryTeamAccessClient } from './api';
 import { TeamPermission, TeamVisibility, type RepositoryAccess, type RepositoryTeamAccess as TeamAccess, type User } from './gen/golf/v1/golf_pb';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { Loading, More, PanelError, privateQuery } from './RepositoryUI';
+import { forgetPrivateQueries } from './queryClient';
 
 type Target = { repositoryId: string; ownerId: string; expectedRevision: string };
 type Intent = { target: Target; row: TeamAccess };
@@ -51,7 +52,8 @@ function Removal({ intent, pending, onCancel, onConfirm }: { intent: Intent; pen
 export function RepositoryTeamAccess({ userId, owner, name, access, signingOut, revalidating }: { userId: string; owner: string; name: string; access: RepositoryAccess; signingOut: boolean; revalidating: boolean }) {
   const client = useQueryClient(); const target: Target = { repositoryId: access.repositoryId, ownerId: access.ownerId, expectedRevision: access.revision };
   const scope = JSON.stringify([userId, owner, name, target]); const queryKey = ['repository-team-access', userId, owner, name, target.repositoryId, target.ownerId, target.expectedRevision];
-  const enabled = !signingOut && !revalidating && access.organizationOwned && id(userId) && id(target.repositoryId) && id(target.ownerId) && revision(target.expectedRevision);
+  const [denial, setDenial] = useState<ConnectError | null>(null);
+  const enabled = !denial && !signingOut && !revalidating && access.organizationOwned && id(userId) && id(target.repositoryId) && id(target.ownerId) && revision(target.expectedRevision);
   const query = useInfiniteQuery({ ...privateQuery, queryKey, enabled, initialPageParam: 1, queryFn: async ({ pageParam, signal }) => {
     const response = await repositoryTeamAccessClient.listRepositoryTeamAccess({ repository: { owner, name }, ...target, page: { page: pageParam, limit: 20 } }, { signal, timeoutMs: 15_000 }); signal.throwIfAborted(); bound(response, target);
     if (!response.page || response.teams.length > 20 || response.canManage && !['owner', 'admin'].includes(access.currentPermission) || response.teams.some((row) => !validRow(row, response.canManage)) || new Set(response.teams.map((row) => row.team!.id)).size !== response.teams.length || response.page.nextPage !== 0 && (response.page.nextPage !== pageParam + 1 || response.page.nextPage > 10_000)) throw new ConnectError('Organization team access metadata is incomplete.', Code.Internal);
@@ -65,7 +67,16 @@ export function RepositoryTeamAccess({ userId, owner, name, access, signingOut, 
   const duplicate = Boolean(visible && new Set(rows.map((row) => row.team!.id)).size !== rows.length);
   const changedAuthority = Boolean(visible && query.data!.pages.some((page) => page.canManage !== query.data!.pages[0]!.canManage));
   const manage = Boolean(visible && !duplicate && !changedAuthority && query.data!.pages[0]!.canManage);
-  const latest = useRef({ scope, enabled, manage, error: query.error }); latest.current = { scope, enabled, manage, error: query.error };
+  const latest = useRef({ scope, enabled, manage, revalidating, error: query.error }); latest.current = { scope, enabled, manage, revalidating, error: query.error };
+  function clearDeniedObservation(error: unknown) {
+    if (!(error instanceof ConnectError) || ![Code.PermissionDenied, Code.NotFound, Code.Unauthenticated].includes(error.code)) return;
+    setDenial(error); controller.current?.abort(); setEditor(null); setRemoval(null); setNotice('');
+    void client.cancelQueries({ queryKey: ['repository-team-access', userId, owner, name] });
+    client.removeQueries({ queryKey: ['repository-team-access', userId, owner, name] });
+    if (error.code === Code.Unauthenticated) { client.setQueryData(['session'], null); forgetPrivateQueries(client); }
+    else void client.invalidateQueries({ queryKey: ['repository-access', userId, owner, name, 'access'] });
+  }
+  useEffect(() => { clearDeniedObservation(query.error); }, [query.error]);
   const active = (frozen = scope) => alive.current && latest.current.scope === frozen && latest.current.enabled && !latest.current.error && client.getQueryData<User | null>(['session'])?.id === userId;
   useEffect(() => { alive.current = true; return () => { alive.current = false; controller.current?.abort(); void client.cancelQueries({ queryKey: ['repository-team-access', userId, owner, name] }); client.removeQueries({ queryKey: ['repository-team-access', userId, owner, name] }); }; }, [client, userId, owner, name]);
   useEffect(() => { controller.current?.abort(); setEditor(null); setRemoval(null); setNotice(''); if (previousIdentity.current !== identity) setUncertain(false); previousIdentity.current = identity; }, [scope, identity]);
@@ -81,10 +92,10 @@ export function RepositoryTeamAccess({ userId, owner, name, access, signingOut, 
     if (disabled || !active() || !latest.current.manage || busy.current || (attach ? !row.canAttach : !row.canDetach)) return;
     busy.current = true; setNotice(''); const abort = new AbortController(); controller.current = abort; const original = scope;
     try { await mutation.mutateAsync({ target: frozen, row, attach, signal: abort.signal }); if (active(original)) { setEditor(null); setRemoval(null); setNotice(attach ? 'Team attached.' : 'Team detached.'); restoreFocus.current = true; await client.invalidateQueries({ queryKey }); } }
-    catch { if (active(original)) { setUncertain(true); setEditor(null); setRemoval(null); } }
+    catch (error) { if (active(original)) { setUncertain(true); setEditor(null); setRemoval(null); clearDeniedObservation(error); } }
     finally { busy.current = false; if (controller.current === abort) controller.current = null; }
   }
-  async function inspect() { if (mutation.isPending || signingOut || query.isFetching) return; setEditor(null); setRemoval(null); setNotice(''); const original = scope; const result = await query.refetch(); if (!result.isError && active(original)) { setUncertain(false); mutation.reset(); } }
+  async function inspect() { if (mutation.isPending || signingOut || revalidating || query.isFetching) return; setEditor(null); setRemoval(null); setNotice(''); const original = scope; const result = await query.refetch(); if (!result.isError && alive.current && latest.current.scope === original && !latest.current.revalidating && client.getQueryData<User | null>(['session'])?.id === userId) { setDenial(null); setUncertain(false); mutation.reset(); } }
   useEffect(() => { if (restoreFocus.current && !editor && !removal && !mutation.isPending && !query.isFetching && manage && !signingOut) { restoreFocus.current = false; (previousAction.current?.isConnected ? previousAction.current : addButton.current)?.focus(); } }, [editor, removal, mutation.isPending, query.isFetching, manage, signingOut]);
   const columns = useMemo<DataTableColumn<TeamAccess>[]>(() => [
     { id: 'team', header: 'Team', accessorFn: (row) => row.team!.name, cell: ({ row }) => <><strong>{row.original.team!.name}</strong>{row.original.team!.description ? <small>{row.original.team!.description}</small> : null}</> },
@@ -92,9 +103,9 @@ export function RepositoryTeamAccess({ userId, owner, name, access, signingOut, 
     { id: 'permission', header: 'Team permission', accessorFn: (row) => permissionName(row.team!.permission), cell: ({ row }) => <>{permissionName(row.original.team!.permission)}<details><summary>Unit permissions</summary><TeamFacts row={row.original} /></details></> },
     { id: 'actions', header: 'Actions', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => row.original.canDetach ? <button className="icon-button" aria-label={`Detach team ${row.original.team!.name}`} title="Detach team" disabled={disabled} onClick={(event) => { previousAction.current = event.currentTarget; setEditor(null); setRemoval({ target: { ...target }, row: row.original }); }}><Unlink size={16} /></button> : row.original.canAttach ? <button className="icon-button" aria-label={`Attach team ${row.original.team!.name}`} title="Attach existing team" disabled={disabled} onClick={(event) => { previousAction.current = event.currentTarget; setRemoval(null); setEditor({ target: { ...target }, initial: row.original.team!.id }); }}><Link2 size={16} /></button> : <span className="field-help">{row.original.isOwnerTeam || row.original.team!.includesAllRepositories ? 'Organization managed' : 'View only'}</span> },
   ], [disabled, target.repositoryId, target.ownerId, target.expectedRevision]);
-  if (!enabled) return null;
+  if (signingOut || revalidating || !access.organizationOwned) return null;
   return <section className="browser-panel credential-list-panel" aria-labelledby="repository-team-access-title"><div className="browser-panel-heading"><h2 id="repository-team-access-title"><Users size={18} />Organization teams</h2><div className="credential-actions"><button className="icon-button" aria-label="Refresh organization team access" title="Refresh organization team access" disabled={mutation.isPending || query.isFetching || signingOut} onClick={() => void inspect()}><RefreshCw size={16} /></button>{manage ? <button ref={addButton} className="button secondary" disabled={disabled || Boolean(editor) || !rows.some((row) => row.canAttach)} onClick={(event) => { previousAction.current = event.currentTarget; setRemoval(null); setNotice(''); setEditor({ target: { ...target }, initial: '' }); }}><Plus size={15} />Attach existing team</button> : null}</div></div>
-    {query.error ? <PanelError error={query.error} retry={() => void inspect()} /> : duplicate || changedAuthority ? <p role="alert" className="error">Organization team access changed across pages. Refresh and inspect again.</p> : !visible ? <Loading label="Loading organization team access…" /> : <>
+    {denial || query.error ? <PanelError error={denial || query.error!} retry={() => void inspect()} /> : duplicate || changedAuthority ? <p role="alert" className="error">Organization team access changed across pages. Refresh and inspect again.</p> : !visible ? <Loading label="Loading organization team access…" /> : <>
       {uncertain ? <div className="panel-error"><h3>Team association change could not be confirmed</h3><p role="alert">{mutation.error ? errorMessage(mutation.error) : 'The outcome is unknown.'} No automatic retry was made. Inspect current access before a separate action; refresh does not attribute an uncertain change.</p></div> : null}
       {notice ? <p role="status" className="session-notice">{notice}</p> : null}
       {editor && !uncertain ? <div className="credential-form-content"><h3>Attach existing team</h3><Addition rows={rows} initial={editor.initial} pending={disabled} onSave={(row) => void dispatch(editor.target, row, true)} onCancel={() => { restoreFocus.current = true; setEditor(null); }} /></div> : null}

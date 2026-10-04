@@ -7,7 +7,7 @@ const attached = create(RepositoryTeamAccessSchema, { ...initial, team: { ...ini
 const protectedOwner = create(RepositoryTeamAccessSchema, { ...initial, team: { ...initial.team!, id: '9007199254740997', name: 'Owners', permission: TeamPermission.OWNER }, isOwnerTeam: true, attached: true, canAttach: false });
 const inherited = create(RepositoryTeamAccessSchema, { ...initial, team: { ...initial.team!, id: '9007199254740998', name: 'Every repository', includesAllRepositories: true }, attached: true, canAttach: false });
 async function backend(page: Page) {
-  const state = { signedIn: true, user: create(UserSchema, { id: '17', login: 'maintainer', isInstanceAdmin: true }), access: create(RepositoryAccessSchema, { owner: { id: '9007199254740993', login: 'workshop' }, ownerId: '9007199254740993', repositoryId: '9007199254740994', organizationOwned: true, currentPermission: 'admin', revision: 'a'.repeat(64) }), rows: [initial, attached, protectedOwner, inherited].map(row => create(RepositoryTeamAccessSchema, row)), manage: true, denied: false, malformed: '', duplicate: false, pageSize: 20, reads: [] as number[], writes: [] as unknown[], lost: false, badReceipt: false, barrier: undefined as Promise<void> | undefined, readBarrier: undefined as Promise<void> | undefined };
+  const state = { signedIn: true, user: create(UserSchema, { id: '17', login: 'maintainer', isInstanceAdmin: true }), access: create(RepositoryAccessSchema, { owner: { id: '9007199254740993', login: 'workshop' }, ownerId: '9007199254740993', repositoryId: '9007199254740994', organizationOwned: true, currentPermission: 'admin', revision: 'a'.repeat(64) }), rows: [initial, attached, protectedOwner, inherited].map(row => create(RepositoryTeamAccessSchema, row)), manage: true, denied: false, malformed: '', duplicate: false, pageSize: 20, reads: [] as number[], writes: [] as unknown[], lost: false, badReceipt: false, mutationDenial: '' as '' | 'permission_denied' | 'not_found' | 'unauthenticated', barrier: undefined as Promise<void> | undefined, readBarrier: undefined as Promise<void> | undefined };
   await page.route('**/rpc/**', async route => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
@@ -30,6 +30,7 @@ async function backend(page: Page) {
     }
     if (method === 'AttachRepositoryTeam' || method === 'DetachRepositoryTeam') {
       const input = method === 'AttachRepositoryTeam' ? request(route, AttachRepositoryTeamRequestSchema) : request(route, DetachRepositoryTeamRequestSchema); state.writes.push(input); expect(input.repositoryId).toBe(state.access.repositoryId); expect(input.ownerId).toBe(state.access.ownerId); expect(input.expectedRevision).toBe(state.access.revision); expect(input.expectedTeamRevision).toBe('b'.repeat(64));
+      if (state.mutationDenial) return reject(route, state.mutationDenial, 'Current access is unavailable.');
       const previous = state.rows.find(row => row.team!.id === input.teamId)!; expect(previous.isOwnerTeam || previous.team!.includesAllRepositories).toBe(false);
       const attach = method === 'AttachRepositoryTeam'; const updated = create(RepositoryTeamAccessSchema, { ...previous, attached: attach, canAttach: !attach, canDetach: attach, revision: 'c'.repeat(64) }); state.rows = state.rows.map(row => row.team!.id === input.teamId ? updated : row);
       if (state.barrier) await state.barrier;
@@ -68,4 +69,11 @@ test('an explicit parent access refresh observes current associations without re
 test('a late private inventory response cannot repopulate an ended browser session', async ({ page }) => {
   const state = await backend(page); await open(page); let release!: () => void; state.readBarrier = new Promise<void>(resolve => { release = resolve; }); await page.getByRole('button', { name: 'Refresh organization team access', exact: true }).click(); await expect(page.getByRole('table', { name: 'Repository team access' })).toHaveCount(0);
   await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out', exact: true }).click(); release(); await expect(page.getByRole('heading', { name: 'Welcome to Golf', exact: true })).toBeVisible(); await expect(page.getByText('Builders', { exact: true })).toHaveCount(0); await expect(page.getByRole('table', { name: 'Repository team access' })).toHaveCount(0); expect(state.writes).toHaveLength(0);
+});
+
+for (const denial of ['permission_denied', 'not_found', 'unauthenticated'] as const) test(`a mutation ${denial} immediately clears private team observations without retry`, async ({ page }) => {
+  const state = await backend(page); await open(page); const form = await editor(page); state.mutationDenial = denial; await form.getByRole('button', { name: 'Attach team', exact: true }).click();
+  if (denial === 'unauthenticated') await expect(page.getByRole('heading', { name: 'Welcome to Golf', exact: true })).toBeVisible();
+  else { await expect(page.getByRole('alert')).toHaveText('Current access is unavailable.'); await expect(page.getByRole('form', { name: 'Attach existing organization team' })).toHaveCount(0); }
+  await expect(page.getByRole('table', { name: 'Repository team access' })).toHaveCount(0); await expect(page.getByText('Builders', { exact: true })).toHaveCount(0); expect(state.writes).toHaveLength(1);
 });
