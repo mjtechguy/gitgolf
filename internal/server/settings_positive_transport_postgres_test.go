@@ -197,3 +197,29 @@ func TestSettingsPositiveOrganizationValuesOuterTransportPostgres(t *testing.T) 
 		t.Fatal("gone variable or missing operation returned sensitive data")
 	}
 }
+
+func TestSettingsPositiveEnvironmentOuterTransportPostgres(t *testing.T) {
+	f, l, target := environmentFixture(t)
+	cookie := f.server.sessionCookie(l.Value, l.Expires, 3600).String()
+	input := environmentInput(target)
+	first := &golfv1.SaveRepositoryEnvironmentResponse{}
+	positiveSettingsTransport(t, f.server, cookie, golfv1connect.RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure, input, first, 200, "")
+	if first.Environment == nil || first.Environment.Version != "1" || first.Environment.DeploymentAvailable || first.Operation == nil || first.Operation.OperationId != input.OperationId {
+		t.Fatal("missing original configuration-only receipt")
+	}
+	inventory := &golfv1.ListRepositoryEnvironmentsResponse{}
+	positiveSettingsTransport(t, f.server, cookie, golfv1connect.RepositoryEnvironmentServiceListRepositoryEnvironmentsProcedure, &golfv1.ListRepositoryEnvironmentsRequest{Target: target}, inventory, 200, "")
+	if inventory.TotalCount != "1" || len(inventory.Environments) != 1 || inventory.DeploymentAvailable {
+		t.Fatal("incorrect current inventory")
+	}
+	inspection := &golfv1.GetRepositoryEnvironmentOperationResponse{}
+	positiveSettingsTransport(t, f.server, cookie, golfv1connect.RepositoryEnvironmentServiceGetRepositoryEnvironmentOperationProcedure, &golfv1.GetRepositoryEnvironmentOperationRequest{Target: target, OperationId: input.OperationId}, inspection, 200, "")
+	if !proto.Equal(inspection.Environment, first.Environment) || !proto.Equal(inspection.Operation, first.Operation) {
+		t.Fatal("historical status changed original receipt")
+	}
+	deleted := &golfv1.DeleteRepositoryEnvironmentResponse{}
+	positiveSettingsTransport(t, f.server, cookie, golfv1connect.RepositoryEnvironmentServiceDeleteRepositoryEnvironmentProcedure, &golfv1.DeleteRepositoryEnvironmentRequest{Target: target, EnvironmentId: input.EnvironmentId, ExpectedVersion: "1", OperationId: uuid.NewString(), CurrentPassword: localTestPassword}, deleted, 200, "")
+	if deleted.Environment == nil || !deleted.Environment.Deleted || deleted.Environment.Version != "2" {
+		t.Fatal("missing exact tombstone")
+	}
+}

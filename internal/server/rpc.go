@@ -47,7 +47,7 @@ func (s *Server) rpcHandler() http.Handler {
 		connect.WithReadMaxBytes(16 << 10), connect.WithSendMaxBytes(16 << 20), connect.WithRequireConnectProtocolHeader(),
 		connect.WithConditionalHandlerOptions(func(spec connect.Spec) []connect.HandlerOption {
 			switch spec.Procedure {
-			case golfv1connect.OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure:
+			case golfv1connect.RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure, golfv1connect.OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure:
 				// Eight-KiB values can double under JSON escaping; organization
 				// requests also carry bounded selected-repository identities.
 				return []connect.HandlerOption{connect.WithReadMaxBytes(64 << 10)}
@@ -85,6 +85,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewRepositoryDeployKeyServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryWebhookServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryLifecycleServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewRepositoryEnvironmentServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewEmailNotificationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryExecutionValueServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewOrganizationExecutionValueServiceHandler(s, options...))
@@ -163,6 +164,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.RepositoryExecutionValueServiceListRepositoryExecutionValuesProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceDeleteRepositoryExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceGetRepositoryExecutionVariableProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionBindingProcedure, golfv1connect.RepositoryExecutionValueServiceDeleteRepositoryExecutionBindingProcedure, golfv1connect.RepositoryExecutionValueServiceGetRepositoryExecutionValueOperationProcedure,
 			golfv1connect.EmailNotificationServiceListEmailTransportsProcedure, golfv1connect.EmailNotificationServiceSaveEmailTransportProcedure, golfv1connect.EmailNotificationServiceActivateEmailTransportProcedure, golfv1connect.EmailNotificationServiceGetOwnEmailNotificationsProcedure, golfv1connect.EmailNotificationServiceRequestEmailVerificationProcedure, golfv1connect.EmailNotificationServiceConfirmEmailVerificationProcedure, golfv1connect.EmailNotificationServiceSaveOwnEmailPreferenceProcedure, golfv1connect.EmailNotificationServiceGetRepositoryEmailSubscriptionProcedure, golfv1connect.EmailNotificationServiceSaveRepositoryEmailSubscriptionProcedure, golfv1connect.EmailNotificationServiceListOwnEmailDeliveriesProcedure, golfv1connect.EmailNotificationServiceRedeliverOwnEmailProcedure,
 			golfv1connect.RepositoryLifecycleServiceGetRepositoryLifecycleProcedure, golfv1connect.RepositoryLifecycleServiceChangeRepositoryArchiveStateProcedure, golfv1connect.RepositoryLifecycleServiceGetRepositoryLifecycleOperationProcedure, golfv1connect.RepositoryLifecycleServiceDeleteRepositoryProcedure, golfv1connect.RepositoryLifecycleServiceGetRepositoryDeletionOperationProcedure,
+			golfv1connect.RepositoryEnvironmentServiceListRepositoryEnvironmentsProcedure, golfv1connect.RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure, golfv1connect.RepositoryEnvironmentServiceDeleteRepositoryEnvironmentProcedure, golfv1connect.RepositoryEnvironmentServiceGetRepositoryEnvironmentOperationProcedure,
 			golfv1connect.RepositoryDeployKeyServiceListRepositoryDeployKeysProcedure, golfv1connect.RepositoryDeployKeyServiceAddRepositoryDeployKeyProcedure, golfv1connect.RepositoryDeployKeyServiceDeleteRepositoryDeployKeyProcedure,
 			golfv1connect.RepositoryTeamAccessServiceListRepositoryTeamAccessProcedure, golfv1connect.RepositoryTeamAccessServiceAttachRepositoryTeamProcedure, golfv1connect.RepositoryTeamAccessServiceDetachRepositoryTeamProcedure,
 			golfv1connect.RepositoryAccessServiceGetRepositoryAccessOperationProcedure, golfv1connect.RepositoryAccessServiceGetRepositoryAccessProcedure, golfv1connect.RepositoryAccessServiceListRepositoryCollaboratorsProcedure, golfv1connect.RepositoryAccessServiceResolveRepositoryCollaboratorProcedure, golfv1connect.RepositoryAccessServiceSetRepositoryCollaboratorProcedure, golfv1connect.RepositoryAccessServiceRemoveRepositoryCollaboratorProcedure,
@@ -203,7 +205,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		}
 		limit := int64(16 << 10)
 		switch procedure {
-		case golfv1connect.OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure:
+		case golfv1connect.RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure, golfv1connect.OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure:
 			limit = 64 << 10
 		case golfv1connect.RepositoryServiceSavePullRequestReviewDraftProcedure:
 			limit = 2 << 20
