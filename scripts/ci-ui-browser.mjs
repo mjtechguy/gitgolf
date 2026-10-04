@@ -8,6 +8,12 @@ const headers=origin=>({Origin:origin,'Connect-Protocol-Version':'1','Content-Ty
 const readProcedure=method=>/^(Get|List|Watch|Inspect|Resolve)/.test(method)||method==='QueryRepositoryComparison';
 const surfaces=['actions-inventory','actions-run','actions-selected-step'];
 const widths=[1440,390],themes=['dark','light'];
+const catalog='golf.workflow.act.v0.2.89.linux.v1',engineCommit='4f411281417e88660bea1c1a1749aa71ae0bd60f';
+function graphSelection(run,selection){
+  if(run?.engineCatalog!==catalog||run.engineCommit!==engineCommit||!/^[a-f0-9]{32}$/.test(run.attemptId)||!selection||!/^[a-f0-9]{32}$/.test(selection.jobInstanceId)||!/^[A-Za-z0-9_-]{1,64}$/.test(selection.stepId)||!selection.logMarker||!selection.otherLogMarker||selection.logMarker===selection.otherLogMarker||run.jobs?.length!==5)return undefined;
+  const jobs=run.jobs.filter(job=>job.instanceId===selection.jobInstanceId);if(jobs.length!==1||jobs[0].state!=='WORKFLOW_STEP_STATE_SUCCEEDED'||!jobs[0].eventsRecorded)return undefined;
+  const steps=jobs[0].steps.filter(step=>step.id===selection.stepId);return steps.length===1&&steps[0].state==='WORKFLOW_STEP_STATE_SUCCEEDED'&&steps[0].startedAt&&steps[0].finishedAt?{job:jobs[0],step:steps[0]}:undefined;
+}
 const assert=(condition,message)=>{if(!condition){const error=Error(message);error.name='CIProofAssertion';throw error;}};
 function exactActionSummary(summary,run,repositoryId){
   return summary?.ref?.kind==='ACTION_RUN_KIND_WORKFLOW'&&summary.ref.id===run.id&&summary.repositoryId===repositoryId&&summary.ownerId===run.ownerId&&summary.commitId===run.commitId&&summary.workflowPath===run.workflowPath&&summary.workflowBlobId===run.workflowBlobId&&summary.sourceSha256===run.sourceSha256&&summary.state==='succeeded';
@@ -20,30 +26,34 @@ if(process.argv.includes('--self-check')){
   const summary={ref:{kind:'ACTION_RUN_KIND_WORKFLOW',id:run.id},repositoryId:'9',...run,state:'succeeded'};
   assert(exactActionSummary(summary,run,'9'),'Typed workflow receipt guard failed');
   for(const changed of [{ref:{kind:'ACTION_RUN_KIND_CODING_TASK',id:run.id}},{repositoryId:'8'},{ownerId:'8'},{commitId:'different'},{workflowBlobId:'different'},{sourceSha256:'different'},{state:'running'}])assert(!exactActionSummary({...summary,...changed},run,'9'),'Mismatched receipt accepted');
+  const graph={engineCatalog:catalog,engineCommit,attemptId:'a'.repeat(32),jobs:[{instanceId:'b'.repeat(32),state:'WORKFLOW_STEP_STATE_SUCCEEDED',eventsRecorded:true,steps:[{id:'local',state:'WORKFLOW_STEP_STATE_SUCCEEDED',startedAt:'2026-10-04T01:00:00Z',finishedAt:'2026-10-04T01:01:00Z'}]},...Array.from({length:4},(_,i)=>({instanceId:String(i+1).repeat(32)}))]};
+  const selection={jobInstanceId:'b'.repeat(32),stepId:'local',logMarker:'local marker',otherLogMarker:'other marker'};assert(graphSelection(graph,selection),'Exact recorded graph selection refused');
+  for(const changes of [{jobInstanceId:'c'.repeat(32)},{stepId:'missing'},{stepId:'bad/path'},{logMarker:selection.otherLogMarker}])assert(!graphSelection(graph,{...selection,...changes}),'Invalid graph selection accepted');
+  for(const changes of [{engineCatalog:'unqualified'},{engineCommit:'different'},{attemptId:'wrong'},{jobs:[...graph.jobs,graph.jobs[0]]}])assert(!graphSelection({...graph,...changes},selection),'Invalid graph run accepted');
   console.log('PASS: twelve capture cases and read-only browser guard; no browser or native fixture executed.');
   process.exit(0);
 }
 
-let config,browser,stage='configuration';
+let config,browser,engine=false,selectedGraph,stage='configuration';
 const active=[],results=[];
 async function manifest(complete=false){
   if(!config?.screenshots)return;
   await writeFile(join(config.screenshots,'manifest.json'),JSON.stringify({
-    captureKind:'Actual successful controlled shell Actions run in a disposable isolated Compose installation',
+    captureKind:engine?'Actual successful controlled pinned Actions graph in a disposable isolated Compose installation':'Actual successful controlled shell Actions run in a disposable isolated Compose installation',
     workingTreeHead:config.workingTreeHead,servedSourceCommit:config.servedSourceCommit??null,
     servedSourceProvenance:config.servedSourceProvenance,runtime:config.runtime,
-    repositoryId:config.repositoryId,runId:config.run.id,commitId:config.run.commitId,
+    repositoryId:config.repositoryId,runId:config.run.id,commitId:config.run.commitId,graphSelection:engine?{jobInstanceId:config.graphSelection.jobInstanceId,stepId:config.graphSelection.stepId}:undefined,
     ownerOnly:true,complete,passed:complete&&results.length===12&&results.every(r=>r.status==='captured'),results,
     limitations:[
       'GitHub public run logs may require sign-in; these captures are Golf-only, not authenticated GitHub comparisons.',
-      'Controlled shell workflow only; this does not qualify hosted actions, complete Actions/GitLab compatibility, artifacts, cache or protected merges.',
+      engine?'Controlled successful graph, exact job/step output and UI only; this does not qualify automatic push, cancellation, owner-loss recovery, the full catalog or protected merges.':'Controlled shell workflow only; this does not qualify hosted actions, complete Actions/GitLab compatibility, artifacts, cache or protected merges.',
       'Fresh disposable instance policies only; retained instance settings are unchanged.',
       'Working-tree HEAD is separate from served-source provenance; an absent OCI revision label remains unknown.',
     ],
   },null,2)+'\n',{mode:0o600});
 }
 function exactRun(run){
-  return run?.id===config.run.id&&run.repositoryId===config.repositoryId&&run.ownerId===config.run.ownerId&&run.commitId===config.run.commitId&&run.workflowPath===config.run.workflowPath&&run.workflowBlobId===config.run.workflowBlobId&&run.sourceSha256===config.run.sourceSha256&&run.state==='WORKFLOW_RUN_STATE_SUCCEEDED';
+  return run?.id===config.run.id&&run.repositoryId===config.repositoryId&&run.ownerId===config.run.ownerId&&run.commitId===config.run.commitId&&run.workflowPath===config.run.workflowPath&&run.workflowBlobId===config.run.workflowBlobId&&run.sourceSha256===config.run.sourceSha256&&run.state==='WORKFLOW_RUN_STATE_SUCCEEDED'&&(!engine||run.engineCatalog===catalog&&run.engineCommit===engineCommit&&run.attemptId===config.run.attemptId&&JSON.stringify(run.jobs)===JSON.stringify(config.run.jobs));
 }
 async function logout(context){
   const response=await context.request.post(config.golf+'/rpc/golf.v1.SessionService/Logout',{headers:headers(config.golf),data:{}});
@@ -55,8 +65,9 @@ try{
   const origin=new URL(config.golf);
   assert(origin.protocol==='http:'&&['127.0.0.1','localhost'].includes(origin.hostname)&&origin.port&&origin.origin===config.golf,'Expected loopback proof origin');
   assert(config.screenshots&&/^[1-9][0-9]*$/.test(config.repositoryId)&&/^[0-9a-f]{40}$/.test(config.run?.commitId)&&/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(config.run?.id),'Invalid proof identities');
-  assert(exactRun(config.run)&&config.run.progress?.eventsRecorded&&config.run.progress.steps?.length===2,'Expected independently proven successful two-step run');
-  assert(config.run.progress.steps[0].name==='Read source'&&config.run.progress.steps[1].name==='Verify workspace','Controlled fixture differs');
+  engine=config.run.engineCatalog===catalog;selectedGraph=engine?graphSelection(config.run,config.graphSelection):undefined;
+  if(engine)assert(exactRun(config.run)&&selectedGraph&&!config.run.progress&&!Object.hasOwn(config.run,'exitCode'),'Expected independently proven complete graph and actual selected step');
+  else{assert(exactRun(config.run)&&config.run.progress?.eventsRecorded&&config.run.progress.steps?.length===2,'Expected independently proven successful two-step run');assert(config.run.progress.steps[0].name==='Read source'&&config.run.progress.steps[1].name==='Verify workspace','Controlled fixture differs');}
   const {chromium}=await import(pathToFileURL(join(process.cwd(),'web/node_modules/playwright/index.mjs')));
   browser=await chromium.launch();await manifest();
   const repo='/'+encodeURIComponent(config.repository.owner)+'/'+encodeURIComponent(config.repository.name);
@@ -105,25 +116,29 @@ try{
             result.check='selected-step-open-jobs';
             if(width===390)await page.getByLabel('Jobs and steps').locator('summary').click();
             result.check='selected-step-visible-link';
-            await page.getByLabel('Jobs and steps').getByRole('link',{name:/Read source/}).click();
-            await page.waitForURL(url=>url.searchParams.get('step')==='0');
-            assert(new URL(page.url()).searchParams.get('step')==='0','Selected step URL differs');
+            if(engine){
+              const jobLink=page.getByLabel('Jobs and steps').locator('a[href*="jobInstanceId='+config.graphSelection.jobInstanceId+'"]').first();
+              const jobURL=new URL(await jobLink.getAttribute('href'),config.golf);assert(jobURL.searchParams.get('jobInstanceId')===config.graphSelection.jobInstanceId&&!jobURL.searchParams.has('stepId'),'Job link scope differs');
+              await jobLink.click();await page.waitForURL(url=>url.searchParams.get('jobInstanceId')===config.graphSelection.jobInstanceId);
+              await page.getByLabel('Jobs and steps').locator('a[href*="jobInstanceId='+config.graphSelection.jobInstanceId+'"][href*="stepId='+config.graphSelection.stepId+'"]').click();
+              await page.waitForURL(url=>url.searchParams.get('jobInstanceId')===config.graphSelection.jobInstanceId&&url.searchParams.get('stepId')===config.graphSelection.stepId);
+              assert(!new URL(page.url()).searchParams.has('step'),'Graph step conflated with legacy index');
+            }else{await page.getByLabel('Jobs and steps').getByRole('link',{name:/Read source/}).click();await page.waitForURL(url=>url.searchParams.get('step')==='0');assert(new URL(page.url()).searchParams.get('step')==='0','Selected step URL differs');}
             // The old document's reads may be cancelled without a terminal
             // response event on navigation. Track only the reloaded document;
             // request identities fence any late responses from the old one.
             inflight.clear();
             await page.reload({waitUntil:'domcontentloaded'});
             result.check='selected-step-reload-binding';
-            const selectedLink=page.getByLabel('Jobs and steps').getByRole('link',{name:/Read source/,includeHidden:width===390});
+            const selectedLink=engine?page.getByLabel('Jobs and steps').locator('a[href*="jobInstanceId='+config.graphSelection.jobInstanceId+'"][href*="stepId='+config.graphSelection.stepId+'"]'):page.getByLabel('Jobs and steps').getByRole('link',{name:/Read source/,includeHidden:width===390});
             await selectedLink.waitFor({state:width===390?'attached':'visible'});
             assert(await selectedLink.getAttribute('aria-current')==='page','Reload lost selected step');
           }
           const log=page.getByLabel('Workflow run log',{exact:true});await log.waitFor();
           result.check='controlled-output';
-          await page.waitForFunction(()=>document.querySelector('[aria-label="Workflow run log"]')?.textContent?.includes('actions proof'));
-          const text=await log.innerText();
-          assert(text.includes('actions proof'),'Controlled first-step output absent');
-          assert(text.includes('second step proof')===(id==='actions-run'),'Selected log range differs');
+          const marker=engine?config.graphSelection.logMarker:'actions proof',other=engine?config.graphSelection.otherLogMarker:'second step proof';
+          await page.waitForFunction(marker=>document.querySelector('[aria-label="Workflow run log"]')?.textContent?.includes(marker),marker);
+          const text=await log.innerText();assert(text.includes(marker),'Controlled source output absent');assert(text.includes(other)===(id==='actions-run'),'Selected log range differs');
         }
         result.check='read-receipts';
         const deadline=Date.now()+12000;
@@ -133,11 +148,11 @@ try{
         if(await page.locator('html').getAttribute('data-theme')!==theme)await page.getByRole('button',{name:'Switch to '+theme+' theme',exact:true}).click();
         result.actualTheme=await page.locator('html').getAttribute('data-theme');
         const current=receipts.filter(r=>r.status===200);
-        result.logSelections=current.filter(r=>r.procedure==='GetWorkflowRunLogs').map(r=>r.request.stepIndex??'all');
+        result.logSelections=current.filter(r=>r.procedure==='GetWorkflowRunLogs').map(r=>engine?{jobInstanceId:r.request.jobInstanceId??'',stepId:r.request.stepId??''}:r.request.stepIndex??'all');
         if(id==='actions-inventory')assert(current.some(r=>r.procedure==='ListActionRuns'&&r.request.repositoryId===config.repositoryId&&r.request.repository?.owner===config.repository.owner&&r.request.repository?.name===config.repository.name&&r.body.repositoryId===config.repositoryId&&r.body.runs?.some(summary=>exactActionSummary(summary,config.run,config.repositoryId))),'Exact typed inventory receipt missing');
         else{
           assert(current.some(r=>r.procedure==='GetWorkflowRun'&&r.request.runId===config.run.id&&exactRun(r.body.run)),'Exact run receipt missing');
-          assert(current.some(r=>r.procedure==='GetWorkflowRunLogs'&&r.request.runId===config.run.id&&(id==='actions-selected-step'?r.request.stepIndex===0:r.request.stepIndex===undefined)),'Exact log request missing');
+          assert(current.some(r=>r.procedure==='GetWorkflowRunLogs'&&r.request.runId===config.run.id&&(engine?r.request.stepIndex===undefined&&r.body.runId===config.run.id&&r.body.attemptId===config.run.attemptId&&r.body.repositoryId===config.repositoryId&&r.body.sourceCommitId===config.run.commitId&&(r.body.jobInstanceId??'')===(id==='actions-selected-step'?config.graphSelection.jobInstanceId:'')&&(r.body.stepId??'')===(id==='actions-selected-step'?config.graphSelection.stepId:'')&&(r.request.jobInstanceId??'')===(r.body.jobInstanceId??'')&&(r.request.stepId??'')===(r.body.stepId??''):id==='actions-selected-step'?r.request.stepIndex===0:r.request.stepIndex===undefined)),'Exact scoped log request/receipt missing');
         }
         result.check='layout';
         result.metrics=await page.evaluate(()=>({documentWidth:document.documentElement.scrollWidth,viewportWidth:innerWidth,firstLogY:document.querySelector('.execution-log')?.getBoundingClientRect().y??null,jobNavigationWidth:document.querySelector('.automation-job-navigation')?.getBoundingClientRect().width??null,jobsOpen:document.querySelector('.workflow-jobs-disclosure')?.open??null}));
@@ -155,7 +170,7 @@ try{
           await page.waitForURL(url=>url.pathname===repo+'/actions/runs/'+config.run.id);
           await page.getByRole('heading',{name:config.run.workflowPath,exact:true}).waitFor();
           inflight.clear();await page.reload({waitUntil:'domcontentloaded'});
-          await page.waitForFunction(()=>document.querySelector('[aria-label="Workflow run log"]')?.textContent?.includes('actions proof'));
+          await page.waitForFunction(marker=>document.querySelector('[aria-label="Workflow run log"]')?.textContent?.includes(marker),engine?config.graphSelection.logMarker:'actions proof');
           const deadline=Date.now()+12000;
           while(Date.now()<deadline&&(inflight.size>0||Date.now()-lastResponse<450))await page.waitForTimeout(100);
           assert(inflight.size===0,'Drilldown reads did not settle');await Promise.all(responseTasks);
