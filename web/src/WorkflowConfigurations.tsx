@@ -6,14 +6,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Code, ConnectError } from '@connectrpc/connect';
-import { FileCode2, ListFilter, RefreshCw, Settings2 } from 'lucide-react';
+import { Bot, FileCode2, GitPullRequest, ListFilter, RefreshCw, Settings2, Workflow } from 'lucide-react';
 import { repositoryClient, workflowClient, workflowRunClient, errorMessage } from './api';
 import { sourceRepositoryID } from './sourceReads';
 import { RepositorySettingsLayout } from './AccountSettings';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { Loading, PanelError, privateQuery } from './RepositoryUI';
-import { repositoryOptions } from './navigation';
-import { WorkflowRuns } from './WorkflowRuns';
+import { repositoryOptions, defaultRepositorySearch, type RepositoryLocation } from './navigation';
+import { ActionRuns } from './ActionRuns';
 import { AutomationGrantPanel } from './AutomationGrantPanel';
 import { ExecutionPolicyPanel } from './ExecutionPolicyPanel';
 import { ExecutionScope, WorkflowFormat, WorkflowInspectionState, type WorkflowConfiguration, type WorkflowDiagnostic } from './gen/golf/v1/golf_pb';
@@ -31,10 +31,10 @@ function Diagnostics({ diagnostics }: { diagnostics: WorkflowDiagnostic[] }) {
   </li>)}</ul>;
 }
 
-export function WorkflowConfigurations({ userId, owner, name, signingOut, repositoryId = '', workView = false }: { repositoryId?:string; workView?:boolean; userId: string; owner: string; name: string; signingOut: boolean }) {
+export function WorkflowConfigurations({ userId, owner, name, signingOut, repositoryId = '', workView = false, location: suppliedLocation }: { repositoryId?:string; workView?:boolean;location?:RepositoryLocation; userId: string; owner: string; name: string; signingOut: boolean }) {
   const [dispatching, setDispatching] = useState(false);
-  const [selectedWorkflow, setSelectedWorkflow] = useState<{scope:string;path:string}>();
   const [tasksOpen, setTasksOpen] = useState(false);
+  const location:RepositoryLocation=suppliedLocation||{...defaultRepositorySearch,kind:'repository',owner,name,view:'actions'};
   const scope = JSON.stringify([userId,owner,name]);
   const [notice, setNotice] = useState('');
   const [uncertain, setUncertain] = useState(false);
@@ -62,7 +62,7 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
   const commit = result?.commitId ?? '';
   const policyObserved = (item:WorkflowConfiguration) => Boolean(result && /^[a-f0-9]{64}$/.test(result.policyRevision) && typeof item.manualPolicyAllowed==='boolean' && typeof item.pushPolicyAllowed==='boolean');
   const policyLabel = (item:WorkflowConfiguration, kind:'manual'|'push') => !policyObserved(item)?'Unknown':(kind==='manual'?item.manualPolicyAllowed:item.pushPolicyAllowed)?'Ceilings allow':'Ceilings deny';
-  const selectedPath = selectedWorkflow?.scope===scope && result?.configurations.some(item=>item.path===selectedWorkflow.path) ? selectedWorkflow.path : undefined;
+  const selectedPath = location.actionKind==='workflow' ? location.workflowPath : undefined;
   const manualEligible = (item:WorkflowConfiguration) => item.state===WorkflowInspectionState.VALIDATED_SUBSET && (item.format===WorkflowFormat.GITLAB_CI || item.events.includes('workflow_dispatch'));
   const canDispatch = (item:WorkflowConfiguration) => Boolean(commit && manualEligible(item) && policyObserved(item) && item.manualPolicyAllowed===true && result?.executionAvailable && !dispatching && !uncertain && !signingOut);
   const selectedConfiguration = selectedPath ? result?.configurations.find(item=>item.path===selectedPath) : undefined;
@@ -115,19 +115,26 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
 
   const content = <>
     <section className="page-stack" aria-labelledby="workflow-configurations-title">
-      <header className="repository-intro"><div>{workView ? null : <span className="eyebrow">REPOSITORY CONFIGURATION</span>}<h1 id="workflow-configurations-title"><FileCode2 size={29} />{workView?'Actions':'Workflow configuration'}</h1><p>{workView ? 'Workflow runs and recorded output for this repository.' : 'Inspect Actions and GitLab configuration from the current default-branch commit.'}</p></div></header>
+      <header className="repository-intro"><div>{workView ? null : <span className="eyebrow">REPOSITORY CONFIGURATION</span>}<h1 id="workflow-configurations-title"><FileCode2 size={29} />{workView?'Actions':'Workflow configuration'}</h1><p>{workView ? 'Workflow, coding task and PR review runs for this repository.' : 'Inspect Actions and GitLab configuration from the current default-branch commit.'}</p></div></header>
       {workView ? <>
         {result?<p className="workflow-readiness">{result.executionAvailable?'A workflow worker is configured.':'Workflow worker execution is unavailable.'} Execution requires policy approval; automatic pushes also need an active automation grant. <Link to="/$owner/$name/settings/workflows" params={{owner,name}}>Review workflow settings</Link></p>:null}
         {dispatchNotice}
-        <div className="actions-workspace"><aside className="workflow-navigation-panel" aria-label="Current default-branch workflows"><h2>Workflows</h2><nav className="workflow-navigation" aria-label="Workflow navigation"><button className="workflow-nav-link" aria-current={!selectedPath?'page':undefined} onClick={()=>setSelectedWorkflow(undefined)}><ListFilter size={16}/>All workflows</button>
-          {result?.configurations.map(item=><button key={item.path} className="workflow-nav-link" aria-label={`Show loaded runs for ${item.path}`} title={`${item.name||item.path} · ${item.path}`} aria-current={selectedPath===item.path?'page':undefined} onClick={()=>setSelectedWorkflow({scope,path:item.path})}><FileCode2 size={16}/><span>{item.name||item.path}</span></button>)}
-        </nav>{inspectionError?<PanelError error={inspectionError} retry={refreshInspection}/>:!result?<Loading label="Inspecting workflow navigation…"/>:<p className="field-help">Current default-branch configurations at <code title={commit}>{commit.slice(0,12)}</code>. A source-tab ref does not change this inventory.</p>}<Link className="text-button" to="/$owner/$name/settings/workflows" params={{owner,name}}><Settings2 size={15}/>Workflow settings</Link></aside><div className="actions-main">{selectedConfiguration?<header className="browser-panel-heading workflow-selected-heading"><div><h2>{selectedConfiguration.name||selectedConfiguration.path}</h2><p className="field-help">Manual: {policyLabel(selectedConfiguration,'manual')} · Automatic push: {policyLabel(selectedConfiguration,'push')}. Policy observations do not grant native write access or activate a push grant.</p></div>{manualEligible(selectedConfiguration)?<button className="button secondary" disabled={!canDispatch(selectedConfiguration)} onClick={()=>void dispatch(selectedConfiguration.path)}>Run workflow</button>:null}</header>:null}<WorkflowRuns userId={userId} owner={owner} name={name} signingOut={signingOut} workflowPath={selectedPath}/></div></div>
+        <div className="actions-workspace"><aside className="workflow-navigation-panel" aria-label="Actions navigation"><h2>Runs</h2><nav className="workflow-navigation" aria-label="Run navigation">
+          <Link {...repositoryOptions(location,{run:undefined,runKind:undefined,actionKind:undefined,workflowPath:undefined,step:undefined})} className="workflow-nav-link" aria-current={!location.actionKind?'page':undefined}><ListFilter size={16}/>All runs</Link>
+          {([{kind:'workflow',label:'Workflow runs',Icon:Workflow},{kind:'coding-task',label:'Coding tasks',Icon:Bot},{kind:'review',label:'PR reviews',Icon:GitPullRequest}] as const).map(({kind,label,Icon})=><Link key={kind} {...repositoryOptions(location,{run:undefined,runKind:undefined,actionKind:kind,workflowPath:undefined,step:undefined})} className="workflow-nav-link" aria-current={location.actionKind===kind&&!selectedPath?'page':undefined}><Icon size={16}/>{label}</Link>)}
+        </nav><h3>Workflows</h3><nav className="workflow-navigation" aria-label="Workflow navigation">{result?.configurations.map(item=><Link key={item.path} {...repositoryOptions(location,{run:undefined,runKind:undefined,actionKind:'workflow',workflowPath:item.path,step:undefined})} className="workflow-nav-link" aria-label={`Show runs for ${item.path}`} title={`${item.name||item.path} · ${item.path}`} aria-current={selectedPath===item.path?'page':undefined}><FileCode2 size={16}/><span>{item.name||item.path}</span></Link>)}</nav>
+        {inspectionError?<PanelError error={inspectionError} retry={refreshInspection}/>:!result?<Loading label="Inspecting workflow navigation…"/>:<p className="field-help">Current default-branch configurations at <code title={commit}>{commit.slice(0,12)}</code>. A source-tab ref does not change run history.</p>}
+        <Link className="text-button" to="/$owner/$name/settings/workflows" params={{owner,name}}><Settings2 size={15}/>Workflow settings</Link></aside><div className="actions-main">
+        <div className="browser-panel-heading action-inventory-actions"><span className="field-help">Recorded execution history</span><button className="button secondary" aria-expanded={tasksOpen} onClick={()=>setTasksOpen(open=>!open)}><Bot size={15}/>New coding task</button></div>
+        {tasksOpen?<AgentTasks key={scope} userId={userId} owner={owner} name={name} signingOut={signingOut} launcherOnly/>:null}
+        {selectedConfiguration?<header className="browser-panel-heading workflow-selected-heading"><div><h2>{selectedConfiguration.name||selectedConfiguration.path}</h2><p className="field-help">Manual: {policyLabel(selectedConfiguration,'manual')} · Automatic push: {policyLabel(selectedConfiguration,'push')}. Policy observations do not grant native write access or activate a push grant.</p></div>{manualEligible(selectedConfiguration)?<button className="button secondary" disabled={!canDispatch(selectedConfiguration)} onClick={()=>void dispatch(selectedConfiguration.path)}>Run workflow</button>:null}</header>:null}
+        <ActionRuns key={`${scope}-${effectiveRepositoryId}-${location.actionKind||''}-${selectedPath||''}`} userId={userId} repositoryId={effectiveRepositoryId} location={location} signingOut={signingOut||!identityReady}/></div></div>
         <details className="workflow-inspection-disclosure"><summary>Workflow configuration files</summary>{configurationPanel}</details>
-        <details className="workflow-inspection-disclosure" onToggle={event=>setTasksOpen(event.currentTarget.open)}><summary>Coding tasks</summary>{tasksOpen?<AgentTasks key={scope} userId={userId} owner={owner} name={name} signingOut={signingOut}/>:null}</details>
+
       </> : configurationPanel}
       {result && !workView ? <><ExecutionPolicyPanel key={`${userId}/${owner}/${name}`} userId={userId} signingOut={signingOut} scope={ExecutionScope.REPOSITORY} repository={{ owner, name }} />
-      <ReviewerPanel userId={userId} owner={owner} name={name} signingOut={signingOut}/><AgentTasks userId={userId} owner={owner} name={name} signingOut={signingOut}/><AgentUsagePanel userId={userId} signingOut={signingOut} scope={AgentUsageScope.REPOSITORY} repository={{ owner, name }} /><AutomationGrantPanel userId={userId} owner={owner} name={name} signingOut={signingOut} />
-      <WorkflowRuns key={`runs/${userId}/${owner}/${name}`} userId={userId} owner={owner} name={name} signingOut={signingOut} /></> : null}
+      <ReviewerPanel userId={userId} owner={owner} name={name} signingOut={signingOut} showRuns={false}/><AgentUsagePanel userId={userId} signingOut={signingOut} scope={AgentUsageScope.REPOSITORY} repository={{ owner, name }} /><AutomationGrantPanel userId={userId} owner={owner} name={name} signingOut={signingOut} />
+      <p className="panel-footnote"><Link {...repositoryOptions({owner,name,view:'actions'})}>Open Actions run history</Link> for workflows, coding tasks and PR reviews.</p></> : null}
     </section>
   </>;
   return workView ? content : <RepositorySettingsLayout owner={owner} name={name}>{content}</RepositorySettingsLayout>;

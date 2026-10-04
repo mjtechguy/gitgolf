@@ -25,6 +25,7 @@ export function useRepositoryLive(userId:string,owner:string,name:string,reposit
     if(key[0]==='repository'&&pin.current&&key[4]==='pull'&&key.length===6)return false;
     if(key[0]==='repository'&&key[4]==='pull-checks')return topics.includes('pulls')||topics.includes('actions');
     if(key[0]==='repository')return topics.includes('issues')&&['issue','issues'].includes(String(key[4]))||topics.includes('pulls')&&['pull','pulls','pull-discussion'].includes(String(key[4]));
+    if(['action-runs','action-run'].includes(String(key[0])))return topics.some(topic=>['actions','agents','pulls'].includes(topic));
     if(key[0]==='workflow-configurations')return topics.includes('source')||topics.includes('actions');
     return topics.includes('actions')&&['workflow-runs','workflow-run','workflow-run-logs'].includes(String(key[0]))||topics.includes('agents')&&['agent-tasks','agent-task'].includes(String(key[0]))||topics.includes('pulls')&&key[0]==='reviewer-runs';
    }});

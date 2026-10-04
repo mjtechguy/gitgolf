@@ -1,7 +1,7 @@
 import { disabledAgentTasks, disabledAgentUsage } from './rpc';
 import { expect, test, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { DispatchWorkflowRequestSchema, DispatchWorkflowResponseSchema, GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetRepositorySettingsResponseSchema, GetSessionResponseSchema, GetReviewerResponseSchema, ListReviewerRunsResponseSchema, GetRepositoryResponseSchema, InspectWorkflowsRequestSchema, InspectWorkflowsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ExecutionScope, ExecutionMode, GetExecutionPolicyResponseSchema, ListWorkflowRunsResponseSchema, ListWorkflowRunsRequestSchema, WorkflowRunState, WorkflowRunOrigin, WorkflowConfigurationSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
+import { ActionRunKind, ListActionRunsRequestSchema, ListActionRunsResponseSchema, DispatchWorkflowRequestSchema, DispatchWorkflowResponseSchema, GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetRepositorySettingsResponseSchema, GetSessionResponseSchema, GetReviewerResponseSchema, ListReviewerRunsResponseSchema, GetRepositoryResponseSchema, InspectWorkflowsRequestSchema, InspectWorkflowsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ExecutionScope, ExecutionMode, GetExecutionPolicyResponseSchema, WorkflowRunState, WorkflowConfigurationSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 const path = '/repositories/alex/private/settings/workflows';
@@ -23,12 +23,12 @@ async function backend(page: Page) {
     if (method === 'GetRepositoryAccess') return respond(route, GetRepositoryAccessResponseSchema, { access: { repositoryId: '9007199254740997', ownerId: '9007199254740993', currentPermission: 'read' } });
     if (method === 'GetRepositorySettings') return respond(route, GetRepositorySettingsResponseSchema, { settings: { repositoryId: '9007199254740997', ownerId: '9007199254740993', canEdit: false } });
     if (method === 'GetExecutionPolicy') return respond(route, GetExecutionPolicyResponseSchema, { policy: { scope: ExecutionScope.REPOSITORY, scopeId: '9007199254740997', ownerId: '9007199254740993', mode: ExecutionMode.DISABLED, revision: '0', revocationEpoch: '0', authorityRevision: 'd'.repeat(64) } });
-    if (method === 'ListWorkflowRuns') {
-      const input = request(route, ListWorkflowRunsRequestSchema); state.requestedRunPages.push(input.page?.page || 1);
-      if (state.denyRuns) return reject(route, 'permission_denied', 'Workflow runs require repository read access.');
-      if (!state.runPages) return respond(route, ListWorkflowRunsResponseSchema, {});
-      const current = input.page?.page || 1;
-      return respond(route, ListWorkflowRunsResponseSchema, { runs: Array.from({ length: current === 1 ? 20 : 1 }, (_, index) => ({ id: `12345678-1234-4234-8234-${(current*100+index).toString(16).padStart(12,'0')}`, workflowPath: state.matchingRuns && index===0 ? manual.path : current === 2 ? '.github/workflows/later.yml' : `.github/workflows/job-${index}.yml`, state: WorkflowRunState.SUCCEEDED, origin: index === 0 ? WorkflowRunOrigin.PUSH : WorkflowRunOrigin.MANUAL, commitId: commit })), page: { nextPage: current === 1 ? 2 : 0 } });
+    if (method === 'ListActionRuns') {
+      const input=request(route,ListActionRunsRequestSchema),current=input.cursor?2:1;state.requestedRunPages.push(current);
+      if(state.denyRuns)return reject(route,'permission_denied','Workflow runs require repository read access.');
+      let runs=state.runPages?Array.from({length:current===1?20:1},(_,index)=>({ref:{kind:ActionRunKind.WORKFLOW,id:`12345678-1234-4234-8234-${(current*100+index).toString(16).padStart(12,'0')}`},repositoryId:'9007199254740997',ownerId:'9007199254740993',title:state.matchingRuns&&index===0?manual.path:current===2?'.github/workflows/later.yml':`.github/workflows/job-${index}.yml`,workflowPath:state.matchingRuns&&index===0?manual.path:current===2?'.github/workflows/later.yml':`.github/workflows/job-${index}.yml`,state:'succeeded',trigger:index===0?'push':'manual',commitId:commit,createdAt:'2026-10-01T12:00:00Z'})):[];
+      if(input.workflowPath)runs=runs.filter(run=>run.workflowPath===input.workflowPath);
+      return respond(route,ListActionRunsResponseSchema,{repositoryId:'9007199254740997',runs,nextCursor:state.runPages&&current===1?'page-two':''});
     }
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, {});
     if(method==='DispatchWorkflow') { const input=request(route,DispatchWorkflowRequestSchema);if(state.dispatchLost)return reject(route,'unavailable','Dispatch acknowledgement unavailable.');return respond(route,DispatchWorkflowResponseSchema,{run:{id:'12345678-1234-4234-8234-123456789012',commitId:input.ref,workflowPath:input.workflowPath,state:WorkflowRunState.QUEUED}}); }
@@ -110,15 +110,15 @@ test('empty workflow inventory and bounded refusal remain distinct without fake 
 
 
 test('run inventory loads the next server page and clears private rows on denial', async ({ page }) => {
-  const state = await backend(page); state.runPages = true; await open(page);
-  const table = page.getByRole('table', { name: 'Workflow runs', exact: true });
+  const state = await backend(page); state.runPages = true; await page.goto('/alex/private/actions');
+  const table = page.getByRole('table', { name: 'Action runs', exact: true });
   await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(20);
   await expect(table.getByRole('columnheader', { name: 'Run', exact: false })).toBeVisible();
-  await expect(table.locator('.workflow-run-row small').filter({hasText:/^Push ·/})).toHaveCount(1);
-  await expect(table.locator('.workflow-run-row small').filter({hasText:/^Manual ·/})).toHaveCount(19);
-  await page.getByRole('button', { name: 'Load more workflow runs', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Load more workflow runs', exact: true })).toHaveCount(0);
-  await page.getByRole('searchbox', { name: 'Search loaded Workflow runs', exact: true }).fill('later.yml');
+  await expect(table.locator('.workflow-run-row small').filter({hasText:/push ·/})).toHaveCount(1);
+  await expect(table.locator('.workflow-run-row small').filter({hasText:/manual ·/})).toHaveCount(19);
+  await page.getByRole('button', { name: 'Load more action runs', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Load more action runs', exact: true })).toHaveCount(0);
+  await page.getByRole('searchbox', { name: 'Search loaded Action runs', exact: true }).fill('later.yml');
   await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(1);
   await expect(table).toContainText('.github/workflows/later.yml');
   expect(state.requestedRunPages.filter(value => value === 2)).toEqual([2]);
@@ -143,7 +143,7 @@ test('Actions is a repository work tab with direct run inventory and configurati
  await page.goto('/repositories/alex/private?view=actions');
  await expect(page.locator('.repository-tabs [aria-current="page"]')).toHaveText('Actions');
  await expect(page.getByRole('heading',{name:'Actions',exact:true})).toBeVisible();
- await expect(page.getByRole('table',{name:'Workflow runs',exact:true})).toBeVisible();
+ await expect(page.getByRole('table',{name:'Action runs',exact:true})).toBeVisible();
  await expect(page.getByRole('table',{name:'Workflow configurations',exact:true})).toBeHidden();
  await expect(page.getByRole('navigation',{name:'Workflow navigation'})).toBeVisible();
  await page.getByText('Workflow configuration files',{exact:true}).click();
@@ -152,21 +152,21 @@ test('Actions is a repository work tab with direct run inventory and configurati
  await page.reload();await expect(page.locator('.repository-tabs [aria-current="page"]')).toHaveText('Actions');
 });
 
-for(const theme of ['dark','light'])for(const width of [1440,390])test(`Actions ${theme}/${width} defaults to runs and filters only loaded history without eager coding tasks`,async({page},testInfo)=>{
+for(const theme of ['dark','light'])for(const width of [1440,390])test(`Actions ${theme}/${width} defaults to runs and filters server history without eager coding tasks`,async({page},testInfo)=>{
  const s=await backend(page);s.runPages=true;s.matchingRuns=true;await page.setViewportSize({width,height:1000});await page.addInitScript(theme=>localStorage.setItem('golf.theme',theme),theme);
  await page.goto('/alex/private/actions?ref='+commit+'&branch=older-context');
- const table=page.getByRole('table',{name:'Workflow runs',exact:true});await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(20);
- const navigation=page.getByRole('navigation',{name:'Workflow navigation'});await expect(navigation.getByRole('button',{name:'All workflows'})).toHaveAttribute('aria-current','page');
+ const table=page.getByRole('table',{name:'Action runs',exact:true});await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(20);
+ const navigation=page.getByRole('navigation',{name:'Workflow navigation'});await expect(page.getByRole('link',{name:'All runs',exact:true})).toHaveAttribute('aria-current','page');
  expect(s.methods).not.toContain('ListAgentTasks');await expect(page.getByRole('table',{name:'Workflow configurations',exact:true})).toBeHidden();
  await expect(page.getByText('Current default-branch configurations at',{exact:false})).toBeVisible();
  await expect(page.getByText('Workflow worker execution is unavailable.',{exact:false})).toBeVisible();
- const select=navigation.getByRole('button',{name:'Show loaded runs for '+manual.path,exact:true});await select.focus();await page.keyboard.press('Enter');
+ const select=navigation.getByRole('link',{name:'Show runs for '+manual.path,exact:true});await select.focus();await page.keyboard.press('Enter');
  await expect(select).toHaveAttribute('aria-current','page');await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(1);await expect(table).toContainText(manual.path);
- await expect(page.getByText('this is not a complete history count.',{exact:false})).toBeVisible();
- await page.getByRole('button',{name:'Load more workflow runs'}).click();await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(2);expect(s.requestedRunPages.filter(p=>p===2)).toEqual([2]);
- await navigation.getByRole('button',{name:'All workflows'}).click();await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(20);
+ await expect(page.getByText('no complete history count is claimed.',{exact:false})).toBeVisible();
+ await page.getByRole('button',{name:'Load more action runs'}).click();await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(2);expect(s.requestedRunPages.filter(p=>p===2)).toEqual([2]);
+ await page.getByRole('link',{name:'All runs',exact:true}).click();await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(20);
  await page.getByText('Workflow configuration files',{exact:true}).click();await expect(page.getByRole('button',{name:'Run workflow',exact:true})).toBeDisabled();
- await page.getByText('Coding tasks',{exact:true}).click();await expect.poll(()=>s.methods.filter(m=>m==='ListAgentTasks').length).toBeGreaterThan(0);
+ await page.getByRole('button',{name:'New coding task',exact:true}).click();await expect.poll(()=>s.methods.filter(m=>m==='ListAgentTasks').length).toBeGreaterThan(0);
  expect(s.methods.some(m=>/^(Dispatch|Update|Cancel)/.test(m))).toBe(false);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:testInfo.outputPath('actions-workflow-filter.png'),fullPage:true});
 });
@@ -182,7 +182,7 @@ for(const [known,manualAllowed,pushAllowed,badRevision,expected] of [[true,false
 test('Actions refuses a wrong native repository inspection receipt before rendering private workflow metadata',async({page})=>{
  const s=await backend(page);s.badTarget=true;await page.goto('/alex/private/actions');
  await expect(page.getByRole('alert')).toHaveText('Workflow inspection does not match the selected repository.');
- await expect(page.getByRole('button',{name:'Show loaded runs for '+manual.path,exact:true})).toHaveCount(0);await expect(page.getByText('<literal-workflow>',{exact:true})).toHaveCount(0);expect(s.methods).not.toContain('DispatchWorkflow');
+ await expect(page.getByRole('link',{name:'Show runs for '+manual.path,exact:true})).toHaveCount(0);await expect(page.getByText('<literal-workflow>',{exact:true})).toHaveCount(0);expect(s.methods).not.toContain('DispatchWorkflow');
 });
 
 
@@ -198,8 +198,8 @@ for(const missing of [false,true])test(`settings workflow inspection refuses ${m
 for(const mode of ['manual','denied','unknown','push'] as const)test(`selected workflow exposes only a guarded manual action (${mode})`,async({page})=>{
  const s=await backend(page);s.worker=true;s.manualPolicy=mode==='manual';s.pushPolicy=true;s.policyKnown=mode!=='unknown';if(mode==='push')s.mode='push';
  await page.setViewportSize({width:390,height:844});await page.goto('/alex/private/actions');
- await expect(page.getByRole('button',{name:'All workflows',exact:true})).toHaveAttribute('aria-current','page');await expect(page.getByRole('button',{name:'Run workflow',exact:true})).toBeHidden();
- await page.getByRole('button',{name:'Show loaded runs for '+manual.path,exact:true}).click();
+ await expect(page.getByRole('link',{name:'All runs',exact:true})).toHaveAttribute('aria-current','page');await expect(page.getByRole('button',{name:'Run workflow',exact:true})).toBeHidden();
+ await page.getByRole('link',{name:'Show runs for '+manual.path,exact:true}).click();
  const action=page.locator('.workflow-selected-heading').getByRole('button',{name:'Run workflow',exact:true});
  if(mode==='manual'){await expect(action).toBeEnabled();await action.click();await expect(page.getByRole('status').filter({hasText:'Run 12345678-1234-4234-8234-123456789012 recorded.'})).toBeVisible();expect(s.methods.filter(m=>m==='DispatchWorkflow')).toHaveLength(1);let release!:()=>void;s.barrier=new Promise<void>(resolve=>release=resolve);s.mode='denied';await page.getByText('Workflow configuration files',{exact:true}).click();await page.getByRole('button',{name:'Refresh workflow inspection',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'Run 12345678-1234-4234-8234-123456789012 recorded.'})).toHaveCount(0);release();s.barrier=undefined;await expect(page.getByRole('alert').filter({hasText:'Workflow inspection requires repository read access.'}).first()).toBeVisible();await expect(page.getByText('12345678-1234-4234-8234-123456789012',{exact:false})).toHaveCount(0);}
  else if(mode==='push')await expect(action).toHaveCount(0);else await expect(action).toBeDisabled();
@@ -209,7 +209,7 @@ for(const mode of ['manual','denied','unknown','push'] as const)test(`selected w
 
 test('selected manual dispatch uncertainty survives inspection refresh without another write',async({page})=>{
  const s=await backend(page);s.worker=true;s.manualPolicy=true;s.dispatchLost=true;await page.goto('/alex/private/actions');
- await page.getByRole('button',{name:'Show loaded runs for '+manual.path,exact:true}).click();const action=page.locator('.workflow-selected-heading').getByRole('button',{name:'Run workflow',exact:true});await action.click();
+ await page.getByRole('link',{name:'Show runs for '+manual.path,exact:true}).click();const action=page.locator('.workflow-selected-heading').getByRole('button',{name:'Run workflow',exact:true});await action.click();
  const notice=page.getByRole('status').filter({hasText:'Dispatch acknowledgement unavailable.'});await expect(notice).toBeVisible();await expect(action).toBeDisabled();
  let release!:()=>void;s.barrier=new Promise<void>(resolve=>release=resolve);await page.getByText('Workflow configuration files',{exact:true}).click();await page.getByRole('button',{name:'Refresh workflow inspection',exact:true}).click();await expect(notice).toHaveCount(0);release();s.barrier=undefined;
  await expect(notice).toBeVisible();await expect(action).toBeDisabled();expect(s.methods.filter(m=>m==='DispatchWorkflow')).toHaveLength(1);

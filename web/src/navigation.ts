@@ -13,6 +13,9 @@ export type RepositorySearch = {
   pullView?: 'conversation' | 'commits' | 'checks' | 'files';
   commit?: string;
   run?: string;
+  runKind?: 'workflow' | 'coding-task' | 'review';
+  actionKind?: 'workflow' | 'coding-task' | 'review';
+  workflowPath?: string;
   step?: number;
   base?: string;
   head?: string;
@@ -44,6 +47,8 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
     pullView: next.view === 'pulls' && next.pull ? next.pullView : undefined,
     commit: next.view === 'commits' ? next.commit : undefined,
     run: next.view === 'actions' ? next.run : undefined,
+    runKind: next.view==='actions'&&next.run?next.runKind:undefined,
+    actionKind:next.view==='actions'?next.actionKind:undefined,workflowPath:next.view==='actions'?next.workflowPath:undefined,
     step: next.view === 'actions' && next.run ? next.step : undefined,
     base:next.view==='compare'?next.base:undefined,head:next.view==='compare'?next.head:undefined,
     sourceOwner:next.view==='compare'?next.sourceOwner:undefined,sourceName:next.view==='compare'?next.sourceName:undefined,
@@ -54,7 +59,7 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
   if(next.view==='compare')path='compare';
   else if(next.view==='issues') path=next.issueNew&&!next.issue?'issues/new':next.issue?`issues/${next.issue}`:'issues';
   else if(next.view==='pulls') path=next.pull?`pull/${next.pull}${next.pullView&&next.pullView!=='conversation'?'/'+next.pullView:''}`:'pulls';
-  else if(next.view==='actions') path=next.run?`actions/runs/${next.run}`:'actions';
+  else if(next.view==='actions') path=next.run?`actions/${next.runKind==='coding-task'?'tasks':next.runKind==='review'?'reviews':'runs'}/${next.run}`:'actions';
   else if(next.view==='commits') path=next.commit?`commit/${next.commit}`:next.historyPath&&isCommitID(next.ref)?`commits/${next.ref}/${next.historyPath}`:'commits';
   else if(next.refKind && next.refName) path=`${sourceKind==='file'?'blob':'tree'}/${next.refName}${next.path?`/${next.path}`:''}`;
   else if(isCommitID(next.ref)) path=`${sourceKind==='file'?'blob':'tree'}/${next.ref}${next.path?`/${next.path}`:''}`;
@@ -62,7 +67,7 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
   // deliberate source/history return context and relevant list filters.
   search.view = 'source'; search.path = '';
   if(next.view==='source'&&next.refKind){search.branch='';search.tag=undefined;}
-  search.issue = undefined; search.issueNew = undefined; search.pull = undefined; search.pullView = undefined; search.commit = undefined; search.run = undefined;
+  search.issue = undefined; search.issueNew = undefined; search.pull = undefined; search.pullView = undefined; search.commit = undefined; search.run = undefined; search.runKind=undefined;
   if (next.view === 'commits' && next.historyPath && isCommitID(next.ref)) search.historyPath = undefined;
   // The path is authoritative for source and path-history snapshots.
   if ((next.view === 'source' && (isCommitID(next.ref) || Boolean(next.refKind))) || (next.view === 'commits' && !next.commit && next.historyPath && isCommitID(next.ref))) search.ref = '';

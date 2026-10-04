@@ -1,4 +1,4 @@
-import { InspectWorkflowsResponseSchema, ListWorkflowRunsResponseSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
+import { ListActionRunsResponseSchema, InspectWorkflowsResponseSchema, ListWorkflowRunsResponseSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
 import {expect,test,type Page,type Route} from '@playwright/test';
 import {create,toJson} from '@bufbuild/protobuf';
 import {resolveSourceFixture,respond,reject,request} from './rpc';
@@ -29,6 +29,7 @@ async function fixture(page:Page){
   if(method==='ResolveRepositorySource')return resolveSourceFixture(route,'11',{owner:'alex',name:'demo'},'main',{main:head});
   if(method==='GetContents'){state.sources++;return respond(route,GetContentsResponseSchema,{repositoryId:'11',kind:SourceEntryType.DIRECTORY,commitId:head,entries:[{name:'src',path:'src',sha:head,type:SourceEntryType.DIRECTORY}]});}
   if(method==='InspectWorkflows'){state.inspections++;return respond(route,InspectWorkflowsResponseSchema,{repositoryId:'11',commitId:head,catalogVersion:'golf.workflow.shell.v1',executionAvailable:true,policyRevision:'d'.repeat(64),configurations:[{path:'.github/workflows/ci.yml',name:state.workflowName,blobId:'e'.repeat(40),byteSize:100n,format:WorkflowFormat.GITHUB_ACTIONS,state:WorkflowInspectionState.VALIDATED_SUBSET,events:['workflow_dispatch','push'],manualPolicyAllowed:state.manualAllowed,pushPolicyAllowed:true}]});}
+  if(method==='ListActionRuns')return respond(route,ListActionRunsResponseSchema,{repositoryId:'11'});
   if(method==='ListWorkflowRuns')return respond(route,ListWorkflowRunsResponseSchema,{});
   if(method==='DispatchWorkflow'){state.dispatches++;return reject(route,'permission_denied','Unexpected dispatch.');}
   if(method==='ListBranches')return respond(route,ListBranchesResponseSchema,{branches:[{name:'main',commitId:head}]});
@@ -130,14 +131,14 @@ test('offline reconnect attempts keep source controls stable without repeated me
 test('Actions source and run events refresh workflow observations without dispatching or moving the URL',async({page})=>{
  const state=await fixture(page);
  await page.goto('/alex/demo/actions');
- const workflow=page.getByRole('button',{name:'Show loaded runs for .github/workflows/ci.yml',exact:true});
+ const workflow=page.getByRole('link',{name:'Show runs for .github/workflows/ci.yml',exact:true});
  await expect(workflow).toHaveText('Original CI');
  await expect(page.getByText('Live',{exact:true})).toBeVisible();
- const url=page.url(),reads=state.inspections;
+ let url=page.url();const reads=state.inspections;
  state.workflowName='Updated CI';state.topics=['source'];state.cursor++;
  await expect(workflow).toHaveText('Updated CI');
- expect(state.inspections).toBeGreaterThan(reads);
- await workflow.click();
+ expect(state.inspections).toBeGreaterThan(reads);expect(page.url()).toBe(url);
+ await workflow.click();url=page.url();
  await expect(page.locator('.workflow-selected-heading')).toContainText('Manual: Ceilings allow');
  state.manualAllowed=false;state.topics=['actions'];state.cursor++;
  await expect(page.locator('.workflow-selected-heading')).toContainText('Manual: Ceilings deny');

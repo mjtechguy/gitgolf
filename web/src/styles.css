@@ -1147,3 +1147,23 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .workflow-selected-heading h2 { overflow-wrap:anywhere; }
 .workflow-selected-heading .field-help { margin:6px 0 0; }
 .workflow-selected-heading>.button { flex-shrink:0; }
+
+/* Shared execution records: workflow, coding task and PR review. */
+.run-kind-badge { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); border-radius:4px; padding:1px 6px; font-size:.8125rem; white-space:nowrap; }
+.action-run-context { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.action-inventory-actions { padding:0 0 12px; }
+.action-inventory-actions>button { flex-shrink:0; }
+.action-review-context { display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+.action-run-detail .discussion-description>.markdown-body { padding:var(--panel-padding); }
+.action-run-detail .source-preview { max-height:640px; overflow:auto; }
+.action-run-detail .panel-content h3 { font-size:.9375rem; }
+.workflow-navigation-panel>h3 { font-size:.875rem; margin:20px 12px 8px; color:var(--muted); }
+@media (max-width:720px) {
+ .action-inventory-actions { gap:8px; flex-wrap:wrap; }
+ .action-run-detail .workflow-run-summary { grid-template-columns:minmax(0,1fr); }
+ .action-run-detail .workflow-run-summary .row-actions { justify-content:flex-start; }
+ .action-review-context { gap:10px; }
+}
+
+.run-state-published { color:var(--accent); }
+.run-state-outdated,.run-state-admitting { color:var(--muted); }
