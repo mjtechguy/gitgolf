@@ -59,7 +59,7 @@ A release is not a tag count. Native latest excludes drafts and prereleases; rel
 
 Introduce a lazy root-only overview query bound to the displayed native repository ID and current caller authority before and after the read. Return independently classified optional sections; absent/error/unavailable must not become zero, empty or success. Keep current repository metadata separate from exact snapshot resources. Cancel and erase private query data on sign-out or revocation. Renamed/replaced repositories must not silently populate the old workspace.
 
-The backend/UI peers are now implementing this narrower overview slice. It remains unqualified until their source, native and served checks finish. It intentionally excludes releases, contributors, packages and deployments.
+At the review baseline, backend/UI peers were implementing this narrower overview slice; the subsequent qualified checkpoint is recorded below. It intentionally excludes releases, contributors, packages and deployments.
 
 Website links should admit safe schemes and use clear labels. Topics should wrap as small chips; make them links only when a real authorized search exists. GitHub documents that its topic names can be public even on private repositories; Golf should retain tenant/private visibility rather than copying that discovery behavior. See [GitHub topics](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/classifying-your-repository-with-topics).
 
@@ -90,3 +90,7 @@ Use `RepositorySidebar` plus small `RepositorySidebarSection` and resource/stat-
 Before marking this slice verified, exercise both themes at 1280/1920 and390/320; rich and empty repositories; long Unicode names, URLs and topics; unavailable/empty language indexes; repository rename/replacement; wrong native ID; private permission loss; selected historical commit versus current repository metadata; independent section failure; and keyboard/touch disclosure behavior. Verify no horizontal page overflow, no hidden meaningful controls and no private-data residue after revocation. Qualify release-unit/package permissions independently when those features are implemented.
 
 This review uses the fresh [Web Interface Guidelines](https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md) for accessibility and interaction checks. Screenshot artifacts are ignored local evidence and are not included in the documentation commit. Full GitHub parity, contributor indexing and all deployment/registry workflows remain open.
+
+## Subsequent bounded implementation
+
+The root toolbar alignment and scoped About/topics/licenses/counts/languages slice is now implemented and locally served-qualified through `c35dc86`; see [overview contract](REPOSITORY_OVERVIEW_CONTRACT.md) and [final evidence ledger](IMPLEMENTATION_STATUS.md). Actual new root measurements place both columns at y208, retaining280px rail/24px gap and Golf styling; mobile places the sidebar after README. Shared README heading/actions are consolidated. This checkpoint uses new native fixture captures, not the historical Golf baseline above. Contributors/resources/releases/packages/deployments and contextual issue/PR metadata remain required follow-ups.
