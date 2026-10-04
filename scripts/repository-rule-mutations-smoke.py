@@ -293,7 +293,6 @@ def main():
     ports: !override ["127.0.0.1:{ports[0]}:8080"]
     environment:
       GITEA_URL: http://host.docker.internal:{ports[2]}
-      GITEA_PUBLIC_URL: {smoke.GITEA}
   gitea:
     environment:
       GITEA__server__ROOT_URL: {smoke.GITEA}/

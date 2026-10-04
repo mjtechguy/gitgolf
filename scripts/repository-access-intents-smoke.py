@@ -219,7 +219,6 @@ def main():
     ports: !override ["127.0.0.1:{ports[0]}:8080"]
     environment:
       GITEA_URL: http://host.docker.internal:{ports[2]}
-      GITEA_PUBLIC_URL: {smoke.GITEA}
   gitea:
     environment:
       GITEA__server__ROOT_URL: {smoke.GITEA}/
@@ -242,7 +241,7 @@ def main():
             if wanted:
                 r=smoke.provider(repository['owner']['token'],'GET','repos/'+repository['name']+'/collaborators/'+recipient['name']+'/permission');assert str(r['user']['id'])==recipient['id'];return r['permission']
         def target(repository,actor):
-            a=checked_rpc(actor['session'],'RepositoryAccessService/GetRepositoryAccess',{'repository':repository['key']})['access'];assert a['repositoryId']==repository['id'] and a['ownerId']==repository['ownerId'] and revision(a['revision']);return {'repository':repository['key'],'repositoryId':a['repositoryId'],'ownerId':a['ownerId'],'expectedRevision':a['revision']}
+            a=checked_rpc(actor['session'],'RepositoryAccessService/GetRepositoryAccess',{'repository':repository['key']})['access'];assert a['repositoryId']==repository['id'] and a['ownerId']==repository['ownerId'] and revision(a['revision']);record(authorityObservation={'canManage':a.get('canManage',False),'permission':a['currentPermission'],'organizationOwned':a.get('organizationOwned',False)});return {'repository':repository['key'],'repositoryId':a['repositoryId'],'ownerId':a['ownerId'],'expectedRevision':a['revision']}
         def create(repository,issuer,recipient,permission="read",seconds=3600):
             t=target(repository,issuer);before=member(repository,recipient,False);preview=call(issuer,'PreviewRepositoryInvitationRecipient',{**t,'username':recipient['name']});assert preview['repositoryId']==repository['id'] and preview['ownerId']==repository['ownerId'] and preview['accessRevision']==t['expectedRevision'];u=preview['recipient'];assert u['user']['id']==recipient['id'] and u['user']['login']==recipient['name'] and revision(u['revision']);payload={**t,'recipientId':recipient['id'],'recipientUsername':recipient['name'],'recipientRevision':u['revision'],'permission':permission,'expiresAt':datetime.datetime.fromtimestamp(time.time()+seconds,datetime.timezone.utc).isoformat().replace('+00:00','Z'),'persistentConsent':True,'idempotencyKey':key()};r=invitation(call(issuer,'CreateRepositoryInvitation',payload)['invitation'],recipient,repository);assert r['state']=='PENDING' and r['revision']=='1';member(repository,recipient,False);return r,payload
         def respond(recipient,row,decision='REPOSITORY_INVITATION_DECISION_ACCEPT',**kwargs):
@@ -266,7 +265,8 @@ def main():
         def grant_cycle(repository,actor,recipient,roles):
             generations=[]
             for permission in roles:
-                p,c=intent(repository,actor,recipient,permission);op,current=mutate(repository,actor,recipient,p);generations.append(int(op['generation']));assert current['generation']==op['generation'] and current['isDirect'] and RANK[member(repository,recipient,True)]>=RANK[permission]
+                record(accessCheck={'scope':'organization' if repository['key']['owner']!=repository['owner']['name'] else 'personal','actor':actor['role'],'requestedPermission':permission,'action':'set'})
+                p,c=intent(repository,actor,recipient,permission);record(targetObservation={'permission':c['permission'],'isDirect':c.get('isDirect',False),'isOwner':c['user']['id']==repository['ownerId'],'isCaller':c['user']['id']==actor['id']});op,current=mutate(repository,actor,recipient,p);generations.append(int(op['generation']));assert current['generation']==op['generation'] and current['isDirect'] and RANK[member(repository,recipient,True)]>=RANK[permission]
                 if permission=='read' and actor is repository['owner'] and repository['key']['owner']==actor['name']:
                     a=checked_rpc(recipient['session'],ACCESS+'GetRepositoryAccess',{'repository':repository['key']})['access'];assert not a.get('canManage',False)
                     checked_rpc(recipient['session'],ACCESS+'SetRepositoryCollaborator',{**p,'idempotencyKey':key()},expected=403)
@@ -275,7 +275,58 @@ def main():
                 remove,_=intent(repository,actor,recipient);removed,current=mutate(repository,actor,recipient,remove);generations.append(int(removed['generation']));assert not current.get('isDirect',False);member(repository,recipient,False)
             assert generations==sorted(set(generations));return generations
         try:
-            stage('fresh cached048 core and owned loopback forwarding prerequisite');started=True;record(cleanup='pending');command('up','-d','--no-build','--pull','never',timeout=180);smoke.ready();before=runtime();record(runtime=before)
+            stage('fresh cached048 core and owned loopback forwarding prerequisite');started=True;record(cleanup='pending');command('up','-d','--no-build','--pull','never',timeout=180)
+            try:smoke.ready()
+            except RuntimeError:
+                # Public closed dependency states only; no logs/env/token/body dump.
+                diagnostic={}
+                for label,url in (('golf',smoke.GOLF+'/readyz'),('native',smoke.GITEA+'/api/v1/version')):
+                    try:
+                        try:response=urllib.request.urlopen(url,timeout=5)
+                        except urllib.error.HTTPError as e:response=e
+                        with response:
+                            raw=response.read(4097);diagnostic[label+'Status']=response.status
+                            if len(raw)<=4096:
+                                value=json.loads(raw)
+                                if label=='golf' and set(value.get('checks',{}))=={'database','gitea'} and all(v in {'ready','unavailable','unsupported_version'} for v in value['checks'].values()):diagnostic['checks']=value['checks']
+                                if label=='native':diagnostic['nativeVersionMatches']=value.get('version')=='1.27.3'
+                    except Exception:diagnostic[label+'TransportUnavailable']=True
+                container=command('ps','-aq','golf')
+                if re.fullmatch(r'[a-f0-9]{12,64}',container):
+                    state=json.loads(run('docker','inspect','--format','{"image":{{json .Image}},"state":{{json .State.Status}},"exit":{{json .State.ExitCode}}}',container))
+                    assert state['image']==image;diagnostic['coreState']=state['state'];diagnostic['coreExit']=state['exit']
+                    logged=subprocess.run(['docker','logs','--tail','40',container],cwd=ROOT,env=environment,capture_output=True,timeout=10)
+                    text=(logged.stdout+logged.stderr).decode(errors='replace')
+                    diagnostic['fatalCategories']=[name for name,pattern in [('exec_format','exec format'),('migration','migrat|goose|SQLSTATE'),('encryption','encrypt|cipher|keyring'),('permission','permission denied'),('configuration','config|invalid|unsupported'),('database','database|postgres|connect'),('listen','bind|address|listen')] if re.search(pattern,text,re.I)]
+                    codes=re.findall(r'SQLSTATE ([A-Z0-9]{5})',text);diagnostic['sqlStates']=sorted(set(codes))
+                    for line in text.splitlines():
+                        try:event=json.loads(line)
+                        except ValueError:continue
+                        message=event.get('message','')
+                        if message in {'Golf stopped','telemetry shutdown failed'}:
+                            diagnostic['stoppedMessage']=message
+                            # Persist only an exact source literal or fixed formatting
+                            # template, never the runtime error's interpolated values.
+                            runtime_error=event.get('error','');closed=set();templates=set()
+                            for tree in ('cmd/golf','internal/server','internal/telemetry'):
+                                for source_file in (ROOT/tree).rglob('*.go'):
+                                    if source_file.name.endswith('_test.go'):continue
+                                    for kind,literal in re.findall(r'(errors\.New|fmt\.Errorf)\((\"(?:[^\"\\]|\\.)*\")',source_file.read_text()):
+                                        try:text_value=json.loads(literal)
+                                        except ValueError:continue
+                                        if kind=='errors.New':closed.add(text_value)
+                                        elif '%' in text_value:templates.add(text_value)
+                            if runtime_error in closed:diagnostic['closedSourceError']=runtime_error
+                            else:
+                                matching=[v for v in templates if len(v.split('%',1)[0])>=12 and runtime_error.startswith(v.split('%',1)[0])]
+                                diagnostic['closedSourceErrorTemplate']=sorted(matching)[0] if matching else 'unmatched_private_error_withheld'
+                    observation=subprocess.run(['docker','exec',container,'/bin/wget','-q','-T','3','-O','-','http://host.docker.internal:'+str(ports[2])+'/api/v1/version'],cwd=ROOT,env=environment,capture_output=True,timeout=10)
+                    diagnostic['containerProxyReadExit']=observation.returncode
+                    try:diagnostic['containerProxyVersionMatches']=len(observation.stdout)<=4096 and json.loads(observation.stdout).get('version')=='1.27.3'
+                    except Exception:diagnostic['containerProxyVersionMatches']=False
+                record(startupObservation=diagnostic,proxyRequests=sum(proxy.counts.values()),proxyFailures=proxy.failures)
+                raise
+            before=runtime();record(runtime=before)
             stage('ordinary actors and managed local sessions; no native site administrator bypass')
             for role in ('owner','recipient','directadmin','outsider','golfadmin','teamadmin'):
                 actor={'role':role,'name':project+'-'+role,'created':False,'loggedIn':False};actors[role]=actor;admin('create','--username',actor['name'],'--email',actor['name']+'@example.invalid','--random-password','--must-change-password=false');actor['created']=True;actor['token']=admin('generate-access-token','--username',actor['name'],'--token-name',project,'--scopes','write:user,write:organization,write:repository','--raw');u=smoke.provider(actor['token'],'GET','user');assert not u['is_admin'];actor.update(id=str(u['id']),email=actor['name']+'@golf.invalid',password='Access48 fixture '+secrets.token_urlsafe(24));operator('create',{'username':actor['name'],'email':actor['email'],'password':actor['password'],'forge_token':actor['token'],'is_instance_admin':role=='golfadmin'});login(actor)
