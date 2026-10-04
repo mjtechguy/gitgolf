@@ -9,10 +9,17 @@ const readProcedure=method=>/^(Get|List|Watch|Inspect|Resolve)/.test(method)||me
 const surfaces=['actions-inventory','actions-run','actions-selected-step'];
 const widths=[1440,390],themes=['dark','light'];
 const assert=(condition,message)=>{if(!condition){const error=Error(message);error.name='CIProofAssertion';throw error;}};
+function exactActionSummary(summary,run,repositoryId){
+  return summary?.ref?.kind==='ACTION_RUN_KIND_WORKFLOW'&&summary.ref.id===run.id&&summary.repositoryId===repositoryId&&summary.ownerId===run.ownerId&&summary.commitId===run.commitId&&summary.workflowPath===run.workflowPath&&summary.workflowBlobId===run.workflowBlobId&&summary.sourceSha256===run.sourceSha256&&summary.state==='succeeded';
+}
 if(process.argv.includes('--self-check')){
   assert(surfaces.length*widths.length*themes.length===12,'Capture inventory changed');
-  for(const method of ['GetWorkflowRun','GetWorkflowRunLogs','ListWorkflowRuns','WatchRepository'])assert(readProcedure(method),'Read guard failed');
+  for(const method of ['GetWorkflowRun','GetWorkflowRunLogs','ListActionRuns','GetActionRun','WatchRepository'])assert(readProcedure(method),'Read guard failed');
   for(const method of ['DispatchWorkflow','CancelWorkflowRun','SavePullRequestReviewDraft','UpdateExecutionPolicy','LoginWithPassword'])assert(!readProcedure(method),'Effect guard failed');
+  const run={id:'owned-id',ownerId:'7',commitId:'owned-commit',workflowPath:'.github/workflows/owned.yml',workflowBlobId:'owned-blob',sourceSha256:'owned-source'};
+  const summary={ref:{kind:'ACTION_RUN_KIND_WORKFLOW',id:run.id},repositoryId:'9',...run,state:'succeeded'};
+  assert(exactActionSummary(summary,run,'9'),'Typed workflow receipt guard failed');
+  for(const changed of [{ref:{kind:'ACTION_RUN_KIND_CODING_TASK',id:run.id}},{repositoryId:'8'},{ownerId:'8'},{commitId:'different'},{workflowBlobId:'different'},{sourceSha256:'different'},{state:'running'}])assert(!exactActionSummary({...summary,...changed},run,'9'),'Mismatched receipt accepted');
   console.log('PASS: twelve capture cases and read-only browser guard; no browser or native fixture executed.');
   process.exit(0);
 }
@@ -79,7 +86,7 @@ try{
         if(!response.url().includes('/rpc/'))return;
         const procedure=response.url().split('/').at(-1);rpc.push({procedure,status:response.status()});
         if(procedure!=='WatchRepository'){inflight.delete(response.request());lastResponse=Date.now();}
-        if(['ListWorkflowRuns','GetWorkflowRun','GetWorkflowRunLogs'].includes(procedure))responseTasks.push((async()=>{
+        if(['ListActionRuns','GetActionRun','GetWorkflowRun','GetWorkflowRunLogs'].includes(procedure))responseTasks.push((async()=>{
           try{receipts.push({procedure,status:response.status(),request:response.request().postDataJSON(),body:await response.json()});}catch{errors.push('invalid-read-receipt');}
         })());
       });
@@ -88,7 +95,7 @@ try{
       try{
         await page.goto(config.golf+route,{waitUntil:'domcontentloaded'});
         if(id==='actions-inventory'){
-          const row=page.getByRole('table',{name:'Workflow runs',exact:true}).locator('tr[data-row-id="'+config.run.id+'"]');
+          const row=page.getByRole('table',{name:'Action runs',exact:true}).locator('tr[data-row-id="1:'+config.run.id+'"]');
           await row.getByRole('link',{name:config.run.workflowPath,exact:true}).waitFor();
           assert(await row.getByText('succeeded',{exact:true}).count()===1,'Run result not shown');
         }else{
@@ -127,7 +134,7 @@ try{
         result.actualTheme=await page.locator('html').getAttribute('data-theme');
         const current=receipts.filter(r=>r.status===200);
         result.logSelections=current.filter(r=>r.procedure==='GetWorkflowRunLogs').map(r=>r.request.stepIndex??'all');
-        if(id==='actions-inventory')assert(current.some(r=>r.procedure==='ListWorkflowRuns'&&r.request.repository?.owner===config.repository.owner&&r.request.repository?.name===config.repository.name&&r.body.runs?.some(exactRun)),'Exact inventory receipt missing');
+        if(id==='actions-inventory')assert(current.some(r=>r.procedure==='ListActionRuns'&&r.request.repositoryId===config.repositoryId&&r.request.repository?.owner===config.repository.owner&&r.request.repository?.name===config.repository.name&&r.body.repositoryId===config.repositoryId&&r.body.runs?.some(summary=>exactActionSummary(summary,config.run,config.repositoryId))),'Exact typed inventory receipt missing');
         else{
           assert(current.some(r=>r.procedure==='GetWorkflowRun'&&r.request.runId===config.run.id&&exactRun(r.body.run)),'Exact run receipt missing');
           assert(current.some(r=>r.procedure==='GetWorkflowRunLogs'&&r.request.runId===config.run.id&&(id==='actions-selected-step'?r.request.stepIndex===0:r.request.stepIndex===undefined)),'Exact log request missing');
@@ -140,7 +147,23 @@ try{
         const basename=id+'-'+theme+'-'+width;
         await page.screenshot({path:join(config.screenshots,basename+'.png'),fullPage:true,timeout:20000});await chmod(join(config.screenshots,basename+'.png'),0o600);
         await writeFile(join(config.screenshots,basename+'.txt'),await page.locator('body').innerText(),{mode:0o600});
-        result.screenshot=basename+'.png';result.textSnapshot=basename+'.txt';result.status='captured';
+        result.screenshot=basename+'.png';result.textSnapshot=basename+'.txt';
+        if(id==='actions-inventory'){
+          result.check='actual-inventory-drilldown';
+          await page.getByRole('table',{name:'Action runs',exact:true}).locator('tr[data-row-id="1:'+config.run.id+'"]')
+            .getByRole('link',{name:config.run.workflowPath,exact:true}).click();
+          await page.waitForURL(url=>url.pathname===repo+'/actions/runs/'+config.run.id);
+          await page.getByRole('heading',{name:config.run.workflowPath,exact:true}).waitFor();
+          inflight.clear();await page.reload({waitUntil:'domcontentloaded'});
+          await page.waitForFunction(()=>document.querySelector('[aria-label="Workflow run log"]')?.textContent?.includes('actions proof'));
+          const deadline=Date.now()+12000;
+          while(Date.now()<deadline&&(inflight.size>0||Date.now()-lastResponse<450))await page.waitForTimeout(100);
+          assert(inflight.size===0,'Drilldown reads did not settle');await Promise.all(responseTasks);
+          assert(receipts.some(r=>r.status===200&&r.procedure==='GetWorkflowRun'&&r.request.runId===config.run.id&&exactRun(r.body.run)),'Drilldown selected a different run');
+          assert(!errors.length&&!writes.length&&!rpc.some(r=>r.status>=400),'Drilldown read boundary failed');
+          result.drilldown={kind:'workflow',id:config.run.id,route:new URL(page.url()).pathname,reloaded:true};
+        }
+        result.status='captured';
       }catch(error){result.status='failed';result.reason=error.name==='CIProofAssertion'?error.message:'Expected actual page/read/capture failed; sensitive diagnostics withheld';}
       result.pageErrorCount=errors.length;result.blockedWriteCount=writes.length;
       results.push(result);await page.close();await manifest();

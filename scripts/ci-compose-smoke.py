@@ -6,7 +6,8 @@ policy denial/revocation, durable queues across restart and runner cleanup.
 --objects additionally provisions private RustFS storage and qualifies persisted
 S3 source bindings without retaining source archives in PostgreSQL.
 --ui-screenshots additionally captures the actual successful Actions inventory,
-run and selected-step workspace in both themes at desktop/mobile widths.
+run and selected-step workspace in both themes at desktop/mobile widths,
+including a real inventory link click and selected-run reload.
 No hosted-engine, artifact/cache/secret or trusted-merge compatibility is claimed.
 """
 import argparse
@@ -220,6 +221,23 @@ def main():
             assert 'actions proof' in first_text and 'second step proof' not in first_text
             assert 'second step proof' in second_text and 'actions proof' not in second_text
             print('PASS: real independent Actions step events, names, timing and isolated log ranges.',flush=True)
+            stage('unified Actions inventory and typed detail retain actual execution receipts')
+            selection={'repository':repository,'repositoryId':str(native['id'])}
+            typed={'kind':'ACTION_RUN_KIND_WORKFLOW','id':actions['id']}
+            detail=rpc('ActionRunService/GetActionRun',{**selection,'ref':typed})
+            summary=detail['summary'];workflow=detail['workflow']
+            assert detail['repositoryId']==selection['repositoryId'] and summary['ref']==typed
+            assert summary['state']=='succeeded' and summary['repositoryId']==selection['repositoryId'] and summary['ownerId']==action_result['ownerId']
+            for field in ['commitId','workflowPath','workflowBlobId','sourceSha256']:
+                assert summary[field]==workflow[field]==action_result[field], 'Unified execution receipt mismatch'
+            attempt=workflow.get('attemptId','')
+            assert len(attempt)==32 and all(c in '0123456789abcdef' for c in attempt) and summary.get('attemptId')==attempt==action_result.get('attemptId'), 'Actual attempt receipt missing'
+            assert workflow['progress']==action_result['progress'], 'Unified detail changed actual step progress'
+            page=rpc('ActionRunService/ListActionRuns',{**selection,'limit':2})
+            assert page['repositoryId']==selection['repositoryId'] and any(item['ref']==typed for item in page.get('runs',[])), 'Actual workflow absent from unified history'
+            rpc('ActionRunService/GetActionRun',{**selection,'ref':{'kind':'ACTION_RUN_KIND_CODING_TASK','id':actions['id']}},expected=404)
+            rpc('ActionRunService/ListActionRuns',{**selection,'repositoryId':str(int(native['id'])+1)},expected=404)
+            print('PASS: real typed workflow inventory/detail, attempt/source/progress receipts and wrong-kind/repository denial.',flush=True)
             if screenshots:
                 stage('actual managed Actions inventory, run and selected-step browser proof; no browser effects')
                 before=runtime()
@@ -269,6 +287,25 @@ def main():
             repo_policy=update('REPOSITORY',repo_policy,False,repository)
             assert wait_run(revoked['id'])['state']=='WORKFLOW_RUN_STATE_CANCELLED'
             rpc('WorkflowRunService/DispatchWorkflow',{'repository':repository,'workflowPath':'.gitlab-ci.yml','idempotencyKey':str(uuid.uuid4())},expected=403)
+            stage('unified keyset history pages every actual run once and binds filters')
+            cursor='';seen=[]
+            while True:
+                page=rpc('ActionRunService/ListActionRuns',{**selection,'limit':2,'cursor':cursor})
+                assert page['repositoryId']==selection['repositoryId'] and len(page.get('runs',[]))<=2
+                for item in page.get('runs',[]):
+                    assert item['ref']['kind']=='ACTION_RUN_KIND_WORKFLOW'
+                    assert item['ref']['id'] not in seen, 'Unified continuation duplicated an actual run'
+                    seen.append(item['ref']['id'])
+                next_cursor=page.get('nextCursor','')
+                if not next_cursor:break
+                assert page.get('runs') and next_cursor!=cursor and len(seen)<=20, 'Unified continuation did not advance'
+                rpc('ActionRunService/ListActionRuns',{**selection,'limit':2,'cursor':next_cursor,'kindFilter':'ACTION_RUN_KIND_REVIEW'},expected=400)
+                cursor=next_cursor
+            assert set(seen)=={item['id'] for item in [actions,gitlab,failure,paged_run,slow,revoked]}, 'Unified history skipped or invented a run'
+            filtered=rpc('ActionRunService/ListActionRuns',{**selection,'kindFilter':'ACTION_RUN_KIND_WORKFLOW','workflowPath':'.github/workflows/actions.yml'})
+            assert [item['ref'] for item in filtered.get('runs',[])]==[typed], 'Server workflow filter differs'
+            assert not rpc('ActionRunService/ListActionRuns',{**selection,'kindFilter':'ACTION_RUN_KIND_REVIEW'}).get('runs'), 'Invented a review without execution'
+            print('PASS: real bounded unified-history continuation without duplicates/skips and cursor-bound server filters.',flush=True)
             if args.objects:
                 stage('all actual Actions and GitLab jobs retain verified S3 locators and no PostgreSQL source bytes')
                 for item in [actions,gitlab,failure,paged_run,slow,revoked]:
