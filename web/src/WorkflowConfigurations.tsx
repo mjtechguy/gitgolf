@@ -121,8 +121,8 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
   const policyLabel = (item:WorkflowConfiguration, kind:'manual'|'push') => !policyObserved(item)?'Unknown':(kind==='manual'?item.manualPolicyAllowed:item.pushPolicyAllowed)?'Ceilings allow':'Ceilings deny';
   const selectedPath = location.actionKind==='workflow' ? location.workflowPath : undefined;
   const manualEligible = (item:WorkflowConfiguration) => item.state===WorkflowInspectionState.VALIDATED_SUBSET && (item.format===WorkflowFormat.GITLAB_CI || item.events.includes('workflow_dispatch'));
-  const typedMode=(item:WorkflowConfiguration)=>item.format===WorkflowFormat.GITHUB_ACTIONS&&result?.executionCatalog===workflowInputsCatalog&&inputDigest(item.manualInputsSchemaSha256)&&validInputDefinitions(item.manualInputs);
-  const inputModeValid=(item:WorkflowConfiguration)=>item.format===WorkflowFormat.GITHUB_ACTIONS&&result?.executionCatalog===workflowInputsCatalog?typedMode(item):!item.manualInputs.length&&!item.manualInputsSchemaSha256;
+  const typedMode=(item:WorkflowConfiguration)=>item.format===WorkflowFormat.GITHUB_ACTIONS&&result?.executionCatalog===workflowInputsCatalog&&item.manualInputs.length>0&&inputDigest(item.manualInputsSchemaSha256)&&validInputDefinitions(item.manualInputs);
+  const inputModeValid=(item:WorkflowConfiguration)=>item.format===WorkflowFormat.GITHUB_ACTIONS&&result?.executionCatalog===workflowInputsCatalog?(item.manualInputs.length>0?typedMode(item):!item.manualInputsSchemaSha256||inputDigest(item.manualInputsSchemaSha256)):!item.manualInputs.length&&!item.manualInputsSchemaSha256;
   const editorContext=JSON.stringify([guardScope,commit,access?.ownerId,access?.revision,result?.policyRevision,query.dataUpdatedAt,accessQuery.dataUpdatedAt]);
   const latestEditorContext=useRef(editorContext);latestEditorContext.current=editorContext;
   useEffect(()=>{setInputEditor(null);controller.current?.abort();},[editorContext]);
