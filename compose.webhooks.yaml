@@ -18,7 +18,7 @@ services:
       DATABASE_URL: postgres://golf:${GOLF_DB_PASSWORD:?Run scripts/init-env.sh}@postgres:5432/golf?sslmode=disable
       GITEA_URL: http://gitea:3000
     read_only: true
-    tmpfs: [/tmp:size=16777216,mode=1777]
+    tmpfs: ["/tmp:size=16777216,mode=1777"]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     mem_limit: 256m

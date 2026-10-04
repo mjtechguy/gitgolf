@@ -229,3 +229,19 @@ func TestWebhookOperatorOriginIsExactAndPathBounded(t *testing.T) {
 		}
 	}
 }
+
+func TestWebhookApprovedHTTPSOriginRequiresItsExactPathBeforeSaving(t *testing.T) {
+	n := defaultWebhookNetwork()
+	n.approvals = map[string]webhookEgressApproval{"https://receiver.golf.test": {Origin: "https://receiver.golf.test", Addresses: []string{"127.0.0.1"}, PathPrefix: "/owned"}}
+	for _, value := range []string{"https://receiver.golf.test/not-approved", "https://receiver.golf.test/owned-neighbor", "https://receiver.golf.test/owned%2f..%2fescape"} {
+		if _, err := n.url(value); !errors.Is(err, errWebhookDestination) {
+			t.Fatalf("configured-origin path escape accepted: %v", err)
+		}
+	}
+	if _, err := n.url("https://receiver.golf.test/owned/accept"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := n.url("https://public.example.com/other"); err != nil {
+		t.Fatal(err)
+	}
+}

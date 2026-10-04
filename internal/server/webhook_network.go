@@ -263,6 +263,9 @@ func webhookPort(u *url.URL) string {
 }
 func (n webhookNetwork) url(value string) (*url.URL, error) {
 	if u, e := webhookURL(value); e == nil {
+		if approval, exists := n.approvals[u.Scheme+"://"+u.Host]; exists && !webhookApprovedPath(u, approval.PathPrefix) {
+			return nil, errWebhookDestination
+		}
 		return u, nil
 	}
 	if len(value) > 2048 || strings.ContainsAny(value, "\\\x00\r\n\t ") {

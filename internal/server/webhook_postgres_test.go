@@ -685,3 +685,22 @@ func TestWebhookOwnerTransferDoesNotAdoptFrozenSubscriptionPostgres(t *testing.T
 		t.Fatal("frozen owner delivery accepted after transfer")
 	}
 }
+
+func TestWebhookDestinationDenialIsTerminalBeforeHTTPPostgres(t *testing.T) {
+	f := newWebhookFixture(t)
+	sub := f.save(t, uuid.NewString(), "0", true)
+	delivery := f.queue(t, sub, uuid.NewString())
+	policy, err := json.Marshal([]webhookEgressApproval{{Origin: f.sink.URL, Addresses: []string{"127.0.0.1"}, PathPrefix: "/replaced"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.s.config.WebhookEgressPolicyJSON = string(policy)
+	f.s.attemptWebhook(t.Context(), f.claim(t))
+	row := f.delivery(t, delivery.Id)
+	if row.State != "failed" || row.FailureCode != "destination_denied" || row.PossibleDuplicate || row.Attempts != 1 || f.received.Load() != 0 {
+		t.Fatal("denied destination was retried, sent or reported as a receiver uncertainty")
+	}
+	if _, err := f.s.claimWebhook(t.Context()); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatal("terminal denial returned to the queue", err)
+	}
+}

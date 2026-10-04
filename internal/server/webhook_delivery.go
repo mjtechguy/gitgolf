@@ -177,6 +177,13 @@ func (s *Server) attemptWebhookOwned(ctx context.Context, d database.GolfWebhook
 			failure = "retry_budget_exhausted"
 		}
 	}
+	// Destination validation refuses the URL/address/payload before HTTP bytes.
+	// It is a terminal denial, not an uncertain receiver acknowledgment.
+	if errors.Is(e, errWebhookDestination) {
+		state = "failed"
+		failure = "destination_denied"
+		duplicate = false
+	}
 	if errors.Is(e, errWebhookRevoked) || errors.Is(e, errUnauthenticated) || webhookDenied(e) || sourceNotFound(e) {
 		state = "cancelled"
 		failure = "background_authority_revoked"

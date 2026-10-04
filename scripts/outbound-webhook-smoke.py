@@ -264,7 +264,8 @@ def main():
     existing = [json.loads(line) for line in run('docker', 'network', 'ls', '--format', '{{json .ID}}').splitlines()]
     networks = [json.loads(run('docker', 'network', 'inspect', identifier))[0] for identifier in existing]
     occupied = [ipaddress.ip_network(row['Subnet']) for network in networks for row in (network.get('IPAM', {}).get('Config') or []) if row.get('Subnet')]
-    subnet = next((ipaddress.ip_network(f'172.30.{i}.0/24') for i in range(32, 224) if not any(ipaddress.ip_network(f'172.30.{i}.0/24').overlaps(n) for n in occupied if n.version == 4)), None)
+    candidates = [ipaddress.ip_network(f'172.{second}.{third}.0/24') for second in range(16, 32) for third in range(32, 224)] + [ipaddress.ip_network(f'10.239.{third}.0/24') for third in range(32, 224)]
+    subnet = next((candidate for candidate in candidates if not any(candidate.overlaps(n) for n in occupied if n.version == 4)), None)
     assert subnet, 'No unused private fixture subnet'
     sink_ip = str(subnet.network_address+10)
     prefix = '/golf-owned-'+secrets.token_hex(12)
@@ -318,12 +319,14 @@ def main():
     volumes: ["{fixture/'ca.crt'}:/proof-ca.crt:ro"]
     mem_limit: 384m
     cpus: 1
+    networks: [default, proofsink]
   webhook-worker:
     image: {images['golf']}
     pull_policy: never
     environment:
       SSL_CERT_FILE: /proof-ca.crt
     volumes: ["{fixture/'ca.crt'}:/proof-ca.crt:ro"]
+    networks: [default, proofsink]
   receiver:
     image: {images['sink']}
     pull_policy: never
@@ -337,14 +340,14 @@ def main():
     mem_limit: 64m
     cpus: 0.25
     pids_limit: 32
-    tmpfs: [/tmp:size=16777216,mode=1777]
+    tmpfs: ["/tmp:size=16777216,mode=1777"]
     volumes: ["{fixture}:/fixture:ro", "{state_dir}:/state"]
     networks:
-      default:
+      proofsink:
         ipv4_address: {sink_ip}
         aliases: [receiver.golf.test, receiver-bad.golf.test]
 networks:
-  default:
+  proofsink:
     internal: true
     ipam:
       config: [{{subnet: {subnet}}}]
@@ -550,6 +553,13 @@ networks:
 if __name__ == '__main__':
     try:
         main()
-    except Exception:
-        print('FAIL: outbound webhook qualification at '+STAGE+'; private diagnostics withheld',file=sys.stderr)
+    except Exception as error:
+        trace = error.__traceback__
+        locations = []
+        while trace is not None:
+            filename = Path(trace.tb_frame.f_code.co_filename).name
+            if filename.endswith('.py') and re.fullmatch(r'[A-Za-z0-9_.-]+', filename):
+                locations.append({'file': filename, 'line': trace.tb_lineno})
+            trace = trace.tb_next
+        print('FAIL: outbound webhook qualification at '+STAGE+'; '+type(error).__name__+'; locations='+json.dumps(locations[-8:])+'; private diagnostics withheld',file=sys.stderr)
         sys.exit(1)
