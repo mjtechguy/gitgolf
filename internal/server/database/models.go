@@ -943,6 +943,50 @@ type GolfRepositoryCreationEvent struct {
 	State      string
 }
 
+type GolfRepositoryEnvironment struct {
+	ForgeURL       string
+	ID             uuid.UUID
+	RepositoryID   int64
+	OwnerID        int64
+	NameKey        string
+	CurrentVersion int64
+	Deleted        bool
+}
+
+type GolfRepositoryEnvironmentOperation struct {
+	UserID           int64
+	OperationID      uuid.UUID
+	ForgeURL         string
+	EnvironmentID    uuid.UUID
+	RepositoryID     int64
+	OwnerID          int64
+	Action           string
+	ExpectedVersion  int64
+	Version          int64
+	InputFingerprint []byte
+	CreatedAt        time.Time
+}
+
+type GolfRepositoryEnvironmentVersion struct {
+	ForgeURL             string
+	EnvironmentID        uuid.UUID
+	RepositoryID         int64
+	OwnerID              int64
+	Version              int64
+	Name                 string
+	Deleted              bool
+	Policy               []byte
+	CreatorUserID        int64
+	CreatorNativeID      int64
+	ActorUserID          int64
+	ActorNativeID        int64
+	RepositoryOwner      string
+	RepositoryName       string
+	AccessRevision       string
+	EnvironmentCreatedAt time.Time
+	CreatedAt            time.Time
+}
+
 type GolfRepositoryEvent struct {
 	ID             int64
 	ConnectionID   uuid.UUID

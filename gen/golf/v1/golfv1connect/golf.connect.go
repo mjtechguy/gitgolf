@@ -105,6 +105,9 @@ const (
 	// OrganizationExecutionValueServiceName is the fully-qualified name of the
 	// OrganizationExecutionValueService service.
 	OrganizationExecutionValueServiceName = "golf.v1.OrganizationExecutionValueService"
+	// RepositoryEnvironmentServiceName is the fully-qualified name of the RepositoryEnvironmentService
+	// service.
+	RepositoryEnvironmentServiceName = "golf.v1.RepositoryEnvironmentService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -683,6 +686,18 @@ const (
 	// fully-qualified name of the OrganizationExecutionValueService's
 	// GetOrganizationExecutionValueOperation RPC.
 	OrganizationExecutionValueServiceGetOrganizationExecutionValueOperationProcedure = "/golf.v1.OrganizationExecutionValueService/GetOrganizationExecutionValueOperation"
+	// RepositoryEnvironmentServiceListRepositoryEnvironmentsProcedure is the fully-qualified name of
+	// the RepositoryEnvironmentService's ListRepositoryEnvironments RPC.
+	RepositoryEnvironmentServiceListRepositoryEnvironmentsProcedure = "/golf.v1.RepositoryEnvironmentService/ListRepositoryEnvironments"
+	// RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure is the fully-qualified name of the
+	// RepositoryEnvironmentService's SaveRepositoryEnvironment RPC.
+	RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure = "/golf.v1.RepositoryEnvironmentService/SaveRepositoryEnvironment"
+	// RepositoryEnvironmentServiceDeleteRepositoryEnvironmentProcedure is the fully-qualified name of
+	// the RepositoryEnvironmentService's DeleteRepositoryEnvironment RPC.
+	RepositoryEnvironmentServiceDeleteRepositoryEnvironmentProcedure = "/golf.v1.RepositoryEnvironmentService/DeleteRepositoryEnvironment"
+	// RepositoryEnvironmentServiceGetRepositoryEnvironmentOperationProcedure is the fully-qualified
+	// name of the RepositoryEnvironmentService's GetRepositoryEnvironmentOperation RPC.
+	RepositoryEnvironmentServiceGetRepositoryEnvironmentOperationProcedure = "/golf.v1.RepositoryEnvironmentService/GetRepositoryEnvironmentOperation"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -7275,4 +7290,156 @@ func (UnimplementedOrganizationExecutionValueServiceHandler) GetOrganizationExec
 
 func (UnimplementedOrganizationExecutionValueServiceHandler) GetOrganizationExecutionValueOperation(context.Context, *connect.Request[v1.GetOrganizationExecutionValueOperationRequest]) (*connect.Response[v1.GetOrganizationExecutionValueOperationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationExecutionValueService.GetOrganizationExecutionValueOperation is not implemented"))
+}
+
+// RepositoryEnvironmentServiceClient is a client for the golf.v1.RepositoryEnvironmentService
+// service.
+type RepositoryEnvironmentServiceClient interface {
+	ListRepositoryEnvironments(context.Context, *connect.Request[v1.ListRepositoryEnvironmentsRequest]) (*connect.Response[v1.ListRepositoryEnvironmentsResponse], error)
+	SaveRepositoryEnvironment(context.Context, *connect.Request[v1.SaveRepositoryEnvironmentRequest]) (*connect.Response[v1.SaveRepositoryEnvironmentResponse], error)
+	DeleteRepositoryEnvironment(context.Context, *connect.Request[v1.DeleteRepositoryEnvironmentRequest]) (*connect.Response[v1.DeleteRepositoryEnvironmentResponse], error)
+	GetRepositoryEnvironmentOperation(context.Context, *connect.Request[v1.GetRepositoryEnvironmentOperationRequest]) (*connect.Response[v1.GetRepositoryEnvironmentOperationResponse], error)
+}
+
+// NewRepositoryEnvironmentServiceClient constructs a client for the
+// golf.v1.RepositoryEnvironmentService service. By default, it uses the Connect protocol with the
+// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
+// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRepositoryEnvironmentServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepositoryEnvironmentServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	repositoryEnvironmentServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryEnvironmentService").Methods()
+	return &repositoryEnvironmentServiceClient{
+		listRepositoryEnvironments: connect.NewClient[v1.ListRepositoryEnvironmentsRequest, v1.ListRepositoryEnvironmentsResponse](
+			httpClient,
+			baseURL+RepositoryEnvironmentServiceListRepositoryEnvironmentsProcedure,
+			connect.WithSchema(repositoryEnvironmentServiceMethods.ByName("ListRepositoryEnvironments")),
+			connect.WithClientOptions(opts...),
+		),
+		saveRepositoryEnvironment: connect.NewClient[v1.SaveRepositoryEnvironmentRequest, v1.SaveRepositoryEnvironmentResponse](
+			httpClient,
+			baseURL+RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure,
+			connect.WithSchema(repositoryEnvironmentServiceMethods.ByName("SaveRepositoryEnvironment")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteRepositoryEnvironment: connect.NewClient[v1.DeleteRepositoryEnvironmentRequest, v1.DeleteRepositoryEnvironmentResponse](
+			httpClient,
+			baseURL+RepositoryEnvironmentServiceDeleteRepositoryEnvironmentProcedure,
+			connect.WithSchema(repositoryEnvironmentServiceMethods.ByName("DeleteRepositoryEnvironment")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryEnvironmentOperation: connect.NewClient[v1.GetRepositoryEnvironmentOperationRequest, v1.GetRepositoryEnvironmentOperationResponse](
+			httpClient,
+			baseURL+RepositoryEnvironmentServiceGetRepositoryEnvironmentOperationProcedure,
+			connect.WithSchema(repositoryEnvironmentServiceMethods.ByName("GetRepositoryEnvironmentOperation")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// repositoryEnvironmentServiceClient implements RepositoryEnvironmentServiceClient.
+type repositoryEnvironmentServiceClient struct {
+	listRepositoryEnvironments        *connect.Client[v1.ListRepositoryEnvironmentsRequest, v1.ListRepositoryEnvironmentsResponse]
+	saveRepositoryEnvironment         *connect.Client[v1.SaveRepositoryEnvironmentRequest, v1.SaveRepositoryEnvironmentResponse]
+	deleteRepositoryEnvironment       *connect.Client[v1.DeleteRepositoryEnvironmentRequest, v1.DeleteRepositoryEnvironmentResponse]
+	getRepositoryEnvironmentOperation *connect.Client[v1.GetRepositoryEnvironmentOperationRequest, v1.GetRepositoryEnvironmentOperationResponse]
+}
+
+// ListRepositoryEnvironments calls golf.v1.RepositoryEnvironmentService.ListRepositoryEnvironments.
+func (c *repositoryEnvironmentServiceClient) ListRepositoryEnvironments(ctx context.Context, req *connect.Request[v1.ListRepositoryEnvironmentsRequest]) (*connect.Response[v1.ListRepositoryEnvironmentsResponse], error) {
+	return c.listRepositoryEnvironments.CallUnary(ctx, req)
+}
+
+// SaveRepositoryEnvironment calls golf.v1.RepositoryEnvironmentService.SaveRepositoryEnvironment.
+func (c *repositoryEnvironmentServiceClient) SaveRepositoryEnvironment(ctx context.Context, req *connect.Request[v1.SaveRepositoryEnvironmentRequest]) (*connect.Response[v1.SaveRepositoryEnvironmentResponse], error) {
+	return c.saveRepositoryEnvironment.CallUnary(ctx, req)
+}
+
+// DeleteRepositoryEnvironment calls
+// golf.v1.RepositoryEnvironmentService.DeleteRepositoryEnvironment.
+func (c *repositoryEnvironmentServiceClient) DeleteRepositoryEnvironment(ctx context.Context, req *connect.Request[v1.DeleteRepositoryEnvironmentRequest]) (*connect.Response[v1.DeleteRepositoryEnvironmentResponse], error) {
+	return c.deleteRepositoryEnvironment.CallUnary(ctx, req)
+}
+
+// GetRepositoryEnvironmentOperation calls
+// golf.v1.RepositoryEnvironmentService.GetRepositoryEnvironmentOperation.
+func (c *repositoryEnvironmentServiceClient) GetRepositoryEnvironmentOperation(ctx context.Context, req *connect.Request[v1.GetRepositoryEnvironmentOperationRequest]) (*connect.Response[v1.GetRepositoryEnvironmentOperationResponse], error) {
+	return c.getRepositoryEnvironmentOperation.CallUnary(ctx, req)
+}
+
+// RepositoryEnvironmentServiceHandler is an implementation of the
+// golf.v1.RepositoryEnvironmentService service.
+type RepositoryEnvironmentServiceHandler interface {
+	ListRepositoryEnvironments(context.Context, *connect.Request[v1.ListRepositoryEnvironmentsRequest]) (*connect.Response[v1.ListRepositoryEnvironmentsResponse], error)
+	SaveRepositoryEnvironment(context.Context, *connect.Request[v1.SaveRepositoryEnvironmentRequest]) (*connect.Response[v1.SaveRepositoryEnvironmentResponse], error)
+	DeleteRepositoryEnvironment(context.Context, *connect.Request[v1.DeleteRepositoryEnvironmentRequest]) (*connect.Response[v1.DeleteRepositoryEnvironmentResponse], error)
+	GetRepositoryEnvironmentOperation(context.Context, *connect.Request[v1.GetRepositoryEnvironmentOperationRequest]) (*connect.Response[v1.GetRepositoryEnvironmentOperationResponse], error)
+}
+
+// NewRepositoryEnvironmentServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRepositoryEnvironmentServiceHandler(svc RepositoryEnvironmentServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	repositoryEnvironmentServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryEnvironmentService").Methods()
+	repositoryEnvironmentServiceListRepositoryEnvironmentsHandler := connect.NewUnaryHandler(
+		RepositoryEnvironmentServiceListRepositoryEnvironmentsProcedure,
+		svc.ListRepositoryEnvironments,
+		connect.WithSchema(repositoryEnvironmentServiceMethods.ByName("ListRepositoryEnvironments")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryEnvironmentServiceSaveRepositoryEnvironmentHandler := connect.NewUnaryHandler(
+		RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure,
+		svc.SaveRepositoryEnvironment,
+		connect.WithSchema(repositoryEnvironmentServiceMethods.ByName("SaveRepositoryEnvironment")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryEnvironmentServiceDeleteRepositoryEnvironmentHandler := connect.NewUnaryHandler(
+		RepositoryEnvironmentServiceDeleteRepositoryEnvironmentProcedure,
+		svc.DeleteRepositoryEnvironment,
+		connect.WithSchema(repositoryEnvironmentServiceMethods.ByName("DeleteRepositoryEnvironment")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryEnvironmentServiceGetRepositoryEnvironmentOperationHandler := connect.NewUnaryHandler(
+		RepositoryEnvironmentServiceGetRepositoryEnvironmentOperationProcedure,
+		svc.GetRepositoryEnvironmentOperation,
+		connect.WithSchema(repositoryEnvironmentServiceMethods.ByName("GetRepositoryEnvironmentOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RepositoryEnvironmentService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RepositoryEnvironmentServiceListRepositoryEnvironmentsProcedure:
+			repositoryEnvironmentServiceListRepositoryEnvironmentsHandler.ServeHTTP(w, r)
+		case RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure:
+			repositoryEnvironmentServiceSaveRepositoryEnvironmentHandler.ServeHTTP(w, r)
+		case RepositoryEnvironmentServiceDeleteRepositoryEnvironmentProcedure:
+			repositoryEnvironmentServiceDeleteRepositoryEnvironmentHandler.ServeHTTP(w, r)
+		case RepositoryEnvironmentServiceGetRepositoryEnvironmentOperationProcedure:
+			repositoryEnvironmentServiceGetRepositoryEnvironmentOperationHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRepositoryEnvironmentServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRepositoryEnvironmentServiceHandler struct{}
+
+func (UnimplementedRepositoryEnvironmentServiceHandler) ListRepositoryEnvironments(context.Context, *connect.Request[v1.ListRepositoryEnvironmentsRequest]) (*connect.Response[v1.ListRepositoryEnvironmentsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryEnvironmentService.ListRepositoryEnvironments is not implemented"))
+}
+
+func (UnimplementedRepositoryEnvironmentServiceHandler) SaveRepositoryEnvironment(context.Context, *connect.Request[v1.SaveRepositoryEnvironmentRequest]) (*connect.Response[v1.SaveRepositoryEnvironmentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryEnvironmentService.SaveRepositoryEnvironment is not implemented"))
+}
+
+func (UnimplementedRepositoryEnvironmentServiceHandler) DeleteRepositoryEnvironment(context.Context, *connect.Request[v1.DeleteRepositoryEnvironmentRequest]) (*connect.Response[v1.DeleteRepositoryEnvironmentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryEnvironmentService.DeleteRepositoryEnvironment is not implemented"))
+}
+
+func (UnimplementedRepositoryEnvironmentServiceHandler) GetRepositoryEnvironmentOperation(context.Context, *connect.Request[v1.GetRepositoryEnvironmentOperationRequest]) (*connect.Response[v1.GetRepositoryEnvironmentOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryEnvironmentService.GetRepositoryEnvironmentOperation is not implemented"))
 }

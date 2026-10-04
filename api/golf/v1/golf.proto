@@ -3506,3 +3506,116 @@ message GetRepositoryDeletionOperationRequest {
  string idempotency_key=4;
 }
 message GetRepositoryDeletionOperationResponse { RepositoryLifecycleOperation operation=1; }
+
+// Named local policy only. No deployment/preview consumer is activated here.
+service RepositoryEnvironmentService {
+  rpc ListRepositoryEnvironments(ListRepositoryEnvironmentsRequest) returns (ListRepositoryEnvironmentsResponse);
+  rpc SaveRepositoryEnvironment(SaveRepositoryEnvironmentRequest) returns (SaveRepositoryEnvironmentResponse);
+  rpc DeleteRepositoryEnvironment(DeleteRepositoryEnvironmentRequest) returns (DeleteRepositoryEnvironmentResponse);
+  rpc GetRepositoryEnvironmentOperation(GetRepositoryEnvironmentOperationRequest) returns (GetRepositoryEnvironmentOperationResponse);
+}
+message RepositoryEnvironmentTarget {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string access_revision = 4;
+}
+message RepositoryEnvironmentReviewer {
+  string id = 1;
+  string login = 2;
+}
+message RepositoryEnvironmentPolicy {
+  bool allow_all_sources = 1;
+  // Exact literals only: BRANCH, TAG or full COMMIT. No glob or default-branch guess.
+  repeated RepositorySourceSelector sources = 2;
+  repeated RepositoryEnvironmentReviewer reviewers = 3;
+  uint32 required_approvals = 4;
+  bool prevent_self_approval = 5;
+  // True remains unsupported until a deployment consumer qualifies bypass.
+  bool allow_admin_bypass = 6;
+  uint32 wait_seconds = 7;
+  uint32 max_concurrency = 8;
+  bool protected_previews = 9;
+  uint32 preview_ttl_seconds = 10;
+}
+enum RepositoryEnvironmentCapability {
+  REPOSITORY_ENVIRONMENT_CAPABILITY_UNSPECIFIED = 0;
+  REPOSITORY_ENVIRONMENT_CAPABILITY_CONFIGURATION_ONLY = 1;
+}
+message RepositoryEnvironment {
+  string id = 1;
+  RepositoryEnvironmentTarget target = 2;
+  string name = 3;
+  string version = 4;
+  RepositoryEnvironmentPolicy policy = 5;
+  string creator_id = 6;
+  string updater_id = 7;
+  string created_at = 8;
+  string updated_at = 9;
+  bool deleted = 10;
+  RepositoryEnvironmentCapability capability = 11;
+  bool deployment_available = 12;
+}
+enum RepositoryEnvironmentAction {
+  REPOSITORY_ENVIRONMENT_ACTION_UNSPECIFIED = 0;
+  REPOSITORY_ENVIRONMENT_ACTION_SAVE = 1;
+  REPOSITORY_ENVIRONMENT_ACTION_DELETE = 2;
+}
+message RepositoryEnvironmentOperation {
+  string operation_id = 1;
+  string environment_id = 2;
+  RepositoryEnvironmentTarget target = 3;
+  string actor_id = 4;
+  RepositoryEnvironmentAction action = 5;
+  string expected_version = 6;
+  string version = 7;
+  // SUCCEEDED means only the atomic local configuration transaction committed.
+  string state = 8;
+  string created_at = 9;
+}
+message ListRepositoryEnvironmentsRequest {
+  RepositoryEnvironmentTarget target = 1;
+  PageRequest page = 2;
+}
+message ListRepositoryEnvironmentsResponse {
+  RepositoryEnvironmentTarget target = 1;
+  repeated RepositoryEnvironment environments = 2;
+  PageResponse page = 3;
+  string total_count = 4;
+  RepositoryEnvironmentCapability capability = 5;
+  bool deployment_available = 6;
+}
+message SaveRepositoryEnvironmentRequest {
+  RepositoryEnvironmentTarget target = 1;
+  string environment_id = 2;
+  // Canonical decimal: 0 creates a never-used UUID; positive edits that version.
+  string expected_version = 3;
+  string name = 4;
+  RepositoryEnvironmentPolicy policy = 5;
+  string operation_id = 6;
+  string current_password = 7;
+}
+message SaveRepositoryEnvironmentResponse {
+  RepositoryEnvironment environment = 1;
+  RepositoryEnvironmentOperation operation = 2;
+}
+message DeleteRepositoryEnvironmentRequest {
+  RepositoryEnvironmentTarget target = 1;
+  string environment_id = 2;
+  string expected_version = 3;
+  string operation_id = 4;
+  string current_password = 5;
+}
+message DeleteRepositoryEnvironmentResponse {
+  RepositoryEnvironment environment = 1;
+  RepositoryEnvironmentOperation operation = 2;
+}
+message GetRepositoryEnvironmentOperationRequest {
+  RepositoryEnvironmentTarget target = 1;
+  string operation_id = 2;
+}
+message GetRepositoryEnvironmentOperationResponse {
+  RepositoryEnvironmentOperation operation = 1;
+  // Historical accepted version, not current configuration or deployment readiness.
+  RepositoryEnvironment environment = 2;
+}
