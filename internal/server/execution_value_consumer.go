@@ -100,7 +100,7 @@ func (s *Server) executionApprovalForSource(ctx context.Context, run workflowRun
 	var selected *executionBindingRecord
 	for i := range bindings {
 		b := &bindings[i]
-		if b.commit == run.CommitID && b.blob == run.BlobID && b.source == run.SourceSHA256 && b.catalog == run.EngineCatalog && (b.event != "push" || b.ref == run.EventRef) {
+		if b.commit == run.CommitID && b.blob == run.BlobID && b.source == run.SourceSHA256 && executionBindingInputsMatch(b, run) && (b.event != "push" || b.ref == run.EventRef) {
 			if selected != nil {
 				return nil, errExecutionApproval
 			}
@@ -187,7 +187,7 @@ func (s *Server) executionBrokerFence(ctx context.Context, tx *sql.Tx, run workf
 	if e := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_execution_bindings current JOIN golf_execution_binding_versions v ON v.id=current.id AND v.version=current.version WHERE current.id=$1 AND current.forge_url=$2 AND current.repository_id=$3 AND current.owner_id=$4 AND current.version=$5 AND NOT current.deleted AND v.expires_at>clock_timestamp() AND v.approver_user_id=$6 AND v.approver_native_id=$7 AND v.approval_session_hash=$8)`, b.id, run.ForgeURL, run.RepositoryID, run.OwnerID, b.version, b.approverUser, b.approverNative, b.session).Scan(&current); e != nil {
 		return nil, errStorageUnavailable
 	}
-	if !current || run.EngineCatalog != runner.ActionsCatalog || b.commit != run.CommitID || b.blob != run.BlobID || b.source != run.SourceSHA256 || b.path != run.WorkflowPath || b.event != run.Origin || b.event == "push" && b.ref != run.EventRef {
+	if !current || !executionBindingInputsMatch(b, run) || b.commit != run.CommitID || b.blob != run.BlobID || b.source != run.SourceSHA256 || b.path != run.WorkflowPath || b.event != run.Origin || b.event == "push" && b.ref != run.EventRef {
 		return nil, errExecutionApproval
 	}
 	if run.Origin == "manual" {

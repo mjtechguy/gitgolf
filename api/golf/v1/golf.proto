@@ -2898,6 +2898,11 @@ message RepositoryExecutionBinding {
  // Session-backed approval is independently fenced at each release. A stored
  // observation is not ongoing authority or background execution consent.
  string approval_state = 15;
+ // Typed manual approvals retain identities only, never submitted input bodies.
+ string input_contract = 16;
+ string schema_sha256 = 17;
+ string submitted_sha256 = 18;
+ string effective_sha256 = 19;
 }
 message ListRepositoryExecutionValuesRequest { RepositoryExecutionValueTarget target = 1; }
 message ListRepositoryExecutionValuesResponse {
@@ -2950,6 +2955,12 @@ message SaveRepositoryExecutionBindingRequest {
  string event_ref = 9;
  repeated RepositoryExecutionValueReference values = 10;
  string expires_at = 11;
+ repeated WorkflowDispatchInputValue inputs = 12;
+ optional string input_contract = 13;
+ string workflow_blob_id = 14;
+ string schema_sha256 = 15;
+ string submitted_sha256 = 16;
+ string effective_sha256 = 17;
 }
 message DeleteRepositoryExecutionBindingRequest {
  RepositoryExecutionValueTarget target = 1;

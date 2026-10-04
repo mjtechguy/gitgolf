@@ -401,21 +401,25 @@ type GolfExecutionBinding struct {
 }
 
 type GolfExecutionBindingVersion struct {
-	ID                  uuid.UUID
-	Version             int64
-	WorkflowPath        string
-	CommitID            string
-	BlobID              string
-	SourceSha256        string
-	EngineCatalog       string
-	Event               string
-	EventRef            string
-	ValueRefs           json.RawMessage
-	ApproverUserID      int64
-	ApproverNativeID    int64
-	ApprovalSessionHash []byte
-	ExpiresAt           time.Time
-	CreatedAt           time.Time
+	ID                    uuid.UUID
+	Version               int64
+	WorkflowPath          string
+	CommitID              string
+	BlobID                string
+	SourceSha256          string
+	EngineCatalog         string
+	Event                 string
+	EventRef              string
+	ValueRefs             json.RawMessage
+	ApproverUserID        int64
+	ApproverNativeID      int64
+	ApprovalSessionHash   []byte
+	ExpiresAt             time.Time
+	CreatedAt             time.Time
+	InputContract         string
+	InputSchemaSha256     string
+	SubmittedInputsSha256 string
+	EffectiveInputsSha256 string
 }
 
 type GolfExecutionPolicy struct {

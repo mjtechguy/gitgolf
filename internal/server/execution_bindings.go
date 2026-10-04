@@ -76,24 +76,25 @@ func executionReferences(values []*golfv1.RepositoryExecutionValueReference) ([]
 }
 
 type executionBindingRecord struct {
-	id                                              string
-	version                                         int64
-	deleted                                         bool
-	created, updated                                time.Time
-	path, commit, blob, source, catalog, event, ref string
-	values                                          []executionReference
-	expires                                         time.Time
-	approverUser, approverNative                    int64
-	session                                         []byte
-	organizations                                   []organizationExecutionApproval
+	id                                                   string
+	version                                              int64
+	deleted                                              bool
+	created, updated                                     time.Time
+	path, commit, blob, source, catalog, event, ref      string
+	inputContract, schemaSHA, submittedSHA, effectiveSHA string
+	values                                               []executionReference
+	expires                                              time.Time
+	approverUser, approverNative                         int64
+	session                                              []byte
+	organizations                                        []organizationExecutionApproval
 }
 
-const executionBindingColumns = `b.id::text,b.version,b.deleted,b.created_at,b.updated_at,v.workflow_path,v.commit_id,v.blob_id,v.source_sha256,v.engine_catalog,v.event,v.event_ref,v.value_refs,v.expires_at,v.approver_user_id,v.approver_native_id,v.approval_session_hash`
+const executionBindingColumns = `b.id::text,b.version,b.deleted,b.created_at,b.updated_at,v.workflow_path,v.commit_id,v.blob_id,v.source_sha256,v.engine_catalog,v.event,v.event_ref,v.value_refs,v.expires_at,v.approver_user_id,v.approver_native_id,v.approval_session_hash,v.input_contract,v.input_schema_sha256,v.submitted_inputs_sha256,v.effective_inputs_sha256`
 
 func scanExecutionBinding(row workflowRunScanner) (executionBindingRecord, error) {
 	var b executionBindingRecord
 	var values []byte
-	e := row.Scan(&b.id, &b.version, &b.deleted, &b.created, &b.updated, &b.path, &b.commit, &b.blob, &b.source, &b.catalog, &b.event, &b.ref, &values, &b.expires, &b.approverUser, &b.approverNative, &b.session)
+	e := row.Scan(&b.id, &b.version, &b.deleted, &b.created, &b.updated, &b.path, &b.commit, &b.blob, &b.source, &b.catalog, &b.event, &b.ref, &values, &b.expires, &b.approverUser, &b.approverNative, &b.session, &b.inputContract, &b.schemaSHA, &b.submittedSHA, &b.effectiveSHA)
 	if e == nil && json.Unmarshal(values, &b.values) != nil {
 		e = errStorageUnavailable
 	}
@@ -104,7 +105,7 @@ func wireExecutionBinding(b executionBindingRecord) *golfv1.RepositoryExecutionB
 	if b.event == "push" {
 		event = golfv1.WorkflowRunOrigin_WORKFLOW_RUN_ORIGIN_PUSH
 	}
-	out := &golfv1.RepositoryExecutionBinding{Id: b.id, Version: strconv.FormatInt(b.version, 10), Deleted: b.deleted, CreatedAt: b.created.UTC().Format(time.RFC3339Nano), UpdatedAt: b.updated.UTC().Format(time.RFC3339Nano), WorkflowPath: b.path, CommitId: b.commit, WorkflowBlobId: b.blob, SourceSha256: b.source, EngineCatalog: b.catalog, Event: event, EventRef: b.ref, ExpiresAt: b.expires.UTC().Format(time.RFC3339Nano), ApprovalState: "requires_current_authority"}
+	out := &golfv1.RepositoryExecutionBinding{Id: b.id, Version: strconv.FormatInt(b.version, 10), Deleted: b.deleted, CreatedAt: b.created.UTC().Format(time.RFC3339Nano), UpdatedAt: b.updated.UTC().Format(time.RFC3339Nano), WorkflowPath: b.path, CommitId: b.commit, WorkflowBlobId: b.blob, SourceSha256: b.source, EngineCatalog: b.catalog, Event: event, EventRef: b.ref, ExpiresAt: b.expires.UTC().Format(time.RFC3339Nano), ApprovalState: "requires_current_authority", InputContract: b.inputContract, SchemaSha256: b.schemaSHA, SubmittedSha256: b.submittedSHA, EffectiveSha256: b.effectiveSHA}
 	for _, r := range b.values {
 		v := &golfv1.RepositoryExecutionValueReference{Id: r.ID, Version: r.Version}
 		if r.Scope == "repository" {
@@ -140,11 +141,38 @@ func listExecutionBindings(ctx context.Context, tx *sql.Tx, forge string, t exec
 	return out, nil
 }
 
+// Presence, rather than zero values, distinguishes legacy approvals from typed
+// manual approvals. Maps are validated against exact source before any journal.
+func executionApprovalTypedRequest(m *golfv1.SaveRepositoryExecutionBindingRequest) (*golfv1.DispatchWorkflowRequest, error) {
+	any := m.InputContract != nil || len(m.Inputs) > 0 || m.WorkflowBlobId != "" || m.SchemaSha256 != "" || m.SubmittedSha256 != "" || m.EffectiveSha256 != ""
+	if !any {
+		return nil, nil
+	}
+	if m.Target == nil || m.InputContract == nil || m.GetInputContract() != workflowManualInputsContract || m.Event != golfv1.WorkflowRunOrigin_WORKFLOW_RUN_ORIGIN_MANUAL || m.EventRef != "" || !objectID.MatchString(m.CommitId) || !objectID.MatchString(m.WorkflowBlobId) || len(m.WorkflowBlobId) != len(m.CommitId) || !workflowDispatchSHA256(m.SchemaSha256) || !workflowDispatchSHA256(m.SubmittedSha256) || !workflowDispatchSHA256(m.EffectiveSha256) || len(m.Inputs) > maxWorkflowDispatchInputs || len(m.ProtoReflect().GetUnknown()) != 0 {
+		return nil, invalid("Prepare complete typed manual parameters using exact source before approving values.")
+	}
+	return &golfv1.DispatchWorkflowRequest{Repository: m.Target.Repository, RepositoryId: m.Target.RepositoryId, OwnerId: m.Target.OwnerId, Ref: m.CommitId, WorkflowPath: m.WorkflowPath, WorkflowBlobId: m.WorkflowBlobId, Inputs: m.Inputs, InputContract: m.InputContract, SchemaSha256: m.SchemaSha256, SubmittedSha256: &m.SubmittedSha256, EffectiveSha256: m.EffectiveSha256}, nil
+}
+
+func executionBindingInputsMatch(b *executionBindingRecord, run workflowRunRecord) bool {
+	if b.catalog != run.EngineCatalog {
+		return false
+	}
+	if b.catalog == runner.ActionsCatalog {
+		return b.inputContract == "" && b.schemaSHA == "" && b.submittedSHA == "" && b.effectiveSHA == "" && run.InputContract == "" && run.SchemaSHA256 == "" && run.SubmittedSHA256 == "" && run.EffectiveSHA256 == ""
+	}
+	return b.catalog == runner.ActionsInputsCatalog && run.Origin == "manual" && b.event == "manual" && b.inputContract == workflowManualInputsContract && b.inputContract == run.InputContract && workflowDispatchSHA256(b.schemaSHA) && workflowDispatchSHA256(b.submittedSHA) && workflowDispatchSHA256(b.effectiveSHA) && b.schemaSHA == run.SchemaSHA256 && b.submittedSHA == run.SubmittedSHA256 && b.effectiveSHA == run.EffectiveSHA256
+}
+
 // A native fork is not admitted by this initial source approval profile, even
 // when the administrator also owns the fork. No PR/event payload is a trust grant.
 func (s *Server) executionApprovalSource(ctx context.Context, token forgeCredential, t executionTarget, m *golfv1.SaveRepositoryExecutionBindingRequest) (string, string, *workflowExecutionPlan, []byte, error) {
 	if !objectID.MatchString(m.CommitId) || !executionWorkflowPath(m.WorkflowPath) || m.WorkflowPath == ".gitlab-ci.yml" {
 		return "", "", nil, nil, invalid("Select an exact commit and maintained Actions workflow.")
+	}
+	typed, err := executionApprovalTypedRequest(m)
+	if err != nil {
+		return "", "", nil, nil, err
 	}
 	base, _ := repositoryPath(t.key)
 	var native struct {
@@ -177,6 +205,10 @@ func (s *Server) executionApprovalSource(ctx context.Context, token forgeCredent
 		pushRef = m.EventRef
 	default:
 		return "", "", nil, nil, invalid("Select manual or push source approval.")
+	}
+	if typed != nil {
+		commit, blob, plan, source, _, e := s.prepareWorkflowDispatchTyped(ctx, token, t.key, typed)
+		return commit, blob, plan, source, e
 	}
 	commit, blob, plan, source, e := s.prepareWorkflowRunForEvent(ctx, token, t.key, m.CommitId, m.WorkflowPath, pushRef)
 	if e != nil {
@@ -220,8 +252,9 @@ func (s *Server) SaveRepositoryExecutionBinding(ctx context.Context, req *connec
 	}
 	metadata := struct {
 		ID, Version, Broker, Path, Commit, Event, Ref, Expires string
+		InputContract, SchemaSHA, SubmittedSHA, EffectiveSHA   string
 		Values                                                 []executionReference
-	}{m.Id, m.ExpectedVersion, m.ExpectedBrokerRevision, m.WorkflowPath, m.CommitId, m.Event.String(), m.EventRef, m.ExpiresAt, values}
+	}{m.Id, m.ExpectedVersion, m.ExpectedBrokerRevision, m.WorkflowPath, m.CommitId, m.Event.String(), m.EventRef, m.ExpiresAt, m.GetInputContract(), m.SchemaSha256, m.SubmittedSha256, m.EffectiveSha256, values}
 	result, e := s.executionMutation(ctx, req.Header(), executionMutation{m.Target, m.Id, m.OperationId, "save_binding", m.ExpectedVersion, m.ExpectedBrokerRevision, metadata, "", values}, func(tx *sql.Tx, actor database.LockManagedSessionRow, hash []byte, t executionTarget, version int64) error {
 		if !expiry.Before(actor.ExpiresAt) || !expiry.After(time.Now()) {
 			return invalid("Source approval must expire before the approving session.")
@@ -270,7 +303,7 @@ func (s *Server) SaveRepositoryExecutionBinding(ctx context.Context, req *connec
 		if m.Event == golfv1.WorkflowRunOrigin_WORKFLOW_RUN_ORIGIN_PUSH {
 			event = "push"
 		}
-		_, e = tx.ExecContext(ctx, `INSERT INTO golf_execution_binding_versions(id,version,workflow_path,commit_id,blob_id,source_sha256,engine_catalog,event,event_ref,value_refs,approver_user_id,approver_native_id,approval_session_hash,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, m.Id, version+1, m.WorkflowPath, commit, blob, sourceArchiveHash(source), plan.Actions.Catalog, event, m.EventRef, refs, actor.UserID, approverNative, hash, expiry)
+		_, e = tx.ExecContext(ctx, `INSERT INTO golf_execution_binding_versions(id,version,workflow_path,commit_id,blob_id,source_sha256,engine_catalog,event,event_ref,value_refs,approver_user_id,approver_native_id,approval_session_hash,expires_at,input_contract,input_schema_sha256,submitted_inputs_sha256,effective_inputs_sha256) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`, m.Id, version+1, m.WorkflowPath, commit, blob, sourceArchiveHash(source), plan.Actions.Catalog, event, m.EventRef, refs, actor.UserID, approverNative, hash, expiry, m.GetInputContract(), m.SchemaSha256, m.SubmittedSha256, m.EffectiveSha256)
 		if e != nil {
 			return errStorageUnavailable
 		}
