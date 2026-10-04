@@ -219,6 +219,19 @@ func (s *Server) executionApprovalSource(ctx context.Context, token forgeCredent
 	}
 	return commit, blob, plan, source, nil
 }
+
+// Optional typed identities preserve pre-060 legacy operation metadata exactly.
+func executionBindingMetadata(m *golfv1.SaveRepositoryExecutionBindingRequest, values []executionReference) any {
+	return struct {
+		ID, Version, Broker, Path, Commit, Event, Ref, Expires string
+		InputContract                                          string `json:",omitempty"`
+		SchemaSHA                                              string `json:",omitempty"`
+		SubmittedSHA                                           string `json:",omitempty"`
+		EffectiveSHA                                           string `json:",omitempty"`
+		Values                                                 []executionReference
+	}{m.Id, m.ExpectedVersion, m.ExpectedBrokerRevision, m.WorkflowPath, m.CommitId, m.Event.String(), m.EventRef, m.ExpiresAt, m.GetInputContract(), m.SchemaSha256, m.SubmittedSha256, m.EffectiveSha256, values}
+}
+
 func (s *Server) SaveRepositoryExecutionBinding(ctx context.Context, req *connect.Request[golfv1.SaveRepositoryExecutionBindingRequest]) (*connect.Response[golfv1.SaveRepositoryExecutionBindingResponse], error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -250,11 +263,7 @@ func (s *Server) SaveRepositoryExecutionBinding(ctx context.Context, req *connec
 	if e != nil {
 		return nil, executionMutationRPCError(e, nil)
 	}
-	metadata := struct {
-		ID, Version, Broker, Path, Commit, Event, Ref, Expires string
-		InputContract, SchemaSHA, SubmittedSHA, EffectiveSHA   string
-		Values                                                 []executionReference
-	}{m.Id, m.ExpectedVersion, m.ExpectedBrokerRevision, m.WorkflowPath, m.CommitId, m.Event.String(), m.EventRef, m.ExpiresAt, m.GetInputContract(), m.SchemaSha256, m.SubmittedSha256, m.EffectiveSha256, values}
+	metadata := executionBindingMetadata(m, values)
 	result, e := s.executionMutation(ctx, req.Header(), executionMutation{m.Target, m.Id, m.OperationId, "save_binding", m.ExpectedVersion, m.ExpectedBrokerRevision, metadata, "", values}, func(tx *sql.Tx, actor database.LockManagedSessionRow, hash []byte, t executionTarget, version int64) error {
 		if !expiry.Before(actor.ExpiresAt) || !expiry.After(time.Now()) {
 			return invalid("Source approval must expire before the approving session.")

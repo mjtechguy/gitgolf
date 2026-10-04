@@ -375,3 +375,66 @@ func TestExecutionTypedBrokerQuarantinePostgres(t *testing.T) {
 		}
 	}
 }
+
+func TestExecutionTypedApprovalLegacyMetadata(t *testing.T) {
+	m := &golfv1.SaveRepositoryExecutionBindingRequest{Id: "approval", ExpectedVersion: "0", ExpectedBrokerRevision: "1", WorkflowPath: ".github/workflows/build.yml", CommitId: strings.Repeat("a", 40), Event: golfv1.WorkflowRunOrigin_WORKFLOW_RUN_ORIGIN_MANUAL, ExpiresAt: "2026-10-04T12:00:00Z"}
+	values := []executionReference{{ID: "value", Version: "1"}}
+	old := struct {
+		ID, Version, Broker, Path, Commit, Event, Ref, Expires string
+		Values                                                 []executionReference
+	}{m.Id, m.ExpectedVersion, m.ExpectedBrokerRevision, m.WorkflowPath, m.CommitId, m.Event.String(), m.EventRef, m.ExpiresAt, values}
+	want, _ := json.Marshal(old)
+	got, _ := json.Marshal(executionBindingMetadata(m, values))
+	if !bytes.Equal(want, got) {
+		t.Fatalf("pre-060 immutable metadata changed: %s != %s", want, got)
+	}
+	var oldMap, newMap any
+	_ = json.Unmarshal(want, &oldMap)
+	_ = json.Unmarshal(got, &newMap)
+	if accessRevision(oldMap) != accessRevision(newMap) {
+		t.Fatal("historical operation fingerprint changed")
+	}
+	m.InputContract = ptrTypedString(workflowManualInputsContract)
+	m.SchemaSha256 = strings.Repeat("b", 64)
+	m.SubmittedSha256 = strings.Repeat("c", 64)
+	m.EffectiveSha256 = strings.Repeat("d", 64)
+	got, _ = json.Marshal(executionBindingMetadata(m, values))
+	var typed map[string]any
+	_ = json.Unmarshal(got, &typed)
+	for _, key := range []string{"InputContract", "SchemaSHA", "SubmittedSHA", "EffectiveSHA"} {
+		if typed[key] == nil || typed[key] == "" {
+			t.Fatal("typed identity omitted", key)
+		}
+	}
+}
+func TestExecutionTypedApprovalHistoricalReplayPostgres(t *testing.T) {
+	f, target := executionEngineFixture(t)
+	id := uuid.NewString()
+	if _, e := f.server.SaveRepositoryExecutionValue(f.context(t), workflowRunRequest(f, executionSaveRequest(target, id, "0", "0", "BUILD_CREDENTIAL", "abcdefgh", golfv1.RepositoryExecutionValueKind_REPOSITORY_EXECUTION_VALUE_KIND_SECRET))); e != nil {
+		t.Fatal(e)
+	}
+	m := &golfv1.SaveRepositoryExecutionBindingRequest{Target: target, Id: uuid.NewString(), ExpectedVersion: "0", ExpectedBrokerRevision: "1", OperationId: uuid.NewString(), WorkflowPath: runWorkflowPath, CommitId: f.commit, Event: golfv1.WorkflowRunOrigin_WORKFLOW_RUN_ORIGIN_MANUAL, ExpiresAt: time.Now().Add(10 * time.Minute).UTC().Format(time.RFC3339Nano), Values: []*golfv1.RepositoryExecutionValueReference{{Id: id, Version: "1"}}}
+	first, e := f.server.SaveRepositoryExecutionBinding(f.context(t), workflowRunRequest(f, m))
+	if e != nil {
+		t.Fatal(e)
+	}
+	// Install the exact original pre-060 journal shape, independently of the new writer.
+	old := struct {
+		ID, Version, Broker, Path, Commit, Event, Ref, Expires string
+		Values                                                 []executionReference
+	}{m.Id, m.ExpectedVersion, m.ExpectedBrokerRevision, m.WorkflowPath, m.CommitId, m.Event.String(), m.EventRef, m.ExpiresAt, []executionReference{{ID: id, Version: "1"}}}
+	raw, _ := json.Marshal(old)
+	originalOperation := m.OperationId
+	m.OperationId = uuid.NewString()
+	if _, e = f.server.db.Exec(`INSERT INTO golf_execution_value_operations(forge_url,repository_id,owner_id,user_id,operation_id,action,item_id,accepted_version,accepted_broker_revision,request_metadata,created_at) SELECT forge_url,repository_id,owner_id,user_id,$1,action,item_id,accepted_version,accepted_broker_revision,$2,created_at FROM golf_execution_value_operations WHERE operation_id=$3`, m.OperationId, string(raw), originalOperation); e != nil {
+		t.Fatal(e)
+	}
+	replay, e := f.server.SaveRepositoryExecutionBinding(f.context(t), workflowRunRequest(f, m))
+	if e != nil || !replay.Msg.Operation.Replayed || replay.Msg.Operation.AcceptedVersion != first.Msg.Operation.AcceptedVersion {
+		t.Fatal("historical original replay refused", e)
+	}
+	var count int
+	if e = f.server.db.QueryRow(`SELECT count(*) FROM golf_execution_binding_versions WHERE id=$1`, m.Id).Scan(&count); e != nil || count != 1 {
+		t.Fatal("replay changed version", count, e)
+	}
+}
