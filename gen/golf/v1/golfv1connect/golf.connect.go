@@ -366,6 +366,9 @@ const (
 	// WorkflowRunServiceGetWorkflowRunProcedure is the fully-qualified name of the WorkflowRunService's
 	// GetWorkflowRun RPC.
 	WorkflowRunServiceGetWorkflowRunProcedure = "/golf.v1.WorkflowRunService/GetWorkflowRun"
+	// WorkflowRunServiceGetWorkflowDispatchProcedure is the fully-qualified name of the
+	// WorkflowRunService's GetWorkflowDispatch RPC.
+	WorkflowRunServiceGetWorkflowDispatchProcedure = "/golf.v1.WorkflowRunService/GetWorkflowDispatch"
 	// WorkflowRunServiceListWorkflowRunsProcedure is the fully-qualified name of the
 	// WorkflowRunService's ListWorkflowRuns RPC.
 	WorkflowRunServiceListWorkflowRunsProcedure = "/golf.v1.WorkflowRunService/ListWorkflowRuns"
@@ -3387,6 +3390,7 @@ func (UnimplementedExecutionPolicyServiceHandler) UpdateExecutionPolicy(context.
 type WorkflowRunServiceClient interface {
 	DispatchWorkflow(context.Context, *connect.Request[v1.DispatchWorkflowRequest]) (*connect.Response[v1.DispatchWorkflowResponse], error)
 	GetWorkflowRun(context.Context, *connect.Request[v1.GetWorkflowRunRequest]) (*connect.Response[v1.GetWorkflowRunResponse], error)
+	GetWorkflowDispatch(context.Context, *connect.Request[v1.GetWorkflowDispatchRequest]) (*connect.Response[v1.GetWorkflowDispatchResponse], error)
 	ListWorkflowRuns(context.Context, *connect.Request[v1.ListWorkflowRunsRequest]) (*connect.Response[v1.ListWorkflowRunsResponse], error)
 	CancelWorkflowRun(context.Context, *connect.Request[v1.CancelWorkflowRunRequest]) (*connect.Response[v1.CancelWorkflowRunResponse], error)
 	GetWorkflowRunLogs(context.Context, *connect.Request[v1.GetWorkflowRunLogsRequest]) (*connect.Response[v1.GetWorkflowRunLogsResponse], error)
@@ -3415,6 +3419,12 @@ func NewWorkflowRunServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(workflowRunServiceMethods.ByName("GetWorkflowRun")),
 			connect.WithClientOptions(opts...),
 		),
+		getWorkflowDispatch: connect.NewClient[v1.GetWorkflowDispatchRequest, v1.GetWorkflowDispatchResponse](
+			httpClient,
+			baseURL+WorkflowRunServiceGetWorkflowDispatchProcedure,
+			connect.WithSchema(workflowRunServiceMethods.ByName("GetWorkflowDispatch")),
+			connect.WithClientOptions(opts...),
+		),
 		listWorkflowRuns: connect.NewClient[v1.ListWorkflowRunsRequest, v1.ListWorkflowRunsResponse](
 			httpClient,
 			baseURL+WorkflowRunServiceListWorkflowRunsProcedure,
@@ -3438,11 +3448,12 @@ func NewWorkflowRunServiceClient(httpClient connect.HTTPClient, baseURL string, 
 
 // workflowRunServiceClient implements WorkflowRunServiceClient.
 type workflowRunServiceClient struct {
-	dispatchWorkflow   *connect.Client[v1.DispatchWorkflowRequest, v1.DispatchWorkflowResponse]
-	getWorkflowRun     *connect.Client[v1.GetWorkflowRunRequest, v1.GetWorkflowRunResponse]
-	listWorkflowRuns   *connect.Client[v1.ListWorkflowRunsRequest, v1.ListWorkflowRunsResponse]
-	cancelWorkflowRun  *connect.Client[v1.CancelWorkflowRunRequest, v1.CancelWorkflowRunResponse]
-	getWorkflowRunLogs *connect.Client[v1.GetWorkflowRunLogsRequest, v1.GetWorkflowRunLogsResponse]
+	dispatchWorkflow    *connect.Client[v1.DispatchWorkflowRequest, v1.DispatchWorkflowResponse]
+	getWorkflowRun      *connect.Client[v1.GetWorkflowRunRequest, v1.GetWorkflowRunResponse]
+	getWorkflowDispatch *connect.Client[v1.GetWorkflowDispatchRequest, v1.GetWorkflowDispatchResponse]
+	listWorkflowRuns    *connect.Client[v1.ListWorkflowRunsRequest, v1.ListWorkflowRunsResponse]
+	cancelWorkflowRun   *connect.Client[v1.CancelWorkflowRunRequest, v1.CancelWorkflowRunResponse]
+	getWorkflowRunLogs  *connect.Client[v1.GetWorkflowRunLogsRequest, v1.GetWorkflowRunLogsResponse]
 }
 
 // DispatchWorkflow calls golf.v1.WorkflowRunService.DispatchWorkflow.
@@ -3453,6 +3464,11 @@ func (c *workflowRunServiceClient) DispatchWorkflow(ctx context.Context, req *co
 // GetWorkflowRun calls golf.v1.WorkflowRunService.GetWorkflowRun.
 func (c *workflowRunServiceClient) GetWorkflowRun(ctx context.Context, req *connect.Request[v1.GetWorkflowRunRequest]) (*connect.Response[v1.GetWorkflowRunResponse], error) {
 	return c.getWorkflowRun.CallUnary(ctx, req)
+}
+
+// GetWorkflowDispatch calls golf.v1.WorkflowRunService.GetWorkflowDispatch.
+func (c *workflowRunServiceClient) GetWorkflowDispatch(ctx context.Context, req *connect.Request[v1.GetWorkflowDispatchRequest]) (*connect.Response[v1.GetWorkflowDispatchResponse], error) {
+	return c.getWorkflowDispatch.CallUnary(ctx, req)
 }
 
 // ListWorkflowRuns calls golf.v1.WorkflowRunService.ListWorkflowRuns.
@@ -3474,6 +3490,7 @@ func (c *workflowRunServiceClient) GetWorkflowRunLogs(ctx context.Context, req *
 type WorkflowRunServiceHandler interface {
 	DispatchWorkflow(context.Context, *connect.Request[v1.DispatchWorkflowRequest]) (*connect.Response[v1.DispatchWorkflowResponse], error)
 	GetWorkflowRun(context.Context, *connect.Request[v1.GetWorkflowRunRequest]) (*connect.Response[v1.GetWorkflowRunResponse], error)
+	GetWorkflowDispatch(context.Context, *connect.Request[v1.GetWorkflowDispatchRequest]) (*connect.Response[v1.GetWorkflowDispatchResponse], error)
 	ListWorkflowRuns(context.Context, *connect.Request[v1.ListWorkflowRunsRequest]) (*connect.Response[v1.ListWorkflowRunsResponse], error)
 	CancelWorkflowRun(context.Context, *connect.Request[v1.CancelWorkflowRunRequest]) (*connect.Response[v1.CancelWorkflowRunResponse], error)
 	GetWorkflowRunLogs(context.Context, *connect.Request[v1.GetWorkflowRunLogsRequest]) (*connect.Response[v1.GetWorkflowRunLogsResponse], error)
@@ -3496,6 +3513,12 @@ func NewWorkflowRunServiceHandler(svc WorkflowRunServiceHandler, opts ...connect
 		WorkflowRunServiceGetWorkflowRunProcedure,
 		svc.GetWorkflowRun,
 		connect.WithSchema(workflowRunServiceMethods.ByName("GetWorkflowRun")),
+		connect.WithHandlerOptions(opts...),
+	)
+	workflowRunServiceGetWorkflowDispatchHandler := connect.NewUnaryHandler(
+		WorkflowRunServiceGetWorkflowDispatchProcedure,
+		svc.GetWorkflowDispatch,
+		connect.WithSchema(workflowRunServiceMethods.ByName("GetWorkflowDispatch")),
 		connect.WithHandlerOptions(opts...),
 	)
 	workflowRunServiceListWorkflowRunsHandler := connect.NewUnaryHandler(
@@ -3522,6 +3545,8 @@ func NewWorkflowRunServiceHandler(svc WorkflowRunServiceHandler, opts ...connect
 			workflowRunServiceDispatchWorkflowHandler.ServeHTTP(w, r)
 		case WorkflowRunServiceGetWorkflowRunProcedure:
 			workflowRunServiceGetWorkflowRunHandler.ServeHTTP(w, r)
+		case WorkflowRunServiceGetWorkflowDispatchProcedure:
+			workflowRunServiceGetWorkflowDispatchHandler.ServeHTTP(w, r)
 		case WorkflowRunServiceListWorkflowRunsProcedure:
 			workflowRunServiceListWorkflowRunsHandler.ServeHTTP(w, r)
 		case WorkflowRunServiceCancelWorkflowRunProcedure:
@@ -3543,6 +3568,10 @@ func (UnimplementedWorkflowRunServiceHandler) DispatchWorkflow(context.Context, 
 
 func (UnimplementedWorkflowRunServiceHandler) GetWorkflowRun(context.Context, *connect.Request[v1.GetWorkflowRunRequest]) (*connect.Response[v1.GetWorkflowRunResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.WorkflowRunService.GetWorkflowRun is not implemented"))
+}
+
+func (UnimplementedWorkflowRunServiceHandler) GetWorkflowDispatch(context.Context, *connect.Request[v1.GetWorkflowDispatchRequest]) (*connect.Response[v1.GetWorkflowDispatchResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.WorkflowRunService.GetWorkflowDispatch is not implemented"))
 }
 
 func (UnimplementedWorkflowRunServiceHandler) ListWorkflowRuns(context.Context, *connect.Request[v1.ListWorkflowRunsRequest]) (*connect.Response[v1.ListWorkflowRunsResponse], error) {
