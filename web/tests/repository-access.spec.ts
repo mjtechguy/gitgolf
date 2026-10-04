@@ -67,12 +67,12 @@ test('collaborator table searches and sorts loaded grants with exact IDs and loc
   await page.getByRole('button', { name: 'Load more collaborators', exact: true }).click();
   await expect(table.getByText('<literal-account>', { exact: true })).toBeVisible(); await expect(table.locator('img')).toHaveCount(0);
   await search.fill(first.user!.id); await expect(table.locator('tbody tr[data-row-id]').first()).toHaveAttribute('data-row-id', first.user!.id);
-  await search.fill(''); await table.getByRole('button', { name: 'Native permission', exact: true }).click(); await expect(table.getByRole('columnheader', { name: 'Native permission', exact: true })).toHaveAttribute('aria-sort', 'ascending');
+  await search.fill(''); await table.getByRole('button', { name: 'Permission', exact: true }).click(); await expect(table.getByRole('columnheader', { name: 'Permission', exact: true })).toHaveAttribute('aria-sort', 'ascending');
 });
 
 test('admin access requires explicit identity/grant review and duplicate apply clicks dispatch once', async ({ page }) => {
   const state = await backend(page); await open(page); await reviewNew(page, 'admin');
-  await expect(page.getByText('Admin grants native repository administration, including destructive operations such as repository deletion. Confirm only if this account should hold that authority.', { exact: true })).toBeVisible(); expect(state.writes).toHaveLength(0);
+  await expect(page.getByText('Admin can manage access and delete this repository. Apply only if this account should have that authority.', { exact: true })).toBeVisible(); expect(state.writes).toHaveLength(0);
   let release!: () => void; state.barrier = new Promise<void>((resolve) => { release = resolve; });
   await page.getByRole('button', { name: 'Apply reviewed access', exact: true }).evaluate((button) => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); }); await expect.poll(() => state.writes.length).toBe(1); release();
   await expect(page.getByText('Collaborator access saved.', { exact: true })).toBeVisible();
@@ -113,7 +113,7 @@ test('changed repository or collaborator revisions are not silently adopted', as
 });
 
 for (const kind of ['read-only', 'organization-owned', 'exceptional owner'] as const) test(`${kind} displays inventory without fake administration even with a Golf instance role`, async ({ page }) => {
-  const state = await backend(page); state.access.canManage = kind !== 'read-only'; state.access.organizationOwned = kind === 'organization-owned'; state.access.currentPermission = kind === 'exceptional owner' ? 'owner' : 'read'; await page.goto(path); await expect(page.getByRole('heading', { name: 'Repository access', exact: true })).toBeVisible(); await expect(page.getByText('Collaborator inventory requires qualified administration of a personal repository. Your native permission is shown above; organization/team grants and exceptional native authority are outside this editor.', { exact: true })).toBeVisible(); await expect(page.getByRole('table', { name: 'Repository collaborators', exact: true })).toHaveCount(0); expect(state.pages).toHaveLength(0);
+  const state = await backend(page); state.access.canManage = kind !== 'read-only'; state.access.organizationOwned = kind === 'organization-owned'; state.access.currentPermission = kind === 'exceptional owner' ? 'owner' : 'read'; await page.goto(path); await expect(page.getByRole('heading', { name: 'Repository access', exact: true })).toBeVisible(); await expect(page.getByText('Managing collaborators requires administration of a personal repository. Your permission is shown above. Organization and team grants are not managed here.', { exact: true })).toBeVisible(); await expect(page.getByRole('table', { name: 'Repository collaborators', exact: true })).toHaveCount(0); expect(state.pages).toHaveLength(0);
   await expect(page.getByRole('button', { name: 'Add collaborator', exact: true })).toHaveCount(0); await expect(page.getByRole('button', { name: /^Change access for/ })).toHaveCount(0); await expect(page.getByRole('button', { name: /^Remove collaborator/ })).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true); expect(state.writes).toHaveLength(0);
 });
@@ -132,4 +132,22 @@ test('pending resolve cancellation and late write navigation cannot restore disc
 test('account switch hides former access and malformed inventory does not become a fabricated empty result', async ({ page }) => {
   const state = await backend(page); await open(page); await reviewNew(page); await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out', exact: true }).click(); await expect(page.getByRole('heading', { name: 'Welcome to Golf', exact: true })).toBeVisible(); state.user = create(UserSchema, { id: '19', login: 'other' }); state.denied = true; await page.getByLabel('Email or username', { exact: true }).fill('fixture-account'); await page.getByLabel('Password', { exact: true }).fill('other-token'); await page.getByRole('button', { name: 'Sign in', exact: true }).click(); await expect(page.getByRole('alert')).toHaveText('Repository access unavailable.'); await expect(page.getByRole('table', { name: 'Repository collaborators', exact: true })).toHaveCount(0); await expect(page.getByRole('heading', { name: 'Review collaborator access', exact: true })).toHaveCount(0);
   state.denied = false; state.malformed = true; await page.reload(); await expect(page.getByRole('alert')).toHaveText('Collaborator metadata is incomplete.'); await expect(page.getByRole('table', { name: 'Repository collaborators', exact: true })).toHaveCount(0);
+});
+
+for (const theme of ['dark', 'light']) for (const width of [390, 1440]) test(`${theme} ${width} keeps access headings intact and actions compact`, async ({ page }) => {
+  await page.addInitScript(value => localStorage.setItem('golf.theme', value), theme);
+  await page.setViewportSize({ width, height: 950 }); await backend(page); await open(page);
+  const section = page.getByRole('region', { name: 'Collaborators', exact: true });
+  const heading = section.getByRole('heading', { name: 'Collaborators', exact: true });
+  expect(await heading.evaluate(node => { const range = document.createRange(); range.selectNodeContents(node); return range.getClientRects().length; })).toBe(1);
+  await expect(section.getByRole('button', { name: 'Refresh repository access', exact: true })).toHaveAttribute('title', 'Refresh repository access');
+  await expect(section.getByRole('button', { name: 'Change access for first-reader', exact: true })).toHaveAttribute('title', 'Change access');
+  await expect(section.getByRole('button', { name: 'Remove collaborator first-reader', exact: true })).toHaveAttribute('title', 'Remove collaborator');
+  const details = section.locator('details').filter({ hasText: 'About repository access' });
+  await expect(details).not.toHaveAttribute('open');
+  await details.getByText('About repository access', { exact: true }).click();
+  await expect(details.getByText(/Instance administration does not grant access/)).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await details.getByText('About repository access', { exact: true }).click();
+  await page.screenshot({ path: `.tmp/access-density-source/${theme}-${width}.png`, fullPage: true });
 });

@@ -98,7 +98,9 @@ try {
     at('reload added association'); await page.reload();
     const remove = section.getByRole('button', { name: 'Remove deploy key '+title, exact: true });
     at('await reloaded row'); await remove.waitFor();
-    const row = section.getByRole('table', { name: 'Repository deploy keys', exact: true }).locator('tbody tr').filter({ has: remove });
+    // Bind the rendered row to the independently acknowledged association ID.
+    // A section-scoped `has` locator would search for that section inside each row.
+    const row = section.getByRole('table', { name: 'Repository deploy keys', exact: true }).locator('tbody tr[data-row-id="'+add.id+'"]');
     at('verify reloaded mode'); check((await row.innerText()).includes(write ? 'Read/write' : 'Read-only'));
     at('capture added inventory'); await capture(theme, width, mode, 'added-and-reloaded');
     stage = 'cancel then confirm exact association removal '+theme+' '+width+' '+mode;
