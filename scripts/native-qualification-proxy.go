@@ -47,12 +47,13 @@ type counter struct {
 	Count  uint64 `json:"count"` // dispatch attempts, not inferred native effects
 }
 type observation struct {
-	Method    string `json:"method"`
-	Category  string `json:"category"`
-	Status    int    `json:"status,omitempty"`
-	Bytes     int    `json:"bytes,omitempty"`
-	ElapsedMS int64  `json:"elapsedMs"`
-	Failure   string `json:"failure,omitempty"` // closed category, no error text
+	Method          string `json:"method"`
+	Category        string `json:"category"`
+	Status          int    `json:"status,omitempty"`
+	Bytes           int    `json:"bytes,omitempty"`
+	ElapsedMS       int64  `json:"elapsedMs"`
+	Failure         string `json:"failure,omitempty"`         // closed category, no error text
+	CallerCancelled bool   `json:"callerCancelled,omitempty"` // verified incoming GET cancellation only
 }
 type fault struct {
 	Method   string `json:"method"`
@@ -68,6 +69,7 @@ type snapshot struct {
 	ForwardRequestCount uint64        `json:"forwardRequestCount"`
 	Lost                uint64        `json:"lost"`
 	Failures            uint64        `json:"failures"`
+	CallerCancelled     uint64        `json:"callerCancelled"`
 	Armed               *fault        `json:"armed"`
 }
 type adapter struct {
@@ -181,7 +183,9 @@ func (a *adapter) begin(method, path string) bool {
 func (a *adapter) observed(o observation) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if o.Failure != "" {
+	if o.CallerCancelled {
+		a.state.CallerCancelled++
+	} else if o.Failure != "" {
 		a.state.Failures++
 	}
 	a.state.Observations = append(a.state.Observations, o)
@@ -247,6 +251,11 @@ func classify(err error) string {
 	}
 	return "transport"
 }
+func callerReadCancelled(r *http.Request, err error) bool {
+	// A provider cancellation, timeout or disconnect alone is not a caller abort.
+	// Never discount cancellation of any possibly dispatched native write.
+	return r.Method == http.MethodGet && errors.Is(r.Context().Err(), context.Canceled) && errors.Is(err, context.Canceled)
+}
 func (a *adapter) forward(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
 	path := r.URL.RequestURI()
@@ -273,7 +282,7 @@ func (a *adapter) forward(w http.ResponseWriter, r *http.Request) {
 	}
 	response, err := a.client.Do(request)
 	if err != nil {
-		a.observed(observation{Method: r.Method, Category: category(path), ElapsedMS: time.Since(started).Milliseconds(), Failure: "preheaders_" + classify(err)})
+		a.observed(observation{Method: r.Method, Category: category(path), ElapsedMS: time.Since(started).Milliseconds(), Failure: "preheaders_" + classify(err), CallerCancelled: callerReadCancelled(r, err)})
 		http.Error(w, "Owned qualification native transport unavailable", http.StatusBadGateway)
 		return
 	}
@@ -284,7 +293,7 @@ func (a *adapter) forward(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			kind = "response_" + classify(err)
 		}
-		a.observed(observation{Method: r.Method, Category: category(path), Status: response.StatusCode, ElapsedMS: time.Since(started).Milliseconds(), Failure: kind})
+		a.observed(observation{Method: r.Method, Category: category(path), Status: response.StatusCode, ElapsedMS: time.Since(started).Milliseconds(), Failure: kind, CallerCancelled: callerReadCancelled(r, err)})
 		http.Error(w, "Owned qualification native response unavailable", http.StatusBadGateway)
 		return
 	}
@@ -366,6 +375,35 @@ func selfCheck() {
 		panic("source configuration check")
 	}
 	path := "/api/v1/repos/golf-rules49-0123456789-owner/rules/branch_protections"
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	deadline, end := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer end()
+	ca, _ := newAdapter("golf-rules49-0123456789", strings.Repeat("d", 64))
+	for _, tc := range []struct {
+		method string
+		ctx    context.Context
+		err    error
+		want   bool
+	}{
+		{http.MethodGet, cancelled, fmt.Errorf("wrapped: %w", context.Canceled), true},
+		{http.MethodGet, context.Background(), context.Canceled, false},
+		{http.MethodGet, deadline, context.Canceled, false},
+		{http.MethodGet, cancelled, context.DeadlineExceeded, false},
+		{http.MethodGet, cancelled, io.EOF, false},
+		{http.MethodPut, cancelled, context.Canceled, false},
+	} {
+		r, _ := http.NewRequestWithContext(tc.ctx, tc.method, nativeDestination+path, nil)
+		got := callerReadCancelled(r, tc.err)
+		if got != tc.want {
+			panic("source caller cancellation fence")
+		}
+		ca.begin(tc.method, path)
+		ca.observed(observation{Method: tc.method, Category: "authority", Failure: "preheaders_cancelled", CallerCancelled: got})
+	}
+	if ca.state.CallerCancelled != 1 || ca.state.Failures != 5 || ca.state.ForwardRequestCount != 6 {
+		panic("source separate caller/provider cancellation counts")
+	}
 	if !a.allowedWrite("POST", path) || a.allowedWrite("POST", path+"?x=1") || a.allowedWrite("DELETE", "/api/v1/repos/foreign/rules") || a.allowedWrite("PUT", path) || a.allowedWrite("PATCH", path+"/%2E%2E%2F%2E%2E") || a.allowedWrite("PATCH", path+"/%ZZ") {
 		panic("source ownership check")
 	}

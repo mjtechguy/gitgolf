@@ -59,9 +59,9 @@ def valid_fault(project: str, value: dict) -> bool:
 
 
 def checked_snapshot(value: object, project: str) -> dict:
-    assert isinstance(value, dict) and set(value) == {'project', 'nativeDestination', 'counts', 'observations', 'forwardRequestCount', 'lost', 'failures', 'armed'}, 'Safe control snapshot shape mismatch'
+    assert isinstance(value, dict) and set(value) == {'project', 'nativeDestination', 'counts', 'observations', 'forwardRequestCount', 'lost', 'failures', 'callerCancelled', 'armed'}, 'Safe control snapshot shape mismatch'
     assert value['project'] == project and value['nativeDestination'] == NATIVE_DESTINATION, 'Control fixture identity mismatch'
-    for key in ('forwardRequestCount', 'lost', 'failures'):
+    for key in ('forwardRequestCount', 'lost', 'failures', 'callerCancelled'):
         assert type(value[key]) is int and 0 <= value[key] <= (1 << 53) - 1, 'Control counter mismatch'
     assert value['lost'] <= 1 and (value['armed'] is None or isinstance(value['armed'], dict) and valid_fault(project, value['armed'])), 'Control fault identity mismatch'
     counts, observations = value['counts'], value['observations']
@@ -73,12 +73,17 @@ def checked_snapshot(value: object, project: str) -> dict:
         pair = row['method'], row['path']
         assert pair not in pairs, 'Duplicate mutation counter'; pairs.add(pair)
     for row in observations:
-        assert isinstance(row, dict) and {'method', 'category', 'elapsedMs'} <= set(row) <= {'method', 'category', 'elapsedMs', 'status', 'bytes', 'failure'}, 'Observation shape mismatch'
+        assert isinstance(row, dict) and {'method', 'category', 'elapsedMs'} <= set(row) <= {'method', 'category', 'elapsedMs', 'status', 'bytes', 'failure', 'callerCancelled'}, 'Observation shape mismatch'
         assert row['method'] in METHODS | {'GET'} and row['category'] in CATEGORIES and type(row['elapsedMs']) is int and row['elapsedMs'] >= 0, 'Observation metadata mismatch'
         assert 'status' not in row or type(row['status']) is int and 100 <= row['status'] <= 599, 'Observation status mismatch'
         assert 'bytes' not in row or type(row['bytes']) is int and 0 <= row['bytes'] <= 2 << 20, 'Observation byte bound mismatch'
         assert 'failure' not in row or row['failure'] in FAILURES, 'Unknown transport failure category'
+        if 'callerCancelled' in row:
+            assert row['callerCancelled'] is True and row['method'] == 'GET' and row.get('failure') in {'preheaders_cancelled','response_cancelled'}, 'Unverified/write cancellation was discounted'
+        if row.get('callerCancelled') and row['failure'] == 'preheaders_cancelled':
+            assert 'status' not in row and 'bytes' not in row, 'Pre-header caller abort cannot claim a native receipt'
     assert sum(row['count'] for row in counts) <= value['forwardRequestCount'], 'Control aggregate count mismatch'
+    assert value['callerCancelled'] <= value['forwardRequestCount'] and sum(row.get('callerCancelled', False) for row in observations) <= value['callerCancelled'], 'Caller cancellation count mismatch'
     return value
 
 
@@ -163,6 +168,10 @@ class NativeProxy:
         return self.snapshot()['failures']
 
     @property
+    def caller_cancelled(self):
+        return self.snapshot()['callerCancelled']
+
+    @property
     def armed(self):
         value = self.snapshot()['armed']
         return None if value is None else (value['method'], value['path'])
@@ -230,7 +239,7 @@ def self_check():
     assert owned_write(project, 'POST', path) and not owned_write(project, 'POST', path + '?extra=1') and not owned_write(project, 'DELETE', '/api/v1/repos/foreign/rules')
     assert valid_fault(project, {'method': 'POST', 'path': path, 'status': 201, 'ruleName': 'unknown/*'})
     assert not valid_fault(project, {'method': 'POST', 'path': path, 'status': 200, 'ruleName': 'unknown/*'})
-    value = {'project': project, 'nativeDestination': NATIVE_DESTINATION, 'counts': [{'method': 'POST', 'path': path, 'count': 1}], 'observations': [{'method': 'POST', 'category': 'branch_protections', 'status': 201, 'elapsedMs': 1}], 'forwardRequestCount': 1, 'lost': 1, 'failures': 0, 'armed': None}
+    value = {'project': project, 'nativeDestination': NATIVE_DESTINATION, 'counts': [{'method': 'POST', 'path': path, 'count': 1}], 'observations': [{'method': 'POST', 'category': 'branch_protections', 'status': 201, 'elapsedMs': 1}], 'forwardRequestCount': 1, 'lost': 1, 'failures': 0, 'callerCancelled': 0, 'armed': None}
     assert checked_snapshot(value, project) is value
     for patch in ({'lost': 2}, {'forwardRequestCount': 0}, {'counts': [value['counts'][0], value['counts'][0]]}, {'observations': [{'method': 'GET', 'category': 'authority', 'elapsedMs': 0, 'failure': 'private response text'}]}):
         try:
@@ -240,6 +249,12 @@ def self_check():
         else:
             raise AssertionError('Malformed control metadata accepted')
     proxy = NativeProxy(39001, project)
+    aborted = {**value,'callerCancelled':1,'observations':[{'method':'GET','category':'authority','elapsedMs':1,'failure':'preheaders_cancelled','callerCancelled':True}]}
+    checked_snapshot(aborted,project)
+    for patch in ({'callerCancelled':0}, {'callerCancelled':2}, {'observations':[{**aborted['observations'][0],'method':'PUT'}]}, {'observations':[{**aborted['observations'][0],'failure':'preheaders_timeout'}]}, {'observations':[{**aborted['observations'][0],'status':200}]}, {'observations':[{**aborted['observations'][0],'callerCancelled':False}]}):
+        try:checked_snapshot({**aborted,**patch},project)
+        except AssertionError:pass
+        else:raise AssertionError('Unverified/write/deadline caller cancellation accepted')
     assert proxy._repository_name({'owner': project + '-owner', 'name': 'rules'}) == project + '-owner/rules'
     assert proxy._nonce not in json.dumps(value)
     assert proxy.environment()['NATIVE_QUALIFICATION_NONCE'] == proxy._nonce
