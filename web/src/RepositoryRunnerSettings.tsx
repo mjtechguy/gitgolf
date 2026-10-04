@@ -1,9 +1,10 @@
+import { RepositoryRunnerPlacement } from './RunnerPools';
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from '@tanstack/react-form';
 import { useQuery } from '@tanstack/react-query';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Pencil, Server, X } from 'lucide-react';
-import { runnerControlClient, workflowClient } from './api';
+import { runnerPoolClient, runnerControlClient, workflowClient } from './api';
 import { RepositorySettingsLayout } from './AccountSettings';
 import { Loading, PanelError, privateQuery } from './RepositoryUI';
 import { RepositoryRunners } from './RunnerControls';
@@ -37,8 +38,9 @@ export function RepositoryRunnerSettings({ userId, owner, name, signingOut }: { 
   });
   const chosen = ready && selected?.repositoryId === access!.repositoryId && selected?.ownerId === access!.ownerId ? selected.path : '';
   return <RepositorySettingsLayout owner={owner} name={name}><section className="page-stack">
-    <header className="repository-intro"><div><h1><Server size={24} />Runners</h1><p>Inspect enrolled workers and the policy for a selected workflow.</p></div></header>
+    <header className="repository-intro"><div><h1><Server size={24} />Runners</h1><p>Manage runner placement and inspect the policy for a selected workflow.</p></div></header>
     {error ? <PanelError error={error} retry={refresh} /> : !access ? <Loading label="Verifying repository access…" /> : null}
+    {access?.canManage && !error ? <RepositoryRunnerPlacement key={`${userId}/${access.repositoryId}/${access.ownerId}`} userId={userId} owner={owner} name={name} repositoryId={access.repositoryId} ownerId={access.ownerId} accessRevision={access.revision} signingOut={signingOut} revalidating={revalidating} client={runnerPoolClient} /> : null}
     {access ? <section className="browser-panel"><div className="browser-panel-heading"><h2>Workflow selection</h2>{editing ? <button type="button" className="icon-button" aria-label="Close workflow selection" title="Close workflow selection" onClick={() => edit(false)}><X size={16} /></button> : null}<button className="button secondary" disabled={!ready || editing} onClick={() => edit(true)}><Pencil size={15} />Choose workflow</button></div>
       <p className="panel-footnote">{chosen || 'Choose a workflow to inspect its current policy. Worker controls are managed in the Admin portal.'}</p>
       {editing && ready ? paths.error ? <><PanelError error={paths.error} retry={() => void paths.refetch()} /><button className="button secondary" onClick={() => edit(false)}>Cancel</button></> : !paths.isSuccess || paths.isFetching ? <Loading label="Reading repository workflows…" /> : paths.data.length ? <WorkflowChoice paths={paths.data} cancel={() => edit(false)} onChoose={path => { select({ repositoryId: access.repositoryId, ownerId: access.ownerId, path }); edit(false); }} /> : <><p className="panel-footnote">No supported workflow paths were found. Add a workflow before inspecting its policy.</p><button className="button secondary" onClick={() => edit(false)}>Cancel</button></> : null}

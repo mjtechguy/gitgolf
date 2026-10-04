@@ -23,7 +23,7 @@ async function backend(page: Page) {
       const input = request(route, GetRepositoryRunnerPlacementRequestSchema);
       expect(input).toMatchObject({ repository: { owner: 'alice', name: 'example' }, repositoryId: '9007199254740993', ownerId: '42', expectedRevision: 'a'.repeat(64) });
       if (state.denyRead) return reject(route, 'permission_denied', 'Current repository administrator required.');
-      const response = create(GetRepositoryRunnerPlacementResponseSchema, { placement: state.placement, eligiblePools: state.pools.filter(p => p.repositoryAssignmentEnabled), selectedPool: state.pools.find(p => p.id === state.placement.poolId), canEdit: state.canEdit, passwordConfirmationAvailable: state.password });
+      const response = create(GetRepositoryRunnerPlacementResponseSchema, { placement: state.placement, eligiblePools: state.pools.filter(p => p.repositoryAssignmentEnabled), selectedPool: state.pools.find(p => p.id === state.placement.poolId) ? create(RunnerPoolSchema, { ...state.pools.find(p => p.id === state.placement.poolId)!, workerIds: [...state.pools.find(p => p.id === state.placement.poolId)!.workerIds] }) : undefined, canEdit: state.canEdit, passwordConfirmationAvailable: state.password });
       state.malformedPlacement?.(response);
       return respond(route, GetRepositoryRunnerPlacementResponseSchema, response);
     }
@@ -122,7 +122,7 @@ test('current pool drift is visible without silently changing the original selec
   const s = await backend(page); s.placement = { ...placement(), version: '3', poolId: id, poolVersion: '1', legacyUnbound: false }; s.pools[0]!.version = '5'; await open(page, true); await expect(page.getByText('Selected 1 · current 5', { exact: true })).toBeVisible(); await expect(page.getByText('The selected pool configuration has changed.', { exact: false })).toBeVisible(); await editPlacement(page); await page.getByRole('button', { name: 'Save placement' }).click(); await expect(page.getByText('Selected 5 · current 5', { exact: true })).toBeVisible(); expect(s.sets[0]).toMatchObject({ expectedPlacementVersion: '3', expectedPoolVersion: '5' });
 });
 test('draining eligible pools remain observations and cannot be selected', async ({ page }) => {
-  const s = await backend(page); s.pools[0]!.state = State.DRAINING; await open(page, true); await page.getByRole('button', { name: 'Edit runner placement' }).click(); await expect(page.getByRole('option', { name: 'Trusted Linux · Draining · version 1', exact: true })).toBeDisabled(); await expect(page.getByRole('combobox', { name: 'Runner placement' })).toHaveValue(''); expect(s.sets).toHaveLength(0);
+  const s = await backend(page); s.pools[0]!.state = State.DRAINING; await open(page, true); await page.getByRole('button', { name: 'Edit runner placement' }).click(); await expect(page.getByRole('option', { name: 'Trusted Linux · Draining · version 1', exact: true })).toHaveJSProperty('disabled', true); await expect(page.getByRole('combobox', { name: 'Runner placement' })).toHaveValue(''); expect(s.sets).toHaveLength(0);
 });
 test('managed read-only placement exposes no mutation form', async ({ page }) => {
   const s = await backend(page); s.canEdit = false; s.password = false; await open(page, true); await expect(page.getByRole('button', { name: 'Edit runner placement', exact: true })).toBeDisabled(); await expect(page.getByText('Read-only observation.', { exact: false })).toBeVisible(); await expect(page.getByRole('form')).toHaveCount(0); expect(s.sets).toHaveLength(0);

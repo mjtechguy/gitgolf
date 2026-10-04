@@ -11852,14 +11852,16 @@ func (x *RepositoryAccess) GetCurrentPermission() string {
 }
 
 type RepositoryCollaborator struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	User          *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
-	Permission    string                 `protobuf:"bytes,2,opt,name=permission,proto3" json:"permission,omitempty"`
-	IsDirect      bool                   `protobuf:"varint,3,opt,name=is_direct,json=isDirect,proto3" json:"is_direct,omitempty"`
-	Revision      string                 `protobuf:"bytes,4,opt,name=revision,proto3" json:"revision,omitempty"`
-	Generation    string                 `protobuf:"bytes,5,opt,name=generation,proto3" json:"generation,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	User       *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
+	Permission string                 `protobuf:"bytes,2,opt,name=permission,proto3" json:"permission,omitempty"`
+	IsDirect   bool                   `protobuf:"varint,3,opt,name=is_direct,json=isDirect,proto3" json:"is_direct,omitempty"`
+	Revision   string                 `protobuf:"bytes,4,opt,name=revision,proto3" json:"revision,omitempty"`
+	Generation string                 `protobuf:"bytes,5,opt,name=generation,proto3" json:"generation,omitempty"`
+	// Independent organization ownership; native effective owner can be an admin team.
+	ActualOrganizationOwner *bool `protobuf:"varint,6,opt,name=actual_organization_owner,json=actualOrganizationOwner,proto3,oneof" json:"actual_organization_owner,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *RepositoryCollaborator) Reset() {
@@ -11925,6 +11927,13 @@ func (x *RepositoryCollaborator) GetGeneration() string {
 		return x.Generation
 	}
 	return ""
+}
+
+func (x *RepositoryCollaborator) GetActualOrganizationOwner() bool {
+	if x != nil && x.ActualOrganizationOwner != nil {
+		return *x.ActualOrganizationOwner
+	}
+	return false
 }
 
 type GetRepositoryAccessRequest struct {
@@ -36150,7 +36159,7 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\n" +
 	"can_manage\x18\x05 \x01(\bR\tcanManage\x12\x1a\n" +
 	"\brevision\x18\x06 \x01(\tR\brevision\x12-\n" +
-	"\x12current_permission\x18\a \x01(\tR\x11currentPermission\"\xb4\x01\n" +
+	"\x12current_permission\x18\a \x01(\tR\x11currentPermission\"\x93\x02\n" +
 	"\x16RepositoryCollaborator\x12!\n" +
 	"\x04user\x18\x01 \x01(\v2\r.golf.v1.UserR\x04user\x12\x1e\n" +
 	"\n" +
@@ -36160,7 +36169,9 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\brevision\x18\x04 \x01(\tR\brevision\x12\x1e\n" +
 	"\n" +
 	"generation\x18\x05 \x01(\tR\n" +
-	"generation\"T\n" +
+	"generation\x12?\n" +
+	"\x19actual_organization_owner\x18\x06 \x01(\bH\x00R\x17actualOrganizationOwner\x88\x01\x01B\x1c\n" +
+	"\x1a_actual_organization_owner\"T\n" +
 	"\x1aGetRepositoryAccessRequest\x126\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x16.golf.v1.RepositoryKeyR\n" +
@@ -40253,6 +40264,7 @@ func file_golf_v1_golf_proto_init() {
 	file_golf_v1_golf_proto_msgTypes[89].OneofWrappers = []any{}
 	file_golf_v1_golf_proto_msgTypes[131].OneofWrappers = []any{}
 	file_golf_v1_golf_proto_msgTypes[142].OneofWrappers = []any{}
+	file_golf_v1_golf_proto_msgTypes[146].OneofWrappers = []any{}
 	file_golf_v1_golf_proto_msgTypes[162].OneofWrappers = []any{}
 	file_golf_v1_golf_proto_msgTypes[172].OneofWrappers = []any{}
 	file_golf_v1_golf_proto_msgTypes[173].OneofWrappers = []any{}

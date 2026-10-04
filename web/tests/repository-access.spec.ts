@@ -127,7 +127,7 @@ for (const kind of ['read-only', 'organization-owned', 'exceptional owner'] as c
 
 test('owner identities cannot become reviewed collaborator mutations', async ({ page }) => {
   const state = await backend(page); await open(page); await page.getByRole('button', { name: 'Add collaborator', exact: true }).click(); await page.getByLabel('Account username', { exact: true }).fill(owner.login); await page.getByRole('button', { name: 'Resolve and review access', exact: true }).click();
-  await expect(page.getByRole('alert')).toHaveText('Owner, self and exceptional owner-level access cannot be changed here.'); await expect(page.getByRole('button', { name: 'Apply reviewed access', exact: true })).toHaveCount(0); expect(state.writes).toHaveLength(0);
+  await expect(page.getByRole('alert')).toHaveText('Owner, self and unverified owner-level access cannot be changed here.'); await expect(page.getByRole('button', { name: 'Apply reviewed access', exact: true })).toHaveCount(0); expect(state.writes).toHaveLength(0);
 });
 
 test('pending resolve cancellation and late write navigation cannot restore discarded previews or receipts', async ({ page }) => {
@@ -212,4 +212,11 @@ test('denial during original inspection hides private inventory and preserves on
 test('malformed original metadata fails closed without source, status or mutation probes',async({page})=>{
  const state=await backend(page);await page.addInitScript(()=>sessionStorage.setItem(`golf.access-intent.${location.origin}:17:9007199254740998:9007199254740997`,JSON.stringify({key:'not-an-original-key'})));await open(page);
  await expect(page.getByText('Original access operation metadata is unavailable. No new change can be sent; sign out before switching accounts or targets.',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Add collaborator',exact:true})).toBeDisabled();expect(state.operationReads).toHaveLength(0);expect(state.resolves).toHaveLength(0);expect(state.requests).toHaveLength(0);
+});
+
+for (const ownership of [false, true, undefined]) test(`organization effective owner target requires verified nonownership (${ownership})`, async ({ page }) => {
+ const state=await backend(page);state.access.organizationOwned=true;state.collaborators[0]={...first,permission:'owner',actualOrganizationOwner:ownership};await open(page);
+ const change=page.getByRole('button',{name:'Change access for first-reader',exact:true});
+ if(ownership!==false){await expect(change).toHaveCount(0);await expect(page.getByRole('button',{name:'Remove collaborator first-reader',exact:true})).toHaveCount(0);expect(state.writes).toHaveLength(0);return;}
+ await change.click();await page.getByLabel('Requested permission',{exact:true}).selectOption('read');await page.getByRole('button',{name:'Resolve and review access',exact:true}).click();await expect(page.getByRole('heading',{name:'Review collaborator access',exact:true})).toBeVisible();expect(state.writes).toHaveLength(0);
 });
