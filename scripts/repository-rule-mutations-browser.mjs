@@ -104,7 +104,7 @@ try {
   const path = new URL(request.url()).pathname; if (!path.startsWith('/rpc/')) return; const name = path.split('/').at(-1); counts[name] = (counts[name] || 0)+1;
   if (name === 'MutateRepositoryRules') try {
    const value = request.postDataJSON(); exactTarget(value); check(value.action === 'REPOSITORY_RULE_MUTATION_ACTION_CREATE_BRANCH' && uuid(value.operationId) && revision(value.expectedAccessRevision) && revision(value.expectedRulesRevision));
-   check(/^ui-(dark|light)-(1440|390)\/\*$/.test(value.ruleName) && value.desiredBranch?.ruleName === value.ruleName && value.desiredBranch.priority === '0' && value.desiredBranch.requiredApprovals === '1');
+   check(/^ui-(dark|light)-(1440|390)\/\*$/.test(value.ruleName) && value.desiredBranch?.ruleName === value.ruleName && value.desiredBranch.priority === '1' && value.desiredBranch.requiredApprovals === '1');
   } catch { errors.push('mutation_target'); }
  });
  page.on('response', response => {
@@ -142,7 +142,7 @@ try {
   check(await page.getByRole('form', { name: 'Add branch rule', exact: true }).count() === 0); at('actual current inventory'); await capture(theme, width, 'inventory');
   at('explicit requested branch editor'); await page.getByRole('button', { name: 'Branch rule', exact: true }).click();
   const form = page.getByRole('form', { name: 'Add branch rule', exact: true }); await form.waitFor();
-  await form.getByLabel('Branch pattern', { exact: true }).fill('ui-'+theme+'-'+width+'/*'); await form.getByLabel('Required approvals', { exact: true }).fill('1'); await form.getByLabel('Priority', { exact: true }).fill('0');
+  await form.getByLabel('Branch pattern', { exact: true }).fill('ui-'+theme+'-'+width+'/*'); await form.getByLabel('Required approvals', { exact: true }).fill('1'); await form.getByLabel('Priority', { exact: true }).fill('1');
   await settled(); await capture(theme, width, 'requested-editor');
   at('explicit once-only native configuration dispatch'); const before = counts.MutateRepositoryRules || 0;
   const accepted = page.waitForResponse(r => new URL(r.url()).pathname.endsWith('/MutateRepositoryRules')); await form.getByRole('button', { name: 'Save configuration', exact: true }).click();

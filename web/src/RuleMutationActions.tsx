@@ -40,7 +40,7 @@ function loadIdentity(key: string): { identity: OperationIdentity | null; blocke
  } catch { return { identity: null, blocked: true }; }
 }
 
-function stripBranch(v?: RepositoryBranchProtection) { const b = create(RepositoryBranchProtectionSchema, v ? { ...v, createdAt: '', updatedAt: '' } : { priority: '0', requiredApprovals: '1', blockOnRejectedReviews: true, blockAdminMergeOverride: true }); return b; }
+function stripBranch(v?: RepositoryBranchProtection) { const b = create(RepositoryBranchProtectionSchema, v ? { ...v, createdAt: '', updatedAt: '' } : { priority: '1', requiredApprovals: '1', blockOnRejectedReviews: true, blockAdminMergeOverride: true }); return b; }
 function stripTag(v?: RepositoryTagProtection) { return create(RepositoryTagProtectionSchema, v ? { ...v, id: '', createdAt: '', updatedAt: '' } : {}); }
 const split = (v: string | boolean | undefined) => String(v || '').split('\n').map(s => s.trim()).filter(Boolean);
 
@@ -49,6 +49,7 @@ function inputProblem(input: Pick<MutateRepositoryRulesRequest, 'action' | 'rule
  const list = (v: string[]) => v.length <= 100 && new Set(v).size === v.length && v.every(s => text(s, 512));
  const integer = (v: string, nonnegative = false) => /^-?(?:0|[1-9][0-9]*)$/.test(v) && v !== '-0' && v.length <= 20 && BigInt(v) >= (nonnegative ? 0n : -9223372036854775808n) && BigInt(v) <= 9223372036854775807n;
  const b = input.desiredBranch;
+ if (b && input.action === Action.CREATE_BRANCH && b.priority === '0') return 'Choose a nonzero priority for a new branch rule; zero requests automatic priority assignment.';
  if (b && (!text(b.ruleName, 512) || !integer(b.priority) || !integer(b.requiredApprovals, true) || !text(b.protectedFilePatterns, 4096, true) || !text(b.unprotectedFilePatterns, 4096, true) || branchLists.some(([key]) => !list(b[key])))) return 'Use a trimmed branch pattern, canonical signed64 counts and bounded unique list entries.';
  if (b && ((!b.enablePush && (b.enablePushWhitelist || b.pushWhitelistDeployKeys || b.enableForcePush)) || (!b.enablePushWhitelist && b.pushWhitelistDeployKeys) || (!b.enableForcePush && (b.enableForcePushAllowlist || b.forcePushAllowlistDeployKeys)) || (!b.enableForcePushAllowlist && b.forcePushAllowlistDeployKeys) || (!b.enableBypassAllowlist && (b.bypassUsernames.length || b.bypassTeams.length)))) return 'Enable the parent push, force-push and bypass options before enabling their dependent settings.';
  const t = input.desiredTag; if (t && (!text(t.namePattern, 512) || !list(t.allowedUsernames) || !list(t.allowedTeams) || (input.action === Action.CREATE_TAG && t.allowedUsernames.length + t.allowedTeams.length === 0))) return 'Provide a trimmed tag pattern and at least one allowed account or organization team.';

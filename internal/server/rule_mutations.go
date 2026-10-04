@@ -132,6 +132,11 @@ func parseRuleWrite(m *golfv1.MutateRepositoryRulesRequest) (ruleWrite, error) {
 			return w, invalid("Bind exactly one complete branch configuration to its immutable pattern.")
 		}
 		w.payload, e = branchRulePayload(m.DesiredBranch)
+		// Native CREATE treats zero as automatic MAX(priority)+1. An exact
+		// desired-value receipt cannot certify that unspecified value.
+		if m.Action == golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_CREATE_BRANCH && m.DesiredBranch.Priority == "0" {
+			return w, invalid("Choose a nonzero priority for a new branch rule; zero requests native automatic assignment.")
+		}
 		w.method = http.MethodPost
 		w.suffix = "/branch_protections"
 		if m.Action == golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_EDIT_BRANCH {

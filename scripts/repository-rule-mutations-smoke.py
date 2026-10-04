@@ -490,7 +490,7 @@ def main():
             rpc(actors['team']['session'],SERVICE,access(actors['team'],organization),expected=403)
             record(authorityMatrix='passed')
             stage('current individual role and operation-boundary denial')
-            denied=intent(owner,personal,'CREATE_BRANCH',ruleName='denied/*',desiredBranch={'ruleName':'denied/*','priority':'0','requiredApprovals':'0'})
+            denied=intent(owner,personal,'CREATE_BRANCH',ruleName='denied/*',desiredBranch={'ruleName':'denied/*','priority':'1','requiredApprovals':'0'})
             before_count=proxy.total(personal)
             for role in ('reader','global'):
                 rpc(actors[role]['session'],MUTATE,{**denied,'operationId':str(uuid.uuid4())},expected=403)
@@ -503,25 +503,30 @@ def main():
             rpc(actors['direct']['session'],MUTATE,direct,expected=403); native(owner['token'],'PUT',path+'/collaborators/'+actors['direct']['name'],{'permission':'admin'},204)
             assert proxy.total(personal)==before_count
             stage('serial whole/access drift rejects before supported write')
-            stale=intent(owner,personal,'CREATE_BRANCH',ruleName='stale/*',desiredBranch={'ruleName':'stale/*','priority':'0','requiredApprovals':'0'})
+            automatic=intent(owner,personal,'CREATE_BRANCH',ruleName='automatic/*',desiredBranch={'ruleName':'automatic/*','priority':'0','requiredApprovals':'0'})
+            automatic_count=proxy.total(personal)
+            rpc(owner['session'],MUTATE,automatic,expected=400,code='invalid_argument')
+            assert proxy.total(personal)==automatic_count
+            record(automaticPriorityRefusedBeforeNativeWrite='passed')
+            stale=intent(owner,personal,'CREATE_BRANCH',ruleName='stale/*',desiredBranch={'ruleName':'stale/*','priority':'1','requiredApprovals':'0'})
             native(owner['token'],'PATCH',path+'/branch_protections/main',{'required_approvals':4})
             change(owner,stale,'REJECTED')
-            stale_access=intent(owner,personal,'CREATE_BRANCH',ruleName='stale-access/*',desiredBranch={'ruleName':'stale-access/*','priority':'0','requiredApprovals':'0'})
+            stale_access=intent(owner,personal,'CREATE_BRANCH',ruleName='stale-access/*',desiredBranch={'ruleName':'stale-access/*','priority':'1','requiredApprovals':'0'})
             # Access revision binds repository identity/visibility metadata,
             # not an unrelated reader's effective role. Current caller authority
             # loss is exercised independently above.
             native(owner['token'],'PATCH',path,{'private':False})
             change(owner,stale_access,'REJECTED'); native(owner['token'],'PATCH',path,{'private':True})
             for field in ('repositoryId','ownerId'):
-                rpc(owner['session'],MUTATE,{**intent(owner,personal,'CREATE_BRANCH',ruleName='wrong/*',desiredBranch={'ruleName':'wrong/*','priority':'0','requiredApprovals':'0'}),field:'9223372036854775807'},expected=400,code='failed_precondition')
+                rpc(owner['session'],MUTATE,{**intent(owner,personal,'CREATE_BRANCH',ruleName='wrong/*',desiredBranch={'ruleName':'wrong/*','priority':'1','requiredApprovals':'0'}),field:'9223372036854775807'},expected=400,code='failed_precondition')
             record(staleObservationFences='passed',knownReplayNoNativeWrite='passed')
             stage('archive and actual mirror refuse configuration writes')
-            native(owner['token'],'PATCH',path,{'archived':True}); archived_intent=intent(owner,personal,'CREATE_BRANCH',ruleName='archive/*',desiredBranch={'ruleName':'archive/*','priority':'0','requiredApprovals':'0'})
+            native(owner['token'],'PATCH',path,{'archived':True}); archived_intent=intent(owner,personal,'CREATE_BRANCH',ruleName='archive/*',desiredBranch={'ruleName':'archive/*','priority':'1','requiredApprovals':'0'})
             archive_count=proxy.total(personal);rpc(owner['session'],MUTATE,archived_intent,expected=400,code='failed_precondition');inspect(owner,archived_intent,'REJECTED');assert proxy.total(personal)==archive_count
             native(owner['token'],'PATCH',path,{'archived':False})
             mirror=native(owner['token'],'POST','repos/migrate',{'clone_addr':'http://gitea:3000/'+owner['name']+'/rules.git','repo_owner':owner['name'],'repo_name':'rules-mirror','service':'git','mirror':True,'private':True,'auth_username':owner['name'],'auth_password':owner['token'],'mirror_interval':'168h'},201)
             repositories[mirror['full_name']]=(mirror['id'],mirror['owner']['id']);assert mirror['mirror'] is True;mirror_key={'owner':owner['name'],'name':'rules-mirror'}
-            mirror_intent=intent(owner,mirror_key,'CREATE_BRANCH',ruleName='mirror/*',desiredBranch={'ruleName':'mirror/*','priority':'0','requiredApprovals':'0'})
+            mirror_intent=intent(owner,mirror_key,'CREATE_BRANCH',ruleName='mirror/*',desiredBranch={'ruleName':'mirror/*','priority':'1','requiredApprovals':'0'})
             mirror_count=proxy.total(mirror_key);rpc(owner['session'],MUTATE,mirror_intent,expected=400,code='failed_precondition');inspect(owner,mirror_intent,'REJECTED');assert proxy.total(mirror_key)==mirror_count
             record(archivedAndMirrorWriteRefusals='passed')
             if args.ui:
@@ -533,18 +538,18 @@ def main():
                 assert browser.returncode==0 and proof['status']=='browser_checks_passed_parent_cleanup_pending' and len(proof['captures'])==12 and proof['runtime']==before,'Browser proof failed; safe staged manifest retained'
                 target,current=read(owner,personal)
                 for accepted in proof['acceptedRules']:
-                    rule=next(row for row in current['branchProtections'] if row['ruleName']==accepted['pattern']);assert rule.get('requiredApprovals','0')==accepted['requiredApprovals'] and rule['priority']=='0'
+                    rule=next(row for row in current['branchProtections'] if row['ruleName']==accepted['pattern']);assert rule.get('requiredApprovals','0')==accepted['requiredApprovals'] and rule['priority']=='1'
             stage('real accepted native write loses response; unknown is inspection-only')
             unknown_repo=create_repository(owner,'unknown-rules');u_path='repos/'+unknown_repo['owner']+'/'+unknown_repo['name'];native(owner['token'],'PUT',u_path+'/collaborators/'+actors['direct']['name'],{'permission':'admin'},204)
-            unknown=intent(owner,unknown_repo,'CREATE_BRANCH',ruleName='unknown/*',desiredBranch={'ruleName':'unknown/*','priority':'0','requiredApprovals':'0'})
+            unknown=intent(owner,unknown_repo,'CREATE_BRANCH',ruleName='unknown/*',desiredBranch={'ruleName':'unknown/*','priority':'1','requiredApprovals':'0'})
             count=proxy.total(unknown_repo);proxy.arm('POST','/api/v1/'+u_path+'/branch_protections','unknown/*')
             result=rpc(owner['session'],MUTATE,unknown);unknown_receipt=operation(result['operation'],unknown,owner,'DISPATCH_UNKNOWN');assert 'currentRules' not in result
             assert proxy.lost==1 and proxy.total(unknown_repo)==count+1 and any(row['rule_name']=='unknown/*' for row in native(owner['token'],'GET',u_path+'/branch_protections'))
             assert inspect(owner,unknown,'DISPATCH_UNKNOWN')==unknown_receipt
             assert rpc(owner['session'],MUTATE,unknown)=={'operation':unknown_receipt}
-            replacement_intent=intent(owner,unknown_repo,'CREATE_BRANCH',ruleName='replacement/*',desiredBranch={'ruleName':'replacement/*','priority':'0','requiredApprovals':'0'})
+            replacement_intent=intent(owner,unknown_repo,'CREATE_BRANCH',ruleName='replacement/*',desiredBranch={'ruleName':'replacement/*','priority':'1','requiredApprovals':'0'})
             rpc(owner['session'],MUTATE,replacement_intent,expected=400,code='failed_precondition')
-            other_intent=intent(actors['direct'],unknown_repo,'CREATE_BRANCH',ruleName='other-actor/*',desiredBranch={'ruleName':'other-actor/*','priority':'0','requiredApprovals':'0'});rpc(actors['direct']['session'],MUTATE,other_intent,expected=400,code='failed_precondition')
+            other_intent=intent(actors['direct'],unknown_repo,'CREATE_BRANCH',ruleName='other-actor/*',desiredBranch={'ruleName':'other-actor/*','priority':'1','requiredApprovals':'0'});rpc(actors['direct']['session'],MUTATE,other_intent,expected=400,code='failed_precondition')
             lifecycle=rpc(owner['session'],'RepositoryLifecycleService/GetRepositoryLifecycle',{'repository':unknown_repo,'repositoryId':unknown['repositoryId']})['lifecycle'];assert int(lifecycle['activeWorkCount'])>=1 and not lifecycle.get('archiveAvailable',False)
             archive={'repository':unknown_repo,'repositoryId':unknown['repositoryId'],'ownerId':unknown['ownerId'],'expectedRevision':lifecycle['revision'],'archived':True,'confirmationName':unknown_repo['owner']+'/'+unknown_repo['name'],'currentPassword':owner['password'],'idempotencyKey':str(uuid.uuid4())}
             refused_archive=rpc(owner['session'],'RepositoryLifecycleService/ChangeRepositoryArchiveState',archive)['operation'];assert refused_archive['phase']=='REJECTED' and refused_archive['failureCode']=='preflight_refused' and refused_archive['actorId']==owner['id'] and refused_archive.get('fromArchived',False) is False and refused_archive['toArchived'] is True
@@ -561,7 +566,7 @@ def main():
             replacement_target,replacement_empty = read(owner,replacement); assert not replacement_empty.get('branchProtections',[]) and not replacement_empty.get('tagProtections',[])
             stage('all mutation/read/status Origin/bearer/logout boundaries')
             renamed_key={'owner':owner['name'],'name':'rules-renamed'};renamed_target,_=read(owner,renamed_key)
-            boundary=intent(owner,renamed_key,'CREATE_BRANCH',ruleName='boundary/*',desiredBranch={'ruleName':'boundary/*','priority':'0','requiredApprovals':'0'})
+            boundary=intent(owner,renamed_key,'CREATE_BRANCH',ruleName='boundary/*',desiredBranch={'ruleName':'boundary/*','priority':'1','requiredApprovals':'0'})
             status_target={field:boundary[field] for field in ('repository','repositoryId','ownerId','operationId')}
             credential=rpc(owner['session'],'ApiCredentialService/CreateApiCredential',{'label':'Rules boundary'});bearers.append((owner,credential['credential']['id']))
             for procedure,payload in ((SERVICE,renamed_target),(MUTATE,boundary),(STATUS,status_target)):

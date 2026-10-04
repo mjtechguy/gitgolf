@@ -102,6 +102,24 @@ func TestRuleMutationPayloadAdmission(t *testing.T) {
 		t.Fatal("disabled default method admitted")
 	}
 }
+
+func TestRuleMutationZeroPriorityCreateRefusedEditRetained(t *testing.T) {
+	m := ruleRequestFixture()
+	m.DesiredBranch.Priority = "0"
+	if w, e := parseRuleWrite(m); e != nil || w.method != http.MethodPatch || w.payload["priority"] != int64(0) {
+		t.Fatal("existing zero priority must remain explicitly editable", e)
+	}
+	m.Action = golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_CREATE_BRANCH
+	if _, e := parseRuleWrite(m); e == nil {
+		t.Fatal("native automatic priority cannot satisfy exact creation intent")
+	}
+	for _, priority := range []string{"1", "-1", "9223372036854775807"} {
+		m.DesiredBranch.Priority = priority
+		if w, e := parseRuleWrite(m); e != nil || w.method != http.MethodPost {
+			t.Fatal("explicit nonzero priority should remain supported", priority, e)
+		}
+	}
+}
 func TestRuleMutationPreflightAndWholeReadback(t *testing.T) {
 	m := ruleRequestFixture()
 	branch := proto.Clone(m.DesiredBranch).(*golfv1.RepositoryBranchProtection)
