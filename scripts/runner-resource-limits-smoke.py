@@ -3,7 +3,7 @@
 
 Root invokes this helper with cached immutable images and seeds only its fresh
 daemon. --self-check is pure: no sockets, Docker, native APIs or subprocesses.
-The first packet covers lower ceilings, two workers, old-worker refusal,
+    The first packet covers lower ceilings, two workers, old-process nonassignment,
 whole-attempt timeout and cleanup. Unexercised acceptance groups remain explicit.
 """
 import argparse
@@ -194,6 +194,7 @@ def self_check():
         else:raise AssertionError('Wrong limit accepted')
     pool_helpers.safe_manifest({'binding':accepted,'docker':receipt,'cgroup':cg,'diagnostic':pool_helpers.process_observation(('docker','compose','up'),1,b'',sentinel.encode())},[sentinel])
     text=Path(__file__).read_text();require('build: !reset null' in text and '--pull=never' in text and 'before source transfer' not in source(REPOSITORY).decode(),'fixture_source_guards')
+    require("project+'-bootstrap'" in text and "'--admin=false'" in text and "'is_admin') is False" in text and "'timeout_actual_guest_start'" in text,'ordinary_actor_and_timeout_guards')
     require('job_resources = 32;' in (ROOT/'api/golf/v1/golf.proto').read_text() or 'job_resources=32;' in (ROOT/'api/golf/v1/golf.proto').read_text(),'wire_source_guard')
     PROOF.pop('validationFailure',None)
     print('PASS: pure053 limits/binding/Docker/cgroup/private diagnostic checks; actual runtime unrun.')
@@ -389,6 +390,11 @@ def main():
                 return rows
             seeded_images=wait(seeded,args.seed_timeout);record(seededImages=seeded_images);helpers.private_write(OUTPUT/'seed-ready.json',json.dumps({'schema':'golf.runner-resources.seed.v1','containerId':daemon,'verifiedImages':seeded_images},indent=2)+'\n');job_image=seeded_images[0]['imageId']
             stage('owned native identities, managed administrators, repository and exact source')
+            # Native first-user/last-admin rules must not silently promote a test
+            # actor or prevent supported cleanup. This tokenless unmanaged admin
+            # is discarded only with the exact owned fresh native volume.
+            admin('create','--username',project+'-bootstrap','--email',project+'-bootstrap@example.invalid','--random-password','--must-change-password=false','--admin=true')
+            record(nativeBootstrap={'tokenless':True,'notGolfEnrolled':True,'scope':'Fresh owned native only; removed with its fresh volume.'})
             buckets=set()
             for role in ('owner','control','reader'):
                 for _ in range(256):
@@ -396,10 +402,11 @@ def main():
                     if bucket not in buckets:buckets.add(bucket);break
                 else:raise AssertionError('Owned password bucket exhausted')
                 actor={'name':name,'email':name+'@example.invalid','password':secrets.token_urlsafe(32),'session':smoke.client()};actors[role]=actor;forbidden.append(actor['password'])
-                admin('create','--username',name,'--email',actor['email'],'--random-password','--must-change-password=false');actor['nativeCreated']=True
+                admin('create','--username',name,'--email',actor['email'],'--random-password','--must-change-password=false','--admin=false');actor['nativeCreated']=True
                 actor['token']=admin('generate-access-token','--username',name,'--token-name',project,'--scopes','write:user,write:repository,write:issue','--raw');forbidden.append(actor['token'])
+                native_actor=smoke.provider(actor['token'],'GET','user');require(native_actor.get('login')==name and native_actor.get('is_admin') is False and decimal(str(native_actor.get('id')),True),'ordinary_native_actor');actor['nativeId']=str(native_actor['id'])
                 command('exec','-T','golf','golf','local-account','create',payload={'username':name,'email':actor['email'],'password':actor['password'],'forge_token':actor['token'],'is_instance_admin':role!='reader'});actor['enrolled']=True
-                signed=rpc(actor,'SessionService/LoginWithPassword',{'username':actor['email'],'password':actor['password']})['user'];require(signed.get('isInstanceAdmin',False)==(role!='reader'),'managed_role');actor['loggedIn']=True
+                signed=rpc(actor,'SessionService/LoginWithPassword',{'username':actor['email'],'password':actor['password']})['user'];require(signed.get('isInstanceAdmin',False)==(role!='reader') and signed.get('id')==actor['nativeId'],'managed_role_and_native_identity');actor['loggedIn']=True
             owner=actors['owner'];native=smoke.provider(owner['token'],'POST','user/repos',{'name':'resource-limits','private':True,'auto_init':True},201);repository={'owner':owner['name'],'name':native['name']};base='repos/'+native['full_name'];smoke.wait_for_push(owner['token'],native['full_name'])
             for role,permission in (('control','admin'),('reader','read')):smoke.provider(owner['token'],'PUT',base+'/collaborators/'+actors[role]['name'],{'permission':permission},204)
             for path,content in ((PATH,source(REPOSITORY)),(TIMEOUT_PATH,TIMEOUT_SOURCE)):smoke.provider(owner['token'],'POST',base+'/contents/'+path,{'content':base64.b64encode(content).decode(),'message':'Owned resource qualification source'},201)
@@ -418,15 +425,27 @@ def main():
             rpc(owner,'ApiCredentialService/RevokeApiCredential',{'credentialId':delegated['credential']['id']})
             pool=rpc(actors['control'],POOLS+'SaveRunnerPool',{'id':str(uuid.uuid4()),'expectedVersion':'0','name':'Owned lower limits pool','runtime':'local-docker','state':'RUNNER_POOL_STATE_ACTIVE','maxParallelAttempts':2,'workerIds':WORKERS,'repositoryAssignmentEnabled':True,'jobLimits':POOL,'currentPassword':actors['control']['password']})['pool'];require(pool['jobLimits']==POOL and pool['effectiveJobLimits']==minimum(INSTANCE,POOL) and pool['version']=='1','pool_limits_receipt')
             placement=place(owner,REPOSITORY);record(ceilings={'startup':DEFAULT,'instance':policy,'pool':{'id':pool['id'],'version':pool['version'],'configured':pool['jobLimits'],'effective':pool['effectiveJobLimits']},'repository':{'version':placement['version'],'configured':placement['jobLimits'],'effective':placement['effectiveJobLimits']}},independentlyCalculatedMinimum=minimum(INSTANCE,POOL,REPOSITORY))
-            stage('old022 worker remains alive but cannot claim resource-bound work')
+            stage('old022 process nonassignment and separate TLS capability-omission proof')
             first_operation=str(uuid.uuid4());first=dispatch(operation=first_operation)
+            # Real authenticated protocol check, intentionally separate from the
+            # old executable. Missing capability returns before native presence;
+            # State.Running alone cannot prove that binary reached this endpoint.
+            opener=pool_helpers.urllib.request.build_opener(pool_helpers.urllib.request.HTTPSHandler(context=context),pool_helpers.NoRedirect())
+            for key,expected_status in ((keys['worker-legacy'],204),('A'*43,401)):
+                request=pool_helpers.urllib.request.Request(f'https://127.0.0.1:{ports[2]}/internal/ci/poll',data=b'{}',method='POST',headers={'Authorization':'Bearer '+key,'Golf-Runner-ID':'worker-legacy','Content-Type':'application/json','Accept':'application/json'})
+                try:response=opener.open(request,timeout=10)
+                except pool_helpers.urllib.error.HTTPError as error:response=error
+                with response:
+                    raw=response.read(1025);require(response.status==expected_status and len(raw)<=1024 and (expected_status!=204 or not raw),'actual_tls_capability_omission')
+            unassigned=observation(first);require(unassigned['state']=='WORKFLOW_RUN_STATE_QUEUED' and not unassigned.get('attemptId') and cleaned(),'protocol_no_assignment')
+            record(capabilityOmissionProtocol={'origin':'Dedicated helper HTTPS request, not old executable observation','trustedTLS':True,'enrolledCredentialMissingCapabilityStatus':204,'wrongCredentialStatus':401,'queuedNoAssignmentOrJobResources':True})
             command('up','-d','--no-build','--pull','never','runner-legacy')
             samples=[]
             for _ in range(12):
                 value=observation(first);require(value['state']=='WORKFLOW_RUN_STATE_QUEUED' and not value.get('attemptId') and not value.get('runnerId') and cleaned(),'legacy_no_assignment')
                 legacy=json.loads(run('docker','inspect',command('ps','-q','runner-legacy')))[0];require(legacy['Image']==args.old_runner_image and legacy['State']['Running'],'live_legacy_process')
                 samples.append({'state':value['state'],'noAttempt':True,'noJobContainersOrVolumes':True});time.sleep(1)
-            command('stop','-t','15','runner-legacy');record(oldWorker={'image':args.old_runner_image,'aliveWithoutAssignment':True,'seconds':12,'samples':samples,'scope':'Actual old-image poller cannot acquire one resource-bound queued job; not a fabricated protocol lease.'})
+            command('stop','-t','15','runner-legacy');record(oldWorker={'image':args.old_runner_image,'processAliveWithoutAssignment':True,'successfulPollingObserved':False,'seconds':12,'samples':samples,'scope':'Actual old-image process remains running with no assignment/job observed. Process-only negative evidence; successful TLS/authenticated polling by this binary is not proven.'})
             stage('two upgraded workers execute exact lower-limit Docker jobs')
             second=dispatch();command('up','-d','--no-build','--pull','never','runner','runner-second');receipts=[];running=[]
             def both_running():
@@ -451,8 +470,8 @@ def main():
             command('stop','-t','15','runner','runner-second');placement=place(actors['control'],TIMEOUT);timeout_run=dispatch(TIMEOUT_PATH);start=time.monotonic();command('up','-d','--no-build','--pull','never','runner','runner-second')
             timed=wait(lambda:value_if_state(observation(timeout_run),'WORKFLOW_RUN_STATE_TIMED_OUT'),60);binding(timed['jobResources'],policy,pool,placement);wait(lambda:cleaned(timed['attemptId']),45)
             elapsed=time.monotonic()-start;duration=(datetime.fromisoformat(timed['finishedAt'].replace('Z','+00:00'))-datetime.fromisoformat(timed['startedAt'].replace('Z','+00:00'))).total_seconds();require(0<duration<=30,'bounded_timeout_completion')
-            text=run_logs(timed);require('owned timeout must not complete' not in text and all(secret not in text for secret in forbidden),'timeout_no_completion_marker')
-            record(timeout={'runId':timed['id'],'attemptId':timed['attemptId'],'state':timed['state'],'admittedBudgetSeconds':3,'startedToFinishedSeconds':duration,'observedElapsedSeconds':round(elapsed,3),'lateCompletionMarkerAbsent':True,'attemptContainersAndVolumesRemoved':True,'scope':'Whole-attempt wall budget plus bounded completion/cleanup; not instantaneous hardware stop.'})
+            text=run_logs(timed);require('owned timeout started' in text,'timeout_actual_guest_start');require('owned timeout must not complete' not in text and all(secret not in text for secret in forbidden),'timeout_no_completion_marker')
+            record(timeout={'runId':timed['id'],'attemptId':timed['attemptId'],'state':timed['state'],'admittedBudgetSeconds':3,'startedToFinishedSeconds':duration,'observedElapsedSeconds':round(elapsed,3),'guestStartMarkerVerified':True,'lateCompletionMarkerAbsent':True,'attemptContainersAndVolumesRemoved':True,'scope':'Actual guest starts, then whole-attempt wall budget expires with bounded completion/cleanup; not instantaneous hardware stop.'})
             stage('restart keeps original completed and timed-out snapshots without replay')
             historical=[observation(item) for item in (*completed,timed)];command('stop','-t','15','runner','runner-second');command('restart','golf');smoke.ready();command('up','-d','--no-build','--pull','never','runner','runner-second')
             for before_value in historical:
