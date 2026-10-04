@@ -94,6 +94,8 @@ const (
 	// RepositoryInvitationServiceName is the fully-qualified name of the RepositoryInvitationService
 	// service.
 	RepositoryInvitationServiceName = "golf.v1.RepositoryInvitationService"
+	// RepositoryRulesServiceName is the fully-qualified name of the RepositoryRulesService service.
+	RepositoryRulesServiceName = "golf.v1.RepositoryRulesService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -596,6 +598,9 @@ const (
 	// RepositoryInvitationServiceGetRepositoryInvitationOperationProcedure is the fully-qualified name
 	// of the RepositoryInvitationService's GetRepositoryInvitationOperation RPC.
 	RepositoryInvitationServiceGetRepositoryInvitationOperationProcedure = "/golf.v1.RepositoryInvitationService/GetRepositoryInvitationOperation"
+	// RepositoryRulesServiceGetRepositoryRulesProcedure is the fully-qualified name of the
+	// RepositoryRulesService's GetRepositoryRules RPC.
+	RepositoryRulesServiceGetRepositoryRulesProcedure = "/golf.v1.RepositoryRulesService/GetRepositoryRules"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -6310,4 +6315,74 @@ func (UnimplementedRepositoryInvitationServiceHandler) RevokeRepositoryInvitatio
 
 func (UnimplementedRepositoryInvitationServiceHandler) GetRepositoryInvitationOperation(context.Context, *connect.Request[v1.GetRepositoryInvitationOperationRequest]) (*connect.Response[v1.GetRepositoryInvitationOperationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryInvitationService.GetRepositoryInvitationOperation is not implemented"))
+}
+
+// RepositoryRulesServiceClient is a client for the golf.v1.RepositoryRulesService service.
+type RepositoryRulesServiceClient interface {
+	GetRepositoryRules(context.Context, *connect.Request[v1.GetRepositoryRulesRequest]) (*connect.Response[v1.GetRepositoryRulesResponse], error)
+}
+
+// NewRepositoryRulesServiceClient constructs a client for the golf.v1.RepositoryRulesService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRepositoryRulesServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepositoryRulesServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	repositoryRulesServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryRulesService").Methods()
+	return &repositoryRulesServiceClient{
+		getRepositoryRules: connect.NewClient[v1.GetRepositoryRulesRequest, v1.GetRepositoryRulesResponse](
+			httpClient,
+			baseURL+RepositoryRulesServiceGetRepositoryRulesProcedure,
+			connect.WithSchema(repositoryRulesServiceMethods.ByName("GetRepositoryRules")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// repositoryRulesServiceClient implements RepositoryRulesServiceClient.
+type repositoryRulesServiceClient struct {
+	getRepositoryRules *connect.Client[v1.GetRepositoryRulesRequest, v1.GetRepositoryRulesResponse]
+}
+
+// GetRepositoryRules calls golf.v1.RepositoryRulesService.GetRepositoryRules.
+func (c *repositoryRulesServiceClient) GetRepositoryRules(ctx context.Context, req *connect.Request[v1.GetRepositoryRulesRequest]) (*connect.Response[v1.GetRepositoryRulesResponse], error) {
+	return c.getRepositoryRules.CallUnary(ctx, req)
+}
+
+// RepositoryRulesServiceHandler is an implementation of the golf.v1.RepositoryRulesService service.
+type RepositoryRulesServiceHandler interface {
+	GetRepositoryRules(context.Context, *connect.Request[v1.GetRepositoryRulesRequest]) (*connect.Response[v1.GetRepositoryRulesResponse], error)
+}
+
+// NewRepositoryRulesServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRepositoryRulesServiceHandler(svc RepositoryRulesServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	repositoryRulesServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryRulesService").Methods()
+	repositoryRulesServiceGetRepositoryRulesHandler := connect.NewUnaryHandler(
+		RepositoryRulesServiceGetRepositoryRulesProcedure,
+		svc.GetRepositoryRules,
+		connect.WithSchema(repositoryRulesServiceMethods.ByName("GetRepositoryRules")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RepositoryRulesService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RepositoryRulesServiceGetRepositoryRulesProcedure:
+			repositoryRulesServiceGetRepositoryRulesHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRepositoryRulesServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRepositoryRulesServiceHandler struct{}
+
+func (UnimplementedRepositoryRulesServiceHandler) GetRepositoryRules(context.Context, *connect.Request[v1.GetRepositoryRulesRequest]) (*connect.Response[v1.GetRepositoryRulesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryRulesService.GetRepositoryRules is not implemented"))
 }

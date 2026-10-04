@@ -3013,3 +3013,84 @@ message GetRepositoryInvitationOperationResponse { RepositoryInvitationOperation
 message RespondRepositoryInvitationResponse { RepositoryInvitation invitation = 1; RepositoryInvitationOperation operation = 2; }
 message RevokeRepositoryInvitationResponse { RepositoryInvitation invitation = 1; }
 message ListOwnRepositoryInvitationsResponse { repeated RepositoryInvitation invitations = 1; PageResponse page = 2; }
+
+// Current native configuration observations, not Golf protected-write authority.
+service RepositoryRulesService {
+  rpc GetRepositoryRules(GetRepositoryRulesRequest) returns (GetRepositoryRulesResponse);
+}
+message GetRepositoryRulesRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string expected_revision = 4;
+}
+message GetRepositoryRulesResponse {
+  string repository_id = 1;
+  string owner_id = 2;
+  string access_revision = 3;
+  // Before/after observation fingerprint, not native CAS or enforcement proof.
+  string rules_revision = 4;
+  repeated RepositoryBranchProtection branch_protections = 5;
+  repeated RepositoryTagProtection tag_protections = 6;
+  RepositoryMergeConfiguration merge_configuration = 7;
+}
+message RepositoryBranchProtection {
+  string rule_name = 1;
+  string priority = 2;
+  string required_approvals = 3;
+  repeated string status_check_contexts = 4;
+  repeated string push_usernames = 5;
+  repeated string push_teams = 6;
+  repeated string force_push_usernames = 7;
+  repeated string force_push_teams = 8;
+  repeated string merge_usernames = 9;
+  repeated string merge_teams = 10;
+  repeated string bypass_usernames = 11;
+  repeated string bypass_teams = 12;
+  repeated string approvals_usernames = 13;
+  repeated string approvals_teams = 14;
+  string protected_file_patterns = 15;
+  string unprotected_file_patterns = 16;
+  string created_at = 17;
+  string updated_at = 18;
+  bool enable_push = 19;
+  bool enable_push_whitelist = 20;
+  bool push_whitelist_deploy_keys = 21;
+  bool enable_force_push = 22;
+  bool enable_force_push_allowlist = 23;
+  bool force_push_allowlist_deploy_keys = 24;
+  bool enable_merge_whitelist = 25;
+  bool enable_bypass_allowlist = 26;
+  bool enable_status_check = 27;
+  bool enable_approvals_whitelist = 28;
+  bool block_on_rejected_reviews = 29;
+  bool block_on_official_review_requests = 30;
+  bool block_on_outdated_branch = 31;
+  bool dismiss_stale_approvals = 32;
+  bool ignore_stale_approvals = 33;
+  bool require_signed_commits = 34;
+  bool block_admin_merge_override = 35;
+}
+message RepositoryTagProtection {
+  string id = 1;
+  string name_pattern = 2;
+  repeated string allowed_usernames = 3;
+  repeated string allowed_teams = 4;
+  string created_at = 5;
+  string updated_at = 6;
+}
+message RepositoryMergeConfiguration {
+  bool allow_merge_commits = 1;
+  bool allow_rebase = 2;
+  bool allow_rebase_explicit = 3;
+  bool allow_squash_merge = 4;
+  bool allow_fast_forward_only_merge = 5;
+  bool allow_manual_merge = 6;
+  bool autodetect_manual_merge = 7;
+  bool allow_merge_update = 8;
+  bool allow_rebase_update = 9;
+  bool default_delete_branch_after_merge = 10;
+  bool default_allow_maintainer_edit = 11;
+  string default_merge_style = 12;
+  string default_update_style = 13;
+}
