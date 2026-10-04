@@ -1,0 +1,32 @@
+# Optional direct TLS for the coordinator connection. Combine with compose.ci.yaml.
+# Supply existing certificates; this overlay never generates or trusts a new CA.
+services:
+  golf:
+    environment:
+      GOLF_INTERNAL_TLS_LISTEN_ADDR: ${GOLF_INTERNAL_TLS_LISTEN_ADDR:-127.0.0.1:8443}
+      GOLF_INTERNAL_TLS_CERT_FILE: /run/golf/internal-tls/server.crt
+      GOLF_INTERNAL_TLS_KEY_FILE: /run/golf/internal-tls/server.key
+    volumes:
+      - type: bind
+        source: ${GOLF_INTERNAL_TLS_CERT_FILE:?Supply an existing server certificate}
+        target: /run/golf/internal-tls/server.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${GOLF_INTERNAL_TLS_KEY_FILE:?Supply an existing server private key}
+        target: /run/golf/internal-tls/server.key
+        read_only: true
+        bind:
+          create_host_path: false
+  runner:
+    environment:
+      GOLF_RUNNER_URL: ${GOLF_RUNNER_TLS_URL:-https://127.0.0.1:8443}
+      GOLF_RUNNER_TLS_CA_FILE: /run/golf/internal-tls/ca.crt
+    volumes:
+      - type: bind
+        source: ${GOLF_RUNNER_TLS_CA_FILE:?Supply an existing trusted CA certificate}
+        target: /run/golf/internal-tls/ca.crt
+        read_only: true
+        bind:
+          create_host_path: false

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"io"
 	"log"
@@ -102,6 +103,10 @@ func serve(ctx context.Context, logger zerolog.Logger) error {
 	if os.Getenv("DATABASE_URL") == "" {
 		return errors.New("DATABASE_URL is required")
 	}
+	internalTLS, err := loadInternalTLSSettings()
+	if err != nil {
+		return err
+	}
 	config := serverConfig()
 	// Validate configuration before opening a database; errors contain no secret values.
 	validationConfig := config
@@ -147,6 +152,17 @@ func serve(ctx context.Context, logger zerolog.Logger) error {
 	defer public.Close()
 	servers := []*http.Server{httpServer}
 	listeners := []net.Listener{public}
+	if internalTLS != nil {
+		machineListener, err := net.Listen("tcp", internalTLS.address)
+		if err != nil {
+			return errors.New("internal TLS listener unavailable")
+		}
+		defer machineListener.Close()
+		machineServer := newHTTPServer(internalTLS.address, app, logger)
+		machineServer.TLSConfig = internalTLS.config
+		servers = append(servers, machineServer)
+		listeners = append(listeners, tls.NewListener(machineListener, internalTLS.config))
+	}
 	if metricsAddress != "" {
 		private, err := net.Listen("tcp", metricsAddress)
 		if err != nil {
@@ -164,7 +180,7 @@ func serve(ctx context.Context, logger zerolog.Logger) error {
 	coordinatorDone := make(chan struct{})
 	go func() { defer close(coordinatorDone); app.RunPushAutomation(coordinator) }()
 	defer func() { stopCoordinator(); <-coordinatorDone }()
-	logger.Info().Bool("metrics_enabled", metricsAddress != "").Msg("Golf listening")
+	logger.Info().Bool("metrics_enabled", metricsAddress != "").Bool("internal_tls_enabled", internalTLS != nil).Msg("Golf listening")
 	var serveError error
 	select {
 	case err := <-finished:
