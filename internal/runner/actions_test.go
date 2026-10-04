@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -142,5 +143,60 @@ func TestActionsActualPreparationFailureHasOnlyFixedStage(t *testing.T) {
 	_, err = a.Execute(t.Context(), strings.Repeat("b", 32), input, func(context.Context, ActionFrame) error { return nil })
 	if !errors.Is(err, ErrInvalidJob) || ActionsFailureStage(err) != "input_validation" {
 		t.Fatal("invalid source was reclassified as infrastructure")
+	}
+}
+
+func TestHelperTransferStreamsBoundedBinaryIntoLiveNamespaceAndChecksFullDigest(t *testing.T) {
+	for _, mode := range []string{"valid", "changed_digest", "transfer_failure", "empty"} {
+		t.Run(mode, func(t *testing.T) {
+			directory := t.TempDir()
+			helper := filepath.Join(directory, "helper")
+			captured := filepath.Join(directory, "captured")
+			binary := filepath.Join(directory, "fake-docker")
+			body := bytes.Repeat([]byte{'x', 0, 0xff, '\n'}, 33<<10)
+			if mode == "empty" {
+				body = nil
+			}
+			if err := os.WriteFile(helper, body, 0700); err != nil {
+				t.Fatal(err)
+			}
+			sum := sha256.Sum256(body)
+			digest := hex.EncodeToString(sum[:])
+			if mode == "changed_digest" {
+				digest = strings.Repeat("f", 64)
+			}
+			quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
+			transfer := "cat > " + quote(captured)
+			if mode == "transfer_failure" {
+				transfer = "exit 1"
+			}
+			// Substituted CLI: binary bytes are stdin, never command text; fixed
+			// audited path/command is asserted, and no Docker/source is executed.
+			script := "#!/bin/sh\n[ \"$1\" = exec ] || exit 2\nif [ \"$2\" = -i ]; then\n [ \"$4\" = /bin/sh ] && [ \"$5\" = -c ] && [ \"$6\" = 'umask 077; cat > /golf/engine && chmod 0555 /golf/engine' ] || exit 3\n " + transfer + "\nelse\n [ \"$3\" = sha256sum ] && [ \"$4\" = /golf/engine ] || exit 4\n printf '%s  /golf/engine\\n' '" + digest + "'\nfi\n"
+			if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
+				t.Fatal(err)
+			}
+			e, err := New(Config{WorkerID: "owned", DockerBinary: binary, ApprovedImages: []string{"alpine@sha256:" + strings.Repeat("a", 64)}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			a, err := NewActions(e, helper)
+			if err != nil {
+				t.Fatal(err)
+			}
+			phase, err := a.transferHelper(t.Context(), strings.Repeat("b", 64))
+			expectedPhase := map[string]string{"valid": "helper_remote_hash", "changed_digest": "helper_remote_hash", "transfer_failure": "helper_transfer", "empty": "helper_local_hash"}[mode]
+			if phase != expectedPhase || (err == nil) != (mode == "valid") || (err != nil && !errors.Is(err, ErrInfrastructure)) {
+				t.Fatal("transfer/verification policy differs", phase)
+			}
+			if mode == "valid" || mode == "changed_digest" {
+				actual, err := os.ReadFile(captured)
+				if err != nil || !bytes.Equal(actual, body) {
+					t.Fatal("stdin binary copy changed/truncated or used wrong path")
+				}
+			} else if _, err := os.Stat(captured); !os.IsNotExist(err) {
+				t.Fatal("refused helper leaked a copy")
+			}
+		})
 	}
 }

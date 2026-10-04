@@ -206,25 +206,9 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 			return result, ErrInfrastructure
 		}
 	}
-	phase = "helper_transfer"
-	if _, err = e.command(runCtx, nil, "cp", a.helper, container+":/golf/engine"); err != nil {
-		return result, ErrInfrastructure
-	}
-	phase = "helper_local_hash"
-	file, err := os.Open(a.helper)
+	phase, err = a.transferHelper(runCtx, container)
 	if err != nil {
-		return result, ErrInfrastructure
-	}
-	hash := sha256.New()
-	n, copyErr := io.Copy(hash, io.LimitReader(file, (128<<20)+1))
-	closeErr := file.Close()
-	if copyErr != nil || closeErr != nil || n > 128<<20 {
-		return result, ErrInfrastructure
-	}
-	phase = "helper_remote_hash"
-	actual, err := e.command(runCtx, nil, "exec", container, "sha256sum", "/golf/engine")
-	if err != nil || !strings.HasPrefix(string(actual), hex.EncodeToString(hash.Sum(nil))+"  /golf/engine") {
-		return result, ErrInfrastructure
+		return result, err
 	}
 	input.ResolvedImages = images
 	phase = "helper_process_start"
@@ -311,6 +295,44 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 	}
 	return result, nil
 }
+
+// A Docker archive-copy can succeed without populating the running tmpfs.
+// Hash locally first, stream only bounded bytes into the audited live namespace,
+// then require the same full hash before executing anything from that namespace.
+func (a *ActionsExecutor) transferHelper(ctx context.Context, container string) (string, error) {
+	e := a.executor
+	phase := "helper_local_hash"
+	file, err := os.Open(a.helper)
+	if err != nil {
+		return phase, ErrInfrastructure
+	}
+	hash := sha256.New()
+	n, copyErr := io.Copy(hash, io.LimitReader(file, (128<<20)+1))
+	if copyErr != nil || n < 1 || n > 128<<20 {
+		file.Close()
+		return phase, ErrInfrastructure
+	}
+	if _, err = file.Seek(0, io.SeekStart); err != nil {
+		file.Close()
+		return phase, ErrInfrastructure
+	}
+	// Docker's archive-copy endpoint does not expose the running tmpfs.
+	// Transfer through the audited owned live namespace instead. Only this
+	// fixed operator command runs; source and paths never enter shell syntax.
+	phase = "helper_transfer"
+	_, transferErr := e.command(ctx, io.LimitReader(file, n+1), "exec", "-i", container, "/bin/sh", "-c", "umask 077; cat > /golf/engine && chmod 0555 /golf/engine")
+	closeErr := file.Close()
+	if transferErr != nil || closeErr != nil {
+		return phase, ErrInfrastructure
+	}
+	phase = "helper_remote_hash"
+	actual, err := e.command(ctx, nil, "exec", container, "sha256sum", "/golf/engine")
+	if err != nil || !strings.HasPrefix(string(actual), hex.EncodeToString(hash.Sum(nil))+"  /golf/engine") {
+		return phase, ErrInfrastructure
+	}
+	return phase, nil
+}
+
 func (a *ActionsExecutor) copyImage(ctx context.Context, container, image string) error {
 	save := exec.CommandContext(ctx, a.executor.config.DockerBinary, "image", "save", image)
 	save.Stderr = io.Discard
