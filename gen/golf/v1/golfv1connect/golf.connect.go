@@ -98,6 +98,8 @@ const (
 	RepositoryRulesServiceName = "golf.v1.RepositoryRulesService"
 	// RunnerControlServiceName is the fully-qualified name of the RunnerControlService service.
 	RunnerControlServiceName = "golf.v1.RunnerControlService"
+	// RunnerPoolServiceName is the fully-qualified name of the RunnerPoolService service.
+	RunnerPoolServiceName = "golf.v1.RunnerPoolService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -621,6 +623,18 @@ const (
 	// RunnerControlServiceGetRepositoryRunnersProcedure is the fully-qualified name of the
 	// RunnerControlService's GetRepositoryRunners RPC.
 	RunnerControlServiceGetRepositoryRunnersProcedure = "/golf.v1.RunnerControlService/GetRepositoryRunners"
+	// RunnerPoolServiceListRunnerPoolsProcedure is the fully-qualified name of the RunnerPoolService's
+	// ListRunnerPools RPC.
+	RunnerPoolServiceListRunnerPoolsProcedure = "/golf.v1.RunnerPoolService/ListRunnerPools"
+	// RunnerPoolServiceSaveRunnerPoolProcedure is the fully-qualified name of the RunnerPoolService's
+	// SaveRunnerPool RPC.
+	RunnerPoolServiceSaveRunnerPoolProcedure = "/golf.v1.RunnerPoolService/SaveRunnerPool"
+	// RunnerPoolServiceGetRepositoryRunnerPlacementProcedure is the fully-qualified name of the
+	// RunnerPoolService's GetRepositoryRunnerPlacement RPC.
+	RunnerPoolServiceGetRepositoryRunnerPlacementProcedure = "/golf.v1.RunnerPoolService/GetRepositoryRunnerPlacement"
+	// RunnerPoolServiceSetRepositoryRunnerPlacementProcedure is the fully-qualified name of the
+	// RunnerPoolService's SetRepositoryRunnerPlacement RPC.
+	RunnerPoolServiceSetRepositoryRunnerPlacementProcedure = "/golf.v1.RunnerPoolService/SetRepositoryRunnerPlacement"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -6605,4 +6619,152 @@ func (UnimplementedRunnerControlServiceHandler) UpdateRunnerControl(context.Cont
 
 func (UnimplementedRunnerControlServiceHandler) GetRepositoryRunners(context.Context, *connect.Request[v1.GetRepositoryRunnersRequest]) (*connect.Response[v1.GetRepositoryRunnersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RunnerControlService.GetRepositoryRunners is not implemented"))
+}
+
+// RunnerPoolServiceClient is a client for the golf.v1.RunnerPoolService service.
+type RunnerPoolServiceClient interface {
+	ListRunnerPools(context.Context, *connect.Request[v1.ListRunnerPoolsRequest]) (*connect.Response[v1.ListRunnerPoolsResponse], error)
+	SaveRunnerPool(context.Context, *connect.Request[v1.SaveRunnerPoolRequest]) (*connect.Response[v1.SaveRunnerPoolResponse], error)
+	GetRepositoryRunnerPlacement(context.Context, *connect.Request[v1.GetRepositoryRunnerPlacementRequest]) (*connect.Response[v1.GetRepositoryRunnerPlacementResponse], error)
+	SetRepositoryRunnerPlacement(context.Context, *connect.Request[v1.SetRepositoryRunnerPlacementRequest]) (*connect.Response[v1.SetRepositoryRunnerPlacementResponse], error)
+}
+
+// NewRunnerPoolServiceClient constructs a client for the golf.v1.RunnerPoolService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRunnerPoolServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RunnerPoolServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	runnerPoolServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RunnerPoolService").Methods()
+	return &runnerPoolServiceClient{
+		listRunnerPools: connect.NewClient[v1.ListRunnerPoolsRequest, v1.ListRunnerPoolsResponse](
+			httpClient,
+			baseURL+RunnerPoolServiceListRunnerPoolsProcedure,
+			connect.WithSchema(runnerPoolServiceMethods.ByName("ListRunnerPools")),
+			connect.WithClientOptions(opts...),
+		),
+		saveRunnerPool: connect.NewClient[v1.SaveRunnerPoolRequest, v1.SaveRunnerPoolResponse](
+			httpClient,
+			baseURL+RunnerPoolServiceSaveRunnerPoolProcedure,
+			connect.WithSchema(runnerPoolServiceMethods.ByName("SaveRunnerPool")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryRunnerPlacement: connect.NewClient[v1.GetRepositoryRunnerPlacementRequest, v1.GetRepositoryRunnerPlacementResponse](
+			httpClient,
+			baseURL+RunnerPoolServiceGetRepositoryRunnerPlacementProcedure,
+			connect.WithSchema(runnerPoolServiceMethods.ByName("GetRepositoryRunnerPlacement")),
+			connect.WithClientOptions(opts...),
+		),
+		setRepositoryRunnerPlacement: connect.NewClient[v1.SetRepositoryRunnerPlacementRequest, v1.SetRepositoryRunnerPlacementResponse](
+			httpClient,
+			baseURL+RunnerPoolServiceSetRepositoryRunnerPlacementProcedure,
+			connect.WithSchema(runnerPoolServiceMethods.ByName("SetRepositoryRunnerPlacement")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// runnerPoolServiceClient implements RunnerPoolServiceClient.
+type runnerPoolServiceClient struct {
+	listRunnerPools              *connect.Client[v1.ListRunnerPoolsRequest, v1.ListRunnerPoolsResponse]
+	saveRunnerPool               *connect.Client[v1.SaveRunnerPoolRequest, v1.SaveRunnerPoolResponse]
+	getRepositoryRunnerPlacement *connect.Client[v1.GetRepositoryRunnerPlacementRequest, v1.GetRepositoryRunnerPlacementResponse]
+	setRepositoryRunnerPlacement *connect.Client[v1.SetRepositoryRunnerPlacementRequest, v1.SetRepositoryRunnerPlacementResponse]
+}
+
+// ListRunnerPools calls golf.v1.RunnerPoolService.ListRunnerPools.
+func (c *runnerPoolServiceClient) ListRunnerPools(ctx context.Context, req *connect.Request[v1.ListRunnerPoolsRequest]) (*connect.Response[v1.ListRunnerPoolsResponse], error) {
+	return c.listRunnerPools.CallUnary(ctx, req)
+}
+
+// SaveRunnerPool calls golf.v1.RunnerPoolService.SaveRunnerPool.
+func (c *runnerPoolServiceClient) SaveRunnerPool(ctx context.Context, req *connect.Request[v1.SaveRunnerPoolRequest]) (*connect.Response[v1.SaveRunnerPoolResponse], error) {
+	return c.saveRunnerPool.CallUnary(ctx, req)
+}
+
+// GetRepositoryRunnerPlacement calls golf.v1.RunnerPoolService.GetRepositoryRunnerPlacement.
+func (c *runnerPoolServiceClient) GetRepositoryRunnerPlacement(ctx context.Context, req *connect.Request[v1.GetRepositoryRunnerPlacementRequest]) (*connect.Response[v1.GetRepositoryRunnerPlacementResponse], error) {
+	return c.getRepositoryRunnerPlacement.CallUnary(ctx, req)
+}
+
+// SetRepositoryRunnerPlacement calls golf.v1.RunnerPoolService.SetRepositoryRunnerPlacement.
+func (c *runnerPoolServiceClient) SetRepositoryRunnerPlacement(ctx context.Context, req *connect.Request[v1.SetRepositoryRunnerPlacementRequest]) (*connect.Response[v1.SetRepositoryRunnerPlacementResponse], error) {
+	return c.setRepositoryRunnerPlacement.CallUnary(ctx, req)
+}
+
+// RunnerPoolServiceHandler is an implementation of the golf.v1.RunnerPoolService service.
+type RunnerPoolServiceHandler interface {
+	ListRunnerPools(context.Context, *connect.Request[v1.ListRunnerPoolsRequest]) (*connect.Response[v1.ListRunnerPoolsResponse], error)
+	SaveRunnerPool(context.Context, *connect.Request[v1.SaveRunnerPoolRequest]) (*connect.Response[v1.SaveRunnerPoolResponse], error)
+	GetRepositoryRunnerPlacement(context.Context, *connect.Request[v1.GetRepositoryRunnerPlacementRequest]) (*connect.Response[v1.GetRepositoryRunnerPlacementResponse], error)
+	SetRepositoryRunnerPlacement(context.Context, *connect.Request[v1.SetRepositoryRunnerPlacementRequest]) (*connect.Response[v1.SetRepositoryRunnerPlacementResponse], error)
+}
+
+// NewRunnerPoolServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRunnerPoolServiceHandler(svc RunnerPoolServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	runnerPoolServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RunnerPoolService").Methods()
+	runnerPoolServiceListRunnerPoolsHandler := connect.NewUnaryHandler(
+		RunnerPoolServiceListRunnerPoolsProcedure,
+		svc.ListRunnerPools,
+		connect.WithSchema(runnerPoolServiceMethods.ByName("ListRunnerPools")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runnerPoolServiceSaveRunnerPoolHandler := connect.NewUnaryHandler(
+		RunnerPoolServiceSaveRunnerPoolProcedure,
+		svc.SaveRunnerPool,
+		connect.WithSchema(runnerPoolServiceMethods.ByName("SaveRunnerPool")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runnerPoolServiceGetRepositoryRunnerPlacementHandler := connect.NewUnaryHandler(
+		RunnerPoolServiceGetRepositoryRunnerPlacementProcedure,
+		svc.GetRepositoryRunnerPlacement,
+		connect.WithSchema(runnerPoolServiceMethods.ByName("GetRepositoryRunnerPlacement")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runnerPoolServiceSetRepositoryRunnerPlacementHandler := connect.NewUnaryHandler(
+		RunnerPoolServiceSetRepositoryRunnerPlacementProcedure,
+		svc.SetRepositoryRunnerPlacement,
+		connect.WithSchema(runnerPoolServiceMethods.ByName("SetRepositoryRunnerPlacement")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RunnerPoolService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RunnerPoolServiceListRunnerPoolsProcedure:
+			runnerPoolServiceListRunnerPoolsHandler.ServeHTTP(w, r)
+		case RunnerPoolServiceSaveRunnerPoolProcedure:
+			runnerPoolServiceSaveRunnerPoolHandler.ServeHTTP(w, r)
+		case RunnerPoolServiceGetRepositoryRunnerPlacementProcedure:
+			runnerPoolServiceGetRepositoryRunnerPlacementHandler.ServeHTTP(w, r)
+		case RunnerPoolServiceSetRepositoryRunnerPlacementProcedure:
+			runnerPoolServiceSetRepositoryRunnerPlacementHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRunnerPoolServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRunnerPoolServiceHandler struct{}
+
+func (UnimplementedRunnerPoolServiceHandler) ListRunnerPools(context.Context, *connect.Request[v1.ListRunnerPoolsRequest]) (*connect.Response[v1.ListRunnerPoolsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RunnerPoolService.ListRunnerPools is not implemented"))
+}
+
+func (UnimplementedRunnerPoolServiceHandler) SaveRunnerPool(context.Context, *connect.Request[v1.SaveRunnerPoolRequest]) (*connect.Response[v1.SaveRunnerPoolResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RunnerPoolService.SaveRunnerPool is not implemented"))
+}
+
+func (UnimplementedRunnerPoolServiceHandler) GetRepositoryRunnerPlacement(context.Context, *connect.Request[v1.GetRepositoryRunnerPlacementRequest]) (*connect.Response[v1.GetRepositoryRunnerPlacementResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RunnerPoolService.GetRepositoryRunnerPlacement is not implemented"))
+}
+
+func (UnimplementedRunnerPoolServiceHandler) SetRepositoryRunnerPlacement(context.Context, *connect.Request[v1.SetRepositoryRunnerPlacementRequest]) (*connect.Response[v1.SetRepositoryRunnerPlacementResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RunnerPoolService.SetRepositoryRunnerPlacement is not implemented"))
 }

@@ -1376,6 +1376,7 @@ message WorkflowRun {
  WorkflowOutputState output_state = 28;
  string execution_binding_id = 29;
  string execution_binding_version = 30;
+ WorkflowRunnerPlacement runner_placement = 31;
 }
 enum WorkflowStepState {
  WORKFLOW_STEP_STATE_UNSPECIFIED = 0;
@@ -3236,3 +3237,83 @@ message MutateRepositoryRulesResponse {
  GetRepositoryRulesResponse current_rules = 2;
 }
 message GetRepositoryRuleMutationResponse { RepositoryRuleMutation operation = 1; }
+
+// Named pools map already operator-enrolled local Docker workers; not enrollment.
+service RunnerPoolService {
+ rpc ListRunnerPools(ListRunnerPoolsRequest) returns (ListRunnerPoolsResponse);
+ rpc SaveRunnerPool(SaveRunnerPoolRequest) returns (SaveRunnerPoolResponse);
+ rpc GetRepositoryRunnerPlacement(GetRepositoryRunnerPlacementRequest) returns (GetRepositoryRunnerPlacementResponse);
+ rpc SetRepositoryRunnerPlacement(SetRepositoryRunnerPlacementRequest) returns (SetRepositoryRunnerPlacementResponse);
+}
+enum RunnerPoolState {
+ RUNNER_POOL_STATE_UNSPECIFIED = 0;
+ RUNNER_POOL_STATE_ACTIVE = 1;
+ RUNNER_POOL_STATE_DRAINING = 2;
+}
+message RunnerPool {
+ string id=1;
+ string name=2;
+ string version=3;
+ string runtime=4;
+ RunnerPoolState state=5;
+ uint32 max_parallel_attempts=6;
+ repeated string worker_ids=7;
+ bool repository_assignment_enabled=8;
+ string created_at=9;
+ string updated_at=10;
+ optional string active_attempt_count=11;
+}
+message ListRunnerPoolsRequest {}
+message ListRunnerPoolsResponse { repeated RunnerPool pools=1; repeated string enrolled_worker_ids=2; }
+message SaveRunnerPoolRequest {
+ string id=1;
+ string expected_version=2;
+ string name=3;
+ string runtime=4;
+ RunnerPoolState state=5;
+ uint32 max_parallel_attempts=6;
+ repeated string worker_ids=7;
+ bool repository_assignment_enabled=8;
+ string current_password=9;
+}
+message SaveRunnerPoolResponse { RunnerPool pool=1; }
+message RepositoryRunnerPlacement {
+ RepositoryKey repository=1;
+ string repository_id=2;
+ string owner_id=3;
+ string access_revision=4;
+ string version=5;
+ string pool_id=6;
+ string pool_version=7;
+ bool legacy_unbound=8;
+}
+message GetRepositoryRunnerPlacementRequest {
+ RepositoryKey repository=1;
+ string repository_id=2;
+ string owner_id=3;
+ string expected_revision=4;
+}
+message GetRepositoryRunnerPlacementResponse {
+ RepositoryRunnerPlacement placement=1;
+ repeated RunnerPool eligible_pools=2;
+ RunnerPool selected_pool=3;
+ bool can_edit=4;
+ bool password_confirmation_available=5;
+}
+message SetRepositoryRunnerPlacementRequest {
+ RepositoryKey repository=1;
+ string repository_id=2;
+ string owner_id=3;
+ string expected_revision=4;
+ string expected_placement_version=5;
+ string pool_id=6;
+ string expected_pool_version=7;
+ string current_password=8;
+}
+message SetRepositoryRunnerPlacementResponse { RepositoryRunnerPlacement placement=1; }
+message WorkflowRunnerPlacement {
+ string pool_id=1;
+ string pool_version=2;
+ string placement_version=3;
+ bool legacy_unbound=4;
+}

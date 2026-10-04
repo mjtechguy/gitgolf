@@ -963,6 +963,17 @@ type GolfRepositoryRuleMutationEvent struct {
 	OccurredAt time.Time
 }
 
+type GolfRepositoryRunnerPlacement struct {
+	ForgeURL            string
+	RepositoryID        int64
+	OwnerID             int64
+	Version             int64
+	PoolID              uuid.NullUUID
+	SelectedPoolVersion sql.NullInt64
+	ActorUserID         int64
+	UpdatedAt           time.Time
+}
+
 type GolfReviewContent struct {
 	ID               uuid.UUID
 	UserID           int64
@@ -1099,6 +1110,50 @@ type GolfRunnerControlAudit struct {
 	PreviousState string
 	State         string
 	CreatedAt     time.Time
+}
+
+type GolfRunnerPlacementAudit struct {
+	ForgeURL            string
+	RepositoryID        int64
+	OwnerID             int64
+	Version             int64
+	ActorUserID         int64
+	PoolID              uuid.NullUUID
+	SelectedPoolVersion sql.NullInt64
+	CreatedAt           time.Time
+}
+
+type GolfRunnerPool struct {
+	ForgeURL                    string
+	ID                          uuid.UUID
+	Name                        string
+	Runtime                     string
+	State                       string
+	MaxParallelAttempts         int32
+	RepositoryAssignmentEnabled bool
+	Version                     int64
+	ActorUserID                 int64
+	CreatedAt                   time.Time
+	UpdatedAt                   time.Time
+}
+
+type GolfRunnerPoolAudit struct {
+	ForgeURL                    string
+	PoolID                      uuid.UUID
+	Version                     int64
+	ActorUserID                 int64
+	Name                        string
+	State                       string
+	MaxParallelAttempts         int32
+	RepositoryAssignmentEnabled bool
+	WorkerIds                   []string
+	CreatedAt                   time.Time
+}
+
+type GolfRunnerPoolWorker struct {
+	ForgeURL string
+	RunnerID string
+	PoolID   uuid.UUID
 }
 
 type GolfRunnerPresence struct {
@@ -1296,6 +1351,9 @@ type GolfWorkflowRun struct {
 	RepositoryEventID           sql.NullInt64
 	EventRef                    string
 	EngineCatalog               string
+	RunnerPoolID                uuid.NullUUID
+	RunnerPoolVersion           sql.NullInt64
+	RunnerPlacementVersion      int64
 }
 
 type GolfWorkflowRunLog struct {
