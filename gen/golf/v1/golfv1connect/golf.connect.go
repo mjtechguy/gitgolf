@@ -108,6 +108,9 @@ const (
 	// RepositoryEnvironmentServiceName is the fully-qualified name of the RepositoryEnvironmentService
 	// service.
 	RepositoryEnvironmentServiceName = "golf.v1.RepositoryEnvironmentService"
+	// PullMergeObservationServiceName is the fully-qualified name of the PullMergeObservationService
+	// service.
+	PullMergeObservationServiceName = "golf.v1.PullMergeObservationService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -704,6 +707,9 @@ const (
 	// RepositoryEnvironmentServiceGetRepositoryEnvironmentOperationProcedure is the fully-qualified
 	// name of the RepositoryEnvironmentService's GetRepositoryEnvironmentOperation RPC.
 	RepositoryEnvironmentServiceGetRepositoryEnvironmentOperationProcedure = "/golf.v1.RepositoryEnvironmentService/GetRepositoryEnvironmentOperation"
+	// PullMergeObservationServiceGetPullRequestMergeObservationProcedure is the fully-qualified name of
+	// the PullMergeObservationService's GetPullRequestMergeObservation RPC.
+	PullMergeObservationServiceGetPullRequestMergeObservationProcedure = "/golf.v1.PullMergeObservationService/GetPullRequestMergeObservation"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -7502,4 +7508,77 @@ func (UnimplementedRepositoryEnvironmentServiceHandler) DeleteRepositoryEnvironm
 
 func (UnimplementedRepositoryEnvironmentServiceHandler) GetRepositoryEnvironmentOperation(context.Context, *connect.Request[v1.GetRepositoryEnvironmentOperationRequest]) (*connect.Response[v1.GetRepositoryEnvironmentOperationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryEnvironmentService.GetRepositoryEnvironmentOperation is not implemented"))
+}
+
+// PullMergeObservationServiceClient is a client for the golf.v1.PullMergeObservationService
+// service.
+type PullMergeObservationServiceClient interface {
+	GetPullRequestMergeObservation(context.Context, *connect.Request[v1.GetPullRequestMergeObservationRequest]) (*connect.Response[v1.GetPullRequestMergeObservationResponse], error)
+}
+
+// NewPullMergeObservationServiceClient constructs a client for the
+// golf.v1.PullMergeObservationService service. By default, it uses the Connect protocol with the
+// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
+// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewPullMergeObservationServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) PullMergeObservationServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	pullMergeObservationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("PullMergeObservationService").Methods()
+	return &pullMergeObservationServiceClient{
+		getPullRequestMergeObservation: connect.NewClient[v1.GetPullRequestMergeObservationRequest, v1.GetPullRequestMergeObservationResponse](
+			httpClient,
+			baseURL+PullMergeObservationServiceGetPullRequestMergeObservationProcedure,
+			connect.WithSchema(pullMergeObservationServiceMethods.ByName("GetPullRequestMergeObservation")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// pullMergeObservationServiceClient implements PullMergeObservationServiceClient.
+type pullMergeObservationServiceClient struct {
+	getPullRequestMergeObservation *connect.Client[v1.GetPullRequestMergeObservationRequest, v1.GetPullRequestMergeObservationResponse]
+}
+
+// GetPullRequestMergeObservation calls
+// golf.v1.PullMergeObservationService.GetPullRequestMergeObservation.
+func (c *pullMergeObservationServiceClient) GetPullRequestMergeObservation(ctx context.Context, req *connect.Request[v1.GetPullRequestMergeObservationRequest]) (*connect.Response[v1.GetPullRequestMergeObservationResponse], error) {
+	return c.getPullRequestMergeObservation.CallUnary(ctx, req)
+}
+
+// PullMergeObservationServiceHandler is an implementation of the
+// golf.v1.PullMergeObservationService service.
+type PullMergeObservationServiceHandler interface {
+	GetPullRequestMergeObservation(context.Context, *connect.Request[v1.GetPullRequestMergeObservationRequest]) (*connect.Response[v1.GetPullRequestMergeObservationResponse], error)
+}
+
+// NewPullMergeObservationServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewPullMergeObservationServiceHandler(svc PullMergeObservationServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	pullMergeObservationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("PullMergeObservationService").Methods()
+	pullMergeObservationServiceGetPullRequestMergeObservationHandler := connect.NewUnaryHandler(
+		PullMergeObservationServiceGetPullRequestMergeObservationProcedure,
+		svc.GetPullRequestMergeObservation,
+		connect.WithSchema(pullMergeObservationServiceMethods.ByName("GetPullRequestMergeObservation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.PullMergeObservationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case PullMergeObservationServiceGetPullRequestMergeObservationProcedure:
+			pullMergeObservationServiceGetPullRequestMergeObservationHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedPullMergeObservationServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedPullMergeObservationServiceHandler struct{}
+
+func (UnimplementedPullMergeObservationServiceHandler) GetPullRequestMergeObservation(context.Context, *connect.Request[v1.GetPullRequestMergeObservationRequest]) (*connect.Response[v1.GetPullRequestMergeObservationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullMergeObservationService.GetPullRequestMergeObservation is not implemented"))
 }

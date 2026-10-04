@@ -3735,3 +3735,46 @@ message PrepareWorkflowDispatchResponse {
  // A parameter contract only. No worker/catalog availability or run admission.
  string input_contract = 12;
 }
+
+// Current native observations only. This service never issues a merge permit.
+service PullMergeObservationService {
+  rpc GetPullRequestMergeObservation(GetPullRequestMergeObservationRequest) returns (GetPullRequestMergeObservationResponse);
+}
+enum PullMergeTargetProtection {
+  PULL_MERGE_TARGET_PROTECTION_UNSPECIFIED = 0;
+  PULL_MERGE_TARGET_PROTECTION_UNKNOWN = 1;
+  PULL_MERGE_TARGET_PROTECTION_UNPROTECTED = 2;
+  PULL_MERGE_TARGET_PROTECTION_PROTECTED = 3;
+}
+enum PullMergeSourceState {
+  PULL_MERGE_SOURCE_STATE_UNSPECIFIED = 0;
+  PULL_MERGE_SOURCE_STATE_CURRENT = 1;
+  PULL_MERGE_SOURCE_STATE_UNAVAILABLE = 2;
+  PULL_MERGE_SOURCE_STATE_CHANGED = 3;
+  PULL_MERGE_SOURCE_STATE_RETAINED_ONLY = 4;
+}
+message GetPullRequestMergeObservationRequest {
+  PullRequestSelection selection = 1;
+  string expected_pull_revision = 2;
+}
+message PullRequestMergeObservation {
+  PullRequestSelection selection = 1;
+  string pull_revision = 2;
+  string target_owner_id = 3;
+  // Source routing/identity is emitted only after its own current read boundary.
+  RepositoryKey source_repository = 4;
+  string source_repository_id = 5;
+  RepositorySourceSelection source = 6;
+  RepositorySourceSelection base = 7;
+  PullMergeTargetProtection target_protection = 8;
+  // Native flags and ordinary writer observations are not merge eligibility.
+  optional bool native_caller_can_merge = 9;
+  optional bool current_target_writer = 10;
+  RepositoryMergeConfiguration merge_configuration = 11;
+  PullMergeSourceState source_state = 12;
+  string observed_at = 13;
+  // Detects changed display observations only; never executable authority.
+  string fingerprint = 14;
+  string unavailable_reason = 15;
+}
+message GetPullRequestMergeObservationResponse { PullRequestMergeObservation observation = 1; }
