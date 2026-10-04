@@ -522,7 +522,7 @@ networks:
             result=json.loads(command('exec','-T','golf','golf','local-account','disable',payload={'username':actors['admin']['name']}));assert result['result']['disabled']
             smoke.rpc(actors['admin']['session'],SERVICE+METHODS[0],{'target':target},expected=401)
             before=len(records());command('start','webhook-worker');disabled_delivery=terminal(reauthorized,pending_disabled)
-            assert disabled_delivery['state']=='cancelled' and disabled_delivery['failureCode']=='background_authority_revoked' and len(records())==before
+            assert disabled_delivery['state']=='cancelled' and disabled_delivery['failureCode']=='authorization_or_configuration_changed' and not disabled_delivery.get('attempts') and not disabled_delivery.get('possibleDuplicate') and len(records())==before
             paused_disabled=next(row for row in list_subs() if row['id']==reauthorized['id'])
             assert not paused_disabled.get('enabled') and paused_disabled['authorizationState']=='authority_unavailable'
             retained_receipts=receipt_metadata(records(),key)
