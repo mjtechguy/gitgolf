@@ -6,8 +6,8 @@ import {
 } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
-async function inventory(page: Page) {
-  const state = { count: 55, denied: false, reads: [] as number[] };
+async function inventory(page: Page, count = 55) {
+  const state = { count, denied: false, reads: [] as number[] };
   await page.route('**/rpc/**', route => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '17', login: 'owner', isInstanceAdmin: true } });
@@ -132,14 +132,14 @@ test('smaller refreshed inventories reset safely and denied data removes rows an
   state.count = 7;
   await page.getByRole('button', { name: 'Refresh local accounts', exact: true }).click();
   await expect(rows(page)).toHaveCount(7);
-  await expect(status(page)).toContainText('Page 1 of 1');
-  await expect(status(page)).toContainText('Rows 1–7');
-  await expect(next(page)).toBeDisabled();
+  await expect(pager(page)).toHaveCount(0);
+  await expect(page.getByRole('searchbox', { name: 'Search loaded Local accounts', exact: true })).toBeVisible();
   state.count = 0;
   await page.getByRole('button', { name: 'Refresh local accounts', exact: true }).click();
   await expect(rows(page)).toHaveCount(0);
-  await expect(status(page)).toContainText('Rows 0–0');
-  await expect(previous(page)).toBeDisabled();
+  await expect(pager(page)).toHaveCount(0);
+  await expect(page.getByRole('searchbox', { name: 'Search loaded Local accounts', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('table', { name: 'Local accounts', exact: true }).locator('thead')).toHaveCount(0);
   state.denied = true;
   await page.getByRole('button', { name: 'Refresh local accounts', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Instance administration required.');
@@ -174,4 +174,21 @@ test('pagination is keyboard accessible and reflows on charcoal and light mobile
     await expect(pager(page).getByText('Search, sorting and pages cover loaded entries only.', { exact: true })).toBeVisible();
   }
   expect(failures).toEqual([]);
+});
+
+for (const count of [0, 1, 10, 11]) test(`small inventory ${count} keeps only useful controls`, async ({ page }) => {
+  await inventory(page, count);
+  await expect(rows(page)).toHaveCount(count);
+  await expect(pager(page)).toHaveCount(count > 10 ? 1 : 0);
+  await expect(page.getByRole('searchbox', { name: 'Search loaded Local accounts', exact: true })).toHaveCount(count > 1 ? 1 : 0);
+  if (count === 0) {
+    await expect(page.getByRole('table', { name: 'Local accounts', exact: true }).locator('thead')).toHaveCount(0);
+    await expect(page.getByRole('table', { name: 'Local accounts', exact: true })).toContainText('No entries.');
+  }
+  if (count === 11) {
+    await size(page).selectOption('10');
+    await next(page).click();
+    await expect(rows(page)).toHaveCount(1);
+    await expect(status(page)).toContainText('Rows 11–11');
+  }
 });

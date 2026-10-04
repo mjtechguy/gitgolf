@@ -25,24 +25,26 @@ export function DataTable<T extends RowData>({ data, columns, getRowId, label, e
   const pageCount = Math.max(1, table.getPageCount());
   const firstRow = filteredCount ? pageIndex * pageSize + 1 : 0;
   const lastRow = Math.min((pageIndex + 1) * pageSize, filteredCount);
+  const showSearch = data.length > 1 || search !== '';
+  const showPagination = pagination && (data.length > 10 || pageIndex > 0);
   return <div className="data-table-panel">
-    <div className="data-table-toolbar"><label htmlFor={searchId}><Search size={16} />Search loaded {label}</label><input id={searchId} type="search" value={search} onChange={(event) => table.setGlobalFilter(event.target.value)} autoComplete="off" placeholder="Filter loaded entries…" /><span className="data-table-count" aria-live="polite">{filteredCount} of {data.length} loaded</span></div>
+    {showSearch && <div className="data-table-toolbar"><label htmlFor={searchId}><Search size={16} />Search loaded {label}</label><input id={searchId} type="search" value={search} onChange={(event) => table.setGlobalFilter(event.target.value)} autoComplete="off" placeholder="Filter loaded entries…" /><span className="data-table-count" aria-live="polite">{filteredCount} of {data.length} loaded</span></div>}
     <div className="data-table-scroll" tabIndex={0} role="region" aria-label={`${label} table, scroll horizontally when needed`}>
       <table className="data-table" aria-label={label} aria-describedby={scopeId}>
-        <thead>{table.getHeaderGroups().map((group) => <tr key={group.id}>{group.headers.map((header) => {
+        {data.length > 0 && <thead>{table.getHeaderGroups().map((group) => <tr key={group.id}>{group.headers.map((header) => {
           const sorted = header.column.getIsSorted();
           return <th key={header.id} scope="col" aria-sort={sorted === 'asc' ? 'ascending' : sorted === 'desc' ? 'descending' : undefined}>
             {header.column.getCanSort() ? <button type="button" className="data-table-sort" onClick={header.column.getToggleSortingHandler()}><table.FlexRender header={header} />{sorted === 'asc' ? <ArrowUp size={14} aria-hidden="true" /> : sorted === 'desc' ? <ArrowDown size={14} aria-hidden="true" /> : <ArrowUpDown size={14} aria-hidden="true" />}</button> : <table.FlexRender header={header} />}
           </th>;
-        })}</tr>)}</thead>
+        })}</tr>)}</thead>}
         <tbody>{rows.length ? rows.map((row) => <tr key={row.id} data-row-id={row.id}>{row.getAllCells().map((cell) => <td key={cell.id}><table.FlexRender cell={cell} /></td>)}</tr>) : <tr><td colSpan={columns.length} className="data-table-empty">{search && data.length ? 'No loaded entries match your search.' : emptyMessage}</td></tr>}</tbody>
       </table>
     </div>
-    {pagination ? <nav className="data-table-pagination" aria-label={`${label} pages`}>
+    {showPagination ? <nav className="data-table-pagination" aria-label={`${label} pages`}>
       <label htmlFor={pageSizeId}>Rows per page<select id={pageSizeId} className="data-table-page-size" aria-label={`Rows per page for ${label}`} value={pageSize} onChange={(event) => table.setPagination({ pageIndex: 0, pageSize: Number(event.target.value) })}>{[10, 20, 50].map(size => <option key={size} value={size}>{size}</option>)}</select></label>
       <span className="data-table-page-status" aria-live="polite">Page {pageIndex + 1} of {pageCount}<span>Rows {firstRow}–{lastRow}</span></span>
       <div className="data-table-page-actions"><button type="button" className="button secondary" aria-label="Previous loaded page" disabled={!table.getCanPreviousPage()} onClick={() => table.previousPage()}>Previous</button><button type="button" className="button secondary" aria-label="Next loaded page" disabled={!table.getCanNextPage()} onClick={() => table.nextPage()}>Next</button></div>
       <p id={scopeId} className="data-table-scope">Search, sorting and pages cover loaded entries only.</p>
-      </nav> : <p id={scopeId} className="data-table-scope">Search and sorting cover all reported entries.</p>}
+      </nav> : <p id={scopeId} className="data-table-scope">{pagination ? 'Search and sorting cover loaded entries only.' : 'Search and sorting cover all reported entries.'}</p>}
   </div>;
 }
