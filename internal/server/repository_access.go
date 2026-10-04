@@ -358,7 +358,7 @@ func (s *Server) SetRepositoryCollaborator(ctx context.Context, req *connect.Req
 	m := req.Msg
 	result, operation, err := s.mutateRepositoryAccessIntent(ctx, session, token, keyFrom(m.Repository), m.RepositoryId, m.OwnerId, m.ExpectedRevision, m.UserLogin, m.UserId, m.ExpectedCollaboratorRevision, m.Permission, m.IdempotencyKey, false)
 	if err != nil {
-		return nil, rpcError(err)
+		return nil, infrastructureRPCError(err)
 	}
 	return connect.NewResponse(&golfv1.SetRepositoryCollaboratorResponse{Collaborator: result, Operation: operation}), nil
 }
@@ -370,7 +370,7 @@ func (s *Server) RemoveRepositoryCollaborator(ctx context.Context, req *connect.
 	m := req.Msg
 	result, operation, err := s.mutateRepositoryAccessIntent(ctx, session, token, keyFrom(m.Repository), m.RepositoryId, m.OwnerId, m.ExpectedRevision, m.UserLogin, m.UserId, m.ExpectedCollaboratorRevision, "", m.IdempotencyKey, true)
 	if err != nil {
-		return nil, rpcError(err)
+		return nil, infrastructureRPCError(err)
 	}
 	return connect.NewResponse(&golfv1.RemoveRepositoryCollaboratorResponse{Collaborator: result, Operation: operation}), nil
 }

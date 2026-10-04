@@ -402,7 +402,7 @@ func (s *Server) GetRepositoryAccessOperation(ctx context.Context, req *connect.
 		})
 	})
 	if e != nil {
-		return nil, rpcError(e)
+		return nil, infrastructureRPCError(e)
 	}
 	return connect.NewResponse(&result), nil
 }
