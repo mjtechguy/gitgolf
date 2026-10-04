@@ -113,7 +113,7 @@ func ParseKeyring(legacyKeyBase64, keysJSON, activeKeyID string) (*Keyring, erro
 }
 
 func keyAAD(id, domain string, binding []byte) ([]byte, error) {
-	if domain != sessionDomain && domain != oauthAttemptDomain && domain != localAccountDomain && domain != infrastructureConnectionDomain && domain != automationRepositoryDomain && domain != reviewContentDomain && domain != conversationContentDomain && domain != webhookCredentialDomain && domain != notificationContentDomain && domain != executionValueDomain && domain != organizationExecutionValueDomain && domain != quarantinedOutputDomain || len(binding) != 32 {
+	if domain != sessionDomain && domain != oauthAttemptDomain && domain != localAccountDomain && domain != infrastructureConnectionDomain && domain != automationRepositoryDomain && domain != reviewContentDomain && domain != conversationContentDomain && domain != webhookCredentialDomain && domain != notificationContentDomain && domain != executionValueDomain && domain != organizationExecutionValueDomain && domain != quarantinedOutputDomain && domain != workflowDispatchInputDomain || len(binding) != 32 {
 		return nil, errCredentialUnavailable
 	}
 	if id == "legacy" && (domain == sessionDomain || domain == oauthAttemptDomain) {
