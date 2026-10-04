@@ -196,13 +196,16 @@ def self_check():
     text=Path(__file__).read_text();require('build: !reset null' in text and '--pull=never' in text and 'before source transfer' not in source(REPOSITORY).decode(),'fixture_source_guards')
     require("project+'-bootstrap'" in text and "'--admin=false'" in text and "'is_admin') is False" in text and "'timeout_actual_guest_start'" in text,'ordinary_actor_and_timeout_guards')
     require('job_resources = 32;' in (ROOT/'api/golf/v1/golf.proto').read_text() or 'job_resources=32;' in (ROOT/'api/golf/v1/golf.proto').read_text(),'wire_source_guard')
+    browser=Path(__file__).with_name('runner-resource-limits-browser.mjs').read_text()
+    require('--self-check' in browser and 'route.fetch' in browser and "route.abort('failed')" in browser and 'page.routeFromHAR' not in browser and 'route.fulfill' not in browser,'actual_browser_no_mock_guard')
+    require('browser_instance_independent_readback' in text and 'browser_placement_independent_readback' in text and "timeout=420" in text,'browser_independent_receipt_guards')
     PROOF.pop('validationFailure',None)
     print('PASS: pure053 limits/binding/Docker/cgroup/private diagnostic checks; actual runtime unrun.')
 
 def main():
     global OUTPUT
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--self-check',action='store_true')
+    parser.add_argument('--self-check',action='store_true');parser.add_argument('--ui',action='store_true',help='Exercise actual served resource editors/CAS/lost acknowledgement with twelve dark/light1440/390 captures after backend groups')
     for name in ('image','runner-image','old-runner-image','expected-source','expected-runner-sha256','expected-engine-sha256'):parser.add_argument('--'+name)
     parser.add_argument('--stack-root',type=Path,default=ROOT);parser.add_argument('--output',type=Path);parser.add_argument('--seed-timeout',type=int,default=300)
     args=parser.parse_args()
@@ -212,7 +215,8 @@ def main():
     for value in (args.expected_runner_sha256,args.expected_engine_sha256):require(bool(re.fullmatch(r'[a-f0-9]{64}',value or '')),'exact_binary_hash_required')
     require(args.output is not None and 1<=args.seed_timeout<=600,'arguments')
     OUTPUT=args.output.resolve();OUTPUT.mkdir(mode=0o700,exist_ok=False);OUTPUT.chmod(0o700)
-    stack=args.stack_root.resolve();record(status='running',expectedSource=args.expected_source)
+    stack=args.stack_root.resolve();record(status='running',expectedSource=args.expected_source,uiRequested=args.ui)
+    if args.ui:require((stack/'web/node_modules/playwright/index.mjs').is_file(),'installed_browser_required')
     environment={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_','DOCKER_')) and k!='DATABASE_URL'}
     def run(*argv,payload=None,timeout=180):
         try:result=subprocess.run(argv,cwd=stack,env=environment,input=None if payload is None else json.dumps(payload).encode(),capture_output=True,timeout=timeout)
@@ -220,7 +224,10 @@ def main():
         except OSError as error:
             value=pool_helpers.process_observation(argv,None);value['reason']='process_launch_failed';value['errno']=error.errno
             raise pool_helpers.PrivateSubprocessFailure(value) from None
-        if result.returncode or len(result.stdout)>pool_helpers.PROCESS_LIMIT or len(result.stderr)>pool_helpers.PROCESS_LIMIT:raise pool_helpers.PrivateSubprocessFailure(pool_helpers.process_observation(argv,result.returncode,result.stdout,result.stderr))
+        if result.returncode or len(result.stdout)>pool_helpers.PROCESS_LIMIT or len(result.stderr)>pool_helpers.PROCESS_LIMIT:
+            observation=pool_helpers.process_observation(argv,result.returncode,result.stdout,result.stderr)
+            if len(argv)==2 and argv[0]=='node' and Path(argv[1]).name=='runner-resource-limits-browser.mjs':observation['operation']='resource_browser'
+            raise pool_helpers.PrivateSubprocessFailure(observation)
         return result.stdout.decode().strip()
     def ephemeral(image, entrypoint, *argv):
         name='golf-resource-preflight-'+secrets.token_hex(8);original_error=None;result=None
@@ -396,7 +403,7 @@ def main():
             admin('create','--username',project+'-bootstrap','--email',project+'-bootstrap@example.invalid','--random-password','--must-change-password=false','--admin=true')
             record(nativeBootstrap={'tokenless':True,'notGolfEnrolled':True,'scope':'Fresh owned native only; removed with its fresh volume.'})
             buckets=set()
-            for role in ('owner','control','reader'):
+            for role in ['owner','control','reader']+(['dark1440','dark390','light1440','light390'] if args.ui else []):
                 for _ in range(256):
                     name='rl-'+role+'-'+secrets.token_hex(4);bucket=int.from_bytes(hashlib.sha256(name.encode()).digest()[:2],'big')%1024+1
                     if bucket not in buckets:buckets.add(bucket);break
@@ -408,7 +415,8 @@ def main():
                 command('exec','-T','golf','golf','local-account','create',payload={'username':name,'email':actor['email'],'password':actor['password'],'forge_token':actor['token'],'is_instance_admin':role!='reader'});actor['enrolled']=True
                 signed=rpc(actor,'SessionService/LoginWithPassword',{'username':actor['email'],'password':actor['password']})['user'];require(signed.get('isInstanceAdmin',False)==(role!='reader') and signed.get('id')==actor['nativeId'],'managed_role_and_native_identity');actor['loggedIn']=True
             owner=actors['owner'];native=smoke.provider(owner['token'],'POST','user/repos',{'name':'resource-limits','private':True,'auto_init':True},201);repository={'owner':owner['name'],'name':native['name']};base='repos/'+native['full_name'];smoke.wait_for_push(owner['token'],native['full_name'])
-            for role,permission in (('control','admin'),('reader','read')):smoke.provider(owner['token'],'PUT',base+'/collaborators/'+actors[role]['name'],{'permission':permission},204)
+            for role,actor in actors.items():
+                if role!='owner':smoke.provider(owner['token'],'PUT',base+'/collaborators/'+actor['name'],{'permission':'read' if role=='reader' else 'admin'},204)
             for path,content in ((PATH,source(REPOSITORY)),(TIMEOUT_PATH,TIMEOUT_SOURCE)):smoke.provider(owner['token'],'POST',base+'/contents/'+path,{'content':base64.b64encode(content).decode(),'message':'Owned resource qualification source'},201)
             head=smoke.provider(owner['token'],'GET',base+'/branches/'+native['default_branch'])['commit']['id'];require(bool(re.fullmatch(r'[a-f0-9]{40}',head)),'exact_head')
             for scope in ('INSTANCE','REPOSITORY'):
@@ -482,7 +490,23 @@ def main():
             replay=rpc(owner,'WorkflowRunService/DispatchWorkflow',replay_request)
             require(replay['run']['id']==first['id'] and replay['run']['attemptId']==completed[0]['attemptId'] and replay['run']['jobResources']==first['jobResources'],'original_replay_receipt')
             for _ in range(5):require(cleaned(),'restart_no_new_execution');time.sleep(1)
-            require(runtime()==before,'unchanged_runtime');record(runtimeAfter=runtime(),restart={'originalSnapshotsRetained':True,'originalIntentNoReplacementAttempt':True,'idleSeconds':5});passed=True
+            require(runtime()==before,'unchanged_runtime');record(runtimeAfter=runtime(),restart={'originalSnapshotsRetained':True,'originalIntentNoReplacementAttempt':True,'idleSeconds':5})
+            if args.ui:
+                stage('actual served resource editors, CAS and discarded acknowledgement')
+                command('stop','-t','35','runner','runner-second');wait(lambda:cleaned(),45)
+                browser_dir=OUTPUT/'browser';browser_dir.mkdir(mode=0o700)
+                fixtures={key:{'email':actors[key]['email'],'password':actors[key]['password']} for key in ('dark1440','dark390','light1440','light390')}
+                run('node',str(Path(__file__).with_name('runner-resource-limits-browser.mjs')),payload={'stackRoot':str(stack),'golf':smoke.GOLF,'screenshots':str(browser_dir),'repository':repository,'repositoryId':str(native['id']),'ownerId':str(native['owner']['id']),'poolId':pool['id'],'workers':WORKERS,'fixtures':fixtures,'runtime':before,'limits':{'instance':INSTANCE,'pool':POOL,'repository':TIMEOUT}},timeout=420)
+                browser_manifest=json.loads((browser_dir/'manifest.json').read_text());require(browser_manifest.get('passed') is True and browser_manifest.get('complete') is True and len(browser_manifest.get('captures',[]))==12,'actual_browser_proof')
+                # Independently re-read every scope outside browser assertions.
+                policy_after=rpc(owner,CONTROL+'GetInstanceRunnerLimits')['policy'];require(policy_after['limits']==INSTANCE and int(policy_after['version'])>int(policy['version']),'browser_instance_independent_readback')
+                pool_after=next(row for row in rpc(actors['control'],POOLS+'ListRunnerPools')['pools'] if row['id']==pool['id']);require(pool_after['jobLimits']==POOL and int(pool_after['version'])>int(pool['version']),'browser_pool_independent_readback')
+                access_after=rpc(owner,'RepositoryAccessService/GetRepositoryAccess',{'repository':repository})['access']
+                placement_after=rpc(owner,POOLS+'GetRepositoryRunnerPlacement',{'repository':repository,'repositoryId':str(native['id']),'ownerId':str(native['owner']['id']),'expectedRevision':access_after['revision']})['placement'];require(placement_after['jobLimits']==TIMEOUT and placement_after['effectiveJobLimits']==minimum(INSTANCE,POOL,TIMEOUT) and int(placement_after['version'])>int(placement['version']),'browser_placement_independent_readback')
+                require(runtime()==before and cleaned(),'browser_no_runtime_or_job_change')
+                record(browser={'passed':True,'captures':12,'manifestSha256':hashlib.sha256((browser_dir/'manifest.json').read_bytes()).hexdigest(),'independentCurrentVersions':{'instance':policy_after['version'],'pool':pool_after['version'],'repository':placement_after['version']}})
+                PROOF['remaining']=[value for value in PROOF['remaining'] if value!='resource settings browser captures']
+            passed=True
         except Exception as error:original=error;record(originalFailure=failure(error))
         finally:
             if started:
