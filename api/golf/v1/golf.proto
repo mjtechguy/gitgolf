@@ -1326,6 +1326,8 @@ message UpdateExecutionPolicyResponse { ExecutionPolicy policy = 1; }
 
 // Golf execution results are distinct from native required-check eligibility.
 service WorkflowRunService {
+  // Pure exact-source parameter preparation; no dispatch or execution authority.
+  rpc PrepareWorkflowDispatch(PrepareWorkflowDispatchRequest) returns (PrepareWorkflowDispatchResponse);
   rpc DispatchWorkflow(DispatchWorkflowRequest) returns (DispatchWorkflowResponse);
   rpc GetWorkflowRun(GetWorkflowRunRequest) returns (GetWorkflowRunResponse);
   rpc GetWorkflowDispatch(GetWorkflowDispatchRequest) returns (GetWorkflowDispatchResponse);
@@ -3651,4 +3653,54 @@ message GetWorkflowDispatchResponse {
  string native_actor_id = 4;
  string idempotency_key = 5;
  WorkflowRun run = 6;
+}
+
+// Presence in the value oneof distinguishes false/zero/empty from omission.
+// Number values are JSON decimal text; the server returns canonical-map digests.
+// Choice uses string_value and must match a declared option.
+enum WorkflowDispatchInputType {
+ WORKFLOW_DISPATCH_INPUT_TYPE_UNSPECIFIED = 0;
+ WORKFLOW_DISPATCH_INPUT_TYPE_STRING = 1;
+ WORKFLOW_DISPATCH_INPUT_TYPE_BOOLEAN = 2;
+ WORKFLOW_DISPATCH_INPUT_TYPE_NUMBER = 3;
+ WORKFLOW_DISPATCH_INPUT_TYPE_CHOICE = 4;
+}
+message WorkflowDispatchInputValue {
+ string name = 1;
+ oneof value {
+  string string_value = 2;
+  bool boolean_value = 3;
+  string number_value = 4;
+ }
+}
+message WorkflowDispatchInputDefinition {
+ string name = 1;
+ WorkflowDispatchInputType type = 2;
+ string description = 3;
+ bool required = 4;
+ optional WorkflowDispatchInputValue default_value = 5;
+ repeated string options = 6;
+}
+message PrepareWorkflowDispatchRequest {
+ RepositoryKey repository = 1;
+ string repository_id = 2;
+ string owner_id = 3;
+ string commit_id = 4;
+ string workflow_path = 5;
+ repeated WorkflowDispatchInputValue inputs = 6;
+}
+message PrepareWorkflowDispatchResponse {
+ RepositoryKey repository = 1;
+ string repository_id = 2;
+ string owner_id = 3;
+ string native_actor_id = 4;
+ string commit_id = 5;
+ string workflow_path = 6;
+ string workflow_blob_id = 7;
+ string schema_sha256 = 8;
+ string submitted_sha256 = 9;
+ string effective_sha256 = 10;
+ repeated WorkflowDispatchInputDefinition definitions = 11;
+ // A parameter contract only. No worker/catalog availability or run admission.
+ string input_contract = 12;
 }

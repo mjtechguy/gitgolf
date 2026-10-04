@@ -455,41 +455,52 @@ func (s *Server) prepareWorkflowRun(ctx context.Context, credential forgeCredent
 	return s.prepareWorkflowRunForEvent(ctx, credential, key, ref, file, "")
 }
 
-func (s *Server) prepareWorkflowRunForEvent(ctx context.Context, credential forgeCredential, key repositoryKey, ref, file, pushRef string) (string, string, *workflowExecutionPlan, []byte, error) {
+// readWorkflowDefinition verifies the exact native commit/tree/blob and bounds
+// before exposing declaration metadata. It never fetches an archive or plans jobs.
+func (s *Server) readWorkflowDefinition(ctx context.Context, credential forgeCredential, key repositoryKey, ref, file string) (string, string, []byte, error) {
 	base, _ := repositoryPath(key)
 	commits, _, err := s.readCommits(ctx, base, credential, ref, 1, 1)
 	if err != nil {
-		return "", "", nil, nil, err
+		return "", "", nil, err
 	}
 	if len(commits) == 0 {
-		return "", "", nil, nil, errEmptyRepository
+		return "", "", nil, errEmptyRepository
 	}
 	if len(commits) != 1 || objectID.MatchString(ref) && commits[0].SHA != ref {
-		return "", "", nil, nil, errInvalidForgeResponse
+		return "", "", nil, errInvalidForgeResponse
 	}
 	commit := commits[0].SHA
 	metadata, err := s.workflowContents(ctx, credential, base, commit, file, false)
 	if err != nil {
-		return "", "", nil, nil, err
+		return "", "", nil, err
 	}
 	expected := metadata.File
 	if expected == nil || expected.Type != "file" || expected.Path != file || expected.LFSOID != "" || expected.Size > maxWorkflowBytes {
-		return "", "", nil, nil, errWorkflowExecutionUnsupported
+		return "", "", nil, errWorkflowExecutionUnsupported
 	}
 	content, err := s.workflowContents(ctx, credential, base, commit, file, true)
 	if err != nil {
-		return "", "", nil, nil, err
+		return "", "", nil, err
 	}
 	candidate := content.File
 	if candidate == nil || candidate.sourceEntry != expected.sourceEntry || candidate.Type != "file" || candidate.Path != file || candidate.LFSOID != "" || candidate.Size > maxWorkflowBytes || candidate.Encoding != "base64" || len(candidate.Content) > base64.StdEncoding.EncodedLen(maxWorkflowBytes)+2048 {
-		return "", "", nil, nil, errWorkflowExecutionUnsupported
+		return "", "", nil, errWorkflowExecutionUnsupported
 	}
 	data, err := base64.StdEncoding.DecodeString(candidate.Content)
 	if err != nil || int64(len(data)) != candidate.Size || !workflowBlobMatches(data, candidate.SHA) {
-		return "", "", nil, nil, errInvalidForgeResponse
+		return "", "", nil, errInvalidForgeResponse
 	}
 	if workflowLFSPointer(data) {
-		return "", "", nil, nil, errWorkflowExecutionUnsupported
+		return "", "", nil, errWorkflowExecutionUnsupported
+	}
+	return commit, candidate.SHA, data, nil
+}
+
+func (s *Server) prepareWorkflowRunForEvent(ctx context.Context, credential forgeCredential, key repositoryKey, ref, file, pushRef string) (string, string, *workflowExecutionPlan, []byte, error) {
+	base, _ := repositoryPath(key)
+	commit, blob, data, err := s.readWorkflowDefinition(ctx, credential, key, ref, file)
+	if err != nil {
+		return "", "", nil, nil, err
 	}
 	format := golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITHUB_ACTIONS
 	if file == ".gitlab-ci.yml" {
@@ -497,7 +508,7 @@ func (s *Server) prepareWorkflowRunForEvent(ctx context.Context, credential forg
 	}
 	var plan *workflowExecutionPlan
 	if format == golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITHUB_ACTIONS && s.actionsEngineConfigured() {
-		source, e := s.workflowSource(ctx, credential, base, commit, file, candidate.SHA, data)
+		source, e := s.workflowSource(ctx, credential, base, commit, file, blob, data)
 		if e != nil {
 			return "", "", nil, nil, e
 		}
@@ -505,14 +516,14 @@ func (s *Server) prepareWorkflowRunForEvent(ctx context.Context, credential forg
 		if pushRef != "" {
 			event, eventRef = "push", pushRef
 		}
-		actions, e := s.planActions(ctx, file, candidate.SHA, event, eventRef, source)
+		actions, e := s.planActions(ctx, file, blob, event, eventRef, source)
 		if e != nil {
 			return "", "", nil, nil, e
 		}
 		if e = s.verifyActionSources(ctx, base, credential, commit, actions); e != nil {
 			return "", "", nil, nil, e
 		}
-		return commit, candidate.SHA, &workflowExecutionPlan{Format: format, Actions: actions}, source, nil
+		return commit, blob, &workflowExecutionPlan{Format: format, Actions: actions}, source, nil
 	}
 	if pushRef == "" {
 		plan, err = compileWorkflowExecution(format, data)
@@ -526,8 +537,8 @@ func (s *Server) prepareWorkflowRunForEvent(ctx context.Context, credential forg
 	if err != nil {
 		return "", "", nil, nil, err
 	}
-	source, err := s.workflowSource(ctx, credential, base, commit, file, candidate.SHA, data)
-	return commit, candidate.SHA, plan, source, err
+	source, err := s.workflowSource(ctx, credential, base, commit, file, blob, data)
+	return commit, blob, plan, source, err
 }
 
 func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golfv1.DispatchWorkflowRequest]) (*connect.Response[golfv1.DispatchWorkflowResponse], error) {

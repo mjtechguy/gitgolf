@@ -6,7 +6,7 @@ This is the implementation contract for the next Actions increment. It does not 
 
 Support Actions `workflow_dispatch` string, boolean, number and choice declarations through a qualified maintained-engine consumer. Environment selectors remain unsupported until a real environment protection, approval and credential-release consumer exists. GitLab manual variables have distinct precedence and environment-variable semantics; they require a separate consumer.
 
-Parse the exact selected workflow blob, preserving the existing 64-KiB single-document, depth-32, 4096-node, duplicate-key and alias restrictions. A declaration parser does not grant eligibility to the rest of the workflow. Expressions in jobs remain subject to the engine catalog; declarations, descriptions, options and defaults are literal.
+Parse the exact selected workflow blob, preserving the existing 64-KiB single-document, depth-32, 4096-node, duplicate-key and alias restrictions. A declaration parser does not grant eligibility to the rest of the workflow. Expressions in jobs remain subject to the engine catalog; declarations, descriptions, options and defaults are literal. The current catalog refuses `${{` in descriptions, options and defaults; submitted string parameters may contain that text as inert data. This is a published declaration limit, not recursive evaluation.
 
 Bound declarations/submissions to 25 names, 2048 UTF-8 bytes per string and 8192 bytes per canonical submitted/effective map, within the existing 16-KiB event envelope. Reject unknown or duplicate names, unsupported fields/types, invalid defaults, non-finite or out-of-contract numbers, invalid choices and oversized payloads before admission or credential release. Never trim or evaluate a supplied string. Error text must not contain submitted values.
 
@@ -24,7 +24,15 @@ Preserve the exact legacy input-free intent hash and historical replay behavior.
 
 Original-key inspection requires the original typed digest and current managed/native authority. It remains read-only, cannot adopt a new digest and never grants retry. Missing original evidence is not proof of no effect. Persist only original identifiers and digests in browser resume metadata; never parameter values. Lost response/reload must not automatically dispatch or inspect.
 
-Append-only wire fields will expose definition metadata and schema digest, typed submitted values, exact source/native binding, and run digests. Numeric values travel as validated canonical number text to avoid JavaScript/JSON precision loss. Allocate and regenerate tags only with the integrated consumer; no proposed tag is reserved by this document.
+Append-only wire fields will expose definition metadata and schema digest, typed submitted values, exact source/native binding, and run digests. Numeric values travel as validated canonical number text to avoid JavaScript/JSON precision loss. Tags are allocated with each actual consumer. The preparation RPC now exposes exact-source definitions and digests; dispatch and worker wire fields remain pending their integrated consumers.
+
+## Preparation consumer (source implemented)
+
+`WorkflowRunService.PrepareWorkflowDispatch` accepts a managed same-origin cookie, immutable repository/owner IDs, a full commit, an Actions workflow path and typed oneof values. It verifies current native writer access before and after exact commit/tree/blob reads, validates declarations and values through the common package, and rechecks the managed session after source reads. Native and Golf actor IDs remain distinct.
+
+The response contains public exact-source declarations, native/source identity and schema/submitted/effective digests. It does not echo submitted values, fetch an archive, plan jobs, reserve a key, upload source, create a run or release credentials. Preparation may succeed while execution is disabled or no maintained engine is installed: its parameter contract is not an execution catalog or admission receipt. Dispatch must independently recompute all bindings, current authority and policy. Preparation does not change the deployed input-free catalog or enable the pending input form.
+
+Pure/race tests cover wire presence, defaults, invalid values and outer cookie/Origin/bearer boundaries. Fresh PostgreSQL/HTTP tests cover exact metadata, no execution effects or submitted-value disclosure, immutable target mismatch, nonwriter denial and session/native-actor/permission revocation during reads. Actual served deployment and full typed execution qualification remain pending.
 
 ## Stored values and execution
 
