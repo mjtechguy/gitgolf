@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import selectors
 import shutil
 import socket
 import subprocess
@@ -197,6 +198,62 @@ def reject(check):
     raise AssertionError('Closed recovery guard admitted an unsupported profile')
 
 
+def redact_diagnostics(raw, forbidden, limit=65536):
+    text = raw.decode('utf-8', errors='replace')
+    variants = set()
+    for value in forbidden:
+        if value:
+            variants.update((value, json.dumps(value)[1:-1], urllib.parse.quote(value, safe=''),
+                             base64.b64encode(value.encode()).decode()))
+    for value in sorted(variants, key=len, reverse=True):
+        text = text.replace(value, '[REDACTED]')
+    encoded = text.encode()
+    if len(encoded) > limit:
+        # Do not retain a partially cut line, which could contain a credential.
+        encoded = encoded[:limit].rsplit(b'\n', 1)[0] if b'\n' in encoded[:limit] else b''
+        encoded += b'\n[TRUNCATED]\n'
+    return encoded.decode('utf-8', errors='replace')
+
+
+def diagnostic_output(argv, environment, cwd):
+    """Bound only the diagnostic CLI process; never signal a fixture service."""
+    bound = 262144
+    data = bytearray(); truncated = False; timed_out = False
+    with subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          env=environment, cwd=cwd) as process:
+        with selectors.DefaultSelector() as selection:
+            selection.register(process.stdout, selectors.EVENT_READ)
+            deadline = time.monotonic() + 10
+            while selection.get_map():
+                if time.monotonic() >= deadline:
+                    timed_out = True; break
+                for key, _ in selection.select(min(0.2, deadline-time.monotonic())):
+                    chunk = os.read(key.fileobj.fileno(), 16384)
+                    if not chunk:
+                        selection.unregister(key.fileobj); continue
+                    if len(data) + len(chunk) > bound:
+                        data += chunk[:bound-len(data)]; truncated = True; break
+                    data += chunk
+                if truncated: break
+        if truncated or timed_out:
+            process.kill()
+        try: process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            timed_out = True; process.kill(); process.wait()
+        if truncated or timed_out:
+            data = data.rsplit(b'\n', 1)[0] if b'\n' in data else bytearray()
+        return bytes(data), {'returnCode':process.returncode, 'truncated':truncated, 'timedOut':timed_out}
+
+
+def bootstrap_fresh_policy(compose, keys):
+    # Migration002 starts at legacy. No application/native writers exist yet.
+    compose('up','-d','--wait','--wait-timeout','90','--no-build','--pull','never','postgres',timeout=120)
+    assert keys('activate')['status']['active_key_id'] == 'a'
+    status = recovery.checked_key_status(keys('status'))
+    assert {row['key_id'] for row in status['keys']} == {'a','b'}
+    assert all(row[key] == 0 for row in status['keys'] for key in recovery.KEY_FAMILIES)
+
+
 
 def proxy_self_check():
     # In-process fake transport proves harness guards only, never native effects.
@@ -241,6 +298,24 @@ def proxy_self_check():
 
 
 def self_check():
+    calls = []
+    def initial_compose(*argv, **kw): calls.append(('compose',argv,kw))
+    def initial_keys(action):
+        calls.append(('keys',action))
+        return {'status':{'active_key_id':'a'}} if action == 'activate' else {
+            'active_key_id':'a','configured_active_key_id':'a',
+            'keys':[dict.fromkeys(recovery.KEY_FAMILIES,0)|{'key_id':key,'configured':True} for key in ('a','b')]}
+    bootstrap_fresh_policy(initial_compose, initial_keys)
+    assert calls == [('compose',('up','-d','--wait','--wait-timeout','90','--no-build','--pull','never','postgres'),{'timeout':120}),('keys','activate'),('keys','status')]
+    credential = 'private fixture /"token\\value'
+    representations = [credential, json.dumps(credential)[1:-1], urllib.parse.quote(credential,safe=''),base64.b64encode(credential.encode()).decode()]
+    scrubbed = redact_diagnostics(('\n'.join(representations)+'\n').encode(), [credential])
+    assert not any(value in scrubbed for value in representations) and scrubbed.count('[REDACTED]') == 4
+    assert redact_diagnostics(b'x'*100000,[],32) == '\n[TRUNCATED]\n'
+    raw, facts = diagnostic_output((sys.executable,'-c','print("closed diagnostic check")'),{},ROOT)
+    assert raw == b'closed diagnostic check\n' and facts == {'returnCode':0,'truncated':False,'timedOut':False}
+    raw, facts = diagnostic_output((sys.executable,'-c','import os; os.write(1,b"x"*300000)'),{},ROOT)
+    assert len(raw) <= 262144 and facts['truncated'] and not facts['timedOut']
     recovery.validate_profile(recovery.ACCESS_SCHEMA, recovery.ACCESS_PROFILE)
     for schema, profile in [(recovery.ACCESS_SCHEMA, None), ('202610040058', recovery.ACCESS_PROFILE),
                             ('202610020021', recovery.ACCESS_PROFILE), ('999999999999', None)]:
@@ -384,6 +459,7 @@ def main():
         directory = Path(temporary).resolve(); directory.chmod(0o700)
         key_a, key_b = [base64.b64encode(secrets.token_bytes(32)).decode() for _ in range(2)]
         passwords = [secrets.token_hex(24) for _ in range(3)]; forbidden += passwords+[key_a,key_b]
+        runner_key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('='); forbidden.append(runner_key)
         config = {'services': {
             'postgres': {'image': images['postgres'], 'pull_policy':'never', 'restart':'no', 'command':recovery.ACCESS_PG_COMMAND,
                 'environment':dict(zip(('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD'), passwords)),
@@ -402,7 +478,7 @@ def main():
                     'GITEA_URL':'http://gitea:3000','GITEA_PUBLIC_URL':smoke.GITEA,'GOLF_PUBLIC_URL':smoke.GOLF,
                     'GOLF_LISTEN_ADDR':':8080','GOLF_ALLOW_INSECURE_COOKIES':'true','GOLF_WEB_DIR':'/app/web/dist',
                     'GOLF_ENCRYPTION_KEYS':json.dumps({'a':key_a,'b':key_b}), 'GOLF_ACTIVE_ENCRYPTION_KEY':'a',
-                    'GOLF_RUNNER_KEYS':json.dumps({'recovery-unstarted':base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=')}),
+                    'GOLF_RUNNER_KEYS':json.dumps({'recovery-unstarted':runner_key}),
                     'GOLF_RUNNER_IMAGES':json.dumps({'linux':'alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0'}),
                     'GOLF_ACTIONS_ENGINE_CATALOG':CATALOG,'GOLF_ACTIONS_ENGINE_BINARY':'/usr/local/bin/golf-actions-engine','GOLF_RUNNER_JOB_IMAGE':'alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0',
                     'GOLF_PUSH_CI_ENABLED':'false'},'ports':[f'127.0.0.1:{ports[0]}:8080'],
@@ -422,6 +498,37 @@ def main():
         def keys(action, *argv, success=True, overrides=()):
             value=json.loads(compose('run','--rm','--no-deps','-T',*overrides,'golf','keys',action,*argv,success=success))
             assert value['state']==(('eligible' if action=='retirement-check' else 'complete') if success else 'failed'); return value.get('result')
+        def capture_diagnostics():
+            # Raw environment/inspect and request bodies are never requested.
+            # Only this fresh project's service state and capped logs are read.
+            for actor in actors.values():
+                for handler in actor['session'].handlers:
+                    jar = getattr(handler,'cookiejar',None)
+                    if jar is not None: forbidden.extend(cookie.value for cookie in jar)
+            details = {'stage':STAGE,'services':[]}; facts = []
+            for service in ('postgres','gitea','golf','fault'):
+                try:
+                    ids = compose('ps','-aq',service).split()
+                    assert len(ids) <= 1 and all(re.fullmatch('[a-f0-9]{12,64}',value) for value in ids)
+                    if not ids: continue
+                    raw, command = diagnostic_output(('docker','inspect','--format',
+                        '{"status":{{json .State.Status}},"exitCode":{{json .State.ExitCode}},"oomKilled":{{json .State.OOMKilled}}}',ids[0]),environment,ROOT)
+                    assert command['returnCode']==0 and not command['truncated'] and not command['timedOut']
+                    state = json.loads(raw)
+                    assert state['status'] in {'created','running','paused','restarting','removing','exited','dead'}
+                    assert type(state['exitCode']) is int and type(state['oomKilled']) is bool
+                    raw, command = diagnostic_output(('docker','logs','--tail','60',ids[0]),environment,ROOT)
+                    details['services'].append({'service':service,'state':state,'command':command,
+                                                'redactedLogs':redact_diagnostics(raw,forbidden)})
+                    facts.append({'service':service,**state,**command})
+                except BaseException as diagnostic_error:
+                    facts.append({'service':service,'diagnosticFailure':type(diagnostic_error).__name__})
+            raw = json.dumps(details,indent=2).encode()
+            assert len(raw) <= 2 << 20 and not any(value and value.encode() in raw for value in forbidden)
+            private(output/'private-service-diagnostics.json',raw)
+            assert (output/'private-service-diagnostics.json').stat().st_mode & 0o777 == 0o600
+            record(failureDiagnostics={'file':'private-service-diagnostics.json','sha256':hashlib.sha256(raw).hexdigest(),
+                                       'bytes':len(raw),'services':facts})
         def rpc(actor, method, payload, expected=200, code=None):
             return smoke.rpc(actor['session'],method,payload,expected=expected,code=code)
         def access(repo):
@@ -472,6 +579,8 @@ def main():
                 return json.loads(raw)
         try:
             started=True; record(cleanup='pending',project=source,images=images,proxyImage=args.proxy_image)
+            stage('fresh PostgreSQL and supported operator active-key bootstrap before application writers')
+            bootstrap_fresh_policy(compose,keys); record(freshKeyPolicyBootstrapped=True)
             stage('fresh canonical core and ordinary supported native identities')
             compose('up','-d','--no-build','--pull','never',timeout=180); smoke.ready()
             assert sql('SELECT max(version_id) FROM goose_db_version WHERE is_applied;')==recovery.ACCESS_SCHEMA
@@ -719,6 +828,9 @@ def main():
             original=error
             record(status='failed',originalFailure={'type':type(error).__name__,'stage':STAGE,
                 'frames':[{'file':Path(f.filename).name if Path(f.filename).name in {Path(__file__).name,'recovery.py','smoke.py'} else 'dependency','line':f.lineno} for f in traceback.extract_tb(error.__traceback__)[-6:]]})
+            try: capture_diagnostics()
+            except BaseException as diagnostic_error:
+                record(failureDiagnostics={'failed':True,'type':type(diagnostic_error).__name__})
         finally:
             stage('exact owned fresh-project teardown; preserve original failure')
             for project in projects:
