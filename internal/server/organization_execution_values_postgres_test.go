@@ -68,7 +68,13 @@ func newOrganizationExecutionFixture(t *testing.T) *organizationExecutionFixture
 			}
 			data, _ := json.Marshal(row)
 			var object map[string]any
-			json.Unmarshal(data, &object)
+			decoder := json.NewDecoder(bytes.NewReader(data))
+			decoder.UseNumber()
+			if e := decoder.Decode(&object); e != nil {
+				t.Error("decode exact native fixture", e)
+				w.WriteHeader(500)
+				return
+			}
 			object["fork"] = false
 			json.NewEncoder(w).Encode(object)
 		default:
