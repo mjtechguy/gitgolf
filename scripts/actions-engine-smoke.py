@@ -117,12 +117,13 @@ def check_run(run, native, head, workflow, blob, mixed=False):
     return jobs
 
 
-def read_logs(rpc, run, job=None, step=None):
-    after=0; rows=[]
+def read_logs(rpc, run, job=None, step=None, evidence=None):
+    after=0; rows=[]; pages=0
     for _ in range(64):
         request={'runId':run['id'],'afterSequence':str(after)}
         if job:request.update(jobInstanceId=job,stepId=step)
         page=rpc('WorkflowRunService/GetWorkflowRunLogs',request)
+        pages+=1
         for key in ('runId','attemptId','repositoryId','sourceCommitId'):
             original={'runId':'id','sourceCommitId':'commitId'}.get(key,key)
             assert page[key]==run[original], 'Scoped log target/snapshot receipt differs'
@@ -134,7 +135,9 @@ def read_logs(rpc, run, job=None, step=None):
             sequence=int(value['sequence'])
             assert sequence>after and (bool(job) or sequence==after+1), 'Log continuation duplicated/skipped unsliced output'
             after=sequence;rows.append(value)
-        if not page.get('hasMore',False):return ''.join(row['text'] for row in rows)
+        if not page.get('hasMore',False):
+            if evidence is not None:evidence.append({'jobInstanceId':job or '', 'stepId':step or '', 'pageCount':pages, 'chunkCount':len(rows), 'lastSequence':str(after), 'sourceAndScopeVerified':True, 'truncated':False})
+            return ''.join(row['text'] for row in rows)
         assert values, 'Log cursor did not advance'
     raise AssertionError('Bounded log pagination exhausted')
 
@@ -273,10 +276,11 @@ def main():
 
                 replay=rpc('WorkflowRunService/DispatchWorkflow',{'repository':repository,'ref':head,'workflowPath':path,'idempotencyKey':intent})['run']
                 assert replay['id']==observed['id'] and replay['attemptId']==observed['attemptId'], 'Explicit same-key replay changed effect identity'
-                all_logs=read_logs(rpc,observed)
+                receipt['logReadbacks']=[]
+                all_logs=read_logs(rpc,observed,evidence=receipt['logReadbacks'])
                 for job in jobs:
                     for step in job['steps']:
-                        text=read_logs(rpc,observed,job['instanceId'],step['id'])
+                        text=read_logs(rpc,observed,job['instanceId'],step['id'],evidence=receipt['logReadbacks'])
                         if step['state']==STATE+'SKIPPED':assert not text, 'Skipped step produced scoped source logs'
                         if not mixed and step['id']=='tamper':assert 'Protected composite remained immutable' in text and 'UNSAFE' not in text
                         if not mixed and step['id']=='local':assert 'Actual local composite output received' in text

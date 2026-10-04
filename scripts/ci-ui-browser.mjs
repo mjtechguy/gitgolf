@@ -18,6 +18,20 @@ const assert=(condition,message)=>{if(!condition){const error=Error(message);err
 function exactActionSummary(summary,run,repositoryId){
   return summary?.ref?.kind==='ACTION_RUN_KIND_WORKFLOW'&&summary.ref.id===run.id&&summary.repositoryId===repositoryId&&summary.ownerId===run.ownerId&&summary.commitId===run.commitId&&summary.workflowPath===run.workflowPath&&summary.workflowBlobId===run.workflowBlobId&&summary.sourceSha256===run.sourceSha256&&summary.state==='succeeded';
 }
+function logSequence(value){assert(typeof value==='string'&&/^(0|[1-9][0-9]*)$/.test(value)&&BigInt(value)<=9223372036854775807n,'Invalid log sequence receipt');return BigInt(value);}
+function logScope(request,run,engine,selection){
+  return request?.runId===run.id&&(engine?request.stepIndex===undefined&&(request.jobInstanceId??'')===(selection?.jobInstanceId??'')&&(request.stepId??'')===(selection?.stepId??''):request.jobInstanceId===undefined&&request.stepId===undefined&&request.stepIndex===selection?.stepIndex);
+}
+function validateLogPage(receipt,run,repositoryId,engine,selection,after){
+  assert(receipt.status===200&&logScope(receipt.request,run,engine,selection)&&logSequence(receipt.request.afterSequence??'0')===after,'Log continuation request differs');
+  const body=receipt.body;
+  if(engine)assert(body.runId===run.id&&body.attemptId===run.attemptId&&body.repositoryId===repositoryId&&body.sourceCommitId===run.commitId&&(body.jobInstanceId??'')===(selection?.jobInstanceId??'')&&(body.stepId??'')===(selection?.stepId??''),'Log continuation source/scope receipt differs');
+  assert((body.hasMore===undefined||typeof body.hasMore==='boolean')&&(body.truncated===undefined||typeof body.truncated==='boolean'),'Invalid log continuation flags');
+  const rows=body.logs??[];assert(Array.isArray(rows)&&rows.length<=16&&!body.truncated&&(!body.hasMore||rows.length>0),'Log page cannot be safely continued');
+  let next=after;const scoped=engine?Boolean(selection?.jobInstanceId):selection?.stepIndex!==undefined;
+  for(const row of rows){const sequence=logSequence(row.sequence);assert(sequence>next&&(scoped||sequence===next+1n)&&typeof row.text==='string','Log page duplicated/skipped unsliced output');next=sequence;}
+  return {next,hasMore:body.hasMore===true,count:rows.length};
+}
 if(process.argv.includes('--self-check')){
   assert(surfaces.length*widths.length*themes.length===12,'Capture inventory changed');
   for(const method of ['GetWorkflowRun','GetWorkflowRunLogs','ListActionRuns','GetActionRun','WatchRepository'])assert(readProcedure(method),'Read guard failed');
@@ -30,6 +44,14 @@ if(process.argv.includes('--self-check')){
   const selection={jobInstanceId:'b'.repeat(32),stepId:'local',logMarker:'local marker',otherLogMarker:'other marker'};assert(graphSelection(graph,selection),'Exact recorded graph selection refused');
   for(const changes of [{jobInstanceId:'c'.repeat(32)},{stepId:'missing'},{stepId:'bad/path'},{logMarker:selection.otherLogMarker}])assert(!graphSelection(graph,{...selection,...changes}),'Invalid graph selection accepted');
   for(const changes of [{engineCatalog:'unqualified'},{engineCommit:'different'},{attemptId:'wrong'},{jobs:[...graph.jobs,graph.jobs[0]]}])assert(!graphSelection({...graph,...changes},selection),'Invalid graph run accepted');
+  const logRun={...run,attemptId:'a'.repeat(32)},logPage={status:200,request:{runId:run.id},body:{runId:run.id,attemptId:logRun.attemptId,repositoryId:'9',sourceCommitId:run.commitId,logs:Array.from({length:16},(_,i)=>({sequence:String(i+1),text:'bounded output'})),hasMore:true}};
+  assert(validateLogPage(logPage,logRun,'9',true,undefined,0n).next===16n,'First full log page refused');
+  const continued={...logPage,request:{runId:run.id,afterSequence:'16'},body:{...logPage.body,logs:[{sequence:'17',text:'later marker'}],hasMore:false}};
+  assert(validateLogPage(continued,logRun,'9',true,undefined,16n).next===17n,'Later marker page refused');
+  for(const bad of [{...continued,body:{...continued.body,repositoryId:'8'}},{...continued,request:{...continued.request,afterSequence:'0'}},{...continued,body:{...continued.body,logs:[{sequence:'18',text:'skipped chunk'}]}},{...continued,body:{...continued.body,logs:[],hasMore:true}}]){let denied=false;try{validateLogPage(bad,logRun,'9',true,undefined,16n);}catch{denied=true;}assert(denied,'Invalid continuation accepted');}
+  const selected={jobInstanceId:'b'.repeat(32),stepId:'local'},scoped={status:200,request:{runId:run.id,...selected},body:{...continued.body,...selected,logs:[{sequence:'33',text:'selected later chunk'}]}};
+  assert(validateLogPage(scoped,logRun,'9',true,selected,0n).next===33n,'Legitimate scoped sequence gap refused');
+  let wrongScope=false;try{validateLogPage({...scoped,body:{...scoped.body,stepId:'other'}},logRun,'9',true,selected,0n);}catch{wrongScope=true;}assert(wrongScope,'Different step receipt accepted');
   console.log('PASS: twelve capture cases and read-only browser guard; no browser or native fixture executed.');
   process.exit(0);
 }
@@ -83,7 +105,7 @@ try{
     for(const id of surfaces){
       stage=id;
       const page=await context.newPage();page.setDefaultTimeout(15000);
-      const rpc=[],writes=[],errors=[],receipts=[],responseTasks=[];
+      const rpc=[],writes=[],errors=[],receipts=[],responseTasks=[];let generation=0;const requestGenerations=new Map();
       const inflight=new Set();let lastResponse=Date.now();
       await page.route('**/rpc/**',route=>{
         const method=route.request().url().split('/').at(-1);
@@ -91,20 +113,37 @@ try{
         return route.continue();
       });
       page.on('pageerror',()=>errors.push('page-error'));
-      page.on('request',request=>{if(request.url().includes('/rpc/')&&!request.url().endsWith('/WatchRepository'))inflight.add(request);});
+      page.on('request',request=>{if(request.url().includes('/rpc/'))requestGenerations.set(request,generation);if(request.url().includes('/rpc/')&&!request.url().endsWith('/WatchRepository'))inflight.add(request);});
       page.on('requestfailed',request=>{if(inflight.delete(request)){lastResponse=Date.now();errors.push('unary-read-failed');}});
       page.on('response',response=>{
         if(!response.url().includes('/rpc/'))return;
         const procedure=response.url().split('/').at(-1);rpc.push({procedure,status:response.status()});
         if(procedure!=='WatchRepository'){inflight.delete(response.request());lastResponse=Date.now();}
         if(['ListActionRuns','GetActionRun','GetWorkflowRun','GetWorkflowRunLogs'].includes(procedure))responseTasks.push((async()=>{
-          try{receipts.push({procedure,status:response.status(),request:response.request().postDataJSON(),body:await response.json()});}catch{errors.push('invalid-read-receipt');}
+          try{receipts.push({procedure,generation:requestGenerations.get(response.request()),status:response.status(),request:response.request().postDataJSON(),body:await response.json()});}catch{errors.push('invalid-read-receipt');}
         })());
       });
       const route=id==='actions-inventory'?repo+'/actions':repo+'/actions/runs/'+config.run.id;
       const result={id,width,height:1000,theme,role:'owner',status:'pending',requestedRoute:route,rpc,check:'page-readiness'};
+      async function loadActualLogPages(selection){
+        let after=0n;
+        const log=page.getByLabel('Workflow run log',{exact:true});await log.waitFor();
+        for(let pages=0;pages<64;pages++){
+          await Promise.all(responseTasks);
+          const candidates=receipts.filter(r=>r.generation===generation&&r.procedure==='GetWorkflowRunLogs'&&logScope(r.request,config.run,engine,selection)&&logSequence(r.request.afterSequence??'0')===after);
+          assert(candidates.length===1,'Current-document log page receipt missing or duplicated');
+          const checked=validateLogPage(candidates[0],config.run,config.repositoryId,engine,selection,after);
+          (result.logPages??=[]).push({generation,afterSequence:String(after),nextSequence:String(checked.next),chunkCount:checked.count,hasMore:checked.hasMore});
+          if(!checked.hasMore)return log;
+          result.check='actual-log-pagination';
+          const next=page.getByRole('button',{name:'Load more log output',exact:true});await next.waitFor();
+          const response=page.waitForResponse(response=>{if(!response.url().endsWith('/GetWorkflowRunLogs'))return false;const request=response.request().postDataJSON();return requestGenerations.get(response.request())===generation&&logScope(request,config.run,engine,selection)&&request.afterSequence===String(checked.next);});
+          await next.click();await response;after=checked.next;
+        }
+        assert(false,'Bounded actual log pagination exhausted');
+      }
       try{
-        await page.goto(config.golf+route,{waitUntil:'domcontentloaded'});
+        generation++;await page.goto(config.golf+route,{waitUntil:'domcontentloaded'});
         if(id==='actions-inventory'){
           const row=page.getByRole('table',{name:'Action runs',exact:true}).locator('tr[data-row-id="1:'+config.run.id+'"]');
           await row.getByRole('link',{name:config.run.workflowPath,exact:true}).waitFor();
@@ -119,22 +158,23 @@ try{
             if(engine){
               const jobLink=page.getByLabel('Jobs and steps').locator('a[href*="jobInstanceId='+config.graphSelection.jobInstanceId+'"]').first();
               const jobURL=new URL(await jobLink.getAttribute('href'),config.golf);assert(jobURL.searchParams.get('jobInstanceId')===config.graphSelection.jobInstanceId&&!jobURL.searchParams.has('stepId'),'Job link scope differs');
-              await jobLink.click();await page.waitForURL(url=>url.searchParams.get('jobInstanceId')===config.graphSelection.jobInstanceId);
-              await page.getByLabel('Jobs and steps').locator('a[href*="jobInstanceId='+config.graphSelection.jobInstanceId+'"][href*="stepId='+config.graphSelection.stepId+'"]').click();
+              generation++;inflight.clear();await jobLink.click();await page.waitForURL(url=>url.searchParams.get('jobInstanceId')===config.graphSelection.jobInstanceId);
+              generation++;inflight.clear();await page.getByLabel('Jobs and steps').locator('a[href*="jobInstanceId='+config.graphSelection.jobInstanceId+'"][href*="stepId='+config.graphSelection.stepId+'"]').click();
               await page.waitForURL(url=>url.searchParams.get('jobInstanceId')===config.graphSelection.jobInstanceId&&url.searchParams.get('stepId')===config.graphSelection.stepId);
               assert(!new URL(page.url()).searchParams.has('step'),'Graph step conflated with legacy index');
-            }else{await page.getByLabel('Jobs and steps').getByRole('link',{name:/Read source/}).click();await page.waitForURL(url=>url.searchParams.get('step')==='0');assert(new URL(page.url()).searchParams.get('step')==='0','Selected step URL differs');}
+            }else{generation++;inflight.clear();await page.getByLabel('Jobs and steps').getByRole('link',{name:/Read source/}).click();await page.waitForURL(url=>url.searchParams.get('step')==='0');assert(new URL(page.url()).searchParams.get('step')==='0','Selected step URL differs');}
             // The old document's reads may be cancelled without a terminal
             // response event on navigation. Track only the reloaded document;
             // request identities fence any late responses from the old one.
             inflight.clear();
-            await page.reload({waitUntil:'domcontentloaded'});
+            generation++;await page.reload({waitUntil:'domcontentloaded'});
             result.check='selected-step-reload-binding';
             const selectedLink=engine?page.getByLabel('Jobs and steps').locator('a[href*="jobInstanceId='+config.graphSelection.jobInstanceId+'"][href*="stepId='+config.graphSelection.stepId+'"]'):page.getByLabel('Jobs and steps').getByRole('link',{name:/Read source/,includeHidden:width===390});
             await selectedLink.waitFor({state:width===390?'attached':'visible'});
             assert(await selectedLink.getAttribute('aria-current')==='page','Reload lost selected step');
           }
-          const log=page.getByLabel('Workflow run log',{exact:true});await log.waitFor();
+          result.check='actual-log-readiness';
+          const log=await loadActualLogPages(id==='actions-selected-step'?(engine?config.graphSelection:{stepIndex:0}):undefined);
           result.check='controlled-output';
           const marker=engine?config.graphSelection.logMarker:'actions proof',other=engine?config.graphSelection.otherLogMarker:'second step proof';
           await page.waitForFunction(marker=>document.querySelector('[aria-label="Workflow run log"]')?.textContent?.includes(marker),marker);
@@ -147,7 +187,7 @@ try{
         assert(inflight.size===0,'Reads did not settle');await Promise.all(responseTasks);
         if(await page.locator('html').getAttribute('data-theme')!==theme)await page.getByRole('button',{name:'Switch to '+theme+' theme',exact:true}).click();
         result.actualTheme=await page.locator('html').getAttribute('data-theme');
-        const current=receipts.filter(r=>r.status===200);
+        const current=receipts.filter(r=>r.generation===generation&&r.status===200);
         result.logSelections=current.filter(r=>r.procedure==='GetWorkflowRunLogs').map(r=>engine?{jobInstanceId:r.request.jobInstanceId??'',stepId:r.request.stepId??''}:r.request.stepIndex??'all');
         if(id==='actions-inventory')assert(current.some(r=>r.procedure==='ListActionRuns'&&r.request.repositoryId===config.repositoryId&&r.request.repository?.owner===config.repository.owner&&r.request.repository?.name===config.repository.name&&r.body.repositoryId===config.repositoryId&&r.body.runs?.some(summary=>exactActionSummary(summary,config.run,config.repositoryId))),'Exact typed inventory receipt missing');
         else{
@@ -165,16 +205,17 @@ try{
         result.screenshot=basename+'.png';result.textSnapshot=basename+'.txt';
         if(id==='actions-inventory'){
           result.check='actual-inventory-drilldown';
-          await page.getByRole('table',{name:'Action runs',exact:true}).locator('tr[data-row-id="1:'+config.run.id+'"]')
+          generation++;inflight.clear();await page.getByRole('table',{name:'Action runs',exact:true}).locator('tr[data-row-id="1:'+config.run.id+'"]')
             .getByRole('link',{name:config.run.workflowPath,exact:true}).click();
           await page.waitForURL(url=>url.pathname===repo+'/actions/runs/'+config.run.id);
           await page.getByRole('heading',{name:config.run.workflowPath,exact:true}).waitFor();
-          inflight.clear();await page.reload({waitUntil:'domcontentloaded'});
+          inflight.clear();generation++;await page.reload({waitUntil:'domcontentloaded'});
+          result.check='drilldown-log-pagination';await loadActualLogPages(undefined);
           await page.waitForFunction(marker=>document.querySelector('[aria-label="Workflow run log"]')?.textContent?.includes(marker),engine?config.graphSelection.logMarker:'actions proof');
           const deadline=Date.now()+12000;
           while(Date.now()<deadline&&(inflight.size>0||Date.now()-lastResponse<450))await page.waitForTimeout(100);
           assert(inflight.size===0,'Drilldown reads did not settle');await Promise.all(responseTasks);
-          assert(receipts.some(r=>r.status===200&&r.procedure==='GetWorkflowRun'&&r.request.runId===config.run.id&&exactRun(r.body.run)),'Drilldown selected a different run');
+          assert(receipts.some(r=>r.generation===generation&&r.status===200&&r.procedure==='GetWorkflowRun'&&r.request.runId===config.run.id&&exactRun(r.body.run)),'Drilldown selected a different run');
           assert(!errors.length&&!writes.length&&!rpc.some(r=>r.status>=400),'Drilldown read boundary failed');
           result.drilldown={kind:'workflow',id:config.run.id,route:new URL(page.url()).pathname,reloaded:true};
         }
