@@ -179,11 +179,22 @@ func (s *Server) ResolveRepositorySource(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	if err = validateSourceSelector(m.Selector); err != nil {
-		return nil, rpcError(err)
-	}
-	if !validSourcePath(m.Path) {
-		return nil, rpcError(invalid("Select a literal relative source path."))
+	var boundaries []sourceSuffixBoundary
+	if m.Suffix != "" {
+		if m.Selector != nil || m.Path != "" {
+			return nil, rpcError(invalid("Readable suffix selection cannot include a typed selector or separate path."))
+		}
+		boundaries, err = sourceSuffixBoundaries(m.Suffix)
+		if err != nil {
+			return nil, rpcError(err)
+		}
+	} else {
+		if err = validateSourceSelector(m.Selector); err != nil {
+			return nil, rpcError(err)
+		}
+		if !validSourcePath(m.Path) {
+			return nil, rpcError(invalid("Select a literal relative source path."))
+		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -192,19 +203,40 @@ func (s *Server) ResolveRepositorySource(ctx context.Context, req *connect.Reque
 		if repo.ID != id {
 			return errIssueTargetChanged
 		}
-		selection, e := s.sourceSelection(ctx, base, repo, token, m.Selector)
-		if e != nil {
-			return e
-		}
 		owner, _, ok := strings.Cut(repo.FullName, "/")
 		if !ok {
 			return errInvalidForgeResponse
 		}
-		result = &golfv1.ResolveRepositorySourceResponse{RepositoryId: strconv.FormatInt(repo.ID, 10), Repository: &golfv1.RepositoryKey{Owner: owner, Name: repo.Name}, Selection: selection, Path: m.Path}
+		result = &golfv1.ResolveRepositorySourceResponse{RepositoryId: strconv.FormatInt(repo.ID, 10), Repository: &golfv1.RepositoryKey{Owner: owner, Name: repo.Name}, Resolution: golfv1.RepositorySourceResolution_REPOSITORY_SOURCE_RESOLUTION_RESOLVED}
+		if m.Suffix != "" {
+			candidates, e := s.resolveSourceSuffix(ctx, base, repo, token, boundaries)
+			if e != nil {
+				return e
+			}
+			result.Suffix, result.Candidates = m.Suffix, candidates
+			if len(candidates) == 1 {
+				result.Selection, result.Path = candidates[0].Selection, candidates[0].Path
+			} else if len(candidates) > 1 {
+				result.Resolution = golfv1.RepositorySourceResolution_REPOSITORY_SOURCE_RESOLUTION_AMBIGUOUS
+			} else {
+				// Recheck current repository/caller authority even for zero matches.
+				// A private denial must not become namespace absence.
+				result.Resolution = golfv1.RepositorySourceResolution_REPOSITORY_SOURCE_RESOLUTION_UNSPECIFIED
+			}
+			return nil
+		}
+		selection, e := s.sourceSelection(ctx, base, repo, token, m.Selector)
+		if e != nil {
+			return e
+		}
+		result.Selection, result.Path = selection, m.Path
 		return nil
 	})
 	if err != nil {
 		return nil, rpcError(err)
+	}
+	if m.Suffix != "" && len(result.Candidates) == 0 {
+		return nil, rpcError(errResourceNotFound)
 	}
 	return connect.NewResponse(result), nil
 }

@@ -491,12 +491,26 @@ message ResolveRepositorySourceRequest {
   string repository_id = 2;
   RepositorySourceSelector selector = 3;
   string path = 4;
+  // Decoded literal readable suffix; mutually exclusive with selector/path.
+  string suffix = 5;
+}
+enum RepositorySourceResolution {
+  REPOSITORY_SOURCE_RESOLUTION_UNSPECIFIED = 0;
+  REPOSITORY_SOURCE_RESOLUTION_RESOLVED = 1;
+  REPOSITORY_SOURCE_RESOLUTION_AMBIGUOUS = 2;
+}
+message RepositorySourceCandidate {
+  RepositorySourceSelection selection = 1;
+  string path = 2;
 }
 message ResolveRepositorySourceResponse {
   string repository_id = 1;
   RepositoryKey repository = 2;
   RepositorySourceSelection selection = 3;
   string path = 4;
+  RepositorySourceResolution resolution = 5;
+  repeated RepositorySourceCandidate candidates = 6;
+  string suffix = 7;
 }
 message GetContentsRequest {
   RepositoryKey repository = 1;
