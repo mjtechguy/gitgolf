@@ -11,8 +11,10 @@ import { DataTable, type DataTableColumn } from './DataTable';
 import { useQuery } from '@tanstack/react-query';
 import { organizationClient } from './api';
 import { Loading, PanelError, privateQuery } from './RepositoryUI';
+import type { AccessObservationTarget } from './RepositoryAccessObservation';
 
 const OwnEmailNotifications = lazy(() => import('./EmailNotificationSettings').then(module => ({ default: module.OwnEmailNotifications })));
+const RepositoryAccessObservation = lazy(() => import('./RepositoryAccessObservation').then(module => ({ default: module.RepositoryAccessObservation })));
 
 export function AccountLayout({ children }: { children: ReactNode }) {
   return <div className="account-layout"><nav className="account-navigation" aria-label="Account settings"><span className="eyebrow">PERSONAL SETTINGS</span>
@@ -122,10 +124,10 @@ function settingsColumns(repository?: { owner: string; name: string }, organizat
   } },
 ]; }
 
-export function SettingsInventory({ scope, generalObservation, repository, organization }: { scope: SettingsScope; organization?: string; repository?: { owner: string; name: string }; generalObservation?: { canEdit: boolean; implemented: boolean; issues: string; wiki: string } }) {
+export function SettingsInventory({ scope, generalObservation, repository, organization, accessTarget, userId }: { scope: SettingsScope; organization?: string; repository?: { owner: string; name: string }; generalObservation?: { canEdit: boolean; implemented: boolean; issues: string; wiki: string }; accessTarget?: AccessObservationTarget; userId?: string }) {
  const columns = useMemo(() => settingsColumns(scope === 'repository' && repository ? { owner: repository.owner, name: repository.name } : undefined, scope === 'organization' ? organization : undefined), [scope, repository?.owner, repository?.name, organization]);
  const entries = scope === 'repository' && generalObservation ? inventory[scope].map((entry) => entry.id === 'general' ? { ...entry, state: generalObservation.implemented ? 'Ready' as const : 'Partial' as const, detail: `Verified current configuration: issues ${generalObservation.issues.toLowerCase()}, wiki ${generalObservation.wiki.toLowerCase()}. ${generalObservation.implemented ? 'Website, topics, default branch and tracker/wiki configuration editors are qualified.' : 'Editor support unavailable.'} ${generalObservation.canEdit ? 'You can administer these settings.' : 'You have view-only access.'} Wiki configuration does not include a Golf wiki workspace.` } : entry) : inventory[scope];
-  return <section className="browser-panel credential-list-panel" aria-labelledby={`${scope}-inventory-title`}><div className="browser-panel-heading"><h2 id={`${scope}-inventory-title`}>Settings coverage</h2><span className="visibility">Current preview</span></div><DataTable data={entries} columns={columns} getRowId={(entry) => entry.id} label={`${scope.charAt(0).toUpperCase()}${scope.slice(1)} settings`} /><p className="panel-footnote">Availability describes this build. Planned rows document missing enforcement and do not grant execution or administration. Search and sorting cover this displayed inventory.</p></section>;
+  return <section className="browser-panel credential-list-panel" aria-labelledby={`${scope}-inventory-title`}><div className="browser-panel-heading"><h2 id={`${scope}-inventory-title`}>Settings coverage</h2><span className="visibility">Current preview</span></div><DataTable data={entries} columns={columns} getRowId={(entry) => entry.id} label={`${scope.charAt(0).toUpperCase()}${scope.slice(1)} settings`} /><p className="panel-footnote">Availability describes this build. Planned rows document missing enforcement and do not grant execution or administration. Search and sorting cover this displayed inventory.</p>{scope === 'repository' && repository && accessTarget && userId ? <Suspense fallback={<Loading label="Opening access inspection…" />}><RepositoryAccessObservation key={JSON.stringify([userId,repository.owner,repository.name,accessTarget])} userId={userId} owner={repository.owner} name={repository.name} target={accessTarget}/></Suspense> : null}</section>;
 }
 
 export function ScopedSettings({ scope, name, userId, signingOut=false }: { signingOut?:boolean; scope: 'organization' | 'instance'; name?: string; userId: string }) {
