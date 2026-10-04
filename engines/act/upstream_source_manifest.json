@@ -1,0 +1,460 @@
+{
+  "schemaVersion": 1,
+  "upstream": {
+    "version": "v0.2.89",
+    "sourceCommitId": "4f411281417e88660bea1c1a1749aa71ae0bd60f",
+    "tagObjectId": "434d69682c7a8db2ac913e5dc3e80ba68055d50d",
+    "goModuleSum": "h1:d9oFeJ6jUkaVExuG+XzAaMPDqoDrNHaGeiRb8IU+N5w=",
+    "goModSum": "h1:9djXFAZR+ltqh1k/8I0G2/3ypi2UrcuFlrC25L6WoCA=",
+    "goModuleZipSHA256": "b4e568212d680a32076455b84ab572d17fe65eb83a6fd6dce6a05164bd68fcc9"
+  },
+  "scope": "Complete pkg runtime subset, excluding upstream tests/testdata; module files, exact license and embeds retained. Only workflow_dispatch declared numeric evaluator context is patched. Current product profile/catalog is unchanged.",
+  "patchSha256": "b9c6c2d28d92f7f982dfb8e604b6b8e19df5f1ceac9fc0010cc7cc6639694cdc",
+  "files": [
+    {
+      "path": ".golf-upstream/expression.go.txt",
+      "upstreamSha256": null,
+      "sha256": "9c6dc1a44612b291e5c1a22208bd500c06567b6fadfdf36733d953160c2a47fb"
+    },
+    {
+      "path": ".golf-upstream/numeric-inputs.patch",
+      "upstreamSha256": null,
+      "sha256": "b9c6c2d28d92f7f982dfb8e604b6b8e19df5f1ceac9fc0010cc7cc6639694cdc"
+    },
+    {
+      "path": "LICENSE",
+      "upstreamSha256": "da3ece2d2daf5c812c8606d2922094f51818258d4ce0e041b4ee8409ba3b381f",
+      "sha256": "da3ece2d2daf5c812c8606d2922094f51818258d4ce0e041b4ee8409ba3b381f"
+    },
+    {
+      "path": "go.mod",
+      "upstreamSha256": "9f220133fb1ee007f1485f02933aac5cb2f30cc07b909656ede60afa54a612bd",
+      "sha256": "9f220133fb1ee007f1485f02933aac5cb2f30cc07b909656ede60afa54a612bd"
+    },
+    {
+      "path": "go.sum",
+      "upstreamSha256": "5f1130ef249a3cbd487f97d3740c6655132e6a76dde37ba513517bf00407fcf7",
+      "sha256": "5f1130ef249a3cbd487f97d3740c6655132e6a76dde37ba513517bf00407fcf7"
+    },
+    {
+      "path": "pkg/artifactcache/doc.go",
+      "upstreamSha256": "bea9a4b57a0d4a33796091dd4d6221129460b070d38b126f6850703f726408ec",
+      "sha256": "bea9a4b57a0d4a33796091dd4d6221129460b070d38b126f6850703f726408ec"
+    },
+    {
+      "path": "pkg/artifactcache/handler.go",
+      "upstreamSha256": "4952e58cb4052d1854ab1dfab0eda49315689f6bcda5cc61cbf680bcad2b7f69",
+      "sha256": "4952e58cb4052d1854ab1dfab0eda49315689f6bcda5cc61cbf680bcad2b7f69"
+    },
+    {
+      "path": "pkg/artifactcache/model.go",
+      "upstreamSha256": "0f830f29d596d3dae53907b450613cd555b7a1ffeac29beb108dbfca6a2fdb85",
+      "sha256": "0f830f29d596d3dae53907b450613cd555b7a1ffeac29beb108dbfca6a2fdb85"
+    },
+    {
+      "path": "pkg/artifactcache/storage.go",
+      "upstreamSha256": "20715638902ce3731dc1fa8c351d79dec3cc1a238da3f3373a94c36cdba250d1",
+      "sha256": "20715638902ce3731dc1fa8c351d79dec3cc1a238da3f3373a94c36cdba250d1"
+    },
+    {
+      "path": "pkg/artifacts/artifact.pb.go",
+      "upstreamSha256": "23d56e4947ad9f12264aff64c0edf6343babcfdde4d1835e5b2f351409621626",
+      "sha256": "23d56e4947ad9f12264aff64c0edf6343babcfdde4d1835e5b2f351409621626"
+    },
+    {
+      "path": "pkg/artifacts/artifacts_v4.go",
+      "upstreamSha256": "b33d8cc5b6bb4db608e904a65eaedb7c321718b732d8f9b16f51f4fe107edc0b",
+      "sha256": "b33d8cc5b6bb4db608e904a65eaedb7c321718b732d8f9b16f51f4fe107edc0b"
+    },
+    {
+      "path": "pkg/artifacts/server.go",
+      "upstreamSha256": "f8dd6ea9f5982e965b54df84c73da4b73ce3ec62f19766cfe91e910b229bfcad",
+      "sha256": "f8dd6ea9f5982e965b54df84c73da4b73ce3ec62f19766cfe91e910b229bfcad"
+    },
+    {
+      "path": "pkg/common/auth.go",
+      "upstreamSha256": "b9d3f808949c720575dbb19948ed537dfdc73df7244cd54be4c83ea48871ec50",
+      "sha256": "b9d3f808949c720575dbb19948ed537dfdc73df7244cd54be4c83ea48871ec50"
+    },
+    {
+      "path": "pkg/common/cartesian.go",
+      "upstreamSha256": "8c989b56e0a8702c9f2c500cd111aa7d90baca47f7a837a992f2af724c8fdc29",
+      "sha256": "8c989b56e0a8702c9f2c500cd111aa7d90baca47f7a837a992f2af724c8fdc29"
+    },
+    {
+      "path": "pkg/common/context.go",
+      "upstreamSha256": "acfe3bf553bd6c9e47af9f9854179cce927b4c8c971f3c9693b9b573bc7fbf2d",
+      "sha256": "acfe3bf553bd6c9e47af9f9854179cce927b4c8c971f3c9693b9b573bc7fbf2d"
+    },
+    {
+      "path": "pkg/common/draw.go",
+      "upstreamSha256": "7787e7bf3e8e147802472c558346cb5bedd80d828e16f982ff50f810881e8ff7",
+      "sha256": "7787e7bf3e8e147802472c558346cb5bedd80d828e16f982ff50f810881e8ff7"
+    },
+    {
+      "path": "pkg/common/dryrun.go",
+      "upstreamSha256": "aa98b1dba5a3de740fc7fa3b80d9cf25b97453be767c840bffe62f753f17feef",
+      "sha256": "aa98b1dba5a3de740fc7fa3b80d9cf25b97453be767c840bffe62f753f17feef"
+    },
+    {
+      "path": "pkg/common/executor.go",
+      "upstreamSha256": "c16e092361178f7af26b4833b0b44eaa21c6a3e54ae4f1b8370658ef76988371",
+      "sha256": "c16e092361178f7af26b4833b0b44eaa21c6a3e54ae4f1b8370658ef76988371"
+    },
+    {
+      "path": "pkg/common/file.go",
+      "upstreamSha256": "50b97d839baac73fa9bc999abb7ed81ff1bc0ed7a31ef1b6b70089c74a37c00d",
+      "sha256": "50b97d839baac73fa9bc999abb7ed81ff1bc0ed7a31ef1b6b70089c74a37c00d"
+    },
+    {
+      "path": "pkg/common/git/git.go",
+      "upstreamSha256": "d6455923939b316fb67016531bc6f1ea215e2f99d7a1f6a26720cb051930e379",
+      "sha256": "d6455923939b316fb67016531bc6f1ea215e2f99d7a1f6a26720cb051930e379"
+    },
+    {
+      "path": "pkg/common/job_error.go",
+      "upstreamSha256": "f4eb2222d2044b54897afd424ee33c61511002d6f25195069620ee5a763e8508",
+      "sha256": "f4eb2222d2044b54897afd424ee33c61511002d6f25195069620ee5a763e8508"
+    },
+    {
+      "path": "pkg/common/line_writer.go",
+      "upstreamSha256": "281030d34c8f2746e14c905b2858171f2342e10206c48428e05627d002d63602",
+      "sha256": "281030d34c8f2746e14c905b2858171f2342e10206c48428e05627d002d63602"
+    },
+    {
+      "path": "pkg/common/logger.go",
+      "upstreamSha256": "bfd57364c7d79000971ef952b9e5c691b7d7b0ae84c731bfa9598b4a8d8d0583",
+      "sha256": "bfd57364c7d79000971ef952b9e5c691b7d7b0ae84c731bfa9598b4a8d8d0583"
+    },
+    {
+      "path": "pkg/common/outbound_ip.go",
+      "upstreamSha256": "5a6e8508c21838e76e79d1d417a5d8e6a60ebe8eb4f56712bc8c0db6240b09a8",
+      "sha256": "5a6e8508c21838e76e79d1d417a5d8e6a60ebe8eb4f56712bc8c0db6240b09a8"
+    },
+    {
+      "path": "pkg/container/DOCKER_LICENSE",
+      "upstreamSha256": "2d81ea060825006fc8f3fe28aa5dc0ffeb80faf325b612c955229157b8c10dc0",
+      "sha256": "2d81ea060825006fc8f3fe28aa5dc0ffeb80faf325b612c955229157b8c10dc0"
+    },
+    {
+      "path": "pkg/container/container_types.go",
+      "upstreamSha256": "b6a3d8f82ee5954ad07666772530f1e1b1bdbc8bf0cb59da52abd18ce58ab698",
+      "sha256": "b6a3d8f82ee5954ad07666772530f1e1b1bdbc8bf0cb59da52abd18ce58ab698"
+    },
+    {
+      "path": "pkg/container/docker_auth.go",
+      "upstreamSha256": "3cc5d78579a5bae56d9c111fdcbfa4a53ab383946af84a47f0d0ec72e98627f6",
+      "sha256": "3cc5d78579a5bae56d9c111fdcbfa4a53ab383946af84a47f0d0ec72e98627f6"
+    },
+    {
+      "path": "pkg/container/docker_build.go",
+      "upstreamSha256": "19d1d9550d4996d51646d97fc644441870665dc200fe3f542baa53ddaf1280d6",
+      "sha256": "19d1d9550d4996d51646d97fc644441870665dc200fe3f542baa53ddaf1280d6"
+    },
+    {
+      "path": "pkg/container/docker_cli.go",
+      "upstreamSha256": "3e1927a79df90b788cae0342416bee42afe06543ed25b82a3d4c4a691a19dd2f",
+      "sha256": "3e1927a79df90b788cae0342416bee42afe06543ed25b82a3d4c4a691a19dd2f"
+    },
+    {
+      "path": "pkg/container/docker_images.go",
+      "upstreamSha256": "db910af6cdc35cd606a9905b642a00cf56e3816b28f7e4fb9883a08f2e84b00f",
+      "sha256": "db910af6cdc35cd606a9905b642a00cf56e3816b28f7e4fb9883a08f2e84b00f"
+    },
+    {
+      "path": "pkg/container/docker_logger.go",
+      "upstreamSha256": "cf238d153c73708ba0f16eb63376d4d7476e2832ae2277a96da4359199a8a679",
+      "sha256": "cf238d153c73708ba0f16eb63376d4d7476e2832ae2277a96da4359199a8a679"
+    },
+    {
+      "path": "pkg/container/docker_network.go",
+      "upstreamSha256": "4d1fe2507011c905b06e932b01ad755c984a2cfbd347083e8eff2a15cf4106ee",
+      "sha256": "4d1fe2507011c905b06e932b01ad755c984a2cfbd347083e8eff2a15cf4106ee"
+    },
+    {
+      "path": "pkg/container/docker_pull.go",
+      "upstreamSha256": "b6364dd7b07877430e1f1d9f7a6c0d22e35df7ef898f31a20cd9dd4e9a581394",
+      "sha256": "b6364dd7b07877430e1f1d9f7a6c0d22e35df7ef898f31a20cd9dd4e9a581394"
+    },
+    {
+      "path": "pkg/container/docker_run.go",
+      "upstreamSha256": "8e7b08c3180f28f362767c1b283d38e6c3ab160f58214f3cd8b4694fe5a4038d",
+      "sha256": "8e7b08c3180f28f362767c1b283d38e6c3ab160f58214f3cd8b4694fe5a4038d"
+    },
+    {
+      "path": "pkg/container/docker_socket.go",
+      "upstreamSha256": "1dcf692e49b1825c1d956dc272645d00f76e7983c27533fcdafc687423a47757",
+      "sha256": "1dcf692e49b1825c1d956dc272645d00f76e7983c27533fcdafc687423a47757"
+    },
+    {
+      "path": "pkg/container/docker_stub.go",
+      "upstreamSha256": "a69e4759fbf18f3e85e03e9752db793c146181ea19d38a791d44fa1374297f96",
+      "sha256": "a69e4759fbf18f3e85e03e9752db793c146181ea19d38a791d44fa1374297f96"
+    },
+    {
+      "path": "pkg/container/docker_volume.go",
+      "upstreamSha256": "ba370789043e9560f8f4d71521d0f07fe8916153335e1f98a62d243c3cd8e8df",
+      "sha256": "ba370789043e9560f8f4d71521d0f07fe8916153335e1f98a62d243c3cd8e8df"
+    },
+    {
+      "path": "pkg/container/executions_environment.go",
+      "upstreamSha256": "a261c624c95f3ab41a6ac1a0c298eab21141059eb509eb6649bc2d321a30415b",
+      "sha256": "a261c624c95f3ab41a6ac1a0c298eab21141059eb509eb6649bc2d321a30415b"
+    },
+    {
+      "path": "pkg/container/host_environment.go",
+      "upstreamSha256": "b4d4e08bdef88785bbfc389d46261c1db8e4a22c6ee6d134caaa160595620b60",
+      "sha256": "b4d4e08bdef88785bbfc389d46261c1db8e4a22c6ee6d134caaa160595620b60"
+    },
+    {
+      "path": "pkg/container/linux_container_environment_extensions.go",
+      "upstreamSha256": "31314137452b3fa199a63ff76632764045f094853f7748f931fb0ba0be7f404d",
+      "sha256": "31314137452b3fa199a63ff76632764045f094853f7748f931fb0ba0be7f404d"
+    },
+    {
+      "path": "pkg/container/parse_env_file.go",
+      "upstreamSha256": "08ecfc45dd72b7f5573200fa752361f4ea37bbb5fce989e18a1267e9030f9abc",
+      "sha256": "08ecfc45dd72b7f5573200fa752361f4ea37bbb5fce989e18a1267e9030f9abc"
+    },
+    {
+      "path": "pkg/container/util.go",
+      "upstreamSha256": "0cafda6bf0da711619d80b4ab6b9898ef9f6e4b154413c8a2d89c7d5860cb8ae",
+      "sha256": "0cafda6bf0da711619d80b4ab6b9898ef9f6e4b154413c8a2d89c7d5860cb8ae"
+    },
+    {
+      "path": "pkg/container/util_openbsd_mips64.go",
+      "upstreamSha256": "6a954733a5e0993caa5e1c92b2b5fbd5b85b31de8a7730b7cc76f5fa64be4ed7",
+      "sha256": "6a954733a5e0993caa5e1c92b2b5fbd5b85b31de8a7730b7cc76f5fa64be4ed7"
+    },
+    {
+      "path": "pkg/container/util_plan9.go",
+      "upstreamSha256": "60402565cf45acd9da894743850c49017462d68024599642681d74dfb222bb75",
+      "sha256": "60402565cf45acd9da894743850c49017462d68024599642681d74dfb222bb75"
+    },
+    {
+      "path": "pkg/container/util_windows.go",
+      "upstreamSha256": "68a0b9dc0a5d5ce3f7a5257e4382ebce4b3f9f48a45d5e7e2e0acce6960889ec",
+      "sha256": "68a0b9dc0a5d5ce3f7a5257e4382ebce4b3f9f48a45d5e7e2e0acce6960889ec"
+    },
+    {
+      "path": "pkg/exprparser/functions.go",
+      "upstreamSha256": "23cb773cf6185eac407127ef2f24614ce33927899b4a810291b276e8329ce1b5",
+      "sha256": "23cb773cf6185eac407127ef2f24614ce33927899b4a810291b276e8329ce1b5"
+    },
+    {
+      "path": "pkg/exprparser/interpreter.go",
+      "upstreamSha256": "7eca8547c64701384ccee89b75563c10e3848caae75dc0362c9de2908913f93c",
+      "sha256": "7eca8547c64701384ccee89b75563c10e3848caae75dc0362c9de2908913f93c"
+    },
+    {
+      "path": "pkg/filecollector/file_collector.go",
+      "upstreamSha256": "aae3ae89ccb013b54d733d9987cda22267dd66f6790c476b7fe79cfac1a8f99b",
+      "sha256": "aae3ae89ccb013b54d733d9987cda22267dd66f6790c476b7fe79cfac1a8f99b"
+    },
+    {
+      "path": "pkg/gh/gh.go",
+      "upstreamSha256": "18f7e6d342e6ef45ea0b2ac7234a3c30dd41ab33c6e6d5927c49ae6973a38ae3",
+      "sha256": "18f7e6d342e6ef45ea0b2ac7234a3c30dd41ab33c6e6d5927c49ae6973a38ae3"
+    },
+    {
+      "path": "pkg/lookpath/LICENSE",
+      "upstreamSha256": "feb78b34b4ffe397ff4bbb114eaac4a145675a9cf248ecac82a69a1b2777ccdf",
+      "sha256": "feb78b34b4ffe397ff4bbb114eaac4a145675a9cf248ecac82a69a1b2777ccdf"
+    },
+    {
+      "path": "pkg/lookpath/env.go",
+      "upstreamSha256": "f2be5acb927016f419a84a30dfbee3473fa635575602e4013d4a1b032f3854e5",
+      "sha256": "f2be5acb927016f419a84a30dfbee3473fa635575602e4013d4a1b032f3854e5"
+    },
+    {
+      "path": "pkg/lookpath/error.go",
+      "upstreamSha256": "e9963fda5cbcdcf4296000ea7d1f3567190a0547b008d4413810c24ed883f807",
+      "sha256": "e9963fda5cbcdcf4296000ea7d1f3567190a0547b008d4413810c24ed883f807"
+    },
+    {
+      "path": "pkg/lookpath/lp_js.go",
+      "upstreamSha256": "0043b3e54c38a5ca0a29b72b5e0ce7868f169306d7df6241ab54388e822d5a41",
+      "sha256": "0043b3e54c38a5ca0a29b72b5e0ce7868f169306d7df6241ab54388e822d5a41"
+    },
+    {
+      "path": "pkg/lookpath/lp_plan9.go",
+      "upstreamSha256": "ba372f241988a6c8ac26a33090113ee0c022e13e24e3be6ace124f5576928c94",
+      "sha256": "ba372f241988a6c8ac26a33090113ee0c022e13e24e3be6ace124f5576928c94"
+    },
+    {
+      "path": "pkg/lookpath/lp_unix.go",
+      "upstreamSha256": "eeffd511ac539c6955b6c01b929042993bf6fcb4c8aad1b5884485797e7a6f3e",
+      "sha256": "eeffd511ac539c6955b6c01b929042993bf6fcb4c8aad1b5884485797e7a6f3e"
+    },
+    {
+      "path": "pkg/lookpath/lp_windows.go",
+      "upstreamSha256": "ad3b43a9070bb2e55c9696af77271b5793bf1f5430353990957f1f61245d8bd0",
+      "sha256": "ad3b43a9070bb2e55c9696af77271b5793bf1f5430353990957f1f61245d8bd0"
+    },
+    {
+      "path": "pkg/model/action.go",
+      "upstreamSha256": "49c8cbf8a597466b11c553f578fbad351587087731f7abffe44e85a508026854",
+      "sha256": "49c8cbf8a597466b11c553f578fbad351587087731f7abffe44e85a508026854"
+    },
+    {
+      "path": "pkg/model/anchors.go",
+      "upstreamSha256": "480bfd8627f07d56c8b40d4f88c78f1690dd9924668972eb0ee4362cbd38c084",
+      "sha256": "480bfd8627f07d56c8b40d4f88c78f1690dd9924668972eb0ee4362cbd38c084"
+    },
+    {
+      "path": "pkg/model/github_context.go",
+      "upstreamSha256": "53eede9a1157329f54cb47c8e668e89e5866e1e89aba4be31bb45a4c1081a85e",
+      "sha256": "53eede9a1157329f54cb47c8e668e89e5866e1e89aba4be31bb45a4c1081a85e"
+    },
+    {
+      "path": "pkg/model/job_context.go",
+      "upstreamSha256": "8bc1ccaa1da826298cb546836d69e554bf1075ad98b8ea30663255f13d7e6b38",
+      "sha256": "8bc1ccaa1da826298cb546836d69e554bf1075ad98b8ea30663255f13d7e6b38"
+    },
+    {
+      "path": "pkg/model/planner.go",
+      "upstreamSha256": "c5469bc123edcd47112f58beaa3ccdb5965223100e327328af6378bc97828ed5",
+      "sha256": "c5469bc123edcd47112f58beaa3ccdb5965223100e327328af6378bc97828ed5"
+    },
+    {
+      "path": "pkg/model/step_result.go",
+      "upstreamSha256": "34e177cae66ccbff4129e07bb9b324f139f30ba3de527df8f6dc03d4d89a2448",
+      "sha256": "34e177cae66ccbff4129e07bb9b324f139f30ba3de527df8f6dc03d4d89a2448"
+    },
+    {
+      "path": "pkg/model/workflow.go",
+      "upstreamSha256": "e6a7da49b78c0472c5a71a7712a49ff2262c534d4a00497a9605ed8c9b31263e",
+      "sha256": "e6a7da49b78c0472c5a71a7712a49ff2262c534d4a00497a9605ed8c9b31263e"
+    },
+    {
+      "path": "pkg/runner/action.go",
+      "upstreamSha256": "ae9e3f0b2fe06ecf86f4357a8534dd3b41d4b99c7215f59dc8d2d85cad4252cd",
+      "sha256": "ae9e3f0b2fe06ecf86f4357a8534dd3b41d4b99c7215f59dc8d2d85cad4252cd"
+    },
+    {
+      "path": "pkg/runner/action_cache.go",
+      "upstreamSha256": "fb45ff9fb75921333c9f2c97d77c0d77ccdc39b4c6b5658e5fa85d1bfad7b0bb",
+      "sha256": "fb45ff9fb75921333c9f2c97d77c0d77ccdc39b4c6b5658e5fa85d1bfad7b0bb"
+    },
+    {
+      "path": "pkg/runner/action_cache_offline_mode.go",
+      "upstreamSha256": "1c923f6ef800880a78b2e5b68286456cbb4658f4bb3adb4b0d6d0038cf85cab2",
+      "sha256": "1c923f6ef800880a78b2e5b68286456cbb4658f4bb3adb4b0d6d0038cf85cab2"
+    },
+    {
+      "path": "pkg/runner/action_composite.go",
+      "upstreamSha256": "1d1adb6489a85bebd82d7abe55f382eec2f7af5ce90eb21f13794dfd32f4423f",
+      "sha256": "1d1adb6489a85bebd82d7abe55f382eec2f7af5ce90eb21f13794dfd32f4423f"
+    },
+    {
+      "path": "pkg/runner/command.go",
+      "upstreamSha256": "5abaeb2bb3189118e54488b4ad7944c86e7bb0659b469478603893a4264afce3",
+      "sha256": "5abaeb2bb3189118e54488b4ad7944c86e7bb0659b469478603893a4264afce3"
+    },
+    {
+      "path": "pkg/runner/expression.go",
+      "upstreamSha256": "9c6dc1a44612b291e5c1a22208bd500c06567b6fadfdf36733d953160c2a47fb",
+      "sha256": "627aad449c1ea3df4c39456fefefa1317d15a7d06a4ef4e6df4e2636519521dc"
+    },
+    {
+      "path": "pkg/runner/golf_dispatch_inputs_test.go",
+      "upstreamSha256": null,
+      "sha256": "715d63da887fba47095bdd659ea2bf5c490435cf72109ed464fbd8517e367708"
+    },
+    {
+      "path": "pkg/runner/hashfiles/index.js",
+      "upstreamSha256": "78d1e27da228709878ecdccb498ba873e9de832d8436224ecbab4acea3d9ee9b",
+      "sha256": "78d1e27da228709878ecdccb498ba873e9de832d8436224ecbab4acea3d9ee9b"
+    },
+    {
+      "path": "pkg/runner/job_executor.go",
+      "upstreamSha256": "68336e0d05df1ab15e972726f64f6f0e35d535bd7f8ad7fe870523b6de40b375",
+      "sha256": "68336e0d05df1ab15e972726f64f6f0e35d535bd7f8ad7fe870523b6de40b375"
+    },
+    {
+      "path": "pkg/runner/local_repository_cache.go",
+      "upstreamSha256": "7f305979e74797fca95803b3948622a123e6517610faec6a8ab84ec2cba31802",
+      "sha256": "7f305979e74797fca95803b3948622a123e6517610faec6a8ab84ec2cba31802"
+    },
+    {
+      "path": "pkg/runner/logger.go",
+      "upstreamSha256": "e2f75e8b487930f1711a9915986394cb5dd1ce708cf8c12603d8b9ac56d7eaae",
+      "sha256": "e2f75e8b487930f1711a9915986394cb5dd1ce708cf8c12603d8b9ac56d7eaae"
+    },
+    {
+      "path": "pkg/runner/res/trampoline.js",
+      "upstreamSha256": "ff4a3f7104aa910a1c6b0cf5e798b6ab87558011f32a4f66ff3f35d0c4742d93",
+      "sha256": "ff4a3f7104aa910a1c6b0cf5e798b6ab87558011f32a4f66ff3f35d0c4742d93"
+    },
+    {
+      "path": "pkg/runner/reusable_workflow.go",
+      "upstreamSha256": "1c72473c259f75be7b582b9437b2f179926b596df46f5d54f795e3e40e4123dd",
+      "sha256": "1c72473c259f75be7b582b9437b2f179926b596df46f5d54f795e3e40e4123dd"
+    },
+    {
+      "path": "pkg/runner/run_context.go",
+      "upstreamSha256": "01fb255cb1fedbbb56639e918b50b78f5e320bf87ec62cae0d4c68a62ef33b8d",
+      "sha256": "01fb255cb1fedbbb56639e918b50b78f5e320bf87ec62cae0d4c68a62ef33b8d"
+    },
+    {
+      "path": "pkg/runner/runner.go",
+      "upstreamSha256": "03198fc2ed5aa8aeae3c39e146b458531eda172a20844faf0ca36f89a0553962",
+      "sha256": "03198fc2ed5aa8aeae3c39e146b458531eda172a20844faf0ca36f89a0553962"
+    },
+    {
+      "path": "pkg/runner/step.go",
+      "upstreamSha256": "43694c61aeaea14cd6141d900b9f362ca77818c491f0d39f034f0eb485ba635e",
+      "sha256": "43694c61aeaea14cd6141d900b9f362ca77818c491f0d39f034f0eb485ba635e"
+    },
+    {
+      "path": "pkg/runner/step_action_local.go",
+      "upstreamSha256": "97534972bba227611b8a9a34704370c371deeecae28fd60106dbad53f6c5e569",
+      "sha256": "97534972bba227611b8a9a34704370c371deeecae28fd60106dbad53f6c5e569"
+    },
+    {
+      "path": "pkg/runner/step_action_remote.go",
+      "upstreamSha256": "2f6e49668c211fac7c4ac549d624631cf62c770628a198c846b0018777cf2287",
+      "sha256": "2f6e49668c211fac7c4ac549d624631cf62c770628a198c846b0018777cf2287"
+    },
+    {
+      "path": "pkg/runner/step_docker.go",
+      "upstreamSha256": "4af38d9f4189bcb83777f0d6db0a95b0dc68683bff1e33cb9f7fb734a6130022",
+      "sha256": "4af38d9f4189bcb83777f0d6db0a95b0dc68683bff1e33cb9f7fb734a6130022"
+    },
+    {
+      "path": "pkg/runner/step_factory.go",
+      "upstreamSha256": "b99330b1a0cecdb91a378368d31f47e901162885567746250b6f0a4ff2cc550f",
+      "sha256": "b99330b1a0cecdb91a378368d31f47e901162885567746250b6f0a4ff2cc550f"
+    },
+    {
+      "path": "pkg/runner/step_run.go",
+      "upstreamSha256": "c4231e3a5f7dd3b7f6545fad4dd09e91e15ad9341326e563355c5a388f7f68da",
+      "sha256": "c4231e3a5f7dd3b7f6545fad4dd09e91e15ad9341326e563355c5a388f7f68da"
+    },
+    {
+      "path": "pkg/schema/action_schema.json",
+      "upstreamSha256": "e716689128023b6b247d5f8c79c8d57387004d82d07f15064520be5a129c4c52",
+      "sha256": "e716689128023b6b247d5f8c79c8d57387004d82d07f15064520be5a129c4c52"
+    },
+    {
+      "path": "pkg/schema/schema.go",
+      "upstreamSha256": "167651d29d193a3d3a731d8f6579179178949adc40af4c32d6a82b294c4fb49f",
+      "sha256": "167651d29d193a3d3a731d8f6579179178949adc40af4c32d6a82b294c4fb49f"
+    },
+    {
+      "path": "pkg/schema/workflow_schema.json",
+      "upstreamSha256": "fa2818694abed4e3edb131ddd817e8f1efb1babb96515fbb2a0b7073bcbe2181",
+      "sha256": "fa2818694abed4e3edb131ddd817e8f1efb1babb96515fbb2a0b7073bcbe2181"
+    },
+    {
+      "path": "pkg/workflowpattern/trace_writer.go",
+      "upstreamSha256": "8dffde944a2d830cf234c1e75abef1ae06465737c17cc94c67d0f7cc41cd6304",
+      "sha256": "8dffde944a2d830cf234c1e75abef1ae06465737c17cc94c67d0f7cc41cd6304"
+    },
+    {
+      "path": "pkg/workflowpattern/workflow_pattern.go",
+      "upstreamSha256": "4d9de563e673a644cbbd2662ce8badacc966e182a40064887ecdff1b1c31fcc0",
+      "sha256": "4d9de563e673a644cbbd2662ce8badacc966e182a40064887ecdff1b1c31fcc0"
+    }
+  ]
+}
