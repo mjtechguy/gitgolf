@@ -84,6 +84,13 @@ def stage(value):
 SERVICES = {'postgres','gitea','golf','runner-daemon','runner-image-init','runner','runner-second'}
 COMPOSE_ACTIONS = {'up','exec','ps','stop','restart','down'}
 PROCESS_LIMIT = 8 << 20
+# Presence flags only, not extracted words: output and private values never escape.
+DIAGNOSTIC_WORDS = frozenset(('image','reference','invalid','format','build','built','pull','policy','space','device','mount','namespace','network','container','conflict','creating','resource','permission','denied','manifest','platform','architecture','context','dockerfile','service','dependency','failed','missing','unavailable','daemon','command','specified','duplicate','shared','name','tag','digest','sha256','healthy','unhealthy','complete','exit','timeout','resolve','create','start','running','recreate','recreated','compose','read','only'))
+
+
+def semantic_words(raw):
+    observed = raw[:1 << 20].lower()
+    return sorted(word for word in DIAGNOSTIC_WORDS if re.search(rb'(?<![a-z0-9_])'+word.encode()+rb'(?![a-z0-9_])',observed))
 
 
 class PrivateSubprocessFailure(AssertionError):
@@ -118,9 +125,16 @@ def operation_category(argv):
 def process_reason(stdout, stderr, timed_out=False):
     if timed_out: return 'process_timeout'
     if len(stdout) > PROCESS_LIMIT or len(stderr) > PROCESS_LIMIT: return 'process_output_bound'
-    text = stderr[:1 << 20].lower()
+    text = stdout[:1 << 20].lower() + b'\n' + stderr[:1 << 20].lower()
     # Classifications are hints, never evidence that a specific service was healthy.
     for code, fragments in (
+        ('compose_invalid_reference',(b'invalid reference format',b'invalid image reference',b'invalid reference:',b'repository name must be lowercase')),
+        ('compose_shared_image_plan',(b'used by multiple services',b'multiple services use the same image',b'cannot be used with image',b'must be built')),
+        ('compose_build_plan_failed',(b'failed to solve',b'failed to read dockerfile',b'unable to prepare context',b'build context')),
+        ('compose_pull_refused',(b'pull access denied',b'requested access to the resource is denied',b'pull policy is set to never')),
+        ('compose_no_disk_space',(b'no space left on device',)),
+        ('compose_platform_mismatch',(b'no matching manifest',b'exec format error',)),
+        ('compose_name_conflict',(b'container name',b'already in use by container')),
         ('compose_dependency_failed',(b'dependency failed to start',b'didn\'t complete successfully',b'did not complete successfully')),
         ('compose_service_unhealthy',(b'is unhealthy',b'container is unhealthy')),
         ('compose_network_namespace_missing',(b'cannot join network',b'network namespace',b'no such container')),
@@ -145,6 +159,7 @@ def process_observation(argv, return_code, stdout=b'', stderr=b'', timed_out=Fal
     return {**operation_category(tuple(argv)), 'returnCode':return_code,
             'stdoutBytes':len(stdout or b''), 'stderrBytes':len(stderr or b''),
             'reason':process_reason(stdout or b'',stderr or b'',timed_out),
+            'semanticWords':{'stdout':semantic_words(stdout or b''),'stderr':semantic_words(stderr or b'')},
             'callSites':safe_callsites(traceback.extract_stack()[:-1])}
 
 
@@ -270,6 +285,17 @@ def self_check():
     assert process_reason(b'',b'no command specified')=='compose_no_command'
     assert process_reason(b'',b'no such image')=='compose_missing_image'
     assert process_reason(b'',b'OCI runtime create failed')=='compose_service_start_failed'
+    assert process_reason(b'Invalid reference format: private',b'')=='compose_invalid_reference'
+    assert process_reason(b'',b'Failed to read Dockerfile: private')=='compose_build_plan_failed'
+    assert process_reason(b'',b'No space left on device')=='compose_no_disk_space'
+    assert process_reason(b'',b'no matching manifest for private')=='compose_platform_mismatch'
+    assert semantic_words((private+' IMAGE reference invalid format unknown-sensitive-output').encode())==['format','image','invalid','reference']
+    assert semantic_words(b'invalidity permission_secret networked containerize')==[]
+    assert semantic_words(b'x'*(1 << 20)+b' image')==[]
+    assert observed['semanticWords']=={'stdout':[],'stderr':['dependency','failed','start']}
+    flagged=process_observation(argv,1,(private+' image').encode(),('invalid reference format '+private+' private-extra-token').encode())
+    assert flagged['semanticWords']=={'stdout':['image'],'stderr':['format','invalid','reference']}
+    safe_manifest(flagged,[private,'private-extra-token','unknown-sensitive-output'])
     assert process_reason(b'',b'',True)=='process_timeout'
     assert process_reason(b'x'*(PROCESS_LIMIT+1),b'')=='process_output_bound'
     assert operation_category(('docker','compose','-p',private,'exec','-T','golf','golf','local-account','create',private))=={'operation':'compose_exec','services':['golf']}
@@ -295,6 +321,8 @@ def self_check():
     assert procedure['procedure']!=original['lastProcedure']['procedure'];safe_manifest(original,[private])
     proto=(ROOT/'api/golf/v1/golf.proto').read_text();assert 'service RunnerPoolService' in proto and 'RUNNER_POOL_STATE_DRAINING = 2;' in proto and 'WorkflowRunnerPlacement runner_placement = 31;' in proto
     text=Path(__file__).read_text();assert 'runner-second' in text and 'io.golf.runner.attempt' in text and '--pull=never' in text and b'sleep 16' in SLOW_SOURCE
+    overlay_source=text.rsplit("helpers.private_write(override,f'''services:",1)[1].split("''')",1)[0]
+    assert re.search(r'  runner:\n(?:    #.*\n)?    build: !reset null\n    image: \{worker\}\n    pull_policy: never',overlay_source) and overlay_source.count('build: !reset null')==1
     print('PASS: pure pool/placement receipts and private subprocess diagnostic guards; actual Docker/native/browser qualification unrun.')
 
 
@@ -332,7 +360,7 @@ def main():
     space=run('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/bin/df',core,'-Pk','/')
     assert int(space.splitlines()[-1].split()[3])>=2*1024*1024
     revision=(core_row.get('Config',{}).get('Labels') or {}).get('org.opencontainers.image.revision')
-    record(coreImage=core,runnerImage=worker,servedSourceRevision=revision if re.fullmatch(r'[a-f0-9]{40}',revision or '') else None,workingTreeHead=run('git','rev-parse','HEAD'))
+    record(fixtureConfiguration={'runnerBuildReset':True,'buildResetFailureHypothesis':'unconfirmed'},coreImage=core,runnerImage=worker,servedSourceRevision=revision if re.fullmatch(r'[a-f0-9]{40}',revision or '') else None,workingTreeHead=run('git','rev-parse','HEAD'))
     if args.ui: assert (stack/'web/node_modules/playwright/index.mjs').is_file()
     project='golf-pools-'+secrets.token_hex(5); ports=helpers.free_ports(2); previous=smoke.GOLF,smoke.GITEA
     smoke.GOLF,smoke.GITEA=f'http://127.0.0.1:{ports[0]}',f'http://127.0.0.1:{ports[1]}'
@@ -356,6 +384,8 @@ def main():
       GITEA__server__ROOT_URL: {smoke.GITEA}/
     ports: !override ["127.0.0.1:{ports[1]}:3000"]
   runner:
+    # Cached-image-only fixture: inherited production build plan is not used.
+    build: !reset null
     image: {worker}
     pull_policy: never
     environment:
