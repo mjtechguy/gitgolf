@@ -1,6 +1,6 @@
 # All-page route and state coverage
 
-Source inventory reviewed on 2026-10-03 against main `31175418c6f616d6c715eb92d8bbdd58bf550988` and the explicitly in-progress RS-2 browser changes in the working tree. This is a read-only inventory for the all-page GitHub comparison. No account sign-in, native fixture, deployment, paid inference or new screenshot was performed for this document. A route listed here is an implemented source entry point, not a claim that its current runtime or every state has been visited.
+Source inventory reviewed on 2026-10-03 against main `31175418c6f616d6c715eb92d8bbdd58bf550988` and the then-in-progress RS-2 browser changes. The initial inventory was read-only; the later [actual audit checkpoint](#actual-served-audit-checkpoint) records separately authorized managed sign-ins, owned native fixtures and screenshots. A route listed here is an implemented source entry point, not a claim that every state has been visited.
 
 The authority for current runnable evidence is [implementation status](IMPLEMENTATION_STATUS.md). [GitHub visual audit](GITHUB_VISUAL_AUDIT.md) and [sidebar review](REPOSITORY_SIDEBAR_PARITY_REVIEW.md) retain their own image/viewport/authentication provenance. The parallel all-page visual review can use this inventory without presenting historical captures as the current build.
 
@@ -156,6 +156,49 @@ The default [Playwright config](../web/playwright.config.ts) starts a local Vite
 | Shared inventories | `data-table.spec.ts` plus consuming page fixtures | Search/sort/paging must be labelled loaded-only where appropriate. Shared tests do not replace actual page-specific authorization checks |
 
 `.tmp/github-visual-audit/` manifests and galleries cover real public GitHub reference pages and separately qualified Golf captures. Their images can be reused only with the original auth/theme/viewport/source/image captions. The sidebar reference set `.tmp/repository-sidebar-review/` contains public signed-out GitHub captures and historical Golf comparisons. Authenticated GitHub account/org/repository/enterprise settings, reviewer write forms, private job logs and agent pages were not magically qualified by these signed-out references. New all-page evidence should maintain an explicit `route + state + actor + source/image + theme + viewport + capture kind` manifest; record unvisited states as pending.
+
+## Actual served audit checkpoint
+
+The later retained-stack audit completed **308 page/state observations: 77 cases at 1440 and 390 pixels, in dark and light themes**. It used actual managed Golf sessions and supported-API-created disposable native resources, without intercepted successful RPCs. The exact manifest is owner-only `.tmp/all-page-final-served/manifest.json`; fixed-label progress is `.tmp/all-page-final-served.log`. Terminal process `71846` exited 1 because four captures exposed a real product layout failure. A completed capture matrix does not mean the matrix passed or that 308 separate features are implemented.
+
+| Recorded outcome | Observations | Scope and remaining work |
+| --- | ---: | --- |
+| Captured | 296 | Actual route headings/settled reads, requested themes, role-specific views, selected explicit editors/menus and no unexpected browser mutations. Covers populated/empty Code, source/commit/compare, issues/PR tabs, account/org/admin/settings and permitted/denied/malformed routes represented by the driver |
+| Failed: mobile Status overflow | 4 | `/status` and its legacy capability alias at 390 pixels, both themes. Document width was 561 pixels; session/capability reads returned 200, with no page error or blocked write. This is product horizontal overflow, not a permission, loading or selector failure |
+| Pending: saved profile Test warning | 4 | `admin-test-warning`, both widths/themes. No eligible saved connection profile existed; the warning was not opened and no test was performed |
+| Pending: object-storage profile activation warning | 4 | `admin-activation-warning`, both widths/themes. No eligible saved object-storage profile existed; no activation or cutover was attempted |
+
+The served source was explicitly supplied as `4e5bc6c497063a9d8f579ce0d3ff1284d24e87b8`, separate from driver working-tree HEAD `308a0b5af83ebf9c34966cfce4d47caa400f12cf`. The recorded running Golf image was `sha256:602fa284f9e3bf861ddd5cd0e28637b174781698b8d17c56f8e0b9a890e0b1a0`, with Compose configuration hash `466f1ecfc285155e94927bb8ab1c184454b7d5d3eb6be787e96d71d61c878bd0`. These are local runtime/source observations, not links to an assumed remote commit. The preparation-only fixture failures were cleaned up before this final run: native 1.27.3 issue-close PATCH returns 201, and the corrected helper independently verified the closed issue plus exact proposed commit/blob before starting the browser.
+
+The browser opened explicit profile, repository-general, SSH/API credential, agent connection and infrastructure Add controls; source branch/clone menus; PR Files/Commits/Checks; and unsent private-draft/overall-review editors. It did not submit those editors, create provider authentication, publish a review, run inference, change global configuration or start a pipeline. Private outsider captures also required source tree/code/README payload absence. Initial denial screenshots are narrower evidence than removing access from an already-open editor.
+
+Owned native personal/empty/organization repositories, organization/team and ordinary owner/reader/outsider users were purged; managed sessions were revoked, owned Golf accounts disabled and the owner-only credential configuration removed. Golf retained its account/history records by design. Cleanup passed. Private captures and text remain local evidence and must not be copied into a public gallery without content review.
+
+Two separate qualifications supplement rather than replace this matrix:
+
+| Qualification | Actual evidence | Boundary |
+| --- | --- | --- |
+| Readable source/overview | Terminal `22639` passed; 12 actual captures under `.tmp/readable-source-final-served/`, log `.tmp/readable-source-final-served.log`, on the same `602fa…` image | Exact typed/suffix source identity, supported native overview and their independently recorded authority checks. This supersedes the earlier pending RS-2 source checkpoint above, not every source edge state in this inventory |
+| Isolated Compose CI | Terminal `87512` passed; `.tmp/all-page-ci-final-served/manifest.json` records 12 actual Actions inventory/run/selected-step captures, four width/theme pairs; log `.tmp/all-page-ci-final-served.log` | Actual bounded Actions/GitLab shell jobs, ordered step/log evidence, failures/denials, cancellation, persistence/restart and cleanup. Its runtime image remained `602fa…`, but its explicit served-source field is null and its separate Compose configuration hash is `2cde7f68e3625d7a404aad3350dbf6ec24293448966a36cc24191f700f076937`; do not infer the working-tree HEAD as its build revision. This is not full workflow compatibility |
+
+The initial all-page driver had no real run/step fixture; the isolated CI captures fill that narrow actual route gap separately. Connected provider/task-result states, late revocation/restart/fault states, saved native publication, GitHub authenticated settings references and the eight profile-dependent warning states retain their separate proof requirements. A screenshot of an empty or unconfigured panel does not qualify the configured behavior.
+
+Mobile Status fixes and Actions refinements after this checkpoint require affected captures on their new served image. The original 308 manifest and source/image captions must remain unchanged; neither source tests nor a selected recapture can retroactively turn it into an all-page pass or establish full product parity.
+
+### Qualified affected-page correction and execution follow-up
+
+The later product source `5bbca43b6c1cfe9f2b8d81eac2922707ea8918c5` is served on image `sha256:da706883eb7a05f5cfdd06433418ced240bd8167a8fb8affb26bbdd4fd48d20e`. Its affected read-only capture matrix passes **16 observations**: Status, its capability alias, Actions and repository workflow settings at1440/390 in both themes. Terminal `63645` and `.tmp/actions-policy-selected-served/manifest.json` record all16 as captured, with cleanup; the retained Compose configuration hash is `466f1ecfc285155e94927bb8ab1c184454b7d5d3eb6be787e96d71d61c878bd0`. This qualifies the current correction to the earlier mobile Status overflow and the represented Actions/settings layouts. It does not relabel the original308 manifest or test the eight profile-dependent warning states.
+
+| Separate execution proof | Actual evidence on `da706…` | Qualified boundary |
+| --- | --- | --- |
+| Isolated manual policy and shell CI | Terminal `98996`; `.tmp/actions-policy-ci-final-served/manifest.json`,12 actual inventory/run/selected-step observations at1440/390 in both themes, stable runtime before/after and cleanup | All four independent manual/push policy observations; real supported manual Actions/GitLab shell execution; selected-step/source receipts,49 log chunks/four pages, failure/skips, cancellation/revocation and restart/idempotency. Explicit served source is `5bbca43…`; driver HEAD `d797a2c…` is separate, with isolated Compose hash `5c3e2d0f9e5d888545ee4f5025f13361d89c1424e80ce2b31221f6ee247b3a05` |
+| Signed automatic push | Terminal `6621`; `.tmp/actions-policy-push-served.log`, actual native signed delivery and real Docker executor cleanup | Push-only/manual-denied policy, active independent sponsor after browser logout, exact commit/blob/private RustFS source, duplicate/restart fencing, running-grant revocation and subsequent denial. This is actual configured push execution, not an inference from manual screenshots |
+
+The first incomplete nine-record CI browser attempt is preserved separately; its helper selected a hidden link after collapsed Jobs reload. The corrected final helper observes the selected step after reopening the control and does not relax the run/source/privacy assertions. Current mobile CI logs begin around589px in these fixtures; this is a layout observation, not an execution-speed or full-fold guarantee.
+
+These separate bounded passes cover current represented layout and the existing one-job shell catalog. They do not qualify full jobs/needs/matrix/`uses`/expression/service/secret/artifact/cache compatibility, connected agent outcomes, full tool/terminal journaling, embedded agent steps or Cloudflare execution. Coding tasks and reviewer runs are being moved toward a typed unified Actions inventory and full-page drilldown; that next source packet is not served by this image. Future page/route captures must name its actual build rather than reusing `da706…` captions. [Metadata/progress contract](ACTIONS_RUN_METADATA_AND_PROGRESS.md), [engine implementation packet](ACTIONS_COMPATIBILITY_IMPLEMENTATION.md).
+
+The eight saved-profile Test/Activate warning captures remain pending. No eligible connection or object-storage profile was created merely to close a screenshot count, and no global cutover was performed. Authenticated GitHub settings references and the wider route/feature gates below also remain open.
 
 ## Fixture requirements for a truthful all-page pass
 
