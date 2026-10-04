@@ -2642,6 +2642,7 @@ service EmailNotificationService {
  rpc ListEmailTransports(ListEmailTransportsRequest) returns (ListEmailTransportsResponse);
  rpc SaveEmailTransport(SaveEmailTransportRequest) returns (SaveEmailTransportResponse);
  rpc ActivateEmailTransport(ActivateEmailTransportRequest) returns (ActivateEmailTransportResponse);
+ rpc DeactivateEmailTransport(DeactivateEmailTransportRequest) returns (DeactivateEmailTransportResponse);
  rpc GetOwnEmailNotifications(GetOwnEmailNotificationsRequest) returns (GetOwnEmailNotificationsResponse);
  rpc RequestEmailVerification(RequestEmailVerificationRequest) returns (RequestEmailVerificationResponse);
  rpc ConfirmEmailVerification(ConfirmEmailVerificationRequest) returns (ConfirmEmailVerificationResponse);
@@ -3789,3 +3790,15 @@ message PullRequestMergeObservation {
   string unavailable_reason = 15;
 }
 message GetPullRequestMergeObservationResponse { PullRequestMergeObservation observation = 1; }
+
+// Pause the exact current SMTP binding. Old generations never reactivate.
+message DeactivateEmailTransportRequest {
+ string id = 1;
+ string version = 2;
+ string expected_activation_generation = 3;
+ string current_password = 4;
+}
+message DeactivateEmailTransportResponse {
+ EmailTransport transport = 1;
+ string activation_generation = 2;
+}
