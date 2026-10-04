@@ -439,6 +439,23 @@ func branchRuleEquivalent(a, b *golfv1.RepositoryBranchProtection) bool {
 	aa.UpdatedAt = ""
 	bb.CreatedAt = ""
 	bb.UpdatedAt = ""
+	// Pinned native conversion emits membership in reader/team inventory order.
+	// Normalize only these cloned membership lists; other configuration remains exact.
+	for _, list := range [][]string{
+		aa.PushUsernames, aa.PushTeams, aa.ForcePushUsernames, aa.ForcePushTeams,
+		aa.MergeUsernames, aa.MergeTeams, aa.BypassUsernames, aa.BypassTeams,
+		aa.ApprovalsUsernames, aa.ApprovalsTeams,
+		bb.PushUsernames, bb.PushTeams, bb.ForcePushUsernames, bb.ForcePushTeams,
+		bb.MergeUsernames, bb.MergeTeams, bb.BypassUsernames, bb.BypassTeams,
+		bb.ApprovalsUsernames, bb.ApprovalsTeams,
+	} {
+		slices.Sort(list)
+		for i := 1; i < len(list); i++ {
+			if list[i] == list[i-1] {
+				return false
+			}
+		}
+	}
 	return proto.Equal(aa, bb)
 }
 func tagRuleEquivalent(a, b *golfv1.RepositoryTagProtection) bool {

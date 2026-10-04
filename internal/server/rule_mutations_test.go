@@ -298,6 +298,11 @@ func newRuleMutationFixture(t *testing.T) *ruleMutationFixture {
 			if r.Method == "PATCH" {
 				v.RuleName = name
 			}
+			if f.fault == "branch-inventory-order" {
+				for _, list := range [][]string{v.PushUsernames, v.PushTeams, v.ForcePushUsernames, v.ForcePushTeams, v.MergeUsernames, v.MergeTeams, v.BypassUsernames, v.BypassTeams, v.ApprovalsUsernames, v.ApprovalsTeams} {
+					slices.Reverse(list)
+				}
+			}
 			v.CreatedAt = "2026-10-04T00:00:00Z"
 			v.UpdatedAt = "2026-10-04T01:00:00Z"
 			if r.Method == "POST" {
@@ -516,5 +521,163 @@ func TestRuleMutationsTagAllowlistOrderPostgres(t *testing.T) {
 	slices.Reverse(m.DesiredTag.AllowedUsernames)
 	if _, err = s.MutateRepositoryRules(ctx, request); connect.CodeOf(err) != connect.CodeFailedPrecondition || f.writes.Load() != 1 {
 		t.Fatal("equivalent membership must not weaken original intent fingerprint", err)
+	}
+}
+
+func TestRuleMutationBranchAllowlistEquivalence(t *testing.T) {
+	fields := map[string]func(*golfv1.RepositoryBranchProtection, []string){
+		"push users":     func(v *golfv1.RepositoryBranchProtection, s []string) { v.PushUsernames = s },
+		"push teams":     func(v *golfv1.RepositoryBranchProtection, s []string) { v.PushTeams = s },
+		"force users":    func(v *golfv1.RepositoryBranchProtection, s []string) { v.ForcePushUsernames = s },
+		"force teams":    func(v *golfv1.RepositoryBranchProtection, s []string) { v.ForcePushTeams = s },
+		"merge users":    func(v *golfv1.RepositoryBranchProtection, s []string) { v.MergeUsernames = s },
+		"merge teams":    func(v *golfv1.RepositoryBranchProtection, s []string) { v.MergeTeams = s },
+		"bypass users":   func(v *golfv1.RepositoryBranchProtection, s []string) { v.BypassUsernames = s },
+		"bypass teams":   func(v *golfv1.RepositoryBranchProtection, s []string) { v.BypassTeams = s },
+		"approval users": func(v *golfv1.RepositoryBranchProtection, s []string) { v.ApprovalsUsernames = s },
+		"approval teams": func(v *golfv1.RepositoryBranchProtection, s []string) { v.ApprovalsTeams = s },
+	}
+	for name, set := range fields {
+		t.Run(name, func(t *testing.T) {
+			desired := writableBranchFixture()
+			set(desired, []string{"zeta", "Alpha"})
+			native := proto.Clone(desired).(*golfv1.RepositoryBranchProtection)
+			set(native, []string{"Alpha", "zeta"})
+			native.CreatedAt, native.UpdatedAt = "2026-10-04T00:00:00Z", "2026-10-04T01:00:00Z"
+			originalDesired, originalNative := proto.Clone(desired), proto.Clone(native)
+			if !branchRuleEquivalent(desired, native) || !proto.Equal(desired, originalDesired) || !proto.Equal(native, originalNative) {
+				t.Fatal("inventory ordering must match without changing the original intent or receipt")
+			}
+			for _, badList := range [][]string{{"Alpha"}, {"Alpha", "zeta", "extra"}, {"Alpha", "Alpha"}, {"alpha", "zeta"}} {
+				bad := proto.Clone(native).(*golfv1.RepositoryBranchProtection)
+				set(bad, badList)
+				if branchRuleEquivalent(desired, bad) {
+					t.Fatal("changed exact membership accepted")
+				}
+			}
+			duplicate := proto.Clone(desired).(*golfv1.RepositoryBranchProtection)
+			set(duplicate, []string{"Alpha", "Alpha"})
+			if branchRuleEquivalent(duplicate, duplicate) {
+				t.Fatal("matching duplicate lists must not become valid sets")
+			}
+		})
+	}
+	desired := writableBranchFixture()
+	desired.StatusCheckContexts = []string{"test-a", "test-b"}
+	for name, change := range map[string]func(*golfv1.RepositoryBranchProtection){
+		"context order": func(v *golfv1.RepositoryBranchProtection) { slices.Reverse(v.StatusCheckContexts) },
+		"priority":      func(v *golfv1.RepositoryBranchProtection) { v.Priority = "4" },
+		"pattern":       func(v *golfv1.RepositoryBranchProtection) { v.RuleName = "other/**" },
+		"flags":         func(v *golfv1.RepositoryBranchProtection) { v.EnablePush = !v.EnablePush },
+		"files":         func(v *golfv1.RepositoryBranchProtection) { v.ProtectedFilePatterns = "other/**" },
+		"unknown field": func(v *golfv1.RepositoryBranchProtection) { v.ProtoReflect().SetUnknown([]byte{0xa0, 0x06, 0x01}) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			bad := proto.Clone(desired).(*golfv1.RepositoryBranchProtection)
+			change(bad)
+			if branchRuleEquivalent(desired, bad) {
+				t.Fatal("non-membership configuration changed")
+			}
+		})
+	}
+}
+
+func TestRuleMutationBranchAllowlistWholeReadback(t *testing.T) {
+	m := ruleRequestFixture()
+	m.DesiredBranch.PushUsernames = []string{"zeta", "alice"}
+	merge, _ := wireMergeConfiguration(rulesRepositoryFixture())
+	unrelated := writableBranchFixture()
+	unrelated.RuleName = "other/**"
+	unrelated.MergeUsernames = []string{"other-b", "other-a"}
+	before := &golfv1.GetRepositoryRulesResponse{RepositoryId: m.RepositoryId, OwnerId: m.OwnerId, AccessRevision: m.ExpectedAccessRevision, BranchProtections: []*golfv1.RepositoryBranchProtection{writableBranchFixture(), unrelated}, TagProtections: []*golfv1.RepositoryTagProtection{{Id: "21", NamePattern: "v*", AllowedUsernames: []string{"other-b", "other-a"}}}, MergeConfiguration: merge}
+	receipt := proto.Clone(m.DesiredBranch).(*golfv1.RepositoryBranchProtection)
+	slices.Reverse(receipt.PushUsernames)
+	receipt.CreatedAt, receipt.UpdatedAt = "2026-10-04T00:00:00Z", "2026-10-04T01:00:00Z"
+	after := proto.Clone(before).(*golfv1.GetRepositoryRulesResponse)
+	after.BranchProtections[0] = receipt
+	if !verifyRuleReadback(m, before, after, receipt, nil, nil) {
+		t.Fatal("selected branch inventory ordering refused")
+	}
+	for name, change := range map[string]func(*golfv1.GetRepositoryRulesResponse){
+		"selected independent order": func(v *golfv1.GetRepositoryRulesResponse) { slices.Reverse(v.BranchProtections[0].PushUsernames) },
+		"selected timestamp":         func(v *golfv1.GetRepositoryRulesResponse) { v.BranchProtections[0].UpdatedAt = "2026-10-04T02:00:00Z" },
+		"unrelated branch order":     func(v *golfv1.GetRepositoryRulesResponse) { slices.Reverse(v.BranchProtections[1].MergeUsernames) },
+		"unrelated tag order":        func(v *golfv1.GetRepositoryRulesResponse) { slices.Reverse(v.TagProtections[0].AllowedUsernames) },
+		"authority":                  func(v *golfv1.GetRepositoryRulesResponse) { v.AccessRevision = strings.Repeat("c", 64) },
+		"merge": func(v *golfv1.GetRepositoryRulesResponse) {
+			v.MergeConfiguration.AllowManualMerge = !v.MergeConfiguration.AllowManualMerge
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			bad := proto.Clone(after).(*golfv1.GetRepositoryRulesResponse)
+			change(bad)
+			if verifyRuleReadback(m, before, bad, receipt, nil, nil) {
+				t.Fatal("strict independent whole-inventory comparison weakened")
+			}
+		})
+	}
+}
+
+// Requires the owned source-only PostgreSQL harness. This is not native API qualification.
+func TestRuleMutationsBranchAllowlistOrderPostgres(t *testing.T) {
+	db := testDatabase(t)
+	f := newRuleMutationFixture(t)
+	s, err := New(testConfig(f.provider.URL), db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := s.createSession(t.Context(), User{ID: 42, Login: "alice"}, "pat", "rules-source-only", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential := forgeCredential{Kind: "pat", Token: "rules-source-only"}
+	ctx := context.WithValue(t.Context(), sessionTokenKey{}, credential)
+	before, err := s.currentRuleInventory(ctx, session.Value, credential, repositoryKey{"alice", "example"}, "9007199254740993", "42")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := ruleRequestFixture()
+	m.ExpectedAccessRevision, m.ExpectedRulesRevision = before.AccessRevision, before.RulesRevision
+	m.DesiredBranch.EnablePush = true
+	m.DesiredBranch.EnablePushWhitelist = true
+	m.DesiredBranch.EnableForcePush = true
+	m.DesiredBranch.EnableForcePushAllowlist = true
+	m.DesiredBranch.EnableBypassAllowlist = true
+	m.DesiredBranch.PushUsernames = []string{"alice", "direct"}
+	m.DesiredBranch.ForcePushUsernames = []string{"alice", "direct"}
+	m.DesiredBranch.MergeUsernames = []string{"alice", "direct"}
+	m.DesiredBranch.BypassUsernames = []string{"alice", "direct"}
+	m.DesiredBranch.ApprovalsUsernames = []string{"alice", "direct"}
+	f.fault = "branch-inventory-order"
+	request := connect.NewRequest(m)
+	request.Header().Set("Origin", s.config.PublicURL)
+	request.Header().Set("Cookie", s.sessionCookie(session.Value, session.Expires, 3600).String())
+	result, err := s.MutateRepositoryRules(ctx, request)
+	if err != nil || result == nil || result.Msg.Operation.Phase != "SUCCEEDED" || result.Msg.CurrentRules == nil || f.writes.Load() != 1 {
+		t.Fatal("reordered native branch acknowledgement/readback must succeed once", err)
+	}
+	got := result.Msg.CurrentRules.BranchProtections[0]
+	for _, list := range [][]string{got.PushUsernames, got.ForcePushUsernames, got.MergeUsernames, got.BypassUsernames, got.ApprovalsUsernames} {
+		if !slices.Equal(list, []string{"direct", "alice"}) {
+			t.Fatal("native inventory order was rewritten")
+		}
+	}
+	if !slices.Equal(m.DesiredBranch.PushUsernames, []string{"alice", "direct"}) {
+		t.Fatal("original fingerprint input rewritten")
+	}
+	statusRequest := connect.NewRequest(&golfv1.GetRepositoryRuleMutationRequest{Repository: m.Repository, RepositoryId: m.RepositoryId, OwnerId: m.OwnerId, OperationId: m.OperationId})
+	statusRequest.Header().Set("Origin", s.config.PublicURL)
+	statusRequest.Header().Set("Cookie", request.Header().Get("Cookie"))
+	status, err := s.GetRepositoryRuleMutation(ctx, statusRequest)
+	if err != nil || status == nil || status.Msg.Operation.Phase != "SUCCEEDED" || f.writes.Load() != 1 {
+		t.Fatal("status inspection changed outcome or resent", err)
+	}
+	replay, err := s.MutateRepositoryRules(ctx, request)
+	if err != nil || replay == nil || replay.Msg.Operation.Phase != "SUCCEEDED" || replay.Msg.CurrentRules != nil || f.writes.Load() != 1 {
+		t.Fatal("original replay redispatched", err)
+	}
+	slices.Reverse(m.DesiredBranch.PushUsernames)
+	if _, err = s.MutateRepositoryRules(ctx, request); connect.CodeOf(err) != connect.CodeFailedPrecondition || f.writes.Load() != 1 {
+		t.Fatal("set-equivalent input cannot change original key fingerprint", err)
 	}
 }
