@@ -1105,7 +1105,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .workflow-navigation { display:flex; flex-direction:column; gap:4px; min-width:0; }
 .workflow-nav-link { display:flex; align-items:center; gap:8px; min-width:0; min-height:40px; padding:9px 12px; text-align:left; background:none; border:0; border-radius:4px; font-size:.875rem; color:var(--text); }
 .workflow-nav-link>svg { flex-shrink:0; }
-.workflow-nav-link>span { min-width:0; overflow-wrap:anywhere; }
+.workflow-nav-link>span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .workflow-nav-link[aria-current="page"] { background:var(--hover); color:var(--accent); box-shadow:inset 3px 0 var(--accent); }
 .workflow-navigation-panel .field-help { margin:12px 0; }
 .workflow-readiness { font-size:.875rem; color:var(--muted); line-height:1.6; }
@@ -1150,7 +1150,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 
 /* Shared execution records: workflow, coding task and PR review. */
 .run-kind-badge { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); border-radius:4px; padding:1px 6px; font-size:.8125rem; white-space:nowrap; }
-.action-run-context { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.data-table td .action-run-context { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .action-inventory-actions { padding:0 0 12px; }
 .action-inventory-actions>button { flex-shrink:0; }
 .action-review-context { display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
@@ -1167,3 +1167,11 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 
 .run-state-published { color:var(--accent); }
 .run-state-outdated,.run-state-admitting { color:var(--muted); }
+
+/* Actions filters retain the desktop rail and fit in one mobile control row. */
+.workflow-mobile-filters { display:none; }
+@media(max-width:700px) {
+ .workflow-navigation-panel>h3,.workflow-navigation-panel>nav { display:none; }
+ .workflow-mobile-filters { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px; }
+ .workflow-mobile-filters select { min-width:0; width:100%; min-height:44px; }
+}

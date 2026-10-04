@@ -118,7 +118,7 @@ export function WorkflowRunPage({userId,owner,name,repositoryId,runId,signingOut
   finally{if(controller.current===request)controller.current=null;if(alive.current)setPending(false);}
  }
  return <section className="page-stack workflow-run-workspace" aria-label="Workflow run workspace">
-  <Link className="text-button" {...repositoryOptions({owner,name},{view:'actions'})}><ArrowLeft size={16}/>All workflow runs</Link>
+  <Link className="text-button" {...repositoryOptions({owner,name},{view:'actions'})}><ArrowLeft size={16}/>All runs</Link>
   {query.error?<PanelError error={query.error} retry={()=>void query.refetch()}/>:!run?<Loading label="Loading selected run…"/>:null}
   {run?<><div hidden={query.isFetching} className="page-stack">
    <header className="discussion-summary workflow-run-summary"><div><h2>{run.workflowPath}</h2><p><RunState state={run.state}/><span>{run.origin===WorkflowRunOrigin.PUSH?'Push':run.origin===WorkflowRunOrigin.MANUAL?'Manual':'Unknown trigger'}{run.eventRef?` · ${run.eventRef}`:''}</span><span><Clock3 size={14}/>{elapsed(run)}</span></p></div><div className="row-actions"><button className="icon-button manual-refresh" aria-label="Refresh selected run" title="Refresh selected run" disabled={pending||query.isFetching||signingOut} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button>{run.canCancel?<button className="button secondary" disabled={pending||signingOut||query.isFetching} onClick={()=>void cancel()}>Cancel run</button>:null}</div></header>

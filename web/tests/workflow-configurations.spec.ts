@@ -146,7 +146,7 @@ test('Actions is a repository work tab with direct run inventory and configurati
  await expect(page.getByRole('table',{name:'Action runs',exact:true})).toBeVisible();
  await expect(page.getByRole('table',{name:'Workflow configurations',exact:true})).toBeHidden();
  await expect(page.getByRole('navigation',{name:'Workflow navigation'})).toBeVisible();
- await page.getByText('Workflow configuration files',{exact:true}).click();
+ await page.getByText('Execution details and configuration',{exact:true}).click();
  await expect(page.getByRole('table',{name:'Workflow configurations',exact:true})).toBeVisible();
  await expect(page.locator('.settings-navigation')).toHaveCount(0);
  await page.reload();await expect(page.locator('.repository-tabs [aria-current="page"]')).toHaveText('Actions');
@@ -156,16 +156,20 @@ for(const theme of ['dark','light'])for(const width of [1440,390])test(`Actions 
  const s=await backend(page);s.runPages=true;s.matchingRuns=true;await page.setViewportSize({width,height:1000});await page.addInitScript(theme=>localStorage.setItem('golf.theme',theme),theme);
  await page.goto('/alex/private/actions?ref='+commit+'&branch=older-context');
  const table=page.getByRole('table',{name:'Action runs',exact:true});await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(20);
- const navigation=page.getByRole('navigation',{name:'Workflow navigation'});await expect(page.getByRole('link',{name:'All runs',exact:true})).toHaveAttribute('aria-current','page');
+ if(width===390){await expect(page.getByRole('combobox',{name:'Run type',exact:true})).toBeVisible();expect((await table.boundingBox())!.y).toBeLessThan(700);}
+ const navigation=page.getByRole('navigation',{name:'Workflow navigation'});await expect(page.getByRole('link',{name:'All runs',exact:true,includeHidden:true})).toHaveAttribute('aria-current','page');
  expect(s.methods).not.toContain('ListAgentTasks');await expect(page.getByRole('table',{name:'Workflow configurations',exact:true})).toBeHidden();
+ await page.getByText('Execution details and configuration',{exact:true}).click();
  await expect(page.getByText('Current default-branch configurations at',{exact:false})).toBeVisible();
  await expect(page.getByText('Workflow worker execution is unavailable.',{exact:false})).toBeVisible();
- const select=navigation.getByRole('link',{name:'Show runs for '+manual.path,exact:true});await select.focus();await page.keyboard.press('Enter');
- await expect(select).toHaveAttribute('aria-current','page');await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(1);await expect(table).toContainText(manual.path);
- await expect(page.getByText('no complete history count is claimed.',{exact:false})).toBeVisible();
+ await page.getByText('Execution details and configuration',{exact:true}).click();
+ const select=navigation.getByRole('link',{name:'Show runs for '+manual.path,exact:true,includeHidden:width===390});
+ if(width===390){await page.getByRole('combobox',{name:'Workflow',exact:true}).selectOption(manual.path);await expect(page.getByRole('combobox',{name:'Run type',exact:true})).toHaveValue('workflow');}else{await select.focus();await page.keyboard.press('Enter');}
+ if(width===390)await expect(page.getByRole('combobox',{name:'Workflow',exact:true})).toHaveValue(manual.path);else await expect(select).toHaveAttribute('aria-current','page');await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(1);await expect(table).toContainText(manual.path);
+ await page.getByText('History visibility',{exact:true}).click();await expect(page.getByText('Private coding tasks require your ownership and current repository write access.',{exact:false})).toBeVisible();
  await page.getByRole('button',{name:'Load more action runs'}).click();await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(2);expect(s.requestedRunPages.filter(p=>p===2)).toEqual([2]);
- await page.getByRole('link',{name:'All runs',exact:true}).click();await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(20);
- await page.getByText('Workflow configuration files',{exact:true}).click();await expect(page.getByRole('button',{name:'Run workflow',exact:true})).toBeDisabled();
+ if(width===390)await page.getByRole('combobox',{name:'Run type',exact:true}).selectOption('');else await page.getByRole('link',{name:'All runs',exact:true}).click();await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(20);
+ await page.getByText('Execution details and configuration',{exact:true}).click();await expect(page.getByRole('button',{name:'Run workflow',exact:true})).toBeDisabled();
  await page.getByRole('button',{name:'New coding task',exact:true}).click();await expect.poll(()=>s.methods.filter(m=>m==='ListAgentTasks').length).toBeGreaterThan(0);
  expect(s.methods.some(m=>/^(Dispatch|Update|Cancel)/.test(m))).toBe(false);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:testInfo.outputPath('actions-workflow-filter.png'),fullPage:true});
@@ -198,10 +202,10 @@ for(const missing of [false,true])test(`settings workflow inspection refuses ${m
 for(const mode of ['manual','denied','unknown','push'] as const)test(`selected workflow exposes only a guarded manual action (${mode})`,async({page})=>{
  const s=await backend(page);s.worker=true;s.manualPolicy=mode==='manual';s.pushPolicy=true;s.policyKnown=mode!=='unknown';if(mode==='push')s.mode='push';
  await page.setViewportSize({width:390,height:844});await page.goto('/alex/private/actions');
- await expect(page.getByRole('link',{name:'All runs',exact:true})).toHaveAttribute('aria-current','page');await expect(page.getByRole('button',{name:'Run workflow',exact:true})).toBeHidden();
- await page.getByRole('link',{name:'Show runs for '+manual.path,exact:true}).click();
+ await expect(page.getByRole('link',{name:'All runs',exact:true,includeHidden:true})).toHaveAttribute('aria-current','page');await expect(page.getByRole('button',{name:'Run workflow',exact:true})).toBeHidden();
+ await page.getByRole('combobox',{name:'Workflow',exact:true}).selectOption(manual.path);
  const action=page.locator('.workflow-selected-heading').getByRole('button',{name:'Run workflow',exact:true});
- if(mode==='manual'){await expect(action).toBeEnabled();await action.click();await expect(page.getByRole('status').filter({hasText:'Run 12345678-1234-4234-8234-123456789012 recorded.'})).toBeVisible();expect(s.methods.filter(m=>m==='DispatchWorkflow')).toHaveLength(1);let release!:()=>void;s.barrier=new Promise<void>(resolve=>release=resolve);s.mode='denied';await page.getByText('Workflow configuration files',{exact:true}).click();await page.getByRole('button',{name:'Refresh workflow inspection',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'Run 12345678-1234-4234-8234-123456789012 recorded.'})).toHaveCount(0);release();s.barrier=undefined;await expect(page.getByRole('alert').filter({hasText:'Workflow inspection requires repository read access.'}).first()).toBeVisible();await expect(page.getByText('12345678-1234-4234-8234-123456789012',{exact:false})).toHaveCount(0);}
+ if(mode==='manual'){await expect(action).toBeEnabled();await action.click();await expect(page.getByRole('status').filter({hasText:'Run 12345678-1234-4234-8234-123456789012 recorded.'})).toBeVisible();expect(s.methods.filter(m=>m==='DispatchWorkflow')).toHaveLength(1);let release!:()=>void;s.barrier=new Promise<void>(resolve=>release=resolve);s.mode='denied';await page.getByText('Execution details and configuration',{exact:true}).click();await page.getByRole('button',{name:'Refresh workflow inspection',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'Run 12345678-1234-4234-8234-123456789012 recorded.'})).toHaveCount(0);release();s.barrier=undefined;await expect(page.getByRole('alert').filter({hasText:'Workflow inspection requires repository read access.'}).first()).toBeVisible();await expect(page.getByText('12345678-1234-4234-8234-123456789012',{exact:false})).toHaveCount(0);}
  else if(mode==='push')await expect(action).toHaveCount(0);else await expect(action).toBeDisabled();
  if(mode!=='manual')expect(s.methods).not.toContain('DispatchWorkflow');
  await expect(page.getByRole('table',{name:'Workflow configurations',exact:true})).toBeHidden();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -211,6 +215,6 @@ test('selected manual dispatch uncertainty survives inspection refresh without a
  const s=await backend(page);s.worker=true;s.manualPolicy=true;s.dispatchLost=true;await page.goto('/alex/private/actions');
  await page.getByRole('link',{name:'Show runs for '+manual.path,exact:true}).click();const action=page.locator('.workflow-selected-heading').getByRole('button',{name:'Run workflow',exact:true});await action.click();
  const notice=page.getByRole('status').filter({hasText:'Dispatch acknowledgement unavailable.'});await expect(notice).toBeVisible();await expect(action).toBeDisabled();
- let release!:()=>void;s.barrier=new Promise<void>(resolve=>release=resolve);await page.getByText('Workflow configuration files',{exact:true}).click();await page.getByRole('button',{name:'Refresh workflow inspection',exact:true}).click();await expect(notice).toHaveCount(0);release();s.barrier=undefined;
+ let release!:()=>void;s.barrier=new Promise<void>(resolve=>release=resolve);await page.getByText('Execution details and configuration',{exact:true}).click();await page.getByRole('button',{name:'Refresh workflow inspection',exact:true}).click();await expect(notice).toHaveCount(0);release();s.barrier=undefined;
  await expect(notice).toBeVisible();await expect(action).toBeDisabled();expect(s.methods.filter(m=>m==='DispatchWorkflow')).toHaveLength(1);
 });

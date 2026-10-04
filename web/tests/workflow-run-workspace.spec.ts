@@ -46,7 +46,7 @@ async function backend(page:Page){
 test('canonical run workspace continues logs across chunks, searches safely, downloads loaded text and survives reload',async({page})=>{
  const state=await backend(page);state.truncated=true;await page.goto(path);
  await expect(page.getByRole('heading',{name:'.github/workflows/qualification.yml',exact:true})).toBeVisible();
- await expect(page.getByRole('link',{name:'All workflow runs'})).toHaveAttribute('href',/\/alex\/demo\/actions/);
+ await expect(page.getByRole('link',{name:'All runs'})).toHaveAttribute('href',/\/alex\/demo\/actions/);
  await expect(page.getByRole('link',{name:head.slice(0,12),exact:true})).toHaveAttribute('href',new RegExp(`/commit/${head}`));
  await expect(page.getByRole('button',{name:'Load more log output'})).toBeVisible();
  await page.getByRole('button',{name:'Load more log output'}).click();
@@ -105,7 +105,7 @@ test('run workspace stays contained in dark/light mobile and preserves receipt/s
 test('leaving a pending cancellation aborts local UI handling without replaying the write',async({page})=>{
  const state=await backend(page);let release!:()=>void;state.cancelBarrier=new Promise(resolve=>{release=resolve;});await page.goto(path);
  await page.getByRole('button',{name:'Cancel run'}).click();await expect.poll(()=>state.cancels.length).toBe(1);
- await page.getByRole('link',{name:'All workflow runs'}).click();await expect(page).toHaveURL(/\/alex\/demo\/actions$/);release();
+ await page.getByRole('link',{name:'All runs'}).click();await expect(page).toHaveURL(/\/alex\/demo\/actions$/);release();
  await expect(page.getByText('Run cancelled.',{exact:false})).toHaveCount(0);expect(state.cancels).toHaveLength(1);
 });
 
