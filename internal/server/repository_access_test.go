@@ -52,7 +52,7 @@ func TestRepositoryAccessBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, method := range []string{"GetRepositoryAccess", "ListRepositoryCollaborators", "ResolveRepositoryCollaborator", "SetRepositoryCollaborator", "RemoveRepositoryCollaborator"} {
+	for _, method := range []string{"GetRepositoryAccessOperation", "GetRepositoryAccess", "ListRepositoryCollaborators", "ResolveRepositoryCollaborator", "SetRepositoryCollaborator", "RemoveRepositoryCollaborator"} {
 		path := "/golf.v1.RepositoryAccessService/" + method
 		for _, origin := range []string{s.config.PublicURL, "https://other.invalid"} {
 			req := httptest.NewRequest("POST", "/rpc"+path, strings.NewReader("malformed"))
