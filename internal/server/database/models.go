@@ -737,6 +737,53 @@ type GolfOrganizationCreationSelection struct {
 	UserID   int64
 }
 
+type GolfOrganizationExecutionBroker struct {
+	ForgeURL       string
+	OrganizationID int64
+	Revision       int64
+}
+
+type GolfOrganizationExecutionOperation struct {
+	ForgeURL               string
+	OrganizationID         int64
+	UserID                 int64
+	OperationID            uuid.UUID
+	Action                 string
+	ItemID                 uuid.UUID
+	AcceptedVersion        int64
+	AcceptedBrokerRevision int64
+	RequestMetadata        json.RawMessage
+	CreatedAt              time.Time
+}
+
+type GolfOrganizationExecutionValue struct {
+	ID             uuid.UUID
+	ForgeURL       string
+	OrganizationID int64
+	Name           string
+	Kind           string
+	Version        int64
+	Deleted        bool
+	ValueBytes     int32
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+type GolfOrganizationExecutionVersion struct {
+	ID                   uuid.UUID
+	Version              int64
+	ValueBytes           int32
+	SelectedRepositories json.RawMessage
+	ApproverUserID       int64
+	ApproverNativeID     int64
+	ApprovalSessionHash  []byte
+	ExpiresAt            time.Time
+	EncryptedContent     []byte
+	ContentBinding       []byte
+	CredentialKeyID      string
+	CreatedAt            time.Time
+}
+
 type GolfPullReviewMutation struct {
 	ID                 int64
 	UserID             int64

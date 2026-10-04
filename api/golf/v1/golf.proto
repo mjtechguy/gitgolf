@@ -3359,3 +3359,66 @@ message GetGitReceiveOutcomeResponse {
  string phase = 4; uint32 command_count = 5; optional uint32 accepted_count = 6;
  optional uint32 rejected_count = 7; string created_at = 8; string updated_at = 9;
 }
+
+// Browser-only organization execution values. Sharing selects immutable native
+// repositories; repository source approval and current dual authority remain separate.
+service OrganizationExecutionValueService {
+ rpc ListOrganizationExecutionValues(ListOrganizationExecutionValuesRequest) returns (ListOrganizationExecutionValuesResponse);
+ rpc SaveOrganizationExecutionValue(SaveOrganizationExecutionValueRequest) returns (SaveOrganizationExecutionValueResponse);
+ rpc DeleteOrganizationExecutionValue(DeleteOrganizationExecutionValueRequest) returns (DeleteOrganizationExecutionValueResponse);
+ rpc GetOrganizationExecutionVariable(GetOrganizationExecutionVariableRequest) returns (GetOrganizationExecutionVariableResponse);
+ rpc GetOrganizationExecutionValueOperation(GetOrganizationExecutionValueOperationRequest) returns (GetOrganizationExecutionValueOperationResponse);
+}
+message OrganizationExecutionValueTarget { string organization = 1; string organization_id = 2; }
+message OrganizationExecutionRepository { RepositoryKey repository = 1; string repository_id = 2; }
+message OrganizationExecutionValue {
+ RepositoryExecutionValue value = 1;
+ repeated OrganizationExecutionRepository selected_repositories = 2;
+ string share_expires_at = 3;
+ string share_state = 4;
+}
+message ListOrganizationExecutionValuesRequest { OrganizationExecutionValueTarget target = 1; }
+message ListOrganizationExecutionValuesResponse {
+ OrganizationExecutionValueTarget target = 1;
+ string broker_revision = 2;
+ repeated OrganizationExecutionValue values = 3;
+ uint32 maximum_values = 4;
+ uint32 maximum_selected_repositories = 5;
+ string consumer_profile = 6;
+}
+message SaveOrganizationExecutionValueRequest {
+ OrganizationExecutionValueTarget target = 1;
+ string id = 2;
+ string expected_version = 3;
+ string expected_broker_revision = 4;
+ string operation_id = 5;
+ string name = 6;
+ RepositoryExecutionValueKind kind = 7;
+ // Omitted only for a policy-only edit; never returned for SECRET.
+ optional string value = 8;
+ repeated OrganizationExecutionRepository selected_repositories = 9;
+ string expires_at = 10;
+}
+message DeleteOrganizationExecutionValueRequest {
+ OrganizationExecutionValueTarget target = 1;
+ string id = 2;
+ string expected_version = 3;
+ string expected_broker_revision = 4;
+ string operation_id = 5;
+}
+message GetOrganizationExecutionVariableRequest { OrganizationExecutionValueTarget target = 1; string id = 2; string version = 3; }
+message GetOrganizationExecutionVariableResponse { OrganizationExecutionValueTarget target = 1; OrganizationExecutionValue variable = 2; string value = 3; }
+message GetOrganizationExecutionValueOperationRequest { OrganizationExecutionValueTarget target = 1; string operation_id = 2; }
+message OrganizationExecutionValueMutation {
+ OrganizationExecutionValueTarget target = 1;
+ string operation_id = 2;
+ string action = 3;
+ string item_id = 4;
+ string accepted_version = 5;
+ string accepted_broker_revision = 6;
+ bool replayed = 7;
+ string committed_at = 8;
+}
+message SaveOrganizationExecutionValueResponse { OrganizationExecutionValueMutation operation = 1; }
+message DeleteOrganizationExecutionValueResponse { OrganizationExecutionValueMutation operation = 1; }
+message GetOrganizationExecutionValueOperationResponse { OrganizationExecutionValueMutation operation = 1; }

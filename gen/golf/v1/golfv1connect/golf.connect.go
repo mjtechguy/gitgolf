@@ -102,6 +102,9 @@ const (
 	RunnerPoolServiceName = "golf.v1.RunnerPoolService"
 	// GitTransportServiceName is the fully-qualified name of the GitTransportService service.
 	GitTransportServiceName = "golf.v1.GitTransportService"
+	// OrganizationExecutionValueServiceName is the fully-qualified name of the
+	// OrganizationExecutionValueService service.
+	OrganizationExecutionValueServiceName = "golf.v1.OrganizationExecutionValueService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -652,6 +655,22 @@ const (
 	// GitTransportServiceGetGitReceiveOutcomeProcedure is the fully-qualified name of the
 	// GitTransportService's GetGitReceiveOutcome RPC.
 	GitTransportServiceGetGitReceiveOutcomeProcedure = "/golf.v1.GitTransportService/GetGitReceiveOutcome"
+	// OrganizationExecutionValueServiceListOrganizationExecutionValuesProcedure is the fully-qualified
+	// name of the OrganizationExecutionValueService's ListOrganizationExecutionValues RPC.
+	OrganizationExecutionValueServiceListOrganizationExecutionValuesProcedure = "/golf.v1.OrganizationExecutionValueService/ListOrganizationExecutionValues"
+	// OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure is the fully-qualified
+	// name of the OrganizationExecutionValueService's SaveOrganizationExecutionValue RPC.
+	OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure = "/golf.v1.OrganizationExecutionValueService/SaveOrganizationExecutionValue"
+	// OrganizationExecutionValueServiceDeleteOrganizationExecutionValueProcedure is the fully-qualified
+	// name of the OrganizationExecutionValueService's DeleteOrganizationExecutionValue RPC.
+	OrganizationExecutionValueServiceDeleteOrganizationExecutionValueProcedure = "/golf.v1.OrganizationExecutionValueService/DeleteOrganizationExecutionValue"
+	// OrganizationExecutionValueServiceGetOrganizationExecutionVariableProcedure is the fully-qualified
+	// name of the OrganizationExecutionValueService's GetOrganizationExecutionVariable RPC.
+	OrganizationExecutionValueServiceGetOrganizationExecutionVariableProcedure = "/golf.v1.OrganizationExecutionValueService/GetOrganizationExecutionVariable"
+	// OrganizationExecutionValueServiceGetOrganizationExecutionValueOperationProcedure is the
+	// fully-qualified name of the OrganizationExecutionValueService's
+	// GetOrganizationExecutionValueOperation RPC.
+	OrganizationExecutionValueServiceGetOrganizationExecutionValueOperationProcedure = "/golf.v1.OrganizationExecutionValueService/GetOrganizationExecutionValueOperation"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -6958,4 +6977,185 @@ func (UnimplementedGitTransportServiceHandler) RevokeGitCredential(context.Conte
 
 func (UnimplementedGitTransportServiceHandler) GetGitReceiveOutcome(context.Context, *connect.Request[v1.GetGitReceiveOutcomeRequest]) (*connect.Response[v1.GetGitReceiveOutcomeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.GitTransportService.GetGitReceiveOutcome is not implemented"))
+}
+
+// OrganizationExecutionValueServiceClient is a client for the
+// golf.v1.OrganizationExecutionValueService service.
+type OrganizationExecutionValueServiceClient interface {
+	ListOrganizationExecutionValues(context.Context, *connect.Request[v1.ListOrganizationExecutionValuesRequest]) (*connect.Response[v1.ListOrganizationExecutionValuesResponse], error)
+	SaveOrganizationExecutionValue(context.Context, *connect.Request[v1.SaveOrganizationExecutionValueRequest]) (*connect.Response[v1.SaveOrganizationExecutionValueResponse], error)
+	DeleteOrganizationExecutionValue(context.Context, *connect.Request[v1.DeleteOrganizationExecutionValueRequest]) (*connect.Response[v1.DeleteOrganizationExecutionValueResponse], error)
+	GetOrganizationExecutionVariable(context.Context, *connect.Request[v1.GetOrganizationExecutionVariableRequest]) (*connect.Response[v1.GetOrganizationExecutionVariableResponse], error)
+	GetOrganizationExecutionValueOperation(context.Context, *connect.Request[v1.GetOrganizationExecutionValueOperationRequest]) (*connect.Response[v1.GetOrganizationExecutionValueOperationResponse], error)
+}
+
+// NewOrganizationExecutionValueServiceClient constructs a client for the
+// golf.v1.OrganizationExecutionValueService service. By default, it uses the Connect protocol with
+// the binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use
+// the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewOrganizationExecutionValueServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) OrganizationExecutionValueServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	organizationExecutionValueServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("OrganizationExecutionValueService").Methods()
+	return &organizationExecutionValueServiceClient{
+		listOrganizationExecutionValues: connect.NewClient[v1.ListOrganizationExecutionValuesRequest, v1.ListOrganizationExecutionValuesResponse](
+			httpClient,
+			baseURL+OrganizationExecutionValueServiceListOrganizationExecutionValuesProcedure,
+			connect.WithSchema(organizationExecutionValueServiceMethods.ByName("ListOrganizationExecutionValues")),
+			connect.WithClientOptions(opts...),
+		),
+		saveOrganizationExecutionValue: connect.NewClient[v1.SaveOrganizationExecutionValueRequest, v1.SaveOrganizationExecutionValueResponse](
+			httpClient,
+			baseURL+OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure,
+			connect.WithSchema(organizationExecutionValueServiceMethods.ByName("SaveOrganizationExecutionValue")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteOrganizationExecutionValue: connect.NewClient[v1.DeleteOrganizationExecutionValueRequest, v1.DeleteOrganizationExecutionValueResponse](
+			httpClient,
+			baseURL+OrganizationExecutionValueServiceDeleteOrganizationExecutionValueProcedure,
+			connect.WithSchema(organizationExecutionValueServiceMethods.ByName("DeleteOrganizationExecutionValue")),
+			connect.WithClientOptions(opts...),
+		),
+		getOrganizationExecutionVariable: connect.NewClient[v1.GetOrganizationExecutionVariableRequest, v1.GetOrganizationExecutionVariableResponse](
+			httpClient,
+			baseURL+OrganizationExecutionValueServiceGetOrganizationExecutionVariableProcedure,
+			connect.WithSchema(organizationExecutionValueServiceMethods.ByName("GetOrganizationExecutionVariable")),
+			connect.WithClientOptions(opts...),
+		),
+		getOrganizationExecutionValueOperation: connect.NewClient[v1.GetOrganizationExecutionValueOperationRequest, v1.GetOrganizationExecutionValueOperationResponse](
+			httpClient,
+			baseURL+OrganizationExecutionValueServiceGetOrganizationExecutionValueOperationProcedure,
+			connect.WithSchema(organizationExecutionValueServiceMethods.ByName("GetOrganizationExecutionValueOperation")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// organizationExecutionValueServiceClient implements OrganizationExecutionValueServiceClient.
+type organizationExecutionValueServiceClient struct {
+	listOrganizationExecutionValues        *connect.Client[v1.ListOrganizationExecutionValuesRequest, v1.ListOrganizationExecutionValuesResponse]
+	saveOrganizationExecutionValue         *connect.Client[v1.SaveOrganizationExecutionValueRequest, v1.SaveOrganizationExecutionValueResponse]
+	deleteOrganizationExecutionValue       *connect.Client[v1.DeleteOrganizationExecutionValueRequest, v1.DeleteOrganizationExecutionValueResponse]
+	getOrganizationExecutionVariable       *connect.Client[v1.GetOrganizationExecutionVariableRequest, v1.GetOrganizationExecutionVariableResponse]
+	getOrganizationExecutionValueOperation *connect.Client[v1.GetOrganizationExecutionValueOperationRequest, v1.GetOrganizationExecutionValueOperationResponse]
+}
+
+// ListOrganizationExecutionValues calls
+// golf.v1.OrganizationExecutionValueService.ListOrganizationExecutionValues.
+func (c *organizationExecutionValueServiceClient) ListOrganizationExecutionValues(ctx context.Context, req *connect.Request[v1.ListOrganizationExecutionValuesRequest]) (*connect.Response[v1.ListOrganizationExecutionValuesResponse], error) {
+	return c.listOrganizationExecutionValues.CallUnary(ctx, req)
+}
+
+// SaveOrganizationExecutionValue calls
+// golf.v1.OrganizationExecutionValueService.SaveOrganizationExecutionValue.
+func (c *organizationExecutionValueServiceClient) SaveOrganizationExecutionValue(ctx context.Context, req *connect.Request[v1.SaveOrganizationExecutionValueRequest]) (*connect.Response[v1.SaveOrganizationExecutionValueResponse], error) {
+	return c.saveOrganizationExecutionValue.CallUnary(ctx, req)
+}
+
+// DeleteOrganizationExecutionValue calls
+// golf.v1.OrganizationExecutionValueService.DeleteOrganizationExecutionValue.
+func (c *organizationExecutionValueServiceClient) DeleteOrganizationExecutionValue(ctx context.Context, req *connect.Request[v1.DeleteOrganizationExecutionValueRequest]) (*connect.Response[v1.DeleteOrganizationExecutionValueResponse], error) {
+	return c.deleteOrganizationExecutionValue.CallUnary(ctx, req)
+}
+
+// GetOrganizationExecutionVariable calls
+// golf.v1.OrganizationExecutionValueService.GetOrganizationExecutionVariable.
+func (c *organizationExecutionValueServiceClient) GetOrganizationExecutionVariable(ctx context.Context, req *connect.Request[v1.GetOrganizationExecutionVariableRequest]) (*connect.Response[v1.GetOrganizationExecutionVariableResponse], error) {
+	return c.getOrganizationExecutionVariable.CallUnary(ctx, req)
+}
+
+// GetOrganizationExecutionValueOperation calls
+// golf.v1.OrganizationExecutionValueService.GetOrganizationExecutionValueOperation.
+func (c *organizationExecutionValueServiceClient) GetOrganizationExecutionValueOperation(ctx context.Context, req *connect.Request[v1.GetOrganizationExecutionValueOperationRequest]) (*connect.Response[v1.GetOrganizationExecutionValueOperationResponse], error) {
+	return c.getOrganizationExecutionValueOperation.CallUnary(ctx, req)
+}
+
+// OrganizationExecutionValueServiceHandler is an implementation of the
+// golf.v1.OrganizationExecutionValueService service.
+type OrganizationExecutionValueServiceHandler interface {
+	ListOrganizationExecutionValues(context.Context, *connect.Request[v1.ListOrganizationExecutionValuesRequest]) (*connect.Response[v1.ListOrganizationExecutionValuesResponse], error)
+	SaveOrganizationExecutionValue(context.Context, *connect.Request[v1.SaveOrganizationExecutionValueRequest]) (*connect.Response[v1.SaveOrganizationExecutionValueResponse], error)
+	DeleteOrganizationExecutionValue(context.Context, *connect.Request[v1.DeleteOrganizationExecutionValueRequest]) (*connect.Response[v1.DeleteOrganizationExecutionValueResponse], error)
+	GetOrganizationExecutionVariable(context.Context, *connect.Request[v1.GetOrganizationExecutionVariableRequest]) (*connect.Response[v1.GetOrganizationExecutionVariableResponse], error)
+	GetOrganizationExecutionValueOperation(context.Context, *connect.Request[v1.GetOrganizationExecutionValueOperationRequest]) (*connect.Response[v1.GetOrganizationExecutionValueOperationResponse], error)
+}
+
+// NewOrganizationExecutionValueServiceHandler builds an HTTP handler from the service
+// implementation. It returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewOrganizationExecutionValueServiceHandler(svc OrganizationExecutionValueServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	organizationExecutionValueServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("OrganizationExecutionValueService").Methods()
+	organizationExecutionValueServiceListOrganizationExecutionValuesHandler := connect.NewUnaryHandler(
+		OrganizationExecutionValueServiceListOrganizationExecutionValuesProcedure,
+		svc.ListOrganizationExecutionValues,
+		connect.WithSchema(organizationExecutionValueServiceMethods.ByName("ListOrganizationExecutionValues")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationExecutionValueServiceSaveOrganizationExecutionValueHandler := connect.NewUnaryHandler(
+		OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure,
+		svc.SaveOrganizationExecutionValue,
+		connect.WithSchema(organizationExecutionValueServiceMethods.ByName("SaveOrganizationExecutionValue")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationExecutionValueServiceDeleteOrganizationExecutionValueHandler := connect.NewUnaryHandler(
+		OrganizationExecutionValueServiceDeleteOrganizationExecutionValueProcedure,
+		svc.DeleteOrganizationExecutionValue,
+		connect.WithSchema(organizationExecutionValueServiceMethods.ByName("DeleteOrganizationExecutionValue")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationExecutionValueServiceGetOrganizationExecutionVariableHandler := connect.NewUnaryHandler(
+		OrganizationExecutionValueServiceGetOrganizationExecutionVariableProcedure,
+		svc.GetOrganizationExecutionVariable,
+		connect.WithSchema(organizationExecutionValueServiceMethods.ByName("GetOrganizationExecutionVariable")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationExecutionValueServiceGetOrganizationExecutionValueOperationHandler := connect.NewUnaryHandler(
+		OrganizationExecutionValueServiceGetOrganizationExecutionValueOperationProcedure,
+		svc.GetOrganizationExecutionValueOperation,
+		connect.WithSchema(organizationExecutionValueServiceMethods.ByName("GetOrganizationExecutionValueOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.OrganizationExecutionValueService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case OrganizationExecutionValueServiceListOrganizationExecutionValuesProcedure:
+			organizationExecutionValueServiceListOrganizationExecutionValuesHandler.ServeHTTP(w, r)
+		case OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure:
+			organizationExecutionValueServiceSaveOrganizationExecutionValueHandler.ServeHTTP(w, r)
+		case OrganizationExecutionValueServiceDeleteOrganizationExecutionValueProcedure:
+			organizationExecutionValueServiceDeleteOrganizationExecutionValueHandler.ServeHTTP(w, r)
+		case OrganizationExecutionValueServiceGetOrganizationExecutionVariableProcedure:
+			organizationExecutionValueServiceGetOrganizationExecutionVariableHandler.ServeHTTP(w, r)
+		case OrganizationExecutionValueServiceGetOrganizationExecutionValueOperationProcedure:
+			organizationExecutionValueServiceGetOrganizationExecutionValueOperationHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedOrganizationExecutionValueServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedOrganizationExecutionValueServiceHandler struct{}
+
+func (UnimplementedOrganizationExecutionValueServiceHandler) ListOrganizationExecutionValues(context.Context, *connect.Request[v1.ListOrganizationExecutionValuesRequest]) (*connect.Response[v1.ListOrganizationExecutionValuesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationExecutionValueService.ListOrganizationExecutionValues is not implemented"))
+}
+
+func (UnimplementedOrganizationExecutionValueServiceHandler) SaveOrganizationExecutionValue(context.Context, *connect.Request[v1.SaveOrganizationExecutionValueRequest]) (*connect.Response[v1.SaveOrganizationExecutionValueResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationExecutionValueService.SaveOrganizationExecutionValue is not implemented"))
+}
+
+func (UnimplementedOrganizationExecutionValueServiceHandler) DeleteOrganizationExecutionValue(context.Context, *connect.Request[v1.DeleteOrganizationExecutionValueRequest]) (*connect.Response[v1.DeleteOrganizationExecutionValueResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationExecutionValueService.DeleteOrganizationExecutionValue is not implemented"))
+}
+
+func (UnimplementedOrganizationExecutionValueServiceHandler) GetOrganizationExecutionVariable(context.Context, *connect.Request[v1.GetOrganizationExecutionVariableRequest]) (*connect.Response[v1.GetOrganizationExecutionVariableResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationExecutionValueService.GetOrganizationExecutionVariable is not implemented"))
+}
+
+func (UnimplementedOrganizationExecutionValueServiceHandler) GetOrganizationExecutionValueOperation(context.Context, *connect.Request[v1.GetOrganizationExecutionValueOperationRequest]) (*connect.Response[v1.GetOrganizationExecutionValueOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationExecutionValueService.GetOrganizationExecutionValueOperation is not implemented"))
 }
