@@ -37,6 +37,9 @@ func run() error {
 
 func runCommand(ctx context.Context, args []string, output io.Writer, logger zerolog.Logger) error {
 	if len(args) > 0 {
+		if args[0] == "email-worker" {
+			return runEmailWorker(ctx, args)
+		}
 		if args[0] == "webhook-worker" {
 			return runWebhookWorker(ctx, args)
 		}

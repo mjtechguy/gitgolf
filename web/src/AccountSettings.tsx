@@ -3,7 +3,7 @@ import { AgentUsageScope } from './gen/golf/v1/golf_pb';
 import { ProfileSettings } from './ProfileSettings';
 import { ExecutionPolicyPanel } from './ExecutionPolicyPanel';
 import { ExecutionScope } from './gen/golf/v1/golf_pb';
-import { useMemo, type ReactNode } from 'react';
+import { lazy, Suspense, useMemo, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Webhook, History, KeyRound, ShieldCheck, UserRound } from 'lucide-react';
 import type { User } from './gen/golf/v1/golf_pb';
@@ -11,6 +11,8 @@ import { DataTable, type DataTableColumn } from './DataTable';
 import { useQuery } from '@tanstack/react-query';
 import { organizationClient } from './api';
 import { Loading, PanelError, privateQuery } from './RepositoryUI';
+
+const OwnEmailNotifications = lazy(() => import('./EmailNotificationSettings').then(module => ({ default: module.OwnEmailNotifications })));
 
 export function AccountLayout({ children }: { children: ReactNode }) {
   return <div className="account-layout"><nav className="account-navigation" aria-label="Account settings"><span className="eyebrow">PERSONAL SETTINGS</span>
@@ -37,12 +39,13 @@ export function AccountSettings({ user, signingOut }: { user: User; signingOut: 
   return <section className="page-stack" aria-labelledby="settings-title">
     <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1 id="settings-title"><UserRound size={29} />Profile</h1><p>Your identity, access and account preferences.</p></div></header>
     <ProfileSettings key={user.id} userId={user.id} signingOut={signingOut} isInstanceAdmin={user.isInstanceAdmin} />
+    <Suspense fallback={<Loading label="Opening notification settings…" />}><OwnEmailNotifications userId={user.id} signingOut={signingOut} /></Suspense>
     <SettingsInventory scope="personal" />
   </section>;
 }
 
 export type SettingsScope = 'personal' | 'organization' | 'repository' | 'instance';
-type SettingEntry = { id: string; section: string; state: 'Ready' | 'Partial' | 'Read only' | 'Planned'; detail: string; task: string; to?: '/account/agents' | '/account/security' | '/account/sessions' | '/account/ssh-keys' | '/account/api-credentials' | '/audit' | '/' | '/organizations' | '/status' | '/admin/execution' | '/admin/organizations' | '/admin/settings/infrastructure' | '/admin/settings' | '/admin/agents'; hash?: string };
+type SettingEntry = { id: string; section: string; state: 'Ready' | 'Partial' | 'Read only' | 'Planned'; detail: string; task: string; to?: '/account/agents' | '/account/security' | '/account/sessions' | '/account/ssh-keys' | '/account/api-credentials' | '/audit' | '/' | '/organizations' | '/status' | '/admin/execution' | '/admin/organizations' | '/admin/settings/notifications' | '/admin/settings/infrastructure' | '/admin/settings' | '/admin/agents'; hash?: string };
 const inventory: Record<SettingsScope, SettingEntry[]> = {
   personal: [
     { id: 'profile', section: 'Profile and email', state: 'Partial', detail: 'Edit public profile fields above. Golf sign-in email changes have a separate security page; username changes, mailbox verification and recovery remain planned.', task: 'P1.3 / G1' },
@@ -52,7 +55,7 @@ const inventory: Record<SettingsScope, SettingEntry[]> = {
     { id: 'signing', section: 'Signing keys', state: 'Planned', detail: 'Signing-key enrollment and revocation need dedicated supported APIs and signature/trust qualification; SSH authentication keys are managed separately.', task: 'P1.8 / P2.3' },
     { id: 'credentials', section: 'API credentials', state: 'Ready', detail: 'Issue source-session-bound, read-only credentials. Configurable scopes, service accounts and managed device login need additional enforcement.', task: 'P1.8 / P5.5', to: '/account/api-credentials' },
     { id: 'identity', section: 'Connected identities and integrations', state: 'Planned', detail: 'Optional provider OAuth sign-in exists; account linking/unlinking, external OIDC and installation approval need explicit immutable identity binding.', task: 'P1.3 / G2' },
-    { id: 'notifications', section: 'Notifications and email', state: 'Planned', detail: 'Subscriptions, delivery preferences, verified email and webhook/email delivery are not implemented. Provider selection must remain optional for portable installs.', task: 'P3 / P6' },
+    { id: 'notifications', section: 'Notifications and email', state: 'Partial', detail: 'Verify your notification mailbox and explicitly enable portable repository email subscriptions. Delivery uses an administrator-configured SMTP worker; richer preferences, inbound replies and Cloudflare delivery remain required.', task: 'P3 / P6' },
     { id: 'appearance', section: 'Appearance', state: 'Ready', detail: 'Use the header theme button. Dark/light choice is stored in this browser; synchronized account preferences are not implemented.', task: 'P1.4' },
     { id: 'activity', section: 'Account activity', state: 'Ready', detail: 'Inspect recorded successful session changes. Export, retention policy and broader security events remain planned.', task: 'P1.3', to: '/audit' },
     { id: 'agents', section: 'Agent tools and provider credentials', state: 'Partial', detail: 'Connect and re-authenticate your own Codex account, and view instance connections shared with you in Coding agents. Model access and task execution are not verified by authentication; Claude Code/OpenCode account setup and scoped usage configuration are available; managed execution remains planned.', task: 'P5 / G4', to: '/account/agents' },
@@ -78,7 +81,7 @@ const inventory: Record<SettingsScope, SettingEntry[]> = {
     { id: 'secrets', section: 'Secrets, variables and OIDC', state: 'Planned', detail: 'Repository/environment credentials, metadata-only inventories and rotation need a broker; workflow text must not expand permission.', task: 'G3 / G5' },
     { id: 'deployments', section: 'Environments, previews and production', state: 'Planned', detail: 'Reviewers, branch restrictions, protected temporary links, exact artifact promotion and rollback need real CD and destination authority.', task: 'P6 / G5' },
     { id: 'agents', section: 'Agents, MCP and models', state: 'Partial', detail: 'Scoped connections, models, coding tasks and PR-review assignments have controls in Workflows; results and bounded private Codex conversation records are in Actions. Interactive follow-ups, other harness journals and complete tool/network policies remain required.', task: 'P5 / G4' },
-    { id: 'events', section: 'Webhooks and notifications', state: 'Partial', detail: 'Named encrypted webhooks have explicit background consent, signed deliveries, durable history, retries and confirmed redelivery. Enablement requires an operator-configured outbound worker; email subscriptions and complete notification semantics remain required.', task: 'P3 / P6' },
+    { id: 'events', section: 'Webhooks and notifications', state: 'Partial', detail: 'Named encrypted webhooks have explicit background consent, signed deliveries, durable history, retries and confirmed redelivery. Enablement requires an operator-configured outbound worker; Verified mailbox and repository subscriptions have portable SMTP controls. Actual deployed SMTP delivery and complete notification semantics remain required.', task: 'P3 / P6' },
     { id: 'danger', section: 'Archive, transfer and deletion', state: 'Partial', detail: 'Current owners can request archive/unarchive with Golf password confirmation and inspect durable operation receipts below. Active or uncertain work blocks dispatch. Native scheduling/ingress, transfer, deletion and recovery remain required.', task: 'P1.5 / P2.3' },
   ],
   instance: [
@@ -88,7 +91,7 @@ const inventory: Record<SettingsScope, SettingEntry[]> = {
     { id: 'infrastructure', section: 'Infrastructure connections', state: 'Ready', detail: 'Save and test versioned PostgreSQL and RustFS/S3/R2 connections. Activate private CI source storage after verification. Database changes require an operator migration and cutover; runner pools remain operator-managed.', task: 'P1 / P4 / P6', to: '/admin/settings/infrastructure' },
     { id: 'policy', section: 'Execution policy ceilings', state: 'Ready', detail: 'Default-deny instance, organization and repository ceilings govern manual shell jobs. Exact repository/workflow selections, compare-and-swap revisions and revocation epochs fence admission and worker results.', task: 'G2 / G3', to: '/admin/execution' },
     { id: 'organization-creation', section: 'Organization creation', state: 'Ready', detail: 'Choose administrators only, selected Golf users or all users. Golf enforces this ceiling on its API; independent native credentials retain their separate native permissions.', task: 'G1 / G2', to: '/admin/organizations' },
-    { id: 'connections', section: 'Provider connections and email', state: 'Planned', detail: 'Cloudflare account/zone bindings, optional portable backends, import providers and email delivery require qualified credentials and adapters.', task: 'P2 / P6' },
+    { id: 'connections', section: 'Provider connections and email', state: 'Partial', detail: 'Named versioned SMTP transports can be configured and explicitly activated for verified notification subscriptions. Actual email delivery, Cloudflare bindings and additional provider adapters require separate qualification.', to: '/admin/settings/notifications', task: 'P2 / P6' },
     { id: 'security', section: 'Credentials and compromise response', state: 'Partial', detail: 'Password-confirmed local disabling revokes Golf password sessions and dependent API credentials. Native Git keys and provider logins remain separate; unified suspension, service identities and keyring lifecycle editors are not implemented.', task: 'P1.3 / P1.8', to: '/admin/settings' },
     { id: 'recovery', section: 'Backup and recovery', state: 'Read only', detail: 'Canonical Docker offline recovery has bounded qualification through operator tooling. Browser recovery, Kubernetes cutovers and RPO/RTO qualification remain open.', task: 'P1.6' },
     { id: 'limits', section: 'Budgets, quotas and retention', state: 'Planned', detail: 'Shared resource ceilings, cost accounting and lifecycle retention need actual execution/storage measurements and auditable policy.', task: 'G3 / G6 / P8' },

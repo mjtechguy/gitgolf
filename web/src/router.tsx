@@ -92,6 +92,7 @@ const organizationTeamSettingsRoute = createRoute({
 const instanceExecutionRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/execution', component: () => <App location={{ kind: 'instance-settings', view: 'execution' }} /> });
 const instanceOrganizationsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/organizations', component: () => <App location={{ kind: 'instance-settings', view: 'organizations' }} /> });
 const instanceAgentsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/agents', component: () => <App location={{ kind: 'instance-settings', view: 'agents' }} /> });
+const instanceNotificationsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/settings/notifications', component: () => <App location={{ kind: 'instance-settings', view: 'notifications' }} /> });
 const instanceInfrastructureRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/settings/infrastructure', component: () => <App location={{ kind: 'instance-settings', view: 'infrastructure' }} /> });
 const instanceOverviewRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin', component: () => <App location={{ kind: 'instance-settings', view: 'overview' }} /> });
 const instanceSettingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/settings', component: () => <App location={{ kind: 'instance-settings' }} /> });
@@ -245,7 +246,7 @@ function OrganizationPage() {
 
 // Router owns navigation only. Private server data stays in the cancellable Query cache.
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([homeRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWebhooksRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountSecurityRoute, accountAgentsRoute, sessionsRoute]),
+  routeTree: rootRoute.addChildren([homeRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWebhooksRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceNotificationsRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountSecurityRoute, accountAgentsRoute, sessionsRoute]),
   defaultPreload: false,
   // Refs and paths are opaque strings, including names such as "1234" or "true".
   parseSearch: (search) => {

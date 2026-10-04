@@ -58,6 +58,9 @@ type Server struct {
 }
 
 func New(config Config, db *sql.DB) (*Server, error) {
+	if err := ValidateEmailEgressPolicy(os.Getenv("GOLF_EMAIL_EGRESS_POLICY")); err != nil {
+		return nil, errors.New("Email operator egress policy is invalid")
+	}
 	if _, err := parseWebhookEgress(config.WebhookEgressPolicyJSON); err != nil {
 		return nil, errors.New("Webhook operator egress policy is invalid")
 	}
@@ -128,6 +131,7 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) { respond(w, 200, map[string]string{"status": "ok"}) })
 	r.Get("/readyz", s.readiness)
 	r.Get("/auth/gitea/callback", s.oauthCallback)
+	r.Handle("/notifications/unsubscribe", s.EmailUnsubscribeHandler())
 	r.Post("/hooks/gitea/{connectionID}", s.repositoryEventWebhook)
 	r.Post("/internal/ci/poll", s.runnerPoll)
 	r.Post("/internal/ci/recover", s.runnerRecover)
