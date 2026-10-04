@@ -10,7 +10,7 @@ import {
   GetAuthenticationOptionsResponseSchema, GetContentsResponseSchema, GetPullRequestRequestSchema, GetPullRequestResponseSchema,
   GetRepositoryResponseSchema, GetSessionResponseSchema, IssueState, ListCapabilitiesResponseSchema, ListPullRequestReviewsRequestSchema,
   ListPullRequestReviewsResponseSchema, ListPullRequestsRequestSchema, ListPullRequestsResponseSchema, ListRepositoriesResponseSchema,
-  LoginWithGiteaTokenResponseSchema, LogoutResponseSchema, PullRequestReviewSchema, PullRequestReviewState, PullRequestSchema, PullRequestRefSchema,
+  LoginWithPasswordResponseSchema, LogoutResponseSchema, PullRequestReviewSchema, PullRequestReviewState, PullRequestSchema, PullRequestRefSchema,
   RepositorySchema, SourceEntryType, UserSchema,
 } from '../src/gen/golf/v1/golf_pb';
 import { resolveSourceFixture, reject, request, respond } from './rpc';
@@ -42,9 +42,9 @@ async function backend(page: Page) {
     expect(route.request().method()).toBe('POST');
     expect(route.request().headers()['connect-protocol-version']).toBe('1');
     const error = (status: number, message: string) => reject(route, status === 401 ? 'unauthenticated' : status === 403 ? 'permission_denied' : status === 404 ? 'not_found' : 'unavailable', message);
-    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { providerLabel: 'Gitea' });
+    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
     if (method === 'GetSession') return state.signedIn ? respond(route, GetSessionResponseSchema, { user }) : error(401, 'Sign in required.');
-    if (method === 'LoginWithGiteaToken') { state.signedIn = true; return respond(route, LoginWithGiteaTokenResponseSchema, { user }); }
+    if (method === 'LoginWithPassword') { state.signedIn = true; return respond(route, LoginWithPasswordResponseSchema, { user }); }
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (!state.signedIn) return error(401, 'Your session expired.');
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, { capabilities: [] });
@@ -243,9 +243,7 @@ test('expired sessions and logout discard pull and review data, including naviga
   await expect(page.getByText('PRIVATE PULL', { exact: false })).toHaveCount(0);
   await expect(page.getByText('PRIVATE REVIEW', { exact: false })).toHaveCount(0);
   state.detailStatus = 404;
-  await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.getByLabel('Provider access token').fill('second-session-token');
-  await page.getByRole('button', { name: 'Continue to workspace' }).click();
+  await page.getByLabel('Email or username', { exact: true }).fill('fixture-account'); await page.getByLabel('Password', { exact: true }).fill('second-session-token'); await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Pull request not found or inaccessible.');
   await expect(page.getByText('PRIVATE REVIEW', { exact: false })).toHaveCount(0);
   state.detailStatus = 200;

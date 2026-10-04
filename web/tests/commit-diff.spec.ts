@@ -5,7 +5,7 @@ import {
   CommitDiffBase, GetAuthenticationOptionsResponseSchema, GetCommitDiffRequestSchema, GetCommitDiffResponseSchema,
   GetContentsRequestSchema, GetContentsResponseSchema, GetRepositoryResponseSchema, GetSessionResponseSchema,
   ListBranchesResponseSchema, ListCapabilitiesResponseSchema, ListCommitsRequestSchema, ListCommitsResponseSchema,
-  ListRepositoriesResponseSchema, LoginWithGiteaTokenResponseSchema, LogoutResponseSchema, RepositorySchema, SourceEntryType, UserSchema,
+  ListRepositoriesResponseSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema, RepositorySchema, SourceEntryType, UserSchema,
 } from '../src/gen/golf/v1/golf_pb';
 import { resolveSourceFixture, reject, request, respond } from './rpc';
 
@@ -22,8 +22,8 @@ async function backend(page: Page) {
     repositoryDenied: false, barrier: undefined as Promise<void> | undefined, commits: [] as string[], historyRefs: [] as string[], sourceRefs: [] as string[] };
   await page.route('**/rpc/**', async (route) => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1)!;
-    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
-    if (method === 'LoginWithGiteaToken') { state.signedIn = true; return respond(route, LoginWithGiteaTokenResponseSchema, { user }); }
+    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
+    if (method === 'LoginWithPassword') { state.signedIn = true; return respond(route, LoginWithPasswordResponseSchema, { user }); }
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Sign in required.');
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user });
@@ -174,9 +174,7 @@ test('sign-out cancels a pending diff and a fresh login cannot reuse its private
   await aborted;
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   state.barrier = undefined; state.failure = 'permission_denied'; release();
-  await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.getByLabel('Provider access token').fill('fixture-only-token');
-  await page.getByRole('button', { name: 'Continue to workspace' }).click();
+  await page.getByLabel('Email or username', { exact: true }).fill('fixture-account'); await page.getByLabel('Password', { exact: true }).fill('fixture-only-token'); await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Diff unavailable: permission_denied.');
   await expect(page.getByLabel('Unified diff, plain text')).toHaveCount(0);
   expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toContain('PRIVATE_DIFF');

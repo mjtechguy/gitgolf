@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { AddTeamMemberRequestSchema, AddTeamMemberResponseSchema, GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, GetTeamAdministrationResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ListTeamMembersRequestSchema, ListTeamMembersResponseSchema, LogoutResponseSchema, LoginWithGiteaTokenResponseSchema, OrganizationTeamSchema, RemoveTeamMemberRequestSchema, RemoveTeamMemberResponseSchema, ResolveTeamMemberRequestSchema, ResolveTeamMemberResponseSchema, TeamPermission, UserSchema } from '../src/gen/golf/v1/golf_pb';
+import { AddTeamMemberRequestSchema, AddTeamMemberResponseSchema, GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, GetTeamAdministrationResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ListTeamMembersRequestSchema, ListTeamMembersResponseSchema, LogoutResponseSchema, LoginWithPasswordResponseSchema, OrganizationTeamSchema, RemoveTeamMemberRequestSchema, RemoveTeamMemberResponseSchema, ResolveTeamMemberRequestSchema, ResolveTeamMemberResponseSchema, TeamPermission, UserSchema } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 const teamId = '9007199254740993';
@@ -14,8 +14,8 @@ async function backend(page: Page) {
   const team = create(OrganizationTeamSchema, { id: teamId, name: 'Platform', permission: TeamPermission.WRITE, unitPermissions: { 'repo.code': TeamPermission.WRITE, 'repo.issues': TeamPermission.READ }, includesAllRepositories: true });
   await page.route('**/rpc/**', async (route) => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
-    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
-    if (method === 'LoginWithGiteaToken') { state.signedIn = true; return respond(route, LoginWithGiteaTokenResponseSchema, { user: state.user }); }
+    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
+    if (method === 'LoginWithPassword') { state.signedIn = true; return respond(route, LoginWithPasswordResponseSchema, { user: state.user }); }
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Your session ended.');
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: state.user });
@@ -202,9 +202,7 @@ test('account switch cannot retain a resolved grant preview or another user memb
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Welcome to Golf', exact: true })).toBeVisible();
   state.user = create(UserSchema, { id: '18', login: 'other' }); state.denied = true;
-  await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.getByLabel('Provider access token', { exact: true }).fill('other-token');
-  await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
+  await page.getByLabel('Email or username', { exact: true }).fill('fixture-account'); await page.getByLabel('Password', { exact: true }).fill('other-token'); await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Team unavailable.');
   await expect(page.getByRole('table', { name: 'Team members', exact: true })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Review team access', exact: true })).toHaveCount(0);

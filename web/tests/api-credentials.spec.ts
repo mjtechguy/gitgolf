@@ -5,7 +5,7 @@ import {
   ApiCredentialSchema, CreateApiCredentialRequestSchema, CreateApiCredentialResponseSchema,
   GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListApiCredentialsRequestSchema,
   ListApiCredentialsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema,
-  LoginWithGiteaTokenResponseSchema, LogoutResponseSchema, RevokeApiCredentialRequestSchema,
+  LoginWithPasswordResponseSchema, LogoutResponseSchema, RevokeApiCredentialRequestSchema,
   RevokeApiCredentialResponseSchema, UserSchema,
 } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
@@ -30,8 +30,8 @@ async function backend(page: Page) {
   };
   await page.route('**/rpc/**', async (route) => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1)!;
-    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
-    if (method === 'LoginWithGiteaToken') { state.signedIn = true; return respond(route, LoginWithGiteaTokenResponseSchema, { user: state.user }); }
+    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
+    if (method === 'LoginWithPassword') { state.signedIn = true; return respond(route, LoginWithPasswordResponseSchema, { user: state.user }); }
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (state.errors[method]) {
       const code = state.errors[method];
@@ -315,9 +315,7 @@ for (const transition of ['navigation', 'sign out', 'expiry'] as const) {
     } else if (transition === 'sign out') {
       await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out', exact: true }).click();
       await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
-      await page.getByText('Advanced token sign-in', { exact: true }).click();
-      await page.getByLabel('Provider access token', { exact: true }).fill('fixture-token');
-      await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
+      await page.getByLabel('Email or username', { exact: true }).fill('fixture-account'); await page.getByLabel('Password', { exact: true }).fill('fixture-token'); await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     } else {
       state.errors.ListApiCredentials = 'unauthenticated';
       await page.getByRole('button', { name: 'Load more credentials', exact: true }).click();
@@ -337,9 +335,7 @@ test('account switch and empty list do not retain the previous account metadata'
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   state.user = create(UserSchema, { id: '9007199254740900', login: 'other', fullName: 'Other' });
   state.credentials = [];
-  await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.getByLabel('Provider access token', { exact: true }).fill('other-token');
-  await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
+  await page.getByLabel('Email or username', { exact: true }).fill('fixture-account'); await page.getByLabel('Password', { exact: true }).fill('other-token'); await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByText('No API credentials', { exact: true })).toBeVisible();
   await expect(page.getByText('My read tool', { exact: true })).toHaveCount(0);
   await expect(page.getByLabel('New API credential', { exact: true })).toHaveCount(0);

@@ -69,17 +69,14 @@ const scopeLabels: Record<string, string> = {
 function Login({ oauthFailed, notice }: { oauthFailed: boolean; notice?: string }) {
   const client = useQueryClient();
   const loginForm = useForm({ defaultValues: { username: '', password: '' }, onSubmit: async () => { await submitPassword(); } });
-  const tokenFields = useForm({ defaultValues: { token: '' }, onSubmit: () => submitToken() });
   const { username, password } = useStore(loginForm.store, (state) => state.values);
-  const { token } = useStore(tokenFields.store, (state) => state.values);
   const setUsername = (value: string) => loginForm.setFieldValue('username', value);
   const setPassword = (value: string) => loginForm.setFieldValue('password', value);
-  const setToken = (value: string) => tokenFields.setFieldValue('token', value);
   const [passwordPending, setPasswordPending] = useState(false);
   const [passwordError, setPasswordError] = useState<Error | null>(null);
   const passwordAttempt = useRef<AbortController | null>(null);
   useEffect(() => {
-    const clear = () => { setPassword(''); setToken(''); passwordAttempt.current?.abort(); };
+    const clear = () => { setPassword(''); passwordAttempt.current?.abort(); };
     window.addEventListener('pagehide', clear);
     return () => { window.removeEventListener('pagehide', clear); passwordAttempt.current?.abort(); };
   }, []);
@@ -90,7 +87,7 @@ function Login({ oauthFailed, notice }: { oauthFailed: boolean; notice?: string 
   const passwordAvailable = options.isSuccess && !options.isFetching && options.data.localPasswordEnabled;
   const oauthAvailable = options.isSuccess && !options.isFetching && options.data.giteaOauthEnabled;
   async function signedIn() {
-    setPassword(''); setToken('');
+    setPassword('');
     forgetPrivateQueries(client);
     await client.invalidateQueries({ queryKey: ['session'] });
   }
@@ -99,25 +96,20 @@ function Login({ oauthFailed, notice }: { oauthFailed: boolean; notice?: string 
     mutationFn: async () => {
       const result = await sessionClient.beginGiteaOAuth({}, { timeoutMs: 8_000 });
       const destination = repositoryLink(result.authorizationUrl);
-      if (!destination) throw new ConnectError('Golf received an invalid sign-in address. Try again or use an access token.', Code.Internal);
+      if (!destination) throw new ConnectError('Golf received an invalid sign-in address. Try again or sign in with your Golf account.', Code.Internal);
       return destination;
     },
     onSuccess: (destination) => { window.location.assign(destination); },
   });
   const redirecting = oauth.isPending || oauth.isSuccess;
-  const mutation = useMutation({
-    gcTime: 0,
-    mutationFn: (value: string) => sessionClient.loginWithGiteaToken({ token: value }),
-    onSuccess: signedIn,
-  });
-  const busy = passwordPending || mutation.isPending || redirecting;
+  const busy = passwordPending || redirecting;
   async function submitPassword() {
     if (!passwordAvailable || busy || passwordAttempt.current || !username.trim() || !password) return;
     // Keep the credential out of mutation/query caches and clear the input before waiting.
     const request = { username: username.trim(), password };
     const controller = new AbortController();
     passwordAttempt.current = controller;
-    setPassword(''); setToken(''); setPasswordError(null); setPasswordPending(true);
+    setPassword(''); setPasswordError(null); setPasswordPending(true);
     try {
       await sessionClient.loginWithPassword(request, { signal: controller.signal, timeoutMs: 15_000 });
       await signedIn();
@@ -129,23 +121,13 @@ function Login({ oauthFailed, notice }: { oauthFailed: boolean; notice?: string 
       setPasswordPending(false);
     }
   }
-  function submitToken() {
-    if (token.trim() && !busy && !passwordAttempt.current) { setPassword(''); setPasswordError(null); mutation.mutate(token.trim()); }
-  }
-  const tokenForm = <form onSubmit={(event) => { event.preventDefault(); void tokenFields.handleSubmit(); }}>
-    <label htmlFor="access-token">Provider access token</label>
-    <input id="access-token" type="password" autoComplete="off" spellCheck={false} required value={token} onChange={(event) => setToken(event.target.value)} placeholder="Enter your scoped access token" aria-describedby="token-help" disabled={busy} />
-    <p className="field-help" id="token-help">Use a scoped token supplied by your installation operator. To browse, select read:user and read:repository. Reading issues and comments also requires read:issue; creating issues and posting comments requires write:issue. Organizations require read:organization. To create repositories, select write:user and write:repository.</p>
-    <ErrorMessage error={mutation.error} />
-    <button className="button secondary full" disabled={!token.trim() || busy}>{mutation.isPending ? <LoaderCircle size={17} className="spin" /> : null}{mutation.isPending ? 'Connecting…' : 'Continue to workspace'}{!mutation.isPending ? <ArrowRight size={17} /> : null}</button>
-  </form>;
   return <div className="login-page">
     <header className="login-header"><Brand /><ThemeSwitch /></header>
     <main className="login-main" id="main-content">
       <section className="login-story">
         <span className="eyebrow"><span className="status-dot" /> THE START OF SOMETHING GOOD</span>
         <h1>Your code.<br />Your next <span>great idea.</span></h1>
-        <p>A focused home for the repositories you’re building. Connect your forge and get straight to work.</p>
+        <p>A focused home for the repositories you’re building. Sign in and get straight to work.</p>
         <div className="story-art" aria-hidden="true"><div className="art-grid" /><div className="art-path"><GitBranch size={25} /><span /><CircleDot size={15} /><span /><Check size={20} /></div><div className="art-label"><span>idea</span><span>commit</span><span>possibility</span></div></div>
         <div className="story-footer"><ShieldCheck size={17} /><span>Your repositories. Your infrastructure.</span></div>
       </section>
@@ -154,8 +136,8 @@ function Login({ oauthFailed, notice }: { oauthFailed: boolean; notice?: string 
         <h2 id="login-title">Welcome to Golf</h2>
         <p>Sign in with your Golf account.</p>
         {notice ? <p className="session-notice" role="status">{notice}</p> : null}
-        {oauthFailed ? <p className="error" role="alert">Provider sign-in could not be completed. Please try again or use an access token.</p> : null}
-        {options.isPending || options.isFetching ? <p className="auth-options-status" role="status"><LoaderCircle className="spin" size={14} />Checking sign-in options…</p> : options.isError ? <div className="auth-options-error"><p className="error" role="alert">Sign-in options could not be loaded. You can still use an access token.</p><button className="text-button" onClick={() => void options.refetch()}>Retry sign-in options</button></div> : !passwordAvailable ? <p className="auth-options-status">Golf password sign-in is not enabled for this installation. Use an available sign-in option below.</p> : null}
+        {oauthFailed ? <p className="error" role="alert">Provider sign-in could not be completed. Please try again or sign in with your Golf account.</p> : null}
+        {options.isPending || options.isFetching ? <p className="auth-options-status" role="status"><LoaderCircle className="spin" size={14} />Checking sign-in options…</p> : options.isError ? <div className="auth-options-error"><p className="error" role="alert">Sign-in options could not be loaded. Retry or contact your installation administrator.</p><button className="text-button" onClick={() => void options.refetch()}>Retry sign-in options</button></div> : !passwordAvailable ? <p className="auth-options-status">Golf password sign-in is not enabled for this installation. {oauthAvailable ? 'Use the connected provider below.' : 'Contact your installation administrator to enable sign-in.'}</p> : null}
         <form onSubmit={(event) => { event.preventDefault(); void loginForm.handleSubmit(); }} aria-label="Golf account sign-in">
           <label htmlFor="golf-username">Email or username</label>
           <input id="golf-username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={username} onChange={(event) => setUsername(event.target.value)} disabled={!passwordAvailable || busy} />
@@ -169,9 +151,8 @@ function Login({ oauthFailed, notice }: { oauthFailed: boolean; notice?: string 
           <p className="oauth-provider">Continue through your connected provider. Your provider password stays with it.</p>
           <div className="oauth-permissions" id="oauth-permissions"><h3>Requested permissions</h3><p>Golf requests these scopes within your existing account access.</p>{options.data.scopes.length ? <ul>{options.data.scopes.map((scope) => <li key={scope}><code>{scope}</code>{scopeLabels[scope] ? <span>{scopeLabels[scope]}</span> : null}</li>)}</ul> : <p>No additional scopes were listed by this installation.</p>}</div>
           <ErrorMessage error={oauth.error} />
-          <button className="button secondary full" disabled={busy} aria-describedby="oauth-permissions" onClick={() => { if (passwordAttempt.current) return; setPassword(''); setToken(''); setPasswordError(null); oauth.mutate(); }}>{redirecting ? <LoaderCircle className="spin" size={17} /> : <GitBranch size={17} />}{redirecting ? 'Continuing to provider…' : 'Continue with provider'}{!redirecting ? <ArrowRight size={17} /> : null}</button>
+          <button className="button secondary full" disabled={busy} aria-describedby="oauth-permissions" onClick={() => { if (passwordAttempt.current) return; setPassword(''); setPasswordError(null); oauth.mutate(); }}>{redirecting ? <LoaderCircle className="spin" size={17} /> : <GitBranch size={17} />}{redirecting ? 'Continuing to provider…' : 'Continue with provider'}{!redirecting ? <ArrowRight size={17} /> : null}</button>
         </section> : null}
-        <details className="token-signin"><summary>Advanced token sign-in</summary>{tokenForm}</details>
         <div className="login-note"><LockKeyhole size={15} /><span>Golf stores provider credentials on the server. They are never saved in browser storage.</span></div>
       </section>
     </main>

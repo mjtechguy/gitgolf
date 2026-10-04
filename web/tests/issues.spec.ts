@@ -6,7 +6,7 @@ import {
   GetAuthenticationOptionsResponseSchema, GetIssueMutationRequestSchema, GetIssueMutationResponseSchema, GetIssueResponseSchema,
   GetRepositoryResponseSchema, GetSessionResponseSchema, IssueCommentSchema, IssueMutationKind, IssueMutationSchema, IssueMutationState,
   IssueSchema, IssueState, ListCapabilitiesResponseSchema, ListIssueCommentsRequestSchema, ListIssueCommentsResponseSchema,
-  ListIssuesResponseSchema, ListRepositoriesResponseSchema, LoginWithGiteaTokenResponseSchema, LogoutResponseSchema, RepositorySchema, UserSchema,
+  ListIssuesResponseSchema, ListRepositoriesResponseSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema, RepositorySchema, UserSchema,
 } from '../src/gen/golf/v1/golf_pb';
 import type { CreateIssueRequest, CreateIssueCommentRequest, UpdateIssueRequest, IssueMutation } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
@@ -29,8 +29,8 @@ async function backend(page: Page) {
   };
   await page.route('**/rpc/**', async (route) => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1)!;
-    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
-    if (method === 'LoginWithGiteaToken') { state.signedIn = true; return respond(route, LoginWithGiteaTokenResponseSchema, { user: state.user }); }
+    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
+    if (method === 'LoginWithPassword') { state.signedIn = true; return respond(route, LoginWithPasswordResponseSchema, { user: state.user }); }
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (state.errors[method]) { if (state.errors[method] === 'unauthenticated') state.signedIn = false; return reject(route, state.errors[method], method === 'CreateIssueComment' ? 'Posting requires write:issue.' : 'Discussion request unavailable or denied.'); }
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Sign in required.');
@@ -295,9 +295,7 @@ test('expired session, sign-out and account switch clear pending private conveni
   await page.evaluate(() => sessionStorage.setItem('golf.issue-intent.other-origin:other-user:999:new', '{"key":"stale"}'));
   delete state.errors.GetIssueMutation;
   state.user = create(UserSchema, { id: '22', login: 'other' });
-  await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.getByLabel('Provider access token').fill('fixture');
-  await page.getByRole('button', { name: 'Continue to workspace' }).click();
+  await page.getByLabel('Email or username', { exact: true }).fill('fixture-account'); await page.getByLabel('Password', { exact: true }).fill('fixture'); await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByLabel('Your account', { exact: true })).toBeVisible();
   await expect.poll(() => stored(page)).toEqual([]);
   await page.evaluate(() => sessionStorage.setItem('golf.issue-intent.synthetic', '{}'));

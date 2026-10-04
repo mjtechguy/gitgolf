@@ -58,21 +58,19 @@ async function backend(page: Page, signedIn = true) {
   return state;
 }
 
-test('sign-in handles errors, establishes a session, and never persists the token', async ({ page }) => {
+test('ordinary sign-in offers Golf credentials without provider token authentication', async ({ page }) => {
   const state = await backend(page, false);
   await page.goto('/');
-  await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Continue to workspace' })).toBeDisabled();
-  await page.getByLabel('Provider access token').fill('wrong');
-  await page.getByRole('button', { name: 'Continue to workspace' }).click();
-  await expect(page.getByRole('alert')).toHaveText('Gitea did not accept this token.');
-  await page.getByLabel('Provider access token').fill('test-scoped-token');
-  await page.getByRole('button', { name: 'Continue to workspace' }).click();
+  await expect(page.getByLabel('Provider access token')).toHaveCount(0);
+  await expect(page.getByText('Advanced token sign-in', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeDisabled();
+  await page.getByLabel('Email or username', { exact: true }).fill('admin@golfgit.local');
+  await page.getByLabel('Password', { exact: true }).fill('private-password-fixture');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Repositories', exact: true, level: 2 })).toBeVisible();
-  expect(state.receivedToken).toBe('test-scoped-token');
-  const stored = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
-  expect(stored).not.toContain('test-scoped-token');
-  await expect(page.locator('input[type=password]')).toHaveCount(0);
+  expect(state.receivedUsername).toBe('admin@golfgit.local');
+  expect(state.passwordCalls).toBe(1); expect(state.receivedToken).toBe('');
+  expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toContain('private-password-fixture');
 });
 
 test('Golf password sign-in clears the password while pending, prevents duplicate attempts and clears on logout', async ({ page }) => {
@@ -82,7 +80,7 @@ test('Golf password sign-in clears the password while pending, prevents duplicat
   await page.goto('/');
   await expect(page.getByLabel('Email or username', { exact: true })).toHaveAttribute('autocomplete', 'username');
   await expect(page.getByLabel('Password', { exact: true })).toHaveAttribute('autocomplete', 'current-password');
-  await expect(page.getByLabel('Provider access token')).not.toBeVisible();
+  await expect(page.getByLabel('Provider access token')).toHaveCount(0);
   await page.getByLabel('Email or username', { exact: true }).fill('alex');
   await page.getByLabel('Password', { exact: true }).fill('private-password-fixture');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
@@ -99,7 +97,7 @@ test('Golf password sign-in clears the password while pending, prevents duplicat
   await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByLabel('Email or username', { exact: true })).toHaveValue('');
   await expect(page.getByLabel('Password', { exact: true })).toHaveValue('');
-  await expect(page.getByLabel('Provider access token')).not.toBeVisible();
+  await expect(page.getByLabel('Provider access token')).toHaveCount(0);
 });
 
 test('password failures stay generic and editable, and only the verified session exposes an administrator label', async ({ page }) => {
@@ -250,14 +248,11 @@ test('configured OAuth shows requested permissions and navigates through the gen
   await expect(page.getByText('Continue through your connected provider.', { exact: false })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Requested permissions' })).toBeVisible();
   for (const scope of state.oauthOptions.scopes) await expect(page.locator('.oauth-permissions code').filter({ hasText: scope })).toBeVisible();
-  await expect(page.getByLabel('Provider access token')).not.toBeVisible();
+  await expect(page.getByLabel('Provider access token')).toHaveCount(0);
   if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
   await page.screenshot({ path: 'test-results/oauth-login-dark.png', fullPage: true });
-  await page.locator('.token-signin summary').focus();
-  await page.keyboard.press('Enter');
-  await page.getByLabel('Provider access token').fill('unused-bootstrap-secret');
   const storage = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
-  expect(storage).not.toMatch(/unused-bootstrap-secret|server-state|server-challenge/);
+  expect(storage).not.toMatch(/server-state|server-challenge/);
   await page.getByRole('button', { name: 'Continue with provider', exact: true }).click();
   await expect(page).toHaveURL(state.oauthUrl);
   await expect(page.getByRole('heading', { name: 'Gitea authorization fixture' })).toBeVisible();
@@ -274,60 +269,49 @@ test('OAuth initiation failures and unsafe destinations stay inline without navi
   await page.goto('/');
   await page.getByRole('button', { name: 'Continue with provider', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Gitea sign-in could not be started. Please try again.');
-  await expect(page).toHaveURL('http://127.0.0.1:4179/');
+  await expect(page).toHaveURL(new URL('/', test.info().project.use.baseURL).href);
   state.beginError = false;
   for (const url of ['javascript:window.executed=true', 'data:text/html,<h1>Bad</h1>', 'https://user:private-password@forge.example/login/oauth/authorize']) {
     state.oauthUrl = url;
     await page.getByRole('button', { name: 'Continue with provider', exact: true }).click();
-    await expect(page.getByRole('alert')).toHaveText('Golf received an invalid sign-in address. Try again or use an access token.');
-    await expect(page).toHaveURL('http://127.0.0.1:4179/');
+    await expect(page.getByRole('alert')).toHaveText('Golf received an invalid sign-in address. Try again or sign in with your Golf account.');
+    await expect(page).toHaveURL(new URL('/', test.info().project.use.baseURL).href);
     expect(await page.evaluate(() => 'executed' in window)).toBe(false);
     await expect(page.locator('body')).not.toContainText('private-password');
   }
-  await page.locator('.token-signin summary').click();
-  await page.getByLabel('Provider access token').fill('test-scoped-token');
-  await page.getByRole('button', { name: 'Continue to workspace' }).click();
+  await page.getByLabel('Email or username', { exact: true }).fill('alex');
+  await page.getByLabel('Password', { exact: true }).fill('private-password-fixture');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Repositories', exact: true, level: 2 })).toBeVisible();
 });
 
-test('unconfigured and unavailable sign-in options keep an explicit token fallback and allow retry', async ({ page }) => {
+test('unconfigured and unavailable sign-in options show honest disabled state and allow retry', async ({ page }) => {
   const state = await backend(page, false);
   state.oauthOptions.localPasswordEnabled = false;
   await page.goto('/');
-  await expect(page.getByText('Golf password sign-in is not enabled for this installation.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Contact your installation administrator to enable sign-in.', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue with provider', exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Password', { exact: true })).toBeDisabled();
-  await expect(page.getByLabel('Provider access token')).not.toBeVisible();
-  await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await expect(page.getByLabel('Provider access token')).toBeVisible();
+  await expect(page.getByLabel('Provider access token')).toHaveCount(0);
   expect(state.beginCalls).toBe(0);
   state.optionsError = true;
   await page.reload();
-  await expect(page.getByRole('alert')).toHaveText('Sign-in options could not be loaded. You can still use an access token.');
+  await expect(page.getByRole('alert')).toHaveText('Sign-in options could not be loaded. Retry or contact your installation administrator.');
   await expect(page.getByLabel('Password', { exact: true })).toBeDisabled();
-  await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await expect(page.getByLabel('Provider access token')).toBeVisible();
+  await expect(page.getByLabel('Provider access token')).toHaveCount(0);
   state.optionsError = false;
   state.oauthOptions.giteaOauthEnabled = true;
   state.oauthOptions.scopes = ['read:user', 'read:repository'];
   await page.getByRole('button', { name: 'Retry sign-in options' }).click();
   await expect(page.getByRole('button', { name: 'Continue with provider', exact: true })).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
-  if (await page.locator('html').getAttribute('data-theme') !== 'light') await page.getByRole('button', { name: 'Switch to light theme', exact: true }).click();
-  await page.setViewportSize({ width: 390, height: 844 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: 'test-results/oauth-login-mobile-light.png', fullPage: true });
-  await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.locator('.token-signin summary').focus();
-  await page.keyboard.press('Enter');
-  await expect(page.getByLabel('Provider access token')).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(state.passwordCalls).toBe(0); expect(state.receivedToken).toBe('');
 });
 
 test('OAuth callback failures show only a generic error and never interrupt an authenticated workspace', async ({ page }) => {
   const state = await backend(page, false);
   await page.goto('/?auth_error=oauth_failed&error_description=private-provider-detail&code=private-code');
-  await expect(page.getByRole('alert')).toHaveText('Provider sign-in could not be completed. Please try again or use an access token.');
+  await expect(page.getByRole('alert')).toHaveText('Provider sign-in could not be completed. Please try again or sign in with your Golf account.');
   await expect(page.locator('body')).not.toContainText('private-provider-detail');
   await expect(page.locator('body')).not.toContainText('private-code');
   expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toMatch(/private-provider-detail|private-code/);
@@ -340,22 +324,37 @@ test('OAuth callback failures show only a generic error and never interrupt an a
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
-test('opening optional token sign-in preserves the desktop page layout', async ({ page }) => {
-  await backend(page, false);
-  await page.goto('/');
-  await page.evaluate(() => document.fonts.ready);
-  const story = await page.locator('.login-story').boundingBox();
-  const header = await page.locator('.login-header').boundingBox();
-  const footer = await page.locator('.login-footer').boundingBox();
-  const height = await page.evaluate(() => document.documentElement.scrollHeight);
-  await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await expect(page.getByLabel('Provider access token')).toBeVisible();
-  expect(await page.locator('.login-story').boundingBox()).toEqual(story);
-  expect(await page.locator('.login-header').boundingBox()).toEqual(header);
-  expect(await page.locator('.login-footer').boundingBox()).toEqual(footer);
-  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(height);
+test('ordinary desktop login retains Golf branding beside the form', async ({ page }) => {
+  await backend(page, false); await page.goto('/'); await page.evaluate(() => document.fonts.ready);
+  const story = await page.locator('.login-story').boundingBox(), card = await page.locator('.login-card').boundingBox();
+  expect(story).not.toBeNull(); expect(card).not.toBeNull();
+  expect(story!.x + story!.width).toBeLessThan(card!.x);
+  await expect(page.getByText('Advanced token sign-in', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Provider access token')).toHaveCount(0);
 });
 
+for (const width of [320, 390]) for (const theme of ['dark', 'light']) {
+  test(`mobile login leads with usable credentials at ${width}px in ${theme}`, async ({ page }) => {
+    const state = await backend(page, false); await page.setViewportSize({ width, height: 844 }); await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Welcome to Golf', exact: true })).toBeVisible();
+    const toggle = page.getByRole('button', { name: `Switch to ${theme} theme`, exact: true }); if (await toggle.count()) await toggle.click();
+    await page.evaluate(() => document.fonts.ready);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+    const card = await page.locator('.login-card').boundingBox(), story = await page.locator('.login-story').boundingBox();
+    const submit = await page.getByRole('button', { name: 'Sign in', exact: true }).boundingBox();
+    expect(card).not.toBeNull(); expect(story).not.toBeNull(); expect(submit).not.toBeNull();
+    expect(card!.y + card!.height).toBeLessThanOrEqual(story!.y);
+    expect(submit!.y + submit!.height).toBeLessThanOrEqual(844); expect(submit!.height).toBeGreaterThanOrEqual(44);
+    expect(await page.locator('.login-card').evaluate(el => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await expect(page.getByLabel('Provider access token')).toHaveCount(0);
+    await page.getByLabel('Email or username', { exact: true }).fill('admin@golfgit.local');
+    await page.getByLabel('Password', { exact: true }).fill('private-mobile-fixture');
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Repositories', exact: true, level: 2 })).toBeVisible();
+    expect(state.passwordCalls).toBe(1); expect(state.receivedToken).toBe('');
+  });
+}
 
 test('work navigation stays compact and system status is separate from repositories', async ({ page }) => {
   const state = await backend(page);

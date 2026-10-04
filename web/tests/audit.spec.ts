@@ -4,7 +4,7 @@ import { create } from '@bufbuild/protobuf';
 import {
   AuditAction, AuditEventSchema, GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema,
   ListAuditEventsRequestSchema, ListAuditEventsResponseSchema, ListCapabilitiesResponseSchema,
-  ListRepositoriesResponseSchema, LoginWithGiteaTokenResponseSchema, LogoutResponseSchema, UserSchema,
+  ListRepositoriesResponseSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema, UserSchema,
 } from '../src/gen/golf/v1/golf_pb';
 import type { ListAuditEventsResponse } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
@@ -24,8 +24,8 @@ async function backend(page: Page) {
     barrier: undefined as Promise<void> | undefined, corrupt: undefined as ((response: ListAuditEventsResponse) => void) | undefined };
   await page.route('**/rpc/**', async (route) => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1)!;
-    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
-    if (method === 'LoginWithGiteaToken') { state.signedIn = true; return respond(route, LoginWithGiteaTokenResponseSchema, { user }); }
+    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
+    if (method === 'LoginWithPassword') { state.signedIn = true; return respond(route, LoginWithPasswordResponseSchema, { user }); }
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Sign in required.');
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user });
@@ -184,9 +184,7 @@ test('sign-out aborts pending history and another sign-in never reuses it', asyn
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(0);
   state.events = []; state.barrier = undefined; release();
-  await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.getByLabel('Provider access token').fill('fixture-only-token');
-  await page.getByRole('button', { name: 'Continue to workspace' }).click();
+  await page.getByLabel('Email or username', { exact: true }).fill('fixture-account'); await page.getByLabel('Password', { exact: true }).fill('fixture-only-token'); await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('cell', { name: 'No recorded account activity. New account events will appear after you refresh.', exact:true })).toBeVisible();
   await expect(page.locator('table[aria-label="Account activity"] tbody tr[data-row-id]')).toHaveCount(0);
 });

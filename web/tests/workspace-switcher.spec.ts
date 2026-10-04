@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { GetAuthenticationOptionsResponseSchema, GetOrganizationRequestSchema, GetOrganizationResponseSchema, GetRepositoryResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListOrganizationsRequestSchema, ListOrganizationsResponseSchema, ListRepositoriesResponseSchema, ListTeamsResponseSchema, LoginWithGiteaTokenResponseSchema, LogoutResponseSchema } from '../src/gen/golf/v1/golf_pb';
+import { GetAuthenticationOptionsResponseSchema, GetOrganizationRequestSchema, GetOrganizationResponseSchema, GetRepositoryResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListOrganizationsRequestSchema, ListOrganizationsResponseSchema, ListRepositoriesResponseSchema, ListTeamsResponseSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 async function backend(page: Page) {
@@ -7,8 +7,8 @@ async function backend(page: Page) {
   await page.route('**/rpc/**', async route => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
     const user = { id: state.login === 'alex' ? '9007199254740993' : '9007199254740994', login: state.login };
-    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
-    if (method === 'LoginWithGiteaToken') { state.signedIn = true; return respond(route, LoginWithGiteaTokenResponseSchema, { user }); }
+    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
+    if (method === 'LoginWithPassword') { state.signedIn = true; return respond(route, LoginWithPasswordResponseSchema, { user }); }
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Your session ended.');
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user });
@@ -82,7 +82,7 @@ test('sign-out/account switch and expired membership checks discard private list
   await page.getByLabel('Your account', { exact: true }).click(); await expect(chooser(page)).toHaveCount(0);
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Welcome to Golf', exact: true })).toBeVisible();
-  state.login = 'other'; await page.getByText('Advanced token sign-in', { exact: true }).click(); await page.getByLabel('Provider access token', { exact: true }).fill('new-fixture-token'); await page.getByRole('button', { name: 'Continue to workspace', exact: true }).click();
+  state.login = 'other'; await page.getByLabel('Email or username', { exact: true }).fill('fixture-account'); await page.getByLabel('Password', { exact: true }).fill('new-fixture-token'); await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(trigger(page)).toHaveText('other'); await trigger(page).click();
   await expect(chooser(page).getByText('No organization memberships in the loaded pages.', { exact: true })).toBeVisible();
   await expect(chooser(page).getByRole('link', { name: 'lab', exact: true })).toHaveCount(0);

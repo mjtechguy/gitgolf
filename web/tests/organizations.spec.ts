@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { GetAuthenticationOptionsResponseSchema, GetOrganizationRequestSchema, GetOrganizationResponseSchema, GetRepositoryResponseSchema, GetSessionResponseSchema, GetTeamRequestSchema, GetTeamResponseSchema, ListCapabilitiesResponseSchema, ListOrganizationsRequestSchema, ListOrganizationsResponseSchema, ListRepositoriesResponseSchema, ListTeamMembersRequestSchema, ListTeamMembersResponseSchema, ListTeamRepositoriesRequestSchema, ListTeamRepositoriesResponseSchema, ListTeamsRequestSchema, ListTeamsResponseSchema, LoginWithGiteaTokenResponseSchema, LogoutResponseSchema, OrganizationSchema, OrganizationTeamSchema, OrganizationVisibility, TeamPermission, TeamVisibility, UserSchema } from '../src/gen/golf/v1/golf_pb';
+import { GetAuthenticationOptionsResponseSchema, GetOrganizationRequestSchema, GetOrganizationResponseSchema, GetRepositoryResponseSchema, GetSessionResponseSchema, GetTeamRequestSchema, GetTeamResponseSchema, ListCapabilitiesResponseSchema, ListOrganizationsRequestSchema, ListOrganizationsResponseSchema, ListRepositoriesResponseSchema, ListTeamMembersRequestSchema, ListTeamMembersResponseSchema, ListTeamRepositoriesRequestSchema, ListTeamRepositoriesResponseSchema, ListTeamsRequestSchema, ListTeamsResponseSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema, OrganizationSchema, OrganizationTeamSchema, OrganizationVisibility, TeamPermission, TeamVisibility, UserSchema } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 const teamId = '9007199254740993';
@@ -14,8 +14,8 @@ async function backend(page: Page) {
   await page.route('**/rpc/**', async (route) => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1)!;
     const user = create(UserSchema, { id: state.login === 'alex' ? '11' : '12', login: state.login });
-    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
-    if (method === 'LoginWithGiteaToken') { state.signedIn = true; return respond(route, LoginWithGiteaTokenResponseSchema, { user }); }
+    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
+    if (method === 'LoginWithPassword') { state.signedIn = true; return respond(route, LoginWithPasswordResponseSchema, { user }); }
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Sign in required.');
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user });
@@ -172,9 +172,7 @@ test('private organization views do not survive sign-out and a different user', 
   await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   state.login = 'bob';
-  await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.getByLabel('Provider access token').fill('bob-fixture-token');
-  await page.getByRole('button', { name: 'Continue to workspace' }).click();
+  await page.getByLabel('Email or username', { exact: true }).fill('fixture-account'); await page.getByLabel('Password', { exact: true }).fill('bob-fixture-token'); await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Organization or team not found or inaccessible.');
   await expect(page.getByText('private-member', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Private Lab', { exact: true })).toHaveCount(0);
