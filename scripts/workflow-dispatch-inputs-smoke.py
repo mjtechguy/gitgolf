@@ -145,6 +145,11 @@ def main():
     forbidden=[LITERAL];manifest={'complete':False,'passed':False,'proofKind':'typed-manual-inputs059','sourceRevision':args.source_revision,'limitations':['One full-SHA manual v2 run only; no UI, input-declaring push, secret binding, provider inference or full Actions parity.','Discarded actual response body after accepted HTTP headers; no arbitrary transport-loss guarantee.','Current native/lease fences source+PG-qualified separately; this runtime slice tests old/HTTP worker exclusion.']}
     def execute(*argv,payload=None,timeout=180,expected=0):
         result=subprocess.run(argv,input=None if payload is None else json.dumps(payload).encode(),cwd=stack,env=environment,capture_output=True,timeout=timeout)
+        if result.returncode!=expected and not (output/'private-command-failure.json').exists():
+            # Owner-only diagnostics survive exact-owned teardown. These bytes
+            # can contain private CLI output; never include them in the manifest.
+            assert len(result.stdout)<=8<<20 and len(result.stderr)<=8<<20
+            helpers.private_write(output/'private-command-failure.json',json.dumps({'stage':STAGE,'exitCode':result.returncode,'stdout':result.stdout.decode(errors='replace'),'stderr':result.stderr.decode(errors='replace')}))
         assert result.returncode==expected and len(result.stdout)<=8<<20 and len(result.stderr)<=8<<20,'Bounded subprocess failure; private output withheld'
         return result.stdout.decode().strip()
     def record(**items):
@@ -175,7 +180,7 @@ def main():
     for argv in (('ps','-aq'),('volume','ls','-q'),('network','ls','-q')):assert not execute('docker',*argv,'--filter','label=com.docker.compose.project='+project)
     previous=smoke.GOLF,smoke.GITEA;smoke.GOLF=f'http://127.0.0.1:{ports[0]}';smoke.GITEA=f'http://127.0.0.1:{ports[1]}';secure=f'https://127.0.0.1:{ports[2]}'
     record(images=images,binarySha256=binaries,project=project,helperRevision=execute('git','rev-parse','HEAD'),proxyBinarySha256=binary_sha)
-    actors={};started=False;passed=False;cleanup=[];bootstrap_created=False
+    actors={};started=False;passed=False;cleanup=[];bootstrap_created=False;proxy_ready=False
     with native_proxy.NativeProxy(ports[3],project) as proxy,tempfile.TemporaryDirectory(prefix=project+'-') as tmp:
         directory=Path(tmp);directory.chmod(0o700);environment.update(proxy.environment())
         ca,cert,key=directory/'ca.crt',directory/'server.crt',directory/'server.key'
@@ -199,7 +204,7 @@ def main():
     ports: !override ["127.0.0.1:{ports[1]}:3000"]
   postgres:
     volumes: !override ["{stack/'deploy/postgres/init.sh'}:/docker-entrypoint-initdb.d/01-golf.sh:ro"]
-    tmpfs: ["/var/lib/postgresql:size=1073741824,mode=0700"]
+    tmpfs: ["/var/lib/postgresql:size=1073741824,mode=0700,uid=70,gid=70"]
 ''')
         compose=['docker','compose','--project-directory',str(stack),'-p',project,'--env-file',str(directory/'proof.env')]
         for file in ('compose.yaml','compose.ci.yaml','compose.actions-engine.yaml','compose.runner-tls.yaml'):compose+=['-f',str(stack/file)]
@@ -218,7 +223,7 @@ def main():
             return result
         try:
             stage('fresh cached stack and verified TLS1.3 before any native actors')
-            started=True;command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','gitea','golf',native_proxy.SERVICE_NAME,'runner-daemon');proxy.ready();smoke.ready();record(proxyRuntime=rules.verify_proxy_runtime(execute,command,proxy,binary,binary_sha,images['golf'],args.source_revision))
+            started=True;command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','gitea','golf',native_proxy.SERVICE_NAME,'runner-daemon');proxy.ready();proxy_ready=True;smoke.ready();record(proxyRuntime=rules.verify_proxy_runtime(execute,command,proxy,binary,binary_sha,images['golf'],args.source_revision))
             context=ssl.create_default_context(cafile=str(ca));context.minimum_version=ssl.TLSVersion.TLSv1_3
             with socket.create_connection(('127.0.0.1',ports[2]),timeout=10) as raw:
                 with context.wrap_socket(raw,server_hostname='127.0.0.1') as secured:assert secured.version()=='TLSv1.3'
@@ -322,6 +327,9 @@ def main():
             assert private_row['runId']==run['id'] and private_row['contract']==1 and private_row['schemaSha256']==prepared['schemaSha256'] and private_row['submittedSha256']==prepared['submittedSha256'] and private_row['effectiveSha256']==prepared['effectiveSha256'] and private_row['cipherBytes']==private_row['payloadBytes']+28
             record(run={'id':observed['id'],'attemptId':observed['attemptId'],'state':observed['state'],'jobs':jobs,'engineCatalog':CATALOG,'engineCommit':act.ENGINE},logReceipts=evidence,encryptedContentMetadata=private_row,workerFailureStages=act.worker_failure_stages(command('logs','--no-color','runner')));passed=True
         except Exception as error:
+            if started:
+                try:helpers.private_write(output/'private-postgres-failure.log',command('logs','--no-color','--tail','100','postgres'))
+                except Exception:pass
             failure(error);raise
         finally:
             if started:
@@ -336,8 +344,9 @@ def main():
                     if actor.get('created'):
                         try:admin('delete','--username',actor['name'],'--purge')
                         except Exception:cleanup.append('native-actor-purge')
-                try:proxy.close()
-                except Exception:cleanup.append('proxy-stop')
+                if proxy_ready:
+                    try:proxy.close()
+                    except Exception:cleanup.append('proxy-stop')
                 try:
                     command('down','--volumes','--remove-orphans')
                     for argv in (('ps','-aq'),('volume','ls','-q'),('network','ls','-q')):assert not execute('docker',*argv,'--filter','label=com.docker.compose.project='+project)
