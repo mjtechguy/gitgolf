@@ -74,23 +74,25 @@ func TestRepositoryRulesManagedBrowserBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := "/golf.v1.RepositoryRulesService/GetRepositoryRules"
-	for _, origin := range []string{s.config.PublicURL, "https://other.invalid"} {
-		req := httptest.NewRequest(http.MethodPost, "/rpc"+path, strings.NewReader("malformed"))
-		req.Header.Set("Origin", origin)
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		s.ServeHTTP(w, req)
-		want := http.StatusUnauthorized
-		if origin != s.config.PublicURL {
-			want = http.StatusForbidden
+	for _, method := range []string{"GetRepositoryRules", "MutateRepositoryRules", "GetRepositoryRuleMutation"} {
+		path := "/golf.v1.RepositoryRulesService/" + method
+		for _, origin := range []string{s.config.PublicURL, "https://other.invalid"} {
+			req := httptest.NewRequest(http.MethodPost, "/rpc"+path, strings.NewReader("malformed"))
+			req.Header.Set("Origin", origin)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			s.ServeHTTP(w, req)
+			want := http.StatusUnauthorized
+			if origin != s.config.PublicURL {
+				want = http.StatusForbidden
+			}
+			if w.Code != want || w.Header().Get("Cache-Control") != "no-store" {
+				t.Fatalf("Rules boundary: status=%d cache=%q", w.Code, w.Header().Get("Cache-Control"))
+			}
 		}
-		if w.Code != want || w.Header().Get("Cache-Control") != "no-store" {
-			t.Fatalf("Rules boundary: status=%d cache=%q", w.Code, w.Header().Get("Cache-Control"))
+		if response := apiRequest(s, apiTokenPrefix+strings.Repeat("A", 43), path, "malformed"); response.Code != http.StatusForbidden || response.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("Rules allowed delegated API access: %d", response.Code)
 		}
-	}
-	if response := apiRequest(s, apiTokenPrefix+strings.Repeat("A", 43), path, "malformed"); response.Code != http.StatusForbidden || response.Header().Get("Cache-Control") != "no-store" {
-		t.Fatalf("Rules allowed delegated API access: %d", response.Code)
 	}
 }
 

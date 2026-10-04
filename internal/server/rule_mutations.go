@@ -360,7 +360,10 @@ func (s *Server) GetRepositoryRuleMutation(ctx context.Context, req *connect.Req
 	}
 	m := req.Msg
 	key := keyFrom(m.Repository)
-	if e = validateRepositoryAccess(key, m.RepositoryId, m.OwnerId, "", ""); e != nil || !creationKey.MatchString(m.OperationId) {
+	_, pathErr := repositoryPath(key)
+	_, repositoryErr := discussionID(m.RepositoryId)
+	_, ownerErr := discussionID(m.OwnerId)
+	if pathErr != nil || repositoryErr != nil || ownerErr != nil || !creationKey.MatchString(m.OperationId) {
 		return nil, ruleMutationRPCError(invalid("Provide the original operation and exact native target."))
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -619,65 +622,79 @@ func (s *Server) MutateRepositoryRules(ctx context.Context, req *connect.Request
 	// Reuse the existing held lifecycle target fence: its final native metadata
 	// GET must still resolve the expected ID before issuing the supported write.
 	// This is not an atomic name/owner fence inside the native handler.
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, ruleMutationRPCError(errStorageUnavailable)
-	}
-	defer tx.Rollback()
-	writeCtx, err := s.lockRepositoryLifecycleTransaction(ctx, tx, repoID)
-	if err != nil {
-		return nil, ruleMutationRPCError(err)
-	}
-	guarded, err := s.currentRuleInventory(writeCtx, session, token, key, m.RepositoryId, m.OwnerId)
-	if err != nil {
-		return nil, ruleMutationRPCError(err)
-	}
-	if guarded.RulesRevision != m.ExpectedRulesRevision || guarded.AccessRevision != m.ExpectedAccessRevision {
-		return connect.NewResponse(&golfv1.MutateRepositoryRulesResponse{Operation: ruleMutationWire(r)}), nil
-	}
-	base, _ := repositoryPath(key)
 	var nativeBranch *golfv1.RepositoryBranchProtection
 	var nativeTag *golfv1.RepositoryTagProtection
 	var nativeMerge *golfv1.RepositoryMergeConfiguration
-	switch m.Action {
-	case golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_CREATE_BRANCH, golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_EDIT_BRANCH:
-		var native forgeBranchProtection
-		status := http.StatusOK
-		if write.method == http.MethodPost {
-			status = http.StatusCreated
+	var nativeErr error
+	dispatched := false
+	e = s.withForgeCaller(ctx, session, token, func(caller User) error {
+		if caller.ID != r.ActorID {
+			return errUnauthenticated
 		}
-		_, e = s.forgeJSON(writeCtx, write.method, base+write.suffix, token, write.payload, &native, status)
-		if e == nil {
-			nativeBranch, e = wireBranchProtection(native)
-		}
-	case golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_CREATE_TAG, golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_EDIT_TAG:
-		var native forgeTagProtection
-		status := http.StatusOK
-		if write.method == http.MethodPost {
-			status = http.StatusCreated
-		}
-		_, e = s.forgeJSON(writeCtx, write.method, base+write.suffix, token, write.payload, &native, status)
-		if e == nil {
-			nativeTag, e = wireTagProtection(native)
-		}
-	case golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_REMOVE_BRANCH, golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_REMOVE_TAG:
-		_, e = s.forgeJSON(writeCtx, write.method, base+write.suffix, token, nil, nil, http.StatusNoContent)
-	case golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_EDIT_MERGE:
-		var native forgeRulesRepository
-		_, e = s.forgeJSON(writeCtx, write.method, base, token, write.payload, &native, http.StatusOK)
-		if e == nil {
-			if strconv.FormatInt(native.ID, 10) != m.RepositoryId || native.Owner == nil || strconv.FormatInt(native.Owner.ID, 10) != m.OwnerId {
-				e = errInvalidForgeResponse
-			} else {
-				nativeMerge, e = wireMergeConfiguration(native)
+		return s.workflowTransaction(ctx, session, caller.ID, func(tx *sql.Tx, _ database.LockManagedSessionRow, _ []byte) error {
+			writeCtx, err := s.lockRepositoryLifecycleTransaction(ctx, tx, repoID)
+			if err != nil {
+				return err
 			}
-		}
+			guarded, err := s.currentRuleInventory(writeCtx, session, token, key, m.RepositoryId, m.OwnerId)
+			if err != nil {
+				return err
+			}
+			if guarded.RulesRevision != m.ExpectedRulesRevision || guarded.AccessRevision != m.ExpectedAccessRevision {
+				return nil
+			}
+			base, _ := repositoryPath(key)
+			dispatched = true
+			switch m.Action {
+			case golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_CREATE_BRANCH, golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_EDIT_BRANCH:
+				var native forgeBranchProtection
+				status := http.StatusOK
+				if write.method == http.MethodPost {
+					status = http.StatusCreated
+				}
+				_, nativeErr = s.forgeJSON(writeCtx, write.method, base+write.suffix, token, write.payload, &native, status)
+				if nativeErr == nil {
+					nativeBranch, nativeErr = wireBranchProtection(native)
+				}
+			case golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_CREATE_TAG, golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_EDIT_TAG:
+				var native forgeTagProtection
+				status := http.StatusOK
+				if write.method == http.MethodPost {
+					status = http.StatusCreated
+				}
+				_, nativeErr = s.forgeJSON(writeCtx, write.method, base+write.suffix, token, write.payload, &native, status)
+				if nativeErr == nil {
+					nativeTag, nativeErr = wireTagProtection(native)
+				}
+			case golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_REMOVE_BRANCH, golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_REMOVE_TAG:
+				_, nativeErr = s.forgeJSON(writeCtx, write.method, base+write.suffix, token, nil, nil, http.StatusNoContent)
+			case golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_EDIT_MERGE:
+				var native forgeRulesRepository
+				_, nativeErr = s.forgeJSON(writeCtx, write.method, base, token, write.payload, &native, http.StatusOK)
+				if nativeErr == nil {
+					if strconv.FormatInt(native.ID, 10) != m.RepositoryId || native.Owner == nil || strconv.FormatInt(native.Owner.ID, 10) != m.OwnerId {
+						nativeErr = errInvalidForgeResponse
+					} else {
+						nativeMerge, nativeErr = wireMergeConfiguration(native)
+					}
+				}
+			}
+			return nil
+		})
+	})
+	// Account/session and shared lifecycle locks are released before the separate
+	// outcome transaction. The retained unknown intent still blocks archive.
+	if e != nil {
+		return nil, ruleMutationRPCError(e)
+	}
+	if !dispatched {
+		return connect.NewResponse(&golfv1.MutateRepositoryRulesResponse{Operation: ruleMutationWire(r)}), nil
 	}
 	after, readErr := s.currentRuleInventory(ctx, session, token, key, m.RepositoryId, m.OwnerId)
 	if readErr != nil {
 		return nil, ruleMutationRPCError(readErr)
 	} // No private metadata survives lost current authority.
-	if e != nil || !verifyRuleReadback(m, before, after, nativeBranch, nativeTag, nativeMerge) {
+	if nativeErr != nil || !verifyRuleReadback(m, before, after, nativeBranch, nativeTag, nativeMerge) {
 		return connect.NewResponse(&golfv1.MutateRepositoryRulesResponse{Operation: ruleMutationWire(r)}), nil
 	}
 	r, e = s.advanceRuleMutation(ctx, session, token, r, "SUCCEEDED", after.RulesRevision)

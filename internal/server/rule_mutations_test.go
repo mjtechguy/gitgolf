@@ -317,6 +317,18 @@ func TestRuleMutationsManagedPostgres(t *testing.T) {
 				request.Header().Set("Authorization", "Bearer not-authorized")
 			}
 			got, e := s.MutateRepositoryRules(ctx, request)
+			if fault == "success" || fault == "accepted500" || fault == "changed-readback" {
+				if e != nil || got == nil {
+					t.Fatal("original outcome missing", e)
+				}
+				statusRequest := connect.NewRequest(&golfv1.GetRepositoryRuleMutationRequest{Repository: m.Repository, RepositoryId: m.RepositoryId, OwnerId: m.OwnerId, OperationId: m.OperationId})
+				statusRequest.Header().Set("Origin", s.config.PublicURL)
+				statusRequest.Header().Set("Cookie", s.sessionCookie(session.Value, session.Expires, 3600).String())
+				status, statusErr := s.GetRepositoryRuleMutation(ctx, statusRequest)
+				if statusErr != nil || status.Msg.Operation.Phase != got.Msg.Operation.Phase || f.writes.Load() != 1 {
+					t.Fatal("original status lookup changed outcome or resent", statusErr)
+				}
+			}
 			if fault == "success" {
 				if e != nil || got.Msg.Operation.Phase != "SUCCEEDED" || got.Msg.CurrentRules == nil || f.writes.Load() != 1 {
 					t.Fatal("verified once-only effect", e)

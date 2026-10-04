@@ -935,6 +935,34 @@ type GolfRepositoryLifecycleOperation struct {
 	UpdatedAt        time.Time
 }
 
+type GolfRepositoryRuleMutation struct {
+	ID                     int64
+	UserID                 int64
+	ForgeURL               string
+	ActorID                int64
+	OperationID            string
+	RepositoryID           int64
+	OwnerID                int64
+	RepositoryOwner        string
+	RepositoryName         string
+	Action                 int32
+	ExpectedAccessRevision string
+	ExpectedRulesRevision  string
+	InputFingerprint       []byte
+	ObservedRulesRevision  string
+	Phase                  string
+	FailureCode            string
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+}
+
+type GolfRepositoryRuleMutationEvent struct {
+	ID         int64
+	MutationID int64
+	Phase      string
+	OccurredAt time.Time
+}
+
 type GolfReviewContent struct {
 	ID               uuid.UUID
 	UserID           int64

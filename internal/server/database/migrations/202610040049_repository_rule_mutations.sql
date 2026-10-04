@@ -60,7 +60,12 @@ END; $$;
 -- +goose StatementEnd
 CREATE TRIGGER golf_rule_mutation_guard BEFORE INSERT OR UPDATE ON golf_repository_rule_mutations FOR EACH ROW EXECUTE FUNCTION golf_rule_mutation_guard();
 CREATE TRIGGER golf_rule_mutation_event AFTER INSERT OR UPDATE ON golf_repository_rule_mutations FOR EACH ROW EXECUTE FUNCTION golf_rule_mutation_event();
--- Aggregate lifecycle active accounting is integrated centrally with the other current families.
+-- Preserve the current access/invitation/execution/delivery consumers when adding
+-- unresolved rule intents to the shared archive admission gate.
+-- +goose StatementBegin
+ALTER FUNCTION golf_repository_lifecycle_active(text,bigint) RENAME TO golf_repository_lifecycle_active_before_rules;
+CREATE OR REPLACE FUNCTION golf_repository_lifecycle_active(f text,r bigint) RETURNS bigint LANGUAGE sql AS $$ SELECT golf_repository_lifecycle_active_before_rules(f,r)+(SELECT count(*) FROM golf_repository_rule_mutations WHERE forge_url=f AND repository_id=r AND phase IN ('RESERVED','DISPATCH_UNKNOWN')); $$;
+-- +goose StatementEnd
 -- +goose Down
 -- +goose StatementBegin
 DO $$ BEGIN RAISE EXCEPTION 'Retained rules outcomes require qualified offline recovery; no automatic downgrade'; END $$;

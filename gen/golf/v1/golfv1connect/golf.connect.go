@@ -606,6 +606,12 @@ const (
 	// RepositoryRulesServiceGetRepositoryRulesProcedure is the fully-qualified name of the
 	// RepositoryRulesService's GetRepositoryRules RPC.
 	RepositoryRulesServiceGetRepositoryRulesProcedure = "/golf.v1.RepositoryRulesService/GetRepositoryRules"
+	// RepositoryRulesServiceMutateRepositoryRulesProcedure is the fully-qualified name of the
+	// RepositoryRulesService's MutateRepositoryRules RPC.
+	RepositoryRulesServiceMutateRepositoryRulesProcedure = "/golf.v1.RepositoryRulesService/MutateRepositoryRules"
+	// RepositoryRulesServiceGetRepositoryRuleMutationProcedure is the fully-qualified name of the
+	// RepositoryRulesService's GetRepositoryRuleMutation RPC.
+	RepositoryRulesServiceGetRepositoryRuleMutationProcedure = "/golf.v1.RepositoryRulesService/GetRepositoryRuleMutation"
 	// RunnerControlServiceGetInstanceRunnersProcedure is the fully-qualified name of the
 	// RunnerControlService's GetInstanceRunners RPC.
 	RunnerControlServiceGetInstanceRunnersProcedure = "/golf.v1.RunnerControlService/GetInstanceRunners"
@@ -6360,6 +6366,8 @@ func (UnimplementedRepositoryInvitationServiceHandler) GetRepositoryInvitationOp
 // RepositoryRulesServiceClient is a client for the golf.v1.RepositoryRulesService service.
 type RepositoryRulesServiceClient interface {
 	GetRepositoryRules(context.Context, *connect.Request[v1.GetRepositoryRulesRequest]) (*connect.Response[v1.GetRepositoryRulesResponse], error)
+	MutateRepositoryRules(context.Context, *connect.Request[v1.MutateRepositoryRulesRequest]) (*connect.Response[v1.MutateRepositoryRulesResponse], error)
+	GetRepositoryRuleMutation(context.Context, *connect.Request[v1.GetRepositoryRuleMutationRequest]) (*connect.Response[v1.GetRepositoryRuleMutationResponse], error)
 }
 
 // NewRepositoryRulesServiceClient constructs a client for the golf.v1.RepositoryRulesService
@@ -6379,12 +6387,26 @@ func NewRepositoryRulesServiceClient(httpClient connect.HTTPClient, baseURL stri
 			connect.WithSchema(repositoryRulesServiceMethods.ByName("GetRepositoryRules")),
 			connect.WithClientOptions(opts...),
 		),
+		mutateRepositoryRules: connect.NewClient[v1.MutateRepositoryRulesRequest, v1.MutateRepositoryRulesResponse](
+			httpClient,
+			baseURL+RepositoryRulesServiceMutateRepositoryRulesProcedure,
+			connect.WithSchema(repositoryRulesServiceMethods.ByName("MutateRepositoryRules")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryRuleMutation: connect.NewClient[v1.GetRepositoryRuleMutationRequest, v1.GetRepositoryRuleMutationResponse](
+			httpClient,
+			baseURL+RepositoryRulesServiceGetRepositoryRuleMutationProcedure,
+			connect.WithSchema(repositoryRulesServiceMethods.ByName("GetRepositoryRuleMutation")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // repositoryRulesServiceClient implements RepositoryRulesServiceClient.
 type repositoryRulesServiceClient struct {
-	getRepositoryRules *connect.Client[v1.GetRepositoryRulesRequest, v1.GetRepositoryRulesResponse]
+	getRepositoryRules        *connect.Client[v1.GetRepositoryRulesRequest, v1.GetRepositoryRulesResponse]
+	mutateRepositoryRules     *connect.Client[v1.MutateRepositoryRulesRequest, v1.MutateRepositoryRulesResponse]
+	getRepositoryRuleMutation *connect.Client[v1.GetRepositoryRuleMutationRequest, v1.GetRepositoryRuleMutationResponse]
 }
 
 // GetRepositoryRules calls golf.v1.RepositoryRulesService.GetRepositoryRules.
@@ -6392,9 +6414,21 @@ func (c *repositoryRulesServiceClient) GetRepositoryRules(ctx context.Context, r
 	return c.getRepositoryRules.CallUnary(ctx, req)
 }
 
+// MutateRepositoryRules calls golf.v1.RepositoryRulesService.MutateRepositoryRules.
+func (c *repositoryRulesServiceClient) MutateRepositoryRules(ctx context.Context, req *connect.Request[v1.MutateRepositoryRulesRequest]) (*connect.Response[v1.MutateRepositoryRulesResponse], error) {
+	return c.mutateRepositoryRules.CallUnary(ctx, req)
+}
+
+// GetRepositoryRuleMutation calls golf.v1.RepositoryRulesService.GetRepositoryRuleMutation.
+func (c *repositoryRulesServiceClient) GetRepositoryRuleMutation(ctx context.Context, req *connect.Request[v1.GetRepositoryRuleMutationRequest]) (*connect.Response[v1.GetRepositoryRuleMutationResponse], error) {
+	return c.getRepositoryRuleMutation.CallUnary(ctx, req)
+}
+
 // RepositoryRulesServiceHandler is an implementation of the golf.v1.RepositoryRulesService service.
 type RepositoryRulesServiceHandler interface {
 	GetRepositoryRules(context.Context, *connect.Request[v1.GetRepositoryRulesRequest]) (*connect.Response[v1.GetRepositoryRulesResponse], error)
+	MutateRepositoryRules(context.Context, *connect.Request[v1.MutateRepositoryRulesRequest]) (*connect.Response[v1.MutateRepositoryRulesResponse], error)
+	GetRepositoryRuleMutation(context.Context, *connect.Request[v1.GetRepositoryRuleMutationRequest]) (*connect.Response[v1.GetRepositoryRuleMutationResponse], error)
 }
 
 // NewRepositoryRulesServiceHandler builds an HTTP handler from the service implementation. It
@@ -6410,10 +6444,26 @@ func NewRepositoryRulesServiceHandler(svc RepositoryRulesServiceHandler, opts ..
 		connect.WithSchema(repositoryRulesServiceMethods.ByName("GetRepositoryRules")),
 		connect.WithHandlerOptions(opts...),
 	)
+	repositoryRulesServiceMutateRepositoryRulesHandler := connect.NewUnaryHandler(
+		RepositoryRulesServiceMutateRepositoryRulesProcedure,
+		svc.MutateRepositoryRules,
+		connect.WithSchema(repositoryRulesServiceMethods.ByName("MutateRepositoryRules")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryRulesServiceGetRepositoryRuleMutationHandler := connect.NewUnaryHandler(
+		RepositoryRulesServiceGetRepositoryRuleMutationProcedure,
+		svc.GetRepositoryRuleMutation,
+		connect.WithSchema(repositoryRulesServiceMethods.ByName("GetRepositoryRuleMutation")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/golf.v1.RepositoryRulesService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case RepositoryRulesServiceGetRepositoryRulesProcedure:
 			repositoryRulesServiceGetRepositoryRulesHandler.ServeHTTP(w, r)
+		case RepositoryRulesServiceMutateRepositoryRulesProcedure:
+			repositoryRulesServiceMutateRepositoryRulesHandler.ServeHTTP(w, r)
+		case RepositoryRulesServiceGetRepositoryRuleMutationProcedure:
+			repositoryRulesServiceGetRepositoryRuleMutationHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -6425,6 +6475,14 @@ type UnimplementedRepositoryRulesServiceHandler struct{}
 
 func (UnimplementedRepositoryRulesServiceHandler) GetRepositoryRules(context.Context, *connect.Request[v1.GetRepositoryRulesRequest]) (*connect.Response[v1.GetRepositoryRulesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryRulesService.GetRepositoryRules is not implemented"))
+}
+
+func (UnimplementedRepositoryRulesServiceHandler) MutateRepositoryRules(context.Context, *connect.Request[v1.MutateRepositoryRulesRequest]) (*connect.Response[v1.MutateRepositoryRulesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryRulesService.MutateRepositoryRules is not implemented"))
+}
+
+func (UnimplementedRepositoryRulesServiceHandler) GetRepositoryRuleMutation(context.Context, *connect.Request[v1.GetRepositoryRuleMutationRequest]) (*connect.Response[v1.GetRepositoryRuleMutationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryRulesService.GetRepositoryRuleMutation is not implemented"))
 }
 
 // RunnerControlServiceClient is a client for the golf.v1.RunnerControlService service.
