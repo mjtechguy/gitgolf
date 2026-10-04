@@ -1379,6 +1379,7 @@ message WorkflowRun {
  string execution_binding_id = 29;
  string execution_binding_version = 30;
  WorkflowRunnerPlacement runner_placement = 31;
+ WorkflowJobResourceBinding job_resources = 32;
 }
 enum WorkflowStepState {
  WORKFLOW_STEP_STATE_UNSPECIFIED = 0;
@@ -3166,6 +3167,8 @@ service RunnerControlService {
   rpc GetInstanceRunners(GetInstanceRunnersRequest) returns (GetInstanceRunnersResponse);
   rpc UpdateRunnerControl(UpdateRunnerControlRequest) returns (UpdateRunnerControlResponse);
   rpc GetRepositoryRunners(GetRepositoryRunnersRequest) returns (GetRepositoryRunnersResponse);
+  rpc GetInstanceRunnerLimits(GetInstanceRunnerLimitsRequest) returns (GetInstanceRunnerLimitsResponse);
+  rpc SetInstanceRunnerLimits(SetInstanceRunnerLimitsRequest) returns (SetInstanceRunnerLimitsResponse);
 }
 enum RunnerControlState {
   RUNNER_CONTROL_STATE_UNSPECIFIED = 0;
@@ -3283,6 +3286,8 @@ message RunnerPool {
  string created_at=9;
  string updated_at=10;
  optional string active_attempt_count=11;
+ RunnerJobLimits job_limits=12;
+ RunnerJobLimits effective_job_limits=13;
 }
 message ListRunnerPoolsRequest {}
 message ListRunnerPoolsResponse { repeated RunnerPool pools=1; repeated string enrolled_worker_ids=2; }
@@ -3296,6 +3301,7 @@ message SaveRunnerPoolRequest {
  repeated string worker_ids=7;
  bool repository_assignment_enabled=8;
  string current_password=9;
+ RunnerJobLimits job_limits=10;
 }
 message SaveRunnerPoolResponse { RunnerPool pool=1; }
 message RepositoryRunnerPlacement {
@@ -3307,6 +3313,8 @@ message RepositoryRunnerPlacement {
  string pool_id=6;
  string pool_version=7;
  bool legacy_unbound=8;
+ RunnerJobLimits job_limits=9;
+ RunnerJobLimits effective_job_limits=10;
 }
 message GetRepositoryRunnerPlacementRequest {
  RepositoryKey repository=1;
@@ -3330,6 +3338,7 @@ message SetRepositoryRunnerPlacementRequest {
  string pool_id=6;
  string expected_pool_version=7;
  string current_password=8;
+ RunnerJobLimits job_limits=9;
 }
 message SetRepositoryRunnerPlacementResponse { RepositoryRunnerPlacement placement=1; }
 message WorkflowRunnerPlacement {
@@ -3441,3 +3450,34 @@ message OrganizationExecutionValueMutation {
 message SaveOrganizationExecutionValueResponse { OrganizationExecutionValueMutation operation = 1; }
 message DeleteOrganizationExecutionValueResponse { OrganizationExecutionValueMutation operation = 1; }
 message GetOrganizationExecutionValueOperationResponse { OrganizationExecutionValueMutation operation = 1; }
+// The first local-Docker profile restricts the existing fixed maxima only.
+// Timeout is the whole attempt budget; CPU/memory/PIDs apply to every job.
+message RunnerJobLimits {
+ uint32 cpu_millis=1;
+ string memory_bytes=2;
+ uint32 pids=3;
+ uint32 timeout_seconds=4;
+}
+message InstanceRunnerLimits {
+ RunnerJobLimits limits=1;
+ string version=2;
+ string updated_at=3;
+}
+message GetInstanceRunnerLimitsRequest {}
+message GetInstanceRunnerLimitsResponse { InstanceRunnerLimits policy=1; }
+message SetInstanceRunnerLimitsRequest {
+ string expected_version=1;
+ RunnerJobLimits limits=2;
+ string current_password=3;
+}
+message SetInstanceRunnerLimitsResponse { InstanceRunnerLimits policy=1; }
+// Historical runs without a resource admission are readable, never releasable.
+message WorkflowJobResourceBinding {
+ string profile=1;
+ RunnerJobLimits limits=2;
+ string instance_version=3;
+ string pool_id=4;
+ string pool_version=5;
+ string placement_version=6;
+ bool bound=7;
+}
