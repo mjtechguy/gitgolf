@@ -32,6 +32,12 @@ function validateLogPage(receipt,run,repositoryId,engine,selection,after){
   for(const row of rows){const sequence=logSequence(row.sequence);assert(sequence>next&&(scoped||sequence===next+1n)&&typeof row.text==='string','Log page duplicated/skipped unsliced output');next=sequence;}
   return {next,hasMore:body.hasMore===true,count:rows.length};
 }
+function supersededAbort(requestGeneration,currentGeneration,errorText){return Number.isSafeInteger(requestGeneration)&&requestGeneration>=1&&requestGeneration<currentGeneration&&errorText==='net::ERR_ABORTED';}
+function pageErrorCategory(error){
+  if(/^Minified React error #[0-9]{1,4};/.test(error?.message??''))return 'browser_react_error';
+  if((error?.message??'').startsWith('Maximum update depth exceeded'))return 'browser_react_update_depth';
+  switch(error?.name){case 'TypeError':return 'browser_type_error';case 'ReferenceError':return 'browser_reference_error';case 'SyntaxError':return 'browser_syntax_error';case 'RangeError':return 'browser_range_error';default:return 'browser_page_error';}
+}
 if(process.argv.includes('--self-check')){
   assert(surfaces.length*widths.length*themes.length===12,'Capture inventory changed');
   for(const method of ['GetWorkflowRun','GetWorkflowRunLogs','ListActionRuns','GetActionRun','WatchRepository'])assert(readProcedure(method),'Read guard failed');
@@ -52,6 +58,9 @@ if(process.argv.includes('--self-check')){
   const selected={jobInstanceId:'b'.repeat(32),stepId:'local'},scoped={status:200,request:{runId:run.id,...selected},body:{...continued.body,...selected,logs:[{sequence:'33',text:'selected later chunk'}]}};
   assert(validateLogPage(scoped,logRun,'9',true,selected,0n).next===33n,'Legitimate scoped sequence gap refused');
   let wrongScope=false;try{validateLogPage({...scoped,body:{...scoped.body,stepId:'other'}},logRun,'9',true,selected,0n);}catch{wrongScope=true;}assert(wrongScope,'Different step receipt accepted');
+  assert(supersededAbort(1,2,'net::ERR_ABORTED'),'Known old navigation abort not recognized');
+  for(const args of [[2,2,'net::ERR_ABORTED'],[3,2,'net::ERR_ABORTED'],[undefined,2,'net::ERR_ABORTED'],[1,2,'net::ERR_CONNECTION_RESET'],[1,2,'private provider response']])assert(!supersededAbort(...args),'Active or unknown read failure discounted');
+  assert(pageErrorCategory({name:'TypeError',message:'private source'})==='browser_type_error'&&pageErrorCategory({name:'private credential',message:'private source'})==='browser_page_error'&&pageErrorCategory({name:'__proto__',message:'private source'})==='browser_page_error','Page error classifier exposed arbitrary details');
   console.log('PASS: twelve capture cases and read-only browser guard; no browser or native fixture executed.');
   process.exit(0);
 }
@@ -105,22 +114,29 @@ try{
     for(const id of surfaces){
       stage=id;
       const page=await context.newPage();page.setDefaultTimeout(15000);
-      const rpc=[],writes=[],errors=[],receipts=[],responseTasks=[];let generation=0;const requestGenerations=new Map();
+      const rpc=[],writes=[],errors=[],receipts=[],responseTasks=[],supersededReads=[];let generation=0,pageErrorCount=0,readErrorCount=0,errorCategoriesTruncated=false;const requestGenerations=new Map();
       const inflight=new Set();let lastResponse=Date.now();
       await page.route('**/rpc/**',route=>{
         const method=route.request().url().split('/').at(-1);
         if(!readProcedure(method)){writes.push(method);return route.abort('blockedbyclient');}
         return route.continue();
       });
-      page.on('pageerror',()=>errors.push('page-error'));
+      function recordError(entry){if(entry.category.startsWith('browser_'))pageErrorCount++;else readErrorCount++;if(errors.length<32)errors.push(entry);else errorCategoriesTruncated=true;}
+      function recordReadFailure(category,request){
+        const requestGeneration=requestGenerations.get(request),aborted=supersededAbort(requestGeneration,generation,request.failure()?.errorText);
+        const entry={category,generation:requestGeneration??0,currentGeneration:generation};
+        if(aborted){if(supersededReads.length<32)supersededReads.push(entry);else recordError({category:'diagnostic_bound',generation});}
+        else recordError(entry);
+      }
+      page.on('pageerror',error=>recordError({category:pageErrorCategory(error),generation}));
       page.on('request',request=>{if(request.url().includes('/rpc/'))requestGenerations.set(request,generation);if(request.url().includes('/rpc/')&&!request.url().endsWith('/WatchRepository'))inflight.add(request);});
-      page.on('requestfailed',request=>{if(inflight.delete(request)){lastResponse=Date.now();errors.push('unary-read-failed');}});
+      page.on('requestfailed',request=>{if(requestGenerations.has(request)&&!request.url().endsWith('/WatchRepository')){inflight.delete(request);lastResponse=Date.now();recordReadFailure('unary_read_failed',request);}});
       page.on('response',response=>{
         if(!response.url().includes('/rpc/'))return;
         const procedure=response.url().split('/').at(-1);rpc.push({procedure,status:response.status()});
         if(procedure!=='WatchRepository'){inflight.delete(response.request());lastResponse=Date.now();}
         if(['ListActionRuns','GetActionRun','GetWorkflowRun','GetWorkflowRunLogs'].includes(procedure))responseTasks.push((async()=>{
-          try{receipts.push({procedure,generation:requestGenerations.get(response.request()),status:response.status(),request:response.request().postDataJSON(),body:await response.json()});}catch{errors.push('invalid-read-receipt');}
+          try{receipts.push({procedure,generation:requestGenerations.get(response.request()),status:response.status(),request:response.request().postDataJSON(),body:await response.json()});}catch{recordReadFailure('invalid_read_receipt',response.request());}
         })());
       });
       const route=id==='actions-inventory'?repo+'/actions':repo+'/actions/runs/'+config.run.id;
@@ -221,7 +237,7 @@ try{
         }
         result.status='captured';
       }catch(error){result.status='failed';result.reason=error.name==='CIProofAssertion'?error.message:'Expected actual page/read/capture failed; sensitive diagnostics withheld';}
-      result.pageErrorCount=errors.length;result.blockedWriteCount=writes.length;
+      result.errorCategories=errors;result.errorCategoriesTruncated=errorCategoriesTruncated;result.pageErrorCount=pageErrorCount;result.readErrorCount=readErrorCount;result.supersededAbortedReads=supersededReads;result.blockedWriteCount=writes.length;
       results.push(result);await page.close();await manifest();
       assert(result.status==='captured','Actual capture failed');
     }
