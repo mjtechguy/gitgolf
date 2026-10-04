@@ -100,6 +100,8 @@ const (
 	RunnerControlServiceName = "golf.v1.RunnerControlService"
 	// RunnerPoolServiceName is the fully-qualified name of the RunnerPoolService service.
 	RunnerPoolServiceName = "golf.v1.RunnerPoolService"
+	// GitTransportServiceName is the fully-qualified name of the GitTransportService service.
+	GitTransportServiceName = "golf.v1.GitTransportService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -635,6 +637,21 @@ const (
 	// RunnerPoolServiceSetRepositoryRunnerPlacementProcedure is the fully-qualified name of the
 	// RunnerPoolService's SetRepositoryRunnerPlacement RPC.
 	RunnerPoolServiceSetRepositoryRunnerPlacementProcedure = "/golf.v1.RunnerPoolService/SetRepositoryRunnerPlacement"
+	// GitTransportServiceGetGitTransportProcedure is the fully-qualified name of the
+	// GitTransportService's GetGitTransport RPC.
+	GitTransportServiceGetGitTransportProcedure = "/golf.v1.GitTransportService/GetGitTransport"
+	// GitTransportServiceCreateGitCredentialProcedure is the fully-qualified name of the
+	// GitTransportService's CreateGitCredential RPC.
+	GitTransportServiceCreateGitCredentialProcedure = "/golf.v1.GitTransportService/CreateGitCredential"
+	// GitTransportServiceListGitCredentialsProcedure is the fully-qualified name of the
+	// GitTransportService's ListGitCredentials RPC.
+	GitTransportServiceListGitCredentialsProcedure = "/golf.v1.GitTransportService/ListGitCredentials"
+	// GitTransportServiceRevokeGitCredentialProcedure is the fully-qualified name of the
+	// GitTransportService's RevokeGitCredential RPC.
+	GitTransportServiceRevokeGitCredentialProcedure = "/golf.v1.GitTransportService/RevokeGitCredential"
+	// GitTransportServiceGetGitReceiveOutcomeProcedure is the fully-qualified name of the
+	// GitTransportService's GetGitReceiveOutcome RPC.
+	GitTransportServiceGetGitReceiveOutcomeProcedure = "/golf.v1.GitTransportService/GetGitReceiveOutcome"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -6767,4 +6784,178 @@ func (UnimplementedRunnerPoolServiceHandler) GetRepositoryRunnerPlacement(contex
 
 func (UnimplementedRunnerPoolServiceHandler) SetRepositoryRunnerPlacement(context.Context, *connect.Request[v1.SetRepositoryRunnerPlacementRequest]) (*connect.Response[v1.SetRepositoryRunnerPlacementResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RunnerPoolService.SetRepositoryRunnerPlacement is not implemented"))
+}
+
+// GitTransportServiceClient is a client for the golf.v1.GitTransportService service.
+type GitTransportServiceClient interface {
+	GetGitTransport(context.Context, *connect.Request[v1.GetGitTransportRequest]) (*connect.Response[v1.GetGitTransportResponse], error)
+	CreateGitCredential(context.Context, *connect.Request[v1.CreateGitCredentialRequest]) (*connect.Response[v1.CreateGitCredentialResponse], error)
+	ListGitCredentials(context.Context, *connect.Request[v1.ListGitCredentialsRequest]) (*connect.Response[v1.ListGitCredentialsResponse], error)
+	RevokeGitCredential(context.Context, *connect.Request[v1.RevokeGitCredentialRequest]) (*connect.Response[v1.RevokeGitCredentialResponse], error)
+	GetGitReceiveOutcome(context.Context, *connect.Request[v1.GetGitReceiveOutcomeRequest]) (*connect.Response[v1.GetGitReceiveOutcomeResponse], error)
+}
+
+// NewGitTransportServiceClient constructs a client for the golf.v1.GitTransportService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewGitTransportServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) GitTransportServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	gitTransportServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("GitTransportService").Methods()
+	return &gitTransportServiceClient{
+		getGitTransport: connect.NewClient[v1.GetGitTransportRequest, v1.GetGitTransportResponse](
+			httpClient,
+			baseURL+GitTransportServiceGetGitTransportProcedure,
+			connect.WithSchema(gitTransportServiceMethods.ByName("GetGitTransport")),
+			connect.WithClientOptions(opts...),
+		),
+		createGitCredential: connect.NewClient[v1.CreateGitCredentialRequest, v1.CreateGitCredentialResponse](
+			httpClient,
+			baseURL+GitTransportServiceCreateGitCredentialProcedure,
+			connect.WithSchema(gitTransportServiceMethods.ByName("CreateGitCredential")),
+			connect.WithClientOptions(opts...),
+		),
+		listGitCredentials: connect.NewClient[v1.ListGitCredentialsRequest, v1.ListGitCredentialsResponse](
+			httpClient,
+			baseURL+GitTransportServiceListGitCredentialsProcedure,
+			connect.WithSchema(gitTransportServiceMethods.ByName("ListGitCredentials")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeGitCredential: connect.NewClient[v1.RevokeGitCredentialRequest, v1.RevokeGitCredentialResponse](
+			httpClient,
+			baseURL+GitTransportServiceRevokeGitCredentialProcedure,
+			connect.WithSchema(gitTransportServiceMethods.ByName("RevokeGitCredential")),
+			connect.WithClientOptions(opts...),
+		),
+		getGitReceiveOutcome: connect.NewClient[v1.GetGitReceiveOutcomeRequest, v1.GetGitReceiveOutcomeResponse](
+			httpClient,
+			baseURL+GitTransportServiceGetGitReceiveOutcomeProcedure,
+			connect.WithSchema(gitTransportServiceMethods.ByName("GetGitReceiveOutcome")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// gitTransportServiceClient implements GitTransportServiceClient.
+type gitTransportServiceClient struct {
+	getGitTransport      *connect.Client[v1.GetGitTransportRequest, v1.GetGitTransportResponse]
+	createGitCredential  *connect.Client[v1.CreateGitCredentialRequest, v1.CreateGitCredentialResponse]
+	listGitCredentials   *connect.Client[v1.ListGitCredentialsRequest, v1.ListGitCredentialsResponse]
+	revokeGitCredential  *connect.Client[v1.RevokeGitCredentialRequest, v1.RevokeGitCredentialResponse]
+	getGitReceiveOutcome *connect.Client[v1.GetGitReceiveOutcomeRequest, v1.GetGitReceiveOutcomeResponse]
+}
+
+// GetGitTransport calls golf.v1.GitTransportService.GetGitTransport.
+func (c *gitTransportServiceClient) GetGitTransport(ctx context.Context, req *connect.Request[v1.GetGitTransportRequest]) (*connect.Response[v1.GetGitTransportResponse], error) {
+	return c.getGitTransport.CallUnary(ctx, req)
+}
+
+// CreateGitCredential calls golf.v1.GitTransportService.CreateGitCredential.
+func (c *gitTransportServiceClient) CreateGitCredential(ctx context.Context, req *connect.Request[v1.CreateGitCredentialRequest]) (*connect.Response[v1.CreateGitCredentialResponse], error) {
+	return c.createGitCredential.CallUnary(ctx, req)
+}
+
+// ListGitCredentials calls golf.v1.GitTransportService.ListGitCredentials.
+func (c *gitTransportServiceClient) ListGitCredentials(ctx context.Context, req *connect.Request[v1.ListGitCredentialsRequest]) (*connect.Response[v1.ListGitCredentialsResponse], error) {
+	return c.listGitCredentials.CallUnary(ctx, req)
+}
+
+// RevokeGitCredential calls golf.v1.GitTransportService.RevokeGitCredential.
+func (c *gitTransportServiceClient) RevokeGitCredential(ctx context.Context, req *connect.Request[v1.RevokeGitCredentialRequest]) (*connect.Response[v1.RevokeGitCredentialResponse], error) {
+	return c.revokeGitCredential.CallUnary(ctx, req)
+}
+
+// GetGitReceiveOutcome calls golf.v1.GitTransportService.GetGitReceiveOutcome.
+func (c *gitTransportServiceClient) GetGitReceiveOutcome(ctx context.Context, req *connect.Request[v1.GetGitReceiveOutcomeRequest]) (*connect.Response[v1.GetGitReceiveOutcomeResponse], error) {
+	return c.getGitReceiveOutcome.CallUnary(ctx, req)
+}
+
+// GitTransportServiceHandler is an implementation of the golf.v1.GitTransportService service.
+type GitTransportServiceHandler interface {
+	GetGitTransport(context.Context, *connect.Request[v1.GetGitTransportRequest]) (*connect.Response[v1.GetGitTransportResponse], error)
+	CreateGitCredential(context.Context, *connect.Request[v1.CreateGitCredentialRequest]) (*connect.Response[v1.CreateGitCredentialResponse], error)
+	ListGitCredentials(context.Context, *connect.Request[v1.ListGitCredentialsRequest]) (*connect.Response[v1.ListGitCredentialsResponse], error)
+	RevokeGitCredential(context.Context, *connect.Request[v1.RevokeGitCredentialRequest]) (*connect.Response[v1.RevokeGitCredentialResponse], error)
+	GetGitReceiveOutcome(context.Context, *connect.Request[v1.GetGitReceiveOutcomeRequest]) (*connect.Response[v1.GetGitReceiveOutcomeResponse], error)
+}
+
+// NewGitTransportServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewGitTransportServiceHandler(svc GitTransportServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	gitTransportServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("GitTransportService").Methods()
+	gitTransportServiceGetGitTransportHandler := connect.NewUnaryHandler(
+		GitTransportServiceGetGitTransportProcedure,
+		svc.GetGitTransport,
+		connect.WithSchema(gitTransportServiceMethods.ByName("GetGitTransport")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gitTransportServiceCreateGitCredentialHandler := connect.NewUnaryHandler(
+		GitTransportServiceCreateGitCredentialProcedure,
+		svc.CreateGitCredential,
+		connect.WithSchema(gitTransportServiceMethods.ByName("CreateGitCredential")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gitTransportServiceListGitCredentialsHandler := connect.NewUnaryHandler(
+		GitTransportServiceListGitCredentialsProcedure,
+		svc.ListGitCredentials,
+		connect.WithSchema(gitTransportServiceMethods.ByName("ListGitCredentials")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gitTransportServiceRevokeGitCredentialHandler := connect.NewUnaryHandler(
+		GitTransportServiceRevokeGitCredentialProcedure,
+		svc.RevokeGitCredential,
+		connect.WithSchema(gitTransportServiceMethods.ByName("RevokeGitCredential")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gitTransportServiceGetGitReceiveOutcomeHandler := connect.NewUnaryHandler(
+		GitTransportServiceGetGitReceiveOutcomeProcedure,
+		svc.GetGitReceiveOutcome,
+		connect.WithSchema(gitTransportServiceMethods.ByName("GetGitReceiveOutcome")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.GitTransportService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case GitTransportServiceGetGitTransportProcedure:
+			gitTransportServiceGetGitTransportHandler.ServeHTTP(w, r)
+		case GitTransportServiceCreateGitCredentialProcedure:
+			gitTransportServiceCreateGitCredentialHandler.ServeHTTP(w, r)
+		case GitTransportServiceListGitCredentialsProcedure:
+			gitTransportServiceListGitCredentialsHandler.ServeHTTP(w, r)
+		case GitTransportServiceRevokeGitCredentialProcedure:
+			gitTransportServiceRevokeGitCredentialHandler.ServeHTTP(w, r)
+		case GitTransportServiceGetGitReceiveOutcomeProcedure:
+			gitTransportServiceGetGitReceiveOutcomeHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedGitTransportServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedGitTransportServiceHandler struct{}
+
+func (UnimplementedGitTransportServiceHandler) GetGitTransport(context.Context, *connect.Request[v1.GetGitTransportRequest]) (*connect.Response[v1.GetGitTransportResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.GitTransportService.GetGitTransport is not implemented"))
+}
+
+func (UnimplementedGitTransportServiceHandler) CreateGitCredential(context.Context, *connect.Request[v1.CreateGitCredentialRequest]) (*connect.Response[v1.CreateGitCredentialResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.GitTransportService.CreateGitCredential is not implemented"))
+}
+
+func (UnimplementedGitTransportServiceHandler) ListGitCredentials(context.Context, *connect.Request[v1.ListGitCredentialsRequest]) (*connect.Response[v1.ListGitCredentialsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.GitTransportService.ListGitCredentials is not implemented"))
+}
+
+func (UnimplementedGitTransportServiceHandler) RevokeGitCredential(context.Context, *connect.Request[v1.RevokeGitCredentialRequest]) (*connect.Response[v1.RevokeGitCredentialResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.GitTransportService.RevokeGitCredential is not implemented"))
+}
+
+func (UnimplementedGitTransportServiceHandler) GetGitReceiveOutcome(context.Context, *connect.Request[v1.GetGitReceiveOutcomeRequest]) (*connect.Response[v1.GetGitReceiveOutcomeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.GitTransportService.GetGitReceiveOutcome is not implemented"))
 }

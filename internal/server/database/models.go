@@ -507,6 +507,60 @@ type GolfExecutionValueVersion struct {
 	CreatedAt        time.Time
 }
 
+type GolfGitCredential struct {
+	ID              int64
+	UserID          int64
+	ForgeURL        string
+	RepositoryID    int64
+	OwnerID         int64
+	NativeUserID    int64
+	SourceSessionID int64
+	SourceTokenHash []byte
+	TokenHash       []byte
+	Label           string
+	Mode            string
+	CreatedAt       time.Time
+	ExpiresAt       time.Time
+	RevokedAt       sql.NullTime
+}
+
+type GolfGitReceiveEvent struct {
+	ID          int64
+	OperationID uuid.UUID
+	Phase       string
+	OccurredAt  time.Time
+}
+
+type GolfGitReceiveOperation struct {
+	ID            uuid.UUID
+	ForgeURL      string
+	RepositoryID  int64
+	OwnerID       int64
+	UserID        int64
+	NativeUserID  int64
+	CredentialID  int64
+	CommandHash   []byte
+	CommandCount  int32
+	Phase         string
+	AcceptedCount sql.NullInt32
+	RejectedCount sql.NullInt32
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type GolfGitTransportProfile struct {
+	ForgeURL              string
+	Incarnation           uuid.UUID
+	NativeVersion         string
+	QualifierSourceCommit string
+	GolfImageDigest       string
+	NativeImageDigest     string
+	NativeRuntimeID       string
+	ReceiptSha256         string
+	QualifiedAt           time.Time
+	SuspendedAt           sql.NullTime
+}
+
 type GolfInfrastructureActivationEvent struct {
 	Revision       int64
 	ProfileID      uuid.UUID

@@ -3319,3 +3319,43 @@ message WorkflowRunnerPlacement {
  string placement_version=3;
  bool legacy_unbound=4;
 }
+
+// Browser-only scoped credentials for the explicitly enabled managed Git profile.
+service GitTransportService {
+ rpc GetGitTransport(GetGitTransportRequest) returns (GetGitTransportResponse);
+ rpc CreateGitCredential(CreateGitCredentialRequest) returns (CreateGitCredentialResponse);
+ rpc ListGitCredentials(ListGitCredentialsRequest) returns (ListGitCredentialsResponse);
+ rpc RevokeGitCredential(RevokeGitCredentialRequest) returns (RevokeGitCredentialResponse);
+ rpc GetGitReceiveOutcome(GetGitReceiveOutcomeRequest) returns (GetGitReceiveOutcomeResponse);
+}
+enum GitCredentialMode {
+ GIT_CREDENTIAL_MODE_UNSPECIFIED = 0;
+ GIT_CREDENTIAL_MODE_READ = 1;
+ GIT_CREDENTIAL_MODE_WRITE = 2;
+}
+message GetGitTransportRequest { RepositoryKey repository = 1; string repository_id = 2; string owner_id = 3; }
+message GetGitTransportResponse {
+ RepositoryKey repository = 1; string repository_id = 2; string owner_id = 3;
+ bool enabled = 4; string clone_url = 5; bool read_credential_available = 6;
+ bool write_credential_available = 7; string write_notice = 8;
+}
+message GitCredential {
+ string id = 1; string label = 2; string repository_id = 3; string owner_id = 4;
+ GitCredentialMode mode = 5; string created_at = 6; string expires_at = 7;
+ string revoked_at = 8; string source_session_id = 9; bool source_session_active = 10;
+}
+message CreateGitCredentialRequest {
+ RepositoryKey repository = 1; string repository_id = 2; string owner_id = 3;
+ string label = 4; GitCredentialMode mode = 5; uint32 lifetime_seconds = 6;
+}
+message CreateGitCredentialResponse { GitCredential credential = 1; string secret = 2; }
+message ListGitCredentialsRequest { RepositoryKey repository = 1; string repository_id = 2; string owner_id = 3; PageRequest page = 4; }
+message ListGitCredentialsResponse { repeated GitCredential credentials = 1; PageResponse page = 2; }
+message RevokeGitCredentialRequest { RepositoryKey repository = 1; string repository_id = 2; string owner_id = 3; string credential_id = 4; }
+message RevokeGitCredentialResponse { string credential_id = 1; bool revoked = 2; }
+message GetGitReceiveOutcomeRequest { RepositoryKey repository = 1; string repository_id = 2; string owner_id = 3; string operation_id = 4; }
+message GetGitReceiveOutcomeResponse {
+ string operation_id = 1; string repository_id = 2; string actor_id = 3;
+ string phase = 4; uint32 command_count = 5; optional uint32 accepted_count = 6;
+ optional uint32 rejected_count = 7; string created_at = 8; string updated_at = 9;
+}
