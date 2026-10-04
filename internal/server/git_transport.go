@@ -112,12 +112,13 @@ func gitRequestEncrypted(r *http.Request, c managedGitConfiguration) bool {
 func gitHTTPFailure(w http.ResponseWriter, e error) {
 	status := http.StatusServiceUnavailable
 	message := "Golf Git transport could not confirm this request."
+	var native forgeError
 	switch {
-	case errors.Is(e, errUnauthenticated):
+	case errors.Is(e, errUnauthenticated), errors.As(e, &native) && (native.status == http.StatusUnauthorized || native.status == http.StatusForbidden):
 		status = 401
 		message = "Use a current repository-scoped Golf Git credential."
 		w.Header().Set("WWW-Authenticate", `Basic realm="Golf Git"`)
-	case errors.Is(e, errResourceNotFound):
+	case errors.Is(e, errResourceNotFound), errors.As(e, &native) && native.status == http.StatusNotFound:
 		status = 404
 		message = "Repository is unavailable for this credential."
 	case errors.Is(e, errGitProtocol):

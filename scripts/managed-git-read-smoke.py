@@ -241,7 +241,7 @@ def main():
             try:response=urllib.request.build_opener(urllib.request.ProxyHandler({}),NoRedirect(),urllib.request.HTTPSHandler(context=context)).open(req,timeout=25)
             except urllib.error.HTTPError as e:response=e
             with response:
-                body=response.read((2<<20)+1);require(response.status==expected and len(body)<=2<<20,'git_http_status_or_bound');require(response.headers.get('Cache-Control')=='no-store','git_http_cache');return body
+                body=response.read((2<<20)+1);record(lastGitHttpCall={'method':method,'path':route,'plainHttp':insecure,'expectedStatus':expected,'actualStatus':response.status,'bodyBounded':len(body)<=2<<20});require(response.status==expected and len(body)<=2<<20,'git_http_status_or_bound');require(response.headers.get('Cache-Control')=='no-store','git_http_cache');return body
         askpass=directory/'askpass.py';credential_file=directory/'git-credential'
         private_write(askpass,'#!/usr/bin/env python3\nimport pathlib,sys\nprint("golf" if "Username" in sys.argv[1] else pathlib.Path(__file__).with_name("git-credential").read_text())\n',0o700)
         def git(work,secret,*arguments,denied=False):
@@ -312,7 +312,7 @@ def main():
             for headers in [{'Origin':browser},{'Cookie':'fixture=owned'}]:git_http(owner_cap['secret'],advertisement,401,headers=headers)
             git_http(owner_cap['secret'],advertisement+'&unknown=1',400)
             git_http(owner_cap['secret'],path+'/info/refs?service=git-receive-pack',401)
-            git_http(owner_cap['secret'],path+'/git-receive-pack',401,payload=b'0000',method='POST')
+            git_http(owner_cap['secret'],path+'/git-receive-pack',401,payload=b'0000',method='POST',headers={'Content-Type':'application/x-git-receive-pack-request'})
             other=native_call(owner['token'],'POST','user/repos',{'name':'other','private':True,'auto_init':True},201)
             git_http(owner_cap['secret'],'/git/'+other['full_name']+'.git/info/refs?service=git-upload-pack',404)
             require(native_call(owner['token'],'GET',base+'/branches/main')['commit']['id']==head,'native_head_changed_by_denied_write')
@@ -346,7 +346,7 @@ def main():
             require(runtime()==initial_runtime and topology()==PROOF['topology'],'final_runtime_topology')
             record(renameReplacement='passed',runtimeUnchanged=True);passed=True
         except Exception as original:
-            record(failedStage=STAGE,originalFailureClass=type(original).__name__,originalValidationFailureCategory=PROOF.get('validationFailureCategory'),originalLastRpcCall=PROOF.get('lastRpcCall'),originalLastNativeCall=PROOF.get('lastNativeCall'))
+            record(failedStage=STAGE,originalFailureClass=type(original).__name__,originalValidationFailureCategory=PROOF.get('validationFailureCategory'),originalLastRpcCall=PROOF.get('lastRpcCall'),originalLastNativeCall=PROOF.get('lastNativeCall'),originalLastGitHttpCall=PROOF.get('lastGitHttpCall'))
             if isinstance(original,ssl.SSLCertVerificationError):record(tlsVerificationCode=original.verify_code)
             raise
         finally:
