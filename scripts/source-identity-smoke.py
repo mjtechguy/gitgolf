@@ -61,6 +61,7 @@ def main():
     parser.add_argument('--screenshots', type=Path)
     parser.add_argument('--cli', type=Path, help='Optional current Golf CLI binary')
     parser.add_argument('--overview', action='store_true', help='Also qualify the integrated repository overview and root sidebar')
+    parser.add_argument('--readable', action='store_true', help='Also qualify readable branch/tag source selection and suffix ambiguity')
     args = parser.parse_args()
     stack = args.stack_root.resolve()
     if not all((stack / item).is_file() for item in ('compose.yaml', '.env', 'web/node_modules/playwright/index.mjs')):
@@ -145,6 +146,14 @@ def main():
         # native contents endpoint guesses branches first; exact source must
         # still read the original object, not this deliberately different head.
         smoke.provider(owner['token'], 'POST', route + '/branches', {'new_branch_name': commit, 'old_branch_name': repo['default_branch']}, 201)
+        if args.readable:
+            # Git forbids feature and feature/topic in ONE refs namespace.
+            # Cross-namespace names exercise real URL-boundary ambiguity.
+            for branch in ('boundary', 'review/topic', 'topic/über%25', 'topic/über%'):
+                smoke.provider(owner['token'], 'POST', route + '/branches', {'new_branch_name': branch, 'old_branch_name': named if branch == 'topic/über%' else repo['default_branch']}, 201)
+            for tag in ('boundary/nested', 'review/topic'):
+                smoke.provider(owner['token'], 'POST', route + '/tags', {'tag_name': tag, 'target': commit}, 201)
+
 
         def rpc(actor, procedure, payload, expected=200, code=None):
             return smoke.rpc(actor['session'], 'RepositoryService/' + procedure, payload, expected=expected, code=code)
@@ -190,6 +199,37 @@ def main():
         resolve('TAG', named, commit)
         resolve('COMMIT', commit, commit)
         resolve('BRANCH', commit, latest)
+        if args.readable:
+            stage = 'exhaustive native suffix selection and ambiguity'
+            def suffix_read(value):
+                out = rpc(reader, 'ResolveRepositorySource', {'repository': key, 'repositoryId': rid, 'suffix': value})
+                assert out['repositoryId'] == rid and out['repository'] == key and out['suffix'] == value
+                return out
+            unique = suffix_read(repo['default_branch'] + '/' + path)
+            assert unique['resolution'] == 'REPOSITORY_SOURCE_RESOLUTION_RESOLVED'
+            assert unique['selection']['kind'] == 'REPOSITORY_SOURCE_REF_KIND_BRANCH' and unique['selection']['name'] == repo['default_branch'] and unique['selection']['commitId'] == latest and unique['path'] == path
+            assert unique['candidates'] == [{'selection': unique['selection'], 'path': path}]
+            def ambiguous(value, expected):
+                out = suffix_read(value)
+                assert out['resolution'] == 'REPOSITORY_SOURCE_RESOLUTION_AMBIGUOUS' and 'selection' not in out and not out.get('path')
+                assert len(out['candidates']) == len(expected)
+                actual = {(candidate['selection']['kind'], candidate['selection']['name'], candidate['path'], candidate['selection']['commitId']) for candidate in out['candidates']}
+                assert actual == {('REPOSITORY_SOURCE_REF_KIND_' + kind, name, target_path, sha) for kind, name, target_path, sha in expected}
+            ambiguous(named + '/' + path, [('BRANCH', named, path, commit), ('TAG', named, path, commit)])
+            ambiguous('review/topic/README.md', [('BRANCH', 'review/topic', 'README.md', latest), ('TAG', 'review/topic', 'README.md', commit)])
+            ambiguous('boundary/nested/' + path, [('BRANCH', 'boundary', 'nested/' + path, latest), ('TAG', 'boundary/nested', path, commit)])
+            unicode_ref = suffix_read('topic/über%25/' + path)
+            assert unicode_ref['resolution'] == 'REPOSITORY_SOURCE_RESOLUTION_RESOLVED' and unicode_ref['selection']['name'] == 'topic/über%25' and unicode_ref['selection']['commitId'] == latest and unicode_ref['path'] == path
+            percent_ref = suffix_read('topic/über%/' + path)
+            assert percent_ref['resolution'] == 'REPOSITORY_SOURCE_RESOLUTION_RESOLVED' and percent_ref['selection']['name'] == 'topic/über%' and percent_ref['selection']['commitId'] == commit and percent_ref['path'] == path
+            rpc(reader, 'ResolveRepositorySource', {'repository': key, 'repositoryId': rid, 'suffix': 'absent-namespace/' + path}, 404)
+            rpc(reader, 'ResolveRepositorySource', {'repository': key, 'repositoryId': rid, 'suffix': '/'.join(['a'] * 33)}, 429)
+            for extra in ({'path': path}, {'selector': {'kind': 'REPOSITORY_SOURCE_REF_KIND_BRANCH', 'name': repo['default_branch']}}):
+                rpc(reader, 'ResolveRepositorySource', {'repository': key, 'repositoryId': rid, 'suffix': repo['default_branch'] + '/' + path, **extra}, 400)
+            rpc(reader, 'ResolveRepositorySource', {'repository': key, 'repositoryId': str(repo['id'] + 1000000), 'suffix': repo['default_branch'] + '/' + path}, 400, 'failed_precondition')
+            rpc(outsider, 'ResolveRepositorySource', {'repository': key, 'repositoryId': rid, 'suffix': repo['default_branch'] + '/' + path}, 404)
+            print('PASS: supported-native exhaustive suffix namespaces, same/different-SHA and independent-path ambiguity, literal Unicode/% refs, bounds and wrong-ID/private denial', flush=True)
+
         exact = {'repository': key, 'repositoryId': rid, 'ref': commit, 'path': path}
         source = rpc(reader, 'GetContents', exact)
         blob = hashlib.sha1(('blob ' + str(len(text.encode())) + '\0').encode() + text.encode()).hexdigest()
@@ -229,7 +269,7 @@ def main():
             assert data['repositoryId'] == rid and data['commitId'] == commit and data['path'] == path and data['file']['content'] == text
             print('PASS: current CLI explicit slash-tag selection and exact source identity', flush=True)
         stage = 'actual served exact source browser'
-        config = {'golf': smoke.GOLF, 'gitea': smoke.GITEA, 'email': reader['email'], 'password': reader['password'], 'user': reader['name'], 'ownerToken': owner['token'], 'repository': full, 'repositoryId': rid, 'commit': commit, 'latest': latest, 'path': path, 'text': text, 'screenshots': str(screens), 'runtime': baseline, 'overview': args.overview}
+        config = {'golf': smoke.GOLF, 'gitea': smoke.GITEA, 'email': reader['email'], 'password': reader['password'], 'user': reader['name'], 'ownerToken': owner['token'], 'repository': full, 'repositoryId': rid, 'commit': commit, 'latest': latest, 'path': path, 'text': text, 'screenshots': str(screens), 'runtime': baseline, 'overview': args.overview, 'readable': args.readable, 'defaultBranch': repo['default_branch']}
         result = subprocess.run(['node', '--input-type=module', '-e', BROWSER], cwd=stack, input=json.dumps(config), capture_output=True, text=True, timeout=150)
         if result.returncode:
             for line in result.stderr.splitlines():
