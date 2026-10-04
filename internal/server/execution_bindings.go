@@ -17,25 +17,60 @@ import (
 )
 
 type executionReference struct {
-	ID      string `json:"id"`
-	Version string `json:"version"`
+	ID             string `json:"id"`
+	Version        string `json:"version"`
+	Scope          string `json:"scope,omitempty"`
+	OrganizationID string `json:"organizationId,omitempty"`
 }
 
 func executionReferences(values []*golfv1.RepositoryExecutionValueReference) ([]executionReference, error) {
 	if len(values) < 1 || len(values) > 64 {
-		return nil, invalid("Select one to64 distinct immutable value versions.")
+		return nil, invalid("Select one to 64 distinct immutable value versions.")
 	}
 	seen := map[string]bool{}
 	out := make([]executionReference, 0, len(values))
 	for _, v := range values {
-		if v == nil || !creationKey.MatchString(v.Id) || seen[v.Id] {
+		if v == nil || !creationKey.MatchString(v.Id) {
 			return nil, invalid("Select distinct canonical value IDs.")
 		}
 		if _, e := executionNumber(v.Version, false); e != nil {
 			return nil, e
 		}
-		seen[v.Id] = true
-		out = append(out, executionReference{v.Id, v.Version})
+		ref := executionReference{ID: v.Id, Version: v.Version}
+		switch v.Scope {
+		case golfv1.ExecutionValueScope_EXECUTION_VALUE_SCOPE_UNSPECIFIED:
+			if v.OrganizationId != "" {
+				return nil, invalid("Repository values cannot select an organization scope.")
+			}
+		case golfv1.ExecutionValueScope_EXECUTION_VALUE_SCOPE_REPOSITORY:
+			if v.OrganizationId != "" {
+				return nil, invalid("Repository values cannot select an organization scope.")
+			}
+			ref.Scope = "repository"
+		case golfv1.ExecutionValueScope_EXECUTION_VALUE_SCOPE_ORGANIZATION:
+			if _, e := discussionID(v.OrganizationId); e != nil {
+				return nil, e
+			}
+			ref.Scope = "organization"
+			ref.OrganizationID = v.OrganizationId
+		default:
+			return nil, invalid("Select a supported explicit execution value scope.")
+		}
+		scope := ref.Scope
+		if scope == "" {
+			scope = "repository"
+		}
+		identity := scope + "/" + ref.OrganizationID + "/" + ref.ID
+		if seen[identity] {
+			return nil, invalid("Select distinct scoped immutable value IDs.")
+		}
+		seen[identity] = true
+		out = append(out, ref)
+	}
+	// jsonb adds whitespace around separators; reserve its worst-case overhead.
+	encoded, _ := json.Marshal(out)
+	if len(encoded)+8*len(out) > 8192 {
+		return nil, invalid("Selected value references exceed their retained metadata bound.")
 	}
 	return out, nil
 }
@@ -50,6 +85,7 @@ type executionBindingRecord struct {
 	expires                                         time.Time
 	approverUser, approverNative                    int64
 	session                                         []byte
+	organizations                                   []organizationExecutionApproval
 }
 
 const executionBindingColumns = `b.id::text,b.version,b.deleted,b.created_at,b.updated_at,v.workflow_path,v.commit_id,v.blob_id,v.source_sha256,v.engine_catalog,v.event,v.event_ref,v.value_refs,v.expires_at,v.approver_user_id,v.approver_native_id,v.approval_session_hash`
@@ -70,7 +106,15 @@ func wireExecutionBinding(b executionBindingRecord) *golfv1.RepositoryExecutionB
 	}
 	out := &golfv1.RepositoryExecutionBinding{Id: b.id, Version: strconv.FormatInt(b.version, 10), Deleted: b.deleted, CreatedAt: b.created.UTC().Format(time.RFC3339Nano), UpdatedAt: b.updated.UTC().Format(time.RFC3339Nano), WorkflowPath: b.path, CommitId: b.commit, WorkflowBlobId: b.blob, SourceSha256: b.source, EngineCatalog: b.catalog, Event: event, EventRef: b.ref, ExpiresAt: b.expires.UTC().Format(time.RFC3339Nano), ApprovalState: "requires_current_authority"}
 	for _, r := range b.values {
-		out.Values = append(out.Values, &golfv1.RepositoryExecutionValueReference{Id: r.ID, Version: r.Version})
+		v := &golfv1.RepositoryExecutionValueReference{Id: r.ID, Version: r.Version}
+		if r.Scope == "repository" {
+			v.Scope = golfv1.ExecutionValueScope_EXECUTION_VALUE_SCOPE_REPOSITORY
+		}
+		if r.Scope == "organization" {
+			v.Scope = golfv1.ExecutionValueScope_EXECUTION_VALUE_SCOPE_ORGANIZATION
+			v.OrganizationId = r.OrganizationID
+		}
+		out.Values = append(out.Values, v)
 	}
 	return out
 }
@@ -157,7 +201,7 @@ func (s *Server) SaveRepositoryExecutionBinding(ctx context.Context, req *connec
 	}
 	expiry, e := time.Parse(time.RFC3339Nano, m.ExpiresAt)
 	if e != nil || !expiry.After(time.Now().Add(time.Minute)) || expiry.After(time.Now().Add(30*24*time.Hour)) {
-		return nil, executionMutationRPCError(invalid("Select an approval expiry between one minute and30 days."), nil)
+		return nil, executionMutationRPCError(invalid("Select an approval expiry between one minute and 30 days."), nil)
 	}
 	// Native reads/planning precede all SQL locks. They cannot be made atomic
 	// with native permission/ref edits; final native authority is independently read.
@@ -178,7 +222,7 @@ func (s *Server) SaveRepositoryExecutionBinding(ctx context.Context, req *connec
 		ID, Version, Broker, Path, Commit, Event, Ref, Expires string
 		Values                                                 []executionReference
 	}{m.Id, m.ExpectedVersion, m.ExpectedBrokerRevision, m.WorkflowPath, m.CommitId, m.Event.String(), m.EventRef, m.ExpiresAt, values}
-	result, e := s.executionMutation(ctx, req.Header(), executionMutation{m.Target, m.Id, m.OperationId, "save_binding", m.ExpectedVersion, m.ExpectedBrokerRevision, metadata, ""}, func(tx *sql.Tx, actor database.LockManagedSessionRow, hash []byte, t executionTarget, version int64) error {
+	result, e := s.executionMutation(ctx, req.Header(), executionMutation{m.Target, m.Id, m.OperationId, "save_binding", m.ExpectedVersion, m.ExpectedBrokerRevision, metadata, "", values}, func(tx *sql.Tx, actor database.LockManagedSessionRow, hash []byte, t executionTarget, version int64) error {
 		if !expiry.Before(actor.ExpiresAt) || !expiry.After(time.Now()) {
 			return invalid("Source approval must expire before the approving session.")
 		}
@@ -198,15 +242,16 @@ func (s *Server) SaveRepositoryExecutionBinding(ctx context.Context, req *connec
 			return invalid("Source approval retention quota reached.")
 		}
 		total := 0
+		namesSeen := map[string]bool{}
 		for _, ref := range values {
-			v, _ := strconv.ParseInt(ref.Version, 10, 64)
-			r, value, e := s.openExecutionValue(ctx, tx, t, ref.ID, v)
+			name, _, value, e := s.openExecutionReference(ctx, tx, t, ref)
 			if e != nil {
 				return e
 			}
-			if r.deleted || r.version != v {
-				return errExecutionValueConflict
+			if namesSeen[name] {
+				return errExecutionApproval
 			}
+			namesSeen[name] = true
 			total += len(value)
 		}
 		if total > runner.MaxExecutionEnvironmentBytes {
@@ -241,7 +286,7 @@ func (s *Server) DeleteRepositoryExecutionBinding(ctx context.Context, req *conn
 	defer cancel()
 	m := req.Msg
 	metadata := struct{ ID, Version, Broker string }{m.Id, m.ExpectedVersion, m.ExpectedBrokerRevision}
-	result, e := s.executionMutation(ctx, req.Header(), executionMutation{m.Target, m.Id, m.OperationId, "delete_binding", m.ExpectedVersion, m.ExpectedBrokerRevision, metadata, ""}, func(tx *sql.Tx, _ database.LockManagedSessionRow, _ []byte, t executionTarget, version int64) error {
+	result, e := s.executionMutation(ctx, req.Header(), executionMutation{m.Target, m.Id, m.OperationId, "delete_binding", m.ExpectedVersion, m.ExpectedBrokerRevision, metadata, "", nil}, func(tx *sql.Tx, _ database.LockManagedSessionRow, _ []byte, t executionTarget, version int64) error {
 		r, e := tx.ExecContext(ctx, `UPDATE golf_execution_bindings SET version=version+1,deleted=true,updated_at=clock_timestamp() WHERE id=$1 AND forge_url=$2 AND repository_id=$3 AND owner_id=$4 AND version=$5 AND NOT deleted`, m.Id, s.config.GiteaURL, t.repo, t.owner, version)
 		if e != nil {
 			return errStorageUnavailable

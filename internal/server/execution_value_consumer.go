@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
@@ -16,6 +17,14 @@ import (
 func (s *Server) executionApprovalAuthority(ctx context.Context, run workflowRunRecord, b *executionBindingRecord) error {
 	if b == nil {
 		return nil
+	}
+	if e := validateOrganizationExecutionApprovals(b); e != nil {
+		return e
+	}
+	for i := range b.organizations {
+		if e := s.organizationExecutionApprovalAuthority(ctx, run, &b.organizations[i]); e != nil {
+			return e
+		}
 	}
 	token, e := s.sessionCredentialHash(ctx, b.session)
 	if e != nil {
@@ -101,6 +110,9 @@ func (s *Server) executionApprovalForSource(ctx context.Context, run workflowRun
 	if selected == nil {
 		return nil, errExecutionApproval
 	}
+	if e = loadOrganizationExecutionApprovals(ctx, s.db, run, selected); e != nil {
+		return nil, e
+	}
 	if e = s.executionApprovalAuthority(ctx, run, selected); e != nil {
 		return nil, e
 	}
@@ -121,6 +133,9 @@ func storedExecutionRunBinding(ctx context.Context, tx workflowQueryer, run work
 	if e != nil {
 		return nil, errStorageUnavailable
 	}
+	if e = loadOrganizationExecutionApprovals(ctx, tx, run, &b); e != nil {
+		return nil, e
+	}
 	return &b, nil
 }
 
@@ -130,7 +145,7 @@ func lockExecutionApprovalUsers(ctx context.Context, tx *sql.Tx, run workflowRun
 	if b == nil {
 		return nil
 	}
-	rows, e := tx.QueryContext(ctx, `SELECT id FROM golf_users WHERE forge_url=$1 AND id=ANY($2::bigint[]) ORDER BY id FOR UPDATE`, run.ForgeURL, []int64{run.UserID, b.approverUser})
+	rows, e := tx.QueryContext(ctx, `SELECT id FROM golf_users WHERE forge_url=$1 AND id=ANY($2::bigint[]) ORDER BY id FOR UPDATE`, run.ForgeURL, executionRunApprovalUserIDs(run, b))
 	if e != nil {
 		return errStorageUnavailable
 	}
@@ -140,10 +155,7 @@ func lockExecutionApprovalUsers(ctx context.Context, tx *sql.Tx, run workflowRun
 	}
 	e = rows.Err()
 	rows.Close()
-	expected := 2
-	if run.UserID == b.approverUser {
-		expected = 1
-	}
+	expected := len(executionRunApprovalUserIDs(run, b))
 	if e != nil {
 		return errStorageUnavailable
 	}
@@ -156,8 +168,16 @@ func (s *Server) executionBrokerFence(ctx context.Context, tx *sql.Tx, run workf
 	if b == nil {
 		return nil, nil
 	}
+	if e := validateOrganizationExecutionApprovals(b); e != nil {
+		return nil, e
+	}
 	if e := executionLifecycleGate(ctx, tx, run.ForgeURL, run.RepositoryID); e != nil {
 		return nil, e
+	}
+	for _, a := range b.organizations {
+		if e := s.lockOrganizationExecutionApproval(ctx, tx, run, a); e != nil {
+			return nil, e
+		}
 	}
 	var revision int64
 	if e := tx.QueryRowContext(ctx, `SELECT revision FROM golf_execution_value_brokers WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3 FOR SHARE`, run.ForgeURL, run.RepositoryID, run.OwnerID).Scan(&revision); e != nil {
@@ -191,21 +211,20 @@ func (s *Server) executionBrokerFence(ctx context.Context, tx *sql.Tx, run workf
 	env := &runner.ExecutionEnvironment{Variables: map[string]string{}, Secrets: map[string]string{}}
 	t := executionTarget{repo: run.RepositoryID, owner: run.OwnerID}
 	for _, ref := range b.values {
-		version, e := executionNumber(ref.Version, false)
-		if e != nil {
-			return nil, errCredentialUnavailable
-		}
-		r, value, e := s.openExecutionValue(ctx, tx, t, ref.ID, version)
+		name, kind, value, e := s.openExecutionReference(ctx, tx, t, ref)
 		if e != nil {
 			return nil, e
 		}
-		if r.deleted || r.version != version {
+		if _, ok := env.Secrets[name]; ok {
 			return nil, errExecutionApproval
 		}
-		if r.kind == "secret" {
-			env.Secrets[r.name] = value
+		if _, ok := env.Variables[name]; ok {
+			return nil, errExecutionApproval
+		}
+		if kind == "secret" {
+			env.Secrets[name] = value
 		} else {
-			env.Variables[r.name] = value
+			env.Variables[name] = value
 		}
 	}
 	if env.Validate() != nil {
@@ -220,6 +239,11 @@ func (s *Server) executionBrokerFence(ctx context.Context, tx *sql.Tx, run workf
 func lockExecutionAdmissionBroker(ctx context.Context, tx *sql.Tx, run workflowRunRecord) error {
 	if e := executionLifecycleGate(ctx, tx, run.ForgeURL, run.RepositoryID); e != nil {
 		return e
+	}
+	if run.OrganizationOwned {
+		if _, e := lockOrganizationExecutionBroker(ctx, tx, run.ForgeURL, run.OwnerID, false); e != nil {
+			return e
+		}
 	}
 	if e := lockExecutionBrokerAbsence(ctx, tx, run.ForgeURL, run.RepositoryID, run.OwnerID); e != nil {
 		return e
@@ -441,4 +465,17 @@ func observeExecutionOutput(ctx context.Context, tx workflowQueryer, runID strin
 		return 0, "", "", errStorageUnavailable
 	}
 	return golfv1.WorkflowOutputState_WORKFLOW_OUTPUT_STATE_WITHHELD, id, strconv.FormatInt(version, 10), nil
+}
+
+// One sorted identity lock order covers the actor and both approving scopes.
+func executionRunApprovalUserIDs(run workflowRunRecord, b *executionBindingRecord) []int64 {
+	ids := append([]int64{run.UserID}, executionApprovalUserIDs(b)...)
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	out := []int64{}
+	for _, id := range ids {
+		if len(out) == 0 || out[len(out)-1] != id {
+			out = append(out, id)
+		}
+	}
+	return out
 }

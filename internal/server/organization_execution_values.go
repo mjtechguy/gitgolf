@@ -56,7 +56,7 @@ func parseOrganizationExecutionTarget(t *golfv1.OrganizationExecutionValueTarget
 }
 func organizationExecutionSelections(values []*golfv1.OrganizationExecutionRepository, org string) ([]organizationExecutionSelection, error) {
 	if len(values) > organizationExecutionSelectedLimit {
-		return nil, invalid("Select at most20 exact organization repositories.")
+		return nil, invalid("Select at most 20 exact organization repositories.")
 	}
 	out := make([]organizationExecutionSelection, 0, len(values))
 	ids := map[string]bool{}
@@ -409,7 +409,7 @@ func (s *Server) SaveOrganizationExecutionValue(ctx context.Context, req *connec
 	}{m.Id, m.ExpectedVersion, m.ExpectedBrokerRevision, m.Name, kind, m.ExpiresAt, m.Value != nil, selected}
 	result, e := s.mutateOrganizationExecutionValue(ctx, req.Header(), organizationExecutionMutation{m.Target, m.Id, m.OperationId, "save_value", m.ExpectedVersion, m.ExpectedBrokerRevision, metadata, m.Value, selected}, func(tx *sql.Tx, actor database.LockManagedSessionRow, hash []byte, t organizationExecutionTarget, version int64, approver User) error {
 		if !expiry.After(time.Now().Add(time.Minute)) || expiry.After(time.Now().Add(30*24*time.Hour)) || !expiry.Before(actor.ExpiresAt) {
-			return invalid("Share expiry must be between one minute and30 days and before the approving session expires.")
+			return invalid("Share expiry must be between one minute and 30 days and before the approving session expires.")
 		}
 		var current int64
 		var name, storedKind string
@@ -420,6 +420,15 @@ func (s *Server) SaveOrganizationExecutionValue(ctx context.Context, req *connec
 		}
 		if e != nil && !errors.Is(e, sql.ErrNoRows) {
 			return errStorageUnavailable
+		}
+		for _, selectedRepo := range selected {
+			var conflict bool
+			if e = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_execution_values WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3 AND name=$4 AND kind<>$5 AND NOT deleted)`, s.config.GiteaURL, selectedRepo.ID, t.id, m.Name, kind).Scan(&conflict); e != nil {
+				return errStorageUnavailable
+			}
+			if conflict {
+				return invalid("A selected repository has a different kind for this name.")
+			}
 		}
 		value := ""
 		if m.Value != nil {
@@ -458,7 +467,7 @@ func (s *Server) SaveOrganizationExecutionValue(ctx context.Context, req *connec
 		if _, e = tx.ExecContext(ctx, `INSERT INTO golf_organization_execution_versions(id,version,value_bytes,selected_repositories,approver_user_id,approver_native_id,approval_session_hash,expires_at,encrypted_content,content_binding,credential_key_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, m.Id, version+1, len(value), policy, actor.UserID, approver.ID, hash, expiry, cipher, binding, key); e != nil {
 			return errStorageUnavailable
 		}
-		return fenceExecutionValueRuns(ctx, tx, s.config.GiteaURL, m.Id)
+		return fenceOrganizationExecutionValueRuns(ctx, tx, s.config.GiteaURL, t.id, m.Id)
 	})
 	if e != nil {
 		return nil, executionMutationRPCError(e, nil)
@@ -479,7 +488,7 @@ func (s *Server) DeleteOrganizationExecutionValue(ctx context.Context, req *conn
 		if n != 1 {
 			return errExecutionValueConflict
 		}
-		return fenceExecutionValueRuns(ctx, tx, s.config.GiteaURL, m.Id)
+		return fenceOrganizationExecutionValueRuns(ctx, tx, s.config.GiteaURL, t.id, m.Id)
 	})
 	if e != nil {
 		return nil, executionMutationRPCError(e, nil)

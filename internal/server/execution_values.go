@@ -221,6 +221,14 @@ func (s *Server) ListRepositoryExecutionValues(ctx context.Context, req *connect
 	out := &golfv1.ListRepositoryExecutionValuesResponse{Target: req.Msg.Target, BrokerRevision: "0", ConsumerProfile: executionConsumerProfile, MaximumValues: 64, MaximumBindings: 20}
 	e = s.withExecutionAdmin(ctx, req.Header(), req.Msg.Target, func(token forgeCredential, u User, a *golfv1.RepositoryAccess) error {
 		return s.workflowTransaction(ctx, s.cookieValue(req.Header()), u.ID, func(tx *sql.Tx, _ database.LockManagedSessionRow, _ []byte) error {
+			if a.OrganizationOwned {
+				if _, e := lockOrganizationExecutionBroker(ctx, tx, s.config.GiteaURL, t.owner, false); e != nil {
+					return e
+				}
+			}
+			if e := lockExecutionBrokerAbsence(ctx, tx, s.config.GiteaURL, t.repo, t.owner); e != nil {
+				return e
+			}
 			// Inventory may remain visible to its current administrator while lifecycle
 			// blocks execution. An inventory read does not acquire execution authority.
 			e := tx.QueryRowContext(ctx, `SELECT revision FROM golf_execution_value_brokers WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3`, s.config.GiteaURL, t.repo, t.owner).Scan(&out.BrokerRevision)
@@ -249,7 +257,8 @@ func (s *Server) ListRepositoryExecutionValues(ctx context.Context, req *connect
 				return e
 			}
 			out.Bindings = bindings
-			return nil
+			out.InheritedValues, e = listInheritedExecutionValues(ctx, tx, s.config.GiteaURL, t, a.OrganizationOwned, t.key.Owner)
+			return e
 		})
 	})
 	if e != nil {
@@ -263,6 +272,7 @@ type executionMutation struct {
 	id, operation, action, expectedVersion, expectedBroker string
 	metadata                                               any
 	plain                                                  string
+	organizationReferences                                 []executionReference
 }
 
 func executionMutationNumbers(m executionMutation) (int64, int64, error) {
@@ -290,10 +300,34 @@ func (s *Server) executionMutation(ctx context.Context, header http.Header, m ex
 		return nil, invalid("Execution operation metadata exceeds its bound.")
 	}
 	out := &golfv1.RepositoryExecutionValueMutationResponse{Target: m.target, OperationId: m.operation, Action: m.action, ItemId: m.id}
-	e = s.withExecutionAdmin(ctx, header, m.target, func(_ forgeCredential, user User, _ *golfv1.RepositoryAccess) error {
-		return s.workflowTransaction(ctx, s.cookieValue(header), user.ID, func(tx *sql.Tx, actor database.LockManagedSessionRow, hash []byte) error {
+	e = s.withExecutionAdmin(ctx, header, m.target, func(_ forgeCredential, user User, access *golfv1.RepositoryAccess) error {
+		run := workflowRunRecord{ForgeURL: s.config.GiteaURL, RepositoryID: t.repo, OwnerID: t.owner, OrganizationOwned: access.OrganizationOwned}
+		prepared := &executionBindingRecord{values: m.organizationReferences}
+		if e := loadOrganizationExecutionApprovals(ctx, s.db, run, prepared); e != nil {
+			return e
+		}
+		for i := range prepared.organizations {
+			if e := s.organizationExecutionApprovalAuthority(ctx, run, &prepared.organizations[i]); e != nil {
+				return e
+			}
+		}
+		users := []int64{}
+		for _, a := range prepared.organizations {
+			users = append(users, a.record.approver)
+		}
+		resultErr := s.workflowTransaction(ctx, s.cookieValue(header), user.ID, func(tx *sql.Tx, actor database.LockManagedSessionRow, hash []byte) error {
 			if e := executionLifecycleGate(ctx, tx, s.config.GiteaURL, t.repo); e != nil {
 				return e
+			}
+			if run.OrganizationOwned {
+				if _, e := lockOrganizationExecutionBroker(ctx, tx, run.ForgeURL, run.OwnerID, false); e != nil {
+					return e
+				}
+			}
+			for _, a := range prepared.organizations {
+				if e := s.lockOrganizationExecutionApproval(ctx, tx, run, a); e != nil {
+					return e
+				}
 			}
 			observed, e := lockExecutionBroker(ctx, tx, s.config.GiteaURL, t, true)
 			if e != nil {
@@ -345,7 +379,16 @@ func (s *Server) executionMutation(ctx context.Context, header http.Header, m ex
 			out.AcceptedBrokerRevision = strconv.FormatInt(revision+1, 10)
 			out.CommittedAt = at.UTC().Format(time.RFC3339Nano)
 			return nil
-		})
+		}, users...)
+		if resultErr != nil {
+			return resultErr
+		}
+		for i := range prepared.organizations {
+			if e := s.organizationExecutionApprovalAuthority(ctx, run, &prepared.organizations[i]); e != nil {
+				return e
+			}
+		}
+		return nil
 	})
 	return out, e
 }
@@ -358,7 +401,7 @@ func (s *Server) SaveRepositoryExecutionValue(ctx context.Context, req *connect.
 		return nil, executionMutationRPCError(invalid("Provide a safe uppercase name and a supported bounded single-line value."), nil)
 	}
 	metadata := struct{ ID, Version, Broker, Name, Kind string }{m.Id, m.ExpectedVersion, m.ExpectedBrokerRevision, m.Name, kind}
-	result, e := s.executionMutation(ctx, req.Header(), executionMutation{m.Target, m.Id, m.OperationId, "save_value", m.ExpectedVersion, m.ExpectedBrokerRevision, metadata, m.Value}, func(tx *sql.Tx, _ database.LockManagedSessionRow, _ []byte, t executionTarget, version int64) error {
+	result, e := s.executionMutation(ctx, req.Header(), executionMutation{m.Target, m.Id, m.OperationId, "save_value", m.ExpectedVersion, m.ExpectedBrokerRevision, metadata, m.Value, nil}, func(tx *sql.Tx, _ database.LockManagedSessionRow, _ []byte, t executionTarget, version int64) error {
 		r, e := scanExecutionValue(tx.QueryRowContext(ctx, `SELECT `+executionValueColumns+` FROM golf_execution_values WHERE id=$1 AND forge_url=$2 AND repository_id=$3 AND owner_id=$4 FOR UPDATE`, m.Id, s.config.GiteaURL, t.repo, t.owner))
 		if e == nil && (r.version != version || r.name != m.Name || r.kind != kind) {
 			return errExecutionValueConflict
@@ -368,6 +411,13 @@ func (s *Server) SaveRepositoryExecutionValue(ctx context.Context, req *connect.
 		}
 		if e != nil && !errors.Is(e, sql.ErrNoRows) {
 			return errStorageUnavailable
+		}
+		var crossKind bool
+		if e = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_organization_execution_values v JOIN golf_organization_execution_versions h ON h.id=v.id AND h.version=v.version WHERE v.forge_url=$1 AND v.organization_id=$2 AND v.name=$3 AND v.kind<>$4 AND NOT v.deleted AND EXISTS(SELECT 1 FROM jsonb_array_elements(h.selected_repositories) x WHERE x->>'id'=$5))`, s.config.GiteaURL, t.owner, m.Name, kind, strconv.FormatInt(t.repo, 10)).Scan(&crossKind); e != nil {
+			return errStorageUnavailable
+		}
+		if crossKind {
+			return invalid("An inherited name has a different value kind; remove that selection before creating an override.")
 		}
 		var names, history, activeBytes int
 		if e = tx.QueryRowContext(ctx, `SELECT count(*),coalesce(sum(value_bytes) FILTER(WHERE NOT deleted AND id<>$4),0),(SELECT count(*) FROM golf_execution_value_versions vv JOIN golf_execution_values v ON v.id=vv.id WHERE v.forge_url=$1 AND v.repository_id=$2 AND v.owner_id=$3) FROM golf_execution_values WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3`, s.config.GiteaURL, t.repo, t.owner, m.Id).Scan(&names, &activeBytes, &history); e != nil {
@@ -392,7 +442,10 @@ func (s *Server) SaveRepositoryExecutionValue(ctx context.Context, req *connect.
 		if _, e = tx.ExecContext(ctx, `INSERT INTO golf_execution_value_versions(id,version,value_bytes,encrypted_content,content_binding,credential_key_id) VALUES($1,$2,$3,$4,$5,$6)`, m.Id, version+1, len(m.Value), encrypted, binding, key); e != nil {
 			return errStorageUnavailable
 		}
-		return fenceExecutionValueRuns(ctx, tx, s.config.GiteaURL, m.Id)
+		if e = fenceExecutionValueRuns(ctx, tx, s.config.GiteaURL, m.Id); e != nil {
+			return e
+		}
+		return fenceInheritedExecutionName(ctx, tx, s.config.GiteaURL, t, m.Name)
 	})
 	if e != nil {
 		return nil, executionMutationRPCError(e, result)
@@ -404,7 +457,7 @@ func (s *Server) DeleteRepositoryExecutionValue(ctx context.Context, req *connec
 	defer cancel()
 	m := req.Msg
 	metadata := struct{ ID, Version, Broker string }{m.Id, m.ExpectedVersion, m.ExpectedBrokerRevision}
-	result, e := s.executionMutation(ctx, req.Header(), executionMutation{m.Target, m.Id, m.OperationId, "delete_value", m.ExpectedVersion, m.ExpectedBrokerRevision, metadata, ""}, func(tx *sql.Tx, _ database.LockManagedSessionRow, _ []byte, t executionTarget, version int64) error {
+	result, e := s.executionMutation(ctx, req.Header(), executionMutation{m.Target, m.Id, m.OperationId, "delete_value", m.ExpectedVersion, m.ExpectedBrokerRevision, metadata, "", nil}, func(tx *sql.Tx, _ database.LockManagedSessionRow, _ []byte, t executionTarget, version int64) error {
 		// Deletion consumes a metadata version but stores no second plaintext/cipher.
 		r, e := tx.ExecContext(ctx, `UPDATE golf_execution_values SET version=version+1,deleted=true,updated_at=clock_timestamp() WHERE id=$1 AND forge_url=$2 AND repository_id=$3 AND owner_id=$4 AND version=$5 AND NOT deleted`, m.Id, s.config.GiteaURL, t.repo, t.owner, version)
 		if e != nil {
@@ -422,7 +475,7 @@ func (s *Server) DeleteRepositoryExecutionValue(ctx context.Context, req *connec
 	return connect.NewResponse(&golfv1.DeleteRepositoryExecutionValueResponse{Operation: result}), nil
 }
 func fenceExecutionValueRuns(ctx context.Context, tx *sql.Tx, forge, id string) error {
-	_, e := tx.ExecContext(ctx, `UPDATE golf_workflow_runs r SET state='cancelled',version=r.version+1,finished_at=clock_timestamp(),reason='Execution value approval or version changed.',lease_token_hash=NULL FROM golf_workflow_execution_bindings rb JOIN golf_execution_binding_versions b ON b.id=rb.binding_id AND b.version=rb.binding_version WHERE r.id=rb.run_id AND r.forge_url=$1 AND r.state IN ('queued','running') AND EXISTS(SELECT 1 FROM jsonb_array_elements(b.value_refs) x WHERE x->>'id'=$2)`, forge, id)
+	_, e := tx.ExecContext(ctx, `UPDATE golf_workflow_runs r SET state='cancelled',version=r.version+1,finished_at=clock_timestamp(),reason='Execution value approval or version changed.',lease_token_hash=NULL FROM golf_workflow_execution_bindings rb JOIN golf_execution_binding_versions b ON b.id=rb.binding_id AND b.version=rb.binding_version WHERE r.id=rb.run_id AND r.forge_url=$1 AND r.state IN ('queued','running') AND EXISTS(SELECT 1 FROM jsonb_array_elements(b.value_refs) x WHERE x->>'id'=$2 AND coalesce(x->>'scope','repository') IN ('repository','') AND coalesce(x->>'organizationId','')='')`, forge, id)
 	if e != nil {
 		return errStorageUnavailable
 	}

@@ -595,7 +595,7 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 			return errStorageUnavailable
 		}
 		sum := sha256.Sum256(source)
-		admissionRun := workflowRunRecord{ID: id, ForgeURL: s.config.GiteaURL, RepositoryID: repoID, OwnerID: ownerID, RepositoryOwner: key.Owner, RepositoryName: key.Name, Origin: "manual", EventRef: m.Ref, CommitID: commit, BlobID: blob, WorkflowPath: m.WorkflowPath, SourceSHA256: hex.EncodeToString(sum[:]), EngineCatalog: workflowExecutionCatalog}
+		admissionRun := workflowRunRecord{OrganizationOwned: access.OrganizationOwned, ID: id, ForgeURL: s.config.GiteaURL, RepositoryID: repoID, OwnerID: ownerID, RepositoryOwner: key.Owner, RepositoryName: key.Name, Origin: "manual", EventRef: m.Ref, CommitID: commit, BlobID: blob, WorkflowPath: m.WorkflowPath, SourceSHA256: hex.EncodeToString(sum[:]), EngineCatalog: workflowExecutionCatalog}
 		if plan.Actions != nil {
 			admissionRun.EngineCatalog = runner.ActionsCatalog
 		}
@@ -605,7 +605,7 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 		}
 		var approvalUsers []int64
 		if approval != nil {
-			approvalUsers = []int64{approval.approverUser}
+			approvalUsers = executionApprovalUserIDs(approval)
 		}
 		return s.workflowTransaction(ctx, s.cookieValue(req.Header()), user.ID, func(tx *sql.Tx, actor database.LockManagedSessionRow, hash []byte) error {
 			if e := executionLifecycleGate(ctx, tx, s.config.GiteaURL, repoID); e != nil {

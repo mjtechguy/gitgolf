@@ -52,7 +52,11 @@ func newOrganizationExecutionFixture(t *testing.T) *organizationExecutionFixture
 			json.NewEncoder(w).Encode(forgeOrganization{ID: id, Name: "club", Visibility: "private"})
 		case "/api/v1/users/alice/orgs/club/permissions":
 			json.NewEncoder(w).Encode(map[string]bool{"is_owner": f.owner.Load()})
-		case "/api/v1/repos/club/example":
+		case "/api/v1/users/search":
+			json.NewEncoder(w).Encode(map[string]any{"ok": true, "data": []User{}})
+		case "/api/v1/repos/club/example/collaborators/alice/permission":
+			json.NewEncoder(w).Encode(map[string]any{"permission": "owner", "user": User{ID: 42, Login: "alice"}})
+		case "/api/v1/repos/club/example", "/api/v1/repositories/9007199254740993":
 			row := settingsFixtureRow()
 			row.Owner = &User{ID: 73, Login: "club"}
 			row.FullName = "club/example"
@@ -62,7 +66,11 @@ func newOrganizationExecutionFixture(t *testing.T) *organizationExecutionFixture
 			if f.foreignRepo.Load() {
 				row.Owner = &User{ID: 75, Login: "elsewhere"}
 			}
-			json.NewEncoder(w).Encode(row)
+			data, _ := json.Marshal(row)
+			var object map[string]any
+			json.Unmarshal(data, &object)
+			object["fork"] = false
+			json.NewEncoder(w).Encode(object)
 		default:
 			w.WriteHeader(404)
 		}
@@ -138,6 +146,23 @@ func TestOrganizationExecutionCRUDReceiptAndPrivacyPostgres(t *testing.T) {
 	}
 	if _, e = f.s.GetOrganizationExecutionVariable(f.ctx, organizationExecutionRequest(f, &golfv1.GetOrganizationExecutionVariableRequest{Target: f.target, Id: id, Version: "1"})); e == nil {
 		t.Fatal("secret revealed as variable")
+	}
+	empty := proto.Clone(m).(*golfv1.SaveOrganizationExecutionValueRequest)
+	blank := ""
+	empty.Value = &blank
+	empty.OperationId = uuid.NewString()
+	empty.ExpectedVersion = "1"
+	empty.ExpectedBrokerRevision = "1"
+	if _, e = f.s.SaveOrganizationExecutionValue(f.ctx, organizationExecutionRequest(f, empty)); e == nil {
+		t.Fatal("explicit empty replacement was treated as omitted unchanged content")
+	}
+	var storedExpiry time.Time
+	if e = f.db.QueryRow(`SELECT expires_at FROM golf_organization_execution_versions WHERE id=$1 AND version=1`, id).Scan(&storedExpiry); e != nil {
+		t.Fatal(e)
+	}
+	parsedExpiry, _ := time.Parse(time.RFC3339Nano, m.ExpiresAt)
+	if !storedExpiry.Equal(parsedExpiry.UTC().Truncate(time.Microsecond)) {
+		t.Fatal("ciphertext expiry differs from normalized stored policy")
 	}
 	policy := proto.Clone(m).(*golfv1.SaveOrganizationExecutionValueRequest)
 	policy.OperationId = uuid.NewString()

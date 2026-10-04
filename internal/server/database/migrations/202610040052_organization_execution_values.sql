@@ -33,6 +33,7 @@ CREATE TABLE golf_organization_execution_operations (
  request_metadata jsonb NOT NULL CHECK(octet_length(request_metadata::text)<=16384),created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
  PRIMARY KEY(forge_url,organization_id,user_id,operation_id),FOREIGN KEY(forge_url,organization_id) REFERENCES golf_organization_execution_brokers
 );
+ALTER TABLE golf_crypto_events ADD COLUMN organization_execution_values_count bigint NOT NULL DEFAULT 0 CHECK(organization_execution_values_count>=0);
 -- +goose StatementBegin
 CREATE FUNCTION golf_organization_execution_identity() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN

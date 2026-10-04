@@ -241,23 +241,24 @@ type GolfCodexConnectionAccess struct {
 }
 
 type GolfCryptoEvent struct {
-	ID                             int64
-	OccurredAt                     time.Time
-	Actor                          string
-	OperationID                    string
-	Action                         string
-	KeyID                          string
-	SessionsCount                  int64
-	OauthAttemptsCount             int64
-	LocalAccountsCount             int64
-	InfrastructureConnectionsCount int64
-	AutomationCredentialsCount     int64
-	ReviewContentsCount            int64
-	ConversationContentsCount      int64
-	WebhookCredentialsCount        int64
-	ExecutionValuesCount           int64
-	QuarantinedOutputsCount        int64
-	NotificationContentsCount      int64
+	ID                               int64
+	OccurredAt                       time.Time
+	Actor                            string
+	OperationID                      string
+	Action                           string
+	KeyID                            string
+	SessionsCount                    int64
+	OauthAttemptsCount               int64
+	LocalAccountsCount               int64
+	InfrastructureConnectionsCount   int64
+	AutomationCredentialsCount       int64
+	ReviewContentsCount              int64
+	ConversationContentsCount        int64
+	WebhookCredentialsCount          int64
+	ExecutionValuesCount             int64
+	QuarantinedOutputsCount          int64
+	NotificationContentsCount        int64
+	OrganizationExecutionValuesCount int64
 }
 
 type GolfEmailAttempt struct {

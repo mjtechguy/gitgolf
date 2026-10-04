@@ -13,25 +13,26 @@ import (
 )
 
 const appendCryptoEvent = `-- name: AppendCryptoEvent :exec
-INSERT INTO golf_crypto_events (operation_id, action, key_id, sessions_count, oauth_attempts_count, local_accounts_count,infrastructure_connections_count,automation_credentials_count,review_contents_count,conversation_contents_count,webhook_credentials_count,notification_contents_count,execution_values_count,quarantined_outputs_count)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+INSERT INTO golf_crypto_events (operation_id, action, key_id, sessions_count, oauth_attempts_count, local_accounts_count,infrastructure_connections_count,automation_credentials_count,review_contents_count,conversation_contents_count,webhook_credentials_count,notification_contents_count,execution_values_count,quarantined_outputs_count,organization_execution_values_count)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 `
 
 type AppendCryptoEventParams struct {
-	OperationID                    string
-	Action                         string
-	KeyID                          string
-	SessionsCount                  int64
-	OauthAttemptsCount             int64
-	LocalAccountsCount             int64
-	InfrastructureConnectionsCount int64
-	AutomationCredentialsCount     int64
-	ReviewContentsCount            int64
-	ConversationContentsCount      int64
-	WebhookCredentialsCount        int64
-	NotificationContentsCount      int64
-	ExecutionValuesCount           int64
-	QuarantinedOutputsCount        int64
+	OperationID                      string
+	Action                           string
+	KeyID                            string
+	SessionsCount                    int64
+	OauthAttemptsCount               int64
+	LocalAccountsCount               int64
+	InfrastructureConnectionsCount   int64
+	AutomationCredentialsCount       int64
+	ReviewContentsCount              int64
+	ConversationContentsCount        int64
+	WebhookCredentialsCount          int64
+	NotificationContentsCount        int64
+	ExecutionValuesCount             int64
+	QuarantinedOutputsCount          int64
+	OrganizationExecutionValuesCount int64
 }
 
 func (q *Queries) AppendCryptoEvent(ctx context.Context, arg AppendCryptoEventParams) error {
@@ -50,6 +51,7 @@ func (q *Queries) AppendCryptoEvent(ctx context.Context, arg AppendCryptoEventPa
 		arg.NotificationContentsCount,
 		arg.ExecutionValuesCount,
 		arg.QuarantinedOutputsCount,
+		arg.OrganizationExecutionValuesCount,
 	)
 	return err
 }
@@ -289,36 +291,38 @@ func (q *Queries) BootstrapLegacyWebhookCredentials(ctx context.Context, arg Boo
 }
 
 const countCredentialKeys = `-- name: CountCredentialKeys :many
-SELECT credential_key_id,sum(sessions)::bigint AS sessions,sum(oauth_attempts)::bigint AS oauth_attempts,sum(local_accounts)::bigint AS local_accounts,sum(infrastructure_connections)::bigint AS infrastructure_connections,sum(automation_credentials)::bigint AS automation_credentials,sum(review_contents)::bigint AS review_contents,sum(conversation_contents)::bigint AS conversation_contents,sum(webhook_credentials)::bigint AS webhook_credentials,sum(notification_contents)::bigint AS notification_contents,sum(execution_values)::bigint AS execution_values,sum(quarantined_outputs)::bigint AS quarantined_outputs
+SELECT credential_key_id,sum(sessions)::bigint AS sessions,sum(oauth_attempts)::bigint AS oauth_attempts,sum(local_accounts)::bigint AS local_accounts,sum(infrastructure_connections)::bigint AS infrastructure_connections,sum(automation_credentials)::bigint AS automation_credentials,sum(review_contents)::bigint AS review_contents,sum(conversation_contents)::bigint AS conversation_contents,sum(webhook_credentials)::bigint AS webhook_credentials,sum(notification_contents)::bigint AS notification_contents,sum(execution_values)::bigint AS execution_values,sum(quarantined_outputs)::bigint AS quarantined_outputs,sum(organization_execution_values)::bigint AS organization_execution_values
 FROM (
- SELECT credential_key_id,count(*) AS sessions,0::bigint AS oauth_attempts,0::bigint AS local_accounts,0::bigint AS infrastructure_connections,0::bigint AS automation_credentials,0::bigint AS review_contents,0::bigint AS conversation_contents,0::bigint AS webhook_credentials,0::bigint AS notification_contents,0::bigint AS execution_values,0::bigint AS quarantined_outputs FROM golf_sessions GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0::bigint,count(*),0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint FROM golf_oauth_attempts GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0::bigint,0::bigint,count(*),0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint FROM golf_local_accounts GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,count(*),0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint FROM golf_infrastructure_connection_versions GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,count(*),0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint FROM golf_automation_credentials GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,count(*),0::bigint,0::bigint,0::bigint,0::bigint,0::bigint FROM golf_review_contents GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,count(*),0::bigint,0::bigint,0::bigint,0::bigint FROM golf_agent_conversation_contents GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,count(*),0::bigint,0::bigint,0::bigint FROM golf_webhook_credentials GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,count(*),0::bigint,0::bigint FROM golf_notification_contents GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,count(*),0::bigint FROM golf_execution_value_versions GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,count(*) FROM golf_workflow_quarantined_outputs GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,count(*),0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint FROM golf_codex_auth GROUP BY credential_key_id
+ SELECT credential_key_id,count(*) AS sessions,0::bigint AS oauth_attempts,0::bigint AS local_accounts,0::bigint AS infrastructure_connections,0::bigint AS automation_credentials,0::bigint AS review_contents,0::bigint AS conversation_contents,0::bigint AS webhook_credentials,0::bigint AS notification_contents,0::bigint AS execution_values,0::bigint AS quarantined_outputs,0::bigint AS organization_execution_values FROM golf_sessions GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0::bigint,count(*),0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint ,0::bigint FROM golf_oauth_attempts GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0::bigint,0::bigint,count(*),0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint ,0::bigint FROM golf_local_accounts GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,count(*),0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint ,0::bigint FROM golf_infrastructure_connection_versions GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,count(*),0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint ,0::bigint FROM golf_automation_credentials GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,count(*),0::bigint,0::bigint,0::bigint,0::bigint,0::bigint ,0::bigint FROM golf_review_contents GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,count(*),0::bigint,0::bigint,0::bigint,0::bigint ,0::bigint FROM golf_agent_conversation_contents GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,count(*),0::bigint,0::bigint,0::bigint ,0::bigint FROM golf_webhook_credentials GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,count(*),0::bigint,0::bigint ,0::bigint FROM golf_notification_contents GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,count(*),0::bigint ,0::bigint FROM golf_execution_value_versions GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,count(*) ,0::bigint FROM golf_workflow_quarantined_outputs GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,count(*),0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint ,0::bigint FROM golf_codex_auth GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,count(*) FROM golf_organization_execution_versions GROUP BY credential_key_id
 ) counts GROUP BY credential_key_id ORDER BY credential_key_id
 `
 
 type CountCredentialKeysRow struct {
-	CredentialKeyID           string
-	Sessions                  int64
-	OauthAttempts             int64
-	LocalAccounts             int64
-	InfrastructureConnections int64
-	AutomationCredentials     int64
-	ReviewContents            int64
-	ConversationContents      int64
-	WebhookCredentials        int64
-	NotificationContents      int64
-	ExecutionValues           int64
-	QuarantinedOutputs        int64
+	CredentialKeyID             string
+	Sessions                    int64
+	OauthAttempts               int64
+	LocalAccounts               int64
+	InfrastructureConnections   int64
+	AutomationCredentials       int64
+	ReviewContents              int64
+	ConversationContents        int64
+	WebhookCredentials          int64
+	NotificationContents        int64
+	ExecutionValues             int64
+	QuarantinedOutputs          int64
+	OrganizationExecutionValues int64
 }
 
 func (q *Queries) CountCredentialKeys(ctx context.Context) ([]CountCredentialKeysRow, error) {
@@ -343,6 +347,7 @@ func (q *Queries) CountCredentialKeys(ctx context.Context) ([]CountCredentialKey
 			&i.NotificationContents,
 			&i.ExecutionValues,
 			&i.QuarantinedOutputs,
+			&i.OrganizationExecutionValues,
 		); err != nil {
 			return nil, err
 		}
