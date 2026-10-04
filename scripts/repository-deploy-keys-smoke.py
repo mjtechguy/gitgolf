@@ -31,6 +31,39 @@ HEX = re.compile(r'[0-9a-f]{64}')
 DECIMAL = re.compile(r'[1-9][0-9]{0,18}')
 
 
+def host_pin(value):
+    assert isinstance(value, str) and re.fullmatch(r'SHA256:[A-Za-z0-9+/]{43}', value)
+    raw = base64.b64decode(value[7:]+'=', validate=True)
+    assert len(raw) == 32 and base64.b64encode(raw).decode().rstrip('=') == value[7:]
+    return value
+
+
+def known_host(scan, port, expected=None):
+    assert isinstance(scan, str) and 0 < len(scan) <= 4096 and '\r' not in scan
+    rows = scan.strip().splitlines()
+    assert len(rows) == 1, 'Require exactly one explicit Ed25519 host key'
+    fields = rows[0].split()
+    assert len(fields) == 3 and fields[0] == ('localhost' if port == 22 else '[localhost]:'+str(port))
+    assert fields[1] == 'ssh-ed25519'
+    raw = base64.b64decode(fields[2], validate=True)
+    # SSH wire public-key envelope: algorithm string followed by exactly32 key bytes.
+    assert raw[:19] == b'\x00\x00\x00\x0bssh-ed25519\x00\x00\x00\x20' and len(raw) == 51
+    assert base64.b64encode(raw).decode() == fields[2]
+    fingerprint = 'SHA256:' + base64.b64encode(hashlib.sha256(raw).digest()).decode().rstrip('=')
+    if expected is not None:
+        assert fingerprint == host_pin(expected), 'SSH host identity differs from the independent operator pin'
+    return rows[0]+'\n', fingerprint
+
+
+def ssh_repository_url(value, port, repository):
+    parsed = urllib.parse.urlparse(value)
+    assert parsed.scheme == 'ssh' and parsed.hostname in ('localhost', '127.0.0.1')
+    assert parsed.username == 'git' and parsed.password is None and parsed.port == port
+    assert parsed.path == '/'+repository['owner']+'/'+repository['name']+'.git'
+    assert not parsed.query and not parsed.fragment and not parsed.params
+    return value
+
+
 def identifier(value):
     return isinstance(value, str) and DECIMAL.fullmatch(value) is not None and int(value) <= 9223372036854775807
 
@@ -66,6 +99,34 @@ def native_matches(native, row):
 
 def self_check(root, contract_file=None):
     # Pure contract checks only. These are not provider/runtime qualification.
+    wire_key = b'\x00\x00\x00\x0bssh-ed25519\x00\x00\x00\x20'+bytes(range(32))
+    scan = '[localhost]:2222 ssh-ed25519 '+base64.b64encode(wire_key).decode()+'\n'
+    canonical, pin = known_host(scan, 2222)
+    assert known_host(scan, 2222, pin) == (canonical, pin)
+    for bad_pin in ('', pin+'=', pin+'\n', pin[:-1], 'SHA256:'+'B'*43):
+        try:
+            host_pin(bad_pin)
+        except (AssertionError, ValueError):
+            pass
+        else:
+            raise AssertionError('Noncanonical host fingerprint admitted')
+    for bad_scan, bad_pin in ((scan, 'SHA256:'+'A'*43), (scan+scan, pin), (scan.replace('localhost', 'other.invalid'), pin), (scan.replace('ssh-ed25519 ', 'ssh-rsa '), pin), (scan.replace('2222', '2223'), pin), (scan.replace('\n', '\r\n'), pin), ('[localhost]:2222 ssh-ed25519 '+base64.b64encode(b'invalid envelope').decode(), pin)):
+        try:
+            known_host(bad_scan, 2222, bad_pin)
+        except (AssertionError, ValueError):
+            pass
+        else:
+            raise AssertionError('Unverified SSH host identity admitted')
+    repo = {'owner': 'owned', 'name': 'private'}
+    exact = 'ssh://git@localhost:2222/owned/private.git'
+    assert ssh_repository_url(exact, 2222, repo) == exact
+    for bad_url in (exact.replace('git@', 'other@'), exact.replace('git@', 'git:password@'), exact.replace('private.git', 'replacement.git'), exact+'?credential=invalid', exact+'#alias', exact.replace('localhost', 'other.invalid')):
+        try:
+            ssh_repository_url(bad_url, 2222, repo)
+        except (AssertionError, ValueError):
+            pass
+        else:
+            raise AssertionError('Wrong SSH user/target admitted')
     public = 'ssh-ed25519 ' + base64.b64encode(b'deploy-key-receipt-self-check').decode()
     target = {'repositoryId': '12', 'ownerId': '7', 'expectedRevision': 'a'*64}
     row = {'id': '22', 'publicKeyId': '31', 'publicKey': normalize(public)[0], 'fingerprint': normalize(public)[1], 'title': 'Example', 'createdAt': '2026-10-04T00:00:00Z', 'revision': 'b'*64}
@@ -108,6 +169,7 @@ def main():
     parser.add_argument('--browser', action='store_true', help='Actual settings Add/list/reload/delete in both modes/themes at1440/390')
     parser.add_argument('--screenshots', type=Path, help='Owner-only browser output directory (required with --browser)')
     parser.add_argument('--ssh-port', type=int, default=2222)
+    parser.add_argument('--expected-ssh-host-key-sha256', help='Independent operator-verified Ed25519 host fingerprint; absent means keyscan-only trust, not host-identity qualification')
     parser.add_argument('--organization', action='store_true', help='Owned private organization repositories, member direct-admin and team-only-admin denial')
     parser.add_argument('--proof-output', type=Path, help='Fresh private diagnostic manifest; never includes raw bodies, URLs or credentials')
     args = parser.parse_args()
@@ -120,6 +182,11 @@ def main():
         parser.error('--stack-root must contain deployed compose.yaml and .env')
     if not 1 <= args.ssh_port <= 65535:
         parser.error('Invalid SSH port')
+    if args.expected_ssh_host_key_sha256:
+        try:
+            host_pin(args.expected_ssh_host_key_sha256)
+        except (AssertionError, ValueError):
+            parser.error('Expected SSH host fingerprint must be canonical SHA256 base64')
     if args.browser and (not args.screenshots or not (stack/'web/node_modules/playwright/index.mjs').is_file()):
         parser.error('--browser requires --screenshots and existing stack-root Playwright')
     if args.screenshots:
@@ -137,6 +204,7 @@ def main():
     passed = False
     original_failure = None
     observations = []
+    transport = {'hostTrust': 'independent-operator-pin' if args.expected_ssh_host_key_sha256 else 'keyscan-only', 'hostKeyFingerprint': None, 'repositories': [], 'readOnlyClone': False, 'readOnlyPushDenied': False, 'writePush': False, 'firstRevokedNewConnectionDenied': False, 'secondAssociationSurvivingPush': False, 'finalRevokedNewConnectionDenied': False}
     original_request = smoke.request
     if args.proof_output:
         assert not args.proof_output.exists(), 'Use a fresh proof manifest'
@@ -292,8 +360,8 @@ def main():
             target, meta = access(owner, repository)
             assert meta['canManage'] and target['repositoryId'] == str(native['id']) and target['ownerId'] == namespace_id
             assert meta.get('organizationOwned',False) is args.organization
-            parsed_ssh = urllib.parse.urlparse(native['ssh_url'])
-            assert parsed_ssh.scheme == 'ssh' and parsed_ssh.hostname in ('localhost', '127.0.0.1') and parsed_ssh.port == args.ssh_port
+            ssh_repository_url(native['ssh_url'], args.ssh_port, repository)
+            transport['repositories'].append({'repositoryId': target['repositoryId'], 'ownerId': target['ownerId'], 'defaultRef': 'refs/heads/'+native['default_branch']})
             targets.append(target); native_repos.append(native)
         first, second = targets
         with tempfile.TemporaryDirectory(prefix='golf-deploy-key-proof-') as directory:
@@ -305,14 +373,20 @@ def main():
             ro = add(owner, first, public, 'Shared read-only', True)
             rw = add(owner, second, public, 'Shared write access', False)
             assert ro['id'] != rw['id'] and ro['publicKeyId'] == rw['publicKeyId']
+            transport['repositories'][0].update(associationId=ro['id'], publicKeyId=ro['publicKeyId'], readOnly=True)
+            transport['repositories'][1].update(associationId=rw['id'], publicKeyId=rw['publicKeyId'], readOnly=False)
             mistaken_target, association = (first, ro) if ro['id'] != ro['publicKeyId'] else (second, rw)
             assert association['id'] != association['publicKeyId'] and len(native_inventory(mistaken_target)) == 1
             call(owner, METHODS[2], {**mistaken_target, 'keyId': association['publicKeyId'], 'expectedKeyRevision': association['revision']}, expected=404)
             assert len(native_inventory(mistaken_target)) == 1
             known = local/'known_hosts'
-            known.write_text(command('ssh-keyscan', '-4', '-T', '3', '-t', 'ed25519', '-p', str(args.ssh_port), 'localhost'))
-            assert known.read_text().strip()
-            env = {**os.environ, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_TERMINAL_PROMPT': '0', 'GIT_SSH_COMMAND': shlex.join(['ssh', '-4', '-F', os.devnull, '-i', str(key_file), '-o', 'IdentityAgent=none', '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'UserKnownHostsFile='+str(known), '-o', 'ControlMaster=no', '-o', 'ControlPath=none'])}
+            canonical, fingerprint = known_host(command('ssh-keyscan', '-4', '-T', '3', '-t', 'ed25519', '-p', str(args.ssh_port), 'localhost'), args.ssh_port, args.expected_ssh_host_key_sha256)
+            known.write_text(canonical); known.chmod(0o600)
+            transport['hostKeyFingerprint'] = fingerprint
+            # Inherited GIT_CONFIG_* or GIT_SSH_* must not rewrite the owned URL
+            # or bypass the explicit key/host pin. Native localhost/127 URLs use
+            # the same independently checked localhost host-key alias.
+            env = {**{key: value for key, value in os.environ.items() if not key.startswith('GIT_')}, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_TERMINAL_PROMPT': '0', 'GIT_ALLOW_PROTOCOL': 'ssh', 'GIT_SSH_VARIANT': 'ssh', 'GIT_SSH_COMMAND': shlex.join(['ssh', '-4', '-F', os.devnull, '-i', str(key_file), '-o', 'IdentityAgent=none', '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'HostKeyAlias=localhost', '-o', 'UserKnownHostsFile='+str(known), '-o', 'ControlMaster=no', '-o', 'ControlPath=none'])}
             def git(work, *arguments, denied=False, denial=()):
                 result = subprocess.run(['git', '-c', 'credential.helper=', '-c', 'core.hooksPath='+os.devnull, '-c', 'commit.gpgsign=false', *arguments], cwd=work, env=env, capture_output=True, text=True, timeout=35)
                 assert (result.returncode != 0) if denied else (result.returncode == 0), 'Git transport result unexpected; sensitive output withheld'
@@ -329,15 +403,20 @@ def main():
             stage = 'real read-only private clone and denied push'
             ro_work = local/'read-only'; git(local, 'clone', native_repos[0]['ssh_url'], str(ro_work))
             assert git(ro_work, 'rev-parse', 'HEAD') == native_ref(first, native_repos[0]['default_branch'])
+            transport['readOnlyClone'] = True
+            transport['repositories'][0]['clonedCommitId'] = git(ro_work, 'rev-parse', 'HEAD')
             candidate(ro_work, 'denied-deploy-key-push')
             git(ro_work, 'push', 'origin', 'HEAD:refs/heads/denied-deploy-key-push', denied=True, denial=('is not authorized to write to',))
             assert git(ro_work, 'ls-remote', 'origin', 'refs/heads/denied-deploy-key-push') == ''
+            transport['readOnlyPushDenied'] = True
             stage = 'real read/write push and independent native commit readback'
             rw_work = local/'read-write'; git(local, 'clone', native_repos[1]['ssh_url'], str(rw_work))
             sha = candidate(rw_work, 'allowed-deploy-key-push')
             git(rw_work, 'push', 'origin', 'HEAD:refs/heads/allowed-deploy-key-push')
             assert native_ref(second, 'allowed-deploy-key-push') == sha
             assert smoke.provider(owner['token'], 'GET', path(second)+'/git/commits/'+sha)['sha'] == sha
+            transport['writePush'] = True
+            transport['repositories'][1].update(pushedRef='refs/heads/allowed-deploy-key-push', pushedCommitId=sha)
             stage = 'current organization owner/member-direct admin and team-only/non-admin denial' if args.organization else 'current personal owner/direct admin and non-admin denial'
             admin_target, admin_meta = access(actors['admin'], first['repository']); assert admin_meta['canManage']
             extra_file = local/'direct-admin'; command('ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(extra_file))
@@ -383,15 +462,19 @@ def main():
             stage = 'detaching first association preserves second global key and SSH grant'
             detach(owner, first, ro)
             git(ro_work, 'ls-remote', 'origin', denied=True, denial=('is not authorized to read',))
+            transport['firstRevokedNewConnectionDenied'] = True
             native_matches(smoke.provider(owner['token'], 'GET', path(second)+'/keys/'+rw['id']), rw)
             assert sha in git(rw_work, 'ls-remote', 'origin', 'refs/heads/allowed-deploy-key-push')
             git(rw_work, 'push', 'origin', 'HEAD:refs/heads/surviving-deploy-key-push')
+            assert native_ref(second, 'surviving-deploy-key-push') == sha
+            transport['secondAssociationSurvivingPush'] = True
             assert native_ref(second, 'surviving-deploy-key-push') == sha
             replacement = add(owner, first, public, 'Reattached key', False)
             assert replacement['id'] != ro['id'] and replacement['publicKeyId'] == rw['publicKeyId']
             call(owner, METHODS[2], {**first, 'keyId': ro['id'], 'expectedKeyRevision': ro['revision']}, expected=404)
             detach(owner, first, replacement); detach(owner, second, rw)
             git(rw_work, 'ls-remote', 'origin', denied=True, denial=('permission denied', 'cannot find key'))
+            transport['finalRevokedNewConnectionDenied'] = True
             assert native_inventory(first) == [] and native_inventory(second) == []
             if args.browser:
                 stage = 'actual settings browser qualification'
@@ -454,7 +537,7 @@ def main():
             (args.screenshots/'manifest.json').write_text(json.dumps(manifest, indent=2)); (args.screenshots/'manifest.json').chmod(0o600)
         smoke.request = original_request
         if args.proof_output:
-            proof = {'status': 'qualified' if passed and not failures else 'failed', 'nativeProofPassed': passed, 'repositoryScope': 'organization' if args.organization else 'personal', 'runtime': runtime_before, 'stage': stage, 'originalFailureType': original_failure, 'cleanup': 'complete' if not failures else 'incomplete', 'cleanupFailures': sorted(set(failures)), 'rpcObservations': observations}
+            proof = {'status': 'qualified' if passed and not failures else 'failed', 'nativeProofPassed': passed, 'repositoryScope': 'organization' if args.organization else 'personal', 'runtime': runtime_before, 'stage': stage, 'originalFailureType': original_failure, 'cleanup': 'complete' if not failures else 'incomplete', 'cleanupFailures': sorted(set(failures)), 'rpcObservations': observations, 'sshTransport': transport, 'sshHostIdentityQualified': bool(passed and not failures and args.expected_ssh_host_key_sha256)}
             args.proof_output.write_text(json.dumps(proof, indent=2)+'\n'); args.proof_output.chmod(0o600)
         if failures:
             print('Deploy-key cleanup categories: '+json.dumps(sorted(set(failures))), file=sys.stderr)
@@ -464,6 +547,7 @@ def main():
         if not failures:
             print('Cleanup: native actors/repos/keys purged, managed fixture accounts disabled, sessions/bearers revoked; Golf account audit history remains retained.', flush=True)
     print('PASS: actual RO clone/denied push, RW push, association/global identity and multi-repository detach survival, native readback, direct-owner/admin authorization and exact revision/Origin/bearer/session boundaries')
+    if not args.expected_ssh_host_key_sha256: print('SSH host trust used keyscan only; independent server identity was not qualified.')
     if not args.browser: print('Browser not executed; no settings/UI or theme/mobile qualification claimed.')
 
 
