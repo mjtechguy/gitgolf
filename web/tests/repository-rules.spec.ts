@@ -1,15 +1,24 @@
 import { expect, test, type Page } from '@playwright/test';
-import { GetSessionResponseSchema, GetRepositoryAccessResponseSchema, GetRepositoryRulesRequestSchema, GetRepositoryRulesResponseSchema, type GetRepositoryRulesResponse } from '../src/gen/golf/v1/golf_pb';
+import { GetSessionResponseSchema, GetRepositoryAccessResponseSchema, GetRepositoryRulesRequestSchema, GetRepositoryRulesResponseSchema, MutateRepositoryRulesRequestSchema, MutateRepositoryRulesResponseSchema, GetRepositoryRuleMutationResponseSchema, type MutateRepositoryRulesRequest, type RepositoryRuleMutation, type GetRepositoryRulesResponse } from '../src/gen/golf/v1/golf_pb';
 import { create, clone } from '@bufbuild/protobuf';
 import { reject, request, respond } from './rpc';
 const timestamp = '2026-10-04T00:00:00Z';
 const initial = create(GetRepositoryRulesResponseSchema, { repositoryId: '9007199254740993', ownerId: '42', accessRevision: 'a'.repeat(64), rulesRevision: 'b'.repeat(64), branchProtections: [{ ruleName: 'release/**', priority: '-2', requiredApprovals: '9007199254740993', statusCheckContexts: ['test / matrix-a'], enableStatusCheck: true, requireSignedCommits: true, blockAdminMergeOverride: true, pushUsernames: ['alice'], protectedFilePatterns: '.github/workflows/**', createdAt: timestamp, updatedAt: timestamp }, { ruleName: 'main', priority: '10', requiredApprovals: '1', enablePush: true, createdAt: timestamp, updatedAt: timestamp }], tagProtections: [{ id: '9007199254740994', namePattern: 'v*', allowedUsernames: ['alice'], createdAt: timestamp, updatedAt: timestamp }], mergeConfiguration: { allowMergeCommits: true, allowSquashMerge: true, defaultMergeStyle: 'squash', defaultUpdateStyle: 'merge' } });
 async function backend(page: Page, main = false, deniedAccess = false, canManage = false) {
- const state = { response: initial, denied: false, calls: 0, barrier: undefined as Promise<void> | undefined, reads: [] as unknown[] };
+ const state = { response: initial, denied: false, calls: 0, barrier: undefined as Promise<void> | undefined, posts: [] as MutateRepositoryRulesRequest[], statusReads: 0, receipt: undefined as RepositoryRuleMutation | undefined, reads: [] as unknown[] };
  await page.route('**/rpc/**', async route => {
   const method = route.request().url().split('/').at(-1);
   if(main && method === 'GetSession') return respond(route, GetSessionResponseSchema, {user:{id:'42',login:'alice'}});
   if(main && method === 'GetRepositoryAccess') { if(deniedAccess) return reject(route,'permission_denied','Current repository access is unavailable.'); return respond(route,GetRepositoryAccessResponseSchema,{access:{repositoryId:initial.repositoryId,ownerId:initial.ownerId,owner:{id:'42',login:'alice'},revision:initial.accessRevision,currentPermission:'owner',canManage}}); }
+  if (method === 'MutateRepositoryRules') {
+   const input = request(route, MutateRepositoryRulesRequestSchema); state.posts.push(input);
+   expect(input).toMatchObject({ repository: { owner: 'alice', name: 'example' }, repositoryId: initial.repositoryId, ownerId: initial.ownerId, expectedAccessRevision: initial.accessRevision, expectedRulesRevision: state.response.rulesRevision });
+   const current = clone(GetRepositoryRulesResponseSchema, state.response); current.rulesRevision = 'e'.repeat(64);
+   if (input.desiredTag) current.tagProtections.push({ ...input.desiredTag, id: '53', createdAt: timestamp, updatedAt: timestamp });
+   state.response = current;
+   const response = create(MutateRepositoryRulesResponseSchema, { operation: { operationId: input.operationId, actorId: main ? '42' : '17', repository: input.repository, repositoryId: input.repositoryId, ownerId: input.ownerId, action: input.action, expectedAccessRevision: input.expectedAccessRevision, expectedRulesRevision: input.expectedRulesRevision, inputFingerprint: 'd'.repeat(64), phase: 'SUCCEEDED', observedRulesRevision: current.rulesRevision, createdAt: timestamp, updatedAt: timestamp }, currentRules: current }); state.receipt = response.operation; return respond(route, MutateRepositoryRulesResponseSchema, response);
+  }
+  if (method === 'GetRepositoryRuleMutation') { state.statusReads++; return respond(route, GetRepositoryRuleMutationResponseSchema, { operation: state.receipt }); }
   expect(route.request().url()).toContain('/golf.v1.RepositoryRulesService/GetRepositoryRules'); const input = request(route, GetRepositoryRulesRequestSchema); state.reads.push(input); state.calls++;
   expect(input.repository).toMatchObject({ owner: 'alice', name: 'example' }); expect(input.repositoryId).toBe('9007199254740993'); expect(input.ownerId).toBe('42'); expect(input.expectedRevision).toBe('a'.repeat(64));
   if (state.barrier) await state.barrier;
@@ -77,3 +86,24 @@ test('product rules route refuses private inventory when parent access is denied
   await expect(page.getByRole('alert')).toHaveText('Current rules authority is unavailable.');
   await expect(page.getByRole('heading',{name:'Configure rules',exact:true})).toHaveCount(0);
  });
+
+async function saveProductTag(page: Page) {
+ await page.getByRole('button', { name: 'Tag rule', exact: true }).click(); await page.getByLabel('Tag pattern', { exact: true }).fill('release/*'); await page.getByLabel('Allowed accounts (one per line)', { exact: true }).fill('alice'); await page.getByRole('button', { name: 'Save configuration', exact: true }).click();
+}
+test('verified success survives its own held inventory refresh with no status adoption or stale actions', async ({ page }) => {
+ const state = await backend(page, true, false, true); await page.goto('/alice/example/settings/rules'); await expect(page.getByRole('button', { name: 'Tag rule', exact: true })).toBeEnabled(); const before = state.calls; let release!: () => void; state.barrier = new Promise<void>(resolve => release = resolve); await saveProductTag(page); await expect.poll(() => state.calls).toBe(before + 1);
+ await expect(page.getByRole('heading', { name: 'Configure rules', exact: true })).toHaveCount(0); await expect(page.getByText('SUCCEEDED', { exact: true })).not.toBeVisible(); await expect(page.getByRole('table', { name: 'Tag protection rules' })).toHaveCount(0);
+ // Even programmatic clicks on the retained, inert child cannot start a stale action.
+ await page.locator('button').filter({ hasText: 'Branch rule' }).evaluate(button => (button as HTMLButtonElement).click()); await expect(page.getByRole('form', { name: 'Add branch rule' })).toHaveCount(0); expect(state.posts).toHaveLength(1); expect(state.statusReads).toBe(0);
+ release(); await expect(page.getByText('SUCCEEDED', { exact: true })).toBeVisible(); await expect(page.getByText('Historical verified readback; current configuration may change independently.', { exact: true })).toBeVisible(); await expect(page.getByRole('table', { name: 'Tag protection rules' })).toContainText('release/*'); expect(state.posts).toHaveLength(1); expect(state.statusReads).toBe(0);
+ // Reload deliberately forgets the in-memory verified receipt and keeps only the original key.
+ await page.reload(); await expect(page.getByText('Status not inspected', { exact: true })).toBeVisible(); await expect(page.getByText('SUCCEEDED', { exact: true })).toHaveCount(0); expect(state.posts).toHaveLength(1); expect(state.statusReads).toBe(0);
+});
+for (const failure of ['denied', 'malformed'] as const) test(`verified success refresh ${failure} removes the historical receipt and private actions`, async ({ page }) => {
+ const state = await backend(page, true, false, true); await page.goto('/alice/example/settings/rules'); await expect(page.getByRole('button', { name: 'Tag rule', exact: true })).toBeEnabled(); const before = state.calls; let release!: () => void; state.barrier = new Promise<void>(resolve => release = resolve); await saveProductTag(page); await expect.poll(() => state.calls).toBe(before + 1); if (failure === 'denied') state.denied = true; else state.response.repositoryId = '13'; release(); await expect(page.getByRole('alert')).toContainText(failure === 'denied' ? 'Current rules authority is unavailable.' : 'could not be verified'); await expect(page.getByRole('heading', { name: 'Configure rules', exact: true })).toHaveCount(0); await expect(page.getByText('SUCCEEDED', { exact: true })).toHaveCount(0); await expect(page.getByText('release/*', { exact: true })).toHaveCount(0); expect(state.posts).toHaveLength(1); expect(state.statusReads).toBe(0);
+});
+
+for (const action of ['Fixture sign out', 'Fixture target refresh', 'Fixture switch account'] as const) test(`own verified refresh ${action} clears private receipt before a late inventory response`, async ({ page }) => {
+ const state = await backend(page); await open(page); const before = state.calls; let release!: () => void; state.barrier = new Promise<void>(resolve => release = resolve); await saveProductTag(page); await expect.poll(() => state.calls).toBe(before + 1); await page.getByRole('button', { name: action, exact: true }).click(); release(); await expect(page.getByText('SUCCEEDED', { exact: true })).toHaveCount(0); await expect(page.getByText('Historical verified readback; current configuration may change independently.', { exact: true })).toHaveCount(0); expect(state.posts).toHaveLength(1); expect(state.statusReads).toBe(0);
+ if (action === 'Fixture target refresh') { await page.getByRole('button', { name: action, exact: true }).click(); await expect(page.getByText('Status not inspected', { exact: true })).toBeVisible(); await expect(page.getByText('SUCCEEDED', { exact: true })).toHaveCount(0); expect(state.posts).toHaveLength(1); expect(state.statusReads).toBe(0); }
+});
