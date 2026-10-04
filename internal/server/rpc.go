@@ -77,6 +77,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewOrganizationAdminServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewInstanceAdminServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryAccessServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewRepositoryTeamAccessServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryDeployKeyServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryWebhookServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewWorkflowServiceHandler(s, options...))
@@ -141,6 +142,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.InstanceAdminServiceDisableLocalAccountProcedure, golfv1connect.WorkflowServiceInspectWorkflowsProcedure,
 			golfv1connect.RepositoryWebhookServiceListRepositoryWebhooksProcedure, golfv1connect.RepositoryWebhookServiceSaveRepositoryWebhookProcedure, golfv1connect.RepositoryWebhookServiceListRepositoryWebhookDeliveriesProcedure, golfv1connect.RepositoryWebhookServiceTestRepositoryWebhookProcedure, golfv1connect.RepositoryWebhookServiceRedeliverRepositoryWebhookProcedure,
 			golfv1connect.RepositoryDeployKeyServiceListRepositoryDeployKeysProcedure, golfv1connect.RepositoryDeployKeyServiceAddRepositoryDeployKeyProcedure, golfv1connect.RepositoryDeployKeyServiceDeleteRepositoryDeployKeyProcedure,
+			golfv1connect.RepositoryTeamAccessServiceListRepositoryTeamAccessProcedure, golfv1connect.RepositoryTeamAccessServiceAttachRepositoryTeamProcedure, golfv1connect.RepositoryTeamAccessServiceDetachRepositoryTeamProcedure,
 			golfv1connect.RepositoryAccessServiceGetRepositoryAccessProcedure, golfv1connect.RepositoryAccessServiceListRepositoryCollaboratorsProcedure, golfv1connect.RepositoryAccessServiceResolveRepositoryCollaboratorProcedure, golfv1connect.RepositoryAccessServiceSetRepositoryCollaboratorProcedure, golfv1connect.RepositoryAccessServiceRemoveRepositoryCollaboratorProcedure,
 			golfv1connect.InstanceAdminServiceListLocalAccountsProcedure, golfv1connect.OrganizationAdminServiceGetTeamAdministrationProcedure, golfv1connect.OrganizationAdminServiceResolveTeamMemberProcedure, golfv1connect.OrganizationAdminServiceAddTeamMemberProcedure, golfv1connect.OrganizationAdminServiceRemoveTeamMemberProcedure,
 			golfv1connect.RepositorySettingsServiceGetRepositorySettingsProcedure, golfv1connect.RepositorySettingsServiceUpdateRepositorySettingsProcedure, golfv1connect.RepositorySettingsServiceUpdateRepositoryTopicsProcedure,

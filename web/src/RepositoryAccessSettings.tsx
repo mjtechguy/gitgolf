@@ -1,3 +1,4 @@
+import { RepositoryTeamAccess } from './RepositoryTeamAccess';
 import { RepositoryDeployKeys } from './RepositoryDeployKeys';
 import { RepositorySettingsLayout } from './AccountSettings';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -44,6 +45,13 @@ export function RepositoryAccessSettings({ userId, owner, name, signingOut }: { 
     return response.access;
   } });
   const access = accessQuery.isSuccess && !accessQuery.isFetching && !signingOut ? accessQuery.data : undefined;
+  // Keep only the same validated native target mounted through a parent refresh.
+  // Its private content is hidden and reads/writes stop until access is observed again.
+  const teamScope = JSON.stringify([userId, owner, name]);
+  const teamObservation = useRef<{ scope: string; access: RepositoryAccess } | null>(null);
+  if (teamObservation.current?.scope !== teamScope || accessQuery.error || signingOut) teamObservation.current = null;
+  if (access) teamObservation.current = { scope: teamScope, access };
+  const teamAccess = teamObservation.current?.access;
   const canManage = Boolean(access?.canManage && !access.organizationOwned && (access.currentPermission === 'admin' || (access.currentPermission === 'owner' && access.ownerId === userId)));
   const collaboratorKey = [...baseKey, 'collaborators', access?.repositoryId || '', access?.revision || ''];
   const collaboratorsQuery = useInfiniteQuery({ ...privateQuery, queryKey: collaboratorKey, enabled: Boolean(access && canManage), initialPageParam: 1,
@@ -116,6 +124,6 @@ export function RepositoryAccessSettings({ userId, owner, name, signingOut }: { 
         </div> : null}
         {canManage ? <><DataTable label="Repository collaborators" data={collaborators} columns={columns} getRowId={(collaborator) => collaborator.user!.id} emptyMessage="No direct collaborators in the loaded inventory." /><div className="list-footer"><span>{collaborators.length} loaded collaborators</span><More hasMore={Boolean(collaboratorsQuery.hasNextPage)} loading={collaboratorsQuery.isFetching || write.isPending} label="collaborators" load={() => void collaboratorsQuery.fetchNextPage()} /></div></> : <p className="panel-footnote">Managing collaborators requires administration of a personal repository. Your permission is shown above. Organization and team grants are not managed here.</p>}<details className="panel-footnote"><summary>About repository access</summary><p>This inventory lists direct collaborator grants. Organization, team and other access can be additive and are not listed here. Instance administration does not grant access to this repository.</p><p>Owner and self grants cannot be changed here. Removing a direct grant preserves other permissions and does not cancel already accepted requests. Unconfirmed changes require inspection and are never automatically retried.</p></details>
       </> : null}
-    </section>{access && canManage ? <RepositoryDeployKeys userId={userId} owner={owner} name={name} access={access} signingOut={signingOut} /> : null}{confirmation && !error && !loading && canManage ? <RemoveCollaborator intent={confirmation} pending={write.isPending} onClose={() => { if (!write.isPending) setConfirmation(null); }} onConfirm={() => dispatch(confirmation)} /> : null}
+    </section>{teamAccess?.organizationOwned ? <RepositoryTeamAccess userId={userId} owner={owner} name={name} access={teamAccess} signingOut={signingOut} revalidating={!access} /> : null}{access && canManage ? <RepositoryDeployKeys userId={userId} owner={owner} name={name} access={access} signingOut={signingOut} /> : null}{confirmation && !error && !loading && canManage ? <RemoveCollaborator intent={confirmation} pending={write.isPending} onClose={() => { if (!write.isPending) setConfirmation(null); }} onConfirm={() => dispatch(confirmation)} /> : null}
   </section></RepositorySettingsLayout>;
 }
