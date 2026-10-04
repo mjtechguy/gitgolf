@@ -169,7 +169,7 @@ def main():
             repository={'owner':name,'name':'pipeline-proof'}
             base='repos/'+name+'/pipeline-proof'
             files={
-              '.github/workflows/actions.yml': 'name: Actions proof\non: [workflow_dispatch, push]\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - name: Read source\n        run: |\n          test "$(id -u)" = 1000\n          test -f README.md\n          export STEP_PRIVATE=first\n          printf "actions proof\\n"\n      - name: Verify workspace\n        run: |\n          test -z "${STEP_PRIVATE:-}"\n          test -f README.md\n          printf "second step proof\\n"\n',
+              '.github/workflows/actions.yml': 'name: Actions proof\non:\n  workflow_dispatch: {}\n  push: {}\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - name: Read source\n        run: |\n          test "$(id -u)" = 1000\n          test -f README.md\n          export STEP_PRIVATE=first\n          printf "actions proof\\n"\n      - name: Verify workspace\n        run: |\n          test -z "${STEP_PRIVATE:-}"\n          test -f README.md\n          printf "second step proof\\n"\n',
               '.gitlab-ci.yml': 'proof:\n  image: '+IMAGE+'\n  script:\n    - value=shared\n    - test "$value" = shared\n    - test -f README.md\n    - printf "gitlab proof\\n"\n',
               '.github/workflows/failure.yml': 'on: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: exit 7\n      - run: printf "must not execute\\n"\n',
               '.github/workflows/slow.yml': 'on: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: sleep 60\n',
