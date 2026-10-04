@@ -109,6 +109,7 @@ def main():
     parser.add_argument('--screenshots', type=Path, help='Owner-only browser output directory (required with --browser)')
     parser.add_argument('--ssh-port', type=int, default=2222)
     parser.add_argument('--organization', action='store_true', help='Owned private organization repositories, member direct-admin and team-only-admin denial')
+    parser.add_argument('--proof-output', type=Path, help='Fresh private diagnostic manifest; never includes raw bodies, URLs or credentials')
     args = parser.parse_args()
     if args.self_check:
         self_check(Path(__file__).resolve().parents[1], args.contract_file); return
@@ -134,6 +135,43 @@ def main():
     stage = 'readiness'
     runtime_before = None
     passed = False
+    original_failure = None
+    observations = []
+    original_request = smoke.request
+    if args.proof_output:
+        assert not args.proof_output.exists(), 'Use a fresh proof manifest'
+        args.proof_output.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+
+    def observed_request(opener, method, url, payload=None, headers=None, expected=200):
+        # Closed wire facts only; never serialize the URL, request, native body,
+        # credentials, arbitrary exception text or native error messages.
+        if not url.startswith(smoke.GOLF + '/rpc/'):
+            return original_request(opener, method, url, payload, headers, expected)
+        procedure = url.removeprefix(smoke.GOLF + '/rpc/golf.v1.')
+        permitted = {SERVICE+m for m in METHODS} | {'RepositoryAccessService/GetRepositoryAccess', 'SessionService/LoginWithPassword', 'SessionService/Logout', 'SessionService/RevokeOtherSessions', 'ApiCredentialService/CreateApiCredential', 'ApiCredentialService/RevokeApiCredential'}
+        assert procedure in permitted and method == 'POST'
+        role = next((name for name, actor in actors.items() if actor['session'] is opener), 'anonymous')
+        body = json.dumps(payload).encode() if payload is not None else None
+        req = urllib.request.Request(url, data=body, method=method, headers={'Origin': smoke.GOLF, 'Content-Type': 'application/json', **(headers or {})})
+        try:
+            response = opener.open(req, timeout=15)
+        except urllib.error.HTTPError as error:
+            response = error
+        with response:
+            raw = response.read(2 << 20)
+            assert len(raw) < 2 << 20
+            result = json.loads(raw) if raw else None
+            known_codes = {'invalid_argument', 'unauthenticated', 'permission_denied', 'not_found', 'resource_exhausted', 'unavailable', 'failed_precondition', 'internal', 'aborted', 'already_exists'}
+            code = result.get('code') if isinstance(result, dict) else None
+            observation = {'procedure': procedure, 'role': role, 'status': response.status, 'expected': expected, 'noStore': response.headers.get('Cache-Control') == 'no-store', 'code': code if code in known_codes else None}
+            observations.append(observation)
+            assert len(observations) <= 512
+            if response.status != expected or not observation['noStore']:
+                print('Deploy-key RPC observation: '+json.dumps(observation, sort_keys=True), file=sys.stderr)
+            assert response.status == expected and observation['noStore'], 'Closed RPC observation failed'
+            return result
+
+    smoke.request = observed_request
 
     def command(*arguments, payload=None, timeout=60):
         result = subprocess.run(arguments, cwd=stack, input=None if payload is None else json.dumps(payload), capture_output=True, text=True, timeout=timeout)
@@ -365,6 +403,7 @@ def main():
             assert runtime() == runtime_before, 'Product runtime changed during qualification'
         passed = True
     except Exception as failure:
+        original_failure = type(failure).__name__
         frames=traceback.extract_tb(failure.__traceback__)
         location=next((frame for frame in reversed(frames) if frame.filename==__file__),frames[-1])
         print('Deploy-key qualification failed at '+stage+'; '+type(failure).__name__+'; qualifier line '+str(location.lineno)+'; private diagnostics withheld', file=sys.stderr)
@@ -376,8 +415,10 @@ def main():
             except Exception: failures.append('bearer revocation')
         for actor in actors.values():
             try:
-                if actor['loggedIn']: smoke.rpc(actor['session'], 'SessionService/RevokeOtherSessions')
-                smoke.rpc(actor['session'], 'SessionService/Logout')
+                if actor['loggedIn']:
+                    smoke.rpc(actor['session'], 'SessionService/RevokeOtherSessions')
+                    smoke.rpc(actor['session'], 'SessionService/Logout')
+                    actor['loggedIn'] = False
             except Exception: failures.append('session cleanup')
         for actor in reversed(enrolled):
             try: assert operator('disable', {'username': actor['name']})['disabled']
@@ -404,8 +445,17 @@ def main():
             manifest = json.loads((args.screenshots/'manifest.json').read_text())
             manifest.update(status='qualified' if passed and not failures else 'failed', nativeProofPassed=passed, repositoryScope='organization' if args.organization else 'personal', cleanup='complete' if not failures else 'incomplete')
             (args.screenshots/'manifest.json').write_text(json.dumps(manifest, indent=2)); (args.screenshots/'manifest.json').chmod(0o600)
-        assert not failures, 'Disposable deploy-key fixture cleanup incomplete'
-        print('Cleanup: native actors/repos/keys purged, managed fixture accounts disabled, sessions/bearers revoked; Golf account audit history remains retained.', flush=True)
+        smoke.request = original_request
+        if args.proof_output:
+            proof = {'status': 'qualified' if passed and not failures else 'failed', 'nativeProofPassed': passed, 'repositoryScope': 'organization' if args.organization else 'personal', 'runtime': runtime_before, 'stage': stage, 'originalFailureType': original_failure, 'cleanup': 'complete' if not failures else 'incomplete', 'cleanupFailures': sorted(set(failures)), 'rpcObservations': observations}
+            args.proof_output.write_text(json.dumps(proof, indent=2)+'\n'); args.proof_output.chmod(0o600)
+        if failures:
+            print('Deploy-key cleanup categories: '+json.dumps(sorted(set(failures))), file=sys.stderr)
+        # Preserve the original proof exception if cleanup also fails.
+        if failures and original_failure is None:
+            raise AssertionError('Disposable deploy-key fixture cleanup incomplete')
+        if not failures:
+            print('Cleanup: native actors/repos/keys purged, managed fixture accounts disabled, sessions/bearers revoked; Golf account audit history remains retained.', flush=True)
     print('PASS: actual RO clone/denied push, RW push, association/global identity and multi-repository detach survival, native readback, direct-owner/admin authorization and exact revision/Origin/bearer/session boundaries')
     if not args.browser: print('Browser not executed; no settings/UI or theme/mobile qualification claimed.')
 
