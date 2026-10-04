@@ -50,5 +50,6 @@ test('ordinary reader cannot read environment inventory through the mounted sett
   await expect(page.getByRole('heading', { name: 'Environments', exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add environment', exact: true })).toBeDisabled();
   await expect(page.getByRole('form')).toHaveCount(0);
+  await expect(page.getByText('Current ordinary repository administrator authority is required to read environment configuration.', { exact: true })).toBeVisible();
   expect(counts.inventory).toBe(0); expect(counts.writes).toBe(0);
 });
