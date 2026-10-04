@@ -1,17 +1,19 @@
+import { forgetPrivateQueries } from './queryClient';
+import { WorkflowDispatchInputs, workflowInputsCatalog, workflowInputsContract, inputDigest, validInputDefinitions, verifyInputPreparation } from './WorkflowDispatchInputs';
 import { clearOtherWorkflowDispatchIntents, workflowDispatchIntentKey } from './workflowDispatchIntents';
 import { ReviewerPanel } from './ReviewerPanel';
 import { AgentTasks } from './AgentTasks';
 import { AgentUsagePanel } from './AgentUsagePanel';
 import { AgentUsageScope } from './gen/golf/v1/golf_pb';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Bot, FileCode2, GitPullRequest, ListFilter, RefreshCw, Settings2, Workflow } from 'lucide-react';
 import { repositoryClient, repositoryAccessClient, workflowClient, workflowRunClient, errorMessage } from './api';
 import { sourceRepositoryID } from './sourceReads';
 import { isCommitID, isRunID } from './navigation';
-import type { WorkflowRun } from './gen/golf/v1/golf_pb';
+import type { WorkflowDispatchInputValue, WorkflowRun } from './gen/golf/v1/golf_pb';
 import { WorkflowRunOrigin, WorkflowRunState } from './gen/golf/v1/golf_pb';
 import { RepositorySettingsLayout } from './AccountSettings';
 import { DataTable, type DataTableColumn } from './DataTable';
@@ -23,15 +25,21 @@ import { ExecutionPolicyPanel } from './ExecutionPolicyPanel';
 import { ExecutionScope, WorkflowFormat, WorkflowInspectionState, type WorkflowConfiguration, type WorkflowDiagnostic } from './gen/golf/v1/golf_pb';
 
 // Original request metadata only; no credential, script or response body persists.
-type DispatchIntent = { actorId:string; key:string; owner:string; name:string; repositoryId:string; ownerId:string; commitId:string; workflowPath:string; workflowBlobId:string };
+type LegacyDispatchIntent = { actorId:string; key:string; owner:string; name:string; repositoryId:string; ownerId:string; commitId:string; workflowPath:string; workflowBlobId:string };
+type TypedDispatchIntent=LegacyDispatchIntent&{version:2;inputContract:string;schemaSha256:string;submittedSha256:string;effectiveSha256:string};
+type DispatchIntent=LegacyDispatchIntent|TypedDispatchIntent;
+const typedIntent=(intent:DispatchIntent):intent is TypedDispatchIntent=>'version' in intent&&intent.version===2;
 const workflowPath = (value:string) => /^(?:\.github\/workflows\/[^/]+\.ya?ml|\.gitlab-ci\.yml)$/.test(value) && new TextEncoder().encode(value).length<=4096 && !/[\\\p{Cc}\uD800-\uDFFF]/u.test(value);
 function validDispatchIntent(value:unknown, actor:string,repo:string):value is DispatchIntent {
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const v=value as Record<string,unknown>;
- return Object.keys(v).length===9 && v.actorId===actor && v.repositoryId===repo && sourceRepositoryID(actor) && sourceRepositoryID(repo) && typeof v.key==='string' && isRunID(v.key) && typeof v.ownerId==='string' && sourceRepositoryID(v.ownerId) && typeof v.owner==='string' && typeof v.name==='string' && [v.owner,v.name].every(part=>part.length>0&&part.length<=255&&!/[\/\\\p{Cc}\uD800-\uDFFF]/u.test(part)) && typeof v.commitId==='string' && isCommitID(v.commitId) && typeof v.workflowBlobId==='string' && isCommitID(v.workflowBlobId) && v.workflowBlobId.length===v.commitId.length && typeof v.workflowPath==='string' && workflowPath(v.workflowPath);
+ const typed=v.version===2&&Object.keys(v).length===14&&v.inputContract===workflowInputsContract&&['schemaSha256','submittedSha256','effectiveSha256'].every(key=>typeof v[key]==='string'&&inputDigest(v[key]));
+ const legacy=Object.keys(v).length===9&&!('version' in v);
+ return (typed||legacy) && v.actorId===actor && v.repositoryId===repo && sourceRepositoryID(actor) && sourceRepositoryID(repo) && typeof v.key==='string' && isRunID(v.key) && typeof v.ownerId==='string' && sourceRepositoryID(v.ownerId) && typeof v.owner==='string' && typeof v.name==='string' && [v.owner,v.name].every(part=>part.length>0&&part.length<=255&&!/[\/\\\p{Cc}\uD800-\uDFFF]/u.test(part)) && typeof v.commitId==='string' && isCommitID(v.commitId) && typeof v.workflowBlobId==='string' && isCommitID(v.workflowBlobId) && v.workflowBlobId.length===v.commitId.length && typeof v.workflowPath==='string' && workflowPath(v.workflowPath);
 }
 function verifiedDispatchRun(run:WorkflowRun|undefined,intent:DispatchIntent,inspection=false):WorkflowRun {
  if(!run||!isRunID(run.id)||run.repositoryId!==intent.repositoryId||run.ownerId!==intent.ownerId||run.commitId!==intent.commitId||run.workflowPath!==intent.workflowPath||run.workflowBlobId!==intent.workflowBlobId||run.origin!==WorkflowRunOrigin.MANUAL||run.eventRef!==''||!/^([1-9][0-9]{0,18})$/.test(run.version)||BigInt(run.version)>9223372036854775807n||!/^\d{4}-\d\d-\d\dT/.test(run.createdAt)||!Number.isFinite(Date.parse(run.createdAt))||!/^([a-f0-9]{64})$/.test(run.sourceSha256)||run.state<WorkflowRunState.QUEUED||run.state>WorkflowRunState.LOST||(inspection&&run.canCancel))throw new ConnectError('The original dispatch receipt could not be verified.',Code.Internal);
+ if(typedIntent(intent)&&(run.inputContract!==intent.inputContract||run.schemaSha256!==intent.schemaSha256||run.submittedSha256!==intent.submittedSha256||run.effectiveSha256!==intent.effectiveSha256))throw new ConnectError('The original input bindings could not be verified.',Code.Internal);
  return run;
 }
 
@@ -50,6 +58,8 @@ function Diagnostics({ diagnostics }: { diagnostics: WorkflowDiagnostic[] }) {
 
 export function WorkflowConfigurations({ userId, owner, name, signingOut, repositoryId = '', workView = false, location: suppliedLocation }: { repositoryId?:string; workView?:boolean;location?:RepositoryLocation; userId: string; owner: string; name: string; signingOut: boolean }) {
   const navigate = useNavigate();
+  const queryClient=useQueryClient();
+  const [inputEditor,setInputEditor]=useState<{context:string;item:WorkflowConfiguration}|null>(null);
   const [dispatching, setDispatching] = useState(false);
   const busy = useRef(false);
   const generation=useRef(0);
@@ -63,7 +73,7 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
   const controller = useRef<AbortController | null>(null);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; controller.current?.abort(); }; }, []);
-  useEffect(() => { clearOtherWorkflowDispatchIntents(signingOut?undefined:userId);if(signingOut){controller.current?.abort();setNotice('');setOriginal({scope:'',blocked:true});} }, [userId,signingOut]);
+  useEffect(() => { clearOtherWorkflowDispatchIntents(signingOut?undefined:userId);if(signingOut){controller.current?.abort();setInputEditor(null);setNotice('');setOriginal({scope:'',blocked:true});} }, [userId,signingOut]);
   const metadata = useQuery({ ...privateQuery, queryKey: ['workflow-repository-identity', userId, owner, name], enabled: !signingOut && !repositoryId,
     queryFn: async ({signal}) => {
       const response = await repositoryClient.getRepository({repository:{owner,name}}, {signal,timeoutMs:8000}); signal.throwIfAborted();
@@ -99,19 +109,24 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
   const unresolved=Boolean(intent&&!stored?.run);
   const originalMatches=Boolean(!intent||(intent.owner===owner&&intent.name===name&&access?.ownerId===intent.ownerId));
   useEffect(()=>{
-   controller.current?.abort();busy.current=false;setDispatching(false);setNotice('');
+   controller.current?.abort();busy.current=false;setDispatching(false);setInputEditor(null);setNotice('');
    if(!storageScope||signingOut){setOriginal({scope:storageScope,blocked:true});return;}
    try{const encoded=sessionStorage.getItem(storageScope);const value:unknown=encoded===null?undefined:JSON.parse(encoded);
     if(value!==undefined&&!validDispatchIntent(value,userId,effectiveRepositoryId))throw new Error('Original metadata unavailable');
     setOriginal({scope:storageScope,intent:value as DispatchIntent|undefined,blocked:false});
    }catch{setOriginal({scope:storageScope,blocked:true});}
   },[storageScope,guardScope,userId,effectiveRepositoryId,signingOut]);
-  useEffect(()=>{if(!result){controller.current?.abort();}if(inspectionError){setNotice('');setOriginal(prior=>({...prior,run:undefined}));}},[Boolean(result),Boolean(inspectionError)]);
+  useEffect(()=>{if(!result){controller.current?.abort();setInputEditor(null);}if(inspectionError){setNotice('');setOriginal(prior=>({...prior,run:undefined}));}},[Boolean(result),Boolean(inspectionError)]);
   const policyObserved = (item:WorkflowConfiguration) => Boolean(result && /^[a-f0-9]{64}$/.test(result.policyRevision) && typeof item.manualPolicyAllowed==='boolean' && typeof item.pushPolicyAllowed==='boolean');
   const policyLabel = (item:WorkflowConfiguration, kind:'manual'|'push') => !policyObserved(item)?'Unknown':(kind==='manual'?item.manualPolicyAllowed:item.pushPolicyAllowed)?'Ceilings allow':'Ceilings deny';
   const selectedPath = location.actionKind==='workflow' ? location.workflowPath : undefined;
   const manualEligible = (item:WorkflowConfiguration) => item.state===WorkflowInspectionState.VALIDATED_SUBSET && (item.format===WorkflowFormat.GITLAB_CI || item.events.includes('workflow_dispatch'));
-  const canDispatch = (item:WorkflowConfiguration) => Boolean(isCommitID(commit) && manualEligible(item) && policyObserved(item) && item.manualPolicyAllowed===true && result?.executionAvailable && available.current && stored && !stored.blocked && originalMatches && !unresolved && !dispatching && !signingOut);
+  const typedMode=(item:WorkflowConfiguration)=>result?.executionCatalog===workflowInputsCatalog&&inputDigest(item.manualInputsSchemaSha256)&&validInputDefinitions(item.manualInputs);
+  const inputModeValid=(item:WorkflowConfiguration)=>result?.executionCatalog===workflowInputsCatalog?typedMode(item):!item.manualInputs.length&&!item.manualInputsSchemaSha256;
+  const editorContext=JSON.stringify([guardScope,commit,access?.ownerId,access?.revision,result?.policyRevision,query.dataUpdatedAt,accessQuery.dataUpdatedAt]);
+  const latestEditorContext=useRef(editorContext);latestEditorContext.current=editorContext;
+  useEffect(()=>{setInputEditor(null);controller.current?.abort();},[editorContext]);
+  const canDispatch = (item:WorkflowConfiguration) => Boolean(isCommitID(commit) && inputModeValid(item) && manualEligible(item) && policyObserved(item) && item.manualPolicyAllowed===true && result?.executionAvailable && available.current && stored && !stored.blocked && originalMatches && !unresolved && !dispatching && !signingOut);
   const selectedConfiguration = selectedPath ? result?.configurations.find(item=>item.path===selectedPath) : undefined;
   const dispatchNotice = result && available.current && stored && (stored.blocked||intent||notice) && !signingOut ? <div className="panel-footnote page-stack">
    {stored.blocked?<p role="alert">Original dispatch metadata is unavailable. New dispatches are blocked; no request was retried.</p>:null}
@@ -121,30 +136,44 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
    </div>:notice?<p role="status">{notice}</p>:null}
   </div>:null;
   const accepted=(stamp:number,request:AbortController)=>alive.current&&stamp===generation.current&&!request.signal.aborted&&available.current;
-  async function dispatch(path: string) {
+  function requestDispatch(item:WorkflowConfiguration){if(!canDispatch(item))return;if(typedMode(item))setInputEditor({context:editorContext,item});else void dispatch(item.path);}
+  function deny(error:unknown){if(error instanceof ConnectError&&[Code.Unauthenticated,Code.PermissionDenied].includes(error.code)){setInputEditor(null);setOriginal(prior=>({...prior,run:undefined,denied:true}));if(error.code===Code.Unauthenticated){queryClient.setQueryData(['session'],null);forgetPrivateQueries(queryClient);}return true;}return false;}
+  async function dispatch(path: string,inputs?:WorkflowDispatchInputValue[],context?:string) {
     const item=result?.configurations.find(item=>item.path===path);
     if (activeScope.current!==guardScope || !item || !canDispatch(item)||busy.current||!access||!isCommitID(item.blobId)) return;
-    const frozen:DispatchIntent={actorId:userId,key:crypto.randomUUID(),owner,name,repositoryId:effectiveRepositoryId,ownerId:access.ownerId,commitId:commit,workflowPath:path,workflowBlobId:item.blobId};
-    if(!validDispatchIntent(frozen,userId,effectiveRepositoryId))return;
+    const base:LegacyDispatchIntent={actorId:userId,key:crypto.randomUUID(),owner,name,repositoryId:effectiveRepositoryId,ownerId:access.ownerId,commitId:commit,workflowPath:path,workflowBlobId:item.blobId};
+    if(!validDispatchIntent(base,userId,effectiveRepositoryId)||Boolean(inputs)!==typedMode(item)||(inputs&&context!==latestEditorContext.current))return;
+    const request=new AbortController(),stamp=generation.current;controller.current=request;busy.current=true;setDispatching(true);setNotice('');
+    let frozen:DispatchIntent=base;
+    if(inputs){
+     try{
+      const preparation=await workflowRunClient.prepareWorkflowDispatch({repository:{owner,name},repositoryId:base.repositoryId,ownerId:base.ownerId,commitId:base.commitId,workflowPath:base.workflowPath,inputs},{signal:request.signal,timeoutMs:15000});
+      if(!accepted(stamp,request)||context!==latestEditorContext.current)return;
+      verifyInputPreparation(preparation,{...base,schemaSha256:item.manualInputsSchemaSha256},item.manualInputs);
+      frozen={...base,version:2,inputContract:preparation.inputContract,schemaSha256:preparation.schemaSha256,submittedSha256:preparation.submittedSha256,effectiveSha256:preparation.effectiveSha256};
+     }catch(error){if(accepted(stamp,request)&&!deny(error))setNotice('Workflow inputs could not be prepared. No dispatch was made. Refresh the workflow and try again.');return;}
+     finally{if(!typedIntent(frozen)&&controller.current===request){controller.current=null;busy.current=false;if(alive.current&&stamp===generation.current)setDispatching(false);}}
+    }
     try{const encoded=JSON.stringify(frozen);sessionStorage.setItem(storageScope,encoded);if(sessionStorage.getItem(storageScope)!==encoded)throw new Error('Storage verification failed');}
-    catch{setOriginal({scope:storageScope,blocked:true});setNotice('Original dispatch metadata could not be retained. No dispatch was made.');return;}
+    catch{setOriginal({scope:storageScope,blocked:true});setNotice('Original dispatch metadata could not be retained. No dispatch was made.');controller.current=null;busy.current=false;setDispatching(false);setInputEditor(null);return;}
     setOriginal({scope:storageScope,intent:frozen,blocked:false});
-    const request = new AbortController(),stamp=generation.current; controller.current = request;busy.current=true;setDispatching(true);setNotice('');
-    try { const receipt = await workflowRunClient.dispatchWorkflow({ repository: { owner, name }, ref: frozen.commitId, workflowPath: frozen.workflowPath, idempotencyKey: frozen.key }, { signal: request.signal, timeoutMs: 25_000 });
+    setInputEditor(null);
+    try { const receipt = await workflowRunClient.dispatchWorkflow({ repository: { owner, name }, ref: frozen.commitId, workflowPath: frozen.workflowPath, idempotencyKey: frozen.key, ...(typedIntent(frozen)?{inputs,repositoryId:frozen.repositoryId,ownerId:frozen.ownerId,workflowBlobId:frozen.workflowBlobId,inputContract:frozen.inputContract,schemaSha256:frozen.schemaSha256,submittedSha256:frozen.submittedSha256,effectiveSha256:frozen.effectiveSha256}:{}) }, { signal: request.signal, timeoutMs: 25_000 });
       if (!accepted(stamp,request)) return;
       const run=verifiedDispatchRun(receipt.run,frozen);setOriginal({scope:storageScope,intent:frozen,blocked:false,run});
-    } catch (error) { if (accepted(stamp,request)) {if(error instanceof ConnectError&&[Code.Unauthenticated,Code.PermissionDenied,Code.NotFound].includes(error.code))setOriginal(prior=>({...prior,run:undefined,denied:true}));else setNotice(`${errorMessage(error instanceof Error ? error : new Error('Dispatch could not be confirmed.'))} Inspect the original dispatch.`);} }
+    } catch (error) { if (accepted(stamp,request)) {if(!deny(error))setNotice(`${errorMessage(error instanceof Error ? error : new Error('Dispatch could not be confirmed.'))} Inspect the original dispatch.`);} }
     finally { if (controller.current === request) {controller.current = null;busy.current=false;if(alive.current&&stamp===generation.current)setDispatching(false);} }
   }
   async function inspectDispatch(){
    if(activeScope.current!==guardScope||!originalMatches||!intent||!available.current||busy.current||stored?.blocked||signingOut)return;
    const frozen=intent,request=new AbortController(),stamp=generation.current;controller.current=request;busy.current=true;setDispatching(true);setNotice('');setOriginal(prior=>({...prior,run:undefined}));
    try{
-    const receipt=await workflowRunClient.getWorkflowDispatch({repository:{owner:frozen.owner,name:frozen.name},repositoryId:frozen.repositoryId,ownerId:frozen.ownerId,commitId:frozen.commitId,workflowPath:frozen.workflowPath,idempotencyKey:frozen.key},{signal:request.signal,timeoutMs:15000});
+    const receipt=await workflowRunClient.getWorkflowDispatch({repository:{owner:frozen.owner,name:frozen.name},repositoryId:frozen.repositoryId,ownerId:frozen.ownerId,commitId:frozen.commitId,workflowPath:frozen.workflowPath,idempotencyKey:frozen.key,...(typedIntent(frozen)?{inputContract:frozen.inputContract,schemaSha256:frozen.schemaSha256,submittedSha256:frozen.submittedSha256,effectiveSha256:frozen.effectiveSha256,workflowBlobId:frozen.workflowBlobId}:{})},{signal:request.signal,timeoutMs:15000});
     if(!accepted(stamp,request))return;
     if(receipt.repository?.owner!==frozen.owner||receipt.repository?.name!==frozen.name||receipt.repositoryId!==frozen.repositoryId||receipt.ownerId!==frozen.ownerId||receipt.nativeActorId!==frozen.actorId||receipt.idempotencyKey!==frozen.key)throw new ConnectError('The original dispatch receipt could not be verified.',Code.Internal);
+    if(typedIntent(frozen)&&(receipt.inputContract!==frozen.inputContract||receipt.schemaSha256!==frozen.schemaSha256||receipt.submittedSha256!==frozen.submittedSha256||receipt.effectiveSha256!==frozen.effectiveSha256))throw new ConnectError('The original input bindings could not be verified.',Code.Internal);
     const run=verifiedDispatchRun(receipt.run,frozen,true);setOriginal({scope:storageScope,intent:frozen,blocked:false,run});
-   }catch(error){if(accepted(stamp,request)){if(error instanceof ConnectError&&[Code.Unauthenticated,Code.PermissionDenied].includes(error.code))setOriginal(prior=>({...prior,run:undefined,denied:true}));else setNotice(error instanceof ConnectError&&error.code===Code.NotFound?'No original receipt is available. Absence does not establish that dispatch had no effect.':errorMessage(error instanceof Error?error:new Error('Original outcome could not be inspected.')));}}
+   }catch(error){if(accepted(stamp,request)){if(!deny(error))setNotice(error instanceof ConnectError&&error.code===Code.NotFound?'No original receipt is available. Absence does not establish that dispatch had no effect.':errorMessage(error instanceof Error?error:new Error('Original outcome could not be inspected.')));}}
    finally{if(controller.current===request){controller.current=null;busy.current=false;if(alive.current&&stamp===generation.current)setDispatching(false);}}
   }
   const columns = useMemo<DataTableColumn<WorkflowConfiguration>[]>(() => [
@@ -156,7 +185,7 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
     { id: 'state', accessorFn: item => state(item.state), header: 'Inspection' },
     { id: 'policy', header: 'Policy ceilings', accessorFn:item=>`Manual ${policyLabel(item,'manual')} Automatic push ${policyLabel(item,'push')}`, cell:({row})=><><span>Manual: {policyLabel(row.original,'manual')}</span><small>Automatic push: {policyLabel(row.original,'push')}</small></> },
     { id: 'size', accessorFn: item => item.byteSize.toString(), header: 'Bytes', cell: ({ row }) => row.original.byteSize.toString(), enableSorting: false },
-    { id: 'run', header: 'Run', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => manualEligible(row.original) ? <button className="button secondary" disabled={!canDispatch(row.original)} onClick={() => void dispatch(row.original.path)}>Run workflow</button> : <span className="muted">{row.original.state === WorkflowInspectionState.VALIDATED_SUBSET ? 'Push trigger only' : 'Unsupported'}</span> },
+    { id: 'run', header: 'Run', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => manualEligible(row.original) ? <button className="button secondary" disabled={!canDispatch(row.original)} onClick={() => requestDispatch(row.original)}>Run workflow</button> : <span className="muted">{row.original.state === WorkflowInspectionState.VALIDATED_SUBSET ? 'Push trigger only' : 'Unsupported'}</span> },
     { id: 'findings', header: 'Details', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => <details>
       <summary>Inspect {row.original.path}</summary>
       <p>Blob <code>{row.original.blobId}</code></p>
@@ -169,10 +198,11 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
     </details> },
   ], [owner, name, commit, dispatching, stored, unresolved, originalMatches, signingOut, result]);
 
+  const inputsPanel=inputEditor&&result&&available.current&&!signingOut&&inputEditor.context===editorContext?<WorkflowDispatchInputs key={`${editorContext}-${inputEditor.item.path}`} path={inputEditor.item.path} definitions={inputEditor.item.manualInputs} pending={dispatching} onCancel={()=>setInputEditor(null)} onRun={values=>dispatch(inputEditor.item.path,values,inputEditor.context)}/>:null;
   const configurationPanel = <section className="browser-panel credential-list-panel" aria-labelledby="workflow-inventory-title">
         <div className="browser-panel-heading"><h2 id="workflow-inventory-title">Configuration files</h2><button className="button secondary" disabled={query.isFetching || metadata.isFetching || signingOut} onClick={refreshInspection}><RefreshCw size={15} />Refresh workflow inspection</button></div>
         <p className="panel-footnote">Manual execution requires policy approval, an enrolled worker and an approved image.{result ? result.executionAvailable ? ' A workflow worker is configured.' : ' Workflow execution is unavailable.' : null}</p>
-        {!workView?dispatchNotice:null}
+        {!workView?dispatchNotice:null}{!workView?inputsPanel:null}
         {inspectionError ? <PanelError error={inspectionError} retry={refreshInspection} /> : !result ? <Loading label="Inspecting workflow configuration…" /> : <>
           <p className="panel-footnote">Pinned commit <Link {...repositoryOptions({ owner, name, ref: commit })}><code>{commit}</code></Link>. Refresh resolves the current default branch again.</p>
           {result.diagnostics.length ? <div role="status"><Diagnostics diagnostics={result.diagnostics} /></div> : null}
@@ -199,8 +229,8 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
         {inspectionError?<PanelError error={inspectionError} retry={refreshInspection}/>:!result?<Loading label="Inspecting workflow navigation…"/>:null}
         <Link className="text-button" to="/$owner/$name/settings/workflows" params={{owner,name}}><Settings2 size={15}/>Workflow settings</Link></aside><div className="actions-main">
         {tasksOpen?<AgentTasks key={scope} userId={userId} owner={owner} name={name} signingOut={signingOut} launcherOnly/>:null}
-        {selectedConfiguration?<header className="browser-panel-heading workflow-selected-heading"><div><h2>{selectedConfiguration.name||selectedConfiguration.path}</h2><p className="field-help">Manual: {policyLabel(selectedConfiguration,'manual')} · Automatic push: {policyLabel(selectedConfiguration,'push')}. Policy observations do not grant native write access or activate a push grant.</p></div>{manualEligible(selectedConfiguration)?<button className="button secondary" disabled={!canDispatch(selectedConfiguration)} onClick={()=>void dispatch(selectedConfiguration.path)}>Run workflow</button>:null}</header>:null}
-        <ActionRuns key={`${scope}-${effectiveRepositoryId}-${location.actionKind||''}-${selectedPath||''}`} userId={userId} repositoryId={effectiveRepositoryId} location={location} signingOut={signingOut||!identityReady}/></div></div>
+        {selectedConfiguration?<header className="browser-panel-heading workflow-selected-heading"><div><h2>{selectedConfiguration.name||selectedConfiguration.path}</h2><p className="field-help">Manual: {policyLabel(selectedConfiguration,'manual')} · Automatic push: {policyLabel(selectedConfiguration,'push')}. Policy observations do not grant native write access or activate a push grant.</p></div>{manualEligible(selectedConfiguration)?<button className="button secondary" disabled={!canDispatch(selectedConfiguration)} onClick={()=>requestDispatch(selectedConfiguration)}>Run workflow</button>:null}</header>:null}
+        {inputsPanel}<ActionRuns key={`${scope}-${effectiveRepositoryId}-${location.actionKind||''}-${selectedPath||''}`} userId={userId} repositoryId={effectiveRepositoryId} location={location} signingOut={signingOut||!identityReady}/></div></div>
         <details className="workflow-inspection-disclosure"><summary>Execution details and configuration</summary>{result?<div className="panel-content"><p className="field-help">{result.executionAvailable?'A workflow worker is configured.':'Workflow worker execution is unavailable.'} Execution requires policy approval; automatic pushes also need an active automation grant.</p><p className="field-help">Current default-branch configurations at <code title={commit}>{commit.slice(0,12)}</code>. A source-tab ref does not change run history.</p></div>:null}{configurationPanel}</details>
 
       </> : configurationPanel}
