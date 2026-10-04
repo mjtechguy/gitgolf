@@ -366,9 +366,10 @@ def main():
                         row=native(actor.get('token',''),'GET','users/'+actor['name']);assert row['login']==actor['name'] and ('id' not in actor or str(row['id'])==actor['id'])
                         admin('delete','--username',actor['name'],'--purge');native('','GET','users/'+actor['name'],expected=404)
                     except Exception:failures.append('owned native actor')
-            if bootstrap_created:
-                try:admin('delete','--username',bootstrap,'--purge')
-                except Exception:failures.append('bootstrap')
+            # The last native administrator is protected by the supported CLI.
+            # This unmanaged, random-password bootstrap has no issued tokens or
+            # sessions and ends with the fresh isolated native volume below.
+            # Ordinary fixture actors still require their supported purge checks.
             try:proxy.close()
             except Exception:failures.append('owned proxy')
             try:
@@ -376,11 +377,12 @@ def main():
                     command('down','--volumes','--remove-orphans',timeout=180)
                     for arguments in (('ps','-aq'),('volume','ls','-q'),('network','ls','-q')):assert not run('docker',*arguments,'--filter','label=com.docker.compose.project='+project)
                     assert run('docker','ps','-aq')==foreign,'Foreign container identities changed during fixture'
+                    if bootstrap_created:record(bootstrapCleanup='fresh_owned_native_volume_removed')
             except Exception:failures.append('fresh resource cleanup or foreign identity')
             rules.ACTIVE_PROXY=None;smoke.GOLF,smoke.GITEA=previous
             record(cleanup='failed' if failures else 'passed',cleanupFailureCategories=sorted(set(failures)),originalFailurePreserved=bool(PROOF.get('failedStage')),status='qualified' if passed and not failures else 'failed')
             if failures and passed:raise AssertionError('Owned cleanup incomplete')
-            print('Cleanup: owned native actors/repos/organization purged, Golfsessions/bearers revoked/accounts disabled, fresh resources removed; isolated metadata discarded with owned Golfvolume.',flush=True)
+            print('Cleanup: ordinary owned native actors/repos/organization purged, unmanaged bootstrap discarded with fresh native volume, Golfsessions/bearers revoked/accounts disabled, fresh resources removed; isolated metadata discarded with owned Golfvolume.',flush=True)
     if passed:print('PASS: actual configuration-only055 API/authority/original receipts and fresh cleanup; no deployment readiness claim',flush=True)
 
 
