@@ -12,8 +12,8 @@ proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)
 
 class ReceiptAssertions(unittest.TestCase):
     def test_worker_diagnostics_keep_only_closed_stages(self):
-        raw='secret\nGolf Actions lifecycle failure: stage=daemon_image_validation\nGolf Actions lifecycle failure: stage=private-value\nGolf Actions lifecycle failure: stage=helper_completion token=private\n'
-        self.assertEqual(proof.worker_failure_stages(raw),['daemon_image_validation'])
+        raw='secret\nGolf Actions lifecycle failure: stage=daemon_image_validation\nGolf Actions lifecycle failure: stage=engine_plan_binding\nGolf Actions lifecycle failure: stage=engine_private-value\nGolf Actions lifecycle failure: stage=private-value\nGolf Actions lifecycle failure: stage=helper_completion token=private\n'
+        self.assertEqual(proof.worker_failure_stages(raw),['daemon_image_validation','engine_plan_binding'])
 
     def setUp(self):
         self.native={'id':7,'owner':{'id':8}}
