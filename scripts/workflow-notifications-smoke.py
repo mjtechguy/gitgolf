@@ -110,6 +110,20 @@ def stage(value):
     global STAGE
     STAGE=value;record(stage=value);print('CHECK: '+value,flush=True)
 
+def network_subnets(row):
+    # Host/none drivers legitimately report Config:null.
+    return [ipaddress.ip_network(v['Subnet']) for v in ((row.get('IPAM') or {}).get('Config') or []) if v.get('Subnet')]
+
+def closed_failure(error):
+    allowed_types={'AssertionError','TypeError','ValueError','KeyError','IndexError','RuntimeError','TimeoutError','TimeoutExpired','HTTPError','URLError','ConnectionError','FileNotFoundError','PermissionError','JSONDecodeError','OSError','StopIteration'}
+    allowed_files={Path(__file__).name,'email-notifications-smoke.py','outbound-webhook-smoke.py','observability-smoke.py','repository-rule-mutations-smoke.py','native_qualification_proxy.py','smoke.py'}
+    kind=type(error).__name__;frames=[];trace=error.__traceback__
+    while trace:
+        name=Path(trace.tb_frame.f_code.co_filename).name
+        frames.append({'file':name if name in allowed_files else 'dependency','line':trace.tb_lineno})
+        trace=trace.tb_next
+    return {'failureType':kind if kind in allowed_types else 'UnexpectedError','failureFrames':frames[-8:]}
+
 def event_receipt(row,keys,target,runs):
     assert set(row)=={'role','deliveryId','eventId','timestamp','signature','bodyBase64','requestIndex','mode'}
     assert row['role'] in MODES and str(uuid.UUID(row['deliveryId']))==row['deliveryId']
@@ -130,6 +144,11 @@ def event_receipt(row,keys,target,runs):
 
 def self_check():
     ast.parse(sink_source())
+    assert network_subnets({'IPAM':{'Config':None}})==[] and network_subnets({'IPAM':None})==[] and network_subnets({})==[]
+    assert network_subnets({'IPAM':{'Config':[{'Subnet':'172.20.1.0/24'},{}]}})==[ipaddress.ip_network('172.20.1.0/24')]
+    try:raise TypeError('PRIVATE_BODY_DIAGNOSTIC')
+    except TypeError as error:
+        diagnostic=closed_failure(error);assert diagnostic['failureType']=='TypeError' and diagnostic['failureFrames'] and 'PRIVATE_BODY_DIAGNOSTIC' not in json.dumps(diagnostic) and all(set(v)=={'file','line'} and type(v['line']) is int for v in diagnostic['failureFrames'])
     source=(ROOT/'api/golf/v1/golf.proto').read_text();assert all(mode+' =' in source for mode in MODES.values())
     target={'repositoryId':'9007199254740993','ownerId':'42'};run={'id':str(uuid.uuid4()),'state':'WORKFLOW_RUN_STATE_FAILED','attemptId':'a'*32}
     payload={'schema':'golf.webhook.v1','event':'workflow.run.terminal','producer':'golf.workflow_notification_events','event_id':'workflow-terminal:'+run['id'],'repository_id':target['repositoryId'],'owner_id':'42','run_id':run['id'],'attempt_id':run['attemptId'],'state':'failed','occurred_at':'2026-10-04T12:00:00Z'}
@@ -185,7 +204,7 @@ def main():
     previous=smoke.GOLF,smoke.GITEA;smoke.GOLF,smoke.GITEA='http://127.0.0.1:'+str(ports[0]),'http://127.0.0.1:'+str(ports[1])
     occupied=[]
     for cid in run('docker','network','ls','-q').splitlines():
-        row=json.loads(run('docker','network','inspect',cid))[0];occupied.extend(ipaddress.ip_network(v['Subnet']) for v in row.get('IPAM',{}).get('Config',[]) if v.get('Subnet'))
+        row=json.loads(run('docker','network','inspect',cid))[0];occupied.extend(network_subnets(row))
     subnet=next(ipaddress.ip_network(f'172.{a}.{b}.0/24') for a in range(16,32) for b in range(32,224) if not any(ipaddress.ip_network(f'172.{a}.{b}.0/24').overlaps(v) for v in occupied if v.version==4));sink_ip=str(subnet.network_address+10)
     actors={};keys={role:secrets.token_urlsafe(32) for role in MODES};control_key=secrets.token_urlsafe(32);started=False;passed=False;repos={};bootstrap_created=False
     record(project=project,proofKind='workflow-notifications056',images=images,binarySha256=binaries,helperGitRevision=run('git','rev-parse','HEAD'),proxyBinarySha256=binary_sha)
@@ -354,7 +373,7 @@ def main():
             count=len(facts['webhooks'])+len(facts['mail']);command('restart','golf','email-worker','webhook-worker');smoke.ready();time.sleep(3);after=control('/workflow-facts');assert len(after['webhooks'])+len(after['mail'])==count and runtime()==baseline
             record(runtimeAfter=runtime(),runs=[{k:v.get(k,'') for k in ('id','state','commitId','workflowPath','workflowBlobId','sourceSha256','attemptId')} for v in runs.values()],originalDispatchReceipts=original_receipts,hmacReceipts=closed,smtpReceipts=smtp_records,filterModesVerified=list(MODES),retryFrozenBodies=True,acceptedResponseLossFrozenBodies=True,restartNoDuplicate=True,lost='not_exercised',timedOut='not_exercised');passed=True
         except Exception as error:
-            record(failedStage=STAGE,failureType=type(error).__name__);raise
+            record(failedStage=STAGE,**closed_failure(error));raise
         finally:
             failures=[]
             if started:
@@ -387,4 +406,4 @@ if __name__=='__main__':
     signal.signal(signal.SIGTERM,lambda *_:(_ for _ in ()).throw(RuntimeError('Interrupted')))
     signal.signal(signal.SIGINT,lambda *_:(_ for _ in ()).throw(RuntimeError('Interrupted')))
     try:main()
-    except Exception as error:record(status='failed',failedStage=PROOF.get('failedStage',STAGE),failureType=type(error).__name__);print('Workflow notification proof failed at '+PROOF.get('failedStage',STAGE)+'; '+type(error).__name__+'; private diagnostics withheld',file=sys.stderr);sys.exit(1)
+    except Exception as error:record(status='failed',failedStage=PROOF.get('failedStage',STAGE),**closed_failure(error));print('Workflow notification proof failed at '+PROOF.get('failedStage',STAGE)+'; '+type(error).__name__+'; private diagnostics withheld',file=sys.stderr);sys.exit(1)
