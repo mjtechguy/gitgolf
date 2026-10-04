@@ -73,6 +73,8 @@ const (
 	// RepositoryActivityServiceName is the fully-qualified name of the RepositoryActivityService
 	// service.
 	RepositoryActivityServiceName = "golf.v1.RepositoryActivityService"
+	// ActionRunServiceName is the fully-qualified name of the ActionRunService service.
+	ActionRunServiceName = "golf.v1.ActionRunService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -445,6 +447,12 @@ const (
 	// RepositoryActivityServiceWatchRepositoryProcedure is the fully-qualified name of the
 	// RepositoryActivityService's WatchRepository RPC.
 	RepositoryActivityServiceWatchRepositoryProcedure = "/golf.v1.RepositoryActivityService/WatchRepository"
+	// ActionRunServiceListActionRunsProcedure is the fully-qualified name of the ActionRunService's
+	// ListActionRuns RPC.
+	ActionRunServiceListActionRunsProcedure = "/golf.v1.ActionRunService/ListActionRuns"
+	// ActionRunServiceGetActionRunProcedure is the fully-qualified name of the ActionRunService's
+	// GetActionRun RPC.
+	ActionRunServiceGetActionRunProcedure = "/golf.v1.ActionRunService/GetActionRun"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -4663,4 +4671,100 @@ type UnimplementedRepositoryActivityServiceHandler struct{}
 
 func (UnimplementedRepositoryActivityServiceHandler) WatchRepository(context.Context, *connect.Request[v1.WatchRepositoryRequest], *connect.ServerStream[v1.WatchRepositoryResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryActivityService.WatchRepository is not implemented"))
+}
+
+// ActionRunServiceClient is a client for the golf.v1.ActionRunService service.
+type ActionRunServiceClient interface {
+	ListActionRuns(context.Context, *connect.Request[v1.ListActionRunsRequest]) (*connect.Response[v1.ListActionRunsResponse], error)
+	GetActionRun(context.Context, *connect.Request[v1.GetActionRunRequest]) (*connect.Response[v1.GetActionRunResponse], error)
+}
+
+// NewActionRunServiceClient constructs a client for the golf.v1.ActionRunService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewActionRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ActionRunServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	actionRunServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("ActionRunService").Methods()
+	return &actionRunServiceClient{
+		listActionRuns: connect.NewClient[v1.ListActionRunsRequest, v1.ListActionRunsResponse](
+			httpClient,
+			baseURL+ActionRunServiceListActionRunsProcedure,
+			connect.WithSchema(actionRunServiceMethods.ByName("ListActionRuns")),
+			connect.WithClientOptions(opts...),
+		),
+		getActionRun: connect.NewClient[v1.GetActionRunRequest, v1.GetActionRunResponse](
+			httpClient,
+			baseURL+ActionRunServiceGetActionRunProcedure,
+			connect.WithSchema(actionRunServiceMethods.ByName("GetActionRun")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// actionRunServiceClient implements ActionRunServiceClient.
+type actionRunServiceClient struct {
+	listActionRuns *connect.Client[v1.ListActionRunsRequest, v1.ListActionRunsResponse]
+	getActionRun   *connect.Client[v1.GetActionRunRequest, v1.GetActionRunResponse]
+}
+
+// ListActionRuns calls golf.v1.ActionRunService.ListActionRuns.
+func (c *actionRunServiceClient) ListActionRuns(ctx context.Context, req *connect.Request[v1.ListActionRunsRequest]) (*connect.Response[v1.ListActionRunsResponse], error) {
+	return c.listActionRuns.CallUnary(ctx, req)
+}
+
+// GetActionRun calls golf.v1.ActionRunService.GetActionRun.
+func (c *actionRunServiceClient) GetActionRun(ctx context.Context, req *connect.Request[v1.GetActionRunRequest]) (*connect.Response[v1.GetActionRunResponse], error) {
+	return c.getActionRun.CallUnary(ctx, req)
+}
+
+// ActionRunServiceHandler is an implementation of the golf.v1.ActionRunService service.
+type ActionRunServiceHandler interface {
+	ListActionRuns(context.Context, *connect.Request[v1.ListActionRunsRequest]) (*connect.Response[v1.ListActionRunsResponse], error)
+	GetActionRun(context.Context, *connect.Request[v1.GetActionRunRequest]) (*connect.Response[v1.GetActionRunResponse], error)
+}
+
+// NewActionRunServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewActionRunServiceHandler(svc ActionRunServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	actionRunServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("ActionRunService").Methods()
+	actionRunServiceListActionRunsHandler := connect.NewUnaryHandler(
+		ActionRunServiceListActionRunsProcedure,
+		svc.ListActionRuns,
+		connect.WithSchema(actionRunServiceMethods.ByName("ListActionRuns")),
+		connect.WithHandlerOptions(opts...),
+	)
+	actionRunServiceGetActionRunHandler := connect.NewUnaryHandler(
+		ActionRunServiceGetActionRunProcedure,
+		svc.GetActionRun,
+		connect.WithSchema(actionRunServiceMethods.ByName("GetActionRun")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.ActionRunService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case ActionRunServiceListActionRunsProcedure:
+			actionRunServiceListActionRunsHandler.ServeHTTP(w, r)
+		case ActionRunServiceGetActionRunProcedure:
+			actionRunServiceGetActionRunHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedActionRunServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedActionRunServiceHandler struct{}
+
+func (UnimplementedActionRunServiceHandler) ListActionRuns(context.Context, *connect.Request[v1.ListActionRunsRequest]) (*connect.Response[v1.ListActionRunsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ActionRunService.ListActionRuns is not implemented"))
+}
+
+func (UnimplementedActionRunServiceHandler) GetActionRun(context.Context, *connect.Request[v1.GetActionRunRequest]) (*connect.Response[v1.GetActionRunResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ActionRunService.GetActionRun is not implemented"))
 }

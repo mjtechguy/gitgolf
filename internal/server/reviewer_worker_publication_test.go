@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/mjtechguy/golf-git/internal/server/database"
 	"github.com/pressly/goose/v3"
 )
 
@@ -101,7 +103,36 @@ func TestReviewerWorkerMigratedBlockerVisibilityPostgres(t *testing.T) {
 	if _, err := provider.UpTo(t.Context(), 202610030034); err != nil {
 		t.Fatal(err)
 	}
-	f := newReviewerPublicationFixtureOnDatabase(t, db)
+	// Forward-only legacy seeding follows the existing publication migration
+	// fixture. The latest runtime cannot enroll against an old key-family
+	// schema, and 035/037 deliberately refuse every downgrade.
+	runtimeConfig := testConfig("http://migration-fixture.invalid")
+	keys, err := ParseKeyring(runtimeConfig.EncryptionKey, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := database.New(db)
+	user, err := q.UpsertUser(t.Context(), database.UpsertUserParams{ForgeURL: runtimeConfig.GiteaURL, ForgeUserID: 42, Login: "alice"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := sha256.Sum256([]byte("owned pre035 worker visibility account"))
+	encrypted, key, err := keys.seal(localAccountDomain, "sponsor-fixture", binding[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	password, err := hashLocalPassword(t.Context(), localTestPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
+	account, err := q.CreateLocalAccount(t.Context(), database.CreateLocalAccountParams{UserID: user, Username: "alice", PasswordHash: password, EncryptedForgeToken: encrypted, CredentialBinding: binding[:], CredentialKeyID: key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviewerID := uuid.NewString()
+	if _, err := db.Exec(`INSERT INTO golf_reviewers(id,forge_url,repository_id,owner_id,repository_owner,repository_name,sponsor_user_id,sponsor_native_id,local_account_id,local_version,publisher_id,config,enabled,expires_at) VALUES($1,$2,11,42,'alice','example',$3,42,$4,1,43,'{}',true,clock_timestamp()+interval '1 day')`, reviewerID, runtimeConfig.GiteaURL, user, account.ID); err != nil {
+		t.Fatal(err)
+	}
 	ids := map[string]string{}
 	for _, state := range []string{"publishing", "publication_unknown", "outdated", "published"} {
 		id := uuid.NewString()
@@ -110,7 +141,7 @@ func TestReviewerWorkerMigratedBlockerVisibilityPostgres(t *testing.T) {
 		if state == "published" {
 			receipt = int64(91)
 		}
-		if _, err := db.Exec(`INSERT INTO golf_reviewer_runs(id,reviewer_id,reviewer_revision,pull_number,base_commit,head_commit,trigger,intent,diff,publisher_id,state,reason,review_id) VALUES($1,$2,1,7,$3,$4,'push',$5,'',43,$6,'Historical reason',$7)`, id, f.p.ID, strings.Repeat("b", 40), strings.Repeat("a", 40), "migration/"+state, state, receipt); err != nil {
+		if _, err := db.Exec(`INSERT INTO golf_reviewer_runs(id,reviewer_id,reviewer_revision,pull_number,base_commit,head_commit,trigger,intent,diff,publisher_id,state,reason,review_id) VALUES($1,$2,1,7,$3,$4,'push',$5,'',43,$6,'Historical reason',$7)`, id, reviewerID, strings.Repeat("b", 40), strings.Repeat("a", 40), "migration/"+state, state, receipt); err != nil {
 			t.Fatal(err)
 		}
 	}

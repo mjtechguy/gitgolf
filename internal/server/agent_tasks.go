@@ -37,6 +37,7 @@ func (t agentTaskRecord) wire(detail bool) *golfv1.AgentTask {
 	var c golfv1.AgentUsageConfig
 	_ = json.Unmarshal(t.RawConfig, &c)
 	v := &golfv1.AgentTask{Id: t.ID, Repository: &golfv1.RepositoryKey{Owner: t.Owner, Name: t.Name}, CommitId: t.Commit, State: t.State, Version: strconv.FormatInt(t.Version, 10), CreatedAt: t.Created.UTC().Format(time.RFC3339Nano), ConnectionId: t.Connection, ModelId: c.ModelId, Reasoning: c.Reasoning, Reason: t.Reason, Tokens: strconv.FormatInt(t.Tokens, 10), CanCancel: t.State == "queued" || t.State == "running", WorkerId: t.Worker}
+	v.AttemptId = actionAttempt(t.Attempt)
 	if detail {
 		v.Summary = t.Summary
 		v.Patch = t.Patch

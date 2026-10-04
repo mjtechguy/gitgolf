@@ -93,6 +93,7 @@ func (s *Server) loadWorkflowRun(ctx context.Context, id string) (workflowRunRec
 }
 func wireWorkflowRun(r workflowRunRecord, canCancel bool) *golfv1.WorkflowRun {
 	w := &golfv1.WorkflowRun{Id: r.ID, RepositoryId: strconv.FormatInt(r.RepositoryID, 10), OwnerId: strconv.FormatInt(r.OwnerID, 10), CommitId: r.CommitID, WorkflowPath: r.WorkflowPath, WorkflowBlobId: r.BlobID, Format: golfv1.WorkflowFormat(r.Format), State: golfv1.WorkflowRunState(golfv1.WorkflowRunState_value["WORKFLOW_RUN_STATE_"+strings.ToUpper(r.State)]), Version: strconv.FormatInt(r.Version, 10), CreatedAt: r.CreatedAt.Format(time.RFC3339Nano), Reason: r.Reason, RunnerId: r.RunnerID, SourceSha256: r.SourceSHA256, LogsTruncated: r.LogsTruncated, CanCancel: canCancel && (r.State == "queued" || r.State == "running")}
+	w.AttemptId = actionAttempt(r.AttemptID)
 	w.Origin = golfv1.WorkflowRunOrigin_WORKFLOW_RUN_ORIGIN_MANUAL
 	if r.Origin == "push" {
 		w.Origin = golfv1.WorkflowRunOrigin_WORKFLOW_RUN_ORIGIN_PUSH

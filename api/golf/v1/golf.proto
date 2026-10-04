@@ -1279,6 +1279,7 @@ message WorkflowRun {
   string repository_event_id = 21;
   string automation_grant_id = 22;
   optional WorkflowJobProgress progress = 23;
+  string attempt_id = 24;
 }
 enum WorkflowStepState {
  WORKFLOW_STEP_STATE_UNSPECIFIED = 0;
@@ -1770,6 +1771,7 @@ message AgentTask {
  string tokens = 15;
  bool can_cancel = 16;
  string worker_id = 17;
+ string attempt_id = 18;
 }
 message CreateAgentTaskRequest {
  RepositoryKey repository = 1;
@@ -2129,4 +2131,60 @@ message GetRepositoryOverviewResponse {
   repeated RepositoryLanguage languages = 10;
   RepositoryOverviewSectionState languages_state = 11;
   RepositoryOverviewSectionState licenses_state = 12;
+}
+
+// Browser-only unified inventory; each kind retains its existing visibility.
+service ActionRunService {
+ rpc ListActionRuns(ListActionRunsRequest) returns (ListActionRunsResponse);
+ rpc GetActionRun(GetActionRunRequest) returns (GetActionRunResponse);
+}
+enum ActionRunKind {
+ ACTION_RUN_KIND_UNSPECIFIED = 0;
+ ACTION_RUN_KIND_WORKFLOW = 1;
+ ACTION_RUN_KIND_CODING_TASK = 2;
+ ACTION_RUN_KIND_REVIEW = 3;
+}
+message ActionRunRef { ActionRunKind kind = 1; string id = 2; }
+message ActionRunSummary {
+ ActionRunRef ref = 1;
+ string repository_id = 2;
+ string owner_id = 3;
+ string title = 4;
+ string state = 5;
+ string commit_id = 6;
+ string created_at = 7;
+ optional string started_at = 8;
+ optional string finished_at = 9;
+ string workflow_path = 10;
+ string trigger = 11;
+ // Actual reviewer task linkage, only when the viewer may inspect that task.
+ optional ActionRunRef child_task = 12;
+ uint32 pull_number = 13;
+ string model_id = 14;
+ string worker_id = 15;
+ string attempt_id = 16;
+ string workflow_blob_id = 17;
+ string source_sha256 = 18;
+ string event_ref = 19;
+ string repository_event_id = 20;
+ string automation_grant_id = 21;
+}
+message ListActionRunsRequest {
+ RepositoryKey repository = 1;
+ string repository_id = 2;
+ uint32 limit = 3;
+ string cursor = 4;
+ ActionRunKind kind_filter = 5;
+ string workflow_path = 6;
+}
+message ListActionRunsResponse { string repository_id = 1; repeated ActionRunSummary runs = 2; string next_cursor = 3; }
+message GetActionRunRequest { RepositoryKey repository = 1; string repository_id = 2; ActionRunRef ref = 3; }
+message GetActionRunResponse {
+ string repository_id = 1;
+ ActionRunSummary summary = 2;
+ oneof detail {
+  WorkflowRun workflow = 3;
+  AgentTask task = 4;
+  ReviewerRun review = 5;
+ }
 }
