@@ -6,9 +6,10 @@ import { request, respond, reject } from './rpc';
 const id = '11111111-1111-4111-8111-111111111111';
 const secondId = '22222222-2222-4222-8222-222222222222';
 const stamp = '2026-10-04T00:00:00Z';
-const pool = () => create(RunnerPoolSchema, { id, name: 'Trusted Linux', version: '1', runtime: 'local-docker', state: State.ACTIVE, maxParallelAttempts: 2, workerIds: ['worker-1'], repositoryAssignmentEnabled: true, createdAt: stamp, updatedAt: stamp });
-const placement = () => ({ repository: { owner: 'alice', name: 'example' }, repositoryId: '9007199254740993', ownerId: '42', accessRevision: 'a'.repeat(64), version: '0', poolId: '', poolVersion: '', legacyUnbound: true });
-type Mode = 'success' | 'lost' | 'denied' | 'stale' | 'wrong version' | 'wrong target' | 'wrong values';
+const limits = { cpuMillis: 1000, memoryBytes: '268435456', pids: 64, timeoutSeconds: 900 };
+const pool = () => create(RunnerPoolSchema, { id, name: 'Trusted Linux', version: '1', runtime: 'local-docker', state: State.ACTIVE, maxParallelAttempts: 2, workerIds: ['worker-1'], repositoryAssignmentEnabled: true, jobLimits: { ...limits }, effectiveJobLimits: { ...limits }, createdAt: stamp, updatedAt: stamp });
+const placement = () => ({ repository: { owner: 'alice', name: 'example' }, repositoryId: '9007199254740993', ownerId: '42', accessRevision: 'a'.repeat(64), version: '0', poolId: '', poolVersion: '', legacyUnbound: true, jobLimits: { ...limits }, effectiveJobLimits: { ...limits } });
+type Mode = 'success' | 'lost' | 'denied' | 'stale' | 'wrong version' | 'wrong target' | 'wrong values' | 'wrong limits';
 async function backend(page: Page) {
   const state = { pools: [pool()], enrolled: ['worker-1', 'worker-2'], placement: placement(), canEdit: true, password: true, mode: 'success' as Mode, saves: [] as SaveRunnerPoolRequest[], sets: [] as SetRepositoryRunnerPlacementRequest[], reads: 0, denyRead: false, malformed: undefined as ((rows: RunnerPool[]) => RunnerPool[]) | undefined, malformedPlacement: undefined as ((r: GetRepositoryRunnerPlacementResponse) => void) | undefined, barrier: undefined as Promise<void> | undefined };
   await page.route('**/rpc/**', async route => {
@@ -35,12 +36,13 @@ async function backend(page: Page) {
       if (state.mode === 'stale') return route.fulfill({ status: 409, json: { code: 'aborted', message: 'Pool version changed.' } });
       const prior = state.pools.find(p => p.id === input.id);
       expect(input.expectedVersion).toBe(prior?.version ?? '0');
-      const next = create(RunnerPoolSchema, { id: input.id, name: input.name, runtime: input.runtime, state: input.state, maxParallelAttempts: input.maxParallelAttempts, workerIds: input.workerIds, repositoryAssignmentEnabled: input.repositoryAssignmentEnabled, version: String(BigInt(input.expectedVersion) + 1n), createdAt: prior?.createdAt ?? stamp, updatedAt: stamp });
+      const next = create(RunnerPoolSchema, { id: input.id, name: input.name, runtime: input.runtime, state: input.state, maxParallelAttempts: input.maxParallelAttempts, workerIds: input.workerIds, repositoryAssignmentEnabled: input.repositoryAssignmentEnabled, jobLimits: input.jobLimits, effectiveJobLimits: input.jobLimits, version: String(BigInt(input.expectedVersion) + 1n), createdAt: prior?.createdAt ?? stamp, updatedAt: stamp });
       state.pools = [...state.pools.filter(p => p.id !== next.id), next];
       if (state.mode === 'lost') return route.abort('failed');
       if (state.mode === 'wrong version') next.version = input.expectedVersion;
       if (state.mode === 'wrong target') next.id = secondId;
       if (state.mode === 'wrong values') next.name = 'Different request';
+      if (state.mode === 'wrong limits') next.jobLimits!.memoryBytes = '67108864';
       return respond(route, SaveRunnerPoolResponseSchema, { pool: next });
     }
     expect(method).toBe('SetRepositoryRunnerPlacement');
@@ -50,12 +52,13 @@ async function backend(page: Page) {
     if (state.mode === 'denied') { state.denyRead = true; return reject(route, 'permission_denied', 'Current repository administration required.'); }
     if (state.mode === 'stale') return route.fulfill({ status: 409, json: { code: 'aborted', message: 'Placement changed.' } });
     expect(input.expectedPlacementVersion).toBe(state.placement.version);
-    state.placement = { ...state.placement, version: String(BigInt(input.expectedPlacementVersion) + 1n), poolId: input.poolId, poolVersion: input.expectedPoolVersion, legacyUnbound: input.poolId === '' };
+    state.placement = { ...state.placement, version: String(BigInt(input.expectedPlacementVersion) + 1n), poolId: input.poolId, poolVersion: input.expectedPoolVersion, legacyUnbound: input.poolId === '', jobLimits: { ...input.jobLimits! }, effectiveJobLimits: { ...input.jobLimits! } };
     if (state.mode === 'lost') return route.abort('failed');
-    const result = { ...state.placement };
+    const result = { ...state.placement, jobLimits: { ...state.placement.jobLimits }, effectiveJobLimits: { ...state.placement.effectiveJobLimits } };
     if (state.mode === 'wrong version') result.version = input.expectedPlacementVersion;
     if (state.mode === 'wrong target') result.repositoryId = '9007199254740994';
     if (state.mode === 'wrong values') result.poolVersion = '9';
+    if (state.mode === 'wrong limits') { result.jobLimits.memoryBytes = '67108864'; result.effectiveJobLimits.memoryBytes = '67108864'; }
     return respond(route, SetRepositoryRunnerPlacementResponseSchema, { placement: result });
   });
   return state;
@@ -94,7 +97,7 @@ test('new pools require enrolled workers and explicit opt-in; no credential enro
 test('workers in other pools cannot be silently moved by this editor', async ({ page }) => {
   const s = await backend(page); s.pools.push(create(RunnerPoolSchema, { ...pool(), id: secondId, name: 'Another pool', workerIds: ['worker-2'] })); await open(page); await editPool(page); await expect(page.getByRole('checkbox', { name: 'worker-2 · another pool', exact: true })).toBeDisabled(); expect(s.saves).toHaveLength(0);
 });
-for (const mode of ['lost', 'stale', 'wrong version', 'wrong target', 'wrong values'] as const) test(`${mode} pool change is inspection-only until explicit current read`, async ({ page }) => {
+for (const mode of ['lost', 'stale', 'wrong version', 'wrong target', 'wrong values', 'wrong limits'] as const) test(`${mode} pool change is inspection-only until explicit current read`, async ({ page }) => {
   const s = await backend(page); s.mode = mode; await open(page); await editPool(page); await page.getByRole('button', { name: 'Save pool', exact: true }).click(); await expect(page.getByRole('status')).toContainText('could not be confirmed'); await expect(page.getByRole('button', { name: 'Add pool', exact: true })).toBeDisabled(); expect(s.saves).toHaveLength(1); s.mode = 'success'; await page.getByRole('button', { name: 'Inspect current runner pools' }).click(); await expect(page.getByRole('status')).toContainText('does not attribute'); expect(s.saves).toHaveLength(1);
 });
 for (const malformed of ['version', 'runtime', 'count', 'timestamp', 'duplicate memberships', 'duplicate ID', 'unknown state', 'empty active', 'missing count'] as const) test(`malformed pool ${malformed} hides the entire inventory`, async ({ page }) => {
@@ -127,7 +130,7 @@ test('draining eligible pools remain observations and cannot be selected', async
 test('managed read-only placement exposes no mutation form', async ({ page }) => {
   const s = await backend(page); s.canEdit = false; s.password = false; await open(page, true); await expect(page.getByRole('button', { name: 'Edit runner placement', exact: true })).toBeDisabled(); await expect(page.getByText('Read-only observation.', { exact: false })).toBeVisible(); await expect(page.getByRole('form')).toHaveCount(0); expect(s.sets).toHaveLength(0);
 });
-for (const mode of ['lost', 'stale', 'wrong version', 'wrong target', 'wrong values'] as const) test(`${mode} placement keeps CAS outcome uncertain until explicit inspection`, async ({ page }) => {
+for (const mode of ['lost', 'stale', 'wrong version', 'wrong target', 'wrong values', 'wrong limits'] as const) test(`${mode} placement keeps CAS outcome uncertain until explicit inspection`, async ({ page }) => {
   const s = await backend(page); s.mode = mode; await open(page, true); await editPlacement(page); await page.getByRole('button', { name: 'Save placement' }).click(); await expect(page.getByRole('status')).toContainText('could not be confirmed'); await expect(page.getByRole('button', { name: 'Edit runner placement', exact: true })).toBeDisabled(); expect(s.sets).toHaveLength(1); s.mode = 'success'; await page.getByRole('button', { name: 'Inspect current runner placement' }).click(); await expect(page.getByRole('button', { name: 'Edit runner placement', exact: true })).toBeEnabled(); expect(s.sets).toHaveLength(1);
 });
 for (const malformed of ['native ID', 'access revision', 'version', 'bound absent', 'unbound object', 'old current pool', 'cross-repository count', 'selected mismatch'] as const) test(`malformed placement ${malformed} clears its private observation`, async ({ page }) => {
@@ -140,4 +143,32 @@ test('repository administration denial removes placement and never sends a repla
 });
 for (const repository of [false, true]) for (const theme of ['dark', 'light']) for (const width of [1440, 390]) test(`${repository ? 'placement' : 'pools'} ${theme} ${width} uses shared controls and bounded layout`, async ({ page }) => {
   await page.addInitScript(theme => localStorage.setItem('golf.theme', theme), theme); const s = await backend(page); await page.setViewportSize({ width, height: 1000 }); await open(page, repository); if (repository) await editPlacement(page); else await editPool(page); await page.evaluate(() => document.fonts.ready); await expect(page.locator('html')).toHaveAttribute('data-theme', theme); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true); expect(await page.evaluate(() => document.fonts.check('14px Archivo'))).toBe(true); expect(s.saves).toHaveLength(0); expect(s.sets).toHaveLength(0);
+});
+
+for (const repository of [false, true]) test(`${repository ? 'repository' : 'pool'} editor preserves exact non-MiB bytes and binds all requested limits`, async ({ page }) => {
+  const s = await backend(page); await open(page, repository); if (repository) await editPlacement(page); else await editPool(page);
+  await page.getByLabel('CPU (millicores)', { exact: true }).fill('500'); await page.getByLabel('Memory (bytes)', { exact: true }).fill('100663297'); await page.getByLabel('Maximum process IDs per job', { exact: true }).fill('32'); await page.getByLabel('Whole-attempt timeout (seconds)', { exact: true }).fill('180');
+  await page.getByRole('button', { name: repository ? 'Save placement' : 'Save pool', exact: true }).click();
+  await expect(page.getByRole('button', { name: repository ? 'Edit runner placement' : 'Edit pool Trusted build pool', exact: true })).toBeEnabled();
+  expect((repository ? s.sets[0] : s.saves[0])!.jobLimits).toMatchObject({ cpuMillis: 500, memoryBytes: '100663297', pids: 32, timeoutSeconds: 180 });
+  if (!repository) await page.getByText('Pool details', { exact: true }).click();
+  await expect(page.getByRole('region', { name: repository ? 'Repository job resource limits' : 'Pool job resource limits', exact: true })).toContainText('100663297 bytes');
+  await page.reload(); if (!repository) await page.getByText('Pool details', { exact: true }).click();
+  await expect(page.getByRole('region', { name: repository ? 'Repository job resource limits' : 'Pool job resource limits', exact: true })).toContainText('100663297 bytes'); expect(s.saves.length + s.sets.length).toBe(1);
+});
+for (const repository of [false, true]) test(`${repository ? 'repository' : 'pool'} current requested and lower effective observations remain distinct`, async ({ page }) => {
+  const s = await backend(page); const effective = { cpuMillis: 500, memoryBytes: '134217728', pids: 32, timeoutSeconds: 120 }; if (repository) s.placement.effectiveJobLimits = effective; else s.pools[0]!.effectiveJobLimits = create(RunnerPoolSchema, { effectiveJobLimits: effective }).effectiveJobLimits;
+  await open(page, repository); if (!repository) await page.getByText('Pool details', { exact: true }).click(); const summary = page.getByRole('region', { name: repository ? 'Repository job resource limits' : 'Pool job resource limits', exact: true }); await expect(summary).toContainText('Requested 1000m · effective 500m'); await expect(summary).toContainText('Effective 128 MiB · 134217728 bytes'); await expect(summary).toContainText('Requested 900s · effective 120s'); expect(s.saves.length + s.sets.length).toBe(0);
+});
+for (const repository of [false, true]) for (const malformed of ['missing', 'memory canonical', 'CPU too high', 'effective above requested', 'PIDs too low', 'timeout zero'] as const) test(`${repository ? 'placement' : 'pool'} malformed resource ${malformed} refuses private inventory`, async ({ page }) => {
+  const s = await backend(page); const corrupt = (v: RunnerPool | NonNullable<GetRepositoryRunnerPlacementResponse['placement']>) => { if (malformed === 'missing') v.jobLimits = undefined; else if (malformed === 'memory canonical') v.jobLimits!.memoryBytes = '0268435456'; else if (malformed === 'CPU too high') v.jobLimits!.cpuMillis = 1001; else if (malformed === 'effective above requested') { v.jobLimits!.cpuMillis = 500; v.effectiveJobLimits!.cpuMillis = 600; } else if (malformed === 'PIDs too low') v.jobLimits!.pids = 15; else v.jobLimits!.timeoutSeconds = 0; };
+  if (repository) s.malformedPlacement = r => corrupt(r.placement!); else s.malformed = rows => { const p = create(RunnerPoolSchema, { ...rows[0]!, activeAttemptCount: '0' }); corrupt(p); return [p]; };
+  await open(page, repository); await expect(page.getByRole('alert')).toContainText('could not be verified'); await expect(page.getByRole('table')).toHaveCount(0); await expect(page.getByRole('form')).toHaveCount(0); expect(s.saves.length + s.sets.length).toBe(0);
+});
+for (const repository of [false, true]) test(`${repository ? 'repository' : 'pool'} noncanonical memory input cannot send a write`, async ({ page }) => {
+  const s = await backend(page); await open(page, repository); if (repository) await editPlacement(page); else await editPool(page); await page.getByLabel('Memory (bytes)', { exact: true }).fill('0100663296'); await page.getByRole('button', { name: repository ? 'Save placement' : 'Save pool', exact: true }).click(); await expect(page.getByRole('alert')).toContainText('canonical memory'); expect(s.saves.length + s.sets.length).toBe(0);
+});
+
+test('repository effective receipt cannot exceed its observed selected pool ceiling', async ({ page }) => {
+  const s = await backend(page); s.placement = { ...placement(), version: '2', poolId: id, poolVersion: '1', legacyUnbound: false }; s.pools[0]!.effectiveJobLimits!.cpuMillis = 500; await open(page, true); await expect(page.getByRole('alert')).toContainText('could not be verified'); await expect(page.getByRole('region', { name: 'Repository job resource limits' })).toHaveCount(0); expect(s.sets).toHaveLength(0);
 });
