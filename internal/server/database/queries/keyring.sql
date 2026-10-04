@@ -37,17 +37,18 @@ UPDATE golf_encryption_policy SET active_key_id = $1 WHERE singleton;
 SELECT pg_advisory_xact_lock(74191526730202002);
 
 -- name: CountCredentialKeys :many
-SELECT credential_key_id,sum(s)::bigint AS sessions,sum(o)::bigint AS oauth_attempts,sum(l)::bigint AS local_accounts,sum(i)::bigint AS infrastructure_connections,sum(a)::bigint AS automation_credentials,sum(r)::bigint AS review_contents,sum(c)::bigint AS conversation_contents,sum(w)::bigint AS webhook_credentials
+SELECT credential_key_id,sum(s)::bigint AS sessions,sum(o)::bigint AS oauth_attempts,sum(l)::bigint AS local_accounts,sum(i)::bigint AS infrastructure_connections,sum(a)::bigint AS automation_credentials,sum(r)::bigint AS review_contents,sum(c)::bigint AS conversation_contents,sum(w)::bigint AS webhook_credentials,sum(n)::bigint AS notification_contents
 FROM (
- SELECT credential_key_id,count(*) AS s,0::bigint AS o,0::bigint AS l,0::bigint AS i,0::bigint AS a,0::bigint AS r,0::bigint AS c,0::bigint AS w FROM golf_sessions GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0,count(*),0,0,0,0,0,0 FROM golf_oauth_attempts GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0,0,count(*),0,0,0,0,0 FROM golf_local_accounts GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0,0,0,count(*),0,0,0,0 FROM golf_infrastructure_connection_versions GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0,0,0,0,count(*),0,0,0 FROM golf_automation_credentials GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0,0,0,count(*),0,0,0,0 FROM golf_codex_auth GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0,0,0,0,0,count(*),0,0 FROM golf_review_contents GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0,0,0,0,0,0,count(*),0 FROM golf_agent_conversation_contents GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0,0,0,0,0,0,0,count(*) FROM golf_webhook_credentials GROUP BY credential_key_id
+ SELECT credential_key_id,count(*) AS s,0::bigint AS o,0::bigint AS l,0::bigint AS i,0::bigint AS a,0::bigint AS r,0::bigint AS c,0::bigint AS w,0::bigint AS n FROM golf_sessions GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,count(*),0,0,0,0,0,0 ,0 FROM golf_oauth_attempts GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,count(*),0,0,0,0,0 ,0 FROM golf_local_accounts GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,count(*),0,0,0,0 ,0 FROM golf_infrastructure_connection_versions GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,0,count(*),0,0,0 ,0 FROM golf_automation_credentials GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,count(*),0,0,0,0 ,0 FROM golf_codex_auth GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,0,0,count(*),0,0 ,0 FROM golf_review_contents GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,0,0,0,count(*),0 ,0 FROM golf_agent_conversation_contents GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,0,0,0,0,count(*) ,0 FROM golf_webhook_credentials GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,0,0,0,0,0,count(*) FROM golf_notification_contents GROUP BY credential_key_id
 ) counts GROUP BY credential_key_id ORDER BY credential_key_id;
 
 -- name: LockRotationSessions :many
@@ -68,8 +69,8 @@ FOR UPDATE SKIP LOCKED;
 UPDATE golf_oauth_attempts SET encrypted_verifier = $2, credential_key_id = $3 WHERE state_hash = $1;
 
 -- name: AppendCryptoEvent :exec
-INSERT INTO golf_crypto_events (operation_id, action, key_id, sessions_count, oauth_attempts_count, local_accounts_count,infrastructure_connections_count,automation_credentials_count,review_contents_count,conversation_contents_count,webhook_credentials_count)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
+INSERT INTO golf_crypto_events (operation_id, action, key_id, sessions_count, oauth_attempts_count, local_accounts_count,infrastructure_connections_count,automation_credentials_count,review_contents_count,conversation_contents_count,webhook_credentials_count,notification_contents_count)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
 
 -- name: GetKeyFingerprint :one
 SELECT fingerprint FROM golf_encryption_keys WHERE key_id = $1;

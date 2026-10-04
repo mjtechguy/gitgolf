@@ -86,6 +86,8 @@ const (
 	// RepositoryLifecycleServiceName is the fully-qualified name of the RepositoryLifecycleService
 	// service.
 	RepositoryLifecycleServiceName = "golf.v1.RepositoryLifecycleService"
+	// EmailNotificationServiceName is the fully-qualified name of the EmailNotificationService service.
+	EmailNotificationServiceName = "golf.v1.EmailNotificationService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -512,6 +514,39 @@ const (
 	// RepositoryLifecycleServiceGetRepositoryLifecycleOperationProcedure is the fully-qualified name of
 	// the RepositoryLifecycleService's GetRepositoryLifecycleOperation RPC.
 	RepositoryLifecycleServiceGetRepositoryLifecycleOperationProcedure = "/golf.v1.RepositoryLifecycleService/GetRepositoryLifecycleOperation"
+	// EmailNotificationServiceListEmailTransportsProcedure is the fully-qualified name of the
+	// EmailNotificationService's ListEmailTransports RPC.
+	EmailNotificationServiceListEmailTransportsProcedure = "/golf.v1.EmailNotificationService/ListEmailTransports"
+	// EmailNotificationServiceSaveEmailTransportProcedure is the fully-qualified name of the
+	// EmailNotificationService's SaveEmailTransport RPC.
+	EmailNotificationServiceSaveEmailTransportProcedure = "/golf.v1.EmailNotificationService/SaveEmailTransport"
+	// EmailNotificationServiceActivateEmailTransportProcedure is the fully-qualified name of the
+	// EmailNotificationService's ActivateEmailTransport RPC.
+	EmailNotificationServiceActivateEmailTransportProcedure = "/golf.v1.EmailNotificationService/ActivateEmailTransport"
+	// EmailNotificationServiceGetOwnEmailNotificationsProcedure is the fully-qualified name of the
+	// EmailNotificationService's GetOwnEmailNotifications RPC.
+	EmailNotificationServiceGetOwnEmailNotificationsProcedure = "/golf.v1.EmailNotificationService/GetOwnEmailNotifications"
+	// EmailNotificationServiceRequestEmailVerificationProcedure is the fully-qualified name of the
+	// EmailNotificationService's RequestEmailVerification RPC.
+	EmailNotificationServiceRequestEmailVerificationProcedure = "/golf.v1.EmailNotificationService/RequestEmailVerification"
+	// EmailNotificationServiceConfirmEmailVerificationProcedure is the fully-qualified name of the
+	// EmailNotificationService's ConfirmEmailVerification RPC.
+	EmailNotificationServiceConfirmEmailVerificationProcedure = "/golf.v1.EmailNotificationService/ConfirmEmailVerification"
+	// EmailNotificationServiceSaveOwnEmailPreferenceProcedure is the fully-qualified name of the
+	// EmailNotificationService's SaveOwnEmailPreference RPC.
+	EmailNotificationServiceSaveOwnEmailPreferenceProcedure = "/golf.v1.EmailNotificationService/SaveOwnEmailPreference"
+	// EmailNotificationServiceGetRepositoryEmailSubscriptionProcedure is the fully-qualified name of
+	// the EmailNotificationService's GetRepositoryEmailSubscription RPC.
+	EmailNotificationServiceGetRepositoryEmailSubscriptionProcedure = "/golf.v1.EmailNotificationService/GetRepositoryEmailSubscription"
+	// EmailNotificationServiceSaveRepositoryEmailSubscriptionProcedure is the fully-qualified name of
+	// the EmailNotificationService's SaveRepositoryEmailSubscription RPC.
+	EmailNotificationServiceSaveRepositoryEmailSubscriptionProcedure = "/golf.v1.EmailNotificationService/SaveRepositoryEmailSubscription"
+	// EmailNotificationServiceListOwnEmailDeliveriesProcedure is the fully-qualified name of the
+	// EmailNotificationService's ListOwnEmailDeliveries RPC.
+	EmailNotificationServiceListOwnEmailDeliveriesProcedure = "/golf.v1.EmailNotificationService/ListOwnEmailDeliveries"
+	// EmailNotificationServiceRedeliverOwnEmailProcedure is the fully-qualified name of the
+	// EmailNotificationService's RedeliverOwnEmail RPC.
+	EmailNotificationServiceRedeliverOwnEmailProcedure = "/golf.v1.EmailNotificationService/RedeliverOwnEmail"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -5426,4 +5461,337 @@ func (UnimplementedRepositoryLifecycleServiceHandler) ChangeRepositoryArchiveSta
 
 func (UnimplementedRepositoryLifecycleServiceHandler) GetRepositoryLifecycleOperation(context.Context, *connect.Request[v1.GetRepositoryLifecycleOperationRequest]) (*connect.Response[v1.GetRepositoryLifecycleOperationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryLifecycleService.GetRepositoryLifecycleOperation is not implemented"))
+}
+
+// EmailNotificationServiceClient is a client for the golf.v1.EmailNotificationService service.
+type EmailNotificationServiceClient interface {
+	ListEmailTransports(context.Context, *connect.Request[v1.ListEmailTransportsRequest]) (*connect.Response[v1.ListEmailTransportsResponse], error)
+	SaveEmailTransport(context.Context, *connect.Request[v1.SaveEmailTransportRequest]) (*connect.Response[v1.SaveEmailTransportResponse], error)
+	ActivateEmailTransport(context.Context, *connect.Request[v1.ActivateEmailTransportRequest]) (*connect.Response[v1.ActivateEmailTransportResponse], error)
+	GetOwnEmailNotifications(context.Context, *connect.Request[v1.GetOwnEmailNotificationsRequest]) (*connect.Response[v1.GetOwnEmailNotificationsResponse], error)
+	RequestEmailVerification(context.Context, *connect.Request[v1.RequestEmailVerificationRequest]) (*connect.Response[v1.RequestEmailVerificationResponse], error)
+	ConfirmEmailVerification(context.Context, *connect.Request[v1.ConfirmEmailVerificationRequest]) (*connect.Response[v1.ConfirmEmailVerificationResponse], error)
+	SaveOwnEmailPreference(context.Context, *connect.Request[v1.SaveOwnEmailPreferenceRequest]) (*connect.Response[v1.SaveOwnEmailPreferenceResponse], error)
+	GetRepositoryEmailSubscription(context.Context, *connect.Request[v1.GetRepositoryEmailSubscriptionRequest]) (*connect.Response[v1.GetRepositoryEmailSubscriptionResponse], error)
+	SaveRepositoryEmailSubscription(context.Context, *connect.Request[v1.SaveRepositoryEmailSubscriptionRequest]) (*connect.Response[v1.SaveRepositoryEmailSubscriptionResponse], error)
+	ListOwnEmailDeliveries(context.Context, *connect.Request[v1.ListOwnEmailDeliveriesRequest]) (*connect.Response[v1.ListOwnEmailDeliveriesResponse], error)
+	RedeliverOwnEmail(context.Context, *connect.Request[v1.RedeliverOwnEmailRequest]) (*connect.Response[v1.RedeliverOwnEmailResponse], error)
+}
+
+// NewEmailNotificationServiceClient constructs a client for the golf.v1.EmailNotificationService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewEmailNotificationServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) EmailNotificationServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	emailNotificationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("EmailNotificationService").Methods()
+	return &emailNotificationServiceClient{
+		listEmailTransports: connect.NewClient[v1.ListEmailTransportsRequest, v1.ListEmailTransportsResponse](
+			httpClient,
+			baseURL+EmailNotificationServiceListEmailTransportsProcedure,
+			connect.WithSchema(emailNotificationServiceMethods.ByName("ListEmailTransports")),
+			connect.WithClientOptions(opts...),
+		),
+		saveEmailTransport: connect.NewClient[v1.SaveEmailTransportRequest, v1.SaveEmailTransportResponse](
+			httpClient,
+			baseURL+EmailNotificationServiceSaveEmailTransportProcedure,
+			connect.WithSchema(emailNotificationServiceMethods.ByName("SaveEmailTransport")),
+			connect.WithClientOptions(opts...),
+		),
+		activateEmailTransport: connect.NewClient[v1.ActivateEmailTransportRequest, v1.ActivateEmailTransportResponse](
+			httpClient,
+			baseURL+EmailNotificationServiceActivateEmailTransportProcedure,
+			connect.WithSchema(emailNotificationServiceMethods.ByName("ActivateEmailTransport")),
+			connect.WithClientOptions(opts...),
+		),
+		getOwnEmailNotifications: connect.NewClient[v1.GetOwnEmailNotificationsRequest, v1.GetOwnEmailNotificationsResponse](
+			httpClient,
+			baseURL+EmailNotificationServiceGetOwnEmailNotificationsProcedure,
+			connect.WithSchema(emailNotificationServiceMethods.ByName("GetOwnEmailNotifications")),
+			connect.WithClientOptions(opts...),
+		),
+		requestEmailVerification: connect.NewClient[v1.RequestEmailVerificationRequest, v1.RequestEmailVerificationResponse](
+			httpClient,
+			baseURL+EmailNotificationServiceRequestEmailVerificationProcedure,
+			connect.WithSchema(emailNotificationServiceMethods.ByName("RequestEmailVerification")),
+			connect.WithClientOptions(opts...),
+		),
+		confirmEmailVerification: connect.NewClient[v1.ConfirmEmailVerificationRequest, v1.ConfirmEmailVerificationResponse](
+			httpClient,
+			baseURL+EmailNotificationServiceConfirmEmailVerificationProcedure,
+			connect.WithSchema(emailNotificationServiceMethods.ByName("ConfirmEmailVerification")),
+			connect.WithClientOptions(opts...),
+		),
+		saveOwnEmailPreference: connect.NewClient[v1.SaveOwnEmailPreferenceRequest, v1.SaveOwnEmailPreferenceResponse](
+			httpClient,
+			baseURL+EmailNotificationServiceSaveOwnEmailPreferenceProcedure,
+			connect.WithSchema(emailNotificationServiceMethods.ByName("SaveOwnEmailPreference")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryEmailSubscription: connect.NewClient[v1.GetRepositoryEmailSubscriptionRequest, v1.GetRepositoryEmailSubscriptionResponse](
+			httpClient,
+			baseURL+EmailNotificationServiceGetRepositoryEmailSubscriptionProcedure,
+			connect.WithSchema(emailNotificationServiceMethods.ByName("GetRepositoryEmailSubscription")),
+			connect.WithClientOptions(opts...),
+		),
+		saveRepositoryEmailSubscription: connect.NewClient[v1.SaveRepositoryEmailSubscriptionRequest, v1.SaveRepositoryEmailSubscriptionResponse](
+			httpClient,
+			baseURL+EmailNotificationServiceSaveRepositoryEmailSubscriptionProcedure,
+			connect.WithSchema(emailNotificationServiceMethods.ByName("SaveRepositoryEmailSubscription")),
+			connect.WithClientOptions(opts...),
+		),
+		listOwnEmailDeliveries: connect.NewClient[v1.ListOwnEmailDeliveriesRequest, v1.ListOwnEmailDeliveriesResponse](
+			httpClient,
+			baseURL+EmailNotificationServiceListOwnEmailDeliveriesProcedure,
+			connect.WithSchema(emailNotificationServiceMethods.ByName("ListOwnEmailDeliveries")),
+			connect.WithClientOptions(opts...),
+		),
+		redeliverOwnEmail: connect.NewClient[v1.RedeliverOwnEmailRequest, v1.RedeliverOwnEmailResponse](
+			httpClient,
+			baseURL+EmailNotificationServiceRedeliverOwnEmailProcedure,
+			connect.WithSchema(emailNotificationServiceMethods.ByName("RedeliverOwnEmail")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// emailNotificationServiceClient implements EmailNotificationServiceClient.
+type emailNotificationServiceClient struct {
+	listEmailTransports             *connect.Client[v1.ListEmailTransportsRequest, v1.ListEmailTransportsResponse]
+	saveEmailTransport              *connect.Client[v1.SaveEmailTransportRequest, v1.SaveEmailTransportResponse]
+	activateEmailTransport          *connect.Client[v1.ActivateEmailTransportRequest, v1.ActivateEmailTransportResponse]
+	getOwnEmailNotifications        *connect.Client[v1.GetOwnEmailNotificationsRequest, v1.GetOwnEmailNotificationsResponse]
+	requestEmailVerification        *connect.Client[v1.RequestEmailVerificationRequest, v1.RequestEmailVerificationResponse]
+	confirmEmailVerification        *connect.Client[v1.ConfirmEmailVerificationRequest, v1.ConfirmEmailVerificationResponse]
+	saveOwnEmailPreference          *connect.Client[v1.SaveOwnEmailPreferenceRequest, v1.SaveOwnEmailPreferenceResponse]
+	getRepositoryEmailSubscription  *connect.Client[v1.GetRepositoryEmailSubscriptionRequest, v1.GetRepositoryEmailSubscriptionResponse]
+	saveRepositoryEmailSubscription *connect.Client[v1.SaveRepositoryEmailSubscriptionRequest, v1.SaveRepositoryEmailSubscriptionResponse]
+	listOwnEmailDeliveries          *connect.Client[v1.ListOwnEmailDeliveriesRequest, v1.ListOwnEmailDeliveriesResponse]
+	redeliverOwnEmail               *connect.Client[v1.RedeliverOwnEmailRequest, v1.RedeliverOwnEmailResponse]
+}
+
+// ListEmailTransports calls golf.v1.EmailNotificationService.ListEmailTransports.
+func (c *emailNotificationServiceClient) ListEmailTransports(ctx context.Context, req *connect.Request[v1.ListEmailTransportsRequest]) (*connect.Response[v1.ListEmailTransportsResponse], error) {
+	return c.listEmailTransports.CallUnary(ctx, req)
+}
+
+// SaveEmailTransport calls golf.v1.EmailNotificationService.SaveEmailTransport.
+func (c *emailNotificationServiceClient) SaveEmailTransport(ctx context.Context, req *connect.Request[v1.SaveEmailTransportRequest]) (*connect.Response[v1.SaveEmailTransportResponse], error) {
+	return c.saveEmailTransport.CallUnary(ctx, req)
+}
+
+// ActivateEmailTransport calls golf.v1.EmailNotificationService.ActivateEmailTransport.
+func (c *emailNotificationServiceClient) ActivateEmailTransport(ctx context.Context, req *connect.Request[v1.ActivateEmailTransportRequest]) (*connect.Response[v1.ActivateEmailTransportResponse], error) {
+	return c.activateEmailTransport.CallUnary(ctx, req)
+}
+
+// GetOwnEmailNotifications calls golf.v1.EmailNotificationService.GetOwnEmailNotifications.
+func (c *emailNotificationServiceClient) GetOwnEmailNotifications(ctx context.Context, req *connect.Request[v1.GetOwnEmailNotificationsRequest]) (*connect.Response[v1.GetOwnEmailNotificationsResponse], error) {
+	return c.getOwnEmailNotifications.CallUnary(ctx, req)
+}
+
+// RequestEmailVerification calls golf.v1.EmailNotificationService.RequestEmailVerification.
+func (c *emailNotificationServiceClient) RequestEmailVerification(ctx context.Context, req *connect.Request[v1.RequestEmailVerificationRequest]) (*connect.Response[v1.RequestEmailVerificationResponse], error) {
+	return c.requestEmailVerification.CallUnary(ctx, req)
+}
+
+// ConfirmEmailVerification calls golf.v1.EmailNotificationService.ConfirmEmailVerification.
+func (c *emailNotificationServiceClient) ConfirmEmailVerification(ctx context.Context, req *connect.Request[v1.ConfirmEmailVerificationRequest]) (*connect.Response[v1.ConfirmEmailVerificationResponse], error) {
+	return c.confirmEmailVerification.CallUnary(ctx, req)
+}
+
+// SaveOwnEmailPreference calls golf.v1.EmailNotificationService.SaveOwnEmailPreference.
+func (c *emailNotificationServiceClient) SaveOwnEmailPreference(ctx context.Context, req *connect.Request[v1.SaveOwnEmailPreferenceRequest]) (*connect.Response[v1.SaveOwnEmailPreferenceResponse], error) {
+	return c.saveOwnEmailPreference.CallUnary(ctx, req)
+}
+
+// GetRepositoryEmailSubscription calls
+// golf.v1.EmailNotificationService.GetRepositoryEmailSubscription.
+func (c *emailNotificationServiceClient) GetRepositoryEmailSubscription(ctx context.Context, req *connect.Request[v1.GetRepositoryEmailSubscriptionRequest]) (*connect.Response[v1.GetRepositoryEmailSubscriptionResponse], error) {
+	return c.getRepositoryEmailSubscription.CallUnary(ctx, req)
+}
+
+// SaveRepositoryEmailSubscription calls
+// golf.v1.EmailNotificationService.SaveRepositoryEmailSubscription.
+func (c *emailNotificationServiceClient) SaveRepositoryEmailSubscription(ctx context.Context, req *connect.Request[v1.SaveRepositoryEmailSubscriptionRequest]) (*connect.Response[v1.SaveRepositoryEmailSubscriptionResponse], error) {
+	return c.saveRepositoryEmailSubscription.CallUnary(ctx, req)
+}
+
+// ListOwnEmailDeliveries calls golf.v1.EmailNotificationService.ListOwnEmailDeliveries.
+func (c *emailNotificationServiceClient) ListOwnEmailDeliveries(ctx context.Context, req *connect.Request[v1.ListOwnEmailDeliveriesRequest]) (*connect.Response[v1.ListOwnEmailDeliveriesResponse], error) {
+	return c.listOwnEmailDeliveries.CallUnary(ctx, req)
+}
+
+// RedeliverOwnEmail calls golf.v1.EmailNotificationService.RedeliverOwnEmail.
+func (c *emailNotificationServiceClient) RedeliverOwnEmail(ctx context.Context, req *connect.Request[v1.RedeliverOwnEmailRequest]) (*connect.Response[v1.RedeliverOwnEmailResponse], error) {
+	return c.redeliverOwnEmail.CallUnary(ctx, req)
+}
+
+// EmailNotificationServiceHandler is an implementation of the golf.v1.EmailNotificationService
+// service.
+type EmailNotificationServiceHandler interface {
+	ListEmailTransports(context.Context, *connect.Request[v1.ListEmailTransportsRequest]) (*connect.Response[v1.ListEmailTransportsResponse], error)
+	SaveEmailTransport(context.Context, *connect.Request[v1.SaveEmailTransportRequest]) (*connect.Response[v1.SaveEmailTransportResponse], error)
+	ActivateEmailTransport(context.Context, *connect.Request[v1.ActivateEmailTransportRequest]) (*connect.Response[v1.ActivateEmailTransportResponse], error)
+	GetOwnEmailNotifications(context.Context, *connect.Request[v1.GetOwnEmailNotificationsRequest]) (*connect.Response[v1.GetOwnEmailNotificationsResponse], error)
+	RequestEmailVerification(context.Context, *connect.Request[v1.RequestEmailVerificationRequest]) (*connect.Response[v1.RequestEmailVerificationResponse], error)
+	ConfirmEmailVerification(context.Context, *connect.Request[v1.ConfirmEmailVerificationRequest]) (*connect.Response[v1.ConfirmEmailVerificationResponse], error)
+	SaveOwnEmailPreference(context.Context, *connect.Request[v1.SaveOwnEmailPreferenceRequest]) (*connect.Response[v1.SaveOwnEmailPreferenceResponse], error)
+	GetRepositoryEmailSubscription(context.Context, *connect.Request[v1.GetRepositoryEmailSubscriptionRequest]) (*connect.Response[v1.GetRepositoryEmailSubscriptionResponse], error)
+	SaveRepositoryEmailSubscription(context.Context, *connect.Request[v1.SaveRepositoryEmailSubscriptionRequest]) (*connect.Response[v1.SaveRepositoryEmailSubscriptionResponse], error)
+	ListOwnEmailDeliveries(context.Context, *connect.Request[v1.ListOwnEmailDeliveriesRequest]) (*connect.Response[v1.ListOwnEmailDeliveriesResponse], error)
+	RedeliverOwnEmail(context.Context, *connect.Request[v1.RedeliverOwnEmailRequest]) (*connect.Response[v1.RedeliverOwnEmailResponse], error)
+}
+
+// NewEmailNotificationServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewEmailNotificationServiceHandler(svc EmailNotificationServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	emailNotificationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("EmailNotificationService").Methods()
+	emailNotificationServiceListEmailTransportsHandler := connect.NewUnaryHandler(
+		EmailNotificationServiceListEmailTransportsProcedure,
+		svc.ListEmailTransports,
+		connect.WithSchema(emailNotificationServiceMethods.ByName("ListEmailTransports")),
+		connect.WithHandlerOptions(opts...),
+	)
+	emailNotificationServiceSaveEmailTransportHandler := connect.NewUnaryHandler(
+		EmailNotificationServiceSaveEmailTransportProcedure,
+		svc.SaveEmailTransport,
+		connect.WithSchema(emailNotificationServiceMethods.ByName("SaveEmailTransport")),
+		connect.WithHandlerOptions(opts...),
+	)
+	emailNotificationServiceActivateEmailTransportHandler := connect.NewUnaryHandler(
+		EmailNotificationServiceActivateEmailTransportProcedure,
+		svc.ActivateEmailTransport,
+		connect.WithSchema(emailNotificationServiceMethods.ByName("ActivateEmailTransport")),
+		connect.WithHandlerOptions(opts...),
+	)
+	emailNotificationServiceGetOwnEmailNotificationsHandler := connect.NewUnaryHandler(
+		EmailNotificationServiceGetOwnEmailNotificationsProcedure,
+		svc.GetOwnEmailNotifications,
+		connect.WithSchema(emailNotificationServiceMethods.ByName("GetOwnEmailNotifications")),
+		connect.WithHandlerOptions(opts...),
+	)
+	emailNotificationServiceRequestEmailVerificationHandler := connect.NewUnaryHandler(
+		EmailNotificationServiceRequestEmailVerificationProcedure,
+		svc.RequestEmailVerification,
+		connect.WithSchema(emailNotificationServiceMethods.ByName("RequestEmailVerification")),
+		connect.WithHandlerOptions(opts...),
+	)
+	emailNotificationServiceConfirmEmailVerificationHandler := connect.NewUnaryHandler(
+		EmailNotificationServiceConfirmEmailVerificationProcedure,
+		svc.ConfirmEmailVerification,
+		connect.WithSchema(emailNotificationServiceMethods.ByName("ConfirmEmailVerification")),
+		connect.WithHandlerOptions(opts...),
+	)
+	emailNotificationServiceSaveOwnEmailPreferenceHandler := connect.NewUnaryHandler(
+		EmailNotificationServiceSaveOwnEmailPreferenceProcedure,
+		svc.SaveOwnEmailPreference,
+		connect.WithSchema(emailNotificationServiceMethods.ByName("SaveOwnEmailPreference")),
+		connect.WithHandlerOptions(opts...),
+	)
+	emailNotificationServiceGetRepositoryEmailSubscriptionHandler := connect.NewUnaryHandler(
+		EmailNotificationServiceGetRepositoryEmailSubscriptionProcedure,
+		svc.GetRepositoryEmailSubscription,
+		connect.WithSchema(emailNotificationServiceMethods.ByName("GetRepositoryEmailSubscription")),
+		connect.WithHandlerOptions(opts...),
+	)
+	emailNotificationServiceSaveRepositoryEmailSubscriptionHandler := connect.NewUnaryHandler(
+		EmailNotificationServiceSaveRepositoryEmailSubscriptionProcedure,
+		svc.SaveRepositoryEmailSubscription,
+		connect.WithSchema(emailNotificationServiceMethods.ByName("SaveRepositoryEmailSubscription")),
+		connect.WithHandlerOptions(opts...),
+	)
+	emailNotificationServiceListOwnEmailDeliveriesHandler := connect.NewUnaryHandler(
+		EmailNotificationServiceListOwnEmailDeliveriesProcedure,
+		svc.ListOwnEmailDeliveries,
+		connect.WithSchema(emailNotificationServiceMethods.ByName("ListOwnEmailDeliveries")),
+		connect.WithHandlerOptions(opts...),
+	)
+	emailNotificationServiceRedeliverOwnEmailHandler := connect.NewUnaryHandler(
+		EmailNotificationServiceRedeliverOwnEmailProcedure,
+		svc.RedeliverOwnEmail,
+		connect.WithSchema(emailNotificationServiceMethods.ByName("RedeliverOwnEmail")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.EmailNotificationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case EmailNotificationServiceListEmailTransportsProcedure:
+			emailNotificationServiceListEmailTransportsHandler.ServeHTTP(w, r)
+		case EmailNotificationServiceSaveEmailTransportProcedure:
+			emailNotificationServiceSaveEmailTransportHandler.ServeHTTP(w, r)
+		case EmailNotificationServiceActivateEmailTransportProcedure:
+			emailNotificationServiceActivateEmailTransportHandler.ServeHTTP(w, r)
+		case EmailNotificationServiceGetOwnEmailNotificationsProcedure:
+			emailNotificationServiceGetOwnEmailNotificationsHandler.ServeHTTP(w, r)
+		case EmailNotificationServiceRequestEmailVerificationProcedure:
+			emailNotificationServiceRequestEmailVerificationHandler.ServeHTTP(w, r)
+		case EmailNotificationServiceConfirmEmailVerificationProcedure:
+			emailNotificationServiceConfirmEmailVerificationHandler.ServeHTTP(w, r)
+		case EmailNotificationServiceSaveOwnEmailPreferenceProcedure:
+			emailNotificationServiceSaveOwnEmailPreferenceHandler.ServeHTTP(w, r)
+		case EmailNotificationServiceGetRepositoryEmailSubscriptionProcedure:
+			emailNotificationServiceGetRepositoryEmailSubscriptionHandler.ServeHTTP(w, r)
+		case EmailNotificationServiceSaveRepositoryEmailSubscriptionProcedure:
+			emailNotificationServiceSaveRepositoryEmailSubscriptionHandler.ServeHTTP(w, r)
+		case EmailNotificationServiceListOwnEmailDeliveriesProcedure:
+			emailNotificationServiceListOwnEmailDeliveriesHandler.ServeHTTP(w, r)
+		case EmailNotificationServiceRedeliverOwnEmailProcedure:
+			emailNotificationServiceRedeliverOwnEmailHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedEmailNotificationServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedEmailNotificationServiceHandler struct{}
+
+func (UnimplementedEmailNotificationServiceHandler) ListEmailTransports(context.Context, *connect.Request[v1.ListEmailTransportsRequest]) (*connect.Response[v1.ListEmailTransportsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.EmailNotificationService.ListEmailTransports is not implemented"))
+}
+
+func (UnimplementedEmailNotificationServiceHandler) SaveEmailTransport(context.Context, *connect.Request[v1.SaveEmailTransportRequest]) (*connect.Response[v1.SaveEmailTransportResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.EmailNotificationService.SaveEmailTransport is not implemented"))
+}
+
+func (UnimplementedEmailNotificationServiceHandler) ActivateEmailTransport(context.Context, *connect.Request[v1.ActivateEmailTransportRequest]) (*connect.Response[v1.ActivateEmailTransportResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.EmailNotificationService.ActivateEmailTransport is not implemented"))
+}
+
+func (UnimplementedEmailNotificationServiceHandler) GetOwnEmailNotifications(context.Context, *connect.Request[v1.GetOwnEmailNotificationsRequest]) (*connect.Response[v1.GetOwnEmailNotificationsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.EmailNotificationService.GetOwnEmailNotifications is not implemented"))
+}
+
+func (UnimplementedEmailNotificationServiceHandler) RequestEmailVerification(context.Context, *connect.Request[v1.RequestEmailVerificationRequest]) (*connect.Response[v1.RequestEmailVerificationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.EmailNotificationService.RequestEmailVerification is not implemented"))
+}
+
+func (UnimplementedEmailNotificationServiceHandler) ConfirmEmailVerification(context.Context, *connect.Request[v1.ConfirmEmailVerificationRequest]) (*connect.Response[v1.ConfirmEmailVerificationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.EmailNotificationService.ConfirmEmailVerification is not implemented"))
+}
+
+func (UnimplementedEmailNotificationServiceHandler) SaveOwnEmailPreference(context.Context, *connect.Request[v1.SaveOwnEmailPreferenceRequest]) (*connect.Response[v1.SaveOwnEmailPreferenceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.EmailNotificationService.SaveOwnEmailPreference is not implemented"))
+}
+
+func (UnimplementedEmailNotificationServiceHandler) GetRepositoryEmailSubscription(context.Context, *connect.Request[v1.GetRepositoryEmailSubscriptionRequest]) (*connect.Response[v1.GetRepositoryEmailSubscriptionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.EmailNotificationService.GetRepositoryEmailSubscription is not implemented"))
+}
+
+func (UnimplementedEmailNotificationServiceHandler) SaveRepositoryEmailSubscription(context.Context, *connect.Request[v1.SaveRepositoryEmailSubscriptionRequest]) (*connect.Response[v1.SaveRepositoryEmailSubscriptionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.EmailNotificationService.SaveRepositoryEmailSubscription is not implemented"))
+}
+
+func (UnimplementedEmailNotificationServiceHandler) ListOwnEmailDeliveries(context.Context, *connect.Request[v1.ListOwnEmailDeliveriesRequest]) (*connect.Response[v1.ListOwnEmailDeliveriesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.EmailNotificationService.ListOwnEmailDeliveries is not implemented"))
+}
+
+func (UnimplementedEmailNotificationServiceHandler) RedeliverOwnEmail(context.Context, *connect.Request[v1.RedeliverOwnEmailRequest]) (*connect.Response[v1.RedeliverOwnEmailResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.EmailNotificationService.RedeliverOwnEmail is not implemented"))
 }

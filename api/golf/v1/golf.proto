@@ -2555,3 +2555,171 @@ message ChangeRepositoryArchiveStateRequest {
 message ChangeRepositoryArchiveStateResponse { RepositoryLifecycle lifecycle=1; RepositoryLifecycleOperation operation=2; }
 message GetRepositoryLifecycleOperationRequest { RepositoryKey repository=1; string repository_id=2; string owner_id=3; string idempotency_key=4; }
 message GetRepositoryLifecycleOperationResponse { RepositoryLifecycleOperation operation=1; }
+// SMTP acceptance is distinct from delivery. All controls are managed-browser only.
+service EmailNotificationService {
+ rpc ListEmailTransports(ListEmailTransportsRequest) returns (ListEmailTransportsResponse);
+ rpc SaveEmailTransport(SaveEmailTransportRequest) returns (SaveEmailTransportResponse);
+ rpc ActivateEmailTransport(ActivateEmailTransportRequest) returns (ActivateEmailTransportResponse);
+ rpc GetOwnEmailNotifications(GetOwnEmailNotificationsRequest) returns (GetOwnEmailNotificationsResponse);
+ rpc RequestEmailVerification(RequestEmailVerificationRequest) returns (RequestEmailVerificationResponse);
+ rpc ConfirmEmailVerification(ConfirmEmailVerificationRequest) returns (ConfirmEmailVerificationResponse);
+ rpc SaveOwnEmailPreference(SaveOwnEmailPreferenceRequest) returns (SaveOwnEmailPreferenceResponse);
+ rpc GetRepositoryEmailSubscription(GetRepositoryEmailSubscriptionRequest) returns (GetRepositoryEmailSubscriptionResponse);
+ rpc SaveRepositoryEmailSubscription(SaveRepositoryEmailSubscriptionRequest) returns (SaveRepositoryEmailSubscriptionResponse);
+ rpc ListOwnEmailDeliveries(ListOwnEmailDeliveriesRequest) returns (ListOwnEmailDeliveriesResponse);
+ rpc RedeliverOwnEmail(RedeliverOwnEmailRequest) returns (RedeliverOwnEmailResponse);
+}
+message EmailTransport {
+ string id = 1;
+ string version = 2;
+ string name = 3;
+ string host = 4;
+ uint32 port = 5;
+ string tls_mode = 6;
+ bool has_credential = 7;
+ bool active = 8;
+ string created_at = 9;
+}
+message ListEmailTransportsRequest {}
+message ListEmailTransportsResponse {
+ repeated EmailTransport transports = 1;
+ string activation_generation = 2;
+}
+message SaveEmailTransportRequest {
+ string id = 1;
+ string expected_version = 2;
+ string name = 3;
+ string host = 4;
+ uint32 port = 5;
+ string tls_mode = 6;
+ string sender = 7;
+ string username = 8;
+ string password = 9;
+ bool retain_credential = 10;
+ string current_password = 11;
+}
+message SaveEmailTransportResponse { EmailTransport transport = 1; }
+message ActivateEmailTransportRequest {
+ string id = 1;
+ string version = 2;
+ string expected_activation_generation = 3;
+ string current_password = 4;
+}
+message ActivateEmailTransportResponse {
+ EmailTransport transport = 1;
+ string activation_generation = 2;
+}
+message OwnEmailNotificationState {
+ string user_id = 1;
+ string native_user_id = 2;
+ string local_account_id = 3;
+ string credential_version = 4;
+ string contact_version = 5;
+ string login_email = 6;
+ bool verified = 7;
+ bool enabled = 8;
+ string suppression = 9;
+ string verified_at = 10;
+ bool transport_active = 11;
+ string preference_version = 12;
+ string challenge_id = 13;
+ string challenge_expires_at = 14;
+ string challenge_delivery_id = 15;
+}
+message GetOwnEmailNotificationsRequest {}
+message GetOwnEmailNotificationsResponse { OwnEmailNotificationState state = 1; }
+message RequestEmailVerificationRequest {
+ string expected_contact_version = 1;
+ string operation_id = 2;
+}
+message RequestEmailVerificationResponse {
+ OwnEmailNotificationState state = 1;
+ string challenge_id = 2;
+ string expires_at = 3;
+ string delivery_id = 4;
+ string accepted_contact_version = 5;
+}
+message ConfirmEmailVerificationRequest {
+ string challenge_id = 1;
+ string code = 2;
+ string expected_contact_version = 3;
+}
+message ConfirmEmailVerificationResponse { OwnEmailNotificationState state = 1; }
+message SaveOwnEmailPreferenceRequest {
+ string expected_contact_version = 1;
+ bool enabled = 2;
+ bool authorize_background = 3;
+ string expected_preference_version = 4;
+}
+message SaveOwnEmailPreferenceResponse { OwnEmailNotificationState state = 1; }
+message RepositoryEmailTarget {
+ RepositoryKey repository = 1;
+ string repository_id = 2;
+ string owner_id = 3;
+}
+message RepositoryEmailSubscription {
+ string id = 1;
+ string version = 2;
+ repeated string event_topics = 3;
+ bool enabled = 4;
+ string authorization_state = 5;
+ string contact_version = 6;
+ string updated_at = 7;
+}
+message GetRepositoryEmailSubscriptionRequest { RepositoryEmailTarget target = 1; }
+message GetRepositoryEmailSubscriptionResponse {
+ RepositoryEmailTarget target = 1;
+ RepositoryEmailSubscription subscription = 2;
+ OwnEmailNotificationState state = 3;
+}
+message SaveRepositoryEmailSubscriptionRequest {
+ RepositoryEmailTarget target = 1;
+ string id = 2;
+ string expected_version = 3;
+ string expected_contact_version = 4;
+ repeated string event_topics = 5;
+ bool enabled = 6;
+ bool authorize_background = 7;
+}
+message SaveRepositoryEmailSubscriptionResponse {
+ RepositoryEmailTarget target = 1;
+ RepositoryEmailSubscription subscription = 2;
+}
+message EmailDelivery {
+ string id = 1;
+ string kind = 2;
+ string event_id = 3;
+ string event_topic = 4;
+ string state = 5;
+ uint32 attempts = 6;
+ uint32 smtp_status = 7;
+ string failure_code = 8;
+ bool possible_duplicate = 9;
+ string created_at = 10;
+ string next_attempt_at = 11;
+ string completed_at = 12;
+ string subscription_id = 13;
+ string subscription_version = 14;
+ string contact_version = 15;
+ string transport_id = 16;
+ string transport_version = 17;
+}
+message ListOwnEmailDeliveriesRequest {
+ PageRequest page = 1;
+ RepositoryEmailTarget target = 2;
+}
+message ListOwnEmailDeliveriesResponse {
+ repeated EmailDelivery deliveries = 1;
+ PageResponse page = 2;
+ string user_id = 3;
+ RepositoryEmailTarget target = 4;
+}
+message RedeliverOwnEmailRequest {
+ string delivery_id = 1;
+ string operation_id = 2;
+ string expected_contact_version = 3;
+}
+message RedeliverOwnEmailResponse {
+ EmailDelivery delivery = 1;
+ string user_id = 2;
+}

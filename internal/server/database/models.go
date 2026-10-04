@@ -255,6 +255,120 @@ type GolfCryptoEvent struct {
 	ReviewContentsCount            int64
 	ConversationContentsCount      int64
 	WebhookCredentialsCount        int64
+	NotificationContentsCount      int64
+}
+
+type GolfEmailAttempt struct {
+	DeliveryID  uuid.UUID
+	Attempt     int32
+	LeaseID     uuid.UUID
+	StartedAt   time.Time
+	CompletedAt sql.NullTime
+	SmtpStatus  int32
+	Outcome     string
+}
+
+type GolfEmailChallenge struct {
+	ID             uuid.UUID
+	UserID         int64
+	ContactVersion int64
+	CodeHash       []byte
+	Attempts       int32
+	ExpiresAt      time.Time
+	ConfirmedAt    sql.NullTime
+	CreatedAt      time.Time
+}
+
+type GolfEmailConfiguration struct {
+	Singleton        bool
+	TransportID      uuid.NullUUID
+	TransportVersion sql.NullInt64
+	Generation       int64
+}
+
+type GolfEmailContact struct {
+	UserID            int64
+	LocalAccountID    int64
+	NativeUserID      int64
+	CredentialVersion int64
+	Version           int64
+	ContentID         uuid.UUID
+	MailboxHash       []byte
+	PreferenceVersion int64
+	VerifiedAt        sql.NullTime
+	Enabled           bool
+	Suppression       string
+	UpdatedAt         time.Time
+}
+
+type GolfEmailDelivery struct {
+	ID                   uuid.UUID
+	UserID               int64
+	Kind                 string
+	ContactVersion       int64
+	SubscriptionID       uuid.NullUUID
+	SubscriptionVersion  int64
+	Epoch                int64
+	ChallengeID          uuid.NullUUID
+	EventID              string
+	EventTopic           string
+	TransportID          uuid.NullUUID
+	TransportVersion     sql.NullInt64
+	ActivationGeneration int64
+	ContentID            uuid.NullUUID
+	State                string
+	Attempts             int32
+	NextAttemptAt        time.Time
+	LeaseID              uuid.NullUUID
+	LeaseUntil           sql.NullTime
+	SmtpStatus           int32
+	FailureCode          string
+	PossibleDuplicate    bool
+	RedeliveryOf         uuid.NullUUID
+	CreatedAt            time.Time
+	CompletedAt          sql.NullTime
+}
+
+type GolfEmailEvent struct {
+	ID        int64
+	UserID    sql.NullInt64
+	Action    string
+	ObjectID  uuid.NullUUID
+	Version   int64
+	CreatedAt time.Time
+}
+
+type GolfEmailSubscription struct {
+	ID                 uuid.UUID
+	UserID             int64
+	ForgeURL           string
+	RepositoryID       int64
+	OwnerID            int64
+	RepositoryOwner    string
+	RepositoryName     string
+	LocalAccountID     int64
+	NativeUserID       int64
+	CredentialVersion  int64
+	ContactVersion     int64
+	Version            int64
+	Epoch              int64
+	EventTopics        json.RawMessage
+	Enabled            bool
+	AuthorizationState string
+	UnsubscribeHash    []byte
+	ContentID          uuid.UUID
+	UpdatedAt          time.Time
+}
+
+type GolfEmailTransport struct {
+	ID        uuid.UUID
+	Version   int64
+	Name      string
+	Host      string
+	Port      int32
+	TlsMode   string
+	ContentID uuid.UUID
+	CreatedAt time.Time
 }
 
 type GolfEncryptionKey struct {
@@ -450,6 +564,15 @@ type GolfLocalLoginLimit struct {
 	Bucket   int16
 	Attempts int32
 	ResetsAt time.Time
+}
+
+type GolfNotificationContent struct {
+	ID               uuid.UUID
+	Kind             string
+	EncryptedContent []byte
+	ContentBinding   []byte
+	CredentialKeyID  string
+	CreatedAt        time.Time
 }
 
 type GolfOauthAttempt struct {
