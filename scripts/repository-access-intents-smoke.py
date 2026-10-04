@@ -4,7 +4,7 @@
 Requires an exact cached revision-labelled --image and NEW --output. No builds,
 pulls, retained policy changes, CI, inference, external destination or SQL writes.
 An owned adapter inside the fresh Compose network forwards unchanged native
-requests; one exact collaborator PUT loses its response only AFTER a real native204.
+requests; direct and invitation collaborator PUTs each lose a response only AFTER a real native204.
 Requires --proxy-binary (precompiled Linux ARM64); only nonce-authenticated control
 is published on loopback. No host bridge is used for native forwarding. --ui adds12 actual
 inventory/requested-role/original-receipt captures. --self-check is pure.
@@ -239,6 +239,26 @@ def access_operation(row,original,actor,phase):
     else:assert not row.get('observedEffectivePermission','') and not row.get('observedDirectMembership',False)
     return row
 
+def checked_invitation_unknown(receipt):
+    expected={'observed204','closedBeforeGolfReceipt','freshDirectBlocked','freshAcceptBlocked','archiveBlocked','noResend','restartStatusOnly',
+              'phase','invitationState','nativeEffectivePermission','generationBefore','generationAfter','generationAfterRestart',
+              'dispatchCountBefore','dispatchCountAfter','dispatchCountAfterReplay','dispatchCountAfterRestart','lostCountBefore','lostCountAfter'}
+    assert set(receipt)==expected
+    for field in ('observed204','closedBeforeGolfReceipt','freshDirectBlocked','freshAcceptBlocked','archiveBlocked','noResend','restartStatusOnly'):
+        assert receipt[field] is True
+    assert receipt['phase']=='DISPATCH_UNKNOWN' and receipt['invitationState']=='GRANTING'
+    assert receipt['nativeEffectivePermission']=='read'
+    for field in ('generationBefore','generationAfter','generationAfterRestart'):
+        assert re.fullmatch(r'0|[1-9][0-9]*',receipt[field])
+    assert int(receipt['generationAfter'])==int(receipt['generationBefore'])+1
+    assert receipt['generationAfterRestart']==receipt['generationAfter']
+    fields=('dispatchCountBefore','dispatchCountAfter','dispatchCountAfterReplay','dispatchCountAfterRestart','lostCountBefore','lostCountAfter')
+    assert all(type(receipt[field]) is int and receipt[field]>=0 for field in fields)
+    assert receipt['dispatchCountBefore']==0 and receipt['dispatchCountAfter']==1
+    assert receipt['dispatchCountAfterReplay']==receipt['dispatchCountAfterRestart']==receipt['dispatchCountAfter']
+    assert receipt['lostCountAfter']==receipt['lostCountBefore']+1
+    return receipt
+
 def checked_owner_refusals(receipts):
     expected={'set','remove','invitation-preview','invitation-create'}
     assert isinstance(receipts,list) and len(receipts)==4
@@ -304,6 +324,18 @@ def self_check():
         try:checked_owner_refusals(invalid)
         except AssertionError:pass
         else:raise AssertionError('Missing ownership proof or effectful protected-owner refusal accepted')
+    unknown={'observed204':True,'closedBeforeGolfReceipt':True,'phase':'DISPATCH_UNKNOWN','invitationState':'GRANTING',
+             'nativeEffectivePermission':'read','generationBefore':'0','generationAfter':'1','generationAfterRestart':'1',
+             'dispatchCountBefore':0,'dispatchCountAfter':1,'dispatchCountAfterReplay':1,'dispatchCountAfterRestart':1,
+             'lostCountBefore':1,'lostCountAfter':2,'freshDirectBlocked':True,'freshAcceptBlocked':True,
+             'archiveBlocked':True,'noResend':True,'restartStatusOnly':True}
+    assert checked_invitation_unknown(unknown) is unknown
+    for field,value in (('phase','SUCCEEDED'),('invitationState','ACCEPTED'),('nativeEffectivePermission','write'),
+                        ('generationAfter','0'),('generationAfterRestart','2'),('dispatchCountBefore',1),
+                        ('dispatchCountAfterReplay',2),('dispatchCountAfterRestart',2),('lostCountAfter',1),('noResend',False),('privateBody','forbidden')):
+        try:checked_invitation_unknown({**unknown,field:value})
+        except AssertionError:pass
+        else:raise AssertionError('Unqualified invitation acknowledgement-loss/restart receipt accepted')
     proxy_source_check()
     print('PASS: pure048 wire, exact actor/target/intent/phase receipts, inherited permission, exact twelve-case invitation matrix and unknown non-adoption; no runtime resources')
 
@@ -533,6 +565,66 @@ def main():
             command('restart','golf',timeout=90);smoke.ready();assert runtime()==before and inspect_access(owner,p,'DISPATCH_UNKNOWN')==op
             replay=checked_rpc(owner['session'],ACCESS+'SetRepositoryCollaborator',p);assert replay['operation']==op and not replay.get('collaborator') and proxy.count(uncertain,recipient)==count;checked_rpc(owner['session'],ACCESS+'SetRepositoryCollaborator',fresh,expected=400,code='failed_precondition');assert proxy.count(uncertain,recipient)==count
             record(native204ResponseLoss={'observed204':True,'closedBeforeGolfReceipt':True,'phase':'DISPATCH_UNKNOWN','dispatchCount':count,'restartStatusOnly':True,'freshDirectAndInvitationBlocked':True,'archiveBlocked':True,'noResend':True},sharedGenerationABA='qualified')
+            stage('invitation-owned acceptance native204 acknowledgement loss retains exact original generation')
+            invitation_repo=create_repo(owner,'invitation-uncertain')
+            lost_invitation,_=create(invitation_repo,owner,recipient,'read')
+            _,invitation_before=resolve(invitation_repo,owner,recipient)
+            assert not invitation_before.get('isDirect',False) and invitation_before['generation']=='0'
+            invitation_count_before=proxy.count(invitation_repo,recipient)
+            invitation_lost_before=proxy.lost
+            assert invitation_count_before==0 and proxy.armed is None
+            proxy.arm('/api/v1/repos/'+invitation_repo['name']+'/collaborators/'+recipient['name'])
+            lost_result,lost_original=respond(recipient,lost_invitation)
+            lost_operation=operation(lost_result['operation'],lost_original,'DISPATCH_UNKNOWN')
+            lost_current=invitation(lost_result['invitation'],recipient,invitation_repo)
+            assert lost_current['state']=='GRANTING' and int(lost_current['revision'])==int(lost_invitation['revision'])+1
+            assert proxy.lost==invitation_lost_before+1 and proxy.armed is None
+            native_invitation_permission=member(invitation_repo,recipient,True)
+            assert native_invitation_permission=='read'
+            _,invitation_after=resolve(invitation_repo,owner,recipient)
+            assert invitation_after['generation']==str(int(invitation_before['generation'])+1)
+            assert invitation_after.get('isDirect',False) and invitation_after['permission']=='read'
+            invitation_count_after=proxy.count(invitation_repo,recipient)
+            assert invitation_count_after==invitation_count_before+1
+            assert own(recipient,lost_invitation['id'])==lost_current
+            assert inspect_invitation(recipient,lost_original,'DISPATCH_UNKNOWN')==lost_operation
+            invitation_replay=call(recipient,'RespondRepositoryInvitation',lost_original)
+            assert invitation_replay['operation']==lost_operation and invitation_replay['invitation']==lost_current
+            invitation_count_replay=proxy.count(invitation_repo,recipient)
+            assert invitation_count_replay==invitation_count_after
+            invitation_fresh,_=intent(invitation_repo,owner,recipient,'write')
+            checked_rpc(owner['session'],ACCESS+'SetRepositoryCollaborator',invitation_fresh,expected=400,code='failed_precondition')
+            respond(recipient,lost_current,expected=400,code='failed_precondition')
+            invitation_lifecycle=checked_rpc(owner['session'],'RepositoryLifecycleService/GetRepositoryLifecycle',{'repository':invitation_repo['key'],'repositoryId':invitation_repo['id']})['lifecycle']
+            assert invitation_lifecycle['repositoryId']==invitation_repo['id'] and invitation_lifecycle['ownerId']==invitation_repo['ownerId']
+            assert invitation_lifecycle['blockedReason']=='active_work' and int(invitation_lifecycle['activeWorkCount'])>=1 and not invitation_lifecycle.get('archiveAvailable',False)
+            invitation_archive={'repository':invitation_repo['key'],'repositoryId':invitation_repo['id'],'ownerId':invitation_repo['ownerId'],
+                                'expectedRevision':invitation_lifecycle['revision'],'archived':True,'confirmationName':invitation_repo['name'],
+                                'currentPassword':owner['password'],'idempotencyKey':key()}
+            archive_refused=checked_rpc(owner['session'],'RepositoryLifecycleService/ChangeRepositoryArchiveState',invitation_archive)
+            assert archive_refused['operation']['phase']=='REJECTED' and archive_refused['operation']['failureCode']=='preflight_refused'
+            assert not smoke.provider(owner['token'],'GET','repos/'+invitation_repo['name'])['archived']
+            _,invitation_unresolved=resolve(invitation_repo,owner,recipient)
+            assert invitation_unresolved==invitation_after and proxy.count(invitation_repo,recipient)==invitation_count_after
+            stage('restart invitation-owned unknown original: read-only inspection/replay without resume or clear')
+            command('restart','golf',timeout=90);smoke.ready();assert runtime()==before
+            assert inspect_invitation(recipient,lost_original,'DISPATCH_UNKNOWN')==lost_operation
+            invitation_restart=call(recipient,'RespondRepositoryInvitation',lost_original)
+            assert invitation_restart['operation']==lost_operation and invitation_restart['invitation']==lost_current
+            _,invitation_after_restart=resolve(invitation_repo,owner,recipient)
+            assert invitation_after_restart==invitation_after and member(invitation_repo,recipient,True)=='read'
+            assert own(recipient,lost_invitation['id'])==lost_current
+            checked_rpc(owner['session'],ACCESS+'SetRepositoryCollaborator',invitation_fresh,expected=400,code='failed_precondition')
+            respond(recipient,lost_current,expected=400,code='failed_precondition')
+            invitation_count_restart=proxy.count(invitation_repo,recipient)
+            assert invitation_count_restart==invitation_count_after and proxy.lost==invitation_lost_before+1
+            record(invitationUnknown=checked_invitation_unknown({'observed204':True,'closedBeforeGolfReceipt':True,
+                'phase':'DISPATCH_UNKNOWN','invitationState':lost_current['state'],'nativeEffectivePermission':native_invitation_permission,
+                'generationBefore':invitation_before['generation'],'generationAfter':invitation_after['generation'],
+                'generationAfterRestart':invitation_after_restart['generation'],'dispatchCountBefore':invitation_count_before,
+                'dispatchCountAfter':invitation_count_after,'dispatchCountAfterReplay':invitation_count_replay,
+                'dispatchCountAfterRestart':invitation_count_restart,'lostCountBefore':invitation_lost_before,'lostCountAfter':proxy.lost,
+                'freshDirectBlocked':True,'freshAcceptBlocked':True,'archiveBlocked':True,'noResend':True,'restartStatusOnly':True}))
             if args.ui:
                 stage('actual requested-role forms and original successful receipt inspection;12 captures')
                 ui_repo=create_repo(owner,'browser');config={'stackRoot':str(ROOT),'golf':smoke.GOLF,'gitea':smoke.GITEA,'repository':ui_repo['name'],'repositoryId':ui_repo['id'],'ownerId':ui_repo['ownerId'],'issuerEmail':owner['email'],'issuerPassword':owner['password'],'recipientId':recipient['id'],'recipientUsername':recipient['name'],'ownerToken':owner['token'],'screenshots':str(common.OUTPUT),'runtime':before};result=subprocess.run(['node',str(Path(__file__).with_name('repository-access-intents-browser.mjs'))],cwd=ROOT,env=environment,input=json.dumps(config).encode(),capture_output=True,timeout=360);assert len(result.stdout)<=65536 and len(result.stderr)<=65536;path=common.OUTPUT/'browser-manifest.json';assert path.is_file(),'Browser safe staged manifest missing';b=json.loads(path.read_text());record(browser=b['status'],captures=b.get('captures',[]),browserFailedStage=b.get('failedStage'));assert result.returncode==0 and b['status']=='browser_checks_passed_parent_native_cleanup_pending' and len(b['captures'])==12 and b['runtime']==before,'Browser predicate failed; safe manifest retained';print(result.stdout.decode().strip(),flush=True)
