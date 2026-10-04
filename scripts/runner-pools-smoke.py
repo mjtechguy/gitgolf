@@ -456,19 +456,21 @@ def main():
             rows=body.get('pools',[]);assert len(rows)<=20 and len({row['id'] for row in rows})==len(rows)
             for row in rows:validate_pool(row)
             return rows
-        def save_pool(old=None, **overrides):
-            intent={'id':old['id'] if old else str(uuid.uuid4()),'expectedVersion':old['version'] if old else '0','name':old['name'] if old else 'Owned capacity-one pool','runtime':'local-docker','state':old['state'] if old else 'RUNNER_POOL_STATE_ACTIVE','maxParallelAttempts':1,'workerIds':workers[:],'repositoryAssignmentEnabled':True,'currentPassword':actors['owner']['password'],**overrides}
-            row=rpc(actors['owner'],SERVICE+'SaveRunnerPool',intent)['pool'];validate_pool(row)
+        def save_pool(old=None, actor=None, **overrides):
+            actor=actor or actors['owner']
+            intent={'id':old['id'] if old else str(uuid.uuid4()),'expectedVersion':old['version'] if old else '0','name':old['name'] if old else 'Owned capacity-one pool','runtime':'local-docker','state':old['state'] if old else 'RUNNER_POOL_STATE_ACTIVE','maxParallelAttempts':1,'workerIds':workers[:],'repositoryAssignmentEnabled':True,'currentPassword':actor['password'],**overrides}
+            row=rpc(actor,SERVICE+'SaveRunnerPool',intent)['pool'];validate_pool(row)
             assert row['id']==intent['id'] and row['version']==str(int(intent['expectedVersion'])+1) and all(row.get(field,False)==intent[field] for field in ('name','runtime','state','maxParallelAttempts','workerIds','repositoryAssignmentEnabled'))
             return row,intent
         def access(actor,repo):return rpc(actor,'RepositoryAccessService/GetRepositoryAccess',{'repository':repo})['access']
         def placement(actor,repo):
             a=access(actor,repo);target={'repository':repo,'repositoryId':a['repositoryId'],'ownerId':a['ownerId'],'expectedRevision':a['revision']}
             body=rpc(actor,SERVICE+'GetRepositoryRunnerPlacement',target);validate_placement(body['placement'],target);return body,target
-        def place(pool_value=None, repo=None):
-            repo=repo or repository;before,target=placement(actors['owner'],repo)
-            intent={**target,'expectedPlacementVersion':before['placement']['version'],'poolId':pool_value['id'] if pool_value else '', 'expectedPoolVersion':pool_value['version'] if pool_value else '', 'currentPassword':actors['owner']['password']}
-            row=rpc(actors['owner'],SERVICE+'SetRepositoryRunnerPlacement',intent)['placement'];validate_placement(row,target)
+        def place(pool_value=None, repo=None, actor=None):
+            actor=actor or actors['owner']
+            repo=repo or repository;before,target=placement(actor,repo)
+            intent={**target,'expectedPlacementVersion':before['placement']['version'],'poolId':pool_value['id'] if pool_value else '', 'expectedPoolVersion':pool_value['version'] if pool_value else '', 'currentPassword':actor['password']}
+            row=rpc(actor,SERVICE+'SetRepositoryRunnerPlacement',intent)['placement'];validate_placement(row,target)
             assert row['version']==str(int(intent['expectedPlacementVersion'])+1) and row.get('poolId','')==intent['poolId'] and row.get('poolVersion','')==intent['expectedPoolVersion'] and row.get('legacyUnbound',False)==(pool_value is None)
             return row,intent
         def assert_binding(row,pool_value,placed):
@@ -513,7 +515,7 @@ def main():
             seeded_images=helpers.until(seeded,timeout=args.seed_timeout);record(seededImages=seeded_images)
             helpers.private_write(OUTPUT/'seed-ready.json',json.dumps({'schema':'golf.runner-pools.seed.v1','containerId':daemon,'verifiedImages':seeded_images},indent=2)+'\n')
             stage('supported native identities and managed local admin/reader sessions')
-            buckets=set();roles=['owner','reader','nativeadmin']+(['dark1440','dark390','light1440','light390'] if args.ui else [])
+            buckets=set();roles=['owner','control','reader','nativeadmin']+(['dark1440','dark390','light1440','light390'] if args.ui else [])
             for role in roles:
                 for _ in range(256):
                     name='rn-'+role+'-'+secrets.token_hex(4);bucket=int.from_bytes(hashlib.sha256(name.encode()).digest()[:2],'big')%1024+1
@@ -530,7 +532,7 @@ def main():
             owner=actors['owner'];native=smoke.provider(owner['token'],'POST','user/repos',{'name':'runner-pools','private':True,'auto_init':True},201)
             repository={'owner':owner['name'],'name':native['name']};base='repos/'+native['full_name'];smoke.wait_for_push(owner['token'],native['full_name'])
             for actor in actors.values():
-                if actor is not owner:smoke.provider(owner['token'],'PUT',base+'/collaborators/'+actor['name'],{'permission':'admin' if actor['email'] in [actors[k]['email'] for k in ('dark1440','dark390','light1440','light390') if k in actors] else 'read'},204)
+                if actor is not owner:smoke.provider(owner['token'],'PUT',base+'/collaborators/'+actor['name'],{'permission':'admin' if actor['email'] in [actors[k]['email'] for k in ('control','dark1440','dark390','light1440','light390') if k in actors] else 'read'},204)
             for path,source in ((PATH,SLOW_SOURCE),(FAST,FAST_SOURCE)):smoke.provider(owner['token'],'POST',base+'/contents/'+path,{'content':base64.b64encode(source).decode(),'message':'Owned bounded runner-control source'},201)
             head=smoke.provider(owner['token'],'GET',base+'/branches/'+native['default_branch'])['commit']['id'];assert re.fullmatch(r'[a-f0-9]{40}',head)
             selection={'repository':repository,'repositoryId':str(native['id']),'ownerId':str(native['owner']['id']),'workflowPath':PATH}
@@ -584,6 +586,7 @@ def main():
             assert datetime.fromisoformat(completed['finishedAt'].replace('Z','+00:00'))<=datetime.fromisoformat(second_done['startedAt'].replace('Z','+00:00'))
             for run_value,marker in ((completed,'owned runner finished'),(second_done,'owned runner finished')):
                 body=rpc(owner,'WorkflowRunService/GetWorkflowRunLogs',{'runId':run_value['id']});assert marker in ''.join(row['text'] for row in body.get('logs',[]))
+            record(actualCapacitySampling={'workerIds':workers,'bothIdentitiesExecuted':True,'capacity':1,'samples':samples,'firstWorker':claiming,'secondWorker':other,'sequentialTimingVerified':True,'attemptContainersAndVolumesRemoved':True})
             change(owner,claiming,'ACTIVE');command('stop','runner','runner-second')
             stage('unbound work never claims a pooled worker')
             unbound_native=smoke.provider(owner['token'],'POST','user/repos',{'name':'unbound-pool-proof','private':True,'auto_init':True},201);unbound_repo={'owner':owner['name'],'name':unbound_native['name']};unbound_base='repos/'+unbound_native['full_name'];smoke.wait_for_push(owner['token'],unbound_native['full_name'])
@@ -597,13 +600,16 @@ def main():
             cancel(unbound);command('stop','runner','runner-second')
             stage('edited/draining pool rejects old queued pin and fresh drained dispatch')
             stale=dispatch(FAST);assert_binding(stale,pool,placed)
-            old_pool=pool;pool,_=save_pool(pool,state='RUNNER_POOL_STATE_DRAINING')
+            # Independent current instance/repository administrator for this
+            # phase; preserve normal per-account password/KDF attempt limits.
+            controller=actors['control']
+            old_pool=pool;pool,_=save_pool(pool,actor=controller,state='RUNNER_POOL_STATE_DRAINING')
             dispatch(FAST,expected=400,code='failed_precondition')
             command('up','-d','--no-build','--pull','never','runner','runner-second')
             refused=wait_state(stale,'WORKFLOW_RUN_STATE_CANCELLED');assert not refused.get('runnerId') and not refused.get('attemptId');assert_binding(refused,old_pool,placed)
-            command('stop','runner','runner-second');pool,_=save_pool(pool,state='RUNNER_POOL_STATE_ACTIVE');placed,_=place(pool)
+            command('stop','runner','runner-second');pool,_=save_pool(pool,actor=controller,state='RUNNER_POOL_STATE_ACTIVE');placed,_=place(pool,actor=controller)
             stage('changed placement refuses old queued pin without automatic reassignment')
-            stale_placement=dispatch(FAST);old_placement=placed;placed,_=place(pool)
+            stale_placement=dispatch(FAST);old_placement=placed;placed,_=place(pool,actor=controller)
             command('up','-d','--no-build','--pull','never','runner','runner-second');refused_placement=wait_state(stale_placement,'WORKFLOW_RUN_STATE_CANCELLED');assert not refused_placement.get('attemptId');assert_binding(refused_placement,pool,old_placement)
             fresh=dispatch(FAST);fresh_done=wait_state(fresh,'WORKFLOW_RUN_STATE_SUCCEEDED');assert_binding(fresh_done,pool,placed);assert cleared(fresh_done['attemptId'])
             stage('restart retains completed binding; original intent replay never executes again')
