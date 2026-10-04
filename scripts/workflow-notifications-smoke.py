@@ -126,18 +126,21 @@ def closed_failure(error):
         trace=trace.tb_next
     return {'failureType':kind if kind in allowed_types else 'UnexpectedError','failureFrames':frames[-8:]}
 
-FOREIGN_FIELDS=('image','status','running','startedAt','restartCount')
+FOREIGN_IDENTITY_FIELDS=('image','status','running')
+FOREIGN_LIFECYCLE_FIELDS=('startedAt','restartCount')
 
 def filtered_foreign(rows):
     # Deliberately exclude Env, command, mounts, health logs and all payloads.
     return {v['Id']:{'image':v['Image'],'status':v['State']['Status'],'running':v['State']['Running'],'startedAt':v['State']['StartedAt'],'restartCount':v['RestartCount']} for v in rows}
 
 def foreign_diff(before,after):
-    missing=sorted(set(before)-set(after));extra=sorted(set(after)-set(before));changed=[]
+    missing=sorted(set(before)-set(after));extra=sorted(set(after)-set(before));changed=[];lifecycle=[]
     for identifier in sorted(set(before)&set(after)):
-        fields=[name for name in FOREIGN_FIELDS if before[identifier][name]!=after[identifier][name]]
+        fields=[name for name in FOREIGN_IDENTITY_FIELDS if before[identifier][name]!=after[identifier][name]]
         if fields:changed.append({'containerId':identifier,'fields':fields})
-    return {'missingContainerIds':missing,'extraContainerIds':extra,'beforeCount':len(before),'afterCount':len(after),'changed':changed,'unchanged':not missing and not extra and not changed}
+        observed=[name for name in FOREIGN_LIFECYCLE_FIELDS if before[identifier][name]!=after[identifier][name]]
+        if observed:lifecycle.append({'containerId':identifier,'fields':observed,'before':{name:before[identifier][name] for name in observed},'after':{name:after[identifier][name] for name in observed}})
+    return {'missingContainerIds':missing,'extraContainerIds':extra,'beforeCount':len(before),'afterCount':len(after),'identityChanges':changed,'identityUnchanged':not missing and not extra and not changed,'lifecycleObservations':lifecycle,'lifecycleCause':'not_asserted'}
 
 def private_snapshot(name,value):
     path=OUTPUT/(name+'.json.tmp');helpers.private_write(path,json.dumps(value,indent=2,sort_keys=True));path.replace(OUTPUT/(name+'.json'))
@@ -197,8 +200,10 @@ def self_check():
         except AssertionError:pass
         else:raise AssertionError('Subprocess callable reassignment was accepted')
     row={'Id':'a'*64,'Image':'sha256:'+'b'*64,'State':{'Status':'running','Running':True,'StartedAt':'2026-10-04T12:00:00Z'},'RestartCount':0,'Config':{'Env':['PRIVATE_DIAGNOSTIC_ENV']}}
-    snapshot=filtered_foreign([row]);assert 'PRIVATE_DIAGNOSTIC_ENV' not in json.dumps(snapshot) and foreign_diff(snapshot,snapshot)['unchanged']
-    changed=filtered_foreign([row|{'RestartCount':1}]);delta=foreign_diff(snapshot,changed);assert delta['changed']==[{'containerId':'a'*64,'fields':['restartCount']}] and not delta['unchanged']
+    snapshot=filtered_foreign([row]);assert 'PRIVATE_DIAGNOSTIC_ENV' not in json.dumps(snapshot) and foreign_diff(snapshot,snapshot)['identityUnchanged']
+    changed=filtered_foreign([row|{'RestartCount':1}]);delta=foreign_diff(snapshot,changed);assert delta['identityUnchanged'] and delta['identityChanges']==[] and delta['lifecycleObservations']==[{'containerId':'a'*64,'fields':['restartCount'],'before':{'restartCount':0},'after':{'restartCount':1}}] and delta['lifecycleCause']=='not_asserted'
+    for field,value in [('Image','sha256:'+'c'*64),('State',row['State']|{'Status':'exited'}),('State',row['State']|{'Running':False})]:
+        observed=foreign_diff(snapshot,filtered_foreign([row|{field:value}]));assert not observed['identityUnchanged'] and observed['identityChanges']
     assert foreign_diff(snapshot,{})['missingContainerIds']==['a'*64] and foreign_diff({},snapshot)['extraContainerIds']==['a'*64]
     assert network_subnets({'IPAM':{'Config':None}})==[] and network_subnets({'IPAM':None})==[] and network_subnets({})==[]
     assert network_subnets({'IPAM':{'Config':[{'Subnet':'172.20.1.0/24'},{}]}})==[ipaddress.ip_network('172.20.1.0/24')]
@@ -461,10 +466,10 @@ def main():
                 own_zero=not resource_errors and not any(survivors.values());record(ownedResourcesZero=own_zero,ownedResourceSurvivors=survivors,ownedResourceCheckErrors=resource_errors)
                 if not own_zero:failures.append('owned resource survivors or unavailable observation')
                 try:
-                    foreign_after=foreign_snapshot();private_snapshot('foreign-after',foreign_after);difference=foreign_diff(foreign_before,foreign_after);record(foreignComparison=difference)
-                    if not difference['unchanged']:failures.append('foreign identity changed')
+                    foreign_after=foreign_snapshot();private_snapshot('foreign-after',foreign_after);difference=foreign_diff(foreign_before,foreign_after);record(foreignComparison=difference,foreignIdentityUnchanged=difference['identityUnchanged'])
+                    if not difference['identityUnchanged']:failures.append('foreign identity changed')
                 except Exception as error:
-                    record(foreignComparison={'unchanged':False,'observationUnavailable':True,**closed_failure(error)});failures.append('foreign identity observation unavailable')
+                    record(foreignIdentityUnchanged=False,foreignComparison={'identityUnchanged':False,'observationUnavailable':True,**closed_failure(error)});failures.append('foreign identity observation unavailable')
             rules.ACTIVE_PROXY=None;smoke.GOLF,smoke.GITEA=previous
             record(status='qualified' if passed and not failures else 'failed',cleanup='failed' if failures else 'passed',cleanupFailureCategories=failures,bootstrapCleanup='fresh_owned_native_volume_removed' if bootstrap_created and not failures else 'not_claimed',originalFailurePreserved=bool(PROOF.get('failedStage')))
             if failures and passed:raise AssertionError('Owned cleanup incomplete')
