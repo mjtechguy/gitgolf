@@ -127,6 +127,7 @@ service RepositoryService {
   rpc CreateRepository(CreateRepositoryRequest) returns (CreateRepositoryResponse);
   rpc GetRepositoryCreation(GetRepositoryCreationRequest) returns (GetRepositoryCreationResponse);
   rpc GetRepository(GetRepositoryRequest) returns (GetRepositoryResponse);
+  rpc GetRepositoryOverview(GetRepositoryOverviewRequest) returns (GetRepositoryOverviewResponse);
   rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse);
   rpc ListTags(ListTagsRequest) returns (ListTagsResponse);
   rpc ListCommits(ListCommitsRequest) returns (ListCommitsResponse);
@@ -2069,4 +2070,36 @@ message GetPullRequestInlineReviewMutationRequest {
 }
 message GetPullRequestInlineReviewMutationResponse {
   PullInlineReviewMutation mutation = 1;
+}
+
+// Independent current native metadata/index observations, not a Git snapshot.
+enum RepositoryOverviewSectionState {
+  REPOSITORY_OVERVIEW_SECTION_STATE_UNSPECIFIED = 0;
+  REPOSITORY_OVERVIEW_SECTION_STATE_UNAVAILABLE = 1;
+  REPOSITORY_OVERVIEW_SECTION_STATE_AVAILABLE = 2;
+  REPOSITORY_OVERVIEW_SECTION_STATE_ERROR = 3;
+}
+message RepositoryLanguage {
+  string name = 1;
+  // Canonical nonnegative signed64 decimal native byte count.
+  string byte_count = 2;
+}
+message GetRepositoryOverviewRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+}
+message GetRepositoryOverviewResponse {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string description = 3;
+  // Display-only http(s) link. Never followed by Golf's backend.
+  string website = 4;
+  repeated string topics = 5;
+  repeated string license_ids = 6;
+  optional string stars_count = 7;
+  optional string watchers_count = 8;
+  optional string forks_count = 9;
+  repeated RepositoryLanguage languages = 10;
+  RepositoryOverviewSectionState languages_state = 11;
+  RepositoryOverviewSectionState licenses_state = 12;
 }
