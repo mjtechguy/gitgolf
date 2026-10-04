@@ -259,8 +259,11 @@ test('immutable source and decoded image survive authority checks without collap
  expect(await image.evaluate((node,previous)=>node===previous,retained)).toBe(true);
  release();state.metadataWait=undefined;await expect(image).toBeVisible();
  expect(await image.evaluate((node,previous)=>node===previous,retained)).toBe(true);expect(state.reads).toHaveLength(sources);expect(state.images).toHaveLength(images);
- await page.evaluate(()=>{window.dispatchEvent(new Event('blur'));window.dispatchEvent(new Event('focus'));});
+ const beforeVisibility=state.metadataReads;
+ await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});document.dispatchEvent(new Event('visibilitychange',{bubbles:true}));Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});document.dispatchEvent(new Event('visibilitychange',{bubbles:true}));});
+ await expect.poll(()=>state.metadataReads).toBeGreaterThan(beforeVisibility);
  await expect(image).toBeVisible();expect(state.reads).toHaveLength(sources);expect(state.images).toHaveLength(images);
+ await page.evaluate(()=>{delete (document as unknown as Record<string,unknown>).visibilityState;});
  state.metadataDenied=true;await page.getByRole('button',{name:'Refresh repository access',exact:true}).click();
  await expect(page.getByRole('alert')).toContainText('Repository access removed');await expect(page.getByRole('img',{name:'Private badge',exact:true})).toHaveCount(0);await expect(page.locator('.source-tree')).toHaveCount(0);
  await retained?.dispose();
