@@ -82,6 +82,7 @@ def checked_snapshot(value: object, project: str) -> dict:
             assert row['callerCancelled'] is True and row['method'] == 'GET' and row.get('failure') in {'preheaders_cancelled','response_cancelled'}, 'Unverified/write cancellation was discounted'
         if row.get('callerCancelled') and row['failure'] == 'preheaders_cancelled':
             assert 'status' not in row and 'bytes' not in row, 'Pre-header caller abort cannot claim a native receipt'
+    assert sum(bool(row.get('callerCancelled')) for row in observations) <= value['callerCancelled'], 'Caller cancellation counter mismatch'
     assert sum(row['count'] for row in counts) <= value['forwardRequestCount'], 'Control aggregate count mismatch'
     assert value['callerCancelled'] <= value['forwardRequestCount'] and sum(row.get('callerCancelled', False) for row in observations) <= value['callerCancelled'], 'Caller cancellation count mismatch'
     return value

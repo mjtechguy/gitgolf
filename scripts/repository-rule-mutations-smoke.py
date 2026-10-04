@@ -150,7 +150,7 @@ def proxy_state(proxy, label):
     # Control failure must not overwrite the original native/RPC predicate.
     try:
         value = proxy.snapshot()
-        failures = [row for row in value['observations'] if row.get('failure')]
+        failures = [row for row in value['observations'] if row.get('failure') and not row.get('callerCancelled')]
         record(**{label: value}, forwardRequestCount=value['forwardRequestCount'], forwardObservations=value['observations'], proxyFailures=value['failures'], forwardFailure=failures[-1] if failures else None)
         return value
     except Exception as error:
@@ -184,7 +184,7 @@ def verify_proxy_runtime(run, command, proxy, binary, binary_sha, image, source)
 def checked_startup_proxy(value, project):
     value = native_proxy.checked_snapshot(value, project)
     assert value['lost'] == 0 and value['armed'] is None and value['counts'] == [], 'Startup baseline must have no mutation dispatch or loss arm'
-    failures = [row for row in value['observations'] if row.get('failure')]
+    failures = [row for row in value['observations'] if row.get('failure') and not row.get('callerCancelled')]
     assert len(failures) == value['failures'], 'All startup failures must remain accounted in the bounded observation window'
     assert all(row['method'] == 'GET' and row['failure'] in {'preheaders_timeout','preheaders_cancelled','preheaders_disconnected','preheaders_transport'} and 'status' not in row and 'bytes' not in row for row in failures), 'Only pre-header startup reads may be distinguished from qualification failures'
     assert any(row['method'] == 'GET' and row.get('status') == 200 and not row.get('failure') for row in value['observations']), 'Positive native read readiness observation required'
@@ -194,7 +194,7 @@ def checked_startup_proxy(value, project):
 def checked_proxy_progress(value, baseline, project):
     checked_startup_proxy(baseline, project)
     value = native_proxy.checked_snapshot(value, project)
-    assert value['failures'] == baseline['failures'] and value['forwardRequestCount'] >= baseline['forwardRequestCount'], 'Post-readiness transport failure or reset is not startup noise'
+    assert value['failures'] == baseline['failures'] and value['forwardRequestCount'] >= baseline['forwardRequestCount'] and value['callerCancelled'] >= baseline['callerCancelled'], 'Post-readiness transport failure or reset is not startup noise'
     return value
 
 
@@ -202,8 +202,10 @@ def startup_proxy_source_check():
     project = 'golf-rules49-0123456789'
     baseline = {'project':project,'nativeDestination':native_proxy.NATIVE_DESTINATION,'counts':[],
                 'observations':[{'method':'GET','category':'authority','status':200,'elapsedMs':1}],
-                'forwardRequestCount':1,'lost':0,'failures':0,'armed':None}
+                'forwardRequestCount':1,'lost':0,'failures':0,'callerCancelled':0,'armed':None}
     checked_startup_proxy(baseline, project)
+    cancelled = {**baseline,'forwardRequestCount':2,'callerCancelled':1,'observations':[*baseline['observations'], {'method':'GET','category':'authority','elapsedMs':1,'failure':'preheaders_cancelled','callerCancelled':True}]}
+    checked_proxy_progress(cancelled, baseline, project)
     startup = {**baseline,'forwardRequestCount':3,'failures':2,'observations':[
         {'method':'GET','category':'authority','elapsedMs':1,'failure':'preheaders_disconnected'},
         {'method':'GET','category':'authority','elapsedMs':2,'failure':'preheaders_transport'}, *baseline['observations']]}
@@ -450,7 +452,7 @@ def main():
             m={'allowMergeCommits':True,'allowRebaseExplicit':True,'allowSquashMerge':True,'autodetectManualMerge':True,'allowMergeUpdate':True,'defaultMergeStyle':'squash','defaultUpdateStyle':'merge','defaultDeleteBranchAfterMerge':True}
             last=intent(actor,repository,'EDIT_MERGE',desiredMerge=m);change(actor,last);return last
         try:
-            stage('fresh base stack only'); started = True; record(cleanup='pending'); command('up','-d','--no-build','--pull','never',timeout=180); proxy.ready(); proxy_before=verify_proxy_runtime(run,command,proxy,binary,binary_sha,image,revision); smoke.ready(); proxy_baseline=checked_startup_proxy(proxy.snapshot(),project);record(preQualificationProxyState=proxy_baseline,proxyStartupFailureCount=proxy_baseline['failures'],proxyFailureScope='Verified pre-header GET startup failures only; every post-readiness failure remains disqualifying'); before = runtime(); record(runtime=before)
+            stage('fresh base stack only'); started = True; record(cleanup='pending'); command('up','-d','--no-build','--pull','never',timeout=180); proxy.ready(); proxy_before=verify_proxy_runtime(run,command,proxy,binary,binary_sha,image,revision); smoke.ready(); proxy_baseline=checked_startup_proxy(proxy.snapshot(),project);record(preQualificationProxyState=proxy_baseline,proxyStartupFailureCount=proxy_baseline['failures'],proxyFailureScope='Verified pre-header GET startup failures only; confirmed caller-aborted GETs counted separately; every other post-readiness failure remains disqualifying'); before = runtime(); record(runtime=before)
             stage('ordinary native actors and managed sessions')
             for role in ('owner','direct','memberdirect','team','reader','global','outsider'):
                 actor = {'role':role,'name':project+'-'+role,'created':False,'session':smoke.client(),'loggedIn':False}; actors[role] = actor
