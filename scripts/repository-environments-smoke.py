@@ -200,6 +200,8 @@ def main():
         def access(actor,key):
             observed=rpc(actor['session'],'RepositoryAccessService/GetRepositoryAccess',{'repository':key})['access']
             assert decimal(observed['repositoryId']) and decimal(observed['ownerId']) and re.fullmatch(r'[a-f0-9]{64}',observed['revision'])
+            independent=native(actor['token'],'GET','repos/'+key['owner']+'/'+key['name'])
+            assert str(independent['id'])==observed['repositoryId'] and str(independent['owner']['id'])==observed['ownerId'] and independent['full_name']==key['owner']+'/'+key['name']
             return dict(repository=key,repositoryId=observed['repositoryId'],ownerId=observed['ownerId'],accessRevision=observed['revision'])
         def create(name,org=None):
             row=native(actors['owner']['token'],'POST','orgs/'+org+'/repos' if org else 'user/repos',{'name':name,'private':True,'auto_init':True,'default_branch':'main'},201)
@@ -236,7 +238,10 @@ def main():
             # Golf metadata only. Never inspect policy bytea, credentials or nativeSQL.
             query="SELECT json_build_object('versions',count(*),'operations',(SELECT count(*) FROM golf_repository_environment_operations WHERE forge_url='http://native-qualification-proxy:8081' AND repository_id="+repo_id+" AND owner_id="+owner_id+"),'creatorNativeIds',array_agg(DISTINCT creator_native_id ORDER BY creator_native_id),'updaterNativeIds',array_agg(DISTINCT actor_native_id ORDER BY actor_native_id)) FROM golf_repository_environment_versions WHERE forge_url='http://native-qualification-proxy:8081' AND repository_id="+repo_id+" AND owner_id="+owner_id
             value=json.loads(command('exec','-T','postgres','psql','-U','postgres','-d','golf','-At','-v','ON_ERROR_STOP=1','-c',query))
-            assert type(value['versions']) is int and value['versions']==value['operations'];return value
+            assert type(value['versions']) is int and value['versions']==value['operations']
+            for field in ('creatorNativeIds','updaterNativeIds'):
+                assert all(str(identifier) in {actor['id'] for actor in actors.values() if 'id' in actor} for identifier in value[field] or [])
+            return value
         def boundaries(actor,target,saved):
             return [(SERVICE+'ListRepositoryEnvironments',{'target':target}),(SERVICE+'SaveRepositoryEnvironment',intent(actor,target,'Denied')),(SERVICE+'DeleteRepositoryEnvironment',{'target':target,'environmentId':saved['environment']['id'],'expectedVersion':saved['environment']['version'],'operationId':str(uuid.uuid4()),'currentPassword':actor['password']}),(SERVICE+'GetRepositoryEnvironmentOperation',{'target':target,'operationId':saved['operation']['operationId']})]
         try:
