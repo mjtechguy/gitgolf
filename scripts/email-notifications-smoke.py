@@ -308,6 +308,7 @@ def main():
     pids_limit: 32
     volumes: ["{fixture}:/fixture:ro"]
     networks:
+      default: {{}}
       proofsink:
         ipv4_address: {receiver_ip}
         aliases: [receiver.golf.test]
