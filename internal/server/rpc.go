@@ -47,9 +47,10 @@ func (s *Server) rpcHandler() http.Handler {
 		connect.WithReadMaxBytes(16 << 10), connect.WithSendMaxBytes(16 << 20), connect.WithRequireConnectProtocolHeader(),
 		connect.WithConditionalHandlerOptions(func(spec connect.Spec) []connect.HandlerOption {
 			switch spec.Procedure {
-			case golfv1connect.RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure, golfv1connect.OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure:
+			case golfv1connect.RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure, golfv1connect.OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionBindingProcedure:
 				// Eight-KiB values can double under JSON escaping; organization
 				// requests also carry bounded selected-repository identities.
+				// Typed binding approvals include escaped inputs and scoped value IDs.
 				return []connect.HandlerOption{connect.WithReadMaxBytes(64 << 10)}
 			case golfv1connect.RepositoryServiceSavePullRequestReviewDraftProcedure:
 				return []connect.HandlerOption{connect.WithReadMaxBytes(2 << 20), connect.WithSendMaxBytes(6 << 20)}
@@ -206,7 +207,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		}
 		limit := int64(16 << 10)
 		switch procedure {
-		case golfv1connect.RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure, golfv1connect.OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure:
+		case golfv1connect.RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure, golfv1connect.OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionBindingProcedure:
 			limit = 64 << 10
 		case golfv1connect.RepositoryServiceSavePullRequestReviewDraftProcedure:
 			limit = 2 << 20
