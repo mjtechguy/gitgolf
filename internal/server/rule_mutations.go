@@ -577,6 +577,11 @@ func (s *Server) MutateRepositoryRules(ctx context.Context, req *connect.Request
 		return nil, ruleMutationRPCError(e)
 	}
 	if !dispatch {
+		// A concurrent original reservation can wait behind another actor/session.
+		// Recheck current native authority before exposing its retained receipt.
+		if _, e = s.currentRuleInventory(ctx, session, token, key, m.RepositoryId, m.OwnerId); e != nil {
+			return nil, ruleMutationRPCError(e)
+		}
 		return connect.NewResponse(&golfv1.MutateRepositoryRulesResponse{Operation: ruleMutationWire(r)}), nil
 	}
 	// Check positive ordinary administration, write eligibility and the entire
