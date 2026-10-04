@@ -61,6 +61,9 @@ func TestAutomationGrantValidation(t *testing.T) {
 func TestAutomationGrantPostgres(t *testing.T) {
 	db := testDatabase(t)
 	var downgrade, foreign atomic.Bool
+	var sourceMode atomic.Value
+	sourceMode.Store("ordinary")
+	var sourceBlobReads atomic.Int32
 	row := settingsFixtureRow()
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -85,13 +88,29 @@ func TestAutomationGrantPostgres(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]any{"permission": permission, "user": *row.Owner})
 		case "/api/v1/repos/alice/example/commits":
 			json.NewEncoder(w).Encode([]map[string]any{{"sha": strings.Repeat("a", 40)}})
-		case "/api/v1/repos/alice/example/contents-ext/" + runWorkflowPath:
-			if r.URL.Query().Get("ref") != strings.Repeat("a", 40) {
-				t.Error("metadata did not bind resolved immutable default commit")
-			}
-			json.NewEncoder(w).Encode(map[string]any{"file_contents": map[string]any{"name": "check.yml", "path": runWorkflowPath, "type": "file", "sha": strings.Repeat("a", 40), "size": 10}})
+
 		default:
-			w.WriteHeader(404)
+			text, kind := workflowActionsFixture, ""
+			switch sourceMode.Load().(string) {
+			case "symlink", "submodule":
+				kind = sourceMode.Load().(string)
+			case "oversize":
+				text = strings.Repeat("x", maxWorkflowBytes+1)
+			case "lfs":
+				text = "version https://git-lfs.github.com/spec/v1\noid sha256:" + strings.Repeat("b", 64) + "\nsize 99999999\n"
+			}
+			objects := workflowSourceObjects(strings.Repeat("a", 40), map[string]string{runWorkflowPath: text}, map[string]string{runWorkflowPath: kind})
+			if strings.Contains(r.URL.Path, "/git/blobs/") {
+				sourceBlobReads.Add(1)
+				if sourceMode.Load().(string) == "corrupt" {
+					for id, data := range objects.blobs {
+						objects.blobs[id] = []byte(strings.Repeat("z", len(data)))
+					}
+				}
+			}
+			if !objects.serve(w, r, "/api/v1/repos/alice/example") {
+				w.WriteHeader(404)
+			}
 		}
 	}))
 	defer provider.Close()
@@ -125,6 +144,24 @@ func TestAutomationGrantPostgres(t *testing.T) {
 		t.Fatal("writer created admin grant", err)
 	}
 	downgrade.Store(false)
+	for _, mode := range []string{"symlink", "submodule", "oversize", "lfs", "corrupt"} {
+		sourceMode.Store(mode)
+		sourceBlobReads.Store(0)
+		if _, err = create(grantFixtureRequest()); err == nil {
+			t.Fatal("unsupported source created grant", mode)
+		}
+		if (mode == "symlink" || mode == "submodule" || mode == "oversize") && sourceBlobReads.Load() != 0 {
+			t.Fatal("unsupported grant source fetched bytes", mode)
+		}
+		if (mode == "lfs" || mode == "corrupt") && sourceBlobReads.Load() != 1 {
+			t.Fatal("bounded selected grant source not checked", mode)
+		}
+		var persisted int
+		if err = db.QueryRow(`SELECT count(*) FROM golf_automation_grants`).Scan(&persisted); err != nil || persisted != 0 {
+			t.Fatal("refused source persisted grant", mode, persisted, err)
+		}
+	}
+	sourceMode.Store("ordinary")
 	var wait sync.WaitGroup
 	grants := make(chan *golfv1.AutomationGrant, 2)
 	failures := make(chan error, 2)

@@ -425,6 +425,9 @@ func (s *Server) prepareWorkflowRunForEvent(ctx context.Context, credential forg
 	if err != nil || int64(len(data)) != candidate.Size || !workflowBlobMatches(data, candidate.SHA) {
 		return "", "", nil, nil, errInvalidForgeResponse
 	}
+	if workflowLFSPointer(data) {
+		return "", "", nil, nil, errWorkflowExecutionUnsupported
+	}
 	format := golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITHUB_ACTIONS
 	if file == ".gitlab-ci.yml" {
 		format = golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITLAB_CI

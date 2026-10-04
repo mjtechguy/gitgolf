@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -242,6 +243,22 @@ func (s *Server) CreateAutomationGrant(ctx context.Context, req *connect.Request
 				return e
 			}
 			if content.File == nil || content.File.Type != "file" || content.File.LFSOID != "" || content.File.Size > maxWorkflowBytes {
+				return errWorkflowExecutionUnsupported
+			}
+			// Exact trees expose no native LFS metadata. Read only this bounded
+			// selected ordinary file before granting, without following its target.
+			read, e := s.workflowContents(ctx, delegated, base, commits[0].SHA, file, true)
+			if e != nil {
+				return e
+			}
+			if read.File == nil || read.File.sourceEntry != content.File.sourceEntry || read.File.Encoding != "base64" {
+				return errInvalidForgeResponse
+			}
+			data, e := base64.StdEncoding.DecodeString(read.File.Content)
+			if e != nil || int64(len(data)) != content.File.Size || !workflowBlobMatches(data, content.File.SHA) {
+				return errInvalidForgeResponse
+			}
+			if workflowLFSPointer(data) {
 				return errWorkflowExecutionUnsupported
 			}
 		}

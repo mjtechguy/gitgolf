@@ -12,7 +12,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -202,9 +201,15 @@ func newWorkflowRunFixture(t *testing.T) *workflowRunFixture {
 				commit = r.URL.Query().Get("sha")
 			}
 			write([]map[string]string{{"sha": commit}})
-		case base + "/contents-ext/" + runWorkflowPath:
-			write(contentsEnvelope{File: &forgeContents{sourceEntry: sourceEntry{Name: path.Base(runWorkflowPath), Path: runWorkflowPath, Type: "file", SHA: workflowTestBlob(f.workflow), Size: int64(len(f.workflow))}, Encoding: "base64", Content: base64.StdEncoding.EncodeToString(f.workflow)}})
 		default:
+			commit := f.commit
+			if strings.HasPrefix(r.URL.Path, base+"/git/commits/") {
+				commit = strings.TrimPrefix(r.URL.Path, base+"/git/commits/")
+			}
+			objects := workflowSourceObjects(commit, map[string]string{runWorkflowPath: string(f.workflow)}, nil)
+			if objects.serve(w, r, base) {
+				return
+			}
 			if strings.HasPrefix(r.URL.Path, base+"/archive/") {
 				f.archives++
 				if f.onArchive != nil {

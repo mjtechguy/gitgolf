@@ -9,8 +9,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/url"
-	"path"
 	"regexp"
 	"sort"
 	"strconv"
@@ -372,40 +370,47 @@ func (v workflowInspector) gitlab(root *yaml.Node) {
 // Metadata first, at an already resolved immutable commit. Never follows a
 // symlink, submodule, LFS target, include, action URL or provider metadata URL.
 func (s *Server) workflowContents(ctx context.Context, token forgeCredential, base, commit, requestedPath string, content bool) (contentsEnvelope, error) {
-	query := url.Values{"ref": {commit}, "includes": {"lfs_metadata"}}
-	if content {
-		query.Set("includes", "file_content,lfs_metadata")
-	}
-	var result contentsEnvelope
-	_, err := s.forge(ctx, http.MethodGet, base+"/contents-ext/"+escapedSourcePath(requestedPath)+"?"+query.Encode(), token, nil, &result)
+	entry, entries, err := s.sourceObjectAtPath(ctx, base, token, commit, requestedPath)
 	if err != nil {
-		return result, err
+		return contentsEnvelope{}, err
 	}
-	if result.File != nil {
-		if !validEntry(result.File.sourceEntry) || result.File.Path != requestedPath || result.File.Type == "dir" || result.Directory != nil {
-			return result, errInvalidForgeResponse
+	if entries != nil {
+		result := contentsEnvelope{Directory: make([]forgeContents, 0, len(entries))}
+		for _, item := range entries {
+			result.Directory = append(result.Directory, forgeContents{sourceEntry: item})
 		}
-	} else {
-		if result.Directory == nil {
-			return result, errInvalidForgeResponse
+		return result, nil
+	}
+	file := &forgeContents{sourceEntry: entry}
+	// Inspection discovers and budgets metadata before fetching any blobs.
+	// Unsupported modes and oversize files remain metadata-only in either mode.
+	if content && entry.Type == "file" && entry.Size <= maxWorkflowBytes {
+		data, err := s.sourceBlob(ctx, base, token, entry)
+		if err != nil {
+			return contentsEnvelope{}, err
 		}
-		if len(result.Directory) > maxDirectoryEntries {
-			return result, errForgeResponseTooLarge
-		}
-		seen := map[string]bool{}
-		for _, item := range result.Directory {
-			if !validEntry(item.sourceEntry) || path.Dir(item.Path) != requestedPath || seen[item.Path] {
-				return result, errInvalidForgeResponse
+		file.Encoding, file.Content = "base64", base64.StdEncoding.EncodeToString(data)
+		if workflowLFSPointer(data) {
+			// Keep a real OID when reported by pointer bytes; never invent metadata.
+			for _, line := range strings.Split(string(data), "\n") {
+				id, ok := strings.CutPrefix(strings.TrimSuffix(line, "\r"), "oid sha256:")
+				if ok && len(id) == 64 && objectID.MatchString(id) {
+					file.LFSOID = id
+					break
+				}
 			}
-			seen[item.Path] = true
 		}
 	}
-	return result, nil
+	return contentsEnvelope{File: file}, nil
+}
+
+func workflowLFSPointer(data []byte) bool {
+	return strings.HasPrefix(string(data), "version https://git-lfs.github.com/spec/v1\n") || strings.HasPrefix(string(data), "version https://git-lfs.github.com/spec/v1\r\n")
 }
 
 func workflowMissing(err error) bool {
 	var upstream forgeError
-	return errors.As(err, &upstream) && upstream.status == http.StatusNotFound
+	return errors.Is(err, errResourceNotFound) || errors.As(err, &upstream) && upstream.status == http.StatusNotFound
 }
 
 func workflowBlobMatches(data []byte, expected string) bool {
@@ -524,7 +529,7 @@ func (s *Server) InspectWorkflows(ctx context.Context, req *connect.Request[golf
 			if err != nil || int64(len(data)) != candidate.Size || len(data) > maxWorkflowBytes || !workflowBlobMatches(data, candidate.SHA) {
 				return errInvalidForgeResponse
 			}
-			if strings.HasPrefix(string(data), "version https://git-lfs.github.com/spec/v1\n") || strings.HasPrefix(string(data), "version https://git-lfs.github.com/spec/v1\r\n") {
+			if workflowLFSPointer(data) {
 				workflowInspector{config}.unsupported("lfs", "Git LFS pointers are not downloaded or inspected.", nil)
 				continue
 			}

@@ -3,14 +3,11 @@ package server
 import (
 	"context"
 	"crypto/sha1"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"path"
-	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -198,53 +195,28 @@ func newWorkflowFixture(t *testing.T) (*workflowFixture, loginResult) {
 			write([]map[string]string{{"sha": commit}})
 			return
 		}
-		prefix := base + "/contents-ext/"
-		if !strings.HasPrefix(r.URL.Path, prefix) {
-			t.Error("unexpected endpoint")
-			w.WriteHeader(404)
-			return
+		commit := strings.Repeat("a", 40)
+		if strings.Contains(r.URL.Path, strings.Repeat("b", 40)) {
+			commit = strings.Repeat("b", 40)
 		}
-		if ref := r.URL.Query().Get("ref"); ref != strings.Repeat("a", 40) && ref != strings.Repeat("b", 40) {
-			t.Error("mutable source ref")
-		}
-		name := strings.TrimPrefix(r.URL.Path, prefix)
-		content := strings.Contains(r.URL.Query().Get("includes"), "file_content")
-		if mode == "missing" {
-			w.WriteHeader(404)
-			return
-		}
-		if name == ".github" {
-			entry := forgeContents{sourceEntry: sourceEntry{Name: "workflows", Path: ".github/workflows", Type: "dir", SHA: strings.Repeat("c", 40)}}
-			if mode == "symlink-location" {
-				entry.Type = "symlink"
+		files := map[string]string{}
+		if mode != "missing" {
+			for name, data := range f.files {
+				files[name] = string(data)
 			}
-			write(contentsEnvelope{Directory: []forgeContents{entry}})
-			return
 		}
-		entry := func(name string, data []byte) forgeContents {
-			return forgeContents{sourceEntry: sourceEntry{Name: path.Base(name), Path: name, Type: "file", SHA: workflowTestBlob(data), Size: int64(len(data))}}
-		}
-		if name == ".github/workflows" {
-			if mode == "symlink-location" {
-				t.Error("followed symlink directory")
-			}
-			entries := []forgeContents{}
-			for filename, data := range f.files {
-				if strings.HasPrefix(filename, name+"/") {
-					entries = append(entries, entry(filename, data))
+		kinds := map[string]string{}
+		if mode == "symlink-location" {
+			for name := range files {
+				if strings.HasPrefix(name, ".github/workflows/") {
+					delete(files, name)
 				}
 			}
-			sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
-			write(contentsEnvelope{Directory: entries})
-			return
+			files[".github/workflows"] = "elsewhere"
+			kinds[".github/workflows"] = "symlink"
 		}
-		data, found := f.files[name]
-		if !found {
-			w.WriteHeader(404)
-			return
-		}
-		file := entry(name, data)
-		if content {
+		objects := workflowSourceObjects(commit, files, kinds)
+		if strings.HasPrefix(r.URL.Path, base+"/git/blobs/") {
 			f.contentReads.Add(1)
 			if mode == "wait" {
 				f.entered <- struct{}{}
@@ -254,12 +226,17 @@ func newWorkflowFixture(t *testing.T) (*workflowFixture, loginResult) {
 					return
 				}
 			}
-			file.Encoding, file.Content = "base64", base64.StdEncoding.EncodeToString(data)
 			if mode == "corrupt" {
-				file.Content = base64.StdEncoding.EncodeToString([]byte(strings.Repeat("x", len(data))))
+				for id, data := range objects.blobs {
+					objects.blobs[id] = []byte(strings.Repeat("x", len(data)))
+				}
 			}
 		}
-		write(contentsEnvelope{File: &file})
+		if !objects.serve(w, r, base) {
+			t.Error("unexpected or mutable source endpoint")
+			w.WriteHeader(404)
+		}
+
 	}))
 	t.Cleanup(provider.Close)
 	t.Cleanup(func() { close(f.resume) })
