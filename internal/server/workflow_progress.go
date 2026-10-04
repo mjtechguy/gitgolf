@@ -110,7 +110,7 @@ func (s *Server) workflowRunDetail(ctx context.Context, id string) (workflowRunR
 	if err != nil {
 		return run, nil, err
 	}
-	if run.EngineCatalog == runner.ActionsCatalog {
+	if runner.IsActionsCatalog(run.EngineCatalog) {
 		run.ActionJobs, err = actionGraphDetail(ctx, tx, run)
 		if err != nil {
 			return run, nil, err

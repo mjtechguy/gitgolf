@@ -116,7 +116,7 @@ func actionWireState(state string) golfv1.WorkflowStepState {
 func loadActionPlan(ctx context.Context, tx *sql.Tx, id string) (runner.ActionPlan, error) {
 	var data []byte
 	var plan workflowExecutionPlan
-	if tx.QueryRowContext(ctx, `SELECT plan FROM golf_workflow_runs WHERE id=$1`, id).Scan(&data) != nil || json.Unmarshal(data, &plan) != nil || plan.Actions == nil || plan.Actions.Catalog != runner.ActionsCatalog || len(plan.Actions.Jobs) < 1 || len(plan.Actions.Jobs) > 12 {
+	if tx.QueryRowContext(ctx, `SELECT plan FROM golf_workflow_runs WHERE id=$1`, id).Scan(&data) != nil || json.Unmarshal(data, &plan) != nil || plan.Actions == nil || !runner.IsActionsCatalog(plan.Actions.Catalog) || len(plan.Actions.Jobs) < 1 || len(plan.Actions.Jobs) > 12 {
 		return runner.ActionPlan{}, errStorageUnavailable
 	}
 	return *plan.Actions, nil

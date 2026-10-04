@@ -506,7 +506,7 @@ func (s *Server) InspectWorkflows(ctx context.Context, req *connect.Request[golf
 	result := &golfv1.InspectWorkflowsResponse{CatalogVersion: workflowCatalog, ExecutionAvailable: len(s.runnerKeys) > 0 && len(s.runnerImages) > 0}
 	result.ExecutionCatalog = workflowExecutionCatalog
 	if s.actionsEngineConfigured() {
-		result.ExecutionCatalog = runner.ActionsCatalog
+		result.ExecutionCatalog = s.config.ActionsEngineCatalog
 		result.ExecutionEngineCommit = runner.ActionsEngineCommit
 	}
 	err = s.withRepositoryRead(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), func(base string, repo Repository) error {
@@ -615,6 +615,14 @@ func (s *Server) InspectWorkflows(ctx context.Context, req *connect.Request[golf
 				workflowInspector{config}.unsupported("lfs", "Git LFS pointers are not downloaded or inspected.", nil)
 				continue
 			}
+			var manualSchema *workflowDispatchInputSchema
+			if config.Format == golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITHUB_ACTIONS {
+				if parsed, e := parseWorkflowDispatchInputs(data); e == nil {
+					manualSchema = &parsed
+					config.ManualInputs = workflowDispatchDefinitionsWire(parsed)
+					config.ManualInputsSchemaSha256 = parsed.SHA256
+				}
+			}
 			if s.actionsEngineConfigured() && config.Format == golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITHUB_ACTIONS {
 				if engineArchive == nil {
 					engineArchive, err = s.workflowSource(ctx, token, base, result.CommitId, "", "", nil)
@@ -622,7 +630,13 @@ func (s *Server) InspectWorkflows(ctx context.Context, req *connect.Request[golf
 						return err
 					}
 				}
-				plan, e := s.planActions(ctx, candidate.Path, candidate.SHA, "inspect", "", engineArchive)
+				var plan *runner.ActionPlan
+				var e error
+				if s.config.ActionsEngineCatalog == runner.ActionsInputsCatalog && manualSchema != nil {
+					plan, e = s.planActionsInput(ctx, runner.ActionPlanInput{Catalog: runner.ActionsInputsCatalog, WorkflowPath: candidate.Path, WorkflowBlobID: candidate.SHA, Archive: engineArchive, Event: "inspect", Ref: result.CommitId, Images: s.runnerImages, ManualInputsContract: runner.ManualInputsCapability, ManualInputsSchemaSHA256: manualSchema.SHA256})
+				} else {
+					plan, e = s.planActions(ctx, candidate.Path, candidate.SHA, "inspect", "", engineArchive)
+				}
 				if e == nil {
 					e = s.verifyActionSources(ctx, base, token, result.CommitId, plan)
 				}
@@ -632,6 +646,13 @@ func (s *Server) InspectWorkflows(ctx context.Context, req *connect.Request[golf
 				} else {
 					config.State = golfv1.WorkflowInspectionState_WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET
 					config.Events = plan.Events
+					if plan.Catalog == runner.ActionsInputsCatalog && manualSchema != nil && len(manualSchema.Definitions) > 0 {
+						for _, event := range plan.Events {
+							if event == "push" {
+								config.Diagnostics = append(config.Diagnostics, workflowDiagnostic("manual_inputs_push_unsupported", "Typed parameters support manual dispatch only; automatic push execution of this input-declaring workflow is not supported by the current catalog.", nil))
+							}
+						}
+					}
 					seen := map[string]bool{}
 					for _, job := range plan.Jobs {
 						if seen[job.JobID] {

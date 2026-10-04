@@ -1,0 +1,39 @@
+# Maintained Actions engine contract
+
+Golf's maintained Linux engine uses pinned act v0.2.89 through a local runtime-source replacement. The combined source supports two distinct catalogs: input-free `golf.workflow.act.v0.2.89.linux.v1` and opt-in manual-input `golf.workflow.act.v0.2.89.linux.v2`. Catalog recognition is not installation readiness or execution authority. The v2 source consumer and build contract are implemented; actual v2 Docker/TLS/native/served qualification remains pending. This contract does not make full Actions/GitLab compatibility or CI settings Ready.
+
+## Catalog and source binding
+
+Both catalogs retain the bounded pinned Linux profile, immutable workflow/archive/local-action source identities, admitted image digests, resource limits, matrix/needs graph, synchronous execution observations and no automatic execution replay. The engine rederives the admitted plan from the original archive and requires exact plan equality before Docker effects. A claimed run does not become successful merely because an engine process exits: existing durable job/step/complete receipts and matching attempt authority are required.
+
+V1 keeps its original catalog and denies input declarations/contexts. V2 admits only manual `workflow_dispatch` execution, with a full 40/64-character commit SHA and the explicit `golf.workflow.dispatch.inputs.v1` contract/schema binding. Inspection uses that same full source SHA. Push remains on v1, and declaring manual inputs does not imply push execution compatibility. Legacy GitLab shell execution remains separate and unchanged; GitLab variables have no typed Actions conversion.
+
+The shared `internal/workflowinputs` parser defines string/boolean/number/choice declarations, presence/default rules, canonical maps and digests. The [manual-input contract](WORKFLOW_DISPATCH_INPUTS_CONTRACT.md) defines preparation, encrypted retention, admission, current-authority release, verified-TLS worker selection and original-operation inspection. Neither the worker's synthetic map check nor a caller-provided digest substitutes for the engine's independent source-schema/default check.
+
+V2 permits `inputs` and `github.event.inputs` only in expression positions already admitted by the profile: workflow/job/step environments, job/step conditions, job outputs, step run/with, and supported local-composite input defaults/output values/steps. AST validation keeps other denied platform/provider/authority contexts denied. Inputs do not select images, resources, runner authority or expand the graph. Existing static matrix, needs, output and local-composite limits remain. Declaration descriptions/options/defaults containing `${{` are still refused; submitted string expression-looking text is inert data.
+
+V2 does not add a secret-release consumer. Repository/organization execution-value approvals and broker release remain restricted to v1; an existing approval cannot silently forward its values into v2. Environment selectors, protected environment gates, external providers, broader operating systems and the rest of the full compatibility plan remain separate requirements.
+
+## Narrow act adaptations
+
+The pinned upstream evaluator already exposes dispatch booleans differently from string-valued event inputs. Golf adds finite numeric conversion only for declarations of type `number` in the `workflow_dispatch` evaluator branch. Canonical event inputs remain strings. Server, worker and engine validate finite safe binary64 numbers and maps before execution; the adaptation alone is not an input admission boundary.
+
+The second correction preserves inherited, already-resolved composite `INPUT_` environment values during child `setupEnv`. Without it, expression-looking parameter data could be evaluated again. Nested scopes and same-name input collisions retain their own data; explicit source-defined step environment overrides still interpolate. This does not disable ordinary source expression evaluation or change generic property lookup. Case-fold-colliding declaration names are refused by the shared parser because the upstream map lookup is case-insensitive.
+
+Regression families exercise public job evaluators and private native step/composite setup, true/false/default booleans, numeric `toJSON` versus event strings, decimal/zero normalization, nested composite scope, literal `${{...}}`, explicit source overrides, and unchanged matrix/needs semantics. Bad maps/types/digests/schema/event bytes are refused before effects. Tests that substitute an executor prove composition semantics only; they are not actual container-execution evidence.
+
+## Reproducible source and licenses
+
+`engines/act/go.mod` replaces `github.com/nektos/act` with `./third_party/act`. The module cache remains unchanged. The exact upstream version is v0.2.89, source commit `4f411281417e88660bea1c1a1749aa71ae0bd60f`, tag object `434d69682c7a8db2ac913e5dc3e80ba68055d50d`. Original module ZIP SHA256 is `b4e568212d680a32076455b84ab572d17fe65eb83a6fd6dce6a05164bd68fcc9`.
+
+The local runtime contains 86 upstream files, including the unchanged module files, full MIT license and required runtime embeds, plus four Golf baseline/patch/regression files. `upstream_source_manifest.json` records the closed 90-file inventory, exact current and original upstream hashes, source pin and patch hash. The current two-file adaptation patch SHA256 is `1df7c201fdc776159c458a0185b5777e09f08b6790a29968444992b5fa695e3e`.
+
+`verify_upstream_source.py` rejects extra/missing files, symlinks, modified modules/licenses/embeds, wrong baseline bytes or a patch that cannot be reconstructed exactly. `--upstream-dir` independently compares every recorded baseline with a local pinned upstream source; `--self-check` demonstrates rejection of five tampering cases. The required embeds retain their original bytes: hashfiles JavaScript, runner trampoline JavaScript, workflow schema and action schema. The verifier performs no downloads, builds or module-cache writes.
+
+`make engine-check` runs verification, nested engine vet/tests and the private runtime regression package alongside root checks. Both `Dockerfile` and `Dockerfile.runner` verify the source before building their engine binary. The runner build includes `internal/workflowinputs`. Both final images copy act's MIT license, the lookpath MIT notice and the container Docker Apache-2.0 notice into `/usr/share/licenses/golf-actions-engine/`.
+
+Image qualification must retain the product revision, baseline/patch/manifest/verifier hashes, exact engine and runner binary hashes, image identities and test/cleanup evidence. A closed self-verification against the checked-in manifest is distinct from an independent upstream-baseline check. A source commit, successful build or advertised catalog does not prove the installed worker executes v2 correctly.
+
+## Remaining execution gate
+
+Before qualifying v2, an owned fixture must exercise actual TLS 1.3 worker release and Docker jobs with all four types/defaults, typed versus event-string semantics, inert metacharacters through environment variables, exact source/archive/blob receipts, graph/progress, invalid-input no-effect, old-worker exclusion, native/session revocation, original-key lost-ack inspection and restart without replacement execution. Served requested forms and private clearing need their own desktop/mobile/theme evidence. Preserve failed attempts and distinguish source, PostgreSQL, Docker, native and served scopes. Latest-schema coordinated recovery remains a separate gate.

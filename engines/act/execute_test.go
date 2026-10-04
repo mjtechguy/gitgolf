@@ -6,15 +6,204 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
 	protocol "github.com/mjtechguy/golf-git/internal/runner"
+	"github.com/mjtechguy/golf-git/internal/workflowinputs"
 	"github.com/nektos/act/pkg/common"
 	"github.com/nektos/act/pkg/model"
 	act "github.com/nektos/act/pkg/runner"
 	"github.com/sirupsen/logrus"
 )
+
+func typedExecution(t *testing.T) protocol.ActionExecutionInput {
+	t.Helper()
+	in := typedInput(t, typedWorkflow, nil)
+	plan, err := Plan(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema, err := workflowinputs.Parse([]byte(typedWorkflow))
+	if err != nil {
+		t.Fatal(err)
+	}
+	values, err := workflowinputs.Validate(schema, []workflowinputs.Value{
+		{Name: "message", Type: workflowinputs.String, String: "literal ${{ secrets.VALUE }}; 'quote' & <tag>"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	event := map[string]string{}
+	for _, value := range values.Effective {
+		switch value.Type {
+		case workflowinputs.Boolean:
+			event[value.Name] = strconv.FormatBool(value.Boolean)
+		case workflowinputs.Number:
+			event[value.Name] = value.Number
+		default:
+			event[value.Name] = value.String
+		}
+	}
+	body, err := json.Marshal(map[string]any{"inputs": event, "after": in.Ref, "ref": in.Ref})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return protocol.ActionExecutionInput{Input: in, Plan: plan, EventJSON: body, CommitID: in.Ref, TimeoutSeconds: 1,
+		ManualInputs: &protocol.ActionManualInputs{Contract: protocol.ManualInputsCapability, SchemaSHA256: schema.SHA256,
+			SubmittedSHA256: values.SubmittedSHA256, EffectiveSHA256: values.EffectiveSHA256, Submitted: values.Submitted, Effective: values.Effective}}
+}
+
+func TestTypedExecutionBindsCanonicalValuesAndEventWithoutEffects(t *testing.T) {
+	input := typedExecution(t)
+	_, _, files, err := admit(input.Input)
+	if err != nil || !validatedManualInputs(input, files) {
+		t.Fatal("complete typed execution contract refused", err)
+	}
+	// A binary marker proves invalid input cannot reach even Docker's first read.
+	directory := t.TempDir()
+	marker := filepath.Join(directory, "docker-called")
+	if err := os.WriteFile(filepath.Join(directory, "docker"), []byte("#!/bin/sh\nprintf called > '"+marker+"'\nexit 91\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", directory)
+	t.Setenv("DOCKER_HOST", "unix:///var/run/docker.sock")
+	t.Setenv("GOLF_OWNED_ACTIONS_DAEMON", "1")
+	for _, tc := range []struct {
+		name   string
+		change func(*protocol.ActionExecutionInput)
+	}{
+		{"missing_envelope", func(in *protocol.ActionExecutionInput) { in.ManualInputs = nil }},
+		{"wrong_contract", func(in *protocol.ActionExecutionInput) { in.ManualInputs.Contract = "other" }},
+		{"wrong_schema", func(in *protocol.ActionExecutionInput) { in.ManualInputs.SchemaSHA256 = strings.Repeat("d", 64) }},
+		{"wrong_submitted_digest", func(in *protocol.ActionExecutionInput) { in.ManualInputs.SubmittedSHA256 = strings.Repeat("d", 64) }},
+		{"wrong_effective_digest", func(in *protocol.ActionExecutionInput) { in.ManualInputs.EffectiveSHA256 = strings.Repeat("d", 64) }},
+		{"changed_effective", func(in *protocol.ActionExecutionInput) { in.ManualInputs.Effective[0].String = "two" }},
+		{"wrong_type", func(in *protocol.ActionExecutionInput) { in.ManualInputs.Submitted[0].Type = workflowinputs.Boolean }},
+		{"unknown_name", func(in *protocol.ActionExecutionInput) { in.ManualInputs.Submitted[0].Name = "other" }},
+		{"missing_event_value", func(in *protocol.ActionExecutionInput) { in.EventJSON = []byte(`{"inputs":{}}`) }},
+		{"event_boolean_not_string", func(in *protocol.ActionExecutionInput) { in.EventJSON = []byte(`{"inputs":{"enabled":false}}`) }},
+		{"duplicate_event_key", func(in *protocol.ActionExecutionInput) { in.EventJSON = []byte(`{"inputs":{},"inputs":{}}`) }},
+		{"duplicate_input_key", func(in *protocol.ActionExecutionInput) {
+			in.EventJSON = []byte(`{"inputs":{"message":"one","message":"two"}}`)
+		}},
+		{"event_null", func(in *protocol.ActionExecutionInput) { in.EventJSON = []byte(`{"inputs":null}`) }},
+		{"event_extra_document", func(in *protocol.ActionExecutionInput) { in.EventJSON = append(in.EventJSON, []byte(` {}`)...) }},
+		{"event_noncanonical_spacing", func(in *protocol.ActionExecutionInput) { in.EventJSON = append([]byte(" "), in.EventJSON...) }},
+		{"event_wrong_after", func(in *protocol.ActionExecutionInput) {
+			var event map[string]any
+			if json.Unmarshal(in.EventJSON, &event) != nil {
+				t.Fatal("fixture event decode failed")
+			}
+			event["after"] = strings.Repeat("d", 40)
+			in.EventJSON, _ = json.Marshal(event)
+		}},
+		{"event_wrong_ref", func(in *protocol.ActionExecutionInput) {
+			var event map[string]any
+			if json.Unmarshal(in.EventJSON, &event) != nil {
+				t.Fatal("fixture event decode failed")
+			}
+			event["ref"] = "refs/heads/main"
+			in.EventJSON, _ = json.Marshal(event)
+		}},
+		{"event_oversized", func(in *protocol.ActionExecutionInput) { in.EventJSON = []byte(strings.Repeat(" ", 16<<10+1)) }},
+		{"different_commit", func(in *protocol.ActionExecutionInput) { in.CommitID = strings.Repeat("d", 40) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body, _ := json.Marshal(input)
+			var changed protocol.ActionExecutionInput
+			if json.Unmarshal(body, &changed) != nil {
+				t.Fatal("fixture clone failed")
+			}
+			tc.change(&changed)
+			if validatedManualInputs(changed, files) {
+				t.Fatal("malformed contract accepted")
+			}
+			err := Execute(t.Context(), changed, func(protocol.ActionFrame) error { t.Fatal("invalid inputs emitted an observation"); return nil })
+			if err == nil || ExecutionFailureStage(err) != "engine_input_validation" {
+				t.Fatalf("invalid typed contract did not fail before execution: %v", err)
+			}
+			if _, err := os.Stat(marker); !os.IsNotExist(err) {
+				t.Fatal("invalid inputs reached Docker")
+			}
+		})
+	}
+	// A canonicalized-but-unreviewed value is not the original submitted map.
+	changed := input
+	copy := *input.ManualInputs
+	changed.ManualInputs = &copy
+	copy.Submitted = []workflowinputs.Value{{Name: "count", Type: workflowinputs.Number, Number: "0.0"}, input.ManualInputs.Submitted[0]}
+	copy.SubmittedSHA256 = workflowinputs.Digest("golf.workflow.dispatch.inputs.v1", copy.Submitted)
+	if validatedManualInputs(changed, files) || !reflect.DeepEqual(input.ManualInputs.Submitted, []workflowinputs.Value{{Name: "message", Type: workflowinputs.String, String: "literal ${{ secrets.VALUE }}; 'quote' & <tag>"}}) {
+		t.Fatal("uncanonical original map adopted or original changed")
+	}
+}
+
+func TestTypedExecutionExplicitPresenceAndFiniteNumbers(t *testing.T) {
+	input := typedExecution(t)
+	_, _, files, err := admit(input.Input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema, err := workflowinputs.Parse(files[input.Input.WorkflowPath].body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	absent, err := workflowinputs.Validate(schema, []workflowinputs.Value{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	falsePresent, err := workflowinputs.Validate(schema, []workflowinputs.Value{{Name: "enabled", Type: workflowinputs.Boolean, Boolean: false}})
+	if err != nil || falsePresent.SubmittedSHA256 == absent.SubmittedSHA256 || falsePresent.EffectiveSHA256 != absent.EffectiveSHA256 {
+		t.Fatal("explicit false presence lost despite identical effective values", err)
+	}
+	for _, tc := range []struct {
+		name, number string
+		enabled      bool
+	}{
+		{"explicit_false_and_zero", "0", false},
+		{"true_and_decimal", "0.125", true},
+		{"negative", "-2.5", true},
+		{"binary64_canonical_decimal", "0.1", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			values, err := workflowinputs.Validate(schema, []workflowinputs.Value{
+				{Name: "enabled", Type: workflowinputs.Boolean, Boolean: tc.enabled},
+				{Name: "count", Type: workflowinputs.Number, Number: tc.number},
+				{Name: "message", Type: workflowinputs.String, String: "${{ inputs.count }} & 'literal'"},
+				{Name: "choice", Type: workflowinputs.Choice, String: "two"},
+			})
+			if err != nil || values.SubmittedSHA256 == absent.SubmittedSHA256 {
+				t.Fatal("explicit value presence not bound", err)
+			}
+			changed := input
+			changed.ManualInputs = &protocol.ActionManualInputs{Contract: protocol.ManualInputsCapability, SchemaSHA256: schema.SHA256,
+				SubmittedSHA256: values.SubmittedSHA256, EffectiveSHA256: values.EffectiveSHA256,
+				Submitted: values.Submitted, Effective: values.Effective}
+			changed.EventJSON, err = json.Marshal(map[string]any{"after": changed.CommitID, "ref": changed.CommitID, "inputs": map[string]string{
+				"enabled": strconv.FormatBool(tc.enabled), "count": tc.number, "message": "${{ inputs.count }} & 'literal'", "choice": "two",
+			}})
+			if err != nil || !validatedManualInputs(changed, files) {
+				t.Fatal("canonical typed values refused", err)
+			}
+			// Event maps stay strings, even when equivalent JSON numbers/bools
+			// would otherwise appear to have the same displayed content.
+			changed.EventJSON, _ = json.Marshal(map[string]any{"after": changed.CommitID, "ref": changed.CommitID, "inputs": map[string]any{
+				"enabled": tc.enabled, "count": tc.number, "message": "${{ inputs.count }} & 'literal'", "choice": "two",
+			}})
+			if validatedManualInputs(changed, files) {
+				t.Fatal("typed event boolean adopted in the string event map")
+			}
+		})
+	}
+	legacy := input
+	legacy.Input.Catalog = protocol.ActionsCatalog
+	if validatedManualInputs(legacy, files) {
+		t.Fatal("v1 accepted a typed execution envelope")
+	}
+}
 
 func testObserver(t *testing.T, send func(protocol.ActionFrame) error) *engineObserver {
 	t.Helper()

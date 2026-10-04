@@ -91,7 +91,14 @@ generate:
 	./scripts/generate.sh
 generate-check:
 	./scripts/generate.sh --check
-check: fmt vet test web-check generate-check
+# The maintained engine is a separate module, outside root go test ./....
+.PHONY: engine-check
+engine-check:
+	python3 engines/act/verify_upstream_source.py
+	go -C engines/act vet ./...
+	go -C engines/act test ./...
+	go -C engines/act/third_party/act test ./pkg/runner
+check: fmt vet test web-check generate-check engine-check
 helm-check:
 	python3 deploy/helm/golf/check.py
 up: setup

@@ -373,3 +373,74 @@ func TestActionsEngineIndependentPushPreparationPostgres(t *testing.T) {
 		t.Fatal("preparation dispatched", err, count)
 	}
 }
+
+func TestActionsManualPlanBinding(t *testing.T) {
+	input := runner.ActionPlanInput{Catalog: runner.ActionsInputsCatalog, WorkflowPath: runWorkflowPath, WorkflowBlobID: strings.Repeat("b", 40), Archive: []byte("bounded-source"), Event: "workflow_dispatch", Ref: strings.Repeat("a", 40), Images: map[string]string{"linux": "image@sha256:" + strings.Repeat("c", 64)}, ManualInputsContract: runner.ManualInputsCapability, ManualInputsSchemaSHA256: strings.Repeat("d", 64)}
+	deps := []byte("{}")
+	plan := runner.ActionPlan{Catalog: input.Catalog, EngineCommit: runner.ActionsEngineCommit, WorkflowPath: input.WorkflowPath, WorkflowBlobID: input.WorkflowBlobID, ArchiveSHA256: sourceArchiveHash(input.Archive), Event: input.Event, Ref: input.Ref, ActionsSHA256: sourceArchiveHash(deps), ManualInputsContract: input.ManualInputsContract, ManualInputsSchemaSHA256: input.ManualInputsSchemaSHA256, Jobs: []runner.ActionJob{{InstanceID: strings.Repeat("e", 32), JobID: "build", Name: "Build", Image: input.Images["linux"], Steps: []runner.ActionStep{{ID: "first", Name: "First"}}}}}
+	if err := validateActionPlan(plan, input); err != nil {
+		t.Fatal("versioned manual plan rejected", err)
+	}
+	for _, change := range []func(*runner.ActionPlan){
+		func(p *runner.ActionPlan) { p.Catalog = runner.ActionsCatalog },
+		func(p *runner.ActionPlan) { p.ManualInputsContract = "" },
+		func(p *runner.ActionPlan) { p.ManualInputsSchemaSHA256 = strings.Repeat("f", 64) },
+		func(p *runner.ActionPlan) { p.EngineCommit = "different" },
+	} {
+		changed := plan
+		change(&changed)
+		if validateActionPlan(changed, input) == nil {
+			t.Fatal("manual plan binding downgrade adopted")
+		}
+	}
+	input.Event = "push"
+	plan.Event = "push"
+	if validateActionPlan(plan, input) == nil {
+		t.Fatal("manual inputs adopted by push catalog")
+	}
+	input.Event = "inspect"
+	plan.Event = "inspect"
+	if err := validateActionPlan(plan, input); err != nil {
+		t.Fatal("read-only manual source planning refused", err)
+	}
+	input.Catalog = runner.ActionsCatalog
+	plan.Catalog = runner.ActionsCatalog
+	if validateActionPlan(plan, input) == nil {
+		t.Fatal("legacy plan accepted manual contract")
+	}
+	input.ManualInputsContract = ""
+	input.ManualInputsSchemaSHA256 = ""
+	plan.ManualInputsContract = ""
+	plan.ManualInputsSchemaSHA256 = ""
+	if err := validateActionPlan(plan, input); err != nil {
+		t.Fatal("legacy plan behavior changed", err)
+	}
+}
+
+// Use the independently built maintained planner so inspection cannot appear
+// supported through an unconditional fake planner response.
+func TestActionsManualInspectionPostgres(t *testing.T) {
+	f := engineRunFixture(t)
+	f.row.HTMLURL = "https://forge.invalid/alice/example"
+	f.workflow = []byte(typedDispatchWorkflow)
+	f.server.config.ActionsEngineCatalog = runner.ActionsInputsCatalog
+	response, err := f.server.InspectWorkflows(f.context(t), workflowRunRequest(f, &golfv1.InspectWorkflowsRequest{Repository: &golfv1.RepositoryKey{Owner: "alice", Name: "example"}, RepositoryId: fmt.Sprint(f.row.ID), Ref: f.commit}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema, err := parseWorkflowDispatchInputs(f.workflow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Msg.ExecutionCatalog != runner.ActionsInputsCatalog || len(response.Msg.Configurations) != 1 {
+		t.Fatal("manual inspection catalog/inventory lost")
+	}
+	c := response.Msg.Configurations[0]
+	if c.State != golfv1.WorkflowInspectionState_WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET || c.ManualInputsSchemaSha256 != schema.SHA256 || len(c.ManualInputs) != 4 || c.BlobId != sourceBlobHash(f.workflow, 40) {
+		t.Fatal("exact-source manual workflow refused by actual planner or metadata mismatched")
+	}
+	var count int
+	if err = f.server.db.QueryRow(`SELECT count(*) FROM golf_workflow_runs`).Scan(&count); err != nil || count != 0 {
+		t.Fatal("source inspection created work", err)
+	}
+}

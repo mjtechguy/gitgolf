@@ -1586,6 +1586,10 @@ type GolfWorkflowRun struct {
 	ResourceMemoryBytes         int64
 	ResourcePids                int32
 	ResourceTimeoutSeconds      int32
+	InputContract               string
+	InputSchemaSha256           string
+	SubmittedInputsSha256       string
+	EffectiveInputsSha256       string
 }
 
 type GolfWorkflowRunLog struct {

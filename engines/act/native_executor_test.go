@@ -3,6 +3,7 @@ package actionsengine
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -13,6 +14,81 @@ import (
 	act "github.com/nektos/act/pkg/runner"
 	"github.com/sirupsen/logrus"
 )
+
+func TestTypedNativePlanContextsAndLiteralData(t *testing.T) {
+	input := typedExecution(t)
+	plan, native, files, err := admit(input.Input)
+	if err != nil || !validatedManualInputs(input, files) {
+		t.Fatal("typed native fixture not admitted", err)
+	}
+	var frames []protocol.ActionFrame
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	observer := &engineObserver{ctx: ctx, cancel: cancel, send: func(f protocol.ActionFrame) error { frames = append(frames, f); return nil },
+		plan: plan, started: map[string]bool{}, finished: map[string]bool{}, nativeResults: map[string]string{}}
+	ctx = act.WithJobLoggerFactory(ctx, observer)
+	config := &act.Config{EventName: "workflow_dispatch", Workdir: t.TempDir(), Env: map[string]string{}, Platforms: map[string]string{"linux": "unused"}}
+	// Substituted executor boundary qualifies native context composition only;
+	// no successful Docker/native job execution is inferred from this callback.
+	called := 0
+	execute := func(ctx context.Context, rc *act.RunContext) error {
+		called++
+		for expression, expected := range map[string]string{
+			"toJSON(inputs.enabled)": "false", "toJSON(github.event.inputs.enabled)": `"false"`,
+			"toJSON(inputs.count)": "0", "toJSON(github.event.inputs.count)": `"0"`,
+			"inputs.message": input.ManualInputs.Submitted[0].String, "inputs.choice": "one",
+		} {
+			if observed := rc.ExprEval.Interpolate(ctx, "${{ "+expression+" }}"); observed != expected {
+				t.Errorf("native evaluator %s = %q, want %q", expression, observed, expected)
+			}
+		}
+		for expression, expected := range map[string]bool{"inputs.enabled": false, "github.event.inputs.enabled": true, "inputs.count": false, "github.event.inputs.count": true} {
+			if observed, err := act.EvalBool(ctx, rc.ExprEval, expression, exprparser.DefaultStatusCheckNone); err != nil || observed != expected {
+				t.Errorf("native condition %s = %v/%v, want %v", expression, observed, err, expected)
+			}
+		}
+		instance, ok := observer.identify(common.Logger(ctx).(*logrus.Entry))
+		if !ok {
+			t.Fatal("actual native instance identity missing")
+		}
+		observer.mu.Lock()
+		observer.started[instance.InstanceID] = true // substituted executor boundary only
+		observer.nativeResults[instance.InstanceID] = "success"
+		observer.mu.Unlock()
+		return nil
+	}
+	original := append([]byte{}, input.EventJSON...)
+	if err := executeNativePlan(ctx, native, config, string(input.EventJSON), observer, execute); err != nil || called != 1 {
+		t.Fatal("native typed evaluator composition failed", err, called)
+	}
+	if !reflect.DeepEqual(original, input.EventJSON) {
+		t.Fatal("native context changed original event strings")
+	}
+}
+
+func TestTypedNativeFalseJobConditionSkipsBeforeDocker(t *testing.T) {
+	source := strings.Replace(typedWorkflow, "if: inputs.enabled || inputs.count == 0", "if: inputs.enabled", 1)
+	plan, native, _, err := admit(typedInput(t, source, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := typedExecution(t)
+	var frames []protocol.ActionFrame
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	observer := &engineObserver{ctx: ctx, cancel: cancel, send: func(f protocol.ActionFrame) error { frames = append(frames, f); return nil },
+		plan: plan, started: map[string]bool{}, finished: map[string]bool{}, nativeResults: map[string]string{}}
+	ctx = act.WithJobLoggerFactory(ctx, observer)
+	// A future regression cannot reach any ordinary local Docker daemon.
+	t.Setenv("DOCKER_HOST", "unix:///nonexistent-golf-typed-input-source-test.sock")
+	config := &act.Config{EventName: "workflow_dispatch", Workdir: t.TempDir(), Env: map[string]string{}, Platforms: map[string]string{"linux": "unused"}}
+	if err := executeNativePlan(ctx, native, config, string(input.EventJSON), observer, nativeInstanceExecutor); err != nil {
+		t.Fatal("actual native false-condition skip failed", err)
+	}
+	if len(frames) != 1 || frames[0].Kind != "job_finished" || frames[0].State != "skipped" || len(observer.started) != 0 {
+		t.Fatalf("false boolean did not remain a pre-execution skip: %#v", frames)
+	}
+}
 
 // The executor callback is a substituted execution boundary: these assertions
 // qualify composition/status attribution, not Docker or a native shell run.

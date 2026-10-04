@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -43,18 +42,13 @@ func seedWorkflowInputKeyRows(t *testing.T, n int) (*workflowRunFixture, []workf
 	out := []workflowDispatchInputContent{}
 	for i := 0; i < n; i++ {
 		identity := base
-		if i > 0 {
-			identity.RunID = uuid.NewString()
-			identity.IdempotencyKey = uuid.NewString()
-			patch, _ := json.Marshal(map[string]any{"id": identity.RunID, "idempotency_key": identity.IdempotencyKey})
-			if _, err = tx.ExecContext(t.Context(), `INSERT INTO golf_workflow_runs SELECT (jsonb_populate_record(NULL::golf_workflow_runs,to_jsonb(r)||$2::jsonb)).* FROM golf_workflow_runs r WHERE id=$1`, run.ID, string(patch)); err != nil {
-				t.Fatal("clone run fixture", err)
-			}
-		}
+		identity.RunID = uuid.NewString()
+		identity.IdempotencyKey = uuid.NewString()
 		row, err := sealWorkflowDispatchInputContent(f.server.keyring, identity, schema, values)
 		if err != nil {
 			t.Fatal(err)
 		}
+		insertTypedWorkflowInputFixtureRun(t, tx, run.ID, row)
 		if err = insertDispatchInputContent(t.Context(), tx, row); err != nil {
 			t.Fatal(err)
 		}

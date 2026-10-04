@@ -1,0 +1,30 @@
+--- a/pkg/runner/expression.go
++++ b/pkg/runner/expression.go
+@@ -6,0 +7 @@
++	"math"
+@@ -9,0 +11 @@
++	"strconv"
+@@ -510,0 +513,10 @@
++					// Golf: workflow_dispatch event inputs remain strings; only the
++					// declared numeric evaluator context receives a finite number.
++					// Admission validates canonical numeric strings before execution.
++					if v.Type == "number" {
++						if text, ok := value.(string); ok {
++							if number, err := strconv.ParseFloat(text, 64); err == nil && !math.IsNaN(number) && !math.IsInf(number, 0) {
++								value = number
++							}
++						}
++					}
+--- a/pkg/runner/step.go
++++ b/pkg/runner/step.go
+@@ -262,0 +263,10 @@
++			// Golf: composite INPUT_ values were already evaluated by the
++			// parent action. They are data, even when they contain ${{ }}.
++			// An explicit source step-env override still evaluates normally.
++			if rc.Parent != nil {
++				if inherited, ok := rc.Env[k]; ok && inherited == v {
++					if _, override := step.getStepModel().GetEnv()[k]; !override {
++						continue
++					}
++				}
++			}

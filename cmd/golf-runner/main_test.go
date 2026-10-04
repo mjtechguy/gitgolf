@@ -4,20 +4,26 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
 
 	"github.com/mjtechguy/golf-git/internal/runner"
+	"github.com/mjtechguy/golf-git/internal/workflowinputs"
 )
 
 func TestCoordinatorOrigin(t *testing.T) {
@@ -226,5 +232,186 @@ func TestResourceConsumerCapabilityAndNoLegacyAdoption(t *testing.T) {
 	a.TimeoutSeconds = 899
 	if c.validAssignment(a) {
 		t.Fatal("timeout does not echo snapshot")
+	}
+}
+
+func typedManualAssignment(t *testing.T) assignment {
+	t.Helper()
+	schema, err := workflowinputs.Parse([]byte("on:\n  workflow_dispatch:\n    inputs:\n      message: {type: string, required: true}\n      count: {type: number, default: 0}\n"))
+	if err != nil {
+		t.Fatal("schema fixture")
+	}
+	values, err := workflowinputs.Validate(schema, []workflowinputs.Value{{Name: "message", Type: workflowinputs.String, String: "private <>& 世界"}})
+	if err != nil {
+		t.Fatal("typed fixture")
+	}
+	commit := strings.Repeat("a", 40)
+	event, _ := json.Marshal(map[string]any{"ref": commit, "after": commit, "inputs": map[string]string{"message": "private <>& 世界", "count": "0"}})
+	return assignment{RunID: "owned", AttemptID: strings.Repeat("b", 32), AttemptToken: strings.Repeat("c", 64), CommitID: commit, SourceSHA256: strings.Repeat("d", 64), EngineCatalog: runner.ActionsInputsCatalog, TimeoutSeconds: 900, LeaseSeconds: 90, JobResources: testResourceBinding(), EventJSON: event, ActionsPlan: &runner.ActionPlan{Catalog: runner.ActionsInputsCatalog, EngineCommit: runner.ActionsEngineCommit, Event: "workflow_dispatch", Ref: commit, ArchiveSHA256: strings.Repeat("d", 64), ManualInputsContract: runner.ManualInputsCapability, ManualInputsSchemaSHA256: schema.SHA256, WorkflowPath: ".github/workflows/main.yml", WorkflowBlobID: strings.Repeat("e", 40), Jobs: []runner.ActionJob{{InstanceID: strings.Repeat("f", 32)}}}, ManualInputs: &runner.ActionManualInputs{Contract: runner.ManualInputsCapability, SchemaSHA256: schema.SHA256, SubmittedSHA256: values.SubmittedSHA256, EffectiveSHA256: values.EffectiveSHA256, Submitted: values.Submitted, Effective: values.Effective}}
+}
+
+func hasManualCapabilities(t *testing.T, c *coordinator) bool {
+	t.Helper()
+	body, _ := json.Marshal(c.pollCapabilities())
+	var result struct{ Catalogs, Capabilities []string }
+	if json.Unmarshal(body, &result) != nil {
+		t.Fatal("capabilities fixture")
+	}
+	return slices.Contains(result.Catalogs, runner.ActionsInputsCatalog) && slices.Contains(result.Capabilities, runner.ManualInputsCapability)
+}
+
+func TestManualAssignmentRequiresActualCurrentVerifiedTLS(t *testing.T) {
+	a := typedManualAssignment(t)
+	sendAssignment := false
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !sendAssignment {
+			w.WriteHeader(204)
+			return
+		}
+		json.NewEncoder(w).Encode(a)
+	}))
+	server.TLS = &tls.Config{MinVersion: tls.VersionTLS13}
+	server.StartTLS()
+	defer server.Close()
+	ca := filepath.Join(t.TempDir(), "ca.crt")
+	if os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}), 0600) != nil {
+		t.Fatal("CA fixture")
+	}
+	config, err := runnerTLSConfig(server.URL, ca)
+	if err != nil {
+		t.Fatal("CA configuration")
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	transport.TLSClientConfig = config
+	defer transport.CloseIdleConnections()
+	c := coordinator{origin: server.URL, id: "owned", key: strings.Repeat("z", 64), client: &http.Client{Transport: transport}, actions: &runner.ActionsExecutor{}}
+	if hasManualCapabilities(t, &c) || c.validAssignment(a) {
+		t.Fatal("configuration alone claimed verified TLS")
+	}
+	if got, err := c.poll(t.Context()); err != nil || got != nil {
+		t.Fatal("first legacy poll failed")
+	}
+	if !hasManualCapabilities(t, &c) || !c.validAssignment(a) {
+		t.Fatal("actual verified TLS failed to authorize typed consumer")
+	}
+	sendAssignment = true
+	if got, err := c.poll(t.Context()); err != nil || got == nil || got.ManualInputs.EffectiveSHA256 != a.ManualInputs.EffectiveSHA256 {
+		t.Fatal("verified typed assignment rejected")
+	}
+	// A response from a now-unverified transport must not inherit the previous
+	// positive observation or consume private input assignments.
+	transport.CloseIdleConnections()
+	transport.TLSClientConfig = transport.TLSClientConfig.Clone()
+	transport.TLSClientConfig.InsecureSkipVerify = true
+	if hasManualCapabilities(t, &c) {
+		t.Fatal("changed insecure transport advertised typed consumer")
+	}
+	if got, err := c.poll(t.Context()); got != nil || !errors.Is(err, errTransport) || c.verifiedTLS.Load() {
+		t.Fatal("prior verified response survived current insecure response")
+	}
+	// Transport verification also refuses a trusted certificate for another name.
+	transport.CloseIdleConnections()
+	transport.TLSClientConfig = config
+	c.origin = strings.Replace(server.URL, "127.0.0.1", "localhost", 1)
+	if got, err := c.poll(t.Context()); got != nil || !errors.Is(err, errTransport) || c.verifiedTLS.Load() {
+		t.Fatal("wrong hostname accepted")
+	}
+	transport.CloseIdleConnections()
+	transport.TLSClientConfig, err = runnerTLSConfig(server.URL, "")
+	if err != nil {
+		t.Fatal("untrusted TLS fixture")
+	}
+	c.origin = server.URL
+	if got, err := c.poll(t.Context()); got != nil || !errors.Is(err, errTransport) || hasManualCapabilities(t, &c) {
+		t.Fatal("missing CA accepted typed assignment")
+	}
+	transport.CloseIdleConnections()
+	transport.TLSClientConfig = config
+	// An arbitrary response TLS field is not enough: current transport config,
+	// chain validation, exact hostname and TLS1.3 all remain required.
+	c.origin = server.URL
+	fake := &http.Response{TLS: &tls.ConnectionState{Version: tls.VersionTLS12, PeerCertificates: []*x509.Certificate{server.Certificate()}, VerifiedChains: [][]*x509.Certificate{{server.Certificate()}}}}
+	if c.verifiedResponseTLS(fake) {
+		t.Fatal("TLS1.2 claimed typed capability")
+	}
+	fake.TLS.Version = tls.VersionTLS13
+	fake.TLS.VerifiedChains = nil
+	if c.verifiedResponseTLS(fake) {
+		t.Fatal("unverified peer claimed typed capability")
+	}
+	c.origin = "http://127.0.0.1:8080"
+	c.verifiedTLS.Store(true)
+	if hasManualCapabilities(t, &c) || c.validAssignment(a) {
+		t.Fatal("HTTP inherited prior TLS observation")
+	}
+}
+
+func TestManualTLSNoCAAndOldProtocolNeverAdvertiseInputs(t *testing.T) {
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) }))
+	server.TLS = &tls.Config{MinVersion: tls.VersionTLS12, MaxVersion: tls.VersionTLS12}
+	server.StartTLS()
+	defer server.Close()
+	ca := filepath.Join(t.TempDir(), "ca.crt")
+	if os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}), 0600) != nil {
+		t.Fatal("CA fixture")
+	}
+	for _, caFile := range []string{"", ca} {
+		config, err := runnerTLSConfig(server.URL, caFile)
+		if err != nil {
+			t.Fatal("TLS fixture")
+		}
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.Proxy = nil
+		transport.TLSClientConfig = config
+		c := coordinator{origin: server.URL, id: "owned", key: strings.Repeat("z", 64), client: &http.Client{Transport: transport}, actions: &runner.ActionsExecutor{}}
+		if got, err := c.poll(t.Context()); got != nil || !errors.Is(err, errTransport) || hasManualCapabilities(t, &c) {
+			transport.CloseIdleConnections()
+			t.Fatal("unqualified TLS advertised private input consumer")
+		}
+		transport.CloseIdleConnections()
+	}
+}
+
+func TestManualAssignmentCatalogSeparation(t *testing.T) {
+	a := typedManualAssignment(t)
+	c := coordinator{origin: "https://golf.invalid", client: &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13}}}, actions: &runner.ActionsExecutor{}}
+	c.verifiedTLS.Store(true)
+	if !c.validAssignment(a) {
+		t.Fatal("bound fixture refused")
+	}
+	for _, change := range []func(*assignment){
+		func(v *assignment) { v.ManualInputs = nil }, func(v *assignment) { v.EngineCatalog = runner.ActionsCatalog }, func(v *assignment) { v.ActionsPlan.ManualInputsContract = "other" }, func(v *assignment) { v.ManualInputs.EffectiveSHA256 = strings.Repeat("f", 64) },
+	} {
+		body, _ := json.Marshal(a)
+		var v assignment
+		json.Unmarshal(body, &v)
+		change(&v)
+		if c.validAssignment(v) {
+			t.Fatal("mismatched input/catalog accepted")
+		}
+	}
+	shell := assignment{JobResources: testResourceBinding(), TimeoutSeconds: 900, ManualInputs: a.ManualInputs}
+	shell.Steps = []struct{ Name, Run, Shell string }{{Run: "true"}}
+	if c.validAssignment(shell) {
+		t.Fatal("shell adopted typed envelope")
+	}
+}
+
+func TestManualEngineRequestKeepsOriginalEnvelopeAndSelectedCatalog(t *testing.T) {
+	a := typedManualAssignment(t)
+	images := map[string]string{"linux": "alpine@sha256:" + strings.Repeat("b", 64)}
+	archive := []byte("owned immutable archive")
+	input := actionsExecutionInput(a, archive, images)
+	if input.Input.Catalog != a.EngineCatalog || input.Plan.Catalog != a.EngineCatalog || input.Input.ManualInputsContract != a.ManualInputs.Contract || input.Input.ManualInputsSchemaSHA256 != a.ManualInputs.SchemaSHA256 || input.ManualInputs != a.ManualInputs || input.CommitID != a.CommitID || !bytes.Equal(input.EventJSON, a.EventJSON) || !bytes.Equal(input.Input.Archive, archive) || input.JobResources != a.JobResources {
+		t.Fatal("worker substituted input/catalog/source binding")
+	}
+	body, err := json.Marshal(input)
+	if err != nil {
+		t.Fatal("engine serialization failed")
+	}
+	var recovered runner.ActionExecutionInput
+	if json.Unmarshal(body, &recovered) != nil || runner.ValidateActionManualInputs(recovered.Plan, recovered.ManualInputs, recovered.EventJSON, recovered.CommitID) != nil {
+		t.Fatal("engine transfer lost canonical typed input envelope")
 	}
 }

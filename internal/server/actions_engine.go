@@ -29,7 +29,7 @@ func sourceArchiveHash(data []byte) string {
 }
 
 func (s *Server) actionsEngineConfigured() bool {
-	return s.config.ActionsEngineCatalog == runner.ActionsCatalog && s.config.ActionsEngineBinary != ""
+	return runner.IsActionsCatalog(s.config.ActionsEngineCatalog) && s.config.ActionsEngineBinary != ""
 }
 func (s *Server) validateActionsEngineConfig() error {
 	if s.config.ActionsEngineCatalog == "" && s.config.ActionsEngineBinary == "" {
@@ -64,6 +64,21 @@ func (s *Server) planActions(ctx context.Context, path, blob, event, ref string,
 		return nil, errActionsEngine
 	}
 	input := runner.ActionPlanInput{Catalog: runner.ActionsCatalog, WorkflowPath: path, WorkflowBlobID: blob, Archive: archive, Event: event, Ref: ref, Images: s.runnerImages}
+	return s.planActionsInput(ctx, input)
+}
+
+// Manual parameters select the explicit v2 catalog; legacy planning remains v1.
+func (s *Server) planActionsManual(ctx context.Context, path, blob, ref string, archive []byte, schemaSHA string) (*runner.ActionPlan, error) {
+	if !s.actionsEngineConfigured() || s.config.ActionsEngineCatalog != runner.ActionsInputsCatalog || !actionSHA.MatchString(schemaSHA) {
+		return nil, errActionsEngine
+	}
+	return s.planActionsInput(ctx, runner.ActionPlanInput{Catalog: runner.ActionsInputsCatalog, WorkflowPath: path, WorkflowBlobID: blob, Archive: archive, Event: "workflow_dispatch", Ref: ref, Images: s.runnerImages, ManualInputsContract: runner.ManualInputsCapability, ManualInputsSchemaSHA256: schemaSHA})
+}
+
+func (s *Server) planActionsInput(ctx context.Context, input runner.ActionPlanInput) (*runner.ActionPlan, error) {
+	if !s.actionsEngineConfigured() || !runner.IsActionsCatalog(input.Catalog) || input.Catalog == runner.ActionsInputsCatalog && s.config.ActionsEngineCatalog != runner.ActionsInputsCatalog {
+		return nil, errActionsEngine
+	}
 	body, err := json.Marshal(input)
 	if err != nil || len(body) > 24<<20 {
 		return nil, errActionsEngine
@@ -98,7 +113,17 @@ func (s *Server) planActions(ctx context.Context, path, blob, event, ref string,
 	return &plan, nil
 }
 func validateActionPlan(plan runner.ActionPlan, input runner.ActionPlanInput) error {
-	if plan.Catalog != runner.ActionsCatalog || plan.EngineCommit != runner.ActionsEngineCommit || plan.WorkflowPath != input.WorkflowPath || plan.WorkflowBlobID != input.WorkflowBlobID || plan.Event != input.Event || plan.Ref != input.Ref || plan.ArchiveSHA256 != sourceArchiveHash(input.Archive) || !actionSHA.MatchString(plan.ActionsSHA256) || len(plan.Jobs) < 1 || len(plan.Jobs) > 12 {
+	if !runner.IsActionsCatalog(input.Catalog) || plan.Catalog != input.Catalog || plan.EngineCommit != runner.ActionsEngineCommit || plan.WorkflowPath != input.WorkflowPath || plan.WorkflowBlobID != input.WorkflowBlobID || plan.Event != input.Event || plan.Ref != input.Ref || plan.ArchiveSHA256 != sourceArchiveHash(input.Archive) || !actionSHA.MatchString(plan.ActionsSHA256) || len(plan.Jobs) < 1 || len(plan.Jobs) > 12 {
+		return errActionsEngine
+	}
+	if plan.ManualInputsContract != input.ManualInputsContract || plan.ManualInputsSchemaSHA256 != input.ManualInputsSchemaSHA256 {
+		return errActionsEngine
+	}
+	if input.Catalog == runner.ActionsInputsCatalog {
+		if input.ManualInputsContract != runner.ManualInputsCapability || !actionSHA.MatchString(input.ManualInputsSchemaSHA256) || input.Event != "inspect" && input.Event != "workflow_dispatch" {
+			return errActionsEngine
+		}
+	} else if input.ManualInputsContract != "" || input.ManualInputsSchemaSHA256 != "" {
 		return errActionsEngine
 	}
 	if len(plan.LocalActions) > 8 {

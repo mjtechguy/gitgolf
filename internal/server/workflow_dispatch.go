@@ -26,17 +26,28 @@ func workflowDispatchTarget(m *golfv1.GetWorkflowDispatchRequest) (repositoryKey
 	if e != nil {
 		return key, 0, 0, e
 	}
-	if !objectID.MatchString(m.CommitId) || !executionWorkflowPath(m.WorkflowPath) || !creationKey.MatchString(m.IdempotencyKey) {
+	if len(m.ProtoReflect().GetUnknown()) != 0 || !validWorkflowTypedInspection(m) || !objectID.MatchString(m.CommitId) || !executionWorkflowPath(m.WorkflowPath) || !creationKey.MatchString(m.IdempotencyKey) {
 		return key, 0, 0, invalid("Inspect the original dispatch using its exact commit, workflow path and UUID v4 key.")
 	}
 	return key, repo, owner, nil
 }
 
+func validWorkflowTypedInspection(m *golfv1.GetWorkflowDispatchRequest) bool {
+	any := m.InputContract != nil || m.SubmittedSha256 != nil || m.SchemaSha256 != nil || m.WorkflowBlobId != nil || m.EffectiveSha256 != nil
+	if !any {
+		return true
+	}
+	return m.InputContract != nil && m.GetInputContract() == workflowManualInputsContract && m.SubmittedSha256 != nil && m.SchemaSha256 != nil && m.WorkflowBlobId != nil && m.EffectiveSha256 != nil && workflowDispatchSHA256(m.GetSubmittedSha256()) && workflowDispatchSHA256(m.GetSchemaSha256()) && workflowDispatchSHA256(m.GetEffectiveSha256()) && objectID.MatchString(m.GetWorkflowBlobId())
+}
+
 func workflowDispatchMatches(r workflowRunRecord, key repositoryKey, repo, owner, actor int64, m *golfv1.GetWorkflowDispatchRequest) bool {
-	return r.Origin == "manual" && r.UserID == actor && r.RepositoryID == repo && r.OwnerID == owner &&
-		strings.EqualFold(r.RepositoryOwner, key.Owner) && strings.EqualFold(r.RepositoryName, key.Name) &&
-		r.CommitID == m.CommitId && r.WorkflowPath == m.WorkflowPath && r.IdempotencyKey == m.IdempotencyKey &&
-		bytes.Equal(r.InputHash, workflowIntentHash(key, m.CommitId, m.WorkflowPath, repo, owner))
+	if r.Origin != "manual" || r.UserID != actor || r.RepositoryID != repo || r.OwnerID != owner || !strings.EqualFold(r.RepositoryOwner, key.Owner) || !strings.EqualFold(r.RepositoryName, key.Name) || r.CommitID != m.CommitId || r.WorkflowPath != m.WorkflowPath || r.IdempotencyKey != m.IdempotencyKey {
+		return false
+	}
+	if r.InputContract == "" {
+		return m.InputContract == nil && bytes.Equal(r.InputHash, workflowIntentHash(key, m.CommitId, m.WorkflowPath, repo, owner))
+	}
+	return m.InputContract != nil && r.InputContract == m.GetInputContract() && r.BlobID == m.GetWorkflowBlobId() && r.SchemaSHA256 == m.GetSchemaSha256() && r.SubmittedSHA256 == m.GetSubmittedSha256() && r.EffectiveSHA256 == m.GetEffectiveSha256() && bytes.Equal(r.InputHash, workflowTypedIntentHash(key, m.CommitId, m.WorkflowPath, repo, owner, m.GetWorkflowBlobId(), m.GetSchemaSha256(), m.GetSubmittedSha256(), m.GetEffectiveSha256(), m.GetInputContract()))
 }
 
 // GetWorkflowDispatch inspects only the caller's original manual key. A missing
@@ -78,6 +89,7 @@ func (s *Server) GetWorkflowDispatch(ctx context.Context, req *connect.Request[g
 			out.NativeActorId, out.IdempotencyKey = strconv.FormatInt(user.ID, 10), r.IdempotencyKey
 			// Historical execution-policy changes do not conceal an admitted
 			// outcome. This receipt grants no execution or cancellation action.
+			out.SubmittedSha256, out.EffectiveSha256, out.SchemaSha256, out.InputContract = r.SubmittedSHA256, r.EffectiveSHA256, r.SchemaSHA256, r.InputContract
 			out.Run = wireWorkflowRun(r, false)
 			return nil
 		})

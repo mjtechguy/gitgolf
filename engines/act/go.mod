@@ -90,3 +90,5 @@ require (
 )
 
 replace github.com/mjtechguy/golf-git => ../..
+
+replace github.com/nektos/act => ./third_party/act
