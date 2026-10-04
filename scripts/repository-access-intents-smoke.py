@@ -239,6 +239,19 @@ def access_operation(row,original,actor,phase):
     else:assert not row.get('observedEffectivePermission','') and not row.get('observedDirectMembership',False)
     return row
 
+def checked_invitation_matrix(receipts):
+    expected={(scope,issuer,permission)
+              for scope in ('personal','organization')
+              for issuer in ('owner','member-direct-admin')
+              for permission in ('read','write','admin')}
+    assert isinstance(receipts,list) and len(receipts)==12,'Require all twelve actual invitation role cases'
+    observed=[]
+    for receipt in receipts:
+        assert set(receipt)=={'scope','issuer','requestedPermission','phase'} and receipt['phase']=='SUCCEEDED'
+        observed.append((receipt['scope'],receipt['issuer'],receipt['requestedPermission']))
+    assert len(set(observed))==12 and set(observed)==expected,'Require exact invitation scope/issuer/role matrix'
+    return receipts
+
 def self_check():
     source=(ROOT/'api/golf/v1/golf.proto').read_text()
     for method in ('SetRepositoryCollaborator','RemoveRepositoryCollaborator','GetRepositoryAccessOperation'):assert 'rpc '+method+'(' in source
@@ -256,8 +269,22 @@ def self_check():
     try:access_operation({**row,'phase':'DISPATCH_UNKNOWN'},original,actor,'DISPATCH_UNKNOWN')
     except AssertionError:pass
     else:raise AssertionError('Unknown adopted fresh observation')
+    matrix=[{'scope':scope,'issuer':issuer,'requestedPermission':permission,'phase':'SUCCEEDED'}
+            for scope in ('personal','organization')
+            for issuer in ('owner','member-direct-admin')
+            for permission in ('read','write','admin')]
+    assert checked_invitation_matrix(matrix) is matrix
+    historical_eight=[r for r in matrix if r['issuer']=='owner' or r['requestedPermission']=='admin']
+    assert len(historical_eight)==8
+    for invalid in (historical_eight,matrix[:-1],matrix+[matrix[0]],matrix[:-1]+[matrix[0]],
+                    [{**r,'phase':'DISPATCH_UNKNOWN'} if i==0 else r for i,r in enumerate(matrix)],
+                    [{**r,'issuer':'team-only-admin'} if i==0 else r for i,r in enumerate(matrix)],
+                    [{**r,'privateBody':'forbidden'} if i==0 else r for i,r in enumerate(matrix)]):
+        try:checked_invitation_matrix(invalid)
+        except AssertionError:pass
+        else:raise AssertionError('Incomplete, duplicate or unconfirmed invitation role matrix accepted')
     proxy_source_check()
-    print('PASS: pure048 wire, exact actor/target/intent/phase receipts, inherited permission and unknown non-adoption; no runtime resources')
+    print('PASS: pure048 wire, exact actor/target/intent/phase receipts, inherited permission, exact twelve-case invitation matrix and unknown non-adoption; no runtime resources')
 
 def main():
     global ROOT
@@ -421,11 +448,10 @@ def main():
             stage('existing-account invitations explicitly request each role; same-key status/replay sends no duplicate')
             invitation_receipts=[]
             for repository,issuer in ((personal,owner),(orgrepo,owner),(personal,direct),(orgrepo,direct)):
-                roles=('read','write','admin') if issuer is owner else ('admin',)
-                for permission in roles:
+                for permission in ('read','write','admin'):
                     row,created=create(repository,issuer,recipient,permission);count=proxy.count(repository,recipient);result,original=respond(recipient,row);op=operation(result['operation'],original,'SUCCEEDED');assert result['invitation']['state']=='ACCEPTED' and result['invitation']['permission']==permission and proxy.count(repository,recipient)==count+1 and RANK[member(repository,recipient,True)]>=RANK[permission];assert inspect_invitation(recipient,original,'SUCCEEDED')==op and call(recipient,'RespondRepositoryInvitation',original)['operation']==op and proxy.count(repository,recipient)==count+1;invitation_receipts.append({'scope':'organization' if repository is orgrepo else 'personal','issuer':'owner' if issuer is owner else 'member-direct-admin','requestedPermission':permission,'phase':'SUCCEEDED'})
                     p,_=intent(repository,issuer,recipient);mutate(repository,issuer,recipient,p);member(repository,recipient,False)
-            record(requestedInvitations=invitation_receipts)
+            record(requestedInvitations=checked_invitation_matrix(invitation_receipts),requestedInvitationCount=12)
             stage('shared retained generation rejects original direct preview and pending invitation after masked add/remove ABA')
             pending,_=create(orgrepo,owner,recipient,'write');old,c=intent(orgrepo,owner,recipient,'read');assert not c.get('isDirect',False) and c['permission']=='owner' and c.get('actualOrganizationOwner') is False;grant_cycle(orgrepo,direct,recipient,('read',));_,now=resolve(orgrepo,owner,recipient);assert now['permission']==c['permission'] and not now.get('isDirect',False) and now['revision']!=c['revision'];count=proxy.count(orgrepo,recipient)
             checked_rpc(owner['session'],ACCESS+'SetRepositoryCollaborator',old,expected=400,code='failed_precondition');assert proxy.count(orgrepo,recipient)==count
