@@ -541,6 +541,8 @@ Advanced reusable workflows, `pull_request_target`, other event families, and un
 
 The contract is a target, not a claim that upstream `act` already supports all of it. Reuse maintained `act` components for supported parsing/action execution. Golf supplies missing orchestration/security, and only advertises entries after passing conformance fixtures. See [GitHub workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax) and [Actions runner](https://github.com/actions/runner).
 
+The next manual-input increment follows the [typed dispatch contract](docs/WORKFLOW_DISPATCH_INPUTS_CONTRACT.md): source/schema-bound string, boolean, number and choice parameters; separate submitted/defaulted digests; encrypted values and worker capability fencing; unchanged legacy replay and read-only original-operation inspection. Environment selectors require the actual deployment approval consumer. The pinned evaluator's numeric/context behavior must be qualified before enabling this increment; declaration parsing or a Run workflow form alone does not complete it.
+
 ### 7.3 GitLab initial contract
 
 | Surface | V1 contract |
