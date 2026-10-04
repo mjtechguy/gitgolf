@@ -126,6 +126,22 @@ def closed_failure(error):
         trace=trace.tb_next
     return {'failureType':kind if kind in allowed_types else 'UnexpectedError','failureFrames':frames[-8:]}
 
+FOREIGN_FIELDS=('image','status','running','startedAt','restartCount')
+
+def filtered_foreign(rows):
+    # Deliberately exclude Env, command, mounts, health logs and all payloads.
+    return {v['Id']:{'image':v['Image'],'status':v['State']['Status'],'running':v['State']['Running'],'startedAt':v['State']['StartedAt'],'restartCount':v['RestartCount']} for v in rows}
+
+def foreign_diff(before,after):
+    missing=sorted(set(before)-set(after));extra=sorted(set(after)-set(before));changed=[]
+    for identifier in sorted(set(before)&set(after)):
+        fields=[name for name in FOREIGN_FIELDS if before[identifier][name]!=after[identifier][name]]
+        if fields:changed.append({'containerId':identifier,'fields':fields})
+    return {'missingContainerIds':missing,'extraContainerIds':extra,'beforeCount':len(before),'afterCount':len(after),'changed':changed,'unchanged':not missing and not extra and not changed}
+
+def private_snapshot(name,value):
+    path=OUTPUT/(name+'.json.tmp');helpers.private_write(path,json.dumps(value,indent=2,sort_keys=True));path.replace(OUTPUT/(name+'.json'))
+
 def event_receipt(row,keys,target,runs):
     assert set(row)=={'role','deliveryId','eventId','timestamp','signature','bodyBase64','requestIndex','mode'}
     assert row['role'] in MODES and str(uuid.UUID(row['deliveryId']))==row['deliveryId']
@@ -168,6 +184,10 @@ def mime_capture_self_check():
 
 def self_check():
     ast.parse(sink_source());mime_capture_self_check()
+    row={'Id':'a'*64,'Image':'sha256:'+'b'*64,'State':{'Status':'running','Running':True,'StartedAt':'2026-10-04T12:00:00Z'},'RestartCount':0,'Config':{'Env':['PRIVATE_DIAGNOSTIC_ENV']}}
+    snapshot=filtered_foreign([row]);assert 'PRIVATE_DIAGNOSTIC_ENV' not in json.dumps(snapshot) and foreign_diff(snapshot,snapshot)['unchanged']
+    changed=filtered_foreign([row|{'RestartCount':1}]);delta=foreign_diff(snapshot,changed);assert delta['changed']==[{'containerId':'a'*64,'fields':['restartCount']}] and not delta['unchanged']
+    assert foreign_diff(snapshot,{})['missingContainerIds']==['a'*64] and foreign_diff({},snapshot)['extraContainerIds']==['a'*64]
     assert network_subnets({'IPAM':{'Config':None}})==[] and network_subnets({'IPAM':None})==[] and network_subnets({})==[]
     assert network_subnets({'IPAM':{'Config':[{'Subnet':'172.20.1.0/24'},{}]}})==[ipaddress.ip_network('172.20.1.0/24')]
     try:raise TypeError('PRIVATE_BODY_DIAGNOSTIC')
@@ -220,11 +240,12 @@ def main():
     for role,name,digest in [('golf','golf',args.expected_core_sha256),('runner','golf-runner',args.expected_runner_sha256)]:
         value=run('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/usr/bin/sha256sum',images[role],'/usr/local/bin/'+name);assert value.split()==[digest,'/usr/local/bin/'+name];binaries[role]=digest
     free=run('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/bin/df',images['golf'],'-Pk','/');assert int(free.splitlines()[-1].split()[3])>=2*1024*1024,'Require2GiB reserve'
-    foreign_ids=run('docker','ps','-aq').splitlines()
     def foreign_snapshot():
-        if not foreign_ids:return {}
-        return {v['Id']:{'image':v['Image'],'status':v['State']['Status'],'running':v['State']['Running'],'startedAt':v['State']['StartedAt'],'restartCount':v['RestartCount']} for v in json.loads(run('docker','inspect',*foreign_ids))}
-    foreign=set(foreign_ids);foreign_before=foreign_snapshot();project='golf-rules49-'+secrets.token_hex(5);ports=helpers.free_ports(4)
+        identifiers=run('docker','ps','-aq','--no-trunc').splitlines();assert len(identifiers)<=500
+        if not identifiers:return {}
+        return filtered_foreign(json.loads(run('docker','inspect',*identifiers)))
+    foreign_before=foreign_snapshot();private_snapshot('foreign-before',foreign_before);record(foreignBeforeCaptured=True,foreignBeforeCount=len(foreign_before))
+    project='golf-rules49-'+secrets.token_hex(5);ports=helpers.free_ports(4)
     previous=smoke.GOLF,smoke.GITEA;smoke.GOLF,smoke.GITEA='http://127.0.0.1:'+str(ports[0]),'http://127.0.0.1:'+str(ports[1])
     occupied=[]
     for cid in run('docker','network','ls','-q').splitlines():
@@ -415,12 +436,21 @@ def main():
                         try:
                             identity=native(actor.get('token',''),'GET','users/'+actor['name']);assert identity['login']==actor['name'] and (actor.get('id') is None or str(identity['id'])==actor['id']);admin('delete','--username',actor['name'],'--purge');native('','GET','users/'+actor['name'],expected=404)
                         except Exception:failures.append('owned native actor')
-                try:proxy.close();command('down','--volumes','--remove-orphans',timeout=180)
-                except Exception:failures.append('owned resources')
+                try:proxy.close()
+                except Exception:failures.append('owned proxy stop')
+                try:command('down','--volumes','--remove-orphans',timeout=180)
+                except Exception:failures.append('owned compose cleanup')
+                survivors={};resource_errors={}
+                for kind,arguments in [('containers',('ps','-aq','--no-trunc')),('volumes',('volume','ls','-q')),('networks',('network','ls','-q'))]:
+                    try:survivors[kind]=run('docker',*arguments,'--filter','label=com.docker.compose.project='+project).splitlines()
+                    except Exception as error:resource_errors[kind]=closed_failure(error)
+                own_zero=not resource_errors and not any(survivors.values());record(ownedResourcesZero=own_zero,ownedResourceSurvivors=survivors,ownedResourceCheckErrors=resource_errors)
+                if not own_zero:failures.append('owned resource survivors or unavailable observation')
                 try:
-                    for arguments in (('ps','-aq'),('volume','ls','-q'),('network','ls','-q')):assert not run('docker',*arguments,'--filter','label=com.docker.compose.project='+project)
-                    assert set(run('docker','ps','-aq').splitlines())==foreign and foreign_snapshot()==foreign_before
-                except Exception:failures.append('foreign/resource identity')
+                    foreign_after=foreign_snapshot();private_snapshot('foreign-after',foreign_after);difference=foreign_diff(foreign_before,foreign_after);record(foreignComparison=difference)
+                    if not difference['unchanged']:failures.append('foreign identity changed')
+                except Exception as error:
+                    record(foreignComparison={'unchanged':False,'observationUnavailable':True,**closed_failure(error)});failures.append('foreign identity observation unavailable')
             rules.ACTIVE_PROXY=None;smoke.GOLF,smoke.GITEA=previous
             record(status='qualified' if passed and not failures else 'failed',cleanup='failed' if failures else 'passed',cleanupFailureCategories=failures,bootstrapCleanup='fresh_owned_native_volume_removed' if bootstrap_created and not failures else 'not_claimed',originalFailurePreserved=bool(PROOF.get('failedStage')))
             if failures and passed:raise AssertionError('Owned cleanup incomplete')
