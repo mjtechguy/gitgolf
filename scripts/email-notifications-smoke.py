@@ -177,6 +177,8 @@ def checked_rpc(session,method,body=None,expected=200,headers=None,code=None):
         meta={'procedure':method,'status':response.status,'noStore':response.headers.get('Cache-Control')=='no-store'}
         if isinstance(result,dict) and isinstance(result.get('code'),str):meta['code']=result['code']
         record(lastProcedure=meta)
+        if response.status!=expected or not meta['noStore']:
+            record(failedProcedure=meta)
         assert response.status==expected and meta['noStore'],'RPC boundary mismatch; metadata only'
         if expected!=200:assert result['code']==(code or {400:'invalid_argument',401:'unauthenticated',403:'permission_denied',404:'not_found',429:'resource_exhausted',503:'unavailable'}[expected])
         return result
@@ -432,7 +434,7 @@ networks:
                 result=subprocess.run(['node',str(ROOT/'scripts/email-notifications-browser.mjs')],cwd=ROOT,env=env,input=json.dumps(config).encode(),capture_output=True,timeout=420);assert len(result.stdout)<=65536 and len(result.stderr)<=65536;browser=json.loads((OUTPUT/'browser-manifest.json').read_text());record(browser=browser);assert result.returncode==0 and browser['status']=='passed_cleanup_pending' and len(browser['captures'])==12
             stage('current native access removal cancels queued mail with zero receiver bytes')
             command('stop','email-worker');activity();queued=pending('reader');smoke.provider(actors['owner']['token'],'DELETE',route+'/collaborators/'+actors['reader']['name'],expected=204);before=control('/receipts');command('start','email-worker');until(lambda:scalar("SELECT count(*) FROM golf_email_deliveries WHERE id='"+queued['id']+"' AND state='cancelled'")==1);time.sleep(2);after=control('/receipts');assert after==before
-            call('reader','GetRepositoryEmailSubscription',{'target':target},404);call('reader','ListOwnEmailDeliveries',{'target':target},404);call('reader','RedeliverOwnEmail',intent,404)
+            call('reader','GetRepositoryEmailSubscription',{'target':target},404);call('reader','ListOwnEmailDeliveries',{'target':target},404);call('reader','RedeliverOwnEmail',intent,403)
             stage('local credential disable cancels pending verified subscription without SMTP')
             command('stop','email-worker');smoke.provider(actors['owner']['token'],'PUT',route+'/collaborators/'+actors['reader']['name'],{'permission':'read'},204);current=call('reader','GetRepositoryEmailSubscription',{'target':target})['subscription'];sub=subscribe('reader',target,previous=current);activity();queued=pending('reader');disabled=json.loads(command('exec','-T','golf','golf','local-account','disable',payload={'username':actors['reader']['name']}));assert disabled['result']['disabled'];checked_rpc(actors['reader']['session'],SERVICE+'GetOwnEmailNotifications',expected=401);before=control('/receipts');command('start','email-worker');until(lambda:scalar("SELECT count(*) FROM golf_email_deliveries WHERE id='"+queued['id']+"' AND state='cancelled'")==1);time.sleep(2);assert control('/receipts')==before
             assert runtime()==baseline;record(runtimeAfter=runtime(),receiverReceipts=records(),mailCodesAndBodiesPersisted=False,verifiedOwnMailbox=True,logoutConsentContinued=True,restartNoResend=True,temporaryRetry=True,uncertainDataAckDuplicate=True,currentNativeRevocationNoReceiverBytes=True,localDisableNoReceiverBytes=True,privateActivityBodyExcluded=True,sqlAckLoss='source_fixture_only',cloudflare='not_exercised',inboxDelivery='not_claimed');passed=True
