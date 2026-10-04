@@ -83,3 +83,30 @@ The full settings requirement still includes renewable OAuth background delegati
 The shared managed-browser client and all eleven RPC methods are registered behind the cookie/Origin/no-store boundary; delegated API credentials cannot use them. Notification verification/preferences are inventories on `/account/settings`. Own repository email subscriptions and history accompany `/OWNER/REPO/settings/webhooks`, with one contextual settings layout. Named SMTP transports have a dedicated Admin portal page at `/admin/settings/notifications`; saving/activation remains configuration, not observed health. Private account/target denials clear the editors and history. The opaque `/notifications/unsubscribe` capability endpoint is outside the managed-session boundary so GET remains a confirmation and explicit POST can unsubscribe without logging in.
 
 The optional `compose.email.yaml` packages the portable `email-worker` with read-only root filesystem, bounded resources, dropped capabilities and operator-only egress configuration. It is not automatically activated on the retained development instance. Startup rejects invalid operator SMTP policy before opening a database, and the actual worker still rechecks current authority before SMTP DATA. No SMTP credentials, notification destinations, provider grants or retained account settings are created by this overlay. Actual disposable SMTP/native/browser qualification and combined encryption/recovery evidence remain required.
+
+## Prepared disposable SMTP qualifier
+
+The maintained parent/browser helpers are `scripts/email-notifications-smoke.py` and `scripts/email-notifications-browser.mjs`. They are **prepared, unrun source** until the operator executes them against an exact combined image. Pure preparation can be checked without Docker, native HTTP, SMTP or provider traffic:
+
+```sh
+python3 scripts/email-notifications-smoke.py --self-check
+node --check scripts/email-notifications-browser.mjs
+```
+
+A parent-authorized actual run requires an already present revision-labeled Golf image, the existing pinned native/PostgreSQL dependencies, an explicitly supplied local Python 3 sink image, Docker/Compose/OpenSSL, at least 2 GiB Docker VM free reserve, and a **new** owner-only evidence directory. `--ui` uses the existing local Playwright installation and adds twelve captures, without installing dependencies:
+
+```sh
+python3 scripts/email-notifications-smoke.py \
+  --image "$GOLF_EMAIL_PROOF_IMAGE" \
+  --sink-image "$GOLF_EMAIL_PROOF_SINK_IMAGE" \
+  --output .tmp/email-notifications-served-proof \
+  --ui
+```
+
+The helper creates a fresh Compose project and ordinary native actors, enrolls explicitly scoped managed local Golf accounts, and activates SMTP only in that fresh project. The actual receiver is private bridge `receiver.golf.test:465`, with a generated fixture CA and verified hostname. The worker uses an exact host/IP/port operator exception and the fixture CA; there is no insecure TLS bypass, image build/pull, retained-stack mutation, paid inference, external provider or third-party message.
+
+Verification codes and unsubscribe capabilities stay in receiver RAM and are fetched once through a secret-protected loopback control endpoint. Receiver message bodies are parsed transiently to check envelope/headers/private-body exclusion; evidence retains only delivery IDs, attempt numbers, body byte/hash observations, fixed outcome flags and safe RPC status metadata. Neither codes nor message bodies are written to artifact files, browser storage or logs. The helper does not decrypt Golf's encrypted content tables.
+
+The prepared runtime checks cover queued-before-worker state, actual verification and one-time confirmation, read-member repository consent, logout continuation, backend/worker restart without replay, a 451 SMTP retry, dropped DATA acknowledgement with potential duplicate/stable Message-ID+body, explicit redelivery, GET-inert/POST unsubscribe and replaced-capability refusal, then native access removal/local account disable with unchanged receiver connection and receipt counts. SQL checks are bounded metadata-only reads of owned fresh delivery state; no direct Golf/native fixture writes are used. Browser paths are `/account/settings`, `/{owner}/{name}/settings/webhooks` and `/admin/settings/notifications`. UI verification, explicit consent, own subscriptions, metadata-only SMTP editors, reload no-dispatch, native read revocation and dark/light 1440/390 captures use actual served data.
+
+`manifest.json` must finish with both `status: passed` and `cleanup: passed`; browser success alone is pending parent cleanup. Exact image IDs/source labels and before/after runtime identities are separate from the working checkout revision. Cleanup revokes/disables owned managed accounts, purges owned native actors and removes the fresh project's containers, volumes and networks. Original failure type/stage/line remains recorded alongside cleanup failures. This fresh-target proof does not establish retained-stack recovery, public production DNS/TLS, actual STARTTLS/authenticated relay operation, inbox delivery, provider bounces, Cloudflare adapters, full notification readiness or workload scale.
