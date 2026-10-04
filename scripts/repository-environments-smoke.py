@@ -288,6 +288,7 @@ def main():
                 out=OUTPUT/'browser';out.mkdir(mode=0o700);pre_ui_counts=counts(target)
                 config=dict(golf=smoke.GOLF,repository=personal['owner']+'/'+personal['name'],target=target,email=owner['email'],password=owner['password'],actorId=owner['id'],runtime=before,output=str(out),stackRoot=str(stack),readerEmail=actors['reader']['email'],readerPassword=actors['reader']['password'],readerLogin=actors['reader']['name'])
                 browser=subprocess.run(['node',str(stack/'scripts/repository-environments-ui-smoke.mjs')],cwd=stack,env=environment,input=json.dumps(config).encode(),capture_output=True,timeout=300)
+                record(browserProcess={'returncode':browser.returncode,'stdoutBytes':len(browser.stdout),'stderrBytes':len(browser.stderr),'assertionError':b'Error: assertion' in browser.stderr,'timeoutError':b'TimeoutError' in browser.stderr,'sourceLines':re.findall(rb'repository-environments-ui-smoke\.mjs:(\d+)',browser.stderr) and [int(n) for n in re.findall(rb'repository-environments-ui-smoke\.mjs:(\d+)',browser.stderr)[:8]] or []})
                 assert browser.returncode==0 and len(browser.stdout)<=1<<20 and len(browser.stderr)<=1<<20,'Actual browser failed; private output withheld'
                 ui=json.loads((out/'browser-manifest.json').read_text());assert ui['status']=='browser_checks_passed_parent_cleanup_pending' and len(ui['captures'])==12 and ui['runtime']==before
                 record(browser='passed_parent_cleanup_pending',browserManifest=str(out/'browser-manifest.json'))
