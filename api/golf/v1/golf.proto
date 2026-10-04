@@ -2455,6 +2455,7 @@ message RepositoryWebhookSubscription {
   string created_at = 9;
   string updated_at = 10;
   string sponsor_user_id = 11;
+  WorkflowNotificationMode workflow_notifications = 12;
 }
 message RepositoryWebhookDelivery {
   string id = 1;
@@ -2489,6 +2490,7 @@ message SaveRepositoryWebhookRequest {
   string signing_secret = 7;
   bool enabled = 8;
   bool authorize_background = 9;
+  optional WorkflowNotificationMode workflow_notifications = 10;
 }
 message SaveRepositoryWebhookResponse { RepositoryWebhookTarget target = 1; RepositoryWebhookSubscription subscription = 2; }
 message ListRepositoryWebhookDeliveriesRequest { RepositoryWebhookTarget target = 1; string subscription_id = 2; PageRequest page = 3; }
@@ -2743,6 +2745,7 @@ message RepositoryEmailSubscription {
  string authorization_state = 5;
  string contact_version = 6;
  string updated_at = 7;
+ WorkflowNotificationMode workflow_notifications = 8;
 }
 message GetRepositoryEmailSubscriptionRequest { RepositoryEmailTarget target = 1; }
 message GetRepositoryEmailSubscriptionResponse {
@@ -2758,6 +2761,7 @@ message SaveRepositoryEmailSubscriptionRequest {
  repeated string event_topics = 5;
  bool enabled = 6;
  bool authorize_background = 7;
+ optional WorkflowNotificationMode workflow_notifications = 8;
 }
 message SaveRepositoryEmailSubscriptionResponse {
  RepositoryEmailTarget target = 1;
@@ -3618,4 +3622,12 @@ message GetRepositoryEnvironmentOperationResponse {
   RepositoryEnvironmentOperation operation = 1;
   // Historical accepted version, not current configuration or deployment readiness.
   RepositoryEnvironment environment = 2;
+}
+
+// Controls actions-topic delivery without changing repository activity or SSE.
+enum WorkflowNotificationMode {
+ WORKFLOW_NOTIFICATION_MODE_UNSPECIFIED = 0;
+ WORKFLOW_NOTIFICATION_MODE_ACTIVITY = 1;
+ WORKFLOW_NOTIFICATION_MODE_COMPLETED = 2;
+ WORKFLOW_NOTIFICATION_MODE_FAILURES = 3;
 }

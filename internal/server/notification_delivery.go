@@ -204,7 +204,19 @@ func (s *Server) prepareEmail(ctx context.Context, d emailDelivery, a emailAccou
 	}
 	link := s.config.PublicURL + "/" + url.PathEscape(owner) + "/" + url.PathEscape(name)
 	text := "Golf observed a repository " + d.Topic + " change.\nObserved at: " + d.CreatedAt.UTC().Format(time.RFC3339) + "\n\nView the repository after signing in:\n" + link + "\n\nManage this email subscription:\n" + s.emailUnsubscribeURL(sub.UnsubscribeToken) + "\n\nThis is a committed activity observation, not a guarantee that a pipeline or deployment completed. No source, issue body or execution logs are included."
-	body, e := emailMessage(secret.Sender, a.Email, d.ID, "Golf repository activity", text)
+	subject := "Golf repository activity"
+	if strings.HasPrefix(d.EventID, "workflow-terminal:") {
+		event, err := s.workflowEmailEvent(ctx, d)
+		if err != nil {
+			return payload, err
+		}
+		subject = "Golf workflow outcome"
+		text, err = workflowOutcomeEmailText(event, link+"/actions/runs/"+event.RunID, s.emailUnsubscribeURL(sub.UnsubscribeToken))
+		if err != nil {
+			return payload, err
+		}
+	}
+	body, e := emailMessage(secret.Sender, a.Email, d.ID, subject, text)
 	if e != nil {
 		return payload, e
 	}

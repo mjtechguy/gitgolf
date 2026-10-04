@@ -69,7 +69,7 @@ func webhookTarget(t *golfv1.RepositoryWebhookTarget) (repositoryKey, int64, int
 func wireWebhook(r database.GolfWebhookSubscription, host string) *golfv1.RepositoryWebhookSubscription {
 	var topics []string
 	_ = json.Unmarshal(r.EventTopics, &topics)
-	return &golfv1.RepositoryWebhookSubscription{Id: r.ID.String(), Version: strconv.FormatInt(r.Version, 10), Name: r.Name, DestinationHost: host, EventTopics: topics, Enabled: r.Enabled, AuthorizationState: r.AuthorizationState, HasSigningSecret: true, SponsorUserId: strconv.FormatInt(r.SponsorUserID, 10), CreatedAt: r.CreatedAt.UTC().Format(time.RFC3339Nano), UpdatedAt: r.UpdatedAt.UTC().Format(time.RFC3339Nano)}
+	return &golfv1.RepositoryWebhookSubscription{Id: r.ID.String(), Version: strconv.FormatInt(r.Version, 10), Name: r.Name, WorkflowNotifications: golfv1.WorkflowNotificationMode(r.WorkflowNotifications), DestinationHost: host, EventTopics: topics, Enabled: r.Enabled, AuthorizationState: r.AuthorizationState, HasSigningSecret: true, SponsorUserId: strconv.FormatInt(r.SponsorUserID, 10), CreatedAt: r.CreatedAt.UTC().Format(time.RFC3339Nano), UpdatedAt: r.UpdatedAt.UTC().Format(time.RFC3339Nano)}
 }
 func wireWebhookDelivery(r database.GolfWebhookDelivery) *golfv1.RepositoryWebhookDelivery {
 	out := &golfv1.RepositoryWebhookDelivery{Id: r.ID.String(), SubscriptionId: r.SubscriptionID.String(), SubscriptionVersion: strconv.FormatInt(r.SubscriptionVersion, 10), EventId: r.EventID, EventTopic: r.EventTopic, State: r.State, Attempts: uint32(r.Attempts), ResponseStatus: uint32(r.ResponseStatus), FailureCode: r.FailureCode, PossibleDuplicate: r.PossibleDuplicate, CreatedAt: r.CreatedAt.UTC().Format(time.RFC3339Nano)}
@@ -175,6 +175,9 @@ func (s *Server) SaveRepositoryWebhook(ctx context.Context, req *connect.Request
 	if e != nil {
 		return nil, rpcError(e)
 	}
+	if _, e = workflowNotificationMode(m.WorkflowNotifications, 0); e != nil {
+		return nil, rpcError(e)
+	}
 	encodedTopics, _ := json.Marshal(topics)
 	if m.Enabled && !m.AuthorizeBackground {
 		return nil, rpcError(invalid("Explicitly authorize background delivery for an enabled subscription."))
@@ -206,6 +209,10 @@ func (s *Server) SaveRepositoryWebhook(ctx context.Context, req *connect.Request
 			}
 			if exists && (version == 0 || row.Version != version || row.OwnerID != owner) || !exists && version != 0 {
 				return errRepositorySettingsConflict
+			}
+			mode, e := workflowNotificationMode(m.WorkflowNotifications, row.WorkflowNotifications)
+			if e != nil {
+				return e
 			}
 			secret := webhookPrivate{Endpoint: m.Endpoint, SigningSecret: m.SigningSecret}
 			if exists {
@@ -242,7 +249,7 @@ func (s *Server) SaveRepositoryWebhook(ctx context.Context, req *connect.Request
 				if count.RepositoryCount >= 20 || count.InstanceCount >= 5000 {
 					return connect.NewError(connect.CodeResourceExhausted, errors.New("Webhook subscription limit reached."))
 				}
-				e = q.CreateWebhookSubscription(ctx, database.CreateWebhookSubscriptionParams{ID: id, ForgeURL: s.config.GiteaURL, RepositoryID: repo, OwnerID: owner, RepositoryOwner: key.Owner, RepositoryName: key.Name, Name: m.Name, EventTopics: encodedTopics, SponsorUserID: caller.UserID, SponsorNativeID: actor.ID, LocalAccountID: authority.ID, CredentialVersion: authority.CredentialVersion})
+				e = q.CreateWebhookSubscription(ctx, database.CreateWebhookSubscriptionParams{ID: id, ForgeURL: s.config.GiteaURL, RepositoryID: repo, OwnerID: owner, RepositoryOwner: key.Owner, RepositoryName: key.Name, Name: m.Name, EventTopics: encodedTopics, WorkflowNotifications: mode, SponsorUserID: caller.UserID, SponsorNativeID: actor.ID, LocalAccountID: authority.ID, CredentialVersion: authority.CredentialVersion})
 				if e != nil {
 					return errStorageUnavailable
 				}
@@ -267,7 +274,7 @@ func (s *Server) SaveRepositoryWebhook(ctx context.Context, req *connect.Request
 			if !exists {
 				expected = 1
 			}
-			count, e := q.UpdateWebhookSubscription(ctx, database.UpdateWebhookSubscriptionParams{ID: id, RepositoryOwner: key.Owner, RepositoryName: key.Name, Name: m.Name, Version: next, EventTopics: encodedTopics, Enabled: m.Enabled, AuthorizationState: state, SponsorUserID: caller.UserID, SponsorNativeID: actor.ID, LocalAccountID: authority.ID, CredentialVersion: authority.CredentialVersion, ExpectedVersion: expected})
+			count, e := q.UpdateWebhookSubscription(ctx, database.UpdateWebhookSubscriptionParams{ID: id, RepositoryOwner: key.Owner, RepositoryName: key.Name, Name: m.Name, Version: next, EventTopics: encodedTopics, WorkflowNotifications: mode, Enabled: m.Enabled, AuthorizationState: state, SponsorUserID: caller.UserID, SponsorNativeID: actor.ID, LocalAccountID: authority.ID, CredentialVersion: authority.CredentialVersion, ExpectedVersion: expected})
 			if e != nil || count != 1 {
 				return errStorageUnavailable
 			}
@@ -275,7 +282,7 @@ func (s *Server) SaveRepositoryWebhook(ctx context.Context, req *connect.Request
 			if e != nil {
 				return errStorageUnavailable
 			}
-			if e = q.RecordWebhookConfiguration(ctx, database.RecordWebhookConfigurationParams{SubscriptionID: id, Version: next, SponsorUserID: caller.UserID, Enabled: m.Enabled, EventTopics: encodedTopics}); e != nil {
+			if e = q.RecordWebhookConfiguration(ctx, database.RecordWebhookConfigurationParams{SubscriptionID: id, Version: next, SponsorUserID: caller.UserID, Enabled: m.Enabled, EventTopics: encodedTopics, WorkflowNotifications: mode}); e != nil {
 				return errStorageUnavailable
 			}
 			out.Subscription = wireWebhook(saved, u.Hostname())

@@ -760,6 +760,7 @@ func (s *Server) withEmailRepository(ctx context.Context, header http.Header, t 
 type emailSubscription struct {
 	ID                                                      string
 	UserID, RepoID, OwnerID, Version, Epoch, ContactVersion int64
+	WorkflowNotifications                                   int32
 	Topics                                                  []byte
 	Enabled                                                 bool
 	Authorization                                           string
@@ -767,17 +768,17 @@ type emailSubscription struct {
 	ContentID                                               string
 }
 
-const emailSubscriptionColumns = "id::text,user_id,repository_id,owner_id,version,epoch,contact_version,event_topics,enabled,authorization_state,updated_at,content_id::text"
+const emailSubscriptionColumns = "id::text,user_id,repository_id,owner_id,version,epoch,contact_version,event_topics,enabled,authorization_state,updated_at,content_id::text,workflow_notifications"
 
 func scanEmailSubscription(row interface{ Scan(...any) error }) (emailSubscription, error) {
 	var s emailSubscription
-	e := row.Scan(&s.ID, &s.UserID, &s.RepoID, &s.OwnerID, &s.Version, &s.Epoch, &s.ContactVersion, &s.Topics, &s.Enabled, &s.Authorization, &s.UpdatedAt, &s.ContentID)
+	e := row.Scan(&s.ID, &s.UserID, &s.RepoID, &s.OwnerID, &s.Version, &s.Epoch, &s.ContactVersion, &s.Topics, &s.Enabled, &s.Authorization, &s.UpdatedAt, &s.ContentID, &s.WorkflowNotifications)
 	return s, e
 }
 func wireEmailSubscription(s emailSubscription) *golfv1.RepositoryEmailSubscription {
 	var topics []string
 	_ = json.Unmarshal(s.Topics, &topics)
-	return &golfv1.RepositoryEmailSubscription{Id: s.ID, Version: strconv.FormatInt(s.Version, 10), ContactVersion: strconv.FormatInt(s.ContactVersion, 10), EventTopics: topics, Enabled: s.Enabled, AuthorizationState: s.Authorization, UpdatedAt: s.UpdatedAt.UTC().Format(time.RFC3339Nano)}
+	return &golfv1.RepositoryEmailSubscription{Id: s.ID, WorkflowNotifications: golfv1.WorkflowNotificationMode(s.WorkflowNotifications), Version: strconv.FormatInt(s.Version, 10), ContactVersion: strconv.FormatInt(s.ContactVersion, 10), EventTopics: topics, Enabled: s.Enabled, AuthorizationState: s.Authorization, UpdatedAt: s.UpdatedAt.UTC().Format(time.RFC3339Nano)}
 }
 func (s *Server) GetRepositoryEmailSubscription(ctx context.Context, req *connect.Request[golfv1.GetRepositoryEmailSubscriptionRequest]) (*connect.Response[golfv1.GetRepositoryEmailSubscriptionResponse], error) {
 	ctx, stop := context.WithTimeout(ctx, 15*time.Second)
@@ -819,6 +820,9 @@ func (s *Server) SaveRepositoryEmailSubscription(ctx context.Context, req *conne
 	if e != nil || cErr != nil || tErr != nil || !creationKey.MatchString(m.Id) || m.Enabled && !m.AuthorizeBackground {
 		return nil, notificationRPCError(invalid("Select exact subscription/mailbox versions, topics and explicit background consent."))
 	}
+	if _, e = workflowNotificationMode(m.WorkflowNotifications, 0); e != nil {
+		return nil, notificationRPCError(e)
+	}
 	encoded, _ := json.Marshal(topics)
 	out := &golfv1.SaveRepositoryEmailSubscriptionResponse{Target: m.Target}
 	e = s.withEmailRepository(ctx, req.Header(), m.Target, func() error {
@@ -840,6 +844,10 @@ func (s *Server) SaveRepositoryEmailSubscription(ctx context.Context, req *conne
 			}
 			if exists && (old.ID != m.Id || old.Version != v || old.OwnerID != owner) || !exists && v != 0 {
 				return errRepositorySettingsConflict
+			}
+			mode, e := workflowNotificationMode(m.WorkflowNotifications, old.WorkflowNotifications)
+			if e != nil {
+				return e
 			}
 			if !exists {
 				// Bound transactional activity fanout across concurrent admissions.
@@ -874,14 +882,14 @@ func (s *Server) SaveRepositoryEmailSubscription(ctx context.Context, req *conne
 				authorization = "authorized"
 			}
 			if !exists {
-				_, e = tx.ExecContext(ctx, `INSERT INTO golf_email_subscriptions(id,user_id,forge_url,repository_id,owner_id,repository_owner,repository_name,local_account_id,native_user_id,credential_version,contact_version,version,event_topics,enabled,authorization_state,unsubscribe_hash,content_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,1,$12,$13,$14,$15,$16)`, m.Id, a.UserID, s.config.GiteaURL, repo, owner, key.Owner, key.Name, a.LocalID, a.NativeID, a.CredentialVersion, contact, encoded, m.Enabled, authorization, emailHash(secret), contentID)
+				_, e = tx.ExecContext(ctx, `INSERT INTO golf_email_subscriptions(id,user_id,forge_url,repository_id,owner_id,repository_owner,repository_name,local_account_id,native_user_id,credential_version,contact_version,version,event_topics,enabled,authorization_state,unsubscribe_hash,content_id,workflow_notifications) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,1,$12,$13,$14,$15,$16,$17)`, m.Id, a.UserID, s.config.GiteaURL, repo, owner, key.Owner, key.Name, a.LocalID, a.NativeID, a.CredentialVersion, contact, encoded, m.Enabled, authorization, emailHash(secret), contentID, mode)
 			} else {
-				_, e = tx.ExecContext(ctx, `UPDATE golf_email_subscriptions SET repository_owner=$2,repository_name=$3,credential_version=$4,contact_version=$5,version=version+1,epoch=epoch+1,event_topics=$6,enabled=$7,authorization_state=$8,unsubscribe_hash=$9,content_id=$10,updated_at=clock_timestamp() WHERE id=$1`, m.Id, key.Owner, key.Name, a.CredentialVersion, contact, encoded, m.Enabled, authorization, emailHash(secret), contentID)
+				_, e = tx.ExecContext(ctx, `UPDATE golf_email_subscriptions SET repository_owner=$2,repository_name=$3,credential_version=$4,contact_version=$5,version=version+1,epoch=epoch+1,event_topics=$6,enabled=$7,authorization_state=$8,unsubscribe_hash=$9,content_id=$10,workflow_notifications=$11,updated_at=clock_timestamp() WHERE id=$1`, m.Id, key.Owner, key.Name, a.CredentialVersion, contact, encoded, m.Enabled, authorization, emailHash(secret), contentID, mode)
 			}
 			if e != nil {
 				return e
 			}
-			if _, e = tx.ExecContext(ctx, `INSERT INTO golf_email_events(user_id,action,object_id,version) VALUES($1,'subscription_saved',$2,$3)`, a.UserID, m.Id, v+1); e != nil {
+			if _, e = tx.ExecContext(ctx, `INSERT INTO golf_email_events(user_id,action,object_id,version,workflow_notifications) VALUES($1,'subscription_saved',$2,$3,$4)`, a.UserID, m.Id, v+1, mode); e != nil {
 				return e
 			}
 			saved, e := scanEmailSubscription(tx.QueryRowContext(ctx, `SELECT `+emailSubscriptionColumns+` FROM golf_email_subscriptions WHERE id=$1`, m.Id))

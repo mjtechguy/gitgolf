@@ -591,7 +591,7 @@ func TestWebhookLegacyBootstrapLaterPagePostgres(t *testing.T) {
 		t.Fatal(e)
 	}
 	sub := uuid.New()
-	if e = q.CreateWebhookSubscription(t.Context(), database.CreateWebhookSubscriptionParams{ID: sub, ForgeURL: cfg.GiteaURL, RepositoryID: 17, OwnerID: 42, RepositoryOwner: "alice", RepositoryName: "example", Name: "Retained versions", EventTopics: []byte(`["source"]`), SponsorUserID: user, SponsorNativeID: 42, LocalAccountID: local.ID, CredentialVersion: 1}); e != nil {
+	if e = q.CreateWebhookSubscription(t.Context(), database.CreateWebhookSubscriptionParams{ID: sub, ForgeURL: cfg.GiteaURL, RepositoryID: 17, OwnerID: 42, RepositoryOwner: "alice", RepositoryName: "example", Name: "Retained versions", WorkflowNotifications: 1, EventTopics: []byte(`["source"]`), SponsorUserID: user, SponsorNativeID: 42, LocalAccountID: local.ID, CredentialVersion: 1}); e != nil {
 		t.Fatal(e)
 	}
 	var original []byte
