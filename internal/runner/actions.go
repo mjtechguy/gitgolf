@@ -18,6 +18,32 @@ import (
 	"time"
 )
 
+// actionsStageError carries an operator-only fixed classification. The cause is
+// preserved for existing error policy, but never formatted into diagnostics.
+type actionsStageError struct {
+	stage string
+	cause error
+}
+
+func (e *actionsStageError) Error() string {
+	return "runner Actions lifecycle failed at " + ActionsFailureStage(e)
+}
+func (e *actionsStageError) Unwrap() error { return e.cause }
+
+// ActionsFailureStage never returns provider text, commands, source or IDs.
+func ActionsFailureStage(err error) string {
+	var classified *actionsStageError
+	if !errors.As(err, &classified) {
+		return ""
+	}
+	switch classified.stage {
+	case "input_validation", "worker_residue_check", "daemon_image_validation", "job_image_validation", "owner_generation", "volume_creation", "daemon_creation", "daemon_receipt_validation", "daemon_start", "daemon_readiness", "image_transfer", "helper_transfer", "helper_local_hash", "helper_remote_hash", "helper_process_start", "helper_input", "helper_frames", "durable_frame_ack", "helper_ack_write", "helper_completion", "container_cleanup", "volume_cleanup":
+		return classified.stage
+	default:
+		return "unknown"
+	}
+}
+
 type ActionsExecutor struct {
 	executor *Executor
 	helper   string
@@ -39,6 +65,12 @@ func NewActions(e *Executor, helper string) (*ActionsExecutor, error) {
 // attempts and removes these same enrollment/attempt/owner labeled resources.
 func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input ActionExecutionInput, onFrame func(context.Context, ActionFrame) error) (result Result, err error) {
 	result.ExitCode = 255
+	phase := "input_validation"
+	defer func() {
+		if err != nil {
+			err = &actionsStageError{phase, err}
+		}
+	}()
 	if !attemptPattern.MatchString(attempt) || input.Plan.Catalog != ActionsCatalog || input.Plan.ArchiveSHA256 == "" || input.TimeoutSeconds < 1 || input.TimeoutSeconds > 900 || onFrame == nil {
 		return result, ErrInvalidJob
 	}
@@ -49,9 +81,11 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(input.TimeoutSeconds)*time.Second)
 	defer cancel()
 	e := a.executor
+	phase = "worker_residue_check"
 	if err = e.RequireCleanWorker(runCtx); err != nil {
 		return result, err
 	}
+	phase = "daemon_image_validation"
 	var daemonImage []struct {
 		ID, Architecture, Os string
 		RepoDigests          []string
@@ -66,6 +100,7 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 	if !allowedDaemon {
 		return result, ErrInfrastructure
 	}
+	phase = "job_image_validation"
 	images := map[string]string{}
 	var imageBytes int64
 	for _, job := range input.Plan.Jobs {
@@ -101,6 +136,7 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 			return result, ErrInvalidJob
 		}
 	}
+	phase = "owner_generation"
 	random := make([]byte, 16)
 	if _, err = rand.Read(random); err != nil {
 		return result, ErrInfrastructure
@@ -112,21 +148,25 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 		cleanupCtx, stop := context.WithTimeout(context.Background(), 30*time.Second)
 		defer stop()
 		if container != "" && e.removeContainer(cleanupCtx, container, attempt, owner) != nil {
+			phase = "container_cleanup"
 			err = ErrCleanup
 			return
 		}
 		if e.removeVolume(cleanupCtx, volume, attempt, owner) != nil {
+			phase = "volume_cleanup"
 			err = ErrCleanup
 		}
 		result.TimedOut = errors.Is(runCtx.Err(), context.DeadlineExceeded)
 		result.Cancelled = ctx.Err() != nil && !result.TimedOut
 	}()
 	labels := []string{"--label", managedLabel + "=true", "--label", workerLabel + "=" + e.config.WorkerID, "--label", attemptLabel + "=" + attempt, "--label", ownerLabel + "=" + owner}
+	phase = "volume_creation"
 	if _, err = e.command(runCtx, nil, append(append([]string{"volume", "create"}, labels...), volume)...); err != nil {
 		return result, ErrInfrastructure
 	}
 	args := append([]string{"container", "create"}, labels...)
 	args = append(args, "--network=none", "--privileged", "--memory=1073741824", "--memory-swap=1073741824", "--cpus=2", "--pids-limit=512", "--mount", "type=volume,source="+volume+",target=/var/lib/docker", "--tmpfs", "/golf:rw,size=134217728,mode=0755", "--env", "DOCKER_TLS_CERTDIR=", "--entrypoint", "dockerd-entrypoint.sh", daemonImage[0].ID, "dockerd", "--host=unix:///var/run/docker.sock", "--iptables=false", "--ip-masq=false", "--bridge=none")
+	phase = "daemon_creation"
 	body, err := e.command(runCtx, nil, args...)
 	if err != nil {
 		return result, ErrInfrastructure
@@ -136,12 +176,15 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 		container = ""
 		return result, ErrInfrastructure
 	}
+	phase = "daemon_receipt_validation"
 	if err = a.verifyDaemon(runCtx, container, daemonImage[0].ID, volume, attempt, owner); err != nil {
 		return result, err
 	}
+	phase = "daemon_start"
 	if _, err = e.command(runCtx, nil, "container", "start", container); err != nil {
 		return result, ErrInfrastructure
 	}
+	phase = "daemon_readiness"
 	deadline := time.Now().Add(30 * time.Second)
 	ready := false
 	for time.Now().Before(deadline) && runCtx.Err() == nil {
@@ -157,14 +200,17 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 	if !ready {
 		return result, ErrInfrastructure
 	}
+	phase = "image_transfer"
 	for _, image := range images {
 		if err = a.copyImage(runCtx, container, image); err != nil {
 			return result, ErrInfrastructure
 		}
 	}
+	phase = "helper_transfer"
 	if _, err = e.command(runCtx, nil, "cp", a.helper, container+":/golf/engine"); err != nil {
 		return result, ErrInfrastructure
 	}
+	phase = "helper_local_hash"
 	file, err := os.Open(a.helper)
 	if err != nil {
 		return result, ErrInfrastructure
@@ -175,11 +221,13 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 	if copyErr != nil || closeErr != nil || n > 128<<20 {
 		return result, ErrInfrastructure
 	}
+	phase = "helper_remote_hash"
 	actual, err := e.command(runCtx, nil, "exec", container, "sha256sum", "/golf/engine")
 	if err != nil || !strings.HasPrefix(string(actual), hex.EncodeToString(hash.Sum(nil))+"  /golf/engine") {
 		return result, ErrInfrastructure
 	}
 	input.ResolvedImages = images
+	phase = "helper_process_start"
 	cmd := exec.CommandContext(runCtx, e.config.DockerBinary, "exec", "-i", container, "env", "-i", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME=/root", "DOCKER_HOST=unix:///var/run/docker.sock", "GOLF_OWNED_ACTIONS_DAEMON=1", "/golf/engine", "execute")
 	cmd.Stderr = io.Discard
 	cmd.WaitDelay = 2 * time.Second
@@ -194,6 +242,7 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 	if err = cmd.Start(); err != nil {
 		return result, ErrInfrastructure
 	}
+	phase = "helper_input"
 	encoder := json.NewEncoder(stdin)
 	if err = encoder.Encode(input); err != nil {
 		cancel()
@@ -205,7 +254,9 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 	scanner.Buffer(make([]byte, 64<<10), 128<<10)
 	sequence, observations, logBytes := 0, 0, 0
 	complete := false
+	phase = "helper_frames"
 	for scanner.Scan() {
+		phase = "helper_frames"
 		var frame ActionFrame
 		d := json.NewDecoder(bytes.NewReader(scanner.Bytes()))
 		d.DisallowUnknownFields()
@@ -238,9 +289,11 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 				result.ExitCode = 1
 			}
 		}
+		phase = "durable_frame_ack"
 		if err = onFrame(runCtx, frame); err != nil {
 			break
 		}
+		phase = "helper_ack_write"
 		if err = encoder.Encode(ActionAck{Sequence: frame.Sequence}); err != nil {
 			break
 		}
@@ -251,6 +304,9 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 	stdin.Close()
 	waitErr := cmd.Wait()
 	if err != nil || scanner.Err() != nil || waitErr != nil || !complete {
+		if err == nil {
+			phase = "helper_completion"
+		}
 		return result, ErrInfrastructure
 	}
 	return result, nil

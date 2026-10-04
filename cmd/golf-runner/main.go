@@ -274,6 +274,7 @@ func (c *coordinator) execute(parent context.Context, e *runner.Executor, a assi
 	if err == nil && a.ActionsPlan != nil {
 		var execution runner.Result
 		execution, err = c.executeActions(ctx, a, source, &forward)
+		reportActionsFailure(os.Stderr, err)
 		result = finish{ExitCode: 0, TimedOut: execution.TimedOut, Cancelled: execution.Cancelled, InfrastructureError: err != nil}
 		if err == nil {
 			result.EngineConclusion = "success"
@@ -441,6 +442,19 @@ func (c *coordinator) validAssignment(a assignment) bool {
 	}
 	return c.actions != nil && a.EngineCatalog == runner.ActionsCatalog && a.ActionsPlan != nil && len(a.Steps) == 0 && a.ActionsPlan.Catalog == runner.ActionsCatalog && a.ActionsPlan.ArchiveSHA256 == a.SourceSHA256 && len(a.ActionsPlan.Jobs) >= 1 && len(a.ActionsPlan.Jobs) <= 12 && len(a.EventJSON) > 0 && len(a.EventJSON) <= 16<<10
 }
+
+// Operator diagnostic only: never format untrusted error strings or run data.
+func reportActionsFailure(output io.Writer, err error) {
+	if err == nil {
+		return
+	}
+	phase := runner.ActionsFailureStage(err)
+	if phase == "" {
+		phase = "coordinator_preparation"
+	}
+	fmt.Fprintln(output, "Golf Actions lifecycle failure: stage="+phase)
+}
+
 func (c *coordinator) executeActions(ctx context.Context, a assignment, source string, forward *logForwarder) (runner.Result, error) {
 	archive, err := os.ReadFile(source)
 	if err != nil || len(archive) > sourceLimit {

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -173,5 +174,31 @@ func TestActionsAssignmentRequiresExplicitQualifiedConsumer(t *testing.T) {
 	changed.Steps = []struct{ Name, Run, Shell string }{{Run: "true"}}
 	if c.validAssignment(changed) {
 		t.Fatal("mixed shell/graph assignment accepted")
+	}
+}
+
+func TestActionsOperatorDiagnosticCannotExposeErrorOrExecutionData(t *testing.T) {
+	var output bytes.Buffer
+	reportActionsFailure(&output, errors.New("private command source and credential"))
+	if output.String() != "Golf Actions lifecycle failure: stage=coordinator_preparation\n" {
+		t.Fatal("untrusted diagnostic escaped")
+	}
+	output.Reset()
+	reportActionsFailure(&output, nil)
+	if output.Len() != 0 {
+		t.Fatal("successful execution emitted failure")
+	}
+	e, err := runner.New(runner.Config{WorkerID: "owned", ApprovedImages: []string{"alpine@sha256:" + strings.Repeat("a", 64)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	helper, err := runner.NewActions(e, os.Args[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = helper.Execute(t.Context(), "invalid", runner.ActionExecutionInput{}, func(context.Context, runner.ActionFrame) error { return nil })
+	reportActionsFailure(&output, err)
+	if output.String() != "Golf Actions lifecycle failure: stage=input_validation\n" || !errors.Is(err, runner.ErrInvalidJob) {
+		t.Fatal("fixed classification or policy lost")
 	}
 }

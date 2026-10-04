@@ -2,6 +2,8 @@ package runner
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -97,5 +99,48 @@ func TestRestartRefusesResidualEngineResourcesWithoutDeletingThem(t *testing.T) 
 				t.Fatal("restart mutated or guessed resource authority")
 			}
 		})
+	}
+}
+
+func TestActionsLifecycleDiagnosticRetainsPolicyAndNeverFormatsPrivateCause(t *testing.T) {
+	private := errors.New("private native response containing a command and credential")
+	for _, phase := range []string{"daemon_receipt_validation", "durable_frame_ack", "container_cleanup", "volume_cleanup"} {
+		err := &actionsStageError{phase, errors.Join(ErrInfrastructure, private)}
+		if !errors.Is(err, ErrInfrastructure) || !errors.Is(err, private) || ActionsFailureStage(err) != phase || strings.Contains(err.Error(), private.Error()) {
+			t.Fatal("classification changed failure policy or exposed cause")
+		}
+	}
+	forged := &actionsStageError{"private command and credential", ErrCleanup}
+	if ActionsFailureStage(forged) != "unknown" || strings.Contains(forged.Error(), "credential") || !errors.Is(forged, ErrCleanup) {
+		t.Fatal("nonallowlisted diagnostic escaped")
+	}
+}
+
+func TestActionsActualPreparationFailureHasOnlyFixedStage(t *testing.T) {
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "fake-docker")
+	// This substituted CLI cannot execute Docker or repository code.
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\ncase \"$1\" in image) printf 'private invalid native receipt\\n';; esac\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	e, err := New(Config{WorkerID: "owned", DockerBinary: binary, ApprovedImages: []string{"alpine@sha256:" + strings.Repeat("a", 64)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := NewActions(e, binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive := []byte("controlled source not executed")
+	sum := sha256.Sum256(archive)
+	input := ActionExecutionInput{Input: ActionPlanInput{Archive: archive}, Plan: ActionPlan{Catalog: ActionsCatalog, ArchiveSHA256: hex.EncodeToString(sum[:])}, TimeoutSeconds: 1}
+	result, err := a.Execute(t.Context(), strings.Repeat("b", 32), input, func(context.Context, ActionFrame) error { t.Fatal("source reached observer"); return nil })
+	if !errors.Is(err, ErrInfrastructure) || ActionsFailureStage(err) != "daemon_image_validation" || result.ExitCode != 255 || strings.Contains(err.Error(), "private invalid") {
+		t.Fatal("actual preparation failure misclassified")
+	}
+	input.Plan.ArchiveSHA256 = "wrong"
+	_, err = a.Execute(t.Context(), strings.Repeat("b", 32), input, func(context.Context, ActionFrame) error { return nil })
+	if !errors.Is(err, ErrInvalidJob) || ActionsFailureStage(err) != "input_validation" {
+		t.Fatal("invalid source was reclassified as infrastructure")
 	}
 }
