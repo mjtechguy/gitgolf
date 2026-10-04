@@ -215,7 +215,9 @@ def main():
                 manifest=json.loads(manifest_path.read_text())
                 assert manifest.get('complete') and manifest.get('passed') and len(manifest.get('results',[]))==12
                 manifest['runtimeAfter']=after;manifest['runtimeStable']=True
-                helpers.private_write(manifest_path,json.dumps(manifest,indent=2)+'\n')
+                updated_manifest=screenshots/'manifest.runtime.json'
+                helpers.private_write(updated_manifest,json.dumps(manifest,indent=2)+'\n')
+                os.replace(updated_manifest,manifest_path)
             gitlab=dispatch('.gitlab-ci.yml');assert wait_run(gitlab['id'])['state']=='WORKFLOW_RUN_STATE_SUCCEEDED'
             assert 'gitlab proof' in ''.join(row['text'] for row in rpc('WorkflowRunService/GetWorkflowRunLogs',{'runId':gitlab['id']}).get('logs',[]))
             gitlab_result=rpc('WorkflowRunService/GetWorkflowRun',{'runId':gitlab['id']})['run'];assert len(gitlab_result['progress']['steps'])==1 and gitlab_result['progress']['steps'][0]['state']=='WORKFLOW_STEP_STATE_SUCCEEDED'

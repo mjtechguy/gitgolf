@@ -8,7 +8,7 @@ const headers=origin=>({Origin:origin,'Connect-Protocol-Version':'1','Content-Ty
 const readProcedure=method=>/^(Get|List|Watch|Inspect|Resolve)/.test(method)||method==='QueryRepositoryComparison';
 const surfaces=['actions-inventory','actions-run','actions-selected-step'];
 const widths=[1440,390],themes=['dark','light'];
-const assert=(condition,message)=>{if(!condition)throw Error(message);};
+const assert=(condition,message)=>{if(!condition){const error=Error(message);error.name='CIProofAssertion';throw error;}};
 if(process.argv.includes('--self-check')){
   assert(surfaces.length*widths.length*themes.length===12,'Capture inventory changed');
   for(const method of ['GetWorkflowRun','GetWorkflowRunLogs','ListWorkflowRuns','WatchRepository'])assert(readProcedure(method),'Read guard failed');
@@ -66,25 +66,25 @@ try{
       stage=id;
       const page=await context.newPage();page.setDefaultTimeout(15000);
       const rpc=[],writes=[],errors=[],receipts=[],responseTasks=[];
-      let inflight=0,lastResponse=Date.now();
+      const inflight=new Set();let lastResponse=Date.now();
       await page.route('**/rpc/**',route=>{
         const method=route.request().url().split('/').at(-1);
         if(!readProcedure(method)){writes.push(method);return route.abort('blockedbyclient');}
         return route.continue();
       });
       page.on('pageerror',()=>errors.push('page-error'));
-      page.on('request',request=>{if(request.url().includes('/rpc/')&&!request.url().endsWith('/WatchRepository'))inflight++;});
-      page.on('requestfailed',request=>{if(request.url().includes('/rpc/')&&!request.url().endsWith('/WatchRepository')){inflight=Math.max(0,inflight-1);lastResponse=Date.now();errors.push('unary-read-failed');}});
+      page.on('request',request=>{if(request.url().includes('/rpc/')&&!request.url().endsWith('/WatchRepository'))inflight.add(request);});
+      page.on('requestfailed',request=>{if(inflight.delete(request)){lastResponse=Date.now();errors.push('unary-read-failed');}});
       page.on('response',response=>{
         if(!response.url().includes('/rpc/'))return;
         const procedure=response.url().split('/').at(-1);rpc.push({procedure,status:response.status()});
-        if(procedure!=='WatchRepository'){inflight=Math.max(0,inflight-1);lastResponse=Date.now();}
+        if(procedure!=='WatchRepository'){inflight.delete(response.request());lastResponse=Date.now();}
         if(['ListWorkflowRuns','GetWorkflowRun','GetWorkflowRunLogs'].includes(procedure))responseTasks.push((async()=>{
           try{receipts.push({procedure,status:response.status(),request:response.request().postDataJSON(),body:await response.json()});}catch{errors.push('invalid-read-receipt');}
         })());
       });
       const route=id==='actions-inventory'?repo+'/actions':repo+'/actions/runs/'+config.run.id;
-      const result={id,width,height:1000,theme,role:'owner',status:'pending',requestedRoute:route,rpc};
+      const result={id,width,height:1000,theme,role:'owner',status:'pending',requestedRoute:route,rpc,check:'page-readiness'};
       try{
         await page.goto(config.golf+route,{waitUntil:'domcontentloaded'});
         if(id==='actions-inventory'){
@@ -94,29 +94,40 @@ try{
         }else{
           await page.getByRole('heading',{name:config.run.workflowPath,exact:true}).waitFor();
           if(id==='actions-selected-step'){
+            result.check='selected-step-navigation';
             await page.getByLabel('Jobs and steps').getByRole('link',{name:/Read source/}).click();
+            await page.waitForURL(url=>url.searchParams.get('step')==='0');
             assert(new URL(page.url()).searchParams.get('step')==='0','Selected step URL differs');
+            // The old document's reads may be cancelled without a terminal
+            // response event on navigation. Track only the reloaded document;
+            // request identities fence any late responses from the old one.
+            inflight.clear();
             await page.reload({waitUntil:'domcontentloaded'});
             await page.getByLabel('Jobs and steps').getByRole('link',{name:/Read source/}).waitFor();
             assert(await page.getByLabel('Jobs and steps').getByRole('link',{name:/Read source/}).getAttribute('aria-current')==='page','Reload lost selected step');
           }
           const log=page.getByLabel('Workflow run log',{exact:true});await log.waitFor();
+          result.check='controlled-output';
           await page.waitForFunction(()=>document.querySelector('[aria-label="Workflow run log"]')?.textContent?.includes('actions proof'));
           const text=await log.innerText();
           assert(text.includes('actions proof'),'Controlled first-step output absent');
           assert(text.includes('second step proof')===(id==='actions-run'),'Selected log range differs');
         }
+        result.check='read-receipts';
         const deadline=Date.now()+12000;
-        while(Date.now()<deadline&&(inflight>0||Date.now()-lastResponse<450))await page.waitForTimeout(100);
-        assert(inflight===0,'Reads did not settle');await Promise.all(responseTasks);
+        while(Date.now()<deadline&&(inflight.size>0||Date.now()-lastResponse<450))await page.waitForTimeout(100);
+        result.pendingReads=[...inflight].map(request=>request.url().split('/').at(-1));
+        assert(inflight.size===0,'Reads did not settle');await Promise.all(responseTasks);
         if(await page.locator('html').getAttribute('data-theme')!==theme)await page.getByRole('button',{name:'Switch to '+theme+' theme',exact:true}).click();
         result.actualTheme=await page.locator('html').getAttribute('data-theme');
         const current=receipts.filter(r=>r.status===200);
+        result.logSelections=current.filter(r=>r.procedure==='GetWorkflowRunLogs').map(r=>r.request.stepIndex??'all');
         if(id==='actions-inventory')assert(current.some(r=>r.procedure==='ListWorkflowRuns'&&r.request.repository?.owner===config.repository.owner&&r.request.repository?.name===config.repository.name&&r.body.runs?.some(exactRun)),'Exact inventory receipt missing');
         else{
           assert(current.some(r=>r.procedure==='GetWorkflowRun'&&r.request.runId===config.run.id&&exactRun(r.body.run)),'Exact run receipt missing');
           assert(current.some(r=>r.procedure==='GetWorkflowRunLogs'&&r.request.runId===config.run.id&&(id==='actions-selected-step'?r.request.stepIndex===0:r.request.stepIndex===undefined)),'Exact log request missing');
         }
+        result.check='layout';
         result.metrics=await page.evaluate(()=>({documentWidth:document.documentElement.scrollWidth,viewportWidth:innerWidth,firstLogY:document.querySelector('.execution-log')?.getBoundingClientRect().y??null,jobNavigationWidth:document.querySelector('.automation-job-navigation')?.getBoundingClientRect().width??null}));
         assert(!errors.length&&!writes.length&&!rpc.some(r=>r.status>=400)&&result.actualTheme===theme&&result.metrics.documentWidth<=width,'Runtime/read-only/theme/layout boundary failed');
         result.actualRoute=new URL(page.url()).pathname+new URL(page.url()).search;
@@ -124,7 +135,7 @@ try{
         await page.screenshot({path:join(config.screenshots,basename+'.png'),fullPage:true,timeout:20000});await chmod(join(config.screenshots,basename+'.png'),0o600);
         await writeFile(join(config.screenshots,basename+'.txt'),await page.locator('body').innerText(),{mode:0o600});
         result.screenshot=basename+'.png';result.textSnapshot=basename+'.txt';result.status='captured';
-      }catch{result.status='failed';result.reason='Expected actual receipt, output, selected URL, read-only runtime or layout assertion failed; sensitive diagnostics withheld';}
+      }catch(error){result.status='failed';result.reason=error.name==='CIProofAssertion'?error.message:'Expected actual page/read/capture failed; sensitive diagnostics withheld';}
       result.pageErrorCount=errors.length;result.blockedWriteCount=writes.length;
       results.push(result);await page.close();await manifest();
       assert(result.status==='captured','Actual capture failed');
