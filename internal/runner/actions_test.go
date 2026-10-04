@@ -146,7 +146,7 @@ func TestActionsActualPreparationFailureHasOnlyFixedStage(t *testing.T) {
 	}
 }
 
-func TestHelperTransferStreamsBoundedBinaryIntoLiveNamespaceAndChecksFullDigest(t *testing.T) {
+func TestHelperTransferStreamsBoundedBinaryIntoOwnedExecutableNamespaceAndChecksFullDigest(t *testing.T) {
 	for _, mode := range []string{"valid", "changed_digest", "transfer_failure", "empty"} {
 		t.Run(mode, func(t *testing.T) {
 			directory := t.TempDir()
@@ -172,7 +172,7 @@ func TestHelperTransferStreamsBoundedBinaryIntoLiveNamespaceAndChecksFullDigest(
 			}
 			// Substituted CLI: binary bytes are stdin, never command text; fixed
 			// audited path/command is asserted, and no Docker/source is executed.
-			script := "#!/bin/sh\n[ \"$1\" = exec ] || exit 2\nif [ \"$2\" = -i ]; then\n [ \"$4\" = /bin/sh ] && [ \"$5\" = -c ] && [ \"$6\" = 'umask 077; cat > /golf/engine && chmod 0555 /golf/engine' ] || exit 3\n " + transfer + "\nelse\n [ \"$3\" = sha256sum ] && [ \"$4\" = /golf/engine ] || exit 4\n printf '%s  /golf/engine\\n' '" + digest + "'\nfi\n"
+			script := "#!/bin/sh\n[ \"$1\" = exec ] || exit 2\nif [ \"$2\" = -i ]; then\n [ \"$4\" = /bin/sh ] && [ \"$5\" = -c ] && [ \"$6\" = 'umask 077; cat > /usr/local/bin/golf-actions-engine && chmod 0555 /usr/local/bin/golf-actions-engine' ] || exit 3\n " + transfer + "\nelse\n [ \"$3\" = sha256sum ] && [ \"$4\" = /usr/local/bin/golf-actions-engine ] || exit 4\n printf '%s  /usr/local/bin/golf-actions-engine\\n' '" + digest + "'\nfi\n"
 			if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
 				t.Fatal(err)
 			}

@@ -260,7 +260,7 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 	}
 	input.ResolvedImages = images
 	phase = "helper_process_start"
-	cmd := exec.CommandContext(runCtx, e.config.DockerBinary, "exec", "-i", container, "env", "-i", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME=/root", "DOCKER_HOST=unix:///var/run/docker.sock", "GOLF_OWNED_ACTIONS_DAEMON=1", "/golf/engine", "execute")
+	cmd := exec.CommandContext(runCtx, e.config.DockerBinary, "exec", "-i", container, "env", "-i", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME=/root", "DOCKER_HOST=unix:///var/run/docker.sock", "GOLF_OWNED_ACTIONS_DAEMON=1", "/usr/local/bin/golf-actions-engine", "execute")
 	var diagnostic actionsEngineDiagnostic
 	cmd.Stderr = &diagnostic
 	cmd.WaitDelay = 2 * time.Second
@@ -350,9 +350,9 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 	return result, nil
 }
 
-// A Docker archive-copy can succeed without populating the running tmpfs.
-// Hash locally first, stream only bounded bytes into the audited live namespace,
-// then require the same full hash before executing anything from that namespace.
+// /golf remains the noexec source tmpfs. The trusted helper alone is copied to
+// the owned daemon's executable overlay, never a source-job mount. Hash locally,
+// transfer bounded stdin bytes, and require the same full remote hash first.
 func (a *ActionsExecutor) transferHelper(ctx context.Context, container string) (string, error) {
 	e := a.executor
 	phase := "helper_local_hash"
@@ -370,18 +370,17 @@ func (a *ActionsExecutor) transferHelper(ctx context.Context, container string) 
 		file.Close()
 		return phase, ErrInfrastructure
 	}
-	// Docker's archive-copy endpoint does not expose the running tmpfs.
-	// Transfer through the audited owned live namespace instead. Only this
-	// fixed operator command runs; source and paths never enter shell syntax.
+	// Only this fixed operator command writes the trusted helper. Repository
+	// source and paths never enter shell syntax or this executable directory.
 	phase = "helper_transfer"
-	_, transferErr := e.command(ctx, io.LimitReader(file, n+1), "exec", "-i", container, "/bin/sh", "-c", "umask 077; cat > /golf/engine && chmod 0555 /golf/engine")
+	_, transferErr := e.command(ctx, io.LimitReader(file, n+1), "exec", "-i", container, "/bin/sh", "-c", "umask 077; cat > /usr/local/bin/golf-actions-engine && chmod 0555 /usr/local/bin/golf-actions-engine")
 	closeErr := file.Close()
 	if transferErr != nil || closeErr != nil {
 		return phase, ErrInfrastructure
 	}
 	phase = "helper_remote_hash"
-	actual, err := e.command(ctx, nil, "exec", container, "sha256sum", "/golf/engine")
-	if err != nil || !strings.HasPrefix(string(actual), hex.EncodeToString(hash.Sum(nil))+"  /golf/engine") {
+	actual, err := e.command(ctx, nil, "exec", container, "sha256sum", "/usr/local/bin/golf-actions-engine")
+	if err != nil || !strings.HasPrefix(string(actual), hex.EncodeToString(hash.Sum(nil))+"  /usr/local/bin/golf-actions-engine") {
 		return phase, ErrInfrastructure
 	}
 	return phase, nil
