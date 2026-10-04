@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/url"
 	"strings"
+
+	"github.com/mjtechguy/golf-git/internal/workflowinputs"
 )
 
 const workflowDispatchInputDomain = "workflow_dispatch_input"
@@ -76,44 +78,34 @@ func workflowDispatchInputBinding(identity workflowDispatchInputIdentity, size i
 // workflow source. Default/schema semantics are validated before sealing and must
 // independently be rechecked against the exact workflow by the execution consumer.
 func canonicalWorkflowDispatchPayload(payload workflowDispatchInputPayload) ([]byte, error) {
-	if payload.Version != 1 || payload.Submitted == nil || payload.Effective == nil {
+	if payload.Version != 1 || payload.Submitted == nil || payload.Effective == nil || len(payload.Submitted) > workflowinputs.MaxCount || len(payload.Effective) > workflowinputs.MaxCount {
 		return nil, errCredentialUnavailable
 	}
-	for _, values := range [][]workflowDispatchInputValue{payload.Submitted, payload.Effective} {
-		if len(values) > maxWorkflowDispatchInputs {
-			return nil, errCredentialUnavailable
-		}
-		names := map[string]bool{}
-		for i, value := range values {
-			if !workflowDispatchInputName.MatchString(value.Name) || names[strings.ToLower(value.Name)] || i > 0 && values[i-1].Name >= value.Name {
-				return nil, errCredentialUnavailable
-			}
-			names[strings.ToLower(value.Name)] = true
-			if value.Type == workflowDispatchChoice && (strings.TrimSpace(value.String) == "" || strings.Contains(value.String, "${{")) {
-				return nil, errCredentialUnavailable
-			}
-			definition := workflowDispatchInputDefinition{Name: value.Name, Type: value.Type, Options: []string{value.String}}
-			canonical, err := canonicalWorkflowDispatchInput(definition, value)
-			if err != nil || canonical != value {
-				return nil, errCredentialUnavailable
-			}
-		}
-		body, err := json.Marshal(values)
-		if err != nil || len(body) > maxWorkflowDispatchInputsBytes {
-			return nil, errCredentialUnavailable
-		}
-	}
-	effective := map[string]workflowDispatchInputValue{}
+	// A synthetic closed schema validates stored typed values through the same
+	// common contract as admission. Defaults reproduce only this frozen effective
+	// map; they do not stand in for native declaration/source revalidation.
+	schema := workflowinputs.Schema{Definitions: []workflowinputs.Definition{}}
 	for _, value := range payload.Effective {
-		effective[value.Name] = value
-	}
-	for _, value := range payload.Submitted {
-		if accepted, exists := effective[value.Name]; !exists || accepted != value {
+		if value.Type == workflowDispatchChoice && (strings.TrimSpace(value.String) == "" || strings.Contains(value.String, "${{")) {
 			return nil, errCredentialUnavailable
 		}
+		definition := workflowinputs.Definition{Name: value.Name, Type: value.Type, Required: true, Default: &value}
+		if value.Type == workflowDispatchChoice {
+			definition.Options = []string{value.String}
+		}
+		schema.Definitions = append(schema.Definitions, definition)
+	}
+	schema.SHA256 = workflowinputs.Digest("golf.workflow.dispatch.schema.v1", schema.Definitions)
+	validated, err := workflowinputs.Validate(schema, payload.Submitted)
+	if err != nil {
+		return nil, errCredentialUnavailable
+	}
+	expected, err := json.Marshal(workflowDispatchInputPayload{1, validated.Submitted, validated.Effective})
+	if err != nil {
+		return nil, errCredentialUnavailable
 	}
 	body, err := json.Marshal(payload)
-	if err != nil || len(body) > maxWorkflowDispatchPayloadBytes {
+	if err != nil || len(body) > maxWorkflowDispatchPayloadBytes || !bytes.Equal(body, expected) {
 		return nil, errCredentialUnavailable
 	}
 	return body, nil
