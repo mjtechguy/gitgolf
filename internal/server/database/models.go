@@ -630,6 +630,28 @@ type GolfInlineReviewMutation struct {
 	UpdatedAt          time.Time
 }
 
+type GolfInstanceRunnerLimit struct {
+	ForgeURL       string
+	Version        int64
+	CpuMillis      int32
+	MemoryBytes    int64
+	Pids           int32
+	TimeoutSeconds int32
+	ActorUserID    int64
+	UpdatedAt      time.Time
+}
+
+type GolfInstanceRunnerLimitAudit struct {
+	ForgeURL       string
+	Version        int64
+	ActorUserID    int64
+	CpuMillis      int32
+	MemoryBytes    int64
+	Pids           int32
+	TimeoutSeconds int32
+	CreatedAt      time.Time
+}
+
 type GolfIssueMutation struct {
 	ID                 int64
 	UserID             int64
@@ -1074,6 +1096,10 @@ type GolfRepositoryRunnerPlacement struct {
 	SelectedPoolVersion sql.NullInt64
 	ActorUserID         int64
 	UpdatedAt           time.Time
+	CpuMillis           int32
+	MemoryBytes         int64
+	Pids                int32
+	TimeoutSeconds      int32
 }
 
 type GolfReviewContent struct {
@@ -1223,6 +1249,10 @@ type GolfRunnerPlacementAudit struct {
 	PoolID              uuid.NullUUID
 	SelectedPoolVersion sql.NullInt64
 	CreatedAt           time.Time
+	CpuMillis           int32
+	MemoryBytes         int64
+	Pids                int32
+	TimeoutSeconds      int32
 }
 
 type GolfRunnerPool struct {
@@ -1237,6 +1267,10 @@ type GolfRunnerPool struct {
 	ActorUserID                 int64
 	CreatedAt                   time.Time
 	UpdatedAt                   time.Time
+	CpuMillis                   int32
+	MemoryBytes                 int64
+	Pids                        int32
+	TimeoutSeconds              int32
 }
 
 type GolfRunnerPoolAudit struct {
@@ -1250,6 +1284,10 @@ type GolfRunnerPoolAudit struct {
 	RepositoryAssignmentEnabled bool
 	WorkerIds                   []string
 	CreatedAt                   time.Time
+	CpuMillis                   int32
+	MemoryBytes                 int64
+	Pids                        int32
+	TimeoutSeconds              int32
 }
 
 type GolfRunnerPoolWorker struct {
@@ -1456,6 +1494,12 @@ type GolfWorkflowRun struct {
 	RunnerPoolID                uuid.NullUUID
 	RunnerPoolVersion           sql.NullInt64
 	RunnerPlacementVersion      int64
+	ResourceBound               bool
+	ResourceInstanceVersion     int64
+	ResourceCpuMillis           int32
+	ResourceMemoryBytes         int64
+	ResourcePids                int32
+	ResourceTimeoutSeconds      int32
 }
 
 type GolfWorkflowRunLog struct {

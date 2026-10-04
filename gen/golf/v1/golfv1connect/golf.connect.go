@@ -628,6 +628,12 @@ const (
 	// RunnerControlServiceGetRepositoryRunnersProcedure is the fully-qualified name of the
 	// RunnerControlService's GetRepositoryRunners RPC.
 	RunnerControlServiceGetRepositoryRunnersProcedure = "/golf.v1.RunnerControlService/GetRepositoryRunners"
+	// RunnerControlServiceGetInstanceRunnerLimitsProcedure is the fully-qualified name of the
+	// RunnerControlService's GetInstanceRunnerLimits RPC.
+	RunnerControlServiceGetInstanceRunnerLimitsProcedure = "/golf.v1.RunnerControlService/GetInstanceRunnerLimits"
+	// RunnerControlServiceSetInstanceRunnerLimitsProcedure is the fully-qualified name of the
+	// RunnerControlService's SetInstanceRunnerLimits RPC.
+	RunnerControlServiceSetInstanceRunnerLimitsProcedure = "/golf.v1.RunnerControlService/SetInstanceRunnerLimits"
 	// RunnerPoolServiceListRunnerPoolsProcedure is the fully-qualified name of the RunnerPoolService's
 	// ListRunnerPools RPC.
 	RunnerPoolServiceListRunnerPoolsProcedure = "/golf.v1.RunnerPoolService/ListRunnerPools"
@@ -6540,6 +6546,8 @@ type RunnerControlServiceClient interface {
 	GetInstanceRunners(context.Context, *connect.Request[v1.GetInstanceRunnersRequest]) (*connect.Response[v1.GetInstanceRunnersResponse], error)
 	UpdateRunnerControl(context.Context, *connect.Request[v1.UpdateRunnerControlRequest]) (*connect.Response[v1.UpdateRunnerControlResponse], error)
 	GetRepositoryRunners(context.Context, *connect.Request[v1.GetRepositoryRunnersRequest]) (*connect.Response[v1.GetRepositoryRunnersResponse], error)
+	GetInstanceRunnerLimits(context.Context, *connect.Request[v1.GetInstanceRunnerLimitsRequest]) (*connect.Response[v1.GetInstanceRunnerLimitsResponse], error)
+	SetInstanceRunnerLimits(context.Context, *connect.Request[v1.SetInstanceRunnerLimitsRequest]) (*connect.Response[v1.SetInstanceRunnerLimitsResponse], error)
 }
 
 // NewRunnerControlServiceClient constructs a client for the golf.v1.RunnerControlService service.
@@ -6571,14 +6579,28 @@ func NewRunnerControlServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(runnerControlServiceMethods.ByName("GetRepositoryRunners")),
 			connect.WithClientOptions(opts...),
 		),
+		getInstanceRunnerLimits: connect.NewClient[v1.GetInstanceRunnerLimitsRequest, v1.GetInstanceRunnerLimitsResponse](
+			httpClient,
+			baseURL+RunnerControlServiceGetInstanceRunnerLimitsProcedure,
+			connect.WithSchema(runnerControlServiceMethods.ByName("GetInstanceRunnerLimits")),
+			connect.WithClientOptions(opts...),
+		),
+		setInstanceRunnerLimits: connect.NewClient[v1.SetInstanceRunnerLimitsRequest, v1.SetInstanceRunnerLimitsResponse](
+			httpClient,
+			baseURL+RunnerControlServiceSetInstanceRunnerLimitsProcedure,
+			connect.WithSchema(runnerControlServiceMethods.ByName("SetInstanceRunnerLimits")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // runnerControlServiceClient implements RunnerControlServiceClient.
 type runnerControlServiceClient struct {
-	getInstanceRunners   *connect.Client[v1.GetInstanceRunnersRequest, v1.GetInstanceRunnersResponse]
-	updateRunnerControl  *connect.Client[v1.UpdateRunnerControlRequest, v1.UpdateRunnerControlResponse]
-	getRepositoryRunners *connect.Client[v1.GetRepositoryRunnersRequest, v1.GetRepositoryRunnersResponse]
+	getInstanceRunners      *connect.Client[v1.GetInstanceRunnersRequest, v1.GetInstanceRunnersResponse]
+	updateRunnerControl     *connect.Client[v1.UpdateRunnerControlRequest, v1.UpdateRunnerControlResponse]
+	getRepositoryRunners    *connect.Client[v1.GetRepositoryRunnersRequest, v1.GetRepositoryRunnersResponse]
+	getInstanceRunnerLimits *connect.Client[v1.GetInstanceRunnerLimitsRequest, v1.GetInstanceRunnerLimitsResponse]
+	setInstanceRunnerLimits *connect.Client[v1.SetInstanceRunnerLimitsRequest, v1.SetInstanceRunnerLimitsResponse]
 }
 
 // GetInstanceRunners calls golf.v1.RunnerControlService.GetInstanceRunners.
@@ -6596,11 +6618,23 @@ func (c *runnerControlServiceClient) GetRepositoryRunners(ctx context.Context, r
 	return c.getRepositoryRunners.CallUnary(ctx, req)
 }
 
+// GetInstanceRunnerLimits calls golf.v1.RunnerControlService.GetInstanceRunnerLimits.
+func (c *runnerControlServiceClient) GetInstanceRunnerLimits(ctx context.Context, req *connect.Request[v1.GetInstanceRunnerLimitsRequest]) (*connect.Response[v1.GetInstanceRunnerLimitsResponse], error) {
+	return c.getInstanceRunnerLimits.CallUnary(ctx, req)
+}
+
+// SetInstanceRunnerLimits calls golf.v1.RunnerControlService.SetInstanceRunnerLimits.
+func (c *runnerControlServiceClient) SetInstanceRunnerLimits(ctx context.Context, req *connect.Request[v1.SetInstanceRunnerLimitsRequest]) (*connect.Response[v1.SetInstanceRunnerLimitsResponse], error) {
+	return c.setInstanceRunnerLimits.CallUnary(ctx, req)
+}
+
 // RunnerControlServiceHandler is an implementation of the golf.v1.RunnerControlService service.
 type RunnerControlServiceHandler interface {
 	GetInstanceRunners(context.Context, *connect.Request[v1.GetInstanceRunnersRequest]) (*connect.Response[v1.GetInstanceRunnersResponse], error)
 	UpdateRunnerControl(context.Context, *connect.Request[v1.UpdateRunnerControlRequest]) (*connect.Response[v1.UpdateRunnerControlResponse], error)
 	GetRepositoryRunners(context.Context, *connect.Request[v1.GetRepositoryRunnersRequest]) (*connect.Response[v1.GetRepositoryRunnersResponse], error)
+	GetInstanceRunnerLimits(context.Context, *connect.Request[v1.GetInstanceRunnerLimitsRequest]) (*connect.Response[v1.GetInstanceRunnerLimitsResponse], error)
+	SetInstanceRunnerLimits(context.Context, *connect.Request[v1.SetInstanceRunnerLimitsRequest]) (*connect.Response[v1.SetInstanceRunnerLimitsResponse], error)
 }
 
 // NewRunnerControlServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -6628,6 +6662,18 @@ func NewRunnerControlServiceHandler(svc RunnerControlServiceHandler, opts ...con
 		connect.WithSchema(runnerControlServiceMethods.ByName("GetRepositoryRunners")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runnerControlServiceGetInstanceRunnerLimitsHandler := connect.NewUnaryHandler(
+		RunnerControlServiceGetInstanceRunnerLimitsProcedure,
+		svc.GetInstanceRunnerLimits,
+		connect.WithSchema(runnerControlServiceMethods.ByName("GetInstanceRunnerLimits")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runnerControlServiceSetInstanceRunnerLimitsHandler := connect.NewUnaryHandler(
+		RunnerControlServiceSetInstanceRunnerLimitsProcedure,
+		svc.SetInstanceRunnerLimits,
+		connect.WithSchema(runnerControlServiceMethods.ByName("SetInstanceRunnerLimits")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/golf.v1.RunnerControlService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case RunnerControlServiceGetInstanceRunnersProcedure:
@@ -6636,6 +6682,10 @@ func NewRunnerControlServiceHandler(svc RunnerControlServiceHandler, opts ...con
 			runnerControlServiceUpdateRunnerControlHandler.ServeHTTP(w, r)
 		case RunnerControlServiceGetRepositoryRunnersProcedure:
 			runnerControlServiceGetRepositoryRunnersHandler.ServeHTTP(w, r)
+		case RunnerControlServiceGetInstanceRunnerLimitsProcedure:
+			runnerControlServiceGetInstanceRunnerLimitsHandler.ServeHTTP(w, r)
+		case RunnerControlServiceSetInstanceRunnerLimitsProcedure:
+			runnerControlServiceSetInstanceRunnerLimitsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -6655,6 +6705,14 @@ func (UnimplementedRunnerControlServiceHandler) UpdateRunnerControl(context.Cont
 
 func (UnimplementedRunnerControlServiceHandler) GetRepositoryRunners(context.Context, *connect.Request[v1.GetRepositoryRunnersRequest]) (*connect.Response[v1.GetRepositoryRunnersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RunnerControlService.GetRepositoryRunners is not implemented"))
+}
+
+func (UnimplementedRunnerControlServiceHandler) GetInstanceRunnerLimits(context.Context, *connect.Request[v1.GetInstanceRunnerLimitsRequest]) (*connect.Response[v1.GetInstanceRunnerLimitsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RunnerControlService.GetInstanceRunnerLimits is not implemented"))
+}
+
+func (UnimplementedRunnerControlServiceHandler) SetInstanceRunnerLimits(context.Context, *connect.Request[v1.SetInstanceRunnerLimitsRequest]) (*connect.Response[v1.SetInstanceRunnerLimitsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RunnerControlService.SetInstanceRunnerLimits is not implemented"))
 }
 
 // RunnerPoolServiceClient is a client for the golf.v1.RunnerPoolService service.
