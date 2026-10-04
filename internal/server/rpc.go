@@ -93,6 +93,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewRepositoryInvitationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryRulesServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewPullMergeObservationServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewStandardPullMergeServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRunnerControlServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRunnerPoolServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewWorkflowServiceHandler(s, options...))
@@ -157,6 +158,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.WorkflowRunServicePrepareWorkflowDispatchProcedure, golfv1connect.WorkflowRunServiceDispatchWorkflowProcedure, golfv1connect.WorkflowRunServiceGetWorkflowRunProcedure, golfv1connect.WorkflowRunServiceGetWorkflowDispatchProcedure, golfv1connect.WorkflowRunServiceListWorkflowRunsProcedure, golfv1connect.WorkflowRunServiceCancelWorkflowRunProcedure, golfv1connect.WorkflowRunServiceGetWorkflowRunLogsProcedure,
 			golfv1connect.InstanceAdminServiceDisableLocalAccountProcedure, golfv1connect.WorkflowServiceInspectWorkflowsProcedure,
 			golfv1connect.RepositoryWebhookServiceListRepositoryWebhooksProcedure, golfv1connect.RepositoryWebhookServiceSaveRepositoryWebhookProcedure, golfv1connect.RepositoryWebhookServiceListRepositoryWebhookDeliveriesProcedure, golfv1connect.RepositoryWebhookServiceTestRepositoryWebhookProcedure, golfv1connect.RepositoryWebhookServiceRedeliverRepositoryWebhookProcedure,
+			golfv1connect.StandardPullMergeServiceSubmitStandardPullMergeProcedure, golfv1connect.StandardPullMergeServiceGetStandardPullMergeOperationProcedure,
 			golfv1connect.PullMergeObservationServiceGetPullRequestMergeObservationProcedure, golfv1connect.RepositoryRulesServiceGetRepositoryRulesProcedure, golfv1connect.RepositoryRulesServiceMutateRepositoryRulesProcedure, golfv1connect.RepositoryRulesServiceGetRepositoryRuleMutationProcedure,
 			golfv1connect.RunnerControlServiceGetInstanceRunnerLimitsProcedure, golfv1connect.RunnerControlServiceSetInstanceRunnerLimitsProcedure, golfv1connect.RunnerControlServiceGetInstanceRunnersProcedure, golfv1connect.RunnerControlServiceUpdateRunnerControlProcedure, golfv1connect.RunnerControlServiceGetRepositoryRunnersProcedure,
 			golfv1connect.RunnerPoolServiceListRunnerPoolsProcedure, golfv1connect.RunnerPoolServiceSaveRunnerPoolProcedure, golfv1connect.RunnerPoolServiceGetRepositoryRunnerPlacementProcedure, golfv1connect.RunnerPoolServiceSetRepositoryRunnerPlacementProcedure,

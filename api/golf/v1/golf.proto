@@ -3802,3 +3802,60 @@ message DeactivateEmailTransportResponse {
  EmailTransport transport = 1;
  string activation_generation = 2;
 }
+// One caller-owned native merge attempt for a same-repository, observed
+// unprotected PR. This is not protected integration or expected-base CAS.
+service StandardPullMergeService {
+ rpc SubmitStandardPullMerge(SubmitStandardPullMergeRequest) returns (SubmitStandardPullMergeResponse);
+ rpc GetStandardPullMergeOperation(GetStandardPullMergeOperationRequest) returns (GetStandardPullMergeOperationResponse);
+}
+enum StandardPullMergePhase {
+ STANDARD_PULL_MERGE_PHASE_UNSPECIFIED = 0;
+ STANDARD_PULL_MERGE_PHASE_RESERVED = 1;
+ STANDARD_PULL_MERGE_PHASE_DISPATCH_UNKNOWN = 2;
+ STANDARD_PULL_MERGE_PHASE_SUCCEEDED = 3;
+ STANDARD_PULL_MERGE_PHASE_REJECTED = 4;
+}
+message SubmitStandardPullMergeRequest {
+ PullRequestSelection selection = 1;
+ string owner_id = 2;
+ string expected_pull_revision = 3;
+ string operation_id = 4;
+ string commit_title = 5;
+ string commit_message = 6;
+ string source_ref = 7;
+ string target_ref = 8;
+}
+message GetStandardPullMergeOperationRequest {
+ RepositoryKey repository = 1;
+ string repository_id = 2;
+ string owner_id = 3;
+ string pull_request_id = 4;
+ uint32 number = 5;
+ string operation_id = 6;
+}
+message StandardPullMergeOperation {
+ string operation_id = 1;
+ string actor_id = 2;
+ RepositoryKey repository = 3;
+ string repository_id = 4;
+ string owner_id = 5;
+ string pull_request_id = 6;
+ uint32 number = 7;
+ string expected_pull_revision = 8;
+ string head_commit_id = 9;
+ // Original displayed B: context only; not an enforced native expected base.
+ string observed_base_commit_id = 10;
+ string source_ref = 11;
+ string target_ref = 12;
+ StandardPullMergePhase phase = 13;
+ string merge_commit_id = 14;
+ // Independently read native merge commit's first parent, only on success.
+ string actual_base_commit_id = 15;
+ string failure_code = 16;
+ string created_at = 17;
+ string updated_at = 18;
+ string method = 19;
+ string contract = 20;
+}
+message SubmitStandardPullMergeResponse { StandardPullMergeOperation operation = 1; }
+message GetStandardPullMergeOperationResponse { StandardPullMergeOperation operation = 1; }

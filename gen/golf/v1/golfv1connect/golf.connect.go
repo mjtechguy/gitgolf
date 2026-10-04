@@ -111,6 +111,8 @@ const (
 	// PullMergeObservationServiceName is the fully-qualified name of the PullMergeObservationService
 	// service.
 	PullMergeObservationServiceName = "golf.v1.PullMergeObservationService"
+	// StandardPullMergeServiceName is the fully-qualified name of the StandardPullMergeService service.
+	StandardPullMergeServiceName = "golf.v1.StandardPullMergeService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -713,6 +715,12 @@ const (
 	// PullMergeObservationServiceGetPullRequestMergeObservationProcedure is the fully-qualified name of
 	// the PullMergeObservationService's GetPullRequestMergeObservation RPC.
 	PullMergeObservationServiceGetPullRequestMergeObservationProcedure = "/golf.v1.PullMergeObservationService/GetPullRequestMergeObservation"
+	// StandardPullMergeServiceSubmitStandardPullMergeProcedure is the fully-qualified name of the
+	// StandardPullMergeService's SubmitStandardPullMerge RPC.
+	StandardPullMergeServiceSubmitStandardPullMergeProcedure = "/golf.v1.StandardPullMergeService/SubmitStandardPullMerge"
+	// StandardPullMergeServiceGetStandardPullMergeOperationProcedure is the fully-qualified name of the
+	// StandardPullMergeService's GetStandardPullMergeOperation RPC.
+	StandardPullMergeServiceGetStandardPullMergeOperationProcedure = "/golf.v1.StandardPullMergeService/GetStandardPullMergeOperation"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -7610,4 +7618,102 @@ type UnimplementedPullMergeObservationServiceHandler struct{}
 
 func (UnimplementedPullMergeObservationServiceHandler) GetPullRequestMergeObservation(context.Context, *connect.Request[v1.GetPullRequestMergeObservationRequest]) (*connect.Response[v1.GetPullRequestMergeObservationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullMergeObservationService.GetPullRequestMergeObservation is not implemented"))
+}
+
+// StandardPullMergeServiceClient is a client for the golf.v1.StandardPullMergeService service.
+type StandardPullMergeServiceClient interface {
+	SubmitStandardPullMerge(context.Context, *connect.Request[v1.SubmitStandardPullMergeRequest]) (*connect.Response[v1.SubmitStandardPullMergeResponse], error)
+	GetStandardPullMergeOperation(context.Context, *connect.Request[v1.GetStandardPullMergeOperationRequest]) (*connect.Response[v1.GetStandardPullMergeOperationResponse], error)
+}
+
+// NewStandardPullMergeServiceClient constructs a client for the golf.v1.StandardPullMergeService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewStandardPullMergeServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) StandardPullMergeServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	standardPullMergeServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("StandardPullMergeService").Methods()
+	return &standardPullMergeServiceClient{
+		submitStandardPullMerge: connect.NewClient[v1.SubmitStandardPullMergeRequest, v1.SubmitStandardPullMergeResponse](
+			httpClient,
+			baseURL+StandardPullMergeServiceSubmitStandardPullMergeProcedure,
+			connect.WithSchema(standardPullMergeServiceMethods.ByName("SubmitStandardPullMerge")),
+			connect.WithClientOptions(opts...),
+		),
+		getStandardPullMergeOperation: connect.NewClient[v1.GetStandardPullMergeOperationRequest, v1.GetStandardPullMergeOperationResponse](
+			httpClient,
+			baseURL+StandardPullMergeServiceGetStandardPullMergeOperationProcedure,
+			connect.WithSchema(standardPullMergeServiceMethods.ByName("GetStandardPullMergeOperation")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// standardPullMergeServiceClient implements StandardPullMergeServiceClient.
+type standardPullMergeServiceClient struct {
+	submitStandardPullMerge       *connect.Client[v1.SubmitStandardPullMergeRequest, v1.SubmitStandardPullMergeResponse]
+	getStandardPullMergeOperation *connect.Client[v1.GetStandardPullMergeOperationRequest, v1.GetStandardPullMergeOperationResponse]
+}
+
+// SubmitStandardPullMerge calls golf.v1.StandardPullMergeService.SubmitStandardPullMerge.
+func (c *standardPullMergeServiceClient) SubmitStandardPullMerge(ctx context.Context, req *connect.Request[v1.SubmitStandardPullMergeRequest]) (*connect.Response[v1.SubmitStandardPullMergeResponse], error) {
+	return c.submitStandardPullMerge.CallUnary(ctx, req)
+}
+
+// GetStandardPullMergeOperation calls
+// golf.v1.StandardPullMergeService.GetStandardPullMergeOperation.
+func (c *standardPullMergeServiceClient) GetStandardPullMergeOperation(ctx context.Context, req *connect.Request[v1.GetStandardPullMergeOperationRequest]) (*connect.Response[v1.GetStandardPullMergeOperationResponse], error) {
+	return c.getStandardPullMergeOperation.CallUnary(ctx, req)
+}
+
+// StandardPullMergeServiceHandler is an implementation of the golf.v1.StandardPullMergeService
+// service.
+type StandardPullMergeServiceHandler interface {
+	SubmitStandardPullMerge(context.Context, *connect.Request[v1.SubmitStandardPullMergeRequest]) (*connect.Response[v1.SubmitStandardPullMergeResponse], error)
+	GetStandardPullMergeOperation(context.Context, *connect.Request[v1.GetStandardPullMergeOperationRequest]) (*connect.Response[v1.GetStandardPullMergeOperationResponse], error)
+}
+
+// NewStandardPullMergeServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewStandardPullMergeServiceHandler(svc StandardPullMergeServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	standardPullMergeServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("StandardPullMergeService").Methods()
+	standardPullMergeServiceSubmitStandardPullMergeHandler := connect.NewUnaryHandler(
+		StandardPullMergeServiceSubmitStandardPullMergeProcedure,
+		svc.SubmitStandardPullMerge,
+		connect.WithSchema(standardPullMergeServiceMethods.ByName("SubmitStandardPullMerge")),
+		connect.WithHandlerOptions(opts...),
+	)
+	standardPullMergeServiceGetStandardPullMergeOperationHandler := connect.NewUnaryHandler(
+		StandardPullMergeServiceGetStandardPullMergeOperationProcedure,
+		svc.GetStandardPullMergeOperation,
+		connect.WithSchema(standardPullMergeServiceMethods.ByName("GetStandardPullMergeOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.StandardPullMergeService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case StandardPullMergeServiceSubmitStandardPullMergeProcedure:
+			standardPullMergeServiceSubmitStandardPullMergeHandler.ServeHTTP(w, r)
+		case StandardPullMergeServiceGetStandardPullMergeOperationProcedure:
+			standardPullMergeServiceGetStandardPullMergeOperationHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedStandardPullMergeServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedStandardPullMergeServiceHandler struct{}
+
+func (UnimplementedStandardPullMergeServiceHandler) SubmitStandardPullMerge(context.Context, *connect.Request[v1.SubmitStandardPullMergeRequest]) (*connect.Response[v1.SubmitStandardPullMergeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.StandardPullMergeService.SubmitStandardPullMerge is not implemented"))
+}
+
+func (UnimplementedStandardPullMergeServiceHandler) GetStandardPullMergeOperation(context.Context, *connect.Request[v1.GetStandardPullMergeOperationRequest]) (*connect.Response[v1.GetStandardPullMergeOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.StandardPullMergeService.GetStandardPullMergeOperation is not implemented"))
 }
