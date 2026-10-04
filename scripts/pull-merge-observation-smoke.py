@@ -205,7 +205,7 @@ try{
  const refresh=page.getByRole('button',{name:'Refresh merge observation',exact:true});let denialVia='live';if(await refresh.count()){try{await refresh.click({timeout:1500});denialVia='explicit_refresh';}catch{await panel.waitFor({state:'detached'});}}await page.getByRole('heading',{name:config.title+' #'+config.number,exact:true}).waitFor({state:'detached'});check(!(await page.locator('body').innerText()).includes(config.bodyMarker));await panel.waitFor({state:'detached'});check(allErrors.length===0);
  await writeFile(join(config.output,'browser-manifest.json'),JSON.stringify({status:'browser_checks_passed_parent_cleanup_pending',runtime:config.runtime,captures,privateDenialCleared:true,privateDenialVia:denialVia,scope:'Explicit protected observation only; no merge publication'},null,2),{mode:0o600});
  console.log('PASS: four actual merge observation captures, explicit read/refresh and private denial; parent cleanup pending');
-}catch{console.error('Merge observation browser failed at '+stage+'; private diagnostics withheld');process.exitCode=1;}
+}catch(error){if(config)await writeFile(join(config.output,'browser-failure.json'),JSON.stringify({stage,type:['Error','TypeError','TimeoutError'].includes(error?.name)?error.name:'Other',captures:captures.length})+'\n',{mode:0o600});console.error('Merge observation browser failed at '+stage+'; private diagnostics withheld');process.exitCode=1;}
 finally{for(const c of contexts)if(config)try{check((await c.request.post(config.golf+'/rpc/golf.v1.SessionService/Logout',{maxRedirects:0,headers:{Origin:config.golf,'Content-Type':'application/json','Connect-Protocol-Version':'1'},data:{}})).status()===200);}catch{process.exitCode=1;}await browser?.close();}
 '''
 
@@ -322,6 +322,17 @@ def main():
         row=rpc(actor,'RepositoryService/GetPullRequest',{'repository':target,'number':number})['pullRequest']
         selection={'repository':target,'repositoryId':str(repo['id']),'pullRequestId':row['id'],'number':number,'headCommitId':row['head']['commitId'],'baseCommitId':row['base']['commitId']}
         return {'selection':selection,'expectedPullRevision':row['revision'],'headRef':row['head']['ref']}
+    def settled_selection(actor,target,number):
+        # Fresh native fixtures schedule asynchronous mergeability updates.
+        # Settle setup before selecting an original comparison; never retry an
+        # inspection or replace an original after it has been submitted.
+        previous=None;stable=0;deadline=time.monotonic()+10
+        while time.monotonic()<deadline:
+            snapshot=native_pull_metadata(api(actor,'GET',path+'/pulls/'+str(number)))
+            stable=stable+1 if snapshot==previous else 0;previous=snapshot
+            if stable>=2:return selected(actor,target,number)
+            time.sleep(.5)
+        raise AssertionError('Native fixture did not settle before selection')
     def inspect(actor,intent):
         # These independent reads diagnose drift; they do not retry failed
         # inspection or prove the server's interior reads were atomic.
@@ -398,7 +409,7 @@ def main():
         native_pull=api(owner,'GET',path+'/pulls/'+str(number));assert str(native_pull['id'])==intent['selection']['pullRequestId'] and native_pull['number']==number and native_pull['head']['sha']==head and native_pull['base']['sha']==base and str(native_pull['head']['repo']['id'])==str(fork['id']) and str(native_pull['base']['repo']['id'])==str(repo['id'])
         stage='independent native unprotected observations'
         for actor in (owner,writer,reader):
-            actor_intent=selected(actor,target,number);native_branch=api(actor,'GET',path+'/branches/'+urllib.parse.quote(repo['default_branch'],safe=''));raw_repo=api(actor,'GET',path)
+            actor_intent=settled_selection(actor,target,number);native_branch=api(actor,'GET',path+'/branches/'+urllib.parse.quote(repo['default_branch'],safe=''));raw_repo=api(actor,'GET',path)
             v=receipt(inspect(actor,actor_intent),actor_intent,native_branch,raw_repo,fork['id'],source_key,source_head)
             assert v['currentTargetWriter'] is (actor is not reader) and v['targetProtection']=='PULL_MERGE_TARGET_PROTECTION_UNPROTECTED'
             facts.append({'actor':actor['name'],'protection':v['targetProtection'],'writer':v['currentTargetWriter'],'nativeCallerCanMerge':v['nativeCallerCanMerge'],'H':head,'B':base})
@@ -406,7 +417,7 @@ def main():
         stage='private source separately denied'
         api(author,'DELETE',source_path+'/collaborators/'+reader['name'],status=204)
         api(reader,'GET',source_path,status=404)
-        reader_intent=selected(reader,target,number)
+        reader_intent=settled_selection(reader,target,number)
         receipt(inspect(reader,reader_intent),reader_intent,api(reader,'GET',path+'/branches/'+urllib.parse.quote(repo['default_branch'],safe='')),api(reader,'GET',path),fork['id'],source_key,None)
         api(author,'PUT',source_path+'/collaborators/'+reader['name'],{'permission':'read'},204)
         stage='native protected branch readback'
@@ -414,10 +425,11 @@ def main():
         assert rule['rule_name']==repo['default_branch'] and rule['enable_merge_whitelist'] is True
         for role,actor in (('owner',owner),('writer',writer),('reader',reader)):
             stage='native protected branch readback '+role
-            actor_intent=selected(actor,target,number);v=receipt(inspect(actor,actor_intent),actor_intent,api(actor,'GET',path+'/branches/'+urllib.parse.quote(repo['default_branch'],safe='')),api(actor,'GET',path),fork['id'],source_key,source_head)
+            actor_intent=settled_selection(actor,target,number);v=receipt(inspect(actor,actor_intent),actor_intent,api(actor,'GET',path+'/branches/'+urllib.parse.quote(repo['default_branch'],safe='')),api(actor,'GET',path),fork['id'],source_key,source_head)
             assert v['targetProtection']=='PULL_MERGE_TARGET_PROTECTION_PROTECTED'
             facts.append({'actor':actor['name'],'protection':v['targetProtection'],'writer':v['currentTargetWriter'],'nativeCallerCanMerge':v['nativeCallerCanMerge'],'H':head,'B':base})
         stage='browser-only authority and exact original selection'
+        intent=settled_selection(owner,target,number)
         body={k:v for k,v in intent.items() if k!='headRef'}
         rpc(outsider,SERVICE,body,404,'not_found');rpc(None,SERVICE,body,401,'unauthenticated')
         rpc(owner,SERVICE,body,403,'permission_denied',{'Origin':'https://foreign.invalid'})
@@ -429,6 +441,14 @@ def main():
             config={'stackRoot':str(stack),'golf':golf,'native':native_url,'repository':repo['full_name'],'number':number,'login':reader['name'],'email':reader['email'],'password':reader['password'],'ownerToken':owner['token'],'head':head,'base':base,'title':title,'bodyMarker':body_marker,'fingerprintReason':'These separate reads do not reserve','output':str(output),'runtime':runtime,'intent':body,'sourceRepositoryId':str(fork['id'])}
             native_unknown=True  # Browser revokes one native grant; ACK failure is conservative.
             result=subprocess.run(['node','--input-type=module','-e',BROWSER],input=json.dumps(config),cwd=stack,text=True,capture_output=True,timeout=180)
+            manifest['browserCommand']={'exitCode':result.returncode,'stdoutBytes':len(result.stdout.encode()),'stderrBytes':len(result.stderr.encode())};persist()
+            if result.returncode:
+                assert len(result.stdout)+len(result.stderr)<512*1024
+                diagnostic=output/'private-browser-command.json'
+                diagnostic.write_text(json.dumps({'stdout':result.stdout,'stderr':result.stderr})+'\n');diagnostic.chmod(0o600)
+            match=re.search(r'(?:^|\n)Merge observation browser failed at ([a-zA-Z0-9 ]{1,100}); private diagnostics withheld(?:\n|$)',result.stderr)
+            if result.returncode and match:
+                manifest['browserFailureStage']=match.group(1);persist()
             assert result.returncode==0 and all(secret not in result.stdout+result.stderr for actor in actors.values() for secret in (actor['token'],actor['password']))
             browser_manifest=json.loads((output/'browser-manifest.json').read_text());assert browser_manifest['status']=='browser_checks_passed_parent_cleanup_pending' and len(browser_manifest['captures'])==4
             assert browser_manifest['privateDenialCleared'] is True
