@@ -111,7 +111,9 @@ def checked_rpc(session, procedure, payload=None, expected=200, code=None, heade
         observed={'procedure':procedure,'status':response.status,'noStore':response.headers.get('Cache-Control')=='no-store'}
         if isinstance(result,dict) and re.fullmatch(r'[a-z_]{1,64}',result.get('code','')): observed['code']=result['code']
         record(lastProcedure=observed)
-        assert response.status==expected and observed['noStore'], 'RPC boundary mismatch; fixed metadata recorded'
+        if response.status!=expected or not observed['noStore']:
+            record(boundaryFailure={**observed,'expectedStatus':expected})
+            raise AssertionError('RPC boundary mismatch; fixed metadata recorded')
         if expected!=200:
             expected_code=code or {400:'invalid_argument',401:'unauthenticated',403:'permission_denied',404:'not_found',409:'aborted',429:'resource_exhausted',503:'unavailable'}[expected]
             assert result['code']==expected_code
