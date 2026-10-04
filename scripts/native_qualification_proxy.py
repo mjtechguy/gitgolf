@@ -73,10 +73,16 @@ def checked_snapshot(value: object, project: str) -> dict:
         pair = row['method'], row['path']
         assert pair not in pairs, 'Duplicate mutation counter'; pairs.add(pair)
     for row in observations:
-        assert isinstance(row, dict) and {'method', 'category', 'elapsedMs'} <= set(row) <= {'method', 'category', 'elapsedMs', 'status', 'bytes', 'failure', 'callerCancelled'}, 'Observation shape mismatch'
+        assert isinstance(row, dict) and {'method', 'category', 'elapsedMs'} <= set(row) <= {'method', 'category', 'elapsedMs', 'status', 'bytes', 'failure', 'callerCancelled', 'tagReceipt'}, 'Observation shape mismatch'
         assert row['method'] in METHODS | {'GET'} and row['category'] in CATEGORIES and type(row['elapsedMs']) is int and row['elapsedMs'] >= 0, 'Observation metadata mismatch'
         assert 'status' not in row or type(row['status']) is int and 100 <= row['status'] <= 599, 'Observation status mismatch'
         assert 'bytes' not in row or type(row['bytes']) is int and 0 <= row['bytes'] <= 2 << 20, 'Observation byte bound mismatch'
+        if 'tagReceipt' in row:
+            facts = row['tagReceipt']
+            assert row['method'] == 'PATCH' and row['category'] == 'tag_protections' and row.get('status') == 200 and 'failure' not in row
+            assert isinstance(facts, dict) and set(facts) == {'requestedUsers','receivedUsers','requestedTeams','receivedTeams','patternEqual','usersEqual','teamsEqual'}
+            assert all(type(facts[key]) is int and 0 <= facts[key] <= 100 for key in ('requestedUsers','receivedUsers','requestedTeams','receivedTeams'))
+            assert all(type(facts[key]) is bool for key in ('patternEqual','usersEqual','teamsEqual'))
         assert 'failure' not in row or row['failure'] in FAILURES, 'Unknown transport failure category'
         if 'callerCancelled' in row:
             assert row['callerCancelled'] is True and row['method'] == 'GET' and row.get('failure') in {'preheaders_cancelled','response_cancelled'}, 'Unverified/write cancellation was discounted'

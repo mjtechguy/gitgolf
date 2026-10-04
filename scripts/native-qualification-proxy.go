@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -47,14 +48,41 @@ type counter struct {
 	Count  uint64 `json:"count"` // dispatch attempts, not inferred native effects
 }
 type observation struct {
-	Method          string `json:"method"`
-	Category        string `json:"category"`
-	Status          int    `json:"status,omitempty"`
-	Bytes           int    `json:"bytes,omitempty"`
-	ElapsedMS       int64  `json:"elapsedMs"`
-	Failure         string `json:"failure,omitempty"`         // closed category, no error text
-	CallerCancelled bool   `json:"callerCancelled,omitempty"` // verified incoming GET cancellation only
+	Method          string                `json:"method"`
+	Category        string                `json:"category"`
+	Status          int                   `json:"status,omitempty"`
+	Bytes           int                   `json:"bytes,omitempty"`
+	ElapsedMS       int64                 `json:"elapsedMs"`
+	Failure         string                `json:"failure,omitempty"`         // closed category, no error text
+	CallerCancelled bool                  `json:"callerCancelled,omitempty"` // verified incoming GET cancellation only
+	TagReceipt      *tagReceiptComparison `json:"tagReceipt,omitempty"`      // bounded counts/equality only
 }
+type tagReceiptComparison struct {
+	RequestedUsers int  `json:"requestedUsers"`
+	ReceivedUsers  int  `json:"receivedUsers"`
+	RequestedTeams int  `json:"requestedTeams"`
+	ReceivedTeams  int  `json:"receivedTeams"`
+	PatternEqual   bool `json:"patternEqual"`
+	UsersEqual     bool `json:"usersEqual"`
+	TeamsEqual     bool `json:"teamsEqual"`
+}
+
+func compareTagReceipt(payload, body []byte) *tagReceiptComparison {
+	type row struct {
+		Pattern string   `json:"name_pattern"`
+		Users   []string `json:"whitelist_usernames"`
+		Teams   []string `json:"whitelist_teams"`
+	}
+	var desired, actual row
+	if json.Unmarshal(payload, &desired) != nil || json.Unmarshal(body, &actual) != nil || desired.Pattern == "" || actual.Pattern == "" || len(desired.Users) > 100 || len(actual.Users) > 100 || len(desired.Teams) > 100 || len(actual.Teams) > 100 {
+		return nil
+	}
+	for _, list := range [][]string{desired.Users, actual.Users, desired.Teams, actual.Teams} {
+		slices.Sort(list)
+	}
+	return &tagReceiptComparison{len(desired.Users), len(actual.Users), len(desired.Teams), len(actual.Teams), desired.Pattern == actual.Pattern, slices.Equal(desired.Users, actual.Users), slices.Equal(desired.Teams, actual.Teams)}
+}
+
 type fault struct {
 	Method   string `json:"method"`
 	Path     string `json:"path"`
@@ -297,7 +325,11 @@ func (a *adapter) forward(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Owned qualification native response unavailable", http.StatusBadGateway)
 		return
 	}
-	a.observed(observation{Method: r.Method, Category: category(path), Status: response.StatusCode, Bytes: len(body), ElapsedMS: time.Since(started).Milliseconds()})
+	o := observation{Method: r.Method, Category: category(path), Status: response.StatusCode, Bytes: len(body), ElapsedMS: time.Since(started).Milliseconds()}
+	if r.Method == http.MethodPatch && o.Category == "tag_protections" && response.StatusCode == http.StatusOK && response.Header.Get("Content-Encoding") == "" {
+		o.TagReceipt = compareTagReceipt(payload, body)
+	}
+	a.observed(o)
 	if a.shouldDrop(r.Method, path, response.StatusCode, body, response.Header.Get("Content-Encoding")) {
 		conn, _, err := http.NewResponseController(w).Hijack()
 		if err != nil {
@@ -370,6 +402,14 @@ func writeJSON(w http.ResponseWriter, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 func selfCheck() {
+	comparison := compareTagReceipt([]byte(`{"name_pattern":"v*","whitelist_usernames":["private-b","private-a"],"whitelist_teams":[]}`), []byte(`{"name_pattern":"v*","whitelist_usernames":["private-a","private-b"],"whitelist_teams":[]}`))
+	diagnosticJSON, _ := json.Marshal(comparison)
+	if comparison == nil || !comparison.UsersEqual || comparison.RequestedUsers != 2 || strings.Contains(string(diagnosticJSON), "private") {
+		panic("closed tag receipt diagnostic")
+	}
+	if compareTagReceipt([]byte(`{"name_pattern":"v*"}`), []byte(`{"name_pattern":"v*","whitelist_usernames":true}`)) != nil {
+		panic("malformed tag diagnostic")
+	}
 	a, err := newAdapter("golf-rules49-0123456789", strings.Repeat("a", 64))
 	if err != nil {
 		panic("source configuration check")

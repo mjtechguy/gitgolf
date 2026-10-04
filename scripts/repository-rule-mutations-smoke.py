@@ -421,6 +421,10 @@ def main():
             return operation(row,request,actor,phase)
         def change(actor,request,phase='SUCCEEDED'):
             stage('supported Golf '+request['action'].removeprefix('REPOSITORY_RULE_MUTATION_ACTION_').lower()+' and independent native receipt'); record(lastMutationAction=request['action']); count=proxy.total(request['repository']); result=rpc(actor['session'],MUTATE,request)
+            if request['action']=='REPOSITORY_RULE_MUTATION_ACTION_EDIT_TAG' and result['operation'].get('phase')!=phase:
+                key=request['repository']; observed=native(actors['owner']['token'],'GET','repos/'+key['owner']+'/'+key['name']+'/tag_protections/'+request['tagId'])
+                desired=request['desiredTag']
+                record(tagIndependentReadback={'identityEqual':str(observed['id'])==request['tagId'],'patternEqual':observed['name_pattern']==desired['namePattern'],'requestedUsers':len(desired.get('allowedUsernames',[])),'receivedUsers':len(observed['whitelist_usernames']),'requestedTeams':len(desired.get('allowedTeams',[])),'receivedTeams':len(observed['whitelist_teams']),'usersEqual':sorted(desired.get('allowedUsernames',[]))==sorted(observed['whitelist_usernames']),'teamsEqual':sorted(desired.get('allowedTeams',[]))==sorted(observed['whitelist_teams'])})
             row=operation(result['operation'],request,actor,phase)
             assert proxy.total(request['repository'])==count+(1 if phase=='SUCCEEDED' else 0)
             if phase=='SUCCEEDED':
