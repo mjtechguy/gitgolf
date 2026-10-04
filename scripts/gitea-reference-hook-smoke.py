@@ -29,6 +29,7 @@ BOUND = 2 << 20
 HOOKS = ('pre-receive', 'update', 'post-receive', 'proc-receive', 'reference-transaction')
 PIN = re.compile(r'^sha256:[0-9a-f]{64}$')
 OID = re.compile(r'^[0-9a-f]{40}$')
+CONTAINER_ID = re.compile(r'^[0-9a-f]{64}$')
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -85,6 +86,13 @@ def marker_events(rows, old, new=None):
                     and (new is None or update['new'] == new) for update in row.get('updates', []))]
 
 
+def owned_container(row, project, images, before_ids, expected_id=None):
+    return (bool(CONTAINER_ID.fullmatch(row.get('id', ''))) and row['id'] not in before_ids
+            and (expected_id is None or row['id'] == expected_id)
+            and row.get('project') == project and row.get('service') in images
+            and row.get('image') == images[row['service']])
+
+
 def self_check():
     tree = ast.parse(Path(__file__).read_text())
     require(not any(isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del))
@@ -102,6 +110,12 @@ def self_check():
            'decision': 'reject_marker', 'updates': [{'old': '1'*40, 'new': '2'*40, 'ref': 'refs/heads/main'}]}
     require(len(marker_events(telemetry(json.dumps(row)), '1'*40, '2'*40)) == 1)
     require(not marker_events([dict(row, context='temporary_clone')], '1'*40, '2'*40))
+    own = {'id': 'a'*64, 'image': 'pin', 'project': 'fresh', 'service': 'reserve'}
+    require(owned_container(own, 'fresh', {'reserve': 'pin'}, set(), 'a'*64))
+    for changed, before_ids, expected_id in ((own, {'a'*64}, 'a'*64), (own, set(), 'b'*64),
+            (dict(own, id='a'*12), set(), 'a'*12), (dict(own, image='different'), set(), 'a'*64),
+            (dict(own, project='foreign'), set(), 'a'*64), (dict(own, service='foreign'), set(), 'a'*64)):
+        require(not owned_container(changed, 'fresh', {'reserve': 'pin'}, before_ids, expected_id))
     try:
         telemetry(json.dumps(dict(row, sequence=2)))
     except AssertionError:
@@ -159,9 +173,11 @@ def main():
     users = []
     compose = None
     reserve_name = project + '-reserve'
-    reserve_started = False
+    reserve_id = None
+    compose_started = False
     owner_token = None
     repository_created = False
+    hook_dir = None
     with tempfile.TemporaryDirectory(prefix=project+'-') as temporary:
         directory = Path(temporary); os.chmod(directory, 0o700)
         try:
@@ -178,11 +194,13 @@ def main():
                                            '--filter', 'label=com.docker.compose.project='+project)[1].strip())
             require(not subprocess_run('docker', 'ps', '-aq', '--filter', 'name=^/'+reserve_name+'$')[1].strip())
             stage = 'disk_reserve'
-            reserve_started = True
-            _, df = subprocess_run('docker', 'run', '--rm', '--name', reserve_name, '--label',
-                'com.docker.compose.project='+project, '--pull', 'never', '--network', 'none', '--read-only',
+            reserve_id = subprocess_run('docker', 'create', '--name', reserve_name, '--label',
+                'com.docker.compose.project='+project, '--label', 'com.docker.compose.service=reserve',
+                '--pull', 'never', '--network', 'none', '--read-only',
                 '--memory', '32m', '--pids-limit', '16', '--cap-drop', 'ALL', '--security-opt',
-                'no-new-privileges', '--entrypoint', '/bin/df', args.native_image, '-Pk', '/')
+                'no-new-privileges', '--entrypoint', '/bin/df', args.native_image, '-Pk', '/')[1].strip()
+            require(CONTAINER_ID.fullmatch(reserve_id))
+            _, df = subprocess_run('docker', 'start', '--attach', reserve_id)
             require(int(df.splitlines()[-1].split()[3]) >= 2*1024*1024)
             hook_dir = directory / 'hooks'; hook_dir.mkdir(mode=0o755)
             shutil.copyfile(args.hook_binary, hook_dir / 'fixture'); os.chmod(hook_dir / 'fixture', 0o555)
@@ -266,6 +284,7 @@ def main():
                                                 'cat /run/golf-hook-telemetry/*.json')[1])
 
             stage = 'bootstrap_and_seed'
+            compose_started = True
             subprocess_run(*compose, 'up', '-d', '--pull', 'never', timeout=120); ready()
             pg_version = subprocess_run(*compose, 'exec', '-T', 'postgres', 'postgres', '--version')[1].strip()
             require(pg_version.startswith('postgres (PostgreSQL) 18.4'))
@@ -371,26 +390,44 @@ def main():
             failure = error
             manifest['status'] = 'failed'
             manifest['failure'] = {'stage': stage, 'type': type(error).__name__, 'lines': [frame.lineno for frame in traceback.extract_tb(error.__traceback__) if Path(frame.filename).name == Path(__file__).name][-8:]}
+            if compose_started:
+                try:
+                    failed_rows = events(); write_json(args.output/'hook-events.json', failed_rows)
+                    manifest['failure']['telemetryAvailable'] = True
+                except Exception:
+                    manifest['failure']['telemetryAvailable'] = False
         finally:
             cleanup_errors = []
-            if compose:
+            if compose_started:
                 if repository_created and owner_token:
                     try: api(owner_token, 'DELETE', 'repos/'+owner_name+'/native-hook', expected=204)
                     except Exception: cleanup_errors.append('supported_native_repository_cleanup')
                 for name in reversed(users):
                     try: cli('delete', '--username', name, '--purge')
                     except Exception: cleanup_errors.append('supported_native_actor_cleanup')
-                try: subprocess_run(*compose, 'down', '--volumes', '--remove-orphans', timeout=90)
+                try:
+                    current_ids = subprocess_run('docker', 'ps', '-aq', '--filter', 'label=com.docker.compose.project='+project)[1].split()
+                    template = ('{"id":{{json .Id}},"image":{{json .Image}},'
+                                '"project":{{json (index .Config.Labels "com.docker.compose.project")}},'
+                                '"service":{{json (index .Config.Labels "com.docker.compose.service")}}}')
+                    current_rows = [json.loads(line) for line in subprocess_run('docker', 'inspect', '--format', template, *current_ids)[1].splitlines()] if current_ids else []
+                    require(all(owned_container(row, project, {'gitea': args.native_image, 'postgres': args.postgres_image,
+                                'reserve': args.native_image}, {item['id'] for item in before},
+                                reserve_id if row['service'] == 'reserve' else None) for row in current_rows))
+                    subprocess_run(*compose, 'down', '--volumes', '--remove-orphans', timeout=90)
                 except Exception: cleanup_errors.append('compose_down')
-            # Exact random reserve name only; it normally already exited --rm.
+            # The create response pins the exact new container, not a name match.
             try:
-                if reserve_started:
-                    reserve_ids = subprocess_run('docker', 'ps', '-aq', '--filter', 'name=^/'+reserve_name+'$')[1].split()
+                if reserve_id:
+                    reserve_ids = subprocess_run('docker', 'ps', '-aq', '--filter', 'id='+reserve_id)[1].split()
                     if reserve_ids:
                         require(len(reserve_ids) == 1)
-                        reserve_id = reserve_ids[0]
-                        require(subprocess_run('docker', 'inspect', '--format', '{{.Image}}', reserve_id)[1].strip() == args.native_image)
-                        require(subprocess_run('docker', 'inspect', '--format', '{{index .Config.Labels "com.docker.compose.project"}}', reserve_id)[1].strip() == project)
+                        template = ('{"id":{{json .Id}},"image":{{json .Image}},'
+                                    '"project":{{json (index .Config.Labels "com.docker.compose.project")}},'
+                                    '"service":{{json (index .Config.Labels "com.docker.compose.service")}}}')
+                        row = json.loads(subprocess_run('docker', 'inspect', '--format', template, reserve_id)[1])
+                        require(owned_container(row, project, {'reserve': args.native_image},
+                                                {item['id'] for item in before}, reserve_id))
                         subprocess_run('docker', 'rm', '-f', reserve_id)
             except Exception: cleanup_errors.append('owned_reserve_cleanup')
             try:
@@ -408,6 +445,12 @@ def main():
                     if not comparison['foreignIdentityUnchanged']: cleanup_errors.append('foreign_identity_changed')
                 except Exception: cleanup_errors.append('foreign_observation')
             manifest['cleanup']['errors'] = cleanup_errors
+            if hook_dir is not None:
+                try:
+                    # Only our operator-owned host bundle, never native data.
+                    os.chmod(hook_dir, 0o700)
+                except OSError:
+                    cleanup_errors.append('host_bundle_cleanup')
             if failure is None and not cleanup_errors:
                 manifest['status'] = 'qualified_bounded_hook_composition'
             elif cleanup_errors:
