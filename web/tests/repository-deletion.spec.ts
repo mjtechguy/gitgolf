@@ -1,0 +1,121 @@
+import { test, expect, type Page } from '@playwright/test';
+import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { create, type MessageInitShape } from '@bufbuild/protobuf';
+import { DeleteRepositoryRequestSchema, DeleteRepositoryResponseSchema, GetRepositoryDeletionOperationRequestSchema, GetRepositoryDeletionOperationResponseSchema, GetRepositoryLifecycleResponseSchema, RepositoryLifecycleSchema, RepositoryLifecycleOperationSchema } from '../src/gen/golf/v1/golf_pb';
+import { reject, request, respond } from './rpc';
+const repositoryId = '9007199254740993', password = 'My current Golf password!';
+let fixture = '';
+test.beforeAll(async ({}, info) => {
+ const directory=resolve(process.cwd(),'tests/.tmp');mkdirSync(directory,{recursive:true});fixture=`/tests/.tmp/repository-deletion-${info.workerIndex}.tsx`;
+ writeFileSync(resolve(process.cwd(),fixture.slice(1)),`
+ import React from 'react'; import {createRoot} from 'react-dom/client';
+ import {QueryClient,QueryClientProvider} from '@tanstack/react-query';import {createClient} from '@connectrpc/connect';import {createConnectTransport} from '@connectrpc/connect-web';
+ import {RepositoryLifecycleService} from '../../src/gen/golf/v1/golf_pb';import {RepositoryDeletion} from '../../src/RepositoryDeletion';
+ import '../../src/styles.css';import '@fontsource/archivo/400.css';import '@fontsource/archivo/600.css';
+ document.documentElement.dataset.theme=localStorage.getItem('golf.theme')||'dark';
+ const cache=new QueryClient({defaultOptions:{queries:{retry:false}}});cache.setQueryData(['session'],{id:'42'});
+ const client=createClient(RepositoryLifecycleService,createConnectTransport({baseUrl:location.origin+'/rpc'}));
+ function Fixture(){const[state,set]=React.useState({userId:'42',signingOut:false,repositoryId:'${repositoryId}'});window.deletionFixture={set,cache};return <QueryClientProvider client={cache}><main className="page-stack"><RepositoryDeletion client={client} {...state} owner="alice" name="example" onDeleted={()=>{window.deletedCallbacks=(window.deletedCallbacks||0)+1;}}/></main></QueryClientProvider>;}
+ createRoot(document.getElementById('root')).render(location.search==='?strict=1'?<React.StrictMode><Fixture/></React.StrictMode>:<Fixture/>);`);
+});
+test.afterAll(()=>{if(fixture)rmSync(resolve(process.cwd(),fixture.slice(1)),{force:true});});
+async function backend(page:Page) {
+ const state={lifecycle:create(RepositoryLifecycleSchema,{repository:{owner:'alice',name:'example'},repositoryId,ownerId:'42',revision:'a'.repeat(64),canManage:true,stepUpAvailable:true,activeWorkCount:'0',deleteAvailable:true}),reads:0,statusReads:[] as string[],writes:[] as ReturnType<typeof create<typeof DeleteRepositoryRequestSchema>>[],operation:undefined as MessageInitShape<typeof RepositoryLifecycleOperationSchema>|undefined,lost:false,refused:false,bad:'',writeDenied:'' as 'unauthenticated'|'permission_denied'|'',statusDenied:'' as 'unauthenticated'|'permission_denied'|'',noEffect:false,denied:false,readUnauthenticated:false,absent:false,readBarrier:undefined as Promise<void>|undefined,writeBarrier:undefined as Promise<void>|undefined,statusBarrier:undefined as Promise<void>|undefined};
+ await page.route(url=>url.pathname==='/deletion-fixture.html',route=>route.fulfill({contentType:'text/html',body:`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div><script type="module">import RefreshRuntime from "/@react-refresh";RefreshRuntime.injectIntoGlobalHook(window);window.$RefreshReg$=()=>{};window.$RefreshSig$=()=>type=>type;window.__vite_plugin_react_preamble_installed__=true;await import("${fixture}");</script></body></html>`}));
+ await page.route('**/rpc/**',async route=>{
+  const method=new URL(route.request().url()).pathname.split('/').at(-1);
+  if(method==='GetRepositoryLifecycle') {state.reads++;if(state.readBarrier)await state.readBarrier;if(state.readUnauthenticated)return reject(route,'unauthenticated','Current sign-in unavailable.');if(state.denied)return reject(route,'permission_denied','Ownership unavailable.');if(state.absent)return reject(route,'not_found','Repository unavailable.');return respond(route,GetRepositoryLifecycleResponseSchema,{lifecycle:state.lifecycle});}
+  if(method==='DeleteRepository') {
+   const input=request(route,DeleteRepositoryRequestSchema);state.writes.push(input);expect(input.repositoryId).toBe(repositoryId);expect(input.ownerId).toBe('42');expect(input.expectedRevision).toBe('a'.repeat(64));expect(input.confirmationName).toBe('alice/example');expect(input.currentPassword).toBe(password);
+   if(state.writeDenied)return reject(route,state.writeDenied,'Current sign-in unavailable.');
+   if(state.noEffect)return route.fulfill({status:403,headers:{'Content-Type':'application/json','Golf-Lifecycle-Effect':'none'},body:JSON.stringify({code:'permission_denied',message:'Password rejected.'})});
+   state.operation={repository:input.repository,repositoryId:input.repositoryId,ownerId:input.ownerId,actorId:'42',idempotencyKey:input.idempotencyKey,expectedRevision:input.expectedRevision,action:'delete',phase:state.lost?'DISPATCH_UNKNOWN':state.refused?'REJECTED':'SUCCEEDED',failureCode:state.refused?'preflight_refused':'',createdAt:'2026-10-04T10:00:00Z',updatedAt:'2026-10-04T10:00:01Z'};
+   if(state.writeBarrier)await state.writeBarrier;
+   if(state.lost)return route.abort('failed');
+   const operation={...state.operation};if(state.bad==='actor')operation.actorId='84';if(state.bad==='action')operation.action='archive_state';if(state.bad==='revision')operation.expectedRevision='b'.repeat(64);if(state.bad==='archive')operation.toArchived=true;if(state.bad==='time')operation.updatedAt='2026-10-03T10:00:00Z';if(state.bad==='target')operation.repositoryId='18';
+   return respond(route,DeleteRepositoryResponseSchema,{operation});
+  }
+  if(method==='GetRepositoryDeletionOperation') {
+   const input=request(route,GetRepositoryDeletionOperationRequestSchema);state.statusReads.push(input.idempotencyKey);expect(input.repositoryId).toBe(repositoryId);expect(input.ownerId).toBe('42');expect(input.repository?.owner).toBe('alice');
+   if(state.statusBarrier)await state.statusBarrier;if(state.statusDenied)return reject(route,state.statusDenied,'Current sign-in unavailable.');if(state.denied)return reject(route,'permission_denied','Ownership unavailable.');if(!state.operation)return reject(route,'not_found','Original receipt unavailable.');return respond(route,GetRepositoryDeletionOperationResponseSchema,{operation:state.operation});
+  }
+  throw new Error('Unexpected fixture RPC '+method);
+ });return state;
+}
+async function open(page:Page,strict=false) {await page.goto('/deletion-fixture.html'+(strict?'?strict=1':''));await expect(page.getByRole('heading',{name:'Repository deletion',exact:true})).toBeVisible();await expect(page.getByText('Checking current deletion availability…')).toHaveCount(0);}
+async function confirmation(page:Page) {await page.getByRole('button',{name:'Delete repository',exact:true}).click();const form=page.getByRole('form',{name:'Confirm repository deletion'});await expect(form.getByRole('button',{name:'Cancel',exact:true})).toBeFocused();await form.getByLabel('Full repository name').fill('alice/example');await form.getByLabel('Current Golf password').fill(password);return form;}
+async function publish(page:Page) {const form=await confirmation(page);await form.getByRole('button',{name:'Confirm delete repository',exact:true}).click();}
+async function storage(page:Page) {return page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('golf.deletion-intent.')).map(([,value])=>value).join(''));}
+
+test('deletion is explicitly requested, exact-bound and independently inspected after disappearance/reload',async({page})=>{
+ const state=await backend(page);await open(page);await expect(page.getByRole('form')).toHaveCount(0);await publish(page);await expect(page.getByRole('heading',{name:'Original deletion completed'})).toBeVisible();expect(state.writes).toHaveLength(1);await expect(page.getByRole('button',{name:'Delete repository',exact:true})).toHaveCount(0);
+ const saved=await storage(page);expect(saved).not.toContain(password);expect(saved).not.toContain('password');expect(saved).not.toContain('phase');expect(saved).not.toContain('SUCCEEDED');expect(saved).not.toContain('createdAt');
+ state.absent=true;await page.reload();await expect(page.getByRole('heading',{name:'Original deletion completed'})).toBeVisible();expect(state.statusReads.length).toBeGreaterThan(0);expect(state.writes).toHaveLength(1);
+});
+for(const mode of ['unavailable','reader','no stepup','active','unresolved','mirror','wrong ID','bad availability'])test(`${mode} has no destructive activation`,async({page})=>{
+ const state=await backend(page);if(mode==='unavailable'){state.lifecycle.deleteAvailable=false;state.lifecycle.deleteNotice='managed_native_boundary_unqualified';}if(mode==='reader'){state.lifecycle.canManage=false;state.lifecycle.deleteAvailable=false;state.lifecycle.activeWorkCount='';}if(mode==='no stepup'){state.lifecycle.stepUpAvailable=false;state.lifecycle.deleteAvailable=false;state.lifecycle.activeWorkCount='';}if(mode==='active'){state.lifecycle.activeWorkCount='1';state.lifecycle.deleteAvailable=false;}if(mode==='unresolved'){state.lifecycle.unresolved=true;state.lifecycle.deleteAvailable=false;}if(mode==='mirror'){state.lifecycle.mirror=true;state.lifecycle.deleteAvailable=false;}if(mode==='wrong ID')state.lifecycle.repositoryId='18';if(mode==='bad availability')state.lifecycle.activeWorkCount='1';
+ await open(page);await expect(page.getByRole('button',{name:'Delete repository',exact:true})).toHaveCount(0);expect(state.writes).toHaveLength(0);await expect(page.getByRole('form')).toHaveCount(0);
+});
+for(const bad of ['actor','action','revision','archive','time','target'])test(`unverified ${bad} receipt does not release original intent`,async({page})=>{
+ const state=await backend(page);state.bad=bad;await open(page);await publish(page);await expect(page.getByRole('heading',{name:'Deletion requires inspection'})).toBeVisible();await expect(page.getByRole('button',{name:'Delete repository',exact:true})).toHaveCount(0);expect(state.writes).toHaveLength(1);expect(await page.evaluate(()=>(window as any).deletedCallbacks||0)).toBe(0);
+ state.operation=undefined;await page.reload();await expect(page.getByRole('alert')).toContainText('original deletion outcome is unconfirmed');expect(state.writes).toHaveLength(1);await expect(page.getByRole('button',{name:'Delete repository',exact:true})).toHaveCount(0);
+});
+test('lost response remains original-key inspection only, including a missing status receipt',async({page})=>{
+ const state=await backend(page);state.lost=true;await open(page);await publish(page);await expect(page.getByRole('heading',{name:'Deletion requires inspection'})).toBeVisible();await page.getByRole('button',{name:'Inspect original deletion operation'}).click();await expect(page.getByText('DISPATCH_UNKNOWN',{exact:true})).toBeVisible();const key=state.writes[0]!.idempotencyKey;
+ state.operation=undefined;state.absent=true;await page.reload();await expect(page.getByRole('alert')).toContainText('outcome is unconfirmed');expect(state.statusReads.every(value=>value===key)).toBe(true);expect(state.writes).toHaveLength(1);
+});
+test('explicit no-effect password correction retains the same original key and clears password',async({page})=>{
+ const state=await backend(page);state.noEffect=true;await open(page);const form=await confirmation(page);await form.getByRole('button',{name:'Confirm delete repository'}).click();await expect(form.getByRole('alert')).toContainText('No deletion was dispatched');await expect(form.getByLabel('Current Golf password')).toHaveValue('');state.noEffect=false;await form.getByLabel('Current Golf password').fill(password);await form.getByRole('button',{name:'Confirm delete repository'}).click();await expect(page.getByRole('heading',{name:'Original deletion completed'})).toBeVisible();expect(state.writes).toHaveLength(2);expect(state.writes[0]!.idempotencyKey).toBe(state.writes[1]!.idempotencyKey);
+});
+test('typed exact namespace is required before storing or dispatching intent',async({page})=>{
+ const state=await backend(page);await open(page);const form=await confirmation(page);await form.getByLabel('Full repository name').fill('alice/other');await form.getByRole('button',{name:'Confirm delete repository'}).click();await expect(form.getByRole('alert')).toContainText('exact full repository name');expect(state.writes).toHaveLength(0);expect(await storage(page)).toBe('');
+});
+test('corrupted original metadata never creates a fresh intent',async({page})=>{
+ await page.addInitScript(({repositoryId})=>sessionStorage.setItem(`golf.deletion-intent.${JSON.stringify([location.origin,'42','alice','example',repositoryId])}`,'{"phase":"UNKNOWN","password":"must not recover"}'),{repositoryId});const state=await backend(page);await open(page);await expect(page.getByRole('alert')).toContainText('metadata is unavailable or invalid');await expect(page.getByRole('button',{name:'Delete repository',exact:true})).toHaveCount(0);expect(state.writes).toHaveLength(0);
+});
+test('refresh clears private confirmation and a current denial fences late content',async({page})=>{
+ const state=await backend(page);await open(page);await confirmation(page);await page.keyboard.press('Escape');let release!:()=>void;state.readBarrier=new Promise<void>(r=>{release=r});await page.getByRole('button',{name:'Refresh deletion availability'}).click();await expect(page.getByText(repositoryId,{exact:true})).toHaveCount(0);state.denied=true;release();await expect(page.getByRole('alert')).toHaveText('Current ownership or sign-in is unavailable.');await expect(page.getByRole('button',{name:'Delete repository',exact:true})).toHaveCount(0);expect(state.writes).toHaveLength(0);
+});
+test('signout masks pending dialog and fences a late verified response',async({page})=>{
+ const state=await backend(page);await open(page);let release!:()=>void;state.writeBarrier=new Promise<void>(r=>{release=r});await publish(page);await expect.poll(()=>state.writes.length).toBe(1);await page.evaluate(()=>(window as any).deletionFixture.set((s:any)=>({...s,signingOut:true})));release();await expect(page.getByRole('heading',{name:'Repository deletion',exact:true})).toHaveCount(0);expect(await page.evaluate(()=>(window as any).deletedCallbacks||0)).toBe(0);expect(state.writes).toHaveLength(1);
+});
+test('changing exact target discards private receipt without rebinding original metadata',async({page})=>{
+ const state=await backend(page);await open(page);await publish(page);await expect(page.getByRole('heading',{name:'Original deletion completed'})).toBeVisible();await page.evaluate(()=>(window as any).deletionFixture.set((s:any)=>({...s,repositoryId:'9007199254740994'})));await expect(page.getByRole('heading',{name:'Original deletion completed'})).toHaveCount(0);await expect(page.getByRole('button',{name:'Delete repository',exact:true})).toHaveCount(0);expect(state.writes).toHaveLength(1);expect(await storage(page)).toContain(repositoryId);
+});
+for(const theme of ['dark','light'])for(const width of [390,1440])test(`${theme} ${width} shared confirmation fits with fonts and keyboard cancel`,async({page})=>{
+ await page.addInitScript(theme=>localStorage.setItem('golf.theme',theme),theme);await backend(page);await page.setViewportSize({width,height:950});await open(page);const form=await confirmation(page);await page.evaluate(()=>document.fonts.ready);expect(await page.evaluate(()=>Array.from(document.fonts).some(font=>font.family==='Archivo'&&font.status==='loaded'))).toBe(true);await expect(page.locator('html')).toHaveAttribute('data-theme',theme);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.keyboard.press('Escape');await expect(form).toHaveCount(0);await expect(page.getByRole('button',{name:'Delete repository',exact:true})).toBeFocused();
+});
+
+test('known rejected receipt requires a fresh current read before explicitly choosing a new operation',async({page})=>{
+ const state=await backend(page);state.refused=true;await open(page);await publish(page);await expect(page.getByRole('heading',{name:'Original deletion refused before dispatch'})).toBeVisible();await expect(page.getByRole('button',{name:'Delete repository',exact:true})).toHaveCount(0);const original=state.writes[0]!.idempotencyKey;
+ await page.getByRole('button',{name:'Refresh deletion availability'}).click();await expect(page.getByRole('button',{name:'Delete repository',exact:true})).toBeVisible();expect(state.reads).toBe(2);expect(state.statusReads).toContain(original);state.refused=false;await publish(page);await expect(page.getByRole('heading',{name:'Original deletion completed'})).toBeVisible();expect(state.writes).toHaveLength(2);expect(state.writes[1]!.idempotencyKey).not.toBe(original);
+});
+test('storage failure refuses native dispatch and never retains a password',async({page})=>{
+ const state=await backend(page);await open(page);await page.evaluate(()=>{Storage.prototype.setItem=()=>{throw new DOMException('Fixture unavailable','SecurityError');};});await publish(page);await expect(page.getByRole('alert').filter({hasText:'No deletion was requested'})).toBeVisible();expect(state.writes).toHaveLength(0);expect(await storage(page)).toBe('');await expect(page.getByRole('form')).toHaveCount(0);await expect(page.getByRole('button',{name:'Delete repository',exact:true})).toHaveCount(0);
+});
+test('current ordinary-owner loss masks the completed original receipt until an explicit fresh inspection',async({page})=>{
+ const state=await backend(page);await open(page);await publish(page);await expect(page.getByRole('heading',{name:'Original deletion completed'})).toBeVisible();state.lifecycle.canManage=false;state.lifecycle.deleteAvailable=false;state.lifecycle.activeWorkCount='';await page.getByRole('button',{name:'Refresh deletion availability'}).click();await expect(page.getByRole('alert')).toHaveText('Current ownership or sign-in is unavailable.');await expect(page.getByRole('heading',{name:'Original deletion completed'})).toHaveCount(0);await expect(page.getByText('SUCCEEDED',{exact:true})).toHaveCount(0);expect(state.writes).toHaveLength(1);
+ state.lifecycle.canManage=true;state.lifecycle.activeWorkCount='0';state.lifecycle.deleteAvailable=true;await page.getByRole('button',{name:'Refresh deletion availability'}).click();await expect(page.getByRole('heading',{name:'Original deletion completed'})).toBeVisible();expect(state.writes).toHaveLength(1);await expect(page.getByRole('button',{name:'Delete repository',exact:true})).toHaveCount(0);
+});
+
+for(const mode of ['submit','status'])test(`${mode} unauthenticated clears managed session and all other private queries, retaining only original safe metadata`,async({page})=>{
+ const state=await backend(page);await open(page);if(mode==='status'){await publish(page);await expect(page.getByRole('heading',{name:'Original deletion completed'})).toBeVisible();}
+ await page.evaluate(()=>{const fixture=(window as any).deletionFixture;fixture.cache.setQueryData(['other-private'],{private:'Fixture private state'});void fixture.cache.fetchQuery({queryKey:['other-private-late'],queryFn:async({signal}:any)=>{await new Promise<void>(resolve=>{(window as any).releasePrivate=resolve;});signal.throwIfAborted();return {private:'Late fixture content'};}}).catch(()=>{});});
+ if(mode==='submit'){state.writeDenied='unauthenticated';await publish(page);}else{state.statusDenied='unauthenticated';await page.getByRole('button',{name:'Inspect original deletion operation'}).click();}
+ await expect(page.getByRole('alert')).toHaveText('Current ownership or sign-in is unavailable.');expect(await page.evaluate(()=>(window as any).deletionFixture.cache.getQueryData(['session']))).toBeNull();await page.evaluate(()=>(window as any).releasePrivate());expect(await page.evaluate(()=>(window as any).deletionFixture.cache.getQueryData(['other-private']))).toBeUndefined();expect(await page.evaluate(()=>(window as any).deletionFixture.cache.getQueryData(['other-private-late']))).toBeUndefined();expect(await storage(page)).toContain(state.writes[0]!.idempotencyKey);expect(await storage(page)).not.toContain(password);expect(state.writes).toHaveLength(1);await expect(page.getByRole('heading',{name:'Original deletion completed'})).toHaveCount(0);await expect(page.getByRole('button',{name:'Delete repository',exact:true})).toHaveCount(0);
+});
+test('status permission denial clears local private operation without signing out other permitted repository data',async({page})=>{
+ const state=await backend(page);await open(page);await publish(page);await expect(page.getByRole('heading',{name:'Original deletion completed'})).toBeVisible();await page.evaluate(()=>(window as any).deletionFixture.cache.setQueryData(['other-private'],{authorized:true}));state.statusDenied='permission_denied';await page.getByRole('button',{name:'Inspect original deletion operation'}).click();await expect(page.getByRole('alert')).toHaveText('Current ownership or sign-in is unavailable.');expect(await page.evaluate(()=>(window as any).deletionFixture.cache.getQueryData(['session'])?.id)).toBe('42');expect(await page.evaluate(()=>(window as any).deletionFixture.cache.getQueryData(['other-private']))).toEqual({authorized:true});await expect(page.getByRole('heading',{name:'Original deletion completed'})).toHaveCount(0);expect(state.writes).toHaveLength(1);
+});
+
+test('a held old-account availability denial cannot sign out or erase the new account',async({page})=>{
+ const state=await backend(page);await open(page);let release!:()=>void;state.readBarrier=new Promise<void>(resolve=>{release=resolve;});await page.getByRole('button',{name:'Refresh deletion availability'}).click();await expect(page.getByText('Checking current deletion availability…')).toBeVisible();await page.evaluate(()=>{(window as any).deletionFixture.cache.setQueryData(['session'],{id:'84'});(window as any).deletionFixture.cache.setQueryData(['new-account-private'],{permitted:true});});state.readUnauthenticated=true;release();await expect(page.getByRole('alert')).toHaveText('Current ownership or sign-in is unavailable.');expect(await page.evaluate(()=>(window as any).deletionFixture.cache.getQueryData(['session'])?.id)).toBe('84');expect(await page.evaluate(()=>(window as any).deletionFixture.cache.getQueryData(['new-account-private']))).toEqual({permitted:true});expect(state.writes).toHaveLength(0);
+});
+test('background availability refresh masks and then independently reinspects the original operation',async({page})=>{
+ const state=await backend(page);await open(page);await publish(page);await expect(page.getByRole('heading',{name:'Original deletion completed'})).toBeVisible();let release!:()=>void;state.readBarrier=new Promise<void>(resolve=>{release=resolve;});await page.evaluate(()=>{void (window as any).deletionFixture.cache.invalidateQueries({queryKey:['repository-deletion']});});await expect(page.getByText('Checking current deletion availability…')).toBeVisible();await expect(page.getByLabel('Original deletion operation')).toHaveCount(0);release();await expect(page.getByRole('heading',{name:'Original deletion completed'})).toBeVisible();expect(state.statusReads).toContain(state.writes[0]!.idempotencyKey);expect(state.writes).toHaveLength(1);
+});
+
+test('React StrictMode repeats read effects without duplicate deletion or losing after-absence inspection',async({page})=>{
+ const state=await backend(page);await open(page,true);await publish(page);await expect(page.getByRole('heading',{name:'Original deletion completed'})).toBeVisible();expect(state.writes).toHaveLength(1);expect(await page.evaluate(()=>(window as any).deletedCallbacks||0)).toBe(1);state.absent=true;await page.reload();await expect(page.getByRole('heading',{name:'Original deletion completed'})).toBeVisible();expect(state.writes).toHaveLength(1);expect(state.statusReads.every(key=>key===state.writes[0]!.idempotencyKey)).toBe(true);
+});
