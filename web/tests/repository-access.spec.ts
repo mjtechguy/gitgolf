@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import { ListRepositoryDeployKeysResponseSchema, GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ListRepositoryCollaboratorsRequestSchema, ListRepositoryCollaboratorsResponseSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema, RemoveRepositoryCollaboratorRequestSchema, RemoveRepositoryCollaboratorResponseSchema, RepositoryAccessSchema, RepositoryCollaboratorSchema, ResolveRepositoryCollaboratorRequestSchema, ResolveRepositoryCollaboratorResponseSchema, SetRepositoryCollaboratorRequestSchema, SetRepositoryCollaboratorResponseSchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
-import { reject, request, respond } from './rpc';
+import { emptyRepositoryInvitations, reject, request, respond } from './rpc';
 
 const owner = create(UserSchema, { id: '9007199254740993', login: 'alex' });
 const first = create(RepositoryCollaboratorSchema, { user: { id: '9007199254740994', login: 'first-reader' }, permission: 'read', isDirect: true, revision: 'first-grant' });
@@ -20,6 +20,7 @@ async function backend(page: Page) {
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, {});
     if (method === 'ListRepositoryDeployKeys') return respond(route, ListRepositoryDeployKeysResponseSchema, { repositoryId: state.access.repositoryId, ownerId: state.access.ownerId, accessRevision: state.access.revision, keys: [], page: { nextPage: 0 } });
+    if (method === 'ListRepositoryInvitations') return emptyRepositoryInvitations(route);
     if (method === 'GetRepositoryAccess') return state.denied ? reject(route, 'not_found', 'Repository access unavailable.') : respond(route, GetRepositoryAccessResponseSchema, { access: state.access });
     if (method === 'ListRepositoryCollaborators') {
       if (state.listDenied) return reject(route, 'permission_denied', 'Collaborator inventory access denied.');

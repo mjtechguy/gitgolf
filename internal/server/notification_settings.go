@@ -282,6 +282,15 @@ func (s *Server) ListEmailTransports(ctx context.Context, req *connect.Request[g
 		if e = rows.Err(); e != nil {
 			return errStorageUnavailable
 		}
+		rows.Close()
+		observed, e := s.readEmailConfigurationStatus(ctx)
+		if e != nil {
+			return e
+		}
+		if observed.ActivationGeneration != generation || observed.Configured != active.Valid || observed.TransportID != active.String || observed.TransportVersion != version.Int64 {
+			return errRepositorySettingsConflict
+		}
+		out.Observation = wireEmailConfigurationObservation(observed)
 		return s.requireInstanceAdmin(ctx, s.cookieValue(req.Header()), token)
 	})
 	if e != nil {

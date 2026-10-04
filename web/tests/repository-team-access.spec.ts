@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import { AttachRepositoryTeamRequestSchema, AttachRepositoryTeamResponseSchema, DetachRepositoryTeamRequestSchema, DetachRepositoryTeamResponseSchema, GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ListRepositoryTeamAccessRequestSchema, ListRepositoryTeamAccessResponseSchema, LogoutResponseSchema, RepositoryAccessSchema, RepositoryTeamAccessSchema, TeamPermission, TeamVisibility, UserSchema } from '../src/gen/golf/v1/golf_pb';
-import { reject, request, respond } from './rpc';
+import { emptyRepositoryInvitations, reject, request, respond } from './rpc';
 const initial = create(RepositoryTeamAccessSchema, { team: { id: '9007199254740995', name: 'Builders', permission: TeamPermission.WRITE, unitPermissions: { 'repo.code': TeamPermission.READ }, visibility: TeamVisibility.PRIVATE }, attached: false, canAttach: true, revision: 'b'.repeat(64) });
 const attached = create(RepositoryTeamAccessSchema, { ...initial, team: { ...initial.team!, id: '9007199254740996', name: 'Maintainers' }, attached: true, canAttach: false, canDetach: true });
 const protectedOwner = create(RepositoryTeamAccessSchema, { ...initial, team: { ...initial.team!, id: '9007199254740997', name: 'Owners', permission: TeamPermission.OWNER }, isOwnerTeam: true, attached: true, canAttach: false });
@@ -16,6 +16,7 @@ async function backend(page: Page) {
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: state.user });
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, {});
+    if (method === 'ListRepositoryInvitations') return emptyRepositoryInvitations(route);
     if (method === 'GetRepositoryAccess') return respond(route, GetRepositoryAccessResponseSchema, { access: state.access });
     if (method === 'ListRepositoryTeamAccess') {
       const input = request(route, ListRepositoryTeamAccessRequestSchema); expect(input.repositoryId).toBe(state.access.repositoryId); expect(input.ownerId).toBe(state.access.ownerId); expect(input.expectedRevision).toBe(state.access.revision); expect(input.page?.limit).toBe(20); const pageNumber = input.page?.page || 1; state.reads.push(pageNumber);

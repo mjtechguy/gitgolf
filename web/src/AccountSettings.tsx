@@ -5,7 +5,7 @@ import { ExecutionPolicyPanel } from './ExecutionPolicyPanel';
 import { ExecutionScope } from './gen/golf/v1/golf_pb';
 import { lazy, Suspense, useMemo, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
-import { Webhook, History, KeyRound, ShieldCheck, UserRound } from 'lucide-react';
+import { MailPlus, Webhook, History, KeyRound, ShieldCheck, UserRound } from 'lucide-react';
 import type { User } from './gen/golf/v1/golf_pb';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { useQuery } from '@tanstack/react-query';
@@ -18,6 +18,7 @@ export function AccountLayout({ children }: { children: ReactNode }) {
   return <div className="account-layout"><nav className="account-navigation" aria-label="Account settings"><span className="eyebrow">PERSONAL SETTINGS</span>
     <Link to="/account/settings" activeOptions={{ exact:true }}><UserRound size={18} />Profile</Link>
     <Link to="/account/security" activeOptions={{ exact:true }}><ShieldCheck size={18} />Sign-in and security</Link>
+    <Link to="/account/invitations" activeOptions={{ exact:true }}><MailPlus size={18} />Invitations</Link>
     <Link to="/account/agents" activeOptions={{ exact:true }}><KeyRound size={18} />Coding agents</Link>
     <Link to="/account/sessions" activeOptions={{ exact:true }}><ShieldCheck size={18} />Sessions</Link>
     <Link to="/account/ssh-keys" activeOptions={{ exact:true }}><KeyRound size={18} />SSH keys</Link>

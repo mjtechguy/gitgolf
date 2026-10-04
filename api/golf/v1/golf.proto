@@ -2588,6 +2588,29 @@ message ListEmailTransportsRequest {}
 message ListEmailTransportsResponse {
  repeated EmailTransport transports = 1;
  string activation_generation = 2;
+ EmailConfigurationObservation observation = 3;
+}
+// Operational observations, separate from delivery readiness or authorization.
+message EmailConfigurationObservation {
+ string observed_at = 1;
+ bool configured = 2;
+ string transport_id = 3;
+ string transport_version = 4;
+ string activation_generation = 5;
+ uint32 connected_workers = 6;
+ uint32 recently_active_workers = 7;
+ string last_worker_activity = 8;
+ EmailDeliveryEvidence latest_delivery = 9;
+}
+// Most recently created delivery for this exact active transport generation.
+message EmailDeliveryEvidence {
+ string created_at = 1;
+ string completed_at = 2;
+ string state = 3;
+ uint32 attempts = 4;
+ uint32 smtp_status = 5;
+ bool relay_accepted = 6;
+ bool possible_duplicate = 7;
 }
 message SaveEmailTransportRequest {
  string id = 1;

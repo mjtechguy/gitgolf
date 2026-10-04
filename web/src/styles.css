@@ -72,7 +72,9 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .repository-intro { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; }
 .repository-intro>div:first-child { min-width:0; }
 .repository-intro h1 { display:flex; align-items:center; flex-wrap:wrap; gap:12px; font-size:1.5rem; margin:8px 0; overflow-wrap:anywhere; }
-.repository-intro h1>svg { color:var(--muted); }
+.repository-intro h2 { display:flex; align-items:center; flex-wrap:wrap; gap:8px; font-size:1.125rem; line-height:1.4; margin:8px 0; overflow-wrap:anywhere; }
+.repository-intro :is(h1,h2)>svg { color:var(--muted); }
+.repository-intro h2>svg { width:20px; height:20px; flex-shrink:0; }
 .repository-intro p { font-size:.9375rem; line-height:1.7; color:var(--muted); overflow-wrap:anywhere; }
 .repository-intro .visibility { letter-spacing:0; font-weight:400; }
 .repository-tabs { display:flex; gap:23px; border-bottom:1px solid var(--line); margin:18px 0 16px; }

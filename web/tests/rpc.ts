@@ -1,3 +1,4 @@
+import { ListRepositoryInvitationsRequestSchema, ListRepositoryInvitationsResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import { GetOwnEmailNotificationsResponseSchema,GetRepositoryEmailSubscriptionResponseSchema,ListOwnEmailDeliveriesResponseSchema, ResolveRepositorySourceRequestSchema, ResolveRepositorySourceResponseSchema, RepositorySourceResolution, RepositorySourceRefKind, ListAgentTasksResponseSchema, GetAgentUsageRequestSchema, GetAgentUsageResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import { create, fromJson, toJson } from '@bufbuild/protobuf';
 import type { DescMessage, MessageInitShape } from '@bufbuild/protobuf';
@@ -52,3 +53,8 @@ export function unconfiguredRepositoryEmail(route: Route,nativeUserId:string,tar
  return respond(route,GetRepositoryEmailSubscriptionResponseSchema,{target,state:{userId:nativeUserId,nativeUserId,localAccountId:'1',credentialVersion:'1',loginEmail:'',contactVersion:'0',preferenceVersion:'0',verified:false,enabled:false,transportActive:false}});
 }
 export function emptyOwnEmailHistory(route: Route,nativeUserId:string,target?:{repository:{owner:string;name:string};repositoryId:string;ownerId:string}) {return respond(route,ListOwnEmailDeliveriesResponseSchema,{userId:nativeUserId,target,page:{nextPage:0}});}
+
+export function emptyRepositoryInvitations(route: Route) {
+ const input=request(route,ListRepositoryInvitationsRequestSchema);
+ return respond(route,ListRepositoryInvitationsResponseSchema,{repositoryId:input.repositoryId,ownerId:input.ownerId,accessRevision:input.expectedRevision,canManage:false,localIssuerAvailable:false,invitations:[],page:{nextPage:0}});
+}

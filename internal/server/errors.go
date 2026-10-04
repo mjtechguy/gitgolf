@@ -44,6 +44,8 @@ func rpcError(err error) error {
 	var input inputError
 	var upstream forgeError
 	switch {
+	case errors.Is(err, errInvitationAuthority):
+		code, message = connect.CodePermissionDenied, "Current invitation issuer authority is unavailable. Inspect the original invitation; do not retry an unknown grant."
 	case errors.Is(err, errExecutionValueConflict):
 		code, message = connect.CodeAborted, "Execution values or source approval changed. Inspect the original operation before another explicit change."
 	case errors.Is(err, errExecutionApproval):

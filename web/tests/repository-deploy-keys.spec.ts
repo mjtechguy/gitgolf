@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import { AddRepositoryDeployKeyRequestSchema, AddRepositoryDeployKeyResponseSchema, DeleteRepositoryDeployKeyRequestSchema, DeleteRepositoryDeployKeyResponseSchema, GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ListRepositoryCollaboratorsResponseSchema, ListRepositoryDeployKeysRequestSchema, ListRepositoryDeployKeysResponseSchema, LogoutResponseSchema, RepositoryAccessSchema, RepositoryDeployKeySchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
-import { reject, request, respond } from './rpc';
+import { emptyRepositoryInvitations, reject, request, respond } from './rpc';
 const keyText = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV';
 const fingerprint = `SHA256:${'A'.repeat(43)}`;
 const initial = create(RepositoryDeployKeySchema, { id: '9007199254740995', publicKeyId: '9007199254740996', title: 'Deployment', publicKey: keyText, fingerprint, createdAt: '2026-10-03T12:00:00Z', readOnly: true, revision: 'b'.repeat(64) });
@@ -16,6 +16,7 @@ async function backend(page: Page) {
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: state.user });
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, {});
+    if (method === 'ListRepositoryInvitations') return emptyRepositoryInvitations(route);
     if (method === 'GetRepositoryAccess') return respond(route, GetRepositoryAccessResponseSchema, { access: state.access });
     if (method === 'ListRepositoryCollaborators') return respond(route, ListRepositoryCollaboratorsResponseSchema, { collaborators: [], page: { nextPage: 0 } });
     if (method === 'ListRepositoryDeployKeys') {
