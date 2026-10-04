@@ -1,0 +1,12 @@
+{
+  "observedOn": "2026-10-03",
+  "repository": "https://github.com/nektos/act",
+  "version": "v0.2.89",
+  "tagObjectId": "434d69682c7a8db2ac913e5dc3e80ba68055d50d",
+  "sourceCommitId": "4f411281417e88660bea1c1a1749aa71ae0bd60f",
+  "goModuleSum": "h1:d9oFeJ6jUkaVExuG+XzAaMPDqoDrNHaGeiRb8IU+N5w=",
+  "goModSum": "h1:9djXFAZR+ltqh1k/8I0G2/3ypi2UrcuFlrC25L6WoCA=",
+  "goModuleZipSHA256": "b4e568212d680a32076455b84ab572d17fe65eb83a6fd6dce6a05164bd68fcc9",
+  "goModSHA256": "9f220133fb1ee007f1485f02933aac5cb2f30cc07b909656ede60afa54a612bd",
+  "qualification": "source-only model planner; no product execution grant"
+}
