@@ -3059,6 +3059,8 @@ message ListOwnRepositoryInvitationsResponse { repeated RepositoryInvitation inv
 // Current native configuration observations, not Golf protected-write authority.
 service RepositoryRulesService {
   rpc GetRepositoryRules(GetRepositoryRulesRequest) returns (GetRepositoryRulesResponse);
+  rpc MutateRepositoryRules(MutateRepositoryRulesRequest) returns (MutateRepositoryRulesResponse);
+  rpc GetRepositoryRuleMutation(GetRepositoryRuleMutationRequest) returns (GetRepositoryRuleMutationResponse);
 }
 message GetRepositoryRulesRequest {
   RepositoryKey repository = 1;
@@ -3181,3 +3183,56 @@ message GetRepositoryRunnersResponse {
   bool push_allowed = 6;
   repeated EnrolledRunner runners = 7;
 }
+
+// Once-only configuration intents, not protected integration permits.
+enum RepositoryRuleMutationAction {
+ REPOSITORY_RULE_MUTATION_ACTION_UNSPECIFIED = 0;
+ REPOSITORY_RULE_MUTATION_ACTION_CREATE_BRANCH = 1;
+ REPOSITORY_RULE_MUTATION_ACTION_EDIT_BRANCH = 2;
+ REPOSITORY_RULE_MUTATION_ACTION_REMOVE_BRANCH = 3;
+ REPOSITORY_RULE_MUTATION_ACTION_CREATE_TAG = 4;
+ REPOSITORY_RULE_MUTATION_ACTION_EDIT_TAG = 5;
+ REPOSITORY_RULE_MUTATION_ACTION_REMOVE_TAG = 6;
+ REPOSITORY_RULE_MUTATION_ACTION_EDIT_MERGE = 7;
+}
+message MutateRepositoryRulesRequest {
+ RepositoryKey repository = 1;
+ string repository_id = 2;
+ string owner_id = 3;
+ string expected_access_revision = 4;
+ string expected_rules_revision = 5;
+ string operation_id = 6;
+ RepositoryRuleMutationAction action = 7;
+ string rule_name = 8;
+ string tag_id = 9;
+ RepositoryBranchProtection desired_branch = 10;
+ RepositoryTagProtection desired_tag = 11;
+ RepositoryMergeConfiguration desired_merge = 12;
+}
+message GetRepositoryRuleMutationRequest {
+ RepositoryKey repository = 1;
+ string repository_id = 2;
+ string owner_id = 3;
+ string operation_id = 4;
+}
+message RepositoryRuleMutation {
+ string operation_id = 1;
+ RepositoryKey repository = 2;
+ string repository_id = 3;
+ string owner_id = 4;
+ string actor_id = 5;
+ RepositoryRuleMutationAction action = 6;
+ string phase = 7;
+ string expected_access_revision = 8;
+ string expected_rules_revision = 9;
+ string input_fingerprint = 10;
+ optional string observed_rules_revision = 11;
+ string created_at = 12;
+ string updated_at = 13;
+ string failure_code = 14;
+}
+message MutateRepositoryRulesResponse {
+ RepositoryRuleMutation operation = 1;
+ GetRepositoryRulesResponse current_rules = 2;
+}
+message GetRepositoryRuleMutationResponse { RepositoryRuleMutation operation = 1; }
