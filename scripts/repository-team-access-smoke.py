@@ -291,8 +291,12 @@ def main():
             for actor in (member,member_admin):
                 current,readonly=inspect(actor);assert not readonly.get('canManage',False) and all(not r.get('canAttach',False) and not r.get('canDetach',False) for r in readonly['teams'])
                 row=selected_row(readonly);call(actor,'AttachRepositoryTeam',mutation_target(current,row),expected=403)
-            nonmember_target=target(access(nonmember));assert nonmember_target['repositoryId']==repo_id
-            call(nonmember,'ListRepositoryTeamAccess',{**nonmember_target,'page':{'page':1,'limit':20}},expected=404)
+            stage('native direct admin does not bypass private organization membership')
+            nonmember_native=smoke.provider(nonmember['token'],'GET',path)
+            assert str(nonmember_native['id'])==repo_id and str(nonmember_native['owner']['id'])==org_id and nonmember_native['permissions']['admin'] is True
+            smoke.provider(owner['token'],'GET','orgs/'+organization+'/members/'+nonmember['name'],expected=404)
+            checked_rpc(nonmember['session'],'RepositoryAccessService/GetRepositoryAccess',{'repository':repository},expected=404)
+            call(nonmember,'ListRepositoryTeamAccess',{**owner_target,'page':{'page':1,'limit':20}},expected=404)
             for actor in (outsider,golfadmin):call(actor,'ListRepositoryTeamAccess',{**owner_target,'page':{'page':1,'limit':20}},expected=404)
             stage('owner and inherited-all protections, foreign IDs and stale revision no effects')
             for protected_id in (owner_team_id,str(all_team['id'])):
@@ -366,7 +370,7 @@ def main():
             assert associations(owner['token'],native['full_name'],int(org_id))==unchanged
             assert runtime()==before_runtime;record(nativeChecks='passed',runtimeUnchanged=True);passed=True
         finally:
-            if not passed:record(failedStage=STAGE)
+            if not passed:record(failedStage=STAGE,failedProcedure=PROOF.get('lastProcedure'))
             print('CHECK: owned fixture cleanup',flush=True);failures=[]
             for actor,identifier in bearers:
                 try:checked_rpc(actor['session'],'ApiCredentialService/RevokeApiCredential',{'credentialId':identifier})
