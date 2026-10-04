@@ -4,6 +4,10 @@ Updated: 2026-10-04. This is bounded P1.6 recovery for the canonical core and op
 
 Cloudflare and AI are not required. The same origin-side procedure can apply to the canonical Docker core of either track; it does not back up Cloudflare resources or external deployment state. Kubernetes, external databases/object stores and modified topologies require separate recovery qualification.
 
+## Actual Access-core059 qualification
+
+[Fresh attempt4](../.tmp/repository-access059-recovery-attempt4/manifest.json) passes on component source `05ab5bf`/core `8f99f647` with exact owned cleanup. Real personal/org grants, team membership, shared RO/RW deploy keys, retained grant/invitation histories and both native204 effect-loss originals survive encrypted backup and fresh quarantined restore. Session/issuer-version invalidation expires the one pending invitation through the specified trigger; reenrollment neither restores old consent nor resends uncertain writes. Independent native bindings remain unchanged. One actual encrypted typed queued run is retained and cancelled without replay, wrong/missing content keys refuse, and all thirteen credential families are counted during supported authenticated rotation. This is the closed scoped profile, not whole-platform or schema060 qualification. Failed attempts1–3 remain preserved below.
+
 ## Supported profile and trust boundary
 
 | Requirement | Current contract |
