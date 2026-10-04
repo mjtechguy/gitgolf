@@ -4,7 +4,7 @@ import {
   GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema,
   GetRepositorySettingsResponseSchema, GetRepositoryAccessResponseSchema, ListRepositoryCollaboratorsResponseSchema,
   InspectWorkflowsResponseSchema, GetRepositoryResponseSchema, GetContentsRequestSchema, GetContentsResponseSchema,
-  ListBranchesResponseSchema, ListCommitsRequestSchema, ListCommitsResponseSchema, SourceEntryType,
+  ListBranchesResponseSchema, ListCommitsRequestSchema, ListCommitsResponseSchema, ResolveRepositorySourceRequestSchema, SourceEntryType,
 } from '../src/gen/golf/v1/golf_pb';
 import { resolveSourceFixture, disabledAgentUsage, disabledAgentTasks, reject, request, respond } from './rpc';
 
@@ -12,7 +12,7 @@ const snapshot = 'a'.repeat(40), other = 'b'.repeat(40);
 const user = { id: '17', login: 'alex', fullName: 'Alex' };
 const repository = { id: '19', owner: user, name: 'demo', fullName: 'alex/demo', defaultBranch: 'main' };
 async function fixture(page: Page) {
-  const state = { denied: false, signedIn: true, methods: [] as string[], authorityURLs: [] as string[], refs: [] as string[] };
+  const state = { denied: false, signedIn: true, methods: [] as string[], authorityURLs: [] as string[], refs: [] as string[], selections: [] as ReturnType<typeof request<typeof ResolveRepositorySourceRequestSchema>>[] };
   await page.route('**/rpc/**', async route => {
     const method = route.request().url().split('/').at(-1)!;
     state.methods.push(method);
@@ -33,7 +33,7 @@ async function fixture(page: Page) {
     if (method === 'ListAgentTasks') return disabledAgentTasks(route);
     if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository });
     if (method === 'ListBranches') return respond(route, ListBranchesResponseSchema, { branches: [{ name: 'main', commitId: snapshot }] });
-    if (method === 'ResolveRepositorySource') return resolveSourceFixture(route, repository.id, { owner: 'alex', name: 'demo' }, 'main', { main: snapshot });
+    if (method === 'ResolveRepositorySource') { state.selections.push(request(route, ResolveRepositorySourceRequestSchema)); return resolveSourceFixture(route, repository.id, { owner: 'alex', name: 'demo' }, 'main', { main: snapshot }); }
     if (method === 'GetContents') {
       const input = request(route, GetContentsRequestSchema), file = input.path === 'src/index.ts'; state.refs.push(input.ref);
       return respond(route, GetContentsResponseSchema, { repositoryId: repository.id, commitId: snapshot, path: input.path, kind: file ? SourceEntryType.FILE : SourceEntryType.DIRECTORY,
@@ -133,11 +133,31 @@ test('commit detail retains deliberately different history return context', asyn
   expect(new URL(page.url()).searchParams.get('branch')).toBe('feature/UI');
 });
 
-for (const tail of ['tree/main', 'tree/feature/UI/src', 'blob/release/2.0/README.md']) test(`unsupported readable ref entry ${tail} is rejected rather than split ambiguously`, async ({ page }) => {
+test('readable main entry retains its address while source reads use the resolved native ID and full snapshot', async ({ page }) => {
+  const state = await fixture(page);
+  await page.goto('/alex/demo/tree/main');
+  await expect.poll(() => state.methods.includes('GetContents')).toBe(true);
+  await expect(page).toHaveURL(/\/alex\/demo\/tree\/main$/);
+  await expect(page.getByRole('heading', { name: 'Page not found', exact: true })).toHaveCount(0);
+  expect(state.selections.length).toBeGreaterThan(0);
+  for (const selection of state.selections) expect(selection).toMatchObject({ repository: { owner: 'alex', name: 'demo' }, repositoryId: '19', suffix: 'main', path: '' });
+  expect(state.refs.length).toBeGreaterThan(0);
+  expect(state.refs.every(ref => ref === snapshot)).toBe(true);
+});
+
+for (const tail of ['tree/feature/UI/src', 'blob/release/2.0/README.md']) test(`missing readable entry ${tail} is resolved as a whole suffix without guessed source reads`, async ({ page }) => {
   const state = await fixture(page);
   await page.goto(`/alex/demo/${tail}`);
-  await expect(page.getByRole('heading', { name: 'Page not found', exact: true })).toBeVisible();
-  expect(state.methods.every(method => ['GetSession', 'GetAuthenticationOptions', 'ListCapabilities'].includes(method))).toBe(true);
+  await expect(page.getByRole('heading', { name: 'Source selection', exact: true })).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('Exact fixture suffix not found.');
+  await expect(page.getByRole('button', { name: 'Choose ref and path', exact: true })).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe(`/alex/demo/${tail}`);
+  expect(state.methods).not.toContain('GetContents');
+  expect(state.selections.length).toBeGreaterThan(0);
+  for (const selection of state.selections) {
+    expect(selection).toMatchObject({ repository: { owner: 'alex', name: 'demo' }, repositoryId: '19', suffix: tail.slice(tail.indexOf('/') + 1), path: '' });
+    expect(selection.selector).toBeUndefined();
+  }
 });
 
 for (const prefix of ['/alex/demo', '/repositories/alex/demo']) test(`legacy uint32 issue selector remains readable at ${prefix}`, async ({ page }) => {

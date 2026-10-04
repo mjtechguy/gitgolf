@@ -55,8 +55,10 @@ test('workflow inventory pins source links, exposes keyboard details and renders
   await expect(page.getByText('Manual execution requires every applicable execution policy', { exact: false })).toBeVisible();
   await expect(page.getByText('Inspection subset checked', { exact: true })).toBeVisible();
   const source = page.getByRole('link', { name: manual.path, exact: true });
-  const url = new URL((await source.getAttribute('href'))!, 'http://127.0.0.1:4179');
-  expect(url.searchParams.get('ref')).toBe(commit); expect(url.pathname).toContain('/'+manual.path);
+  const url = new URL((await source.getAttribute('href'))!, page.url());
+  expect(url.origin).toBe(new URL(page.url()).origin);
+  expect(url.pathname).toBe(`/alex/private/tree/${commit}/${manual.path}`);
+  expect(url.searchParams.has('ref')).toBe(false);
   const details = page.locator('summary').filter({ hasText: `Inspect ${manual.path}` });
   await details.focus(); await page.keyboard.press('Enter');
   await expect(page.getByText('<img src=x onerror=alert(1)>', { exact: true })).toBeVisible();
