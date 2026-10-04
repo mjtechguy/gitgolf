@@ -346,9 +346,16 @@ def main():
             detach(actors['admin'], admin_target, extra)
             baseline = native_inventory(first)
             for role in ('writer', 'reader', 'global') + (('teamadmin',) if args.organization else ()):
-                denied_target, denied_meta = access(actors[role], first['repository']); assert not denied_meta.get('canManage', False)
+                if args.organization and role == 'global':
+                    # A site administrator with no current organization
+                    # membership cannot obtain its private access observation.
+                    smoke.rpc(actors[role]['session'], 'RepositoryAccessService/GetRepositoryAccess', {'repository': first['repository']}, expected=404)
+                    denied_target, expected_denial = first, 404
+                else:
+                    denied_target, denied_meta = access(actors[role], first['repository']); assert not denied_meta.get('canManage', False)
+                    expected_denial = 403
                 for method, fields in ((METHODS[0], {'page': {'limit': 1, 'page': 1}}), (METHODS[1], {'title': 'Denied', 'publicKey': public, 'readOnly': False}), (METHODS[2], {'keyId': ro['id'], 'expectedKeyRevision': ro['revision']})):
-                    call(actors[role], method, {**denied_target, **fields}, expected=403)
+                    call(actors[role], method, {**denied_target, **fields}, expected=expected_denial)
             for method in METHODS:
                 call(actors['outsider'], method, {**first, 'title': 'Denied', 'publicKey': public, 'readOnly': True, 'keyId': ro['id'], 'expectedKeyRevision': ro['revision']}, expected=404)
             assert native_inventory(first) == baseline
