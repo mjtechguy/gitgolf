@@ -2826,7 +2826,25 @@ message RepositoryExecutionValue {
  string created_at = 6;
  string updated_at = 7;
 }
-message RepositoryExecutionValueReference { string id = 1; string version = 2; }
+enum ExecutionValueScope {
+ EXECUTION_VALUE_SCOPE_UNSPECIFIED = 0;
+ EXECUTION_VALUE_SCOPE_REPOSITORY = 1;
+ EXECUTION_VALUE_SCOPE_ORGANIZATION = 2;
+}
+message RepositoryExecutionValueReference {
+ string id = 1;
+ string version = 2;
+ ExecutionValueScope scope = 3;
+ string organization_id = 4;
+}
+message InheritedExecutionValue {
+ string organization_id = 1;
+ string organization_name = 2;
+ RepositoryExecutionValue value = 3;
+ bool overridden = 4;
+ string share_expires_at = 5;
+ string share_state = 6;
+}
 message RepositoryExecutionBinding {
  string id = 1;
  string version = 2;
@@ -2855,6 +2873,7 @@ message ListRepositoryExecutionValuesResponse {
  string consumer_profile = 5;
  uint32 maximum_values = 6;
  uint32 maximum_bindings = 7;
+ repeated InheritedExecutionValue inherited_values = 8;
 }
 message SaveRepositoryExecutionValueRequest {
  RepositoryExecutionValueTarget target = 1;
