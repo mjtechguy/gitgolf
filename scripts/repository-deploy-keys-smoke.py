@@ -195,6 +195,14 @@ def main():
     def native_inventory(target):
         return smoke.provider(owner['token'], 'GET', path(target)+'/keys?limit=50')
 
+    def native_ref(target, name):
+        # Direct supported Git refs do not depend on the native branch DB cache.
+        observed = smoke.provider(owner['token'], 'GET', path(target)+'/git/refs/heads/'+urllib.parse.quote(name, safe=''))
+        rows = observed if isinstance(observed, list) else [observed]
+        assert len(rows) == 1 and rows[0]['ref'] == 'refs/heads/'+name
+        assert rows[0]['object']['type'] == 'commit' and re.fullmatch(r'[a-f0-9]{40}', rows[0]['object']['sha'])
+        return rows[0]['object']['sha']
+
     try:
         smoke.ready(); runtime_before = runtime()
         print('Owned fixture scope: '+prefix, flush=True)
@@ -257,7 +265,7 @@ def main():
             # Pinned native authorization text: https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/routers/private/serv.go
             stage = 'real read-only private clone and denied push'
             ro_work = local/'read-only'; git(local, 'clone', native_repos[0]['ssh_url'], str(ro_work))
-            assert git(ro_work, 'rev-parse', 'HEAD') == smoke.provider(owner['token'], 'GET', path(first)+'/branches/'+native_repos[0]['default_branch'])['commit']['id']
+            assert git(ro_work, 'rev-parse', 'HEAD') == native_ref(first, native_repos[0]['default_branch'])
             candidate(ro_work, 'denied-deploy-key-push')
             git(ro_work, 'push', 'origin', 'HEAD:refs/heads/denied-deploy-key-push', denied=True, denial=('is not authorized to write to',))
             assert git(ro_work, 'ls-remote', 'origin', 'refs/heads/denied-deploy-key-push') == ''
@@ -265,7 +273,7 @@ def main():
             rw_work = local/'read-write'; git(local, 'clone', native_repos[1]['ssh_url'], str(rw_work))
             sha = candidate(rw_work, 'allowed-deploy-key-push')
             git(rw_work, 'push', 'origin', 'HEAD:refs/heads/allowed-deploy-key-push')
-            assert smoke.provider(owner['token'], 'GET', path(second)+'/branches/allowed-deploy-key-push')['commit']['id'] == sha
+            assert native_ref(second, 'allowed-deploy-key-push') == sha
             assert smoke.provider(owner['token'], 'GET', path(second)+'/git/commits/'+sha)['sha'] == sha
             stage = 'current personal owner/direct admin and non-admin denial'
             admin_target, admin_meta = access(actors['admin'], first['repository']); assert admin_meta['canManage']
@@ -308,7 +316,7 @@ def main():
             native_matches(smoke.provider(owner['token'], 'GET', path(second)+'/keys/'+rw['id']), rw)
             assert sha in git(rw_work, 'ls-remote', 'origin', 'refs/heads/allowed-deploy-key-push')
             git(rw_work, 'push', 'origin', 'HEAD:refs/heads/surviving-deploy-key-push')
-            assert smoke.provider(owner['token'], 'GET', path(second)+'/branches/surviving-deploy-key-push')['commit']['id'] == sha
+            assert native_ref(second, 'surviving-deploy-key-push') == sha
             replacement = add(owner, first, public, 'Reattached key', False)
             assert replacement['id'] != ro['id'] and replacement['publicKeyId'] == rw['publicKeyId']
             call(owner, METHODS[2], {**first, 'keyId': ro['id'], 'expectedKeyRevision': ro['revision']}, expected=404)
