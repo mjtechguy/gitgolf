@@ -14,6 +14,7 @@ function equivalent(target, body, reply = false) {
 try {
   let input = ''; for await (const chunk of process.stdin) input += chunk;
   config = JSON.parse(input); input = '';
+  check(['personal','organization'].includes(config.repositoryScope));
   const { chromium } = await import(pathToFileURL(join(config.stackRoot, 'web/node_modules/playwright/index.mjs')));
   browser = await chromium.launch(); context = await browser.newContext();
   page = await context.newPage();
@@ -51,7 +52,7 @@ try {
     await page.screenshot({ path: join(config.screenshots, file+'.png'), fullPage: true });
     await chmod(join(config.screenshots, file+'.png'), 0o600);
     await writeFile(join(config.screenshots, file+'.txt'), text, { mode: 0o600 });
-    captures.push({ id: file, page: 'Repository settings · access · deploy keys', role: 'personal-owner', state, accessMode: mode, theme, viewport: { width, height: 900 }, image: file+'.png', text: file+'.txt', result: 'captured', caption: 'Actual disposable native deploy-key association; product image/runtime recorded below. No agent inference or retained-account changes.' });
+    captures.push({ id: file, page: 'Repository settings · access · deploy keys', role: config.repositoryScope+'-owner', state, accessMode: mode, theme, viewport: { width, height: 900 }, image: file+'.png', text: file+'.txt', result: 'captured', caption: 'Actual disposable native deploy-key association; product image/runtime recorded below. No agent inference or retained-account changes.' });
   }
   stage = 'managed password sign-in'; await page.goto(config.golf);
   await page.getByLabel('Email or username', { exact: true }).fill(config.email);

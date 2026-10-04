@@ -399,7 +399,7 @@ def main():
                 for index in range(8):
                     key = local/('browser-'+str(index)); command('ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(key))
                     browser_keys.append(key.with_suffix('.pub').read_text())
-                config = {'golf': smoke.GOLF, 'gitea': smoke.GITEA, 'email': owner['email'], 'password': owner['password'], 'ownerToken': owner['token'], 'repository': namespace+'/first', 'target': first, 'publicKeys': browser_keys, 'screenshots': str(args.screenshots.resolve()), 'runtime': runtime_before, 'stackRoot': str(stack)}
+                config = {'golf': smoke.GOLF, 'gitea': smoke.GITEA, 'email': owner['email'], 'password': owner['password'], 'ownerToken': owner['token'], 'repository': namespace+'/first', 'repositoryScope': 'organization' if args.organization else 'personal', 'target': first, 'publicKeys': browser_keys, 'screenshots': str(args.screenshots.resolve()), 'runtime': runtime_before, 'stackRoot': str(stack)}
                 proof = subprocess.run(['node', str(Path(__file__).with_name('repository-deploy-keys-browser.mjs'))], cwd=stack, input=json.dumps(config), capture_output=True, text=True, timeout=240)
                 for line in proof.stderr.splitlines():
                     if line.startswith('Deploy-key browser failed at ') or line == 'Deploy-key browser logout failed':
