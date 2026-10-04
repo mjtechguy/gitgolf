@@ -16,7 +16,7 @@ import (
 
 func settingsFixtureRow() forgeRepositorySettings {
 	yes, no := true, false
-	row := forgeRepositorySettings{Repository: Repository{ID: 9007199254740993, Name: "example", FullName: "alice/example", Description: "Original", DefaultBranch: "main"}, Owner: &User{ID: 42, Login: "alice"}, HasIssues: &yes, HasWiki: &yes, HasPullRequests: &yes, Archived: &no, Mirror: &no}
+	row := forgeRepositorySettings{Repository: Repository{ID: 9007199254740993, Name: "example", FullName: "alice/example", Description: "Original", DefaultBranch: "main"}, Owner: &User{ID: 42, Login: "alice"}, Topics: &[]string{}, InternalTracker: &forgeInternalTracker{}, HasIssues: &yes, HasWiki: &yes, HasPullRequests: &yes, Archived: &no, Mirror: &no}
 	row.Permissions = &struct {
 		Admin bool `json:"admin"`
 	}{true}
@@ -73,7 +73,7 @@ func TestRepositorySettingsBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, method := range []string{"GetRepositorySettings", "UpdateRepositorySettings"} {
+	for _, method := range []string{"GetRepositorySettings", "UpdateRepositorySettings", "UpdateRepositoryTopics"} {
 		path := "/golf.v1.RepositorySettingsService/" + method
 		for _, origin := range []string{s.config.PublicURL, "https://other.invalid"} {
 			req := httptest.NewRequest("POST", "/rpc"+path, strings.NewReader("malformed"))
@@ -112,8 +112,8 @@ func TestRepositorySettingsPostgres(t *testing.T) {
 			json.NewEncoder(w).Encode(User{ID: 42, Login: "alice"})
 			return
 		}
-		if r.URL.Path == "/api/v1/repos/alice/example/branches/release/next" {
-			json.NewEncoder(w).Encode(map[string]string{"name": "release/next"})
+		if r.URL.Path == "/api/v1/repos/alice/example/git/refs/heads/release/next" {
+			json.NewEncoder(w).Encode([]map[string]any{{"ref": "refs/heads/release/next", "object": map[string]string{"type": "commit", "sha": strings.Repeat("a", 40)}}})
 			return
 		}
 		if r.URL.Path != "/api/v1/repos/alice/example" {

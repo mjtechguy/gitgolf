@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -25,11 +24,16 @@ type forgeRepositorySettings struct {
 	Permissions *struct {
 		Admin bool `json:"admin"`
 	} `json:"permissions"`
-	HasIssues       *bool `json:"has_issues"`
-	HasWiki         *bool `json:"has_wiki"`
-	HasPullRequests *bool `json:"has_pull_requests"`
-	Archived        *bool `json:"archived"`
-	Mirror          *bool `json:"mirror"`
+	Website         string                `json:"website"`
+	Topics          *[]string             `json:"topics"`
+	InternalTracker *forgeInternalTracker `json:"internal_tracker"`
+	ExternalTracker *forgeExternalTracker `json:"external_tracker"`
+	ExternalWiki    *forgeExternalWiki    `json:"external_wiki"`
+	HasIssues       *bool                 `json:"has_issues"`
+	HasWiki         *bool                 `json:"has_wiki"`
+	HasPullRequests *bool                 `json:"has_pull_requests"`
+	Archived        *bool                 `json:"archived"`
+	Mirror          *bool                 `json:"mirror"`
 }
 
 func wireRepositorySettings(row forgeRepositorySettings, key repositoryKey) (*golfv1.RepositorySettings, error) {
@@ -41,6 +45,9 @@ func wireRepositorySettings(row forgeRepositorySettings, key repositoryKey) (*go
 	}
 	settings := &golfv1.RepositorySettings{RepositoryId: strconv.FormatInt(row.ID, 10), OwnerId: strconv.FormatInt(row.Owner.ID, 10), Description: row.Description, DefaultBranch: row.DefaultBranch,
 		HasIssues: *row.HasIssues, HasWiki: *row.HasWiki, HasPullRequests: *row.HasPullRequests, CanEdit: row.Permissions.Admin && !*row.Archived && !*row.Mirror}
+	if err := projectGeneralSettings(row, settings); err != nil {
+		return nil, err
+	}
 	// This detects stale forms before dispatch; Gitea PATCH does not provide a
 	// qualified atomic compare-and-swap. Never use this hash as a security lock.
 	data, _ := json.Marshal(struct {
@@ -49,6 +56,7 @@ func wireRepositorySettings(row forgeRepositorySettings, key repositoryKey) (*go
 		Issues, Wiki, PullRequests, Archived, Mirror bool
 	}{
 		row.ID, row.Owner.ID, strings.ToLower(row.FullName), row.Description, row.DefaultBranch, *row.HasIssues, *row.HasWiki, *row.HasPullRequests, *row.Archived, *row.Mirror})
+	data = append(data, generalRevisionData(row)...)
 	digest := sha256.Sum256(data)
 	settings.Revision = hex.EncodeToString(digest[:])
 	return settings, nil
@@ -74,6 +82,11 @@ func (s *Server) GetRepositorySettings(ctx context.Context, req *connect.Request
 		return nil, err
 	}
 	key := keyFrom(req.Msg.Repository)
+	if req.Msg.RepositoryId != "" {
+		if _, err := discussionID(req.Msg.RepositoryId); err != nil {
+			return nil, rpcError(invalid("Provide the current canonical repository identity."))
+		}
+	}
 	if _, err := repositoryPath(key); err != nil {
 		return nil, rpcError(err)
 	}
@@ -82,6 +95,9 @@ func (s *Server) GetRepositorySettings(ctx context.Context, req *connect.Request
 		_, settings, err := s.readRepositorySettings(ctx, token, key)
 		if err != nil {
 			return err
+		}
+		if req.Msg.RepositoryId != "" && settings.RepositoryId != req.Msg.RepositoryId {
+			return errRepositorySettingsConflict
 		}
 		result.Settings = settings
 		return nil
@@ -125,6 +141,9 @@ func repositorySettingsPatch(req *golfv1.UpdateRepositorySettingsRequest) (map[s
 	if req.HasPullRequests != nil {
 		patch["has_pull_requests"] = *req.HasPullRequests
 	}
+	if err := generalFeaturePatch(req, patch); err != nil {
+		return nil, err
+	}
 	if len(patch) == 0 {
 		return nil, invalid("Choose at least one repository setting to change.")
 	}
@@ -135,7 +154,7 @@ func settingsMatchUpdate(settings *golfv1.RepositorySettings, req *golfv1.Update
 	return settings.RepositoryId == req.RepositoryId && settings.OwnerId == req.OwnerId && settings.CanEdit &&
 		(req.Description == nil || settings.Description == *req.Description) && (req.DefaultBranch == nil || settings.DefaultBranch == *req.DefaultBranch) &&
 		(req.HasIssues == nil || settings.HasIssues == *req.HasIssues) && (req.HasWiki == nil || settings.HasWiki == *req.HasWiki) &&
-		(req.HasPullRequests == nil || settings.HasPullRequests == *req.HasPullRequests)
+		(req.HasPullRequests == nil || settings.HasPullRequests == *req.HasPullRequests) && generalSettingsMatch(settings, req)
 }
 
 func (s *Server) UpdateRepositorySettings(ctx context.Context, req *connect.Request[golfv1.UpdateRepositorySettingsRequest]) (*connect.Response[golfv1.UpdateRepositorySettingsResponse], error) {
@@ -166,16 +185,16 @@ func (s *Server) UpdateRepositorySettings(ctx context.Context, req *connect.Requ
 			return errRepositorySettingsConflict
 		}
 		if req.Msg.DefaultBranch != nil && *req.Msg.DefaultBranch != before.DefaultBranch {
-			var branch struct {
-				Name string `json:"name"`
-			}
-			_, err := s.forge(ctx, http.MethodGet, base+"/branches/"+url.PathEscape(*req.Msg.DefaultBranch), token, nil, &branch)
-			if err != nil {
+			if _, err := s.exactSourceBranch(ctx, base, token, *req.Msg.DefaultBranch); err != nil {
 				return err
 			}
-			if branch.Name != *req.Msg.DefaultBranch {
-				return errInvalidForgeResponse
-			}
+		}
+		// Legacy enabling must never silently replace an external unit.
+		if req.Msg.HasIssues != nil && *req.Msg.HasIssues && before.IssuesMode == golfv1.RepositoryFeatureMode_REPOSITORY_FEATURE_MODE_EXTERNAL {
+			return invalid("Use an explicit issues mode to change external tracker configuration.")
+		}
+		if req.Msg.HasWiki != nil && *req.Msg.HasWiki && before.WikiMode == golfv1.RepositoryFeatureMode_REPOSITORY_FEATURE_MODE_EXTERNAL {
+			return invalid("Use an explicit wiki mode to change external wiki configuration.")
 		}
 		// Re-read native administration and local authority after branch/provider waits.
 		_, current, err := s.readRepositorySettings(ctx, token, key)

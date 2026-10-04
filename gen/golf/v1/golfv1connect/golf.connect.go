@@ -138,6 +138,9 @@ const (
 	// RepositorySettingsServiceUpdateRepositorySettingsProcedure is the fully-qualified name of the
 	// RepositorySettingsService's UpdateRepositorySettings RPC.
 	RepositorySettingsServiceUpdateRepositorySettingsProcedure = "/golf.v1.RepositorySettingsService/UpdateRepositorySettings"
+	// RepositorySettingsServiceUpdateRepositoryTopicsProcedure is the fully-qualified name of the
+	// RepositorySettingsService's UpdateRepositoryTopics RPC.
+	RepositorySettingsServiceUpdateRepositoryTopicsProcedure = "/golf.v1.RepositorySettingsService/UpdateRepositoryTopics"
 	// RepositoryServiceListRepositoriesProcedure is the fully-qualified name of the RepositoryService's
 	// ListRepositories RPC.
 	RepositoryServiceListRepositoriesProcedure = "/golf.v1.RepositoryService/ListRepositories"
@@ -996,6 +999,7 @@ func (UnimplementedGitAccessServiceHandler) DeleteSSHKey(context.Context, *conne
 type RepositorySettingsServiceClient interface {
 	GetRepositorySettings(context.Context, *connect.Request[v1.GetRepositorySettingsRequest]) (*connect.Response[v1.GetRepositorySettingsResponse], error)
 	UpdateRepositorySettings(context.Context, *connect.Request[v1.UpdateRepositorySettingsRequest]) (*connect.Response[v1.UpdateRepositorySettingsResponse], error)
+	UpdateRepositoryTopics(context.Context, *connect.Request[v1.UpdateRepositoryTopicsRequest]) (*connect.Response[v1.UpdateRepositoryTopicsResponse], error)
 }
 
 // NewRepositorySettingsServiceClient constructs a client for the golf.v1.RepositorySettingsService
@@ -1021,6 +1025,12 @@ func NewRepositorySettingsServiceClient(httpClient connect.HTTPClient, baseURL s
 			connect.WithSchema(repositorySettingsServiceMethods.ByName("UpdateRepositorySettings")),
 			connect.WithClientOptions(opts...),
 		),
+		updateRepositoryTopics: connect.NewClient[v1.UpdateRepositoryTopicsRequest, v1.UpdateRepositoryTopicsResponse](
+			httpClient,
+			baseURL+RepositorySettingsServiceUpdateRepositoryTopicsProcedure,
+			connect.WithSchema(repositorySettingsServiceMethods.ByName("UpdateRepositoryTopics")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -1028,6 +1038,7 @@ func NewRepositorySettingsServiceClient(httpClient connect.HTTPClient, baseURL s
 type repositorySettingsServiceClient struct {
 	getRepositorySettings    *connect.Client[v1.GetRepositorySettingsRequest, v1.GetRepositorySettingsResponse]
 	updateRepositorySettings *connect.Client[v1.UpdateRepositorySettingsRequest, v1.UpdateRepositorySettingsResponse]
+	updateRepositoryTopics   *connect.Client[v1.UpdateRepositoryTopicsRequest, v1.UpdateRepositoryTopicsResponse]
 }
 
 // GetRepositorySettings calls golf.v1.RepositorySettingsService.GetRepositorySettings.
@@ -1040,11 +1051,17 @@ func (c *repositorySettingsServiceClient) UpdateRepositorySettings(ctx context.C
 	return c.updateRepositorySettings.CallUnary(ctx, req)
 }
 
+// UpdateRepositoryTopics calls golf.v1.RepositorySettingsService.UpdateRepositoryTopics.
+func (c *repositorySettingsServiceClient) UpdateRepositoryTopics(ctx context.Context, req *connect.Request[v1.UpdateRepositoryTopicsRequest]) (*connect.Response[v1.UpdateRepositoryTopicsResponse], error) {
+	return c.updateRepositoryTopics.CallUnary(ctx, req)
+}
+
 // RepositorySettingsServiceHandler is an implementation of the golf.v1.RepositorySettingsService
 // service.
 type RepositorySettingsServiceHandler interface {
 	GetRepositorySettings(context.Context, *connect.Request[v1.GetRepositorySettingsRequest]) (*connect.Response[v1.GetRepositorySettingsResponse], error)
 	UpdateRepositorySettings(context.Context, *connect.Request[v1.UpdateRepositorySettingsRequest]) (*connect.Response[v1.UpdateRepositorySettingsResponse], error)
+	UpdateRepositoryTopics(context.Context, *connect.Request[v1.UpdateRepositoryTopicsRequest]) (*connect.Response[v1.UpdateRepositoryTopicsResponse], error)
 }
 
 // NewRepositorySettingsServiceHandler builds an HTTP handler from the service implementation. It
@@ -1066,12 +1083,20 @@ func NewRepositorySettingsServiceHandler(svc RepositorySettingsServiceHandler, o
 		connect.WithSchema(repositorySettingsServiceMethods.ByName("UpdateRepositorySettings")),
 		connect.WithHandlerOptions(opts...),
 	)
+	repositorySettingsServiceUpdateRepositoryTopicsHandler := connect.NewUnaryHandler(
+		RepositorySettingsServiceUpdateRepositoryTopicsProcedure,
+		svc.UpdateRepositoryTopics,
+		connect.WithSchema(repositorySettingsServiceMethods.ByName("UpdateRepositoryTopics")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/golf.v1.RepositorySettingsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case RepositorySettingsServiceGetRepositorySettingsProcedure:
 			repositorySettingsServiceGetRepositorySettingsHandler.ServeHTTP(w, r)
 		case RepositorySettingsServiceUpdateRepositorySettingsProcedure:
 			repositorySettingsServiceUpdateRepositorySettingsHandler.ServeHTTP(w, r)
+		case RepositorySettingsServiceUpdateRepositoryTopicsProcedure:
+			repositorySettingsServiceUpdateRepositoryTopicsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1087,6 +1112,10 @@ func (UnimplementedRepositorySettingsServiceHandler) GetRepositorySettings(conte
 
 func (UnimplementedRepositorySettingsServiceHandler) UpdateRepositorySettings(context.Context, *connect.Request[v1.UpdateRepositorySettingsRequest]) (*connect.Response[v1.UpdateRepositorySettingsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositorySettingsService.UpdateRepositorySettings is not implemented"))
+}
+
+func (UnimplementedRepositorySettingsServiceHandler) UpdateRepositoryTopics(context.Context, *connect.Request[v1.UpdateRepositoryTopicsRequest]) (*connect.Response[v1.UpdateRepositoryTopicsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositorySettingsService.UpdateRepositoryTopics is not implemented"))
 }
 
 // RepositoryServiceClient is a client for the golf.v1.RepositoryService service.

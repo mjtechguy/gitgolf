@@ -69,7 +69,7 @@ func TestRepositoryUnitProjection(t *testing.T) {
 	// Settings have a stricter existing projection. Embedded Repository's new
 	// optional fields must not shadow that native projection or invent can_edit.
 	var settings forgeRepositorySettings
-	if err := json.Unmarshal([]byte(`{"id":11,"name":"private","full_name":"alice/private","owner":{"id":42,"login":"alice"},"default_branch":"main","permissions":{"admin":false},"has_issues":false,"has_pull_requests":true,"has_wiki":false,"archived":false,"mirror":false}`), &settings); err != nil {
+	if err := json.Unmarshal([]byte(`{"id":11,"name":"private","full_name":"alice/private","owner":{"id":42,"login":"alice"},"default_branch":"main","topics":[],"permissions":{"admin":false},"has_issues":false,"has_pull_requests":true,"has_wiki":false,"archived":false,"mirror":false}`), &settings); err != nil {
 		t.Fatal(err)
 	}
 	projection, err := wireRepositorySettings(settings, repositoryKey{"alice", "private"})

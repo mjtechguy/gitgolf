@@ -94,7 +94,21 @@ message DeleteSSHKeyResponse {}
 service RepositorySettingsService {
   rpc GetRepositorySettings(GetRepositorySettingsRequest) returns (GetRepositorySettingsResponse);
   rpc UpdateRepositorySettings(UpdateRepositorySettingsRequest) returns (UpdateRepositorySettingsResponse);
+  rpc UpdateRepositoryTopics(UpdateRepositoryTopicsRequest) returns (UpdateRepositoryTopicsResponse);
 }
+enum RepositoryFeatureMode {
+  REPOSITORY_FEATURE_MODE_UNSPECIFIED = 0;
+  REPOSITORY_FEATURE_MODE_DISABLED = 1;
+  REPOSITORY_FEATURE_MODE_INTERNAL = 2;
+  REPOSITORY_FEATURE_MODE_EXTERNAL = 3;
+}
+message RepositoryExternalTracker {
+  string url = 1;
+  string format = 2;
+  string style = 3;
+  string regexp_pattern = 4;
+}
+message RepositoryExternalWiki { string url = 1; }
 message RepositorySettings {
   string repository_id = 1;
   string owner_id = 2;
@@ -106,8 +120,22 @@ message RepositorySettings {
   bool can_edit = 8;
   // Observation fingerprint; native PATCH does not supply atomic CAS.
   string revision = 9;
+  string website = 10;
+  repeated string topics = 11;
+  RepositoryFeatureMode issues_mode = 12;
+  RepositoryFeatureMode wiki_mode = 13;
+  RepositoryExternalTracker external_tracker = 14;
+  RepositoryExternalWiki external_wiki = 15;
+  bool archived = 16;
+  bool mirror = 17;
+  // Supported editor capability, independent of current permission/configuration.
+  bool general_edit_implemented = 18;
 }
-message GetRepositorySettingsRequest { RepositoryKey repository = 1; }
+message GetRepositorySettingsRequest {
+  RepositoryKey repository = 1;
+  // Optional initial-read compatibility; provided IDs bind all later refreshes.
+  string repository_id = 2;
+}
 message GetRepositorySettingsResponse { RepositorySettings settings = 1; }
 message UpdateRepositorySettingsRequest {
   RepositoryKey repository = 1;
@@ -119,8 +147,22 @@ message UpdateRepositorySettingsRequest {
   optional bool has_issues = 7;
   optional bool has_wiki = 8;
   optional bool has_pull_requests = 9;
+  optional string website = 10;
+  optional RepositoryFeatureMode issues_mode = 11;
+  optional RepositoryFeatureMode wiki_mode = 12;
+  RepositoryExternalTracker external_tracker = 13;
+  RepositoryExternalWiki external_wiki = 14;
 }
 message UpdateRepositorySettingsResponse { RepositorySettings settings = 1; }
+message UpdateRepositoryTopicsRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string expected_revision = 4;
+  // Full explicit replacement, including empty to clear. Separate native write.
+  repeated string topics = 5;
+}
+message UpdateRepositoryTopicsResponse { RepositorySettings settings = 1; }
 
 service RepositoryService {
   rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse);
