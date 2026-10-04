@@ -187,7 +187,7 @@ func sessionIDs(client *http.Client) []string {
 	return ids
 }
 
-var names = []string{"golf_repo_list", "golf_repo_view", "golf_repo_creation", "golf_repo_branches", "golf_repo_commits", "golf_repo_contents", "golf_commit_diff", "golf_issue_list", "golf_issue_view", "golf_issue_comments", "golf_issue_operation", "golf_pr_list", "golf_pr_view", "golf_pr_diff", "golf_pr_reviews", "golf_pr_review_comments", "golf_org_list", "golf_org_view", "golf_org_teams", "golf_team_view", "golf_team_members", "golf_team_repos", "golf_audit_list"}
+var names = []string{"golf_repo_list", "golf_repo_view", "golf_repo_overview", "golf_repo_creation", "golf_repo_branches", "golf_repo_commits", "golf_repo_contents", "golf_commit_diff", "golf_issue_list", "golf_issue_view", "golf_issue_comments", "golf_issue_operation", "golf_pr_list", "golf_pr_view", "golf_pr_diff", "golf_pr_reviews", "golf_pr_review_comments", "golf_org_list", "golf_org_view", "golf_org_teams", "golf_team_view", "golf_team_members", "golf_team_repos", "golf_audit_list"}
 
 func catalogue(ctx context.Context, session *mcp.ClientSession) {
 	result, err := session.ListTools(ctx, &mcp.ListToolsParams{})
@@ -226,6 +226,14 @@ func exercise(ctx context.Context, session *mcp.ClientSession) {
 	secondPage := call(ctx, session, "golf_repo_list", object{"limit": 1, "page": 2})
 	check(len(rows(secondPage["repositories"])) == 1 && first(firstPage, "repositories")["id"] != first(secondPage, "repositories")["id"])
 	check(obj(call(ctx, session, "golf_repo_view", object{"repository": repo})["repository"])["id"] == cfg.RepositoryID)
+	overview := call(ctx, session, "golf_repo_overview", object{"repository": repo})
+	check(overview["repositoryId"] == cfg.RepositoryID)
+	key := strings.Split(repo, "/")
+	check(obj(overview["repository"])["owner"] == key[0] && obj(overview["repository"])["name"] == key[1])
+	for _, field := range []string{"languagesState", "licensesState"} {
+		state := overview[field]
+		check(state == "REPOSITORY_OVERVIEW_SECTION_STATE_AVAILABLE" || state == "REPOSITORY_OVERVIEW_SECTION_STATE_UNAVAILABLE" || state == "REPOSITORY_OVERVIEW_SECTION_STATE_ERROR")
+	}
 	recorded := call(ctx, session, "golf_repo_creation", object{"idempotency_key": cfg.CreationKey})
 	check(obj(recorded["creation"])["state"] == "REPOSITORY_CREATION_STATE_SUCCEEDED" && obj(recorded["repository"])["id"] == cfg.CreationRepositoryID)
 	branches := call(ctx, session, "golf_repo_branches", object{"repository": repo, "limit": 1})
@@ -421,7 +429,7 @@ func nativeCLI(ctx context.Context, token string, api, stdin, failure bool, reso
 }
 
 func bearerQualification(ctx context.Context, control *http.Client, baseline []string) (*mcp.ClientSession, func()) {
-	phase("owner-issued API credential: all 23 tools in both protocol revisions and CLI stdin/environment")
+	phase("owner-issued API credential: all 24 tools in both protocol revisions and CLI stdin/environment")
 	token, id := issueAPI(control)
 	before := rpc(control, "AuditService/ListAuditEvents", object{"limit": 1})["snapshotId"]
 	for _, version := range []string{"2026-07-28", "2025-11-25"} {
@@ -466,7 +474,7 @@ func bearerQualification(ctx context.Context, control *http.Client, baseline []s
 		denied(ctx, session, "golf_repo_view", object{"repository": cfg.Repository}, "unauthenticated")
 	}()
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
-	fmt.Println("PASS: API bearer all 23 tools under both revisions, CLI stdin/environment, unchanged session/audit snapshots, cancellation/SIGTERM, direct revocation and source logout")
+	fmt.Println("PASS: API bearer all 24 tools under both revisions, CLI stdin/environment, unchanged session/audit snapshots, cancellation/SIGTERM, direct revocation and source logout")
 	// Keep one live bearer process for the later real provider membership removal.
 	activeToken, _ := issueAPI(control)
 	session, closeSession, _ := connect(ctx, cfg.Golf, activeToken, "2026-07-28", true)
@@ -497,13 +505,13 @@ func run() (err error) {
 	nativeCLI(ctx, cfg.ReaderToken, false, true, false, "issue", "comments", cfg.Repository, strconv.Itoa(cfg.Issue), "--page", "2", "--limit", "1")
 	nativeCLI(ctx, cfg.ReaderToken, false, false, false, "issue", "operation", cfg.CommentMutationKey)
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
-	phase("modern discovery and all 23 native tools")
+	phase("modern discovery and all 24 native tools")
 	modern, closeModern, _ := connect(ctx, cfg.Golf, cfg.ReaderToken, "2026-07-28", false)
 	defer closeModern()
 	catalogue(ctx, modern)
 	exercise(ctx, modern)
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
-	fmt.Println("PASS: 2026-07-28 discovery, exact 23-tool catalogue, honest annotations, structured/text parity, private native reads, pagination and temporary-session cleanup")
+	fmt.Println("PASS: 2026-07-28 discovery, exact 24-tool catalogue, honest annotations, structured/text parity, private native reads, pagination and temporary-session cleanup")
 	phase("legacy initialization and native reads")
 	func() {
 		legacy, closeLegacy, _ := connect(ctx, cfg.Golf, cfg.ReaderToken, "2025-11-25", false)
@@ -512,7 +520,7 @@ func run() (err error) {
 		exercise(ctx, legacy)
 	}()
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
-	fmt.Println("PASS: explicit 2025-11-25 initialization and all 23 native tools with JSON parity, pagination and session cleanup")
+	fmt.Println("PASS: explicit 2025-11-25 initialization and all 24 native tools with JSON parity, pagination and session cleanup")
 	phase("strict invalid input before authentication")
 	before := rpc(control, "AuditService/ListAuditEvents", object{"limit": 1})["snapshotId"]
 	for _, input := range []object{{"repository": cfg.Repository, "token": "DO-NOT-ECHO"}, {"repository": cfg.Repository, "origin": "http://DO-NOT-ECHO.invalid"}, {"repository": cfg.Repository, "command": "DO-NOT-ECHO"}, {"repository": "../private"}} {
@@ -541,6 +549,7 @@ func run() (err error) {
 		narrow, closeNarrow, _ := connect(ctx, cfg.Golf, cfg.NarrowToken, "2026-07-28", false)
 		defer closeNarrow()
 		denied(ctx, narrow, "golf_repo_view", object{"repository": cfg.Repository}, "permission_denied")
+		denied(ctx, narrow, "golf_repo_overview", object{"repository": cfg.Repository}, "permission_denied")
 		denied(ctx, narrow, "golf_issue_comments", object{"repository": cfg.Repository, "number": cfg.Issue}, "permission_denied")
 		denied(ctx, narrow, "golf_org_list", object{}, "permission_denied")
 		recorded := call(ctx, narrow, "golf_repo_creation", object{"idempotency_key": cfg.CreationKey})
@@ -550,6 +559,7 @@ func run() (err error) {
 		other, closeOther, _ := connect(ctx, cfg.Golf, cfg.OutsiderToken, "2026-07-28", false)
 		defer closeOther()
 		denied(ctx, other, "golf_repo_view", object{"repository": cfg.Repository}, "not_found")
+		denied(ctx, other, "golf_repo_overview", object{"repository": cfg.Repository}, "not_found")
 		denied(ctx, other, "golf_org_view", object{"organization": cfg.Organization}, "not_found")
 		denied(ctx, other, "golf_repo_creation", object{"idempotency_key": cfg.CreationKey}, "not_found")
 		denied(ctx, other, "golf_issue_operation", object{"idempotency_key": cfg.CommentMutationKey}, "not_found")
@@ -573,10 +583,12 @@ func run() (err error) {
 	native := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	httpJSON(native, "DELETE", cfg.Gitea+"/api/v1/repos/"+cfg.Repository+"/collaborators/"+cfg.Reader, nil, map[string]string{"Authorization": "token " + cfg.OwnerToken}, 204)
 	denied(ctx, modern, "golf_repo_view", object{"repository": cfg.Repository}, "not_found")
+	denied(ctx, modern, "golf_repo_overview", object{"repository": cfg.Repository}, "not_found")
 	denied(ctx, modern, "golf_repo_contents", object{"repository": cfg.Repository, "ref": cfg.Revision, "path": cfg.FilePath}, "not_found")
 	denied(ctx, modern, "golf_issue_comments", object{"repository": cfg.Repository, "number": cfg.Issue}, "not_found")
 	if bearer != nil {
 		denied(ctx, bearer, "golf_repo_view", object{"repository": cfg.Repository}, "not_found")
+		denied(ctx, bearer, "golf_repo_overview", object{"repository": cfg.Repository}, "not_found")
 		denied(ctx, bearer, "golf_repo_contents", object{"repository": cfg.Repository, "ref": cfg.Revision, "path": cfg.FilePath}, "not_found")
 		denied(ctx, bearer, "golf_issue_comments", object{"repository": cfg.Repository, "number": cfg.Issue}, "not_found")
 	}

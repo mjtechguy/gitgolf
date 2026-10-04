@@ -30,6 +30,7 @@ type mcpRead struct {
 var mcpReads = []mcpRead{
 	{"golf_repo_list", "List authorized repositories. Explicit pagination; no automatic traversal.", "repo list", nil, []string{"page", "limit"}},
 	{"golf_repo_view", "Read current repository metadata and native permissions.", "repo view", []string{"repository"}, nil},
+	{"golf_repo_overview", "Read exact-ID authorized repository overview, topics, optional counts and indexed language/license states. Independent current metadata, not selected-commit statistics. No website fetch, contributors or mutation.", "repo overview", []string{"repository"}, nil},
 	{"golf_repo_creation", "Inspect your recorded creation intent. Unknown/rejected is not creation success. Never redispatches.", "repo creation", []string{"idempotency_key"}, nil},
 	{"golf_repo_branches", "List branches; select an exact commit for stable later reads.", "repo branches", []string{"repository"}, []string{"page", "limit"}},
 	{"golf_repo_commits", "List native commit history; optional path requires a full immutable ref and returns exact path history pages.", "repo commits", []string{"repository"}, []string{"ref", "path", "page", "limit"}},

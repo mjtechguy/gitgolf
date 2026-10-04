@@ -147,6 +147,7 @@ make cli
 # Supply GOLF_GITEA_TOKEN through your shell's secret manager, not a literal in history.
 ./bin/golf repo list
 ./bin/golf repo view owner/repository
+./bin/golf repo overview owner/repository
 ./bin/golf repo creation 12345678-1234-4234-8234-123456789abc
 ./bin/golf repo branches owner/repository
 ./bin/golf repo commits owner/repository --ref feature/example
@@ -168,6 +169,8 @@ make cli
 ```
 
 Alternatively pipe one token from your secret manager to `./bin/golf --token-stdin repo list`. For owner-issued read-only Golf credentials, set `GOLF_API_TOKEN` or use `--api-token-stdin`. API and Gitea token sources cannot be mixed. Secrets are never accepted as command-line arguments. Set `GOLF_URL` or global `--url` for another installation; remote origins require HTTPS. The CLI does not follow redirects or save credentials/cookies. Gitea PAT mode creates and deletes a temporary Golf session per command, including after an operation fails. Golf API credential mode delegates the issuing browser session without login/logout or a cookie jar; ending that session invalidates the credential. See the [API credential contract](docs/API_CREDENTIAL_CONTRACT.md). Abrupt termination can leave that session until its normal server expiry.
+
+`repo overview` returns current authorized About metadata, topics, website, optional counts, and explicitly available/unavailable/error language and license indexes. It validates the native repository ID and canonical key; indexes are not bound to a selected commit and website links are never fetched.
 
 `repo contents` resolves current repository identity and a typed source selection before reading the exact commit/path. Omitted `--ref` selects the default branch; a bare full lowercase SHA selects a commit; other bare names select branches only. Use `--ref-kind tag` for tags or `--ref-kind branch` for a SHA-looking branch name. There is no namespace fallback. Successful source output includes the validated `repositoryId`, `commitId` and literal `path`. See the [source URL design](docs/READABLE_SOURCE_URL_DESIGN.md) and [qualification ledger](docs/IMPLEMENTATION_STATUS.md) for implementation/runtime scope.
 

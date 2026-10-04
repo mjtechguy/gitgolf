@@ -33,6 +33,7 @@ Usage: golf [--url ORIGIN] [--token-stdin | --api-token-stdin] COMMAND
   mcp                         serve local MCP on stdin/stdout
   repo list [--page N] [--limit N]
   repo view OWNER/REPO
+  repo overview OWNER/REPO
   repo creation IDEMPOTENCY_KEY
   repo branches OWNER/REPO [--page N] [--limit N]
   repo commits OWNER/REPO [--ref REF] [--path PATH] [--page N] [--limit N]
@@ -269,7 +270,7 @@ func parseCommand(args []string) (command, error) {
 			result.teamID = rest[0]
 			rest = rest[1:]
 		}
-	case "repo view", "repo branches", "repo commits", "repo contents", "commit diff", "issue list", "issue view", "issue comments", "pr list", "pr view", "pr reviews", "pr review-comments", "pr diff":
+	case "repo view", "repo overview", "repo branches", "repo commits", "repo contents", "commit diff", "issue list", "issue view", "issue comments", "pr list", "pr view", "pr reviews", "pr review-comments", "pr diff":
 		if len(rest) == 0 {
 			return result, invalid
 		}
@@ -555,6 +556,24 @@ func (command command) read(ctx context.Context, client golfv1connect.Repository
 			return nil, err
 		}
 		return response.Msg, nil
+	case "repo overview":
+		metadata, err := client.GetRepository(ctx, connect.NewRequest(&golfv1.GetRepositoryRequest{Repository: command.repository}))
+		if err != nil {
+			return nil, err
+		}
+		repository := metadata.Msg.GetRepository()
+		canonical, err := repositoryReadKey(repository, command.repository)
+		if err != nil {
+			return nil, err
+		}
+		response, err := client.GetRepositoryOverview(ctx, connect.NewRequest(&golfv1.GetRepositoryOverviewRequest{Repository: canonical, RepositoryId: repository.GetId()}))
+		if err != nil {
+			return nil, err
+		}
+		if err := validateRepositoryOverview(response.Msg, canonical, repository.GetId()); err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
 	case "repo branches":
 		response, err := client.ListBranches(ctx, connect.NewRequest(&golfv1.ListBranchesRequest{Repository: command.repository, Page: command.page}))
 		if err != nil {
@@ -584,14 +603,10 @@ func (command command) read(ctx context.Context, client golfv1connect.Repository
 			return nil, err
 		}
 		repository := metadata.Msg.GetRepository()
-		if repository == nil || !canonicalNativeID(repository.GetId()) {
-			return nil, errors.New("repository identity unavailable")
+		canonical, err := repositoryReadKey(repository, command.repository)
+		if err != nil {
+			return nil, err
 		}
-		parts := strings.Split(repository.GetFullName(), "/")
-		if len(parts) != 2 || parts[0] == "" || parts[1] != repository.GetName() || !strings.EqualFold(repository.GetFullName(), command.repository.GetOwner()+"/"+command.repository.GetName()) {
-			return nil, errors.New("repository identity mismatch")
-		}
-		canonical := &golfv1.RepositoryKey{Owner: parts[0], Name: parts[1]}
 		kind := map[string]golfv1.RepositorySourceRefKind{
 			"default": golfv1.RepositorySourceRefKind_REPOSITORY_SOURCE_REF_KIND_DEFAULT_BRANCH,
 			"branch":  golfv1.RepositorySourceRefKind_REPOSITORY_SOURCE_REF_KIND_BRANCH,

@@ -33,12 +33,13 @@ The union for all tools is `read:user,read:repository,read:issue,read:organizati
 
 The adapter pins the [official Go SDK v1.8.0](https://github.com/modelcontextprotocol/go-sdk/releases/tag/v1.8.0) and restricts advertised versions to `2026-07-28` and `2025-11-25`. MCP `2026-07-28` uses `server/discover` and per-request protocol metadata; legacy `2025-11-25` uses `initialize`. These are distinct negotiation paths handled by the SDK, not a Golf-specific protocol. See the dated [versioning rules](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning) and [stdio binding](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio). The evidence section below distinguishes tested versions from SDK capability.
 
-`tools/list` publishes a fixed catalogue of 23 named tools. Tool arguments are JSON objects with `additionalProperties: false`. Required fields are listed below; omitted optional fields use the existing CLI/API defaults. Historical 19-tool qualification below retains its original scope.
+`tools/list` publishes a fixed catalogue of 24 named tools. Tool arguments are JSON objects with `additionalProperties: false`. Required fields are listed below; omitted optional fields use the existing CLI/API defaults. Historical 19-tool qualification below retains its original scope.
 
 | Tool | Required arguments | Optional arguments |
 | --- | --- | --- |
 | `golf_repo_list` | None | `page`, `limit` |
 | `golf_repo_view` | `repository` | None |
+| `golf_repo_overview` | `repository` | None |
 | `golf_repo_creation` | `idempotency_key` | None |
 | `golf_repo_branches` | `repository` | `page`, `limit` |
 | `golf_repo_commits` | `repository` | `ref`, `path`, `page`, `limit` |
@@ -60,6 +61,8 @@ The adapter pins the [official Go SDK v1.8.0](https://github.com/modelcontextpro
 | `golf_team_members` | `organization`, `team_id` | `page`, `limit` |
 | `golf_team_repos` | `organization`, `team_id` | `page`, `limit` |
 | `golf_audit_list` | None | `limit`, `before_id`, `snapshot_id` |
+
+`golf_repo_overview` resolves current native identity and validates the exact-ID metadata receipt before returning About/topics/website/counts/language bytes/license identifiers. Missing counts remain absent; zero remains zero. Indexed sections report availability explicitly and are not selected-commit facts. Display links are validated and never fetched. This adds no write authority or provider configuration. CLI source checks cover both credential modes; actual 24-tool qualification remains pending until recorded in the ledger.
 
 `repository` is `OWNER/REPO`. `page` defaults to 1 and accepts 1–10,000; `limit` defaults to 20 and accepts 1–100. `number` is a positive issue/PR number within the CLI's signed 32-bit bound. These three fields are JSON integers. `state` accepts `open`, `closed` or `all`, defaulting to `open`.
 

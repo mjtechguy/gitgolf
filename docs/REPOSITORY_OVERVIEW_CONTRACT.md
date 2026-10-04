@@ -8,7 +8,7 @@ The initial repository sidebar adapter reads authorized native metadata and inde
 
 The handler validates the target before provider work and uses `withRepositoryRead`: current native caller and live Golf session/delegation are checked, native repository identity/access are observed before reading, and native repository identity/access, caller identity and local session/delegation are rechecked after provider waits. The additional metadata observation must match the original native ID and canonical name. Wrong IDs, replacement, changed authority, ended sessions and cancellation yield no overview payload. This is an observed read boundary, not a lock on membership or repository state.
 
-The RPC has a 15-second deadline, the existing 2MiB maximum per native JSON response, the normal authenticated same-Origin RPC boundary and `Cache-Control: no-store`. It is explicitly allowlisted for read-only Golf bearer delegation. It adds no write grant, session lifecycle capability or dedicated CLI/MCP overview command. No new database table, worker, cache or migration is required.
+The RPC has a 15-second deadline, the existing 2MiB maximum per native JSON response, the normal authenticated same-Origin RPC boundary and `Cache-Control: no-store`. It is explicitly allowlisted for read-only Golf bearer delegation. It adds no write grant or session lifecycle capability. The initial sidebar checkpoint had no dedicated CLI/MCP overview command; the later `repo overview` / `golf_repo_overview` slice validates the same exact-ID contract without source selectors (see MCP contract and ledger). No new database table, worker, cache or migration is required.
 
 ## Metadata and counts
 
