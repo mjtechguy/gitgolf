@@ -254,6 +254,14 @@ def bootstrap_fresh_policy(compose, keys):
     assert all(row[key] == 0 for row in status['keys'] for key in recovery.KEY_FAMILIES)
 
 
+def validate_local_fixture_auth(config):
+    # Native ROOT_URL serves native URLs; GITEA_PUBLIC_URL enables OAuth setup.
+    # This drill enrolls ordinary native PAT-backed local password accounts only.
+    environment = config['services']['golf']['environment']
+    assert not any(environment.get(key) for key in
+                   ('GITEA_PUBLIC_URL','GITEA_OAUTH_CLIENT_ID','GITEA_OAUTH_CLIENT_SECRET'))
+
+
 
 def proxy_self_check():
     # In-process fake transport proves harness guards only, never native effects.
@@ -358,6 +366,10 @@ def self_check():
     config = {'services': {'golf': {'environment': {'GITEA_URL': 'http://gitea:3000'}},
               'gitea': {'environment': {'GITEA__actions__ENABLED': 'false', 'GITEA__mailer__ENABLED': 'false', **{'GITEA__cron.'+name+'__ENABLED':'false' for name in recovery.NATIVE_CRON_TASKS}}}, 'postgres': {}}}
     recovery.validate_access_config(config)
+    validate_local_fixture_auth(config)
+    for key in ('GITEA_PUBLIC_URL','GITEA_OAUTH_CLIENT_ID','GITEA_OAUTH_CLIENT_SECRET'):
+        changed = json.loads(json.dumps(config)); changed['services']['golf']['environment'][key] = 'fixture-unused'
+        reject(lambda: validate_local_fixture_auth(changed))
     for key, value in [('HTTP_PROXY', 'http://private.invalid'), ('GOLF_PUSH_CI_ENABLED', 'true')]:
         changed = json.loads(json.dumps(config)); changed['services']['golf']['environment'][key] = value
         reject(lambda: recovery.validate_access_config(changed))
@@ -475,7 +487,7 @@ def main():
                 'volumes':['gitea-data:/var/lib/gitea','gitea-config:/etc/gitea'], 'depends_on':{'postgres':{'condition':'service_healthy'}}},
             'golf': {'image':images['golf'], 'pull_policy':'never','restart':'no',
                 'environment':{'DATABASE_URL':f'postgres://golf:{passwords[1]}@postgres:5432/golf?sslmode=disable',
-                    'GITEA_URL':'http://gitea:3000','GITEA_PUBLIC_URL':smoke.GITEA,'GOLF_PUBLIC_URL':smoke.GOLF,
+                    'GITEA_URL':'http://gitea:3000','GOLF_PUBLIC_URL':smoke.GOLF,
                     'GOLF_LISTEN_ADDR':':8080','GOLF_ALLOW_INSECURE_COOKIES':'true','GOLF_WEB_DIR':'/app/web/dist',
                     'GOLF_ENCRYPTION_KEYS':json.dumps({'a':key_a,'b':key_b}), 'GOLF_ACTIVE_ENCRYPTION_KEY':'a',
                     'GOLF_RUNNER_KEYS':json.dumps({'recovery-unstarted':runner_key}),
@@ -484,6 +496,7 @@ def main():
                     'GOLF_PUSH_CI_ENABLED':'false'},'ports':[f'127.0.0.1:{ports[0]}:8080'],
                 'depends_on':{'postgres':{'condition':'service_healthy'},'gitea':{'condition':'service_started'}}},
             }, 'volumes':{name:{} for name in ('postgres-data','gitea-data','gitea-config')}}
+        validate_local_fixture_auth(config)
         canonical = directory/'source.json'; private(canonical, recovery.compose_bytes(config)); active_config = canonical
         def compose(*argv, **kw): return run('docker','compose','-p',active_project,'-f',str(active_config),*argv,**kw)
         def container(service):
@@ -583,6 +596,9 @@ def main():
             bootstrap_fresh_policy(compose,keys); record(freshKeyPolicyBootstrapped=True)
             stage('fresh canonical core and ordinary supported native identities')
             compose('up','-d','--no-build','--pull','never',timeout=180); smoke.ready()
+            authentication = smoke.rpc(smoke.client(),'SessionService/GetAuthenticationOptions')
+            assert authentication.get('localPasswordEnabled') is True and not authentication.get('giteaOauthEnabled',False)
+            record(localPasswordAuthentication=True,oauthConfigured=False)
             assert sql('SELECT max(version_id) FROM goose_db_version WHERE is_applied;')==recovery.ACCESS_SCHEMA
             admin=['exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user']
             compose(*admin,'create','--username',prefix+'-bootstrap','--email',prefix+'-bootstrap@example.invalid','--random-password','--must-change-password=false','--admin')
