@@ -41,16 +41,20 @@ var errOutputBound = errors.New("normalized output exceeds its bound")
 type coordinator struct {
 	origin, id, key string
 	client          *http.Client
+	actions         *runner.ActionsExecutor
 }
 type assignment struct {
-	RunID        string `json:"runId"`
-	AttemptID    string `json:"attemptId"`
-	AttemptToken string `json:"attemptToken"`
-	JobID        string `json:"jobId"`
-	ImageDigest  string `json:"imageDigest"`
-	CommitID     string `json:"commitId"`
-	SourceSHA256 string `json:"sourceSha256"`
-	Steps        []struct {
+	RunID         string             `json:"runId"`
+	AttemptID     string             `json:"attemptId"`
+	AttemptToken  string             `json:"attemptToken"`
+	JobID         string             `json:"jobId"`
+	ImageDigest   string             `json:"imageDigest"`
+	CommitID      string             `json:"commitId"`
+	SourceSHA256  string             `json:"sourceSha256"`
+	EngineCatalog string             `json:"engineCatalog"`
+	ActionsPlan   *runner.ActionPlan `json:"actionsPlan"`
+	EventJSON     []byte             `json:"eventJson"`
+	Steps         []struct {
 		Name  string
 		Run   string
 		Shell string
@@ -59,11 +63,12 @@ type assignment struct {
 	LeaseSeconds   int `json:"leaseSeconds"`
 }
 type finish struct {
-	ExitCode            int  `json:"exitCode"`
-	TimedOut            bool `json:"timedOut"`
-	Cancelled           bool `json:"cancelled"`
-	InfrastructureError bool `json:"infrastructureError"`
-	LogsTruncated       bool `json:"logsTruncated"`
+	ExitCode            int    `json:"exitCode"`
+	EngineConclusion    string `json:"engineConclusion,omitempty"`
+	TimedOut            bool   `json:"timedOut"`
+	Cancelled           bool   `json:"cancelled"`
+	InfrastructureError bool   `json:"infrastructureError"`
+	LogsTruncated       bool   `json:"logsTruncated"`
 }
 
 func tokenOK(s string) bool {
@@ -121,7 +126,7 @@ func (c *coordinator) post(ctx context.Context, a assignment, action string, bod
 	return nil
 }
 func (c *coordinator) poll(ctx context.Context) (*assignment, error) {
-	response, err := c.request(ctx, http.MethodPost, "/internal/ci/poll", "", struct{}{})
+	response, err := c.request(ctx, http.MethodPost, "/internal/ci/poll", "", c.pollCapabilities())
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +147,7 @@ func (c *coordinator) poll(ctx context.Context) (*assignment, error) {
 	var a assignment
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&a) != nil || decoder.Decode(new(any)) != io.EOF || !safeID.MatchString(a.RunID) || !attemptID.MatchString(a.AttemptID) || !tokenOK(a.AttemptToken) || !commitID.MatchString(a.CommitID) || !hashID.MatchString(a.SourceSHA256) || a.TimeoutSeconds < 1 || a.TimeoutSeconds > 900 || a.LeaseSeconds < 30 || a.LeaseSeconds > 300 || len(a.Steps) < 1 || len(a.Steps) > 50 {
+	if decoder.Decode(&a) != nil || decoder.Decode(new(any)) != io.EOF || !safeID.MatchString(a.RunID) || !attemptID.MatchString(a.AttemptID) || !tokenOK(a.AttemptToken) || !commitID.MatchString(a.CommitID) || !hashID.MatchString(a.SourceSHA256) || a.TimeoutSeconds < 1 || a.TimeoutSeconds > 900 || a.LeaseSeconds < 30 || a.LeaseSeconds > 300 || !c.validAssignment(a) {
 		return nil, errTransport
 	}
 	return &a, nil
@@ -173,11 +178,12 @@ func (c *coordinator) source(ctx context.Context, a assignment, directory string
 // Each stream retains only its incomplete UTF-8 suffix. Invalid bytes become
 // replacement characters; chunks sent to the API end at rune boundaries.
 type logForwarder struct {
-	c        *coordinator
-	a        assignment
-	sequence int
-	total    int
-	pending  map[string][]byte
+	c                     *coordinator
+	a                     assignment
+	sequence              int
+	total                 int
+	pending               map[string][]byte
+	jobInstanceID, stepID string
 }
 
 func (l *logForwarder) send(ctx context.Context, text string) error {
@@ -189,9 +195,11 @@ func (l *logForwarder) send(ctx context.Context, text string) error {
 	}
 	next := l.sequence + 1
 	if err := l.c.post(ctx, l.a, "logs", struct {
-		Sequence int    `json:"sequence"`
-		Text     string `json:"text"`
-	}{next, text}); err != nil {
+		Sequence      int    `json:"sequence"`
+		Text          string `json:"text"`
+		JobInstanceID string `json:"jobInstanceId,omitempty"`
+		StepID        string `json:"stepId,omitempty"`
+	}{next, text, l.jobInstanceID, l.stepID}); err != nil {
 		return err
 	}
 	l.sequence = next
@@ -263,7 +271,17 @@ func (c *coordinator) execute(parent context.Context, e *runner.Executor, a assi
 	}
 	forward := logForwarder{c: c, a: a}
 	var outputBound atomic.Bool
-	if err == nil {
+	if err == nil && a.ActionsPlan != nil {
+		var execution runner.Result
+		execution, err = c.executeActions(ctx, a, source, &forward)
+		result = finish{ExitCode: 0, TimedOut: execution.TimedOut, Cancelled: execution.Cancelled, InfrastructureError: err != nil}
+		if err == nil {
+			result.EngineConclusion = "success"
+			if execution.ExitCode != 0 {
+				result.EngineConclusion = "failure"
+			}
+		}
+	} else if err == nil {
 		job := runner.Job{AttemptID: a.AttemptID, JobID: a.JobID, SourceCommit: a.CommitID, ImageDigest: a.ImageDigest, Timeout: time.Duration(a.TimeoutSeconds) * time.Second, SourceArchivePath: source}
 		for _, step := range a.Steps {
 			job.Steps = append(job.Steps, runner.Step{Script: step.Run, Shell: step.Shell})
@@ -351,6 +369,12 @@ func run(ctx context.Context) error {
 	transport.Proxy = nil
 	defer transport.CloseIdleConnections()
 	c := &coordinator{origin: origin, id: id, key: key, client: &http.Client{Transport: transport, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	if binary := os.Getenv("GOLF_RUNNER_ACTIONS_ENGINE_BINARY"); binary != "" {
+		c.actions, err = runner.NewActions(executor, binary)
+		if err != nil {
+			return err
+		}
+	}
 	if len(os.Args) > 1 {
 		if len(os.Args) != 2 || os.Args[1] != "recover" {
 			return errTransport
@@ -368,6 +392,11 @@ func run(ctx context.Context) error {
 		}
 		report(assignment{}, "recovered")
 		return nil
+	}
+	if c.actions != nil {
+		if err = executor.RequireCleanWorker(ctx); err != nil {
+			return err
+		}
 	}
 	for ctx.Err() == nil {
 		a, err := c.poll(ctx)
@@ -396,4 +425,46 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Golf runner could not start or its enrollment was denied; check operator configuration.")
 		os.Exit(1)
 	}
+}
+
+func (c *coordinator) pollCapabilities() any {
+	if c.actions == nil {
+		return struct{}{}
+	}
+	return struct {
+		Catalogs []string `json:"catalogs"`
+	}{[]string{runner.ActionsCatalog}}
+}
+func (c *coordinator) validAssignment(a assignment) bool {
+	if a.EngineCatalog == "" {
+		return a.ActionsPlan == nil && len(a.Steps) >= 1 && len(a.Steps) <= 50
+	}
+	return c.actions != nil && a.EngineCatalog == runner.ActionsCatalog && a.ActionsPlan != nil && len(a.Steps) == 0 && a.ActionsPlan.Catalog == runner.ActionsCatalog && a.ActionsPlan.ArchiveSHA256 == a.SourceSHA256 && len(a.ActionsPlan.Jobs) >= 1 && len(a.ActionsPlan.Jobs) <= 12 && len(a.EventJSON) > 0 && len(a.EventJSON) <= 16<<10
+}
+func (c *coordinator) executeActions(ctx context.Context, a assignment, source string, forward *logForwarder) (runner.Result, error) {
+	archive, err := os.ReadFile(source)
+	if err != nil || len(archive) > sourceLimit {
+		return runner.Result{}, errTransport
+	}
+	images := map[string]string{}
+	// Each frozen job image receives an internal label. The helper must derive
+	// the same admitted graph from the original YAML, so original runs-on labels
+	// are supplied from the independent operator map, never fabricated here.
+	if json.Unmarshal([]byte(os.Getenv("GOLF_RUNNER_ACTIONS_PLATFORMS")), &images) != nil || len(images) == 0 {
+		return runner.Result{}, errTransport
+	}
+	input := runner.ActionExecutionInput{Input: runner.ActionPlanInput{Catalog: runner.ActionsCatalog, WorkflowPath: a.ActionsPlan.WorkflowPath, WorkflowBlobID: a.ActionsPlan.WorkflowBlobID, Archive: archive, Event: a.ActionsPlan.Event, Ref: a.ActionsPlan.Ref, Images: images}, Plan: *a.ActionsPlan, EventJSON: a.EventJSON, CommitID: a.CommitID, TimeoutSeconds: a.TimeoutSeconds}
+	return c.actions.Execute(ctx, a.AttemptID, input, func(ctx context.Context, frame runner.ActionFrame) error {
+		if frame.Kind == "log" {
+			forward.jobInstanceID, forward.stepID = frame.InstanceID, frame.StepID
+			return forward.write(ctx, runner.LogChunk{Stream: "stdout", Data: []byte(frame.Text)}, true)
+		}
+		return c.post(ctx, a, "graph", struct {
+			Sequence      int    `json:"sequence"`
+			JobInstanceID string `json:"jobInstanceId"`
+			StepID        string `json:"stepId"`
+			Kind          string `json:"kind"`
+			State         string `json:"state"`
+		}{frame.EventSequence, frame.InstanceID, frame.StepID, frame.Kind, frame.State})
+	})
 }

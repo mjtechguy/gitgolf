@@ -9,6 +9,7 @@ import (
 	"time"
 
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
+	"github.com/mjtechguy/golf-git/internal/runner"
 )
 
 type workflowProgressEvent struct {
@@ -104,6 +105,16 @@ func (s *Server) workflowRunDetail(ctx context.Context, id string) (workflowRunR
 	run, err := scanWorkflowRun(tx.QueryRowContext(ctx, "SELECT "+workflowRunColumns+" FROM golf_workflow_runs WHERE id=$1 AND forge_url=$2", id, s.config.GiteaURL))
 	if err != nil {
 		return run, nil, errStorageUnavailable
+	}
+	if run.EngineCatalog == runner.ActionsCatalog {
+		run.ActionJobs, err = actionGraphDetail(ctx, tx, run)
+		if err != nil {
+			return run, nil, err
+		}
+		if err = tx.Commit(); err != nil {
+			return run, nil, errStorageUnavailable
+		}
+		return run, nil, nil
 	}
 	plan, err := workflowStoredPlan(ctx, tx, id)
 	if err != nil {

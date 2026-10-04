@@ -35,6 +35,7 @@ type Config struct {
 	AllowInsecureCookies                                       bool
 	WebDir                                                     string
 	RunnerKeysJSON, RunnerImagesJSON                           string
+	ActionsEngineCatalog, ActionsEngineBinary                  string
 	RepositoryEventConnectionsJSON                             string
 	Telemetry                                                  *telemetry.Runtime
 }
@@ -111,6 +112,9 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	if err := s.configureRunners(); err != nil {
 		return nil, err
 	}
+	if err := s.validateActionsEngineConfig(); err != nil {
+		return nil, err
+	}
 	if config.PushCIEnabled && (len(s.repositoryEventConnections) == 0 || len(s.runnerImages) == 0 || len(s.runnerKeys) == 0) {
 		return nil, errors.New("push CI requires repository event connections and enrolled runner images")
 	}
@@ -126,6 +130,7 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	r.Post("/internal/ci/attempt/{id}/heartbeat", s.runnerAttempt)
 	r.Post("/internal/ci/attempt/{id}/logs", s.runnerAttempt)
 	r.Post("/internal/ci/attempt/{id}/progress", s.runnerAttempt)
+	r.Post("/internal/ci/attempt/{id}/graph", s.runnerAttempt)
 	r.Post("/internal/ci/attempt/{id}/finish", s.runnerAttempt)
 	r.Get("/internal/ci/attempt/{id}/source", s.runnerAttempt)
 	rpc := s.rpcBoundary(http.StripPrefix("/rpc", s.rpcHandler()))

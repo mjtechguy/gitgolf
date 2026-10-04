@@ -20,6 +20,7 @@ import (
 
 	"connectrpc.com/connect"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
+	"github.com/mjtechguy/golf-git/internal/runner"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -503,6 +504,11 @@ func (s *Server) InspectWorkflows(ctx context.Context, req *connect.Request[golf
 		}
 	}
 	result := &golfv1.InspectWorkflowsResponse{CatalogVersion: workflowCatalog, ExecutionAvailable: len(s.runnerKeys) > 0 && len(s.runnerImages) > 0}
+	result.ExecutionCatalog = workflowExecutionCatalog
+	if s.actionsEngineConfigured() {
+		result.ExecutionCatalog = runner.ActionsCatalog
+		result.ExecutionEngineCommit = runner.ActionsEngineCommit
+	}
 	err = s.withRepositoryRead(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), func(base string, repo Repository) error {
 		if expectedID > 0 && repo.ID != expectedID {
 			return errIssueTargetChanged
@@ -576,6 +582,7 @@ func (s *Server) InspectWorkflows(ctx context.Context, req *connect.Request[golf
 		if total > maxWorkflowTotalBytes {
 			return errForgeResponseTooLarge
 		}
+		var engineArchive []byte
 		for _, candidate := range candidates {
 			config := &golfv1.WorkflowConfiguration{Path: candidate.Path, BlobId: candidate.SHA, ByteSize: uint64(candidate.Size), Format: golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITHUB_ACTIONS}
 			if candidate.Path == ".gitlab-ci.yml" {
@@ -608,7 +615,35 @@ func (s *Server) InspectWorkflows(ctx context.Context, req *connect.Request[golf
 				workflowInspector{config}.unsupported("lfs", "Git LFS pointers are not downloaded or inspected.", nil)
 				continue
 			}
-			inspectWorkflow(config, data)
+			if s.actionsEngineConfigured() && config.Format == golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITHUB_ACTIONS {
+				if engineArchive == nil {
+					engineArchive, err = s.workflowSource(ctx, token, base, result.CommitId, "", "", nil)
+					if err != nil {
+						return err
+					}
+				}
+				plan, e := s.planActions(ctx, candidate.Path, candidate.SHA, "inspect", "", engineArchive)
+				if e == nil {
+					e = s.verifyActionSources(ctx, base, token, result.CommitId, plan)
+				}
+				if e != nil {
+					config.State = golfv1.WorkflowInspectionState_WORKFLOW_INSPECTION_STATE_UNSUPPORTED
+					config.Diagnostics = append(config.Diagnostics, workflowDiagnostic("engine_profile", "This source is outside the selected pinned Linux engine profile or its bounded planner is unavailable.", nil))
+				} else {
+					config.State = golfv1.WorkflowInspectionState_WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET
+					config.Events = plan.Events
+					seen := map[string]bool{}
+					for _, job := range plan.Jobs {
+						if seen[job.JobID] {
+							continue
+						}
+						seen[job.JobID] = true
+						config.Jobs = append(config.Jobs, &golfv1.WorkflowJobSummary{Id: job.JobID, Name: job.Name, StepCount: uint32(len(job.Steps))})
+					}
+				}
+			} else {
+				inspectWorkflow(config, data)
+			}
 		}
 		if err := s.observeWorkflowPolicies(ctx, repo.ID, owner, result); err != nil {
 			if ctx.Err() != nil {

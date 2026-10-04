@@ -1,0 +1,86 @@
+package runner
+
+import "strings"
+
+// These versioned messages contain source and operator-approved public runtime
+// identities, never Golf/native credentials. The act dependency stays in the
+// separately built engine module.
+const ActionsCatalog = "golf.workflow.act.v0.2.89.linux.v1"
+const ActionsEngineCommit = "4f411281417e88660bea1c1a1749aa71ae0bd60f"
+const ActionsDaemonImage = "docker:29.8.1-dind@sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0"
+
+type ActionPlanInput struct {
+	Catalog        string            `json:"catalog"`
+	WorkflowPath   string            `json:"workflowPath"`
+	WorkflowBlobID string            `json:"workflowBlobId"`
+	Archive        []byte            `json:"archive"`
+	Event          string            `json:"event"`
+	Ref            string            `json:"ref"`
+	Images         map[string]string `json:"images"`
+}
+type ActionMatrixEntry struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+type ActionStep struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+type ActionJob struct {
+	InstanceID string              `json:"instanceId"`
+	JobID      string              `json:"jobId"`
+	Name       string              `json:"name"`
+	Image      string              `json:"image"`
+	Matrix     []ActionMatrixEntry `json:"matrix"`
+	Needs      []string            `json:"needs"`
+	Steps      []ActionStep        `json:"steps"`
+}
+type ActionDependency struct {
+	MetadataPath   string `json:"metadataPath"`
+	MetadataSHA256 string `json:"metadataSha256"`
+}
+type ActionPlan struct {
+	Catalog        string             `json:"catalog"`
+	EngineCommit   string             `json:"engineCommit"`
+	WorkflowPath   string             `json:"workflowPath"`
+	WorkflowBlobID string             `json:"workflowBlobId"`
+	ArchiveSHA256  string             `json:"archiveSha256"`
+	Event          string             `json:"event"`
+	Ref            string             `json:"ref"`
+	Jobs           []ActionJob        `json:"jobs"`
+	Events         []string           `json:"events"`
+	ActionsSHA256  string             `json:"actionsSha256"`
+	LocalActions   []ActionDependency `json:"localActions"`
+}
+type ActionExecutionInput struct {
+	Input          ActionPlanInput   `json:"input"`
+	Plan           ActionPlan        `json:"plan"`
+	EventJSON      []byte            `json:"eventJson"`
+	CommitID       string            `json:"commitId"`
+	TimeoutSeconds int               `json:"timeoutSeconds"`
+	ResolvedImages map[string]string `json:"resolvedImages"`
+}
+
+// Source stdout always has Kind=log and can never set observation fields.
+// Sequence identifies the duplex acknowledgement, EventSequence the durable
+// graph observation. States are engine outcomes, not invented process exits.
+type ActionFrame struct {
+	Sequence      int    `json:"sequence"`
+	EventSequence int    `json:"eventSequence,omitempty"`
+	Kind          string `json:"kind"`
+	InstanceID    string `json:"instanceId,omitempty"`
+	StepID        string `json:"stepId,omitempty"`
+	State         string `json:"state,omitempty"`
+	Text          string `json:"text,omitempty"`
+}
+type ActionAck struct {
+	Sequence int `json:"sequence"`
+}
+
+// Docker drops tags from RepoDigests. Manifest content identity, not a display
+// tag or alias, binds the operator-approved image before content-ID transfer.
+func RegistryDigestMatches(reference, observed string) bool {
+	_, expected, ok := strings.Cut(reference, "@")
+	_, actual, found := strings.Cut(observed, "@")
+	return ok && found && expected == actual && len(expected) == 71 && strings.HasPrefix(expected, "sha256:")
+}

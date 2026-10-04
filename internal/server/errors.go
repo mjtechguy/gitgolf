@@ -74,6 +74,10 @@ func rpcError(err error) error {
 		code, message = connect.CodePermissionDenied, "Manual workflow execution is disabled by the applicable execution policy."
 	case errors.Is(err, errWorkflowSource):
 		code, message = connect.CodeFailedPrecondition, "Repository source is outside the bounded safe source archive catalog."
+	case errors.Is(err, errActionsProfile):
+		code, message = connect.CodeFailedPrecondition, "Workflow is outside the selected pinned Linux Actions engine profile."
+	case errors.Is(err, errActionsEngine):
+		code, message = connect.CodeUnavailable, "The selected Actions engine planner is unavailable."
 	case errors.Is(err, errWorkflowExecutionUnsupported):
 		code, message = connect.CodeFailedPrecondition, "Workflow is outside the bounded manual Linux shell catalog."
 	case errors.Is(err, errRunnerUnavailable):

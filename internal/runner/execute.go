@@ -278,7 +278,7 @@ func (e *Executor) removeContainer(ctx context.Context, id, attempt, owner strin
 	if e.inspect(ctx, "container", id, &records) != nil || len(records) != 1 || records[0].ID != id || !owned(records[0].Config.Labels, attempt, owner, e.config.WorkerID) {
 		return ErrCleanup
 	}
-	_, err := e.command(ctx, nil, "container", "rm", "--force", id)
+	_, err := e.command(ctx, nil, "container", "rm", "--force", "--volumes", id)
 	return err
 }
 func (e *Executor) removeVolume(ctx context.Context, id, attempt, owner string) error {

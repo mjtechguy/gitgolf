@@ -79,6 +79,8 @@ func serverConfig() server.Config {
 		ClaudeBinary:         os.Getenv("GOLF_CLAUDE_BINARY"),
 		OpenCodeBinary:       os.Getenv("GOLF_OPENCODE_BINARY"),
 		PushCIEnabled:        os.Getenv("GOLF_PUSH_CI_ENABLED") == "true",
+		ActionsEngineCatalog: os.Getenv("GOLF_ACTIONS_ENGINE_CATALOG"),
+		ActionsEngineBinary:  os.Getenv("GOLF_ACTIONS_ENGINE_BINARY"),
 		DatabaseEndpoint:     databaseEndpoint, DatabaseTLSMode: databaseTLS, NativeDatabaseEndpoint: os.Getenv("GOLF_NATIVE_DATABASE_ENDPOINT"),
 		ObjectStoreConfig:              objectstore.Config{Endpoint: os.Getenv("GOLF_OBJECT_ENDPOINT"), Bucket: os.Getenv("GOLF_OBJECT_BUCKET"), Region: env("GOLF_OBJECT_REGION", "us-east-1"), Prefix: os.Getenv("GOLF_OBJECT_PREFIX"), AccessKeyID: os.Getenv("GOLF_OBJECT_ACCESS_KEY_ID"), SecretAccessKey: os.Getenv("GOLF_OBJECT_SECRET_ACCESS_KEY"), SessionToken: os.Getenv("GOLF_OBJECT_SESSION_TOKEN"), PathStyle: os.Getenv("GOLF_OBJECT_PATH_STYLE") == "true", AllowHTTP: os.Getenv("GOLF_OBJECT_ALLOW_HTTP") == "true"},
 		RepositoryEventConnectionsJSON: os.Getenv("GOLF_REPOSITORY_EVENT_CONNECTIONS"),

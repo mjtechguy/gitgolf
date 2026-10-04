@@ -1,0 +1,101 @@
+package runner
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestActualActionsDaemonIsolationBeforeSource(t *testing.T) {
+	id := strings.Repeat("a", 64)
+	image := "sha256:" + strings.Repeat("b", 64)
+	attempt := strings.Repeat("c", 32)
+	owner := strings.Repeat("d", 32)
+	volume := "golf-source-" + attempt + "-" + owner
+	valid := func() actionsDaemonInspect {
+		var r actionsDaemonInspect
+		r.ID = id
+		r.Image = image
+		r.Config.Labels = map[string]string{managedLabel: "true", workerLabel: "worker", attemptLabel: attempt, ownerLabel: owner}
+		r.Config.Env = []string{"PATH=/usr/bin", "DOCKER_TLS_CERTDIR="}
+		r.Config.Entrypoint = []string{"dockerd-entrypoint.sh"}
+		r.Config.Cmd = []string{"dockerd", "--host=unix:///var/run/docker.sock", "--iptables=false", "--ip-masq=false", "--bridge=none"}
+		r.HostConfig.NetworkMode = "none"
+		r.HostConfig.Privileged = true
+		r.HostConfig.Memory = 1 << 30
+		r.HostConfig.MemorySwap = 1 << 30
+		r.HostConfig.NanoCpus = 2000000000
+		pids := int64(512)
+		r.HostConfig.PidsLimit = &pids
+		r.HostConfig.Tmpfs = map[string]string{"/golf": "rw,size=134217728,mode=0755"}
+		r.Mounts = append(r.Mounts, struct{ Type, Name, Destination string }{"volume", volume, "/var/lib/docker"})
+		return r
+	}
+	if !validActionsDaemon(valid(), id, image, volume, "worker", attempt, owner) {
+		t.Fatal("exact disposable daemon refused")
+	}
+	for name, change := range map[string]func(*actionsDaemonInspect){
+		"wrongowner":      func(r *actionsDaemonInspect) { r.Config.Labels[ownerLabel] = "other" },
+		"hostnetwork":     func(r *actionsDaemonInspect) { r.HostConfig.NetworkMode = "host" },
+		"unboundedmemory": func(r *actionsDaemonInspect) { r.HostConfig.Memory = 0 },
+		"publishedsocket": func(r *actionsDaemonInspect) {
+			r.HostConfig.PortBindings = map[string]json.RawMessage{"2375/tcp": json.RawMessage(`[]`)}
+		},
+		"tcpdaemon":        func(r *actionsDaemonInspect) { r.Config.Cmd = append(r.Config.Cmd, "--host=tcp://0.0.0.0:2375") },
+		"foreignmount":     func(r *actionsDaemonInspect) { r.Mounts[0].Name = "retained" },
+		"hostbind":         func(r *actionsDaemonInspect) { r.HostConfig.Binds = []string{"/:/host"} },
+		"runnercredential": func(r *actionsDaemonInspect) { r.Config.Env = append(r.Config.Env, "GOLF_RUNNER_KEY=private") },
+		"externalendpoint": func(r *actionsDaemonInspect) { r.Config.Env = append(r.Config.Env, "DOCKER_HOST=tcp://other") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := valid()
+			change(&r)
+			if validActionsDaemon(r, id, image, volume, "worker", attempt, owner) {
+				t.Fatal("unsafe actual daemon admitted before source")
+			}
+		})
+	}
+}
+
+func TestApprovedRegistryDigestSurvivesTagRemovalWithoutLosingIdentity(t *testing.T) {
+	expected := "alpine:3.23@sha256:" + strings.Repeat("a", 64)
+	if !RegistryDigestMatches(expected, "alpine@sha256:"+strings.Repeat("a", 64)) {
+		t.Fatal("tag-free Docker receipt refused")
+	}
+	if RegistryDigestMatches(expected, "alpine@sha256:"+strings.Repeat("b", 64)) || RegistryDigestMatches(expected, "alpine:latest") {
+		t.Fatal("tag/different content accepted")
+	}
+}
+
+func TestRestartRefusesResidualEngineResourcesWithoutDeletingThem(t *testing.T) {
+	for _, residual := range []string{"", "container", "volume"} {
+		t.Run(residual, func(t *testing.T) {
+			directory := t.TempDir()
+			binary := filepath.Join(directory, "docker-fixture")
+			trace := filepath.Join(directory, "trace")
+			script := "#!/bin/sh\nprintf '%s\n' \"$*\" >> '" + trace + "'\ncase \"$1\" in " + residual + ") printf 'residual-resource\n';; esac\n"
+			if residual == "" {
+				script = "#!/bin/sh\nprintf '%s\n' \"$*\" >> '" + trace + "'\n"
+			}
+			if os.WriteFile(binary, []byte(script), 0700) != nil {
+				t.Fatal("fixture")
+			}
+			e, err := New(Config{WorkerID: "owned", DockerBinary: binary, ApprovedImages: []string{"alpine@sha256:" + strings.Repeat("a", 64)}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = e.RequireCleanWorker(context.Background())
+			if (residual == "" && err != nil) || (residual != "" && !errors.Is(err, ErrCleanup)) {
+				t.Fatal("restart safety", err)
+			}
+			commands, err := os.ReadFile(trace)
+			if err != nil || strings.Contains(string(commands), "rm") || strings.Contains(string(commands), "create") || !strings.Contains(string(commands), "label=io.golf.runner.worker=owned") {
+				t.Fatal("restart mutated or guessed resource authority")
+			}
+		})
+	}
+}

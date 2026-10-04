@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/mjtechguy/golf-git/internal/runner"
 	"github.com/mjtechguy/golf-git/internal/server/database"
 )
 
@@ -56,6 +57,21 @@ func (s *Server) configureRunners() error {
 func (s *Server) executionImage(plan *workflowExecutionPlan) (string, error) {
 	if len(s.runnerKeys) == 0 {
 		return "", errRunnerUnavailable
+	}
+	if plan.Actions != nil {
+		if !s.actionsEngineConfigured() || plan.Actions.Catalog != runner.ActionsCatalog || len(plan.Actions.Jobs) == 0 {
+			return "", errRunnerUnavailable
+		}
+		for _, job := range plan.Actions.Jobs {
+			approved := false
+			for _, image := range s.runnerImages {
+				approved = approved || image == job.Image
+			}
+			if !approved {
+				return "", errRunnerUnavailable
+			}
+		}
+		return plan.Actions.Jobs[0].Image, nil
 	}
 	if plan.ImageDigest != "" {
 		for _, image := range s.runnerImages {
@@ -204,9 +220,25 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		runnerFail(w, 401)
 		return
 	}
-	var input struct{}
-	if !runnerDecode(w, r, &input, 128) {
+	var input struct {
+		Catalogs []string `json:"catalogs"`
+	}
+	if !runnerDecode(w, r, &input, 512) {
 		return
+	}
+	catalogs := []string{workflowExecutionCatalog}
+	if len(input.Catalogs) > 2 {
+		runnerFail(w, 400)
+		return
+	}
+	for _, catalog := range input.Catalogs {
+		if catalog != workflowExecutionCatalog && catalog != runner.ActionsCatalog {
+			runnerFail(w, 400)
+			return
+		}
+		if catalog == runner.ActionsCatalog && s.actionsEngineConfigured() {
+			catalogs = append(catalogs, catalog)
+		}
 	}
 	if s.db == nil {
 		runnerFail(w, 503)
@@ -224,7 +256,7 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		runnerFail(w, 503)
 		return
 	}
-	run, err := scanWorkflowRun(s.db.QueryRowContext(ctx, `SELECT `+workflowRunColumns+` FROM golf_workflow_runs WHERE forge_url=$1 AND state='queued' ORDER BY created_at,id LIMIT 1`, s.config.GiteaURL))
+	run, err := scanWorkflowRun(s.db.QueryRowContext(ctx, `SELECT `+workflowRunColumns+` FROM golf_workflow_runs WHERE forge_url=$1 AND state='queued' AND engine_catalog=ANY($2) ORDER BY created_at,id LIMIT 1`, s.config.GiteaURL, catalogs))
 	if errors.Is(err, sql.ErrNoRows) {
 		w.WriteHeader(204)
 		return
@@ -303,6 +335,11 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		runnerFail(w, 503)
 		return
 	}
+	if plan.Actions != nil {
+		eventJSON, _ := json.Marshal(map[string]any{"ref": plan.Actions.Ref, "after": run.CommitID, "repository": map[string]any{"id": run.RepositoryID, "name": run.RepositoryName, "full_name": run.RepositoryOwner + "/" + run.RepositoryName, "owner": map[string]any{"id": run.OwnerID, "login": run.RepositoryOwner}}})
+		respond(w, 200, map[string]any{"runId": run.ID, "attemptId": attempt, "attemptToken": token, "imageDigest": plan.ImageDigest, "commitId": run.CommitID, "sourceSha256": run.SourceSHA256, "timeoutSeconds": 900, "leaseSeconds": runnerLeaseSeconds, "engineCatalog": runner.ActionsCatalog, "actionsPlan": plan.Actions, "eventJson": eventJSON})
+		return
+	}
 	respond(w, 200, map[string]any{"runId": run.ID, "attemptId": attempt, "attemptToken": token, "imageDigest": plan.ImageDigest, "commitId": run.CommitID, "sourceSha256": run.SourceSHA256, "steps": plan.Steps, "jobId": plan.JobID, "timeoutSeconds": 900, "leaseSeconds": runnerLeaseSeconds})
 }
 func isRunnerAuthorityDenied(err error) bool {
@@ -344,7 +381,11 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 	}
 	var input struct {
 		Sequence            int64  `json:"sequence"`
+		EngineConclusion    string `json:"engineConclusion"`
 		Text                string `json:"text"`
+		JobInstanceID       string `json:"jobInstanceId"`
+		StepID              string `json:"stepId"`
+		State               string `json:"state"`
 		StepIndex           int32  `json:"stepIndex"`
 		Kind                string `json:"kind"`
 		ExitCode            int32  `json:"exitCode"`
@@ -408,6 +449,19 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 	case "heartbeat":
 		_, err = tx.ExecContext(ctx, `UPDATE golf_workflow_runs SET lease_expires_at=clock_timestamp()+interval '45 seconds' WHERE id=$1`, run.ID)
 	case "logs":
+		if input.JobInstanceID != "" || input.StepID != "" {
+			plan, e := loadActionPlan(ctx, tx, run.ID)
+			if e != nil || !admittedActionJob(plan, input.JobInstanceID, input.StepID) {
+				runnerFail(w, 400)
+				return
+			}
+		} else {
+			var catalog string
+			if tx.QueryRowContext(ctx, `SELECT engine_catalog FROM golf_workflow_runs WHERE id=$1`, run.ID).Scan(&catalog) != nil || catalog != workflowExecutionCatalog {
+				runnerFail(w, 400)
+				return
+			}
+		}
 		if input.Sequence <= 0 || len(input.Text) == 0 || len(input.Text) > 16<<10 || !runnerLogText(input.Text) {
 			runnerFail(w, 400)
 			return
@@ -419,7 +473,7 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Sequence <= seq {
 			var old string
-			err = tx.QueryRowContext(ctx, `SELECT text FROM golf_workflow_run_logs WHERE run_id=$1 AND sequence=$2`, run.ID, input.Sequence).Scan(&old)
+			err = tx.QueryRowContext(ctx, `SELECT text FROM golf_workflow_run_logs WHERE run_id=$1 AND sequence=$2 AND job_instance_id=$3 AND engine_step_id=$4`, run.ID, input.Sequence, input.JobInstanceID, input.StepID).Scan(&old)
 			if err != nil || old != input.Text {
 				runnerFail(w, 409)
 				return
@@ -429,13 +483,35 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 				runnerFail(w, 409)
 				return
 			}
-			if _, err = tx.ExecContext(ctx, `INSERT INTO golf_workflow_run_logs(run_id,sequence,text) VALUES($1,$2,$3)`, run.ID, input.Sequence, input.Text); err != nil {
+			if _, err = tx.ExecContext(ctx, `INSERT INTO golf_workflow_run_logs(run_id,sequence,text,job_instance_id,engine_step_id) VALUES($1,$2,$3,$4,$5)`, run.ID, input.Sequence, input.Text, input.JobInstanceID, input.StepID); err != nil {
 				runnerFail(w, 503)
 				return
 			}
 			_, err = tx.ExecContext(ctx, `UPDATE golf_workflow_runs SET log_sequence=$2,log_bytes=log_bytes+$3 WHERE id=$1`, run.ID, input.Sequence, len(input.Text))
 		}
+	case "graph":
+		if run.EngineCatalog != runner.ActionsCatalog {
+			runnerFail(w, 400)
+			return
+		}
+		if input.Sequence < 1 || input.Sequence > 512 {
+			runnerFail(w, 400)
+			return
+		}
+		err = recordActionEvent(ctx, tx, run, actionEvent{int(input.Sequence), input.JobInstanceID, input.StepID, input.Kind, input.State})
+		if errors.Is(err, errWorkflowProgressInput) {
+			runnerFail(w, 400)
+			return
+		}
+		if errors.Is(err, errWorkflowRunConflict) {
+			runnerFail(w, 409)
+			return
+		}
 	case "progress":
+		if run.EngineCatalog != workflowExecutionCatalog {
+			runnerFail(w, 400)
+			return
+		}
 		if input.Sequence < 1 || input.Sequence > 100 {
 			runnerFail(w, 400)
 			return
@@ -450,8 +526,29 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case "finish":
+		var finishCatalog string
+		if tx.QueryRowContext(ctx, `SELECT engine_catalog FROM golf_workflow_runs WHERE id=$1`, run.ID).Scan(&finishCatalog) != nil {
+			runnerFail(w, 503)
+			return
+		}
+		if finishCatalog == workflowExecutionCatalog && input.EngineConclusion != "" || finishCatalog == runner.ActionsCatalog && input.ExitCode != 0 {
+			runnerFail(w, 400)
+			return
+		}
 		if !input.TimedOut && !input.Cancelled && !input.InfrastructureError && !input.LogsTruncated {
-			err = checkWorkflowProgressFinish(ctx, tx, run, input.ExitCode)
+			if finishCatalog == runner.ActionsCatalog {
+				if input.ExitCode != 0 || (input.EngineConclusion != "success" && input.EngineConclusion != "failure") {
+					runnerFail(w, 400)
+					return
+				}
+				code := int32(0)
+				if input.EngineConclusion == "failure" {
+					code = 1
+				}
+				err = checkActionsFinish(ctx, tx, run, code)
+			} else {
+				err = checkWorkflowProgressFinish(ctx, tx, run, input.ExitCode)
+			}
 			if errors.Is(err, errWorkflowRunConflict) {
 				runnerFail(w, 409)
 				return
@@ -467,7 +564,7 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		}
 		state = "succeeded"
 		reason := ""
-		if input.ExitCode != 0 {
+		if input.ExitCode != 0 || input.EngineConclusion == "failure" {
 			state = "failed"
 		}
 		if input.TimedOut {
@@ -484,7 +581,7 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 			state = "failed"
 			reason = "Log limit exceeded."
 		}
-		_, err = tx.ExecContext(ctx, `UPDATE golf_workflow_runs SET state=$2,reason=$3,exit_code=$4,logs_truncated=$5,finished_at=clock_timestamp(),version=version+1,lease_token_hash=NULL WHERE id=$1`, run.ID, state, reason, input.ExitCode, input.LogsTruncated)
+		_, err = tx.ExecContext(ctx, `UPDATE golf_workflow_runs SET state=$2,reason=$3,exit_code=$4,logs_truncated=$5,finished_at=clock_timestamp(),version=version+1,lease_token_hash=NULL WHERE id=$1`, run.ID, state, reason, workflowFinishExit(input.ExitCode, finishCatalog), input.LogsTruncated)
 	default:
 		runnerFail(w, 404)
 		return
@@ -534,4 +631,11 @@ func (s *Server) runnerRecover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(204)
+}
+
+func workflowFinishExit(exit int32, catalog string) any {
+	if catalog == runner.ActionsCatalog {
+		return nil
+	}
+	return exit
 }

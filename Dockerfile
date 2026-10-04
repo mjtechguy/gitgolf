@@ -31,12 +31,15 @@ RUN go mod download
 COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 COPY gen/ ./gen/
+COPY engines/ ./engines/
 RUN CGO_ENABLED=0 go build -trimpath -o /golf ./cmd/golf
+RUN cd engines/act && CGO_ENABLED=0 go build -trimpath -o /golf-actions-engine ./cmd/golf-actions-engine
 
 FROM alpine:3.23
 RUN apk add --no-cache ca-certificates libstdc++ && addgroup -S golf && adduser -S -G golf golf
 WORKDIR /app
 COPY --from=server /golf /usr/local/bin/golf
+COPY --from=server /golf-actions-engine /usr/local/bin/golf-actions-engine
 COPY --from=codex /codex /usr/local/bin/codex
 COPY --from=agents /claude /usr/local/bin/claude
 COPY --from=agents /opencode /usr/local/bin/opencode

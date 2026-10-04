@@ -1,0 +1,32 @@
+name: Mixed matrix conclusions
+on: [workflow_dispatch, push]
+defaults: {run: {shell: sh}}
+jobs:
+  cells:
+    runs-on: linux
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: {cell: [a, b]}
+    steps:
+      - id: cell
+        run: |
+          if [ '${{ matrix.cell }}' = a ]; then exit 7; fi
+          printf 'successful-own-cell\n'
+      - id: ownfailure
+        if: ${{ failure() }}
+        run: printf 'own-cell-failure-handler\n'
+      - id: ownsuccess
+        if: ${{ success() }}
+        run: printf 'own-cell-success-handler\n'
+  aftermath:
+    needs: cells
+    runs-on: linux
+    if: ${{ always() }}
+    steps:
+      - id: dependency
+        run: test '${{ needs.cells.result }}' = failure
+  skipped:
+    needs: cells
+    runs-on: linux
+    steps: [{run: exit 99}]

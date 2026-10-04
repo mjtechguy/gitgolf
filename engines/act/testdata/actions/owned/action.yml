@@ -1,0 +1,13 @@
+name: Immutable local composite
+inputs: {value: {required: true}}
+outputs: {value: {value: '${{ steps.emit.outputs.value }}'}}
+runs:
+  using: composite
+  steps:
+    - id: emit
+      shell: sh
+      env: {VALUE: '${{ inputs.value }}'}
+      run: |
+        test "$VALUE" = owned
+        printf 'value=%s\n' "$VALUE" >> "$GITHUB_OUTPUT"
+        echo 'Actual local composite output received'

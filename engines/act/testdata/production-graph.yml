@@ -1,0 +1,53 @@
+name: Golf production engine qualification
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+defaults:
+  run: {shell: sh}
+jobs:
+  build:
+    runs-on: linux
+    outputs: {value: '${{ steps.emit.outputs.value }}'}
+    steps:
+      - id: emit
+        name: Produce a real job output
+        run: printf 'value=owned\n' >> "$GITHUB_OUTPUT"
+  test:
+    needs: build
+    runs-on: linux
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        cell: [a, b]
+        exclude: [{cell: b}]
+        include: [{cell: c}]
+    steps:
+      - id: tamper
+        name: Verify protected composite definitions
+        run: |
+          if (printf 'runs: {using: docker, image: alpine}\n' > actions/owned/action.yml) 2>/dev/null; then
+            echo 'UNSAFE mutable action metadata'; exit 91
+          fi
+          if mv actions .replaced-actions 2>/dev/null; then
+            echo 'UNSAFE replacement of action ancestor'; exit 92
+          fi
+          printf 'ordinary writable output\n' > build-result.txt
+          echo 'Protected composite remained immutable'
+      - id: local
+        name: Run the admitted local composite
+        uses: ./actions/owned
+        with: {value: '${{ needs.build.outputs.value }}'}
+      - id: conditional
+        name: A real skipped step
+        if: ${{ false }}
+        run: exit 99
+  lint:
+    needs: build
+    runs-on: linux
+    steps: [{id: lint, name: Independent Linux job, run: 'true'}]
+  package:
+    needs: [test, lint]
+    runs-on: linux
+    steps: [{id: package, name: Dependent conclusion, run: 'echo finished'}]

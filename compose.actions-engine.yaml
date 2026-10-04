@@ -1,0 +1,28 @@
+# Explicit opt-in maintained Linux graph profile. Include alongside compose.ci;
+# existing manual/push policy and sponsor grants independently govern admission.
+# The trusted per-attempt child daemon is not a hostile-tenant VM claim.
+services:
+  golf:
+    environment:
+      GOLF_ACTIONS_ENGINE_CATALOG: golf.workflow.act.v0.2.89.linux.v1
+      GOLF_ACTIONS_ENGINE_BINARY: /usr/local/bin/golf-actions-engine
+  runner-actions-image-init:
+    image: docker:29.8.1-dind@sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0
+    entrypoint: [docker]
+    command: [pull, docker:29.8.1-dind@sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0]
+    environment:
+      DOCKER_HOST: tcp://runner-daemon:2376
+      DOCKER_TLS_VERIFY: '1'
+      DOCKER_CERT_PATH: /certs/client
+    volumes:
+      - runner-client-certs:/certs/client:ro
+    depends_on:
+      runner-daemon:
+        condition: service_healthy
+  runner:
+    environment:
+      GOLF_RUNNER_ACTIONS_ENGINE_BINARY: /usr/local/bin/golf-actions-engine
+      GOLF_RUNNER_ACTIONS_PLATFORMS: ${GOLF_RUNNER_IMAGES:?Run scripts/init-ci-env.py}
+    depends_on:
+      runner-actions-image-init:
+        condition: service_completed_successfully

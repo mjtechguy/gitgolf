@@ -757,6 +757,28 @@ type GolfUser struct {
 	AvatarURL   string
 }
 
+type GolfWorkflowGraphEvent struct {
+	RunID      uuid.UUID
+	AttemptID  string
+	Sequence   int32
+	InstanceID string
+	StepID     string
+	Kind       string
+	State      string
+	OccurredAt time.Time
+}
+
+type GolfWorkflowJobInventory struct {
+	RunID       uuid.UUID
+	InstanceID  string
+	JobID       string
+	Name        string
+	ImageDigest string
+	Matrix      json.RawMessage
+	Needs       json.RawMessage
+	Steps       json.RawMessage
+}
+
 type GolfWorkflowRun struct {
 	ID                          uuid.UUID
 	ForgeURL                    string
@@ -804,12 +826,15 @@ type GolfWorkflowRun struct {
 	AutomationCredentialVersion sql.NullInt64
 	RepositoryEventID           sql.NullInt64
 	EventRef                    string
+	EngineCatalog               string
 }
 
 type GolfWorkflowRunLog struct {
-	RunID    uuid.UUID
-	Sequence int64
-	Text     string
+	RunID         uuid.UUID
+	Sequence      int64
+	Text          string
+	JobInstanceID string
+	EngineStepID  string
 }
 
 type GolfWorkflowRunProgress struct {

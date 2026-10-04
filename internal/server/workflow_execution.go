@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
+	"github.com/mjtechguy/golf-git/internal/runner"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -19,6 +20,7 @@ var errWorkflowTriggerNotMatched = errors.New("Workflow does not match the selec
 // Commands are private execution input, never an inspection response. Compilation
 // does not admit a run, approve an image, or execute anything on the server host.
 type workflowExecutionPlan struct {
+	Actions     *runner.ActionPlan `json:",omitempty"`
 	Format      golfv1.WorkflowFormat
 	Name        string
 	JobID       string

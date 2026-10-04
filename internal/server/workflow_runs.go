@@ -22,6 +22,7 @@ import (
 
 	"connectrpc.com/connect"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
+	"github.com/mjtechguy/golf-git/internal/runner"
 	"github.com/mjtechguy/golf-git/internal/server/database"
 )
 
@@ -53,6 +54,8 @@ type workflowRunRecord struct {
 	PolicyEpochs                                                                                  []byte
 	IdempotencyKey                                                                                string
 	InputHash                                                                                     []byte
+	EngineCatalog                                                                                 string
+	ActionJobs                                                                                    []*golfv1.WorkflowJobInstance
 	State                                                                                         string
 	Version                                                                                       int64
 	CreatedAt                                                                                     time.Time
@@ -66,13 +69,13 @@ type workflowRunRecord struct {
 	LogBytes, LogSequence                                                                         int64
 }
 
-const workflowRunColumns = `id::text,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,policy_epochs,idempotency_key::text,input_hash,state,version,created_at,started_at,finished_at,exit_code,reason,runner_id,attempt_id,lease_token_hash,lease_expires_at,cancel_requested,logs_truncated,source_sha256,log_bytes,log_sequence,source_storage,source_key,source_fingerprint,source_profile_id::text,source_profile_version,origin,automation_grant_id::text,automation_grant_revision,automation_grant_epoch,automation_credential_version,repository_event_id,event_ref`
+const workflowRunColumns = `id::text,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,policy_epochs,idempotency_key::text,input_hash,state,version,created_at,started_at,finished_at,exit_code,reason,runner_id,attempt_id,lease_token_hash,lease_expires_at,cancel_requested,logs_truncated,source_sha256,log_bytes,log_sequence,source_storage,source_key,source_fingerprint,source_profile_id::text,source_profile_version,origin,automation_grant_id::text,automation_grant_revision,automation_grant_epoch,automation_credential_version,repository_event_id,event_ref,engine_catalog`
 
 type workflowRunScanner interface{ Scan(...any) error }
 
 func scanWorkflowRun(row workflowRunScanner) (workflowRunRecord, error) {
 	var r workflowRunRecord
-	err := row.Scan(&r.ID, &r.ForgeURL, &r.RepositoryID, &r.OwnerID, &r.RepositoryOwner, &r.RepositoryName, &r.OrganizationOwned, &r.UserID, &r.SessionHash, &r.CommitID, &r.WorkflowPath, &r.BlobID, &r.Format, &r.PolicyEpochs, &r.IdempotencyKey, &r.InputHash, &r.State, &r.Version, &r.CreatedAt, &r.StartedAt, &r.FinishedAt, &r.ExitCode, &r.Reason, &r.RunnerID, &r.AttemptID, &r.LeaseTokenHash, &r.LeaseExpiresAt, &r.CancelRequested, &r.LogsTruncated, &r.SourceSHA256, &r.LogBytes, &r.LogSequence, &r.SourceStorage, &r.SourceKey, &r.SourceFingerprint, &r.SourceProfileID, &r.SourceProfileVersion, &r.Origin, &r.AutomationGrantID, &r.AutomationGrantRevision, &r.AutomationGrantEpoch, &r.AutomationCredentialVersion, &r.RepositoryEventID, &r.EventRef)
+	err := row.Scan(&r.ID, &r.ForgeURL, &r.RepositoryID, &r.OwnerID, &r.RepositoryOwner, &r.RepositoryName, &r.OrganizationOwned, &r.UserID, &r.SessionHash, &r.CommitID, &r.WorkflowPath, &r.BlobID, &r.Format, &r.PolicyEpochs, &r.IdempotencyKey, &r.InputHash, &r.State, &r.Version, &r.CreatedAt, &r.StartedAt, &r.FinishedAt, &r.ExitCode, &r.Reason, &r.RunnerID, &r.AttemptID, &r.LeaseTokenHash, &r.LeaseExpiresAt, &r.CancelRequested, &r.LogsTruncated, &r.SourceSHA256, &r.LogBytes, &r.LogSequence, &r.SourceStorage, &r.SourceKey, &r.SourceFingerprint, &r.SourceProfileID, &r.SourceProfileVersion, &r.Origin, &r.AutomationGrantID, &r.AutomationGrantRevision, &r.AutomationGrantEpoch, &r.AutomationCredentialVersion, &r.RepositoryEventID, &r.EventRef, &r.EngineCatalog)
 	return r, err
 }
 func (s *Server) loadWorkflowRun(ctx context.Context, id string) (workflowRunRecord, error) {
@@ -93,6 +96,14 @@ func (s *Server) loadWorkflowRun(ctx context.Context, id string) (workflowRunRec
 }
 func wireWorkflowRun(r workflowRunRecord, canCancel bool) *golfv1.WorkflowRun {
 	w := &golfv1.WorkflowRun{Id: r.ID, RepositoryId: strconv.FormatInt(r.RepositoryID, 10), OwnerId: strconv.FormatInt(r.OwnerID, 10), CommitId: r.CommitID, WorkflowPath: r.WorkflowPath, WorkflowBlobId: r.BlobID, Format: golfv1.WorkflowFormat(r.Format), State: golfv1.WorkflowRunState(golfv1.WorkflowRunState_value["WORKFLOW_RUN_STATE_"+strings.ToUpper(r.State)]), Version: strconv.FormatInt(r.Version, 10), CreatedAt: r.CreatedAt.Format(time.RFC3339Nano), Reason: r.Reason, RunnerId: r.RunnerID, SourceSha256: r.SourceSHA256, LogsTruncated: r.LogsTruncated, CanCancel: canCancel && (r.State == "queued" || r.State == "running")}
+	w.EngineCatalog = r.EngineCatalog
+	if w.EngineCatalog == "" {
+		w.EngineCatalog = workflowExecutionCatalog
+	}
+	if w.EngineCatalog == runner.ActionsCatalog {
+		w.EngineCommit = runner.ActionsEngineCommit
+		w.Jobs = r.ActionJobs
+	}
 	w.AttemptId = actionAttempt(r.AttemptID)
 	w.Origin = golfv1.WorkflowRunOrigin_WORKFLOW_RUN_ORIGIN_MANUAL
 	if r.Origin == "push" {
@@ -434,6 +445,24 @@ func (s *Server) prepareWorkflowRunForEvent(ctx context.Context, credential forg
 		format = golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITLAB_CI
 	}
 	var plan *workflowExecutionPlan
+	if format == golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITHUB_ACTIONS && s.actionsEngineConfigured() {
+		source, e := s.workflowSource(ctx, credential, base, commit, file, candidate.SHA, data)
+		if e != nil {
+			return "", "", nil, nil, e
+		}
+		event, eventRef := "workflow_dispatch", ref
+		if pushRef != "" {
+			event, eventRef = "push", pushRef
+		}
+		actions, e := s.planActions(ctx, file, candidate.SHA, event, eventRef, source)
+		if e != nil {
+			return "", "", nil, nil, e
+		}
+		if e = s.verifyActionSources(ctx, base, credential, commit, actions); e != nil {
+			return "", "", nil, nil, e
+		}
+		return commit, candidate.SHA, &workflowExecutionPlan{Format: format, Actions: actions}, source, nil
+	}
 	if pushRef == "" {
 		plan, err = compileWorkflowExecution(format, data)
 	} else {
@@ -699,7 +728,7 @@ func (s *Server) GetWorkflowRunLogs(ctx context.Context, req *connect.Request[go
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	result := &golfv1.GetWorkflowRunLogsResponse{}
+	result := &golfv1.GetWorkflowRunLogsResponse{RunId: record.ID, AttemptId: record.AttemptID, JobInstanceId: req.Msg.JobInstanceId, StepId: req.Msg.StepId, RepositoryId: strconv.FormatInt(record.RepositoryID, 10), SourceCommitId: record.CommitID}
 	err = s.withWorkflowRepository(ctx, s.cookieValue(req.Header()), credential, repositoryKey{record.RepositoryOwner, record.RepositoryName}, record.RepositoryID, record.OwnerID, false, func(_ User, _ *golfv1.RepositoryAccess) error {
 		tx, e := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 		if e != nil {
@@ -708,6 +737,15 @@ func (s *Server) GetWorkflowRunLogs(ctx context.Context, req *connect.Request[go
 		defer tx.Rollback()
 		after := int64(req.Msg.AfterSequence)
 		var through *int64
+		if req.Msg.StepIndex != nil && (req.Msg.JobInstanceId != "" || req.Msg.StepId != "") {
+			return invalid("Select legacy step index or exact engine job/step coordinates, not both.")
+		}
+		if req.Msg.JobInstanceId != "" || req.Msg.StepId != "" {
+			plan, e := loadActionPlan(ctx, tx, record.ID)
+			if e != nil || !admittedActionJob(plan, req.Msg.JobInstanceId, req.Msg.StepId) {
+				return invalid("Select an admitted engine job and step.")
+			}
+		}
 		if req.Msg.StepIndex != nil {
 			start, end, e := workflowStepLogRange(ctx, tx, record.ID, *req.Msg.StepIndex)
 			if e != nil {
@@ -718,7 +756,7 @@ func (s *Server) GetWorkflowRunLogs(ctx context.Context, req *connect.Request[go
 			}
 			through = end
 		}
-		rows, e := tx.QueryContext(ctx, `SELECT sequence,text FROM golf_workflow_run_logs WHERE run_id=$1 AND sequence>$2 AND ($3::bigint IS NULL OR sequence<=$3) ORDER BY sequence LIMIT 17`, record.ID, after, through)
+		rows, e := tx.QueryContext(ctx, `SELECT sequence,text FROM golf_workflow_run_logs WHERE run_id=$1 AND sequence>$2 AND ($3::bigint IS NULL OR sequence<=$3) AND ($4='' OR job_instance_id=$4) AND ($5='' OR engine_step_id=$5) ORDER BY sequence LIMIT 17`, record.ID, after, through, req.Msg.JobInstanceId, req.Msg.StepId)
 		if e != nil {
 			return errStorageUnavailable
 		}

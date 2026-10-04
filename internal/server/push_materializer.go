@@ -150,7 +150,7 @@ func (s *Server) materializePush(ctx context.Context) error {
 		reason = "repository_queue_capacity"
 	case errors.Is(err, errWorkflowPolicyDenied):
 		reason = "push_policy_denied"
-	case errors.Is(err, errWorkflowExecutionUnsupported), errors.Is(err, errWorkflowSource), errors.Is(err, errRunnerUnavailable):
+	case errors.Is(err, errActionsProfile), errors.Is(err, errWorkflowExecutionUnsupported), errors.Is(err, errWorkflowSource), errors.Is(err, errRunnerUnavailable):
 		reason = "execution_contract_unsupported"
 	case errors.Is(err, errUnauthenticated), errors.Is(err, errResourceNotFound), isRunnerAuthorityDenied(err):
 	default:

@@ -148,3 +148,30 @@ func TestPollValidationAndDenial(t *testing.T) {
 		t.Fatal("enrollment denial ignored")
 	}
 }
+
+func TestActionsAssignmentRequiresExplicitQualifiedConsumer(t *testing.T) {
+	var c coordinator
+	a := assignment{EngineCatalog: runner.ActionsCatalog, SourceSHA256: strings.Repeat("a", 64), EventJSON: []byte(`{"ref":"refs/heads/main"}`), ActionsPlan: &runner.ActionPlan{Catalog: runner.ActionsCatalog, ArchiveSHA256: strings.Repeat("a", 64), Jobs: []runner.ActionJob{{InstanceID: strings.Repeat("b", 32)}}}}
+	if c.validAssignment(a) {
+		t.Fatal("old worker admitted engine graph")
+	}
+	c.actions = &runner.ActionsExecutor{}
+	if !c.validAssignment(a) {
+		t.Fatal("explicit graph consumer rejected bound assignment")
+	}
+	changed := a
+	changed.EngineCatalog = "future-unknown"
+	if c.validAssignment(changed) {
+		t.Fatal("unknown engine accepted")
+	}
+	changed = a
+	changed.SourceSHA256 = strings.Repeat("c", 64)
+	if c.validAssignment(changed) {
+		t.Fatal("source digest drift accepted")
+	}
+	changed = a
+	changed.Steps = []struct{ Name, Run, Shell string }{{Run: "true"}}
+	if c.validAssignment(changed) {
+		t.Fatal("mixed shell/graph assignment accepted")
+	}
+}
