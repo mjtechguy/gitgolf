@@ -108,6 +108,7 @@ def main():
     parser.add_argument('--browser', action='store_true', help='Actual settings Add/list/reload/delete in both modes/themes at1440/390')
     parser.add_argument('--screenshots', type=Path, help='Owner-only browser output directory (required with --browser)')
     parser.add_argument('--ssh-port', type=int, default=2222)
+    parser.add_argument('--organization', action='store_true', help='Owned private organization repositories, member direct-admin and team-only-admin denial')
     args = parser.parse_args()
     if args.self_check:
         self_check(Path(__file__).resolve().parents[1], args.contract_file); return
@@ -127,6 +128,8 @@ def main():
         args.screenshots.chmod(0o700)
     compose = ['docker', 'compose', '--project-directory', str(stack), '--file', str(stack/'compose.yaml'), '--env-file', str(stack/'.env')]
     actors, enrolled, bearers = {}, [], []
+    owned_organization = None
+    native_repos = []
     prefix = 'golf-deploy-keys-' + secrets.token_hex(4)
     stage = 'readiness'
     runtime_before = None
@@ -215,14 +218,14 @@ def main():
         smoke.ready(); runtime_before = runtime()
         print('Owned fixture scope: '+prefix, flush=True)
         stage = 'owned native actors and managed Golf accounts'
-        for role in ('owner', 'admin', 'writer', 'reader', 'outsider', 'global'):
+        for role in ('owner', 'admin', 'writer', 'reader', 'outsider', 'global') + (('teamadmin',) if args.organization else ()):
             name = prefix+'-'+role
             actor = {'name': name, 'session': smoke.client(), 'created': False, 'loggedIn': False}
             actors[role] = actor
             options = ['create', '--username', name, '--email', name+'@example.invalid', '--random-password', '--must-change-password=false']
             if role == 'global': options.append('--admin')
             admin(*options); actor['created'] = True
-            token = admin('generate-access-token', '--username', name, '--token-name', prefix, '--scopes', 'write:user,write:repository', '--raw')
+            token = admin('generate-access-token', '--username', name, '--token-name', prefix, '--scopes', 'write:user,write:repository,write:organization' if args.organization else 'write:user,write:repository', '--raw')
             actor.update(token=token, id=str(smoke.provider(token, 'GET', 'user')['id']), email=name+'@golf.invalid', password='Fixture '+secrets.token_urlsafe(24))
             enrolled.append(actor)
             operator('create', {'username': name, 'email': actor['email'], 'password': actor['password'], 'forge_token': token, 'is_instance_admin': role == 'global'})
@@ -230,13 +233,27 @@ def main():
             assert identity['id'] == actor['id'] and identity['login'] == name
             actor['loggedIn'] = True
         owner = actors['owner']; targets, native_repos = [], []
+        namespace, namespace_id, teams = owner['name'], owner['id'], []
+        if args.organization:
+            stage = 'owned private organization and independently scoped ordinary member teams'
+            namespace = prefix+'-org'
+            owned_organization = smoke.provider(owner['token'], 'POST', 'orgs', {'username': namespace, 'visibility': 'private'}, expected=201)
+            assert owned_organization['username'] == namespace
+            namespace_id = str(owned_organization['id'])
+            for role, permission in (('admin','read'), ('writer','read'), ('reader','read'), ('teamadmin','admin')):
+                team = smoke.provider(owner['token'], 'POST', 'orgs/'+namespace+'/teams', {'name': role, 'permission': permission, 'visibility': 'limited', 'units_map': {'repo.code': permission}, 'includes_all_repositories': False}, expected=201)
+                smoke.provider(owner['token'], 'PUT', 'teams/'+str(team['id'])+'/members/'+actors[role]['name'], expected=204)
+                teams.append(team)
         for name in ('first', 'second'):
-            native = smoke.provider(owner['token'], 'POST', 'user/repos', {'name': name, 'private': True, 'auto_init': True}, expected=201)
-            repository = {'owner': owner['name'], 'name': name}
+            native = smoke.provider(owner['token'], 'POST', 'orgs/'+namespace+'/repos' if args.organization else 'user/repos', {'name': name, 'private': True, 'auto_init': True}, expected=201)
+            repository = {'owner': namespace, 'name': name}
+            for team in teams:
+                smoke.provider(owner['token'], 'PUT', 'teams/'+str(team['id'])+'/repos/'+namespace+'/'+name, expected=204)
             for role, permission in (('admin', 'admin'), ('writer', 'write'), ('reader', 'read')):
-                smoke.provider(owner['token'], 'PUT', 'repos/'+owner['name']+'/'+name+'/collaborators/'+actors[role]['name'], {'permission': permission}, expected=204)
+                smoke.provider(owner['token'], 'PUT', 'repos/'+namespace+'/'+name+'/collaborators/'+actors[role]['name'], {'permission': permission}, expected=204)
             target, meta = access(owner, repository)
-            assert meta['canManage'] and target['repositoryId'] == str(native['id']) and target['ownerId'] == owner['id']
+            assert meta['canManage'] and target['repositoryId'] == str(native['id']) and target['ownerId'] == namespace_id
+            assert meta.get('organizationOwned',False) is args.organization
             parsed_ssh = urllib.parse.urlparse(native['ssh_url'])
             assert parsed_ssh.scheme == 'ssh' and parsed_ssh.hostname in ('localhost', '127.0.0.1') and parsed_ssh.port == args.ssh_port
             targets.append(target); native_repos.append(native)
@@ -283,14 +300,14 @@ def main():
             git(rw_work, 'push', 'origin', 'HEAD:refs/heads/allowed-deploy-key-push')
             assert native_ref(second, 'allowed-deploy-key-push') == sha
             assert smoke.provider(owner['token'], 'GET', path(second)+'/git/commits/'+sha)['sha'] == sha
-            stage = 'current personal owner/direct admin and non-admin denial'
+            stage = 'current organization owner/member-direct admin and team-only/non-admin denial' if args.organization else 'current personal owner/direct admin and non-admin denial'
             admin_target, admin_meta = access(actors['admin'], first['repository']); assert admin_meta['canManage']
             extra_file = local/'direct-admin'; command('ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(extra_file))
             extra = add(actors['admin'], admin_target, extra_file.with_suffix('.pub').read_text(), 'Direct administrator key', True)
             assert len(inventory(owner, first)) == 2
             detach(actors['admin'], admin_target, extra)
             baseline = native_inventory(first)
-            for role in ('writer', 'reader', 'global'):
+            for role in ('writer', 'reader', 'global') + (('teamadmin',) if args.organization else ()):
                 denied_target, denied_meta = access(actors[role], first['repository']); assert not denied_meta.get('canManage', False)
                 for method, fields in ((METHODS[0], {'page': {'limit': 1, 'page': 1}}), (METHODS[1], {'title': 'Denied', 'publicKey': public, 'readOnly': False}), (METHODS[2], {'keyId': ro['id'], 'expectedKeyRevision': ro['revision']})):
                     call(actors[role], method, {**denied_target, **fields}, expected=403)
@@ -337,7 +354,7 @@ def main():
                 for index in range(8):
                     key = local/('browser-'+str(index)); command('ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(key))
                     browser_keys.append(key.with_suffix('.pub').read_text())
-                config = {'golf': smoke.GOLF, 'gitea': smoke.GITEA, 'email': owner['email'], 'password': owner['password'], 'ownerToken': owner['token'], 'repository': owner['name']+'/first', 'target': first, 'publicKeys': browser_keys, 'screenshots': str(args.screenshots.resolve()), 'runtime': runtime_before, 'stackRoot': str(stack)}
+                config = {'golf': smoke.GOLF, 'gitea': smoke.GITEA, 'email': owner['email'], 'password': owner['password'], 'ownerToken': owner['token'], 'repository': namespace+'/first', 'target': first, 'publicKeys': browser_keys, 'screenshots': str(args.screenshots.resolve()), 'runtime': runtime_before, 'stackRoot': str(stack)}
                 proof = subprocess.run(['node', str(Path(__file__).with_name('repository-deploy-keys-browser.mjs'))], cwd=stack, input=json.dumps(config), capture_output=True, text=True, timeout=240)
                 for line in proof.stderr.splitlines():
                     if line.startswith('Deploy-key browser failed at ') or line == 'Deploy-key browser logout failed':
@@ -365,13 +382,27 @@ def main():
         for actor in reversed(enrolled):
             try: assert operator('disable', {'username': actor['name']})['disabled']
             except Exception: failures.append('managed account disable')
+        if owned_organization is not None:
+            try:
+                for native in reversed(native_repos):
+                    route = 'repos/'+native['full_name']
+                    current = smoke.provider(owner['token'], 'GET', route)
+                    assert str(current['id']) == str(native['id']) and str(current['owner']['id']) == str(owned_organization['id'])
+                    smoke.provider(owner['token'], 'DELETE', route, expected=204)
+                    smoke.provider(owner['token'], 'GET', route, expected=404)
+                route = 'orgs/'+owned_organization['username']
+                current = smoke.provider(owner['token'], 'GET', route)
+                assert str(current['id']) == str(owned_organization['id'])
+                smoke.provider(owner['token'], 'DELETE', route, expected=204)
+                smoke.provider(owner['token'], 'GET', route, expected=404)
+            except Exception: failures.append('owned organization/repository cleanup')
         for actor in reversed(list(actors.values())):
             if actor['created']:
                 try: admin('delete', '--username', actor['name'], '--purge')
                 except Exception: failures.append('native purge')
         if args.browser and (args.screenshots/'manifest.json').is_file():
             manifest = json.loads((args.screenshots/'manifest.json').read_text())
-            manifest.update(status='qualified' if passed and not failures else 'failed', nativeProofPassed=passed, cleanup='complete' if not failures else 'incomplete')
+            manifest.update(status='qualified' if passed and not failures else 'failed', nativeProofPassed=passed, repositoryScope='organization' if args.organization else 'personal', cleanup='complete' if not failures else 'incomplete')
             (args.screenshots/'manifest.json').write_text(json.dumps(manifest, indent=2)); (args.screenshots/'manifest.json').chmod(0o600)
         assert not failures, 'Disposable deploy-key fixture cleanup incomplete'
         print('Cleanup: native actors/repos/keys purged, managed fixture accounts disabled, sessions/bearers revoked; Golf account audit history remains retained.', flush=True)
