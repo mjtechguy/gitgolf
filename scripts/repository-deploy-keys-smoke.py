@@ -18,6 +18,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -193,7 +194,14 @@ def main():
         key = target['repository']; return 'repos/'+key['owner']+'/'+key['name']
 
     def native_inventory(target):
-        return smoke.provider(owner['token'], 'GET', path(target)+'/keys?limit=50')
+        rows=smoke.provider(owner['token'], 'GET', path(target)+'/keys?limit=50')
+        # Native key rows embed mutable repository metadata. Visibility updates
+        # deliberately change that metadata, not the observed SSH association.
+        for row in rows:
+            if row.get('repository') is not None:
+                assert str(row['repository']['id'])==target['repositoryId']
+                assert str(row['repository']['owner']['id'])==target['ownerId']
+        return [{field:row[field] for field in ('id','key_id','title','key','fingerprint','created_at','read_only')} for row in rows]
 
     def native_ref(target, name):
         # Direct supported Git refs do not depend on the native branch DB cache.
@@ -340,7 +348,9 @@ def main():
             assert runtime() == runtime_before, 'Product runtime changed during qualification'
         passed = True
     except Exception as failure:
-        print('Deploy-key qualification failed at '+stage+'; '+type(failure).__name__+'; private diagnostics withheld', file=sys.stderr)
+        frames=traceback.extract_tb(failure.__traceback__)
+        location=next((frame for frame in reversed(frames) if frame.filename==__file__),frames[-1])
+        print('Deploy-key qualification failed at '+stage+'; '+type(failure).__name__+'; qualifier line '+str(location.lineno)+'; private diagnostics withheld', file=sys.stderr)
         raise
     finally:
         failures = []
