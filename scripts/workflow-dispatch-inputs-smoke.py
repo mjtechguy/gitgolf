@@ -136,6 +136,7 @@ def main():
     parser.add_argument('--stack-root',type=Path,default=ROOT)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--seed-wait-seconds',type=int,default=300)
+    parser.add_argument('--ui',action='store_true',help='Also qualify read-only actual typed editor and exact recorded run/job/step pages')
     args=parser.parse_args();stack=args.stack_root.resolve();output=args.output.resolve()
     assert 1<=args.seed_wait_seconds<=600 and not output.exists()
     assert re.fullmatch('[a-f0-9]{40}',args.source_revision)
@@ -325,7 +326,16 @@ def main():
             assert counts()=={'runs':1,'inputs':1} and runtime()==initial
             private_row=json.loads(metadata("SELECT json_build_object('runId',run_id::text,'contract',contract_version,'schemaSha256',schema_sha256,'submittedSha256',submitted_sha256,'effectiveSha256',effective_sha256,'cipherBytes',octet_length(encrypted_content),'payloadBytes',payload_bytes) FROM golf_workflow_dispatch_inputs WHERE run_id='"+run['id']+"'::uuid"))
             assert private_row['runId']==run['id'] and private_row['contract']==1 and private_row['schemaSha256']==prepared['schemaSha256'] and private_row['submittedSha256']==prepared['submittedSha256'] and private_row['effectiveSha256']==prepared['effectiveSha256'] and private_row['cipherBytes']==private_row['payloadBytes']+28
-            record(run={'id':observed['id'],'attemptId':observed['attemptId'],'state':observed['state'],'jobs':jobs,'engineCatalog':CATALOG,'engineCommit':act.ENGINE},logReceipts=evidence,encryptedContentMetadata=private_row,workerFailureStages=act.worker_failure_stages(command('logs','--no-color','runner')));passed=True
+            record(run={'id':observed['id'],'attemptId':observed['attemptId'],'state':observed['state'],'jobs':jobs,'engineCatalog':CATALOG,'engineCommit':act.ENGINE},logReceipts=evidence,encryptedContentMetadata=private_row,workerFailureStages=act.worker_failure_stages(command('logs','--no-color','runner')))
+            if args.ui:
+                stage('actual read-only typed editor/run/scoped step browser qualification')
+                cookies=[{'name':cookie.name,'value':cookie.value,'url':smoke.GOLF,'httpOnly':True,'sameSite':'Strict'} for handler in owner['session'].handlers if isinstance(handler,urllib.request.HTTPCookieProcessor) for cookie in handler.cookiejar]
+                assert len(cookies)==1
+                forbidden.extend(cookie['value'] for cookie in cookies)
+                execute('node',str(ROOT/'scripts/workflow-dispatch-inputs-browser.mjs'),payload={'golf':smoke.GOLF,'cookies':cookies,'repository':repository,'run':observed,'literal':LITERAL,'sourceRevision':args.source_revision,'stackRoot':str(stack),'output':str(output/'typed-ui')},timeout=240)
+                browser=json.loads((output/'typed-ui/manifest.json').read_text());assert browser['complete'] and browser['passed'] and len(browser['captures'])==12
+                record(browser={'manifest':'typed-ui/manifest.json','captures':12,'readOnly':True},limitations=['One full-SHA manual v2 run and read-only served editor/run/scoped-step pages; no browser dispatch, input-declaring push, secret binding, provider inference or full Actions parity.','Discarded actual response body after accepted HTTP headers; no arbitrary transport-loss guarantee.','Current native/lease fences source+PG-qualified separately; this runtime slice tests old/HTTP worker exclusion.'])
+            passed=True
         except Exception as error:
             if started:
                 try:helpers.private_write(output/'private-postgres-failure.log',command('logs','--no-color','--tail','100','postgres'))
