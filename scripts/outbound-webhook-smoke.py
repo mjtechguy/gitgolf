@@ -500,7 +500,11 @@ networks:
                 # no-send proof needs a fresh queue immediately before revocation.
                 command('start','webhook-worker');terminal(sub,pending)
                 run('node','--input-type=module','-e',BROWSER,payload=json.dumps(browser_config),timeout=300)
-                call('admin',METHODS[0],{'target':target},403)
+                # Removing the sole collaborator grant hides this private
+                # repository from the former admin, rather than leaving read
+                # access with an administrator-only operation denied.
+                smoke.provider(actors['admin']['token'],'GET',route,expected=404)
+                call('admin',METHODS[0],{'target':target},404)
                 command('stop','webhook-worker')
                 # Regrant only to enqueue an explicit frozen pending fixture. The
                 # browser's preceding revocation proof remains separately recorded.
