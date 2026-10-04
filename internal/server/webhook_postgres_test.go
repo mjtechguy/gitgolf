@@ -451,6 +451,30 @@ func TestWebhookHTTPBoundary(t *testing.T) {
 		}
 	}
 }
+
+func TestWebhookInvalidDestinationHTTPPostgres(t *testing.T) {
+	f := newWebhookFixture(t)
+	for _, endpoint := range []string{"http://169.254.169.254/private-token", f.sink.URL + "/outside/private-token"} {
+		payload, err := json.Marshal(&golfv1.SaveRepositoryWebhookRequest{Target: f.target, Id: uuid.NewString(), ExpectedVersion: "0", Name: "Rejected", EventTopics: []string{"issues"}, Endpoint: endpoint, SigningSecret: strings.Repeat("K", 32), Enabled: true, AuthorizeBackground: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest("POST", "/rpc/golf.v1.RepositoryWebhookService/SaveRepositoryWebhook", strings.NewReader(string(payload)))
+		req.Header.Set("Origin", f.s.config.PublicURL)
+		req.Header.Set("Cookie", f.cookie)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Connect-Protocol-Version", "1")
+		w := httptest.NewRecorder()
+		f.s.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest || w.Header().Get("Cache-Control") != "no-store" || !strings.Contains(w.Body.String(), `"code":"invalid_argument"`) || strings.Contains(w.Body.String(), "private-token") || f.received.Load() != 0 {
+			t.Fatalf("destination rejection: status=%d cache=%q receiver=%d", w.Code, w.Header().Get("Cache-Control"), f.received.Load())
+		}
+	}
+	listed, err := f.s.ListRepositoryWebhooks(f.ctx, webhookRequest(f, &golfv1.ListRepositoryWebhooksRequest{Target: f.target}))
+	if err != nil || len(listed.Msg.Subscriptions) != 0 {
+		t.Fatal("rejected destination persisted a subscription", err)
+	}
+}
 func TestWebhookRetryBounds(t *testing.T) {
 	for attempt := int32(1); attempt <= 6; attempt++ {
 		d := webhookRetryDelay(attempt, "", time.Now())

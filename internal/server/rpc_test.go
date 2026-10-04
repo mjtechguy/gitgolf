@@ -32,6 +32,8 @@ func TestRPCErrorMapping(t *testing.T) {
 		{forgeError{409}, connect.CodeAlreadyExists}, {forgeError{422}, connect.CodeAlreadyExists}, {forgeError{429}, connect.CodeResourceExhausted},
 		{forgeError{500}, connect.CodeUnavailable}, {context.Canceled, connect.CodeCanceled}, {context.DeadlineExceeded, connect.CodeDeadlineExceeded},
 		{errors.New("secret-token-and-SQL-dsn"), connect.CodeInternal},
+		{fmt.Errorf("secret-token-and-SQL-dsn: %w", errWebhookDestination), connect.CodeInvalidArgument},
+		{fmt.Errorf("secret-token-and-SQL-dsn: %w", errWebhookNetwork), connect.CodeUnavailable},
 	} {
 		err := rpcError(tc.err)
 		if connect.CodeOf(err) != tc.code || strings.Contains(err.Error(), "secret-token-and-SQL-dsn") {

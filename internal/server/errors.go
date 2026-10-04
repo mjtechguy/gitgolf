@@ -44,6 +44,10 @@ func rpcError(err error) error {
 	var input inputError
 	var upstream forgeError
 	switch {
+	case errors.Is(err, errWebhookDestination):
+		code, message = connect.CodeInvalidArgument, "Webhook destination is not an approved HTTPS endpoint."
+	case errors.Is(err, errWebhookNetwork):
+		code, message = connect.CodeUnavailable, "Webhook destination is unavailable. Try again after checking its network configuration."
 	case errors.Is(err, errReviewDraftConflict):
 		code, message = connect.CodeAborted, "The private draft version or target generation changed. Refresh and inspect the accepted operation before saving again."
 	case errors.Is(err, errReviewDraftIntent):
