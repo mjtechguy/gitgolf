@@ -1,0 +1,30 @@
+name: Typed manual inputs qualification
+on:
+  workflow_dispatch:
+    inputs:
+      text: {type: string, required: true}
+      flag: {type: boolean, default: false}
+      count: {type: number, default: 2.5}
+      mode: {type: choice, options: [a, b], default: a}
+defaults: {run: {shell: sh}}
+jobs:
+  inputs:
+    runs-on: linux
+    steps:
+      - id: literal
+        env: {VALUE: '${{ inputs.text }}', NUMBER: '${{ inputs.count }}', MODE: '${{ inputs.mode }}'}
+        run: |
+          test "$VALUE" = 'literal <>& 世界 ${{ inputs.flag }} $(touch /tmp/should-not-exist)'
+          test "$NUMBER" = 2.5
+          test "$MODE" = b
+          test ! -e /tmp/should-not-exist
+          echo 'typed-literal-values-verified'
+      - id: falseflag
+        if: '${{ inputs.flag }}'
+        run: 'exit 81'
+      - id: numbertruth
+        if: '${{ inputs.count > 2 }}'
+        run: 'echo typed-number-truth-verified'
+      - id: composite
+        uses: ./actions/manual-inputs-proof
+        with: {value: '${{ inputs.text }}'}

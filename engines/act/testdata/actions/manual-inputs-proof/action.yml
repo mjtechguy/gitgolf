@@ -1,0 +1,11 @@
+name: Typed literal composite
+inputs: {value: {required: true}}
+runs:
+  using: composite
+  steps:
+    - id: literal
+      shell: sh
+      run: |
+        test "$INPUT_VALUE" = 'literal <>& 世界 ${{ inputs.flag }} $(touch /tmp/should-not-exist)'
+        test ! -e /tmp/should-not-exist
+        echo 'typed-composite-nonrecursive-verified'
