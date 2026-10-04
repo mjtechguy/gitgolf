@@ -62,7 +62,7 @@ The adapter pins the [official Go SDK v1.8.0](https://github.com/modelcontextpro
 | `golf_team_repos` | `organization`, `team_id` | `page`, `limit` |
 | `golf_audit_list` | None | `limit`, `before_id`, `snapshot_id` |
 
-`golf_repo_overview` resolves current native identity and validates the exact-ID metadata receipt before returning About/topics/website/counts/language bytes/license identifiers. Missing counts remain absent; zero remains zero. Indexed sections report availability explicitly and are not selected-commit facts. Display links are validated and never fetched. This adds no write authority or provider configuration. CLI source checks cover both credential modes; actual 24-tool qualification remains pending until recorded in the ledger.
+`golf_repo_overview` resolves current native identity and validates the exact-ID metadata receipt before returning About/topics/website/counts/language bytes/license identifiers. Missing counts remain absent; zero remains zero. Indexed sections report availability explicitly and are not selected-commit facts. Display links are validated and never fetched. This adds no write authority or provider configuration. CLI source checks cover both credential modes; actual 24-tool native qualification under both advertised protocol revisions and bearer/PAT modes passes as recorded in the ledger.
 
 `repository` is `OWNER/REPO`. `page` defaults to 1 and accepts 1–10,000; `limit` defaults to 20 and accepts 1–100. `number` is a positive issue/PR number within the CLI's signed 32-bit bound. These three fields are JSON integers. `state` accepts `open`, `closed` or `all`, defaulting to `open`.
 
