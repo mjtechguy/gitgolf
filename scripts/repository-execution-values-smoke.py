@@ -287,7 +287,8 @@ def main():
         try:
             stage('fresh core, real TLS endpoint and bounded externally seeded daemon')
             started = True
-            command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','gitea','golf','runner-daemon','runner-image-init','runner-actions-image-init')
+            command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','gitea','golf','runner-daemon')
+            command('up','-d','--no-build','--pull','never','runner-image-init','runner-actions-image-init')
             smoke.ready(); baseline = runtime(); manifest['runtimeBefore'] = baseline
             context = ssl.create_default_context(cafile=str(ca)); context.minimum_version = ssl.TLSVersion.TLSv1_3
             with socket.create_connection(('127.0.0.1',ports[2]),timeout=10) as raw:
