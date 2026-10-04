@@ -2560,6 +2560,8 @@ service RepositoryLifecycleService {
  rpc GetRepositoryLifecycle(GetRepositoryLifecycleRequest) returns (GetRepositoryLifecycleResponse);
  rpc ChangeRepositoryArchiveState(ChangeRepositoryArchiveStateRequest) returns (ChangeRepositoryArchiveStateResponse);
  rpc GetRepositoryLifecycleOperation(GetRepositoryLifecycleOperationRequest) returns (GetRepositoryLifecycleOperationResponse);
+ rpc DeleteRepository(DeleteRepositoryRequest) returns (DeleteRepositoryResponse);
+ rpc GetRepositoryDeletionOperation(GetRepositoryDeletionOperationRequest) returns (GetRepositoryDeletionOperationResponse);
 }
 message RepositoryLifecycle {
  RepositoryKey repository=1;
@@ -2575,6 +2577,8 @@ message RepositoryLifecycle {
  bool unarchive_available=11;
  string blocked_reason=12;
  bool unresolved=13;
+ bool delete_available=14;
+ string delete_notice=15;
 }
 message RepositoryLifecycleOperation {
  string idempotency_key=1;
@@ -2589,6 +2593,7 @@ message RepositoryLifecycleOperation {
  string failure_code=10;
  string created_at=11;
  string updated_at=12;
+ string action=13;
 }
 message GetRepositoryLifecycleRequest { RepositoryKey repository=1; string repository_id=2; }
 message GetRepositoryLifecycleResponse { RepositoryLifecycle lifecycle=1; }
@@ -3481,3 +3486,23 @@ message WorkflowJobResourceBinding {
  string placement_version=6;
  bool bound=7;
 }
+
+// Browser-only owner deletion. Availability requires independently qualified private-native ingress.
+message DeleteRepositoryRequest {
+ RepositoryKey repository=1;
+ string repository_id=2;
+ string owner_id=3;
+ string expected_revision=4;
+ string confirmation_name=5;
+ string current_password=6;
+ string idempotency_key=7;
+}
+message DeleteRepositoryResponse { RepositoryLifecycleOperation operation=1; }
+// Original operation only; does not look up or delete a replacement repository.
+message GetRepositoryDeletionOperationRequest {
+ RepositoryKey repository=1;
+ string repository_id=2;
+ string owner_id=3;
+ string idempotency_key=4;
+}
+message GetRepositoryDeletionOperationResponse { RepositoryLifecycleOperation operation=1; }

@@ -10,7 +10,7 @@ import (
 )
 
 const advanceRepositoryLifecycle = `-- name: AdvanceRepositoryLifecycle :one
-UPDATE golf_repository_lifecycle_operations SET phase=$4,failure_code=$5,updated_at=clock_timestamp() WHERE id=$1 AND user_id=$2 AND forge_url=$3 RETURNING id, user_id, forge_url, actor_id, idempotency_key, repository_id, owner_id, repository_owner, repository_name, expected_revision, from_archived, to_archived, fingerprint, phase, failure_code, created_at, updated_at
+UPDATE golf_repository_lifecycle_operations SET phase=$4,failure_code=$5,updated_at=clock_timestamp() WHERE id=$1 AND user_id=$2 AND forge_url=$3 RETURNING id, user_id, forge_url, actor_id, idempotency_key, repository_id, owner_id, repository_owner, repository_name, expected_revision, from_archived, to_archived, fingerprint, phase, failure_code, created_at, updated_at, action, owner_is_organization
 `
 
 type AdvanceRepositoryLifecycleParams struct {
@@ -48,6 +48,8 @@ func (q *Queries) AdvanceRepositoryLifecycle(ctx context.Context, arg AdvanceRep
 		&i.FailureCode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Action,
+		&i.OwnerIsOrganization,
 	)
 	return i, err
 }
@@ -69,7 +71,7 @@ func (q *Queries) CountRepositoryLifecycleActive(ctx context.Context, arg CountR
 }
 
 const getOwnRepositoryLifecycle = `-- name: GetOwnRepositoryLifecycle :one
-SELECT id, user_id, forge_url, actor_id, idempotency_key, repository_id, owner_id, repository_owner, repository_name, expected_revision, from_archived, to_archived, fingerprint, phase, failure_code, created_at, updated_at FROM golf_repository_lifecycle_operations WHERE user_id=$1 AND forge_url=$2 AND idempotency_key=$3
+SELECT id, user_id, forge_url, actor_id, idempotency_key, repository_id, owner_id, repository_owner, repository_name, expected_revision, from_archived, to_archived, fingerprint, phase, failure_code, created_at, updated_at, action, owner_is_organization FROM golf_repository_lifecycle_operations WHERE user_id=$1 AND forge_url=$2 AND idempotency_key=$3
 `
 
 type GetOwnRepositoryLifecycleParams struct {
@@ -99,6 +101,8 @@ func (q *Queries) GetOwnRepositoryLifecycle(ctx context.Context, arg GetOwnRepos
 		&i.FailureCode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Action,
+		&i.OwnerIsOrganization,
 	)
 	return i, err
 }
@@ -149,9 +153,69 @@ func (q *Queries) RepositoryLifecycleUnresolved(ctx context.Context, arg Reposit
 	return exists, err
 }
 
+const reserveRepositoryDeletion = `-- name: ReserveRepositoryDeletion :one
+INSERT INTO golf_repository_lifecycle_operations(user_id,forge_url,actor_id,idempotency_key,repository_id,owner_id,repository_owner,repository_name,expected_revision,from_archived,to_archived,fingerprint,action,owner_is_organization)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10,$11,'delete',$12) ON CONFLICT(user_id,idempotency_key) DO NOTHING RETURNING id, user_id, forge_url, actor_id, idempotency_key, repository_id, owner_id, repository_owner, repository_name, expected_revision, from_archived, to_archived, fingerprint, phase, failure_code, created_at, updated_at, action, owner_is_organization
+`
+
+type ReserveRepositoryDeletionParams struct {
+	UserID              int64
+	ForgeURL            string
+	ActorID             int64
+	IdempotencyKey      string
+	RepositoryID        int64
+	OwnerID             int64
+	RepositoryOwner     string
+	RepositoryName      string
+	ExpectedRevision    string
+	FromArchived        bool
+	Fingerprint         []byte
+	OwnerIsOrganization bool
+}
+
+func (q *Queries) ReserveRepositoryDeletion(ctx context.Context, arg ReserveRepositoryDeletionParams) (GolfRepositoryLifecycleOperation, error) {
+	row := q.db.QueryRowContext(ctx, reserveRepositoryDeletion,
+		arg.UserID,
+		arg.ForgeURL,
+		arg.ActorID,
+		arg.IdempotencyKey,
+		arg.RepositoryID,
+		arg.OwnerID,
+		arg.RepositoryOwner,
+		arg.RepositoryName,
+		arg.ExpectedRevision,
+		arg.FromArchived,
+		arg.Fingerprint,
+		arg.OwnerIsOrganization,
+	)
+	var i GolfRepositoryLifecycleOperation
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ForgeURL,
+		&i.ActorID,
+		&i.IdempotencyKey,
+		&i.RepositoryID,
+		&i.OwnerID,
+		&i.RepositoryOwner,
+		&i.RepositoryName,
+		&i.ExpectedRevision,
+		&i.FromArchived,
+		&i.ToArchived,
+		&i.Fingerprint,
+		&i.Phase,
+		&i.FailureCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Action,
+		&i.OwnerIsOrganization,
+	)
+	return i, err
+}
+
 const reserveRepositoryLifecycle = `-- name: ReserveRepositoryLifecycle :one
 INSERT INTO golf_repository_lifecycle_operations(user_id,forge_url,actor_id,idempotency_key,repository_id,owner_id,repository_owner,repository_name,expected_revision,from_archived,to_archived,fingerprint)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(user_id,idempotency_key) DO NOTHING RETURNING id, user_id, forge_url, actor_id, idempotency_key, repository_id, owner_id, repository_owner, repository_name, expected_revision, from_archived, to_archived, fingerprint, phase, failure_code, created_at, updated_at
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(user_id,idempotency_key) DO NOTHING RETURNING id, user_id, forge_url, actor_id, idempotency_key, repository_id, owner_id, repository_owner, repository_name, expected_revision, from_archived, to_archived, fingerprint, phase, failure_code, created_at, updated_at, action, owner_is_organization
 `
 
 type ReserveRepositoryLifecycleParams struct {
@@ -203,6 +267,8 @@ func (q *Queries) ReserveRepositoryLifecycle(ctx context.Context, arg ReserveRep
 		&i.FailureCode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Action,
+		&i.OwnerIsOrganization,
 	)
 	return i, err
 }

@@ -1040,23 +1040,25 @@ type GolfRepositoryLifecycleEvent struct {
 }
 
 type GolfRepositoryLifecycleOperation struct {
-	ID               int64
-	UserID           int64
-	ForgeURL         string
-	ActorID          int64
-	IdempotencyKey   string
-	RepositoryID     int64
-	OwnerID          int64
-	RepositoryOwner  string
-	RepositoryName   string
-	ExpectedRevision string
-	FromArchived     bool
-	ToArchived       bool
-	Fingerprint      []byte
-	Phase            string
-	FailureCode      string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	ID                  int64
+	UserID              int64
+	ForgeURL            string
+	ActorID             int64
+	IdempotencyKey      string
+	RepositoryID        int64
+	OwnerID             int64
+	RepositoryOwner     string
+	RepositoryName      string
+	ExpectedRevision    string
+	FromArchived        bool
+	ToArchived          bool
+	Fingerprint         []byte
+	Phase               string
+	FailureCode         string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	Action              string
+	OwnerIsOrganization bool
 }
 
 type GolfRepositoryRuleMutation struct {

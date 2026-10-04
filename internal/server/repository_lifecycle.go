@@ -73,6 +73,9 @@ type lifecyclePermit struct {
 	userID       int64
 	key          string
 	archived     bool
+	delete       bool
+	ownerID      int64
+	revision     string
 }
 type lifecyclePermitKey struct{}
 type lifecycleBody struct {
@@ -175,7 +178,12 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 			cancel()
 			return nil, errStorageUnavailable
 		}
-		if blocked {
+		if permit, ok := ctx.Value(lifecyclePermitKey{}).(lifecyclePermit); ok {
+			if e := s.validateLifecyclePermit(ctx, held.tx, permit, repo, key, method, path, base, token, input); e != nil {
+				cancel()
+				return nil, e
+			}
+		} else if blocked {
 			cancel()
 			return nil, errLifecycleBlocked
 		}
@@ -192,20 +200,9 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 	}
 	permit, permitted := ctx.Value(lifecyclePermitKey{}).(lifecyclePermit)
 	if permitted {
-		data, _ := json.Marshal(input)
-		expected, _ := json.Marshal(map[string]bool{"archived": permit.archived})
-		if repo.NativeActions == nil || *repo.NativeActions || permit.repositoryID != repo.ID || method != http.MethodPatch || path != base || !bytes.Equal(data, expected) {
+		if e = s.validateLifecyclePermit(ctx, tx, permit, repo, key, method, path, base, token, input); e != nil {
 			release()
-			return nil, errLifecycleBlocked
-		}
-		var exact bool
-		e = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_repository_lifecycle_operations WHERE forge_url=$1 AND repository_id=$2 AND user_id=$3 AND idempotency_key=$4 AND to_archived=$5 AND phase='DISPATCH_UNKNOWN')`, s.config.GiteaURL, repo.ID, permit.userID, permit.key, permit.archived).Scan(&exact)
-		if e != nil || !exact {
-			release()
-			if e != nil {
-				return nil, errStorageUnavailable
-			}
-			return nil, errLifecycleBlocked
+			return nil, e
 		}
 	} else {
 		var blocked bool
@@ -221,7 +218,7 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 	return release, nil
 }
 func wireLifecycleOperation(r database.GolfRepositoryLifecycleOperation) *golfv1.RepositoryLifecycleOperation {
-	return &golfv1.RepositoryLifecycleOperation{IdempotencyKey: r.IdempotencyKey, Repository: &golfv1.RepositoryKey{Owner: r.RepositoryOwner, Name: r.RepositoryName}, RepositoryId: strconv.FormatInt(r.RepositoryID, 10), OwnerId: strconv.FormatInt(r.OwnerID, 10), ActorId: strconv.FormatInt(r.ActorID, 10), FromArchived: r.FromArchived, ToArchived: r.ToArchived, ExpectedRevision: r.ExpectedRevision, Phase: r.Phase, FailureCode: r.FailureCode, CreatedAt: r.CreatedAt.Format(time.RFC3339Nano), UpdatedAt: r.UpdatedAt.Format(time.RFC3339Nano)}
+	return &golfv1.RepositoryLifecycleOperation{IdempotencyKey: r.IdempotencyKey, Repository: &golfv1.RepositoryKey{Owner: r.RepositoryOwner, Name: r.RepositoryName}, RepositoryId: strconv.FormatInt(r.RepositoryID, 10), OwnerId: strconv.FormatInt(r.OwnerID, 10), ActorId: strconv.FormatInt(r.ActorID, 10), FromArchived: r.FromArchived, ToArchived: r.ToArchived, ExpectedRevision: r.ExpectedRevision, Phase: r.Phase, FailureCode: r.FailureCode, CreatedAt: r.CreatedAt.Format(time.RFC3339Nano), UpdatedAt: r.UpdatedAt.Format(time.RFC3339Nano), Action: r.Action}
 }
 
 // Ownership is independently proved even for archived repositories; CanEdit in
@@ -256,7 +253,7 @@ func (s *Server) lifecycleObservation(ctx context.Context, session string, token
 				}
 			}
 			manage := owner && row.Permissions.Admin && !*row.Mirror
-			result = &golfv1.RepositoryLifecycle{Repository: &golfv1.RepositoryKey{Owner: key.Owner, Name: key.Name}, RepositoryId: settings.RepositoryId, OwnerId: settings.OwnerId, Revision: settings.Revision, Archived: *row.Archived, Mirror: *row.Mirror, CanManage: manage, StepUpAvailable: token.Local}
+			result = &golfv1.RepositoryLifecycle{Repository: &golfv1.RepositoryKey{Owner: key.Owner, Name: key.Name}, RepositoryId: settings.RepositoryId, OwnerId: settings.OwnerId, Revision: settings.Revision, Archived: *row.Archived, Mirror: *row.Mirror, CanManage: manage, StepUpAvailable: token.Local, DeleteNotice: "managed_native_boundary_unqualified"}
 			if !manage {
 				if *row.Mirror {
 					result.BlockedReason = "mirror_unsupported"
@@ -301,6 +298,14 @@ func (s *Server) lifecycleObservation(ctx context.Context, session string, token
 			default:
 				result.ArchiveAvailable = !result.Archived
 				result.UnarchiveAvailable = result.Archived
+				if !managedBlocked {
+					if e := s.deletionBoundary(ctx, s.db, token, key, row); e == nil {
+						result.DeleteAvailable = true
+						result.DeleteNotice = ""
+					} else if !errors.Is(e, errDeletionBoundary) {
+						return e
+					}
+				}
 			}
 			after, current, e := s.readLifecycleNative(ctx, token, key)
 			if e != nil {
@@ -391,7 +396,7 @@ func (s *Server) GetRepositoryLifecycleOperation(ctx context.Context, req *conne
 	if e != nil {
 		return nil, lifecycleRPCError(e)
 	}
-	if strconv.FormatInt(r.RepositoryID, 10) != m.RepositoryId || strconv.FormatInt(r.OwnerID, 10) != m.OwnerId || r.RepositoryOwner != key.Owner || r.RepositoryName != key.Name {
+	if r.Action != "archive_state" || strconv.FormatInt(r.RepositoryID, 10) != m.RepositoryId || strconv.FormatInt(r.OwnerID, 10) != m.OwnerId || r.RepositoryOwner != key.Owner || r.RepositoryName != key.Name {
 		return nil, lifecycleRPCError(errRepositorySettingsConflict)
 	}
 	return connect.NewResponse(&golfv1.GetRepositoryLifecycleOperationResponse{Operation: wireLifecycleOperation(r)}), nil
@@ -454,7 +459,7 @@ func (s *Server) ChangeRepositoryArchiveState(ctx context.Context, req *connect.
 	fp := sha256.Sum256(encoded)
 	existing, e := s.ownLifecycle(ctx, session, token, m.IdempotencyKey)
 	if e == nil {
-		if !bytes.Equal(existing.Fingerprint, fp[:]) {
+		if existing.Action != "archive_state" || !bytes.Equal(existing.Fingerprint, fp[:]) {
 			return nil, lifecycleRPCError(errRepositorySettingsConflict)
 		}
 		return connect.NewResponse(&golfv1.ChangeRepositoryArchiveStateResponse{Operation: wireLifecycleOperation(existing)}), nil

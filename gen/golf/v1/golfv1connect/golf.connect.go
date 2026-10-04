@@ -534,6 +534,12 @@ const (
 	// RepositoryLifecycleServiceGetRepositoryLifecycleOperationProcedure is the fully-qualified name of
 	// the RepositoryLifecycleService's GetRepositoryLifecycleOperation RPC.
 	RepositoryLifecycleServiceGetRepositoryLifecycleOperationProcedure = "/golf.v1.RepositoryLifecycleService/GetRepositoryLifecycleOperation"
+	// RepositoryLifecycleServiceDeleteRepositoryProcedure is the fully-qualified name of the
+	// RepositoryLifecycleService's DeleteRepository RPC.
+	RepositoryLifecycleServiceDeleteRepositoryProcedure = "/golf.v1.RepositoryLifecycleService/DeleteRepository"
+	// RepositoryLifecycleServiceGetRepositoryDeletionOperationProcedure is the fully-qualified name of
+	// the RepositoryLifecycleService's GetRepositoryDeletionOperation RPC.
+	RepositoryLifecycleServiceGetRepositoryDeletionOperationProcedure = "/golf.v1.RepositoryLifecycleService/GetRepositoryDeletionOperation"
 	// EmailNotificationServiceListEmailTransportsProcedure is the fully-qualified name of the
 	// EmailNotificationService's ListEmailTransports RPC.
 	EmailNotificationServiceListEmailTransportsProcedure = "/golf.v1.EmailNotificationService/ListEmailTransports"
@@ -5499,6 +5505,8 @@ type RepositoryLifecycleServiceClient interface {
 	GetRepositoryLifecycle(context.Context, *connect.Request[v1.GetRepositoryLifecycleRequest]) (*connect.Response[v1.GetRepositoryLifecycleResponse], error)
 	ChangeRepositoryArchiveState(context.Context, *connect.Request[v1.ChangeRepositoryArchiveStateRequest]) (*connect.Response[v1.ChangeRepositoryArchiveStateResponse], error)
 	GetRepositoryLifecycleOperation(context.Context, *connect.Request[v1.GetRepositoryLifecycleOperationRequest]) (*connect.Response[v1.GetRepositoryLifecycleOperationResponse], error)
+	DeleteRepository(context.Context, *connect.Request[v1.DeleteRepositoryRequest]) (*connect.Response[v1.DeleteRepositoryResponse], error)
+	GetRepositoryDeletionOperation(context.Context, *connect.Request[v1.GetRepositoryDeletionOperationRequest]) (*connect.Response[v1.GetRepositoryDeletionOperationResponse], error)
 }
 
 // NewRepositoryLifecycleServiceClient constructs a client for the
@@ -5530,6 +5538,18 @@ func NewRepositoryLifecycleServiceClient(httpClient connect.HTTPClient, baseURL 
 			connect.WithSchema(repositoryLifecycleServiceMethods.ByName("GetRepositoryLifecycleOperation")),
 			connect.WithClientOptions(opts...),
 		),
+		deleteRepository: connect.NewClient[v1.DeleteRepositoryRequest, v1.DeleteRepositoryResponse](
+			httpClient,
+			baseURL+RepositoryLifecycleServiceDeleteRepositoryProcedure,
+			connect.WithSchema(repositoryLifecycleServiceMethods.ByName("DeleteRepository")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryDeletionOperation: connect.NewClient[v1.GetRepositoryDeletionOperationRequest, v1.GetRepositoryDeletionOperationResponse](
+			httpClient,
+			baseURL+RepositoryLifecycleServiceGetRepositoryDeletionOperationProcedure,
+			connect.WithSchema(repositoryLifecycleServiceMethods.ByName("GetRepositoryDeletionOperation")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -5538,6 +5558,8 @@ type repositoryLifecycleServiceClient struct {
 	getRepositoryLifecycle          *connect.Client[v1.GetRepositoryLifecycleRequest, v1.GetRepositoryLifecycleResponse]
 	changeRepositoryArchiveState    *connect.Client[v1.ChangeRepositoryArchiveStateRequest, v1.ChangeRepositoryArchiveStateResponse]
 	getRepositoryLifecycleOperation *connect.Client[v1.GetRepositoryLifecycleOperationRequest, v1.GetRepositoryLifecycleOperationResponse]
+	deleteRepository                *connect.Client[v1.DeleteRepositoryRequest, v1.DeleteRepositoryResponse]
+	getRepositoryDeletionOperation  *connect.Client[v1.GetRepositoryDeletionOperationRequest, v1.GetRepositoryDeletionOperationResponse]
 }
 
 // GetRepositoryLifecycle calls golf.v1.RepositoryLifecycleService.GetRepositoryLifecycle.
@@ -5557,12 +5579,25 @@ func (c *repositoryLifecycleServiceClient) GetRepositoryLifecycleOperation(ctx c
 	return c.getRepositoryLifecycleOperation.CallUnary(ctx, req)
 }
 
+// DeleteRepository calls golf.v1.RepositoryLifecycleService.DeleteRepository.
+func (c *repositoryLifecycleServiceClient) DeleteRepository(ctx context.Context, req *connect.Request[v1.DeleteRepositoryRequest]) (*connect.Response[v1.DeleteRepositoryResponse], error) {
+	return c.deleteRepository.CallUnary(ctx, req)
+}
+
+// GetRepositoryDeletionOperation calls
+// golf.v1.RepositoryLifecycleService.GetRepositoryDeletionOperation.
+func (c *repositoryLifecycleServiceClient) GetRepositoryDeletionOperation(ctx context.Context, req *connect.Request[v1.GetRepositoryDeletionOperationRequest]) (*connect.Response[v1.GetRepositoryDeletionOperationResponse], error) {
+	return c.getRepositoryDeletionOperation.CallUnary(ctx, req)
+}
+
 // RepositoryLifecycleServiceHandler is an implementation of the golf.v1.RepositoryLifecycleService
 // service.
 type RepositoryLifecycleServiceHandler interface {
 	GetRepositoryLifecycle(context.Context, *connect.Request[v1.GetRepositoryLifecycleRequest]) (*connect.Response[v1.GetRepositoryLifecycleResponse], error)
 	ChangeRepositoryArchiveState(context.Context, *connect.Request[v1.ChangeRepositoryArchiveStateRequest]) (*connect.Response[v1.ChangeRepositoryArchiveStateResponse], error)
 	GetRepositoryLifecycleOperation(context.Context, *connect.Request[v1.GetRepositoryLifecycleOperationRequest]) (*connect.Response[v1.GetRepositoryLifecycleOperationResponse], error)
+	DeleteRepository(context.Context, *connect.Request[v1.DeleteRepositoryRequest]) (*connect.Response[v1.DeleteRepositoryResponse], error)
+	GetRepositoryDeletionOperation(context.Context, *connect.Request[v1.GetRepositoryDeletionOperationRequest]) (*connect.Response[v1.GetRepositoryDeletionOperationResponse], error)
 }
 
 // NewRepositoryLifecycleServiceHandler builds an HTTP handler from the service implementation. It
@@ -5590,6 +5625,18 @@ func NewRepositoryLifecycleServiceHandler(svc RepositoryLifecycleServiceHandler,
 		connect.WithSchema(repositoryLifecycleServiceMethods.ByName("GetRepositoryLifecycleOperation")),
 		connect.WithHandlerOptions(opts...),
 	)
+	repositoryLifecycleServiceDeleteRepositoryHandler := connect.NewUnaryHandler(
+		RepositoryLifecycleServiceDeleteRepositoryProcedure,
+		svc.DeleteRepository,
+		connect.WithSchema(repositoryLifecycleServiceMethods.ByName("DeleteRepository")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryLifecycleServiceGetRepositoryDeletionOperationHandler := connect.NewUnaryHandler(
+		RepositoryLifecycleServiceGetRepositoryDeletionOperationProcedure,
+		svc.GetRepositoryDeletionOperation,
+		connect.WithSchema(repositoryLifecycleServiceMethods.ByName("GetRepositoryDeletionOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/golf.v1.RepositoryLifecycleService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case RepositoryLifecycleServiceGetRepositoryLifecycleProcedure:
@@ -5598,6 +5645,10 @@ func NewRepositoryLifecycleServiceHandler(svc RepositoryLifecycleServiceHandler,
 			repositoryLifecycleServiceChangeRepositoryArchiveStateHandler.ServeHTTP(w, r)
 		case RepositoryLifecycleServiceGetRepositoryLifecycleOperationProcedure:
 			repositoryLifecycleServiceGetRepositoryLifecycleOperationHandler.ServeHTTP(w, r)
+		case RepositoryLifecycleServiceDeleteRepositoryProcedure:
+			repositoryLifecycleServiceDeleteRepositoryHandler.ServeHTTP(w, r)
+		case RepositoryLifecycleServiceGetRepositoryDeletionOperationProcedure:
+			repositoryLifecycleServiceGetRepositoryDeletionOperationHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -5617,6 +5668,14 @@ func (UnimplementedRepositoryLifecycleServiceHandler) ChangeRepositoryArchiveSta
 
 func (UnimplementedRepositoryLifecycleServiceHandler) GetRepositoryLifecycleOperation(context.Context, *connect.Request[v1.GetRepositoryLifecycleOperationRequest]) (*connect.Response[v1.GetRepositoryLifecycleOperationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryLifecycleService.GetRepositoryLifecycleOperation is not implemented"))
+}
+
+func (UnimplementedRepositoryLifecycleServiceHandler) DeleteRepository(context.Context, *connect.Request[v1.DeleteRepositoryRequest]) (*connect.Response[v1.DeleteRepositoryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryLifecycleService.DeleteRepository is not implemented"))
+}
+
+func (UnimplementedRepositoryLifecycleServiceHandler) GetRepositoryDeletionOperation(context.Context, *connect.Request[v1.GetRepositoryDeletionOperationRequest]) (*connect.Response[v1.GetRepositoryDeletionOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryLifecycleService.GetRepositoryDeletionOperation is not implemented"))
 }
 
 // EmailNotificationServiceClient is a client for the golf.v1.EmailNotificationService service.
