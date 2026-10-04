@@ -55,14 +55,16 @@ PROOF={'status':'prepared_not_run','cleanup':'not_created','scope':'Real bounded
 # additions keep raw mail, challenge codes, endpoints and keys only in RAM.
 MAIL_CAPTURE=r'''
     if not challenge:
-     if text.startswith('Golf workflow outcome: '):
-      facts={name:re.search(r'^'+label+r': (.+)$',text,re.M).group(1) for name,label in [('label','Golf workflow outcome'),('runId','Run'),('attemptId','Attempt'),('repositoryId','Repository ID'),('ownerId','Owner ID')]}
-      link=next(line for line in text.splitlines() if '/actions/runs/' in line)
+     fact_text=text.replace('\r\n','\n')
+     if fact_text.startswith('Golf workflow outcome: '):
+      facts={name:re.search(r'^'+label+r': (.+)$',fact_text,re.M).group(1) for name,label in [('label','Golf workflow outcome'),('runId','Run'),('attemptId','Attempt'),('repositoryId','Repository ID'),('ownerId','Owner ID')]}
+      link=next(line for line in fact_text.splitlines() if '/actions/runs/' in line)
       assert facts['label'] in ('Succeeded','Failed','Timed out','Cancelled','Outcome unconfirmed (lost)') and link.startswith(cfg['golf']+'/')
-      facts.update(deliveryId=delivery,role=cfg['roles'][recipient],link=link,truthfulLost=('execution outcome is unconfirmed' in text),truthfulCancellation=('does not prove immediate process cleanup' in text))
+      facts.update(deliveryId=delivery,role=cfg['roles'][recipient],link=link,truthfulLost=('execution outcome is unconfirmed' in fact_text),truthfulCancellation=('does not prove immediate process cleanup' in fact_text))
       with lock:assert len(mailfacts)<2000;mailfacts.append(facts)
      else:
       with lock:assert len(mailfacts)<2000;mailfacts.append({'deliveryId':delivery,'role':cfg['roles'][recipient],'activity':True})
+     del fact_text
 '''
 WEB_RECEIVER=r'''
 class Webhook(BaseHTTPRequestHandler):
@@ -142,8 +144,30 @@ def event_receipt(row,keys,target,runs):
         assert set(value)=={'schema','event','producer','event_id','repository_id','occurred_at'}
     return {k:row[k] for k in ('role','deliveryId','eventId','requestIndex','mode')}|{'bodyBytes':len(raw),'bodySha256':hashlib.sha256(raw).hexdigest(),'signatureVerified':True}
 
+def mime_capture_self_check():
+    # Exercise the exact receiver block with stdlib SMTP/quoted-printable bytes,
+    # including real CRLF and soft-wrapped link lines, without opening sockets.
+    from email.message import EmailMessage
+    from email.parser import BytesParser
+    from email import policy
+    import textwrap
+    import threading
+    golf='http://127.0.0.1:54321';run_id='12345678-1234-4234-8234-123456789abc'
+    link=golf+'/owned-'+('r'*80)+'/notification-proof/actions/runs/'+run_id
+    for label in ('Succeeded','Failed','Timed out','Cancelled','Outcome unconfirmed (lost)'):
+        attempt='Not assigned' if label=='Cancelled' else 'a'*32
+        decoded='Golf workflow outcome: '+label+'\nRun: '+run_id+'\nAttempt: '+attempt+'\nRepository ID: 9007199254740993\nOwner ID: 42\n\n'+link+'\n\nLost means the execution outcome is unconfirmed; cancelled does not prove immediate process cleanup.\n'
+        message=EmailMessage(policy=policy.SMTP);message.set_content(decoded,cte='quoted-printable')
+        wire=message.as_bytes();assert b'=\r\n' in wire and b'\r\n' in wire
+        parsed=BytesParser(policy=policy.SMTP).parsebytes(wire);text=parsed.get_content();assert '\r\n' in text
+        before=hashlib.sha256(wire).hexdigest()
+        values={'text':text,'challenge':None,'delivery':run_id,'recipient':'owned@example.invalid','cfg':{'golf':golf,'roles':{'owned@example.invalid':'completed'}},'mailfacts':[],'lock':threading.Lock(),'re':re}
+        exec(textwrap.dedent(MAIL_CAPTURE),values)
+        facts=values['mailfacts'];assert len(facts)==1 and facts[0]['label']==label and facts[0]['runId']==run_id and facts[0]['attemptId']==attempt and facts[0]['repositoryId']=='9007199254740993' and facts[0]['ownerId']=='42' and facts[0]['link']==link and facts[0]['truthfulLost'] and facts[0]['truthfulCancellation']
+        assert 'fact_text' not in values and values['text']==text and hashlib.sha256(wire).hexdigest()==before
+
 def self_check():
-    ast.parse(sink_source())
+    ast.parse(sink_source());mime_capture_self_check()
     assert network_subnets({'IPAM':{'Config':None}})==[] and network_subnets({'IPAM':None})==[] and network_subnets({})==[]
     assert network_subnets({'IPAM':{'Config':[{'Subnet':'172.20.1.0/24'},{}]}})==[ipaddress.ip_network('172.20.1.0/24')]
     try:raise TypeError('PRIVATE_BODY_DIAGNOSTIC')
