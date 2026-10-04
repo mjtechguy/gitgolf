@@ -33,7 +33,7 @@ The union for all tools is `read:user,read:repository,read:issue,read:organizati
 
 The adapter pins the [official Go SDK v1.8.0](https://github.com/modelcontextprotocol/go-sdk/releases/tag/v1.8.0) and restricts advertised versions to `2026-07-28` and `2025-11-25`. MCP `2026-07-28` uses `server/discover` and per-request protocol metadata; legacy `2025-11-25` uses `initialize`. These are distinct negotiation paths handled by the SDK, not a Golf-specific protocol. See the dated [versioning rules](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning) and [stdio binding](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio). The evidence section below distinguishes tested versions from SDK capability.
 
-`tools/list` publishes a fixed catalogue of 21 named tools. Tool arguments are JSON objects with `additionalProperties: false`. Required fields are listed below; omitted optional fields use the existing CLI/API defaults.
+`tools/list` publishes a fixed catalogue of 23 named tools. Tool arguments are JSON objects with `additionalProperties: false`. Required fields are listed below; omitted optional fields use the existing CLI/API defaults. Historical 19-tool qualification below retains its original scope.
 
 | Tool | Required arguments | Optional arguments |
 | --- | --- | --- |
@@ -42,7 +42,7 @@ The adapter pins the [official Go SDK v1.8.0](https://github.com/modelcontextpro
 | `golf_repo_creation` | `idempotency_key` | None |
 | `golf_repo_branches` | `repository` | `page`, `limit` |
 | `golf_repo_commits` | `repository` | `ref`, `path`, `page`, `limit` |
-| `golf_repo_contents` | `repository` | `ref`, `path` |
+| `golf_repo_contents` | `repository` | `ref`, `ref_kind`, `path` |
 | `golf_commit_diff` | `repository`, `commit_id` | None |
 | `golf_issue_list` | `repository` | `state`, `page`, `limit` |
 | `golf_issue_view` | `repository`, `number` | None |
@@ -50,7 +50,9 @@ The adapter pins the [official Go SDK v1.8.0](https://github.com/modelcontextpro
 | `golf_issue_operation` | `idempotency_key` | None |
 | `golf_pr_list` | `repository` | `state`, `page`, `limit` |
 | `golf_pr_view` | `repository`, `number` | None |
+| `golf_pr_diff` | `repository`, `number` | `repository_id`, `pull_request_id`, `base_commit_id`, `head_commit_id` |
 | `golf_pr_reviews` | `repository`, `number` | `page`, `limit` |
+| `golf_pr_review_comments` | `repository`, `number`, `review_id` | `repository_id`, `pull_request_id`, `review_commit_id` |
 | `golf_org_list` | None | `page`, `limit` |
 | `golf_org_view` | `organization` | None |
 | `golf_org_teams` | `organization` | `page`, `limit` |
@@ -62,6 +64,10 @@ The adapter pins the [official Go SDK v1.8.0](https://github.com/modelcontextpro
 `repository` is `OWNER/REPO`. `page` defaults to 1 and accepts 1–10,000; `limit` defaults to 20 and accepts 1–100. `number` is a positive issue/PR number within the CLI's signed 32-bit bound. These three fields are JSON integers. `state` accepts `open`, `closed` or `all`, defaulting to `open`.
 
 Team and audit cursor IDs are canonical positive signed-64-bit decimal **strings**, not JSON numbers. `idempotency_key` is a lowercase canonical UUID v4 from a previous repository or issue/comment creation request. `commit_id` is an exact lowercase 40- or 64-character hexadecimal object ID. Object-ID syntax support does not qualify every forge object format. The adapter bounds `ref` to 1,024 bytes, `path` to 4,096 bytes and other strings to 2,048 bytes before the existing CLI/API validation. Do not convert IDs through floating-point numbers.
+
+Source selection uses the [exact-source design](READABLE_SOURCE_URL_DESIGN.md): omitted `ref` selects the default branch, a bare full lowercase SHA selects a commit, and another bare name selects the branch namespace only. `ref_kind` accepts `branch`, `tag` or `commit`; tags and SHA-looking named refs require their explicit type. Tags no longer rely on implicit short-name fallback. The adapter reads current repository metadata, resolves the typed selection, then reads source with exact native repository ID/full commit/path and validates every receipt before returning private data. Resolver and source reads share the existing caller authority, not a native permission/ref lock. Invalid selector combinations fail before authentication/network use. Source/runtime qualification and compatibility limits belong in the [ledger](IMPLEMENTATION_STATUS.md).
+
+The optional-looking identity fields on `golf_pr_diff` and `golf_pr_review_comments` remain mandatory as a complete valid command combination: explicit repository/PR IDs and full selected base/head commits for a diff, or explicit repository/PR IDs and full reviewed commit for comments. The adapter does not look them up or infer an active review. Readback does not establish merge eligibility or grant review-write authority.
 
 `golf_repo_commits` optionally selects literal file/directory history with `path`. A nonempty path requires `ref` to be a full lowercase40/64-character commit ID, not a branch alias. The adapter resolves the current native repository ID within that authorized call and passes it to `ListCommits`; successful results include the exact repository ID, commit and path selection receipt. Spaces, Unicode, wildcard characters and leading colons remain literal. Traversal/control/invalid-ref inputs are rejected, and history does not follow previous names across renames. Golf adapts the native fixed history span to requested page/limit; callers still follow Golf's `nextPage`. This extends one existing read tool and leaves the fixed21-tool catalogue and mutation allowlist unchanged. [Exact contract](PATH_HISTORY_CONTRACT.md). Current native/stdio evidence and final integrated runtime qualification belong in the [ledger](IMPLEMENTATION_STATUS.md).
 

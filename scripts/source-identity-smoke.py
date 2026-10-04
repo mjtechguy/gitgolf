@@ -88,6 +88,7 @@ def main():
 
     try:
         smoke.ready()
+        assert smoke.provider('', 'GET', 'version')['version'] == '1.27.3'
         baseline = runtime()
         prefix = 'golf-source-served-' + secrets.token_hex(4)
         stage = 'disposable actors and enrollment'
@@ -128,6 +129,10 @@ def main():
         smoke.provider(owner['token'], 'POST', route + '/branches', {'new_branch_name': named}, 201)
         smoke.provider(owner['token'], 'POST', route + '/tags', {'tag_name': named, 'target': commit}, 201)
         latest = write('README.md', original.replace('Exact source identity', 'Moved source identity'), saved['content']['sha'])['commit']['sha']
+        # A valid Git ref can look exactly like another object's full ID. The
+        # native contents endpoint guesses branches first; exact source must
+        # still read the original object, not this deliberately different head.
+        smoke.provider(owner['token'], 'POST', route + '/branches', {'new_branch_name': commit, 'old_branch_name': repo['default_branch']}, 201)
 
         def rpc(actor, procedure, payload, expected=200, code=None):
             return smoke.rpc(actor['session'], 'RepositoryService/' + procedure, payload, expected=expected, code=code)
@@ -144,6 +149,7 @@ def main():
         resolve('BRANCH', named, commit)
         resolve('TAG', named, commit)
         resolve('COMMIT', commit, commit)
+        resolve('BRANCH', commit, latest)
         exact = {'repository': key, 'repositoryId': rid, 'ref': commit, 'path': path}
         source = rpc(reader, 'GetContents', exact)
         blob = hashlib.sha1(('blob ' + str(len(text.encode())) + '\0').encode() + text.encode()).hexdigest()
@@ -173,6 +179,13 @@ def main():
         if cli:
             stage = 'current CLI exact source'
             smoke.cli_check(cli, reader['token'], full, commit, path, text)
+            environment = {key: value for key, value in os.environ.items() if key not in {'GOLF_GITEA_TOKEN', 'GOLF_API_TOKEN'}}
+            environment['GOLF_URL'] = smoke.GOLF
+            checked = subprocess.run([str(cli), '--token-stdin', 'repo', 'contents', full, '--ref', named, '--ref-kind', 'tag', '--path', path], input=reader['token'] + '\n', cwd=stack, env=environment, capture_output=True, text=True, timeout=30)
+            assert checked.returncode == 0 and reader['token'] not in checked.stdout and reader['token'] not in checked.stderr
+            data = json.loads(checked.stdout)['data']
+            assert data['repositoryId'] == rid and data['commitId'] == commit and data['path'] == path and data['file']['content'] == text
+            print('PASS: current CLI explicit slash-tag selection and exact source identity', flush=True)
         stage = 'actual served exact source browser'
         config = {'golf': smoke.GOLF, 'gitea': smoke.GITEA, 'email': reader['email'], 'password': reader['password'], 'user': reader['name'], 'ownerToken': owner['token'], 'repository': full, 'repositoryId': rid, 'commit': commit, 'latest': latest, 'path': path, 'text': text, 'screenshots': str(screens), 'runtime': baseline}
         result = subprocess.run(['node', '--input-type=module', '-e', BROWSER], cwd=stack, input=json.dumps(config), capture_output=True, text=True, timeout=150)
