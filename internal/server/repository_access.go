@@ -186,6 +186,52 @@ func validateRepositoryAccess(key repositoryKey, repoID, ownerID, revision, logi
 	}
 	return nil
 }
+
+// Native effective "owner" also covers organization admin teams. Only that
+// ambiguous level needs an independent current organization-ownership read.
+// Ordinary none/read/write/admin cannot be an owner under the pinned native
+// permission calculation. Personal exceptional owner-level targets stay blocked.
+func (s *Server) collaboratorOrganizationOwner(ctx context.Context, token forgeCredential, key repositoryKey, access *golfv1.RepositoryAccess, user User, permission string) (*bool, error) {
+	if !access.OrganizationOwned {
+		return nil, nil
+	}
+	owner := false
+	switch permission {
+	case "none", "read", "write", "admin":
+		return &owner, nil
+	case "owner":
+	default:
+		return nil, errInvalidForgeResponse
+	}
+	if permission == "owner" {
+		var err error
+		owner, err = s.organizationOwner(ctx, token, forgeOrganization{Name: key.Owner}, user)
+		if err != nil {
+			return nil, err
+		}
+		// The permissions response has no IDs: retain the original user binding
+		// across this additional named native observation.
+		after, err := s.readTeamTarget(ctx, token, user.Login)
+		if err != nil {
+			return nil, err
+		}
+		if after.ID != user.ID || !strings.EqualFold(after.Login, user.Login) {
+			return nil, errRepositoryAccessConflict
+		}
+	}
+	return &owner, nil
+}
+
+func protectedCollaboratorTarget(access *golfv1.RepositoryAccess, target *golfv1.RepositoryCollaborator, callerID int64) bool {
+	if access == nil || target == nil || target.User == nil || target.User.Id == access.OwnerId || target.User.Id == strconv.FormatInt(callerID, 10) {
+		return true
+	}
+	if access.OrganizationOwned {
+		return target.ActualOrganizationOwner == nil || *target.ActualOrganizationOwner
+	}
+	return target.Permission == "owner"
+}
+
 func (s *Server) readRepositoryCollaborator(ctx context.Context, token forgeCredential, key repositoryKey, access *golfv1.RepositoryAccess, login string) (*golfv1.RepositoryCollaborator, error) {
 	user, err := s.readTeamTarget(ctx, token, login)
 	if err != nil {
@@ -200,7 +246,11 @@ func (s *Server) readRepositoryCollaborator(ctx context.Context, token forgeCred
 	if err != nil {
 		return nil, err
 	}
-	result := &golfv1.RepositoryCollaborator{User: wireUser(user), Permission: permission, IsDirect: direct}
+	owner, err := s.collaboratorOrganizationOwner(ctx, token, key, access, user, permission)
+	if err != nil {
+		return nil, err
+	}
+	result := &golfv1.RepositoryCollaborator{User: wireUser(user), Permission: permission, IsDirect: direct, ActualOrganizationOwner: owner}
 	generation, err := s.accessGeneration(ctx, access.RepositoryId, result.User.Id)
 	if err != nil {
 		return nil, err

@@ -1116,6 +1116,8 @@ message RepositoryCollaborator {
   bool is_direct = 3;
   string revision = 4;
   string generation = 5;
+  // Independent organization ownership; native effective owner can be an admin team.
+  optional bool actual_organization_owner = 6;
 }
 message GetRepositoryAccessRequest { RepositoryKey repository = 1; }
 message GetRepositoryAccessResponse { RepositoryAccess access = 1; }

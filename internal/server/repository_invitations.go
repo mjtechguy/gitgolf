@@ -71,7 +71,7 @@ func (s *Server) invitationRecipient(ctx context.Context, token forgeCredential,
 	if e != nil {
 		return nil, e
 	}
-	if r.User == nil || r.User.Id == a.OwnerId || r.User.Id == strconv.FormatInt(issuer.ID, 10) || r.IsDirect || r.Permission == "owner" {
+	if protectedCollaboratorTarget(a, r, issuer.ID) || r.IsDirect {
 		return nil, errRepositoryAccessConflict
 	}
 	return &golfv1.RepositoryInvitationRecipient{User: r.User, Revision: r.Revision, EffectivePermission: r.Permission}, nil
@@ -865,7 +865,7 @@ func (s *Server) invitationGrant(ctx context.Context, value string, token forgeC
 		if e != nil {
 			return nil
 		}
-		if member.User.Id != strconv.FormatInt(current.RecipientNativeID, 10) || !member.IsDirect || !observedAccessAllows(member.Permission, current.Permission) || after.Revision != current.AccessRevision {
+		if member.User.Id != strconv.FormatInt(current.RecipientNativeID, 10) || protectedCollaboratorTarget(after, member, current.IssuerNativeID) || !member.IsDirect || !observedAccessAllows(member.Permission, current.Permission) || after.Revision != current.AccessRevision {
 			return nil
 		}
 		// Collaborator readback is another external await: issuer/target
@@ -938,5 +938,12 @@ func (s *Server) GetRepositoryInvitationOperation(ctx context.Context, req *conn
 
 func invitationRecipientRevision(a *golfv1.RepositoryAccess, r *golfv1.RepositoryInvitationRecipient, generation int64) string {
 	c := &golfv1.RepositoryCollaborator{User: r.User, Permission: r.EffectivePermission, IsDirect: false}
+	// invitationRecipient has already refused actual organization owners. The
+	// surviving observation is proved non-owner, including effective admin-team
+	// "owner", so reconstruct that same fact at the retained prior generation.
+	if a.OrganizationOwned {
+		owner := false
+		c.ActualOrganizationOwner = &owner
+	}
 	return collaboratorRevision(a, c, generation)
 }

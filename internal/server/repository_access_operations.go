@@ -58,11 +58,21 @@ func (s *Server) accessGeneration(ctx context.Context, repo, recipient string) (
 	return generation, nil
 }
 func collaboratorRevision(a *golfv1.RepositoryAccess, c *golfv1.RepositoryCollaborator, generation int64) string {
-	// Absent/zero preserves pre-048 native observations, including pending invitations.
+	// Proved non-owner observations preserve the pre-048 zero-generation digest,
+	// including pending invitations. Positive actual organization ownership gets
+	// a discriminator even at generation zero. Unknown ownership is never read as
+	// a successful organization target and never authorizes a mutation.
 	legacy := struct {
 		RepoID, OwnerID, UserID, Login, Permission string
 		Direct                                     bool
 	}{a.RepositoryId, a.OwnerId, c.User.Id, strings.ToLower(c.User.Login), c.Permission, c.IsDirect}
+	if c.ActualOrganizationOwner != nil && *c.ActualOrganizationOwner {
+		return accessRevision(struct {
+			Native                  any
+			Generation              int64
+			ActualOrganizationOwner bool
+		}{legacy, generation, true})
+	}
 	if generation == 0 {
 		return accessRevision(legacy)
 	}
@@ -211,7 +221,7 @@ func (s *Server) mutateRepositoryAccessIntent(ctx context.Context, value string,
 			if member.User.Id != userID || member.Revision != targetRevision {
 				return errRepositoryAccessConflict
 			}
-			if recipient == owner || recipient == caller.ID || member.Permission == "owner" {
+			if protectedCollaboratorTarget(a, member, caller.ID) {
 				return forgeError{http.StatusForbidden}
 			}
 			if remove && !member.IsDirect {
@@ -279,7 +289,7 @@ func (s *Server) mutateRepositoryAccessIntent(ctx context.Context, value string,
 			if e != nil {
 				return e
 			}
-			if current.User.Id != userID || collaboratorRevision(a, current, generation-1) != targetRevision || current.Permission == "owner" || (remove && !current.IsDirect) {
+			if current.User.Id != userID || collaboratorRevision(a, current, generation-1) != targetRevision || protectedCollaboratorTarget(a, current, caller.ID) || (remove && !current.IsDirect) {
 				op, e = accessOperationAdvance(ctx, tx, op, "REJECTED", nil)
 				return e
 			}
@@ -317,7 +327,7 @@ func (s *Server) mutateRepositoryAccessIntent(ctx context.Context, value string,
 			if e != nil {
 				return e
 			}
-			if before.User.Id != userID || collaboratorRevision(a, before, generation-1) != targetRevision || before.Permission == "owner" || (remove && !before.IsDirect) {
+			if before.User.Id != userID || collaboratorRevision(a, before, generation-1) != targetRevision || protectedCollaboratorTarget(a, before, caller.ID) || (remove && !before.IsDirect) {
 				return errRepositoryAccessConflict
 			}
 			base, _ := repositoryPath(key)
@@ -340,7 +350,7 @@ func (s *Server) mutateRepositoryAccessIntent(ctx context.Context, value string,
 			if e != nil {
 				return nil
 			}
-			if observed.User.Id != userID || observed.IsDirect == remove || (!remove && !observedAccessAllows(observed.Permission, permission)) {
+			if observed.User.Id != userID || protectedCollaboratorTarget(after, observed, caller.ID) || observed.IsDirect == remove || (!remove && !observedAccessAllows(observed.Permission, permission)) {
 				return nil
 			}
 			if _, e = s.accessOperationAuthority(ctx, token, key, caller, op); e != nil {

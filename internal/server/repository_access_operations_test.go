@@ -29,6 +29,12 @@ type accessIntentFixture struct {
 	writes              int
 	lost                bool
 	revokeAfterReadback bool
+	organization        bool
+	actualOwner         bool
+	ownershipStatus     int
+	ownershipMissing    bool
+	ownershipReads      int
+	promoteOnRead       int
 	hold, entered       chan struct{}
 }
 
@@ -48,10 +54,35 @@ func newAccessIntentFixture(t *testing.T) *accessIntentFixture {
 			json.NewEncoder(w).Encode(map[string]int{"max_response_items": 50})
 		case r.URL.Path == "/api/v1/version":
 			json.NewEncoder(w).Encode(map[string]string{"version": "1.27.3"})
-		case r.URL.Path == "/api/v1/repos/alice/example":
+		case r.URL.Path == "/api/v1/repos/"+f.row.Owner.Login+"/example":
 			json.NewEncoder(w).Encode(f.row)
 		case r.URL.Path == "/api/v1/users/search":
-			json.NewEncoder(w).Encode(map[string]any{"ok": true, "data": []User{*f.row.Owner}})
+			data := []User{*f.row.Owner}
+			if f.organization {
+				data = nil
+			}
+			json.NewEncoder(w).Encode(map[string]any{"ok": true, "data": data})
+		case r.URL.Path == "/api/v1/orgs/acme":
+			json.NewEncoder(w).Encode(forgeOrganization{ID: f.row.Owner.ID, Name: "acme", Visibility: "private"})
+		case strings.HasPrefix(r.URL.Path, "/api/v1/orgs/acme/members/"):
+			w.WriteHeader(204)
+		case strings.HasSuffix(r.URL.Path, "/orgs/acme/permissions"):
+			login := strings.Split(r.URL.Path, "/")[4]
+			if login == "bob" {
+				f.ownershipReads++
+				if f.promoteOnRead > 0 && f.ownershipReads >= f.promoteOnRead {
+					f.actualOwner = true
+				}
+				if f.ownershipStatus != 0 {
+					w.WriteHeader(f.ownershipStatus)
+					return
+				}
+				if f.ownershipMissing {
+					json.NewEncoder(w).Encode(map[string]bool{})
+					return
+				}
+			}
+			json.NewEncoder(w).Encode(map[string]bool{"is_owner": login == "alice" || login == "bob" && f.actualOwner})
 		case strings.HasPrefix(r.URL.Path, "/api/v1/users/"):
 			u, ok := f.users[strings.TrimPrefix(r.URL.Path, "/api/v1/users/")]
 			if !ok {
@@ -76,7 +107,7 @@ func newAccessIntentFixture(t *testing.T) *accessIntentFixture {
 			}
 			json.NewEncoder(w).Encode(map[string]any{"user": f.users[login], "permission": p})
 		case strings.Contains(r.URL.Path, "/collaborators/"):
-			login := strings.TrimPrefix(r.URL.Path, "/api/v1/repos/alice/example/collaborators/")
+			login := strings.TrimPrefix(r.URL.Path, "/api/v1/repos/"+f.row.Owner.Login+"/example/collaborators/")
 			if r.Method == "GET" {
 				if login == "eve" || login == "bob" && f.direct {
 					if login == "bob" && f.writes > 0 && f.revokeAfterReadback {
@@ -150,7 +181,7 @@ func (f *accessIntentFixture) headers(h http.Header, login string) {
 func (f *accessIntentFixture) preview(t *testing.T, login string) (*golfv1.RepositoryAccess, *golfv1.RepositoryCollaborator) {
 	t.Helper()
 	ctx := f.ctx(t, login)
-	key := &golfv1.RepositoryKey{Owner: "alice", Name: "example"}
+	key := &golfv1.RepositoryKey{Owner: f.row.Owner.Login, Name: "example"}
 	r := connect.NewRequest(&golfv1.GetRepositoryAccessRequest{Repository: key})
 	f.headers(r.Header(), login)
 	a, e := f.s.GetRepositoryAccess(ctx, r)
@@ -166,7 +197,7 @@ func (f *accessIntentFixture) preview(t *testing.T, login string) (*golfv1.Repos
 	return a.Msg.Access, c.Msg.Collaborator
 }
 func (f *accessIntentFixture) request(a *golfv1.RepositoryAccess, c *golfv1.RepositoryCollaborator, role string) *golfv1.SetRepositoryCollaboratorRequest {
-	return &golfv1.SetRepositoryCollaboratorRequest{Repository: &golfv1.RepositoryKey{Owner: "alice", Name: "example"}, RepositoryId: a.RepositoryId, OwnerId: a.OwnerId, ExpectedRevision: a.Revision, UserLogin: "bob", UserId: "77", ExpectedCollaboratorRevision: c.Revision, Permission: role, IdempotencyKey: uuid.NewString()}
+	return &golfv1.SetRepositoryCollaboratorRequest{Repository: &golfv1.RepositoryKey{Owner: f.row.Owner.Login, Name: "example"}, RepositoryId: a.RepositoryId, OwnerId: a.OwnerId, ExpectedRevision: a.Revision, UserLogin: "bob", UserId: "77", ExpectedCollaboratorRevision: c.Revision, Permission: role, IdempotencyKey: uuid.NewString()}
 }
 func (f *accessIntentFixture) set(t *testing.T, login string, m *golfv1.SetRepositoryCollaboratorRequest) (*connect.Response[golfv1.SetRepositoryCollaboratorResponse], error) {
 	r := connect.NewRequest(m)
