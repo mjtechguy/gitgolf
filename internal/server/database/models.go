@@ -610,6 +610,33 @@ type GolfRepositoryEventPayload struct {
 	PushAdmissionRequested bool
 }
 
+type GolfRepositoryLifecycleEvent struct {
+	ID          int64
+	OperationID int64
+	Phase       string
+	OccurredAt  time.Time
+}
+
+type GolfRepositoryLifecycleOperation struct {
+	ID               int64
+	UserID           int64
+	ForgeURL         string
+	ActorID          int64
+	IdempotencyKey   string
+	RepositoryID     int64
+	OwnerID          int64
+	RepositoryOwner  string
+	RepositoryName   string
+	ExpectedRevision string
+	FromArchived     bool
+	ToArchived       bool
+	Fingerprint      []byte
+	Phase            string
+	FailureCode      string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
 type GolfReviewContent struct {
 	ID               uuid.UUID
 	UserID           int64

@@ -83,6 +83,9 @@ const (
 	// RepositoryTeamAccessServiceName is the fully-qualified name of the RepositoryTeamAccessService
 	// service.
 	RepositoryTeamAccessServiceName = "golf.v1.RepositoryTeamAccessService"
+	// RepositoryLifecycleServiceName is the fully-qualified name of the RepositoryLifecycleService
+	// service.
+	RepositoryLifecycleServiceName = "golf.v1.RepositoryLifecycleService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -500,6 +503,15 @@ const (
 	// RepositoryTeamAccessServiceDetachRepositoryTeamProcedure is the fully-qualified name of the
 	// RepositoryTeamAccessService's DetachRepositoryTeam RPC.
 	RepositoryTeamAccessServiceDetachRepositoryTeamProcedure = "/golf.v1.RepositoryTeamAccessService/DetachRepositoryTeam"
+	// RepositoryLifecycleServiceGetRepositoryLifecycleProcedure is the fully-qualified name of the
+	// RepositoryLifecycleService's GetRepositoryLifecycle RPC.
+	RepositoryLifecycleServiceGetRepositoryLifecycleProcedure = "/golf.v1.RepositoryLifecycleService/GetRepositoryLifecycle"
+	// RepositoryLifecycleServiceChangeRepositoryArchiveStateProcedure is the fully-qualified name of
+	// the RepositoryLifecycleService's ChangeRepositoryArchiveState RPC.
+	RepositoryLifecycleServiceChangeRepositoryArchiveStateProcedure = "/golf.v1.RepositoryLifecycleService/ChangeRepositoryArchiveState"
+	// RepositoryLifecycleServiceGetRepositoryLifecycleOperationProcedure is the fully-qualified name of
+	// the RepositoryLifecycleService's GetRepositoryLifecycleOperation RPC.
+	RepositoryLifecycleServiceGetRepositoryLifecycleOperationProcedure = "/golf.v1.RepositoryLifecycleService/GetRepositoryLifecycleOperation"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -5289,4 +5301,129 @@ func (UnimplementedRepositoryTeamAccessServiceHandler) AttachRepositoryTeam(cont
 
 func (UnimplementedRepositoryTeamAccessServiceHandler) DetachRepositoryTeam(context.Context, *connect.Request[v1.DetachRepositoryTeamRequest]) (*connect.Response[v1.DetachRepositoryTeamResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryTeamAccessService.DetachRepositoryTeam is not implemented"))
+}
+
+// RepositoryLifecycleServiceClient is a client for the golf.v1.RepositoryLifecycleService service.
+type RepositoryLifecycleServiceClient interface {
+	GetRepositoryLifecycle(context.Context, *connect.Request[v1.GetRepositoryLifecycleRequest]) (*connect.Response[v1.GetRepositoryLifecycleResponse], error)
+	ChangeRepositoryArchiveState(context.Context, *connect.Request[v1.ChangeRepositoryArchiveStateRequest]) (*connect.Response[v1.ChangeRepositoryArchiveStateResponse], error)
+	GetRepositoryLifecycleOperation(context.Context, *connect.Request[v1.GetRepositoryLifecycleOperationRequest]) (*connect.Response[v1.GetRepositoryLifecycleOperationResponse], error)
+}
+
+// NewRepositoryLifecycleServiceClient constructs a client for the
+// golf.v1.RepositoryLifecycleService service. By default, it uses the Connect protocol with the
+// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
+// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRepositoryLifecycleServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepositoryLifecycleServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	repositoryLifecycleServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryLifecycleService").Methods()
+	return &repositoryLifecycleServiceClient{
+		getRepositoryLifecycle: connect.NewClient[v1.GetRepositoryLifecycleRequest, v1.GetRepositoryLifecycleResponse](
+			httpClient,
+			baseURL+RepositoryLifecycleServiceGetRepositoryLifecycleProcedure,
+			connect.WithSchema(repositoryLifecycleServiceMethods.ByName("GetRepositoryLifecycle")),
+			connect.WithClientOptions(opts...),
+		),
+		changeRepositoryArchiveState: connect.NewClient[v1.ChangeRepositoryArchiveStateRequest, v1.ChangeRepositoryArchiveStateResponse](
+			httpClient,
+			baseURL+RepositoryLifecycleServiceChangeRepositoryArchiveStateProcedure,
+			connect.WithSchema(repositoryLifecycleServiceMethods.ByName("ChangeRepositoryArchiveState")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryLifecycleOperation: connect.NewClient[v1.GetRepositoryLifecycleOperationRequest, v1.GetRepositoryLifecycleOperationResponse](
+			httpClient,
+			baseURL+RepositoryLifecycleServiceGetRepositoryLifecycleOperationProcedure,
+			connect.WithSchema(repositoryLifecycleServiceMethods.ByName("GetRepositoryLifecycleOperation")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// repositoryLifecycleServiceClient implements RepositoryLifecycleServiceClient.
+type repositoryLifecycleServiceClient struct {
+	getRepositoryLifecycle          *connect.Client[v1.GetRepositoryLifecycleRequest, v1.GetRepositoryLifecycleResponse]
+	changeRepositoryArchiveState    *connect.Client[v1.ChangeRepositoryArchiveStateRequest, v1.ChangeRepositoryArchiveStateResponse]
+	getRepositoryLifecycleOperation *connect.Client[v1.GetRepositoryLifecycleOperationRequest, v1.GetRepositoryLifecycleOperationResponse]
+}
+
+// GetRepositoryLifecycle calls golf.v1.RepositoryLifecycleService.GetRepositoryLifecycle.
+func (c *repositoryLifecycleServiceClient) GetRepositoryLifecycle(ctx context.Context, req *connect.Request[v1.GetRepositoryLifecycleRequest]) (*connect.Response[v1.GetRepositoryLifecycleResponse], error) {
+	return c.getRepositoryLifecycle.CallUnary(ctx, req)
+}
+
+// ChangeRepositoryArchiveState calls
+// golf.v1.RepositoryLifecycleService.ChangeRepositoryArchiveState.
+func (c *repositoryLifecycleServiceClient) ChangeRepositoryArchiveState(ctx context.Context, req *connect.Request[v1.ChangeRepositoryArchiveStateRequest]) (*connect.Response[v1.ChangeRepositoryArchiveStateResponse], error) {
+	return c.changeRepositoryArchiveState.CallUnary(ctx, req)
+}
+
+// GetRepositoryLifecycleOperation calls
+// golf.v1.RepositoryLifecycleService.GetRepositoryLifecycleOperation.
+func (c *repositoryLifecycleServiceClient) GetRepositoryLifecycleOperation(ctx context.Context, req *connect.Request[v1.GetRepositoryLifecycleOperationRequest]) (*connect.Response[v1.GetRepositoryLifecycleOperationResponse], error) {
+	return c.getRepositoryLifecycleOperation.CallUnary(ctx, req)
+}
+
+// RepositoryLifecycleServiceHandler is an implementation of the golf.v1.RepositoryLifecycleService
+// service.
+type RepositoryLifecycleServiceHandler interface {
+	GetRepositoryLifecycle(context.Context, *connect.Request[v1.GetRepositoryLifecycleRequest]) (*connect.Response[v1.GetRepositoryLifecycleResponse], error)
+	ChangeRepositoryArchiveState(context.Context, *connect.Request[v1.ChangeRepositoryArchiveStateRequest]) (*connect.Response[v1.ChangeRepositoryArchiveStateResponse], error)
+	GetRepositoryLifecycleOperation(context.Context, *connect.Request[v1.GetRepositoryLifecycleOperationRequest]) (*connect.Response[v1.GetRepositoryLifecycleOperationResponse], error)
+}
+
+// NewRepositoryLifecycleServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRepositoryLifecycleServiceHandler(svc RepositoryLifecycleServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	repositoryLifecycleServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryLifecycleService").Methods()
+	repositoryLifecycleServiceGetRepositoryLifecycleHandler := connect.NewUnaryHandler(
+		RepositoryLifecycleServiceGetRepositoryLifecycleProcedure,
+		svc.GetRepositoryLifecycle,
+		connect.WithSchema(repositoryLifecycleServiceMethods.ByName("GetRepositoryLifecycle")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryLifecycleServiceChangeRepositoryArchiveStateHandler := connect.NewUnaryHandler(
+		RepositoryLifecycleServiceChangeRepositoryArchiveStateProcedure,
+		svc.ChangeRepositoryArchiveState,
+		connect.WithSchema(repositoryLifecycleServiceMethods.ByName("ChangeRepositoryArchiveState")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryLifecycleServiceGetRepositoryLifecycleOperationHandler := connect.NewUnaryHandler(
+		RepositoryLifecycleServiceGetRepositoryLifecycleOperationProcedure,
+		svc.GetRepositoryLifecycleOperation,
+		connect.WithSchema(repositoryLifecycleServiceMethods.ByName("GetRepositoryLifecycleOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RepositoryLifecycleService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RepositoryLifecycleServiceGetRepositoryLifecycleProcedure:
+			repositoryLifecycleServiceGetRepositoryLifecycleHandler.ServeHTTP(w, r)
+		case RepositoryLifecycleServiceChangeRepositoryArchiveStateProcedure:
+			repositoryLifecycleServiceChangeRepositoryArchiveStateHandler.ServeHTTP(w, r)
+		case RepositoryLifecycleServiceGetRepositoryLifecycleOperationProcedure:
+			repositoryLifecycleServiceGetRepositoryLifecycleOperationHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRepositoryLifecycleServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRepositoryLifecycleServiceHandler struct{}
+
+func (UnimplementedRepositoryLifecycleServiceHandler) GetRepositoryLifecycle(context.Context, *connect.Request[v1.GetRepositoryLifecycleRequest]) (*connect.Response[v1.GetRepositoryLifecycleResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryLifecycleService.GetRepositoryLifecycle is not implemented"))
+}
+
+func (UnimplementedRepositoryLifecycleServiceHandler) ChangeRepositoryArchiveState(context.Context, *connect.Request[v1.ChangeRepositoryArchiveStateRequest]) (*connect.Response[v1.ChangeRepositoryArchiveStateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryLifecycleService.ChangeRepositoryArchiveState is not implemented"))
+}
+
+func (UnimplementedRepositoryLifecycleServiceHandler) GetRepositoryLifecycleOperation(context.Context, *connect.Request[v1.GetRepositoryLifecycleOperationRequest]) (*connect.Response[v1.GetRepositoryLifecycleOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryLifecycleService.GetRepositoryLifecycleOperation is not implemented"))
 }

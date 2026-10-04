@@ -80,8 +80,13 @@ func (s *Server) forgeRequest(ctx context.Context, method, path, accept string, 
 		}
 		req.Header.Set("Authorization", scheme+" "+token.Token)
 	}
+	release, err := s.beginRepositoryLifecycleWrite(ctx, method, path, token, input, req)
+	if err != nil {
+		return nil, err
+	}
 	res, err := s.client.Do(req)
 	if err != nil {
+		release()
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -89,8 +94,10 @@ func (s *Server) forgeRequest(ctx context.Context, method, path, accept string, 
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		res.Body.Close()
+		release()
 		return nil, forgeError{res.StatusCode}
 	}
+	res.Body = &lifecycleBody{ReadCloser: res.Body, release: release}
 	return res, nil
 }
 

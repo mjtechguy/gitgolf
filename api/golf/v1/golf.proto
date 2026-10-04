@@ -2505,3 +2505,53 @@ message DetachRepositoryTeamResponse {
   string access_revision = 3;
   RepositoryTeamAccess team = 4;
 }
+
+service RepositoryLifecycleService {
+ rpc GetRepositoryLifecycle(GetRepositoryLifecycleRequest) returns (GetRepositoryLifecycleResponse);
+ rpc ChangeRepositoryArchiveState(ChangeRepositoryArchiveStateRequest) returns (ChangeRepositoryArchiveStateResponse);
+ rpc GetRepositoryLifecycleOperation(GetRepositoryLifecycleOperationRequest) returns (GetRepositoryLifecycleOperationResponse);
+}
+message RepositoryLifecycle {
+ RepositoryKey repository=1;
+ string repository_id=2;
+ string owner_id=3;
+ string revision=4;
+ bool archived=5;
+ bool mirror=6;
+ bool can_manage=7;
+ bool step_up_available=8;
+ string active_work_count=9;
+ bool archive_available=10;
+ bool unarchive_available=11;
+ string blocked_reason=12;
+ bool unresolved=13;
+}
+message RepositoryLifecycleOperation {
+ string idempotency_key=1;
+ RepositoryKey repository=2;
+ string repository_id=3;
+ string owner_id=4;
+ string actor_id=5;
+ bool from_archived=6;
+ bool to_archived=7;
+ string expected_revision=8;
+ string phase=9;
+ string failure_code=10;
+ string created_at=11;
+ string updated_at=12;
+}
+message GetRepositoryLifecycleRequest { RepositoryKey repository=1; string repository_id=2; }
+message GetRepositoryLifecycleResponse { RepositoryLifecycle lifecycle=1; }
+message ChangeRepositoryArchiveStateRequest {
+ RepositoryKey repository=1;
+ string repository_id=2;
+ string owner_id=3;
+ string expected_revision=4;
+ optional bool archived=5;
+ string confirmation_name=6;
+ string current_password=7;
+ string idempotency_key=8;
+}
+message ChangeRepositoryArchiveStateResponse { RepositoryLifecycle lifecycle=1; RepositoryLifecycleOperation operation=2; }
+message GetRepositoryLifecycleOperationRequest { RepositoryKey repository=1; string repository_id=2; string owner_id=3; string idempotency_key=4; }
+message GetRepositoryLifecycleOperationResponse { RepositoryLifecycleOperation operation=1; }

@@ -128,7 +128,7 @@ func (f *reviewerPublicationFixture) serve(w http.ResponseWriter, r *http.Reques
 	base := "/api/v1/repos/alice/example"
 	url := "https://forge.invalid/alice/example"
 	if r.URL.Path == base {
-		write(map[string]any{"id": 11, "name": "example", "full_name": "alice/example", "html_url": url, "private": true, "owner": User{ID: 42, Login: "alice"}, "permissions": map[string]bool{"admin": true, "push": true, "pull": true}, "archived": false, "mirror": false, "default_branch": "main", "has_issues": true, "has_wiki": true, "has_pull_requests": true})
+		write(map[string]any{"id": 11, "name": "example", "full_name": "alice/example", "html_url": url, "private": true, "owner": User{ID: 42, Login: "alice"}, "permissions": map[string]bool{"admin": true, "push": true, "pull": true}, "archived": false, "mirror": false, "default_branch": "main", "has_issues": true, "has_wiki": true, "has_pull_requests": true, "topics": []string{}, "internal_tracker": forgeInternalTracker{}})
 		return
 	}
 	if r.URL.Path == base+"/collaborators/alice/permission" {
