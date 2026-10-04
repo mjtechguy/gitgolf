@@ -286,7 +286,7 @@ def main():
                         'runtime':baseline,'workingTreeHead':manifest['workingTreeHead'],'servedSourceCommit':manifest['servedSourceCommit'],
                         'servedSourceProvenance':manifest['sourceProvenance'],
                         'graphSelection':{'jobInstanceId':selected,'stepId':'local','logMarker':'Actual local composite output received','otherLogMarker':'Protected composite remained immutable'}},timeout=240)
-                    assert browser.startswith('PASS:') and len(browser)<4096, 'Bounded actual browser helper failed'
+                    assert len(browser)<4096 and browser.strip().splitlines()[-1].startswith('PASS: twelve actual Actions screenshots,'), 'Bounded actual browser helper failed'
                     assert runtime()==baseline, 'Served image/config changed during actual browser proof'
                     capture_manifest=json.loads((screenshots/'manifest.json').read_text())
                     assert capture_manifest.get('complete') and capture_manifest.get('passed') and len(capture_manifest.get('results',[]))==12
@@ -317,7 +317,7 @@ def main():
                 cleanup.append('fresh Compose resource teardown')
             finally:
                 smoke.GOLF,smoke.GITEA=old_urls
-                manifest['cleanupPassed']=not cleanup;manifest['complete']=manifest['passed'] and not cleanup
+                manifest['lastCheck']=STAGE;manifest['cleanupPassed']=not cleanup;manifest['complete']=manifest['passed'] and not cleanup
                 helpers.private_write(output/'manifest.json',json.dumps(manifest,indent=2)+'\n')
             assert not cleanup, 'Fixture cleanup failed; private details withheld'
             print('Cleanup: managed accounts disabled/sessions revoked, native fixture purged, fresh Compose project/volumes removed.',flush=True)
