@@ -444,3 +444,22 @@ func TestActionsManualInspectionPostgres(t *testing.T) {
 		t.Fatal("source inspection created work", err)
 	}
 }
+
+// A v2-configured installation must not adopt input-free workflows into v2,
+// including workflows whose existing secret approval is intentionally v1-only.
+func TestActionsInputFreeInspectionUnderV2Postgres(t *testing.T) {
+	f := engineRunFixture(t)
+	f.row.HTMLURL = "https://forge.invalid/alice/example"
+	f.server.config.ActionsEngineCatalog = runner.ActionsInputsCatalog
+	response, err := f.server.InspectWorkflows(f.context(t), workflowRunRequest(f, &golfv1.InspectWorkflowsRequest{Repository: &golfv1.RepositoryKey{Owner: "alice", Name: "example"}, RepositoryId: fmt.Sprint(f.row.ID), Ref: f.commit}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Msg.Configurations) != 1 || response.Msg.Configurations[0].State != golfv1.WorkflowInspectionState_WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET || len(response.Msg.Configurations[0].ManualInputs) != 0 {
+		t.Fatal("input-free workflow lost its legacy inspection profile")
+	}
+	dispatched, err := f.dispatch(t, "12345678-1234-4234-8234-123456789abc")
+	if err != nil || dispatched.Msg.Run.EngineCatalog != runner.ActionsCatalog || dispatched.Msg.Run.InputContract != "" {
+		t.Fatal("input-free manual dispatch adopted v2", err)
+	}
+}
