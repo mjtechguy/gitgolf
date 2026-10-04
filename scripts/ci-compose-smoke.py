@@ -5,6 +5,8 @@ Requires locally built Golf/runner images. It exercises both workflow formats,
 policy denial/revocation, durable queues across restart and runner cleanup.
 --objects additionally provisions private RustFS storage and qualifies persisted
 S3 source bindings without retaining source archives in PostgreSQL.
+--ui-screenshots additionally captures the actual successful Actions inventory,
+run and selected-step workspace in both themes at desktop/mobile widths.
 No hosted-engine, artifact/cache/secret or trusted-merge compatibility is claimed.
 """
 import argparse
@@ -39,16 +41,29 @@ def main():
     parser.add_argument('--image', required=True)
     parser.add_argument('--runner-image', required=True)
     parser.add_argument('--objects', action='store_true', help='qualify private RustFS-backed CI sources using the storage overlay')
+    parser.add_argument('--ui-screenshots', type=Path, help='owner-only output directory for optional actual Actions browser proof (requires local Playwright)')
     args = parser.parse_args()
     environment = {key:value for key,value in os.environ.items() if not key.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','RUSTFS_','AWS_')) and key!='DATABASE_URL'}
     def run(*command, payload=None, timeout=180):
         result = subprocess.run(command, input=None if payload is None else json.dumps(payload).encode(), cwd=ROOT, env=environment, capture_output=True, timeout=timeout)
         assert result.returncode == 0, 'Private subprocess failed; diagnostics withheld'
         return result.stdout.decode()
-    core = json.loads(run('docker','image','inspect',args.image))[0]['Id']
+    core_image = json.loads(run('docker','image','inspect',args.image))[0]
+    core = core_image['Id']
     worker = json.loads(run('docker','image','inspect',args.runner_image))[0]['Id']
     print('Golf image: '+core, flush=True)
     print('Runner image: '+worker, flush=True)
+    screenshots = None
+    if args.ui_screenshots:
+        screenshots = args.ui_screenshots.resolve()
+        assert not screenshots.exists() or not any(screenshots.iterdir()), 'Browser output must be a new or empty directory'
+        screenshots.mkdir(parents=True, exist_ok=True); screenshots.chmod(0o700)
+        assert (ROOT/'web/node_modules/playwright/index.mjs').is_file(), 'Local Playwright is required for optional browser proof'
+        # The already resolved local Golf image sees the Docker VM filesystem. Never pull
+        # or prune: leave 1 GiB reserve plus 1 GiB startup headroom before Compose.
+        space = run('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/bin/df',core,'-Pk','/')
+        assert int(space.strip().splitlines()[-1].split()[3]) >= 2*1024*1024, 'Insufficient Docker VM free-space reserve'
+        print('PASS: Docker VM has at least 2 GiB available before fresh-stack startup.', flush=True)
     project = 'golf-ci-proof-'+secrets.token_hex(5)
     golf_port, native_port = helpers.free_ports(2)
     previous = smoke.GOLF, smoke.GITEA
@@ -81,6 +96,13 @@ def main():
             compose += ['-f',str(ROOT/'compose.storage.yaml')]
         compose += ['-f',str(override)]
         def command(*arguments, **kwargs): return run(*compose,*arguments,**kwargs)
+        def runtime():
+            identifier=command('ps','-q','golf').strip()
+            assert identifier and '\n' not in identifier, 'Expected exactly one proof Golf container'
+            observed=json.loads(run('docker','inspect',identifier))[0]
+            return {'containerImageReference':observed['Image'], 'resolvedLocalImageId':core,
+                    'composeConfigHash':observed['Config']['Labels']['com.docker.compose.config-hash'],
+                    'suppliedImageReference':args.image}
         def admin(*arguments): return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*arguments).strip()
         def rpc(method,body=None,expected=200,code=None): return smoke.rpc(session,method,body,expected=expected,code=code)
         def wait_run(identifier,state=None):
@@ -177,6 +199,23 @@ def main():
             assert 'actions proof' in first_text and 'second step proof' not in first_text
             assert 'second step proof' in second_text and 'actions proof' not in second_text
             print('PASS: real independent Actions step events, names, timing and isolated log ranges.',flush=True)
+            if screenshots:
+                stage('actual managed Actions inventory, run and selected-step browser proof; no browser effects')
+                before=runtime()
+                revision=(core_image.get('Config',{}).get('Labels') or {}).get('org.opencontainers.image.revision')
+                if not isinstance(revision,str) or len(revision)!=40 or any(c not in '0123456789abcdef' for c in revision):revision=None
+                output=run('node',str(ROOT/'scripts/ci-ui-browser.mjs'),payload={
+                    'golf':smoke.GOLF,'screenshots':str(screenshots),'actor':{'name':name,'email':name+'@example.invalid','password':password},
+                    'repository':repository,'repositoryId':str(native['id']),'run':action_result,
+                    'runtime':before,'workingTreeHead':run('git','rev-parse','HEAD').strip(),
+                    'servedSourceCommit':revision,'servedSourceProvenance':'OCI revision label if present; working-tree HEAD is not served-source evidence'},timeout=240)
+                print(output.strip(),flush=True)
+                after=runtime(); assert after==before, 'Proof container provenance changed during browser captures'
+                manifest_path=screenshots/'manifest.json'
+                manifest=json.loads(manifest_path.read_text())
+                assert manifest.get('complete') and manifest.get('passed') and len(manifest.get('results',[]))==12
+                manifest['runtimeAfter']=after;manifest['runtimeStable']=True
+                helpers.private_write(manifest_path,json.dumps(manifest,indent=2)+'\n')
             gitlab=dispatch('.gitlab-ci.yml');assert wait_run(gitlab['id'])['state']=='WORKFLOW_RUN_STATE_SUCCEEDED'
             assert 'gitlab proof' in ''.join(row['text'] for row in rpc('WorkflowRunService/GetWorkflowRunLogs',{'runId':gitlab['id']}).get('logs',[]))
             gitlab_result=rpc('WorkflowRunService/GetWorkflowRun',{'runId':gitlab['id']})['run'];assert len(gitlab_result['progress']['steps'])==1 and gitlab_result['progress']['steps'][0]['state']=='WORKFLOW_STEP_STATE_SUCCEEDED'
