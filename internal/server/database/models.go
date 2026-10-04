@@ -333,34 +333,36 @@ type GolfEmailDelivery struct {
 }
 
 type GolfEmailEvent struct {
-	ID        int64
-	UserID    sql.NullInt64
-	Action    string
-	ObjectID  uuid.NullUUID
-	Version   int64
-	CreatedAt time.Time
+	ID                    int64
+	UserID                sql.NullInt64
+	Action                string
+	ObjectID              uuid.NullUUID
+	Version               int64
+	CreatedAt             time.Time
+	WorkflowNotifications sql.NullInt32
 }
 
 type GolfEmailSubscription struct {
-	ID                 uuid.UUID
-	UserID             int64
-	ForgeURL           string
-	RepositoryID       int64
-	OwnerID            int64
-	RepositoryOwner    string
-	RepositoryName     string
-	LocalAccountID     int64
-	NativeUserID       int64
-	CredentialVersion  int64
-	ContactVersion     int64
-	Version            int64
-	Epoch              int64
-	EventTopics        json.RawMessage
-	Enabled            bool
-	AuthorizationState string
-	UnsubscribeHash    []byte
-	ContentID          uuid.UUID
-	UpdatedAt          time.Time
+	ID                    uuid.UUID
+	UserID                int64
+	ForgeURL              string
+	RepositoryID          int64
+	OwnerID               int64
+	RepositoryOwner       string
+	RepositoryName        string
+	LocalAccountID        int64
+	NativeUserID          int64
+	CredentialVersion     int64
+	ContactVersion        int64
+	Version               int64
+	Epoch                 int64
+	EventTopics           json.RawMessage
+	Enabled               bool
+	AuthorizationState    string
+	UnsubscribeHash       []byte
+	ContentID             uuid.UUID
+	UpdatedAt             time.Time
+	WorkflowNotifications int32
 }
 
 type GolfEmailTransport struct {
@@ -1381,13 +1383,14 @@ type GolfWebhookAttempt struct {
 }
 
 type GolfWebhookConfigurationEvent struct {
-	ID             int64
-	SubscriptionID uuid.UUID
-	Version        int64
-	SponsorUserID  int64
-	Enabled        bool
-	EventTopics    json.RawMessage
-	CreatedAt      time.Time
+	ID                    int64
+	SubscriptionID        uuid.UUID
+	Version               int64
+	SponsorUserID         int64
+	Enabled               bool
+	EventTopics           json.RawMessage
+	CreatedAt             time.Time
+	WorkflowNotifications int32
 }
 
 type GolfWebhookCredential struct {
@@ -1423,24 +1426,25 @@ type GolfWebhookDelivery struct {
 }
 
 type GolfWebhookSubscription struct {
-	ID                 uuid.UUID
-	ForgeURL           string
-	RepositoryID       int64
-	OwnerID            int64
-	RepositoryOwner    string
-	RepositoryName     string
-	Name               string
-	Version            int64
-	Epoch              int64
-	EventTopics        json.RawMessage
-	Enabled            bool
-	AuthorizationState string
-	SponsorUserID      int64
-	SponsorNativeID    int64
-	LocalAccountID     int64
-	CredentialVersion  int64
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	ID                    uuid.UUID
+	ForgeURL              string
+	RepositoryID          int64
+	OwnerID               int64
+	RepositoryOwner       string
+	RepositoryName        string
+	Name                  string
+	Version               int64
+	Epoch                 int64
+	EventTopics           json.RawMessage
+	Enabled               bool
+	AuthorizationState    string
+	SponsorUserID         int64
+	SponsorNativeID       int64
+	LocalAccountID        int64
+	CredentialVersion     int64
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+	WorkflowNotifications int32
 }
 
 type GolfWorkflowExecutionBinding struct {
@@ -1471,6 +1475,17 @@ type GolfWorkflowJobInventory struct {
 	Matrix      json.RawMessage
 	Needs       json.RawMessage
 	Steps       json.RawMessage
+}
+
+type GolfWorkflowNotificationEvent struct {
+	RunID        uuid.UUID
+	EventID      string
+	ForgeURL     string
+	RepositoryID int64
+	OwnerID      int64
+	AttemptID    string
+	State        string
+	ObservedAt   time.Time
 }
 
 type GolfWorkflowQuarantinedOutput struct {

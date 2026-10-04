@@ -102,23 +102,24 @@ func (q *Queries) CreateWebhookCredential(ctx context.Context, arg CreateWebhook
 }
 
 const createWebhookSubscription = `-- name: CreateWebhookSubscription :exec
-INSERT INTO golf_webhook_subscriptions(id,forge_url,repository_id,owner_id,repository_owner,repository_name,name,version,event_topics,enabled,authorization_state,sponsor_user_id,sponsor_native_id,local_account_id,credential_version)
-VALUES($1,$2,$3,$4,$5,$6,$7,1,$8,false,'disabled',$9,$10,$11,$12)
+INSERT INTO golf_webhook_subscriptions(id,forge_url,repository_id,owner_id,repository_owner,repository_name,name,version,event_topics,enabled,authorization_state,sponsor_user_id,sponsor_native_id,local_account_id,credential_version,workflow_notifications)
+VALUES($1,$2,$3,$4,$5,$6,$7,1,$8,false,'disabled',$9,$10,$11,$12,$13)
 `
 
 type CreateWebhookSubscriptionParams struct {
-	ID                uuid.UUID
-	ForgeURL          string
-	RepositoryID      int64
-	OwnerID           int64
-	RepositoryOwner   string
-	RepositoryName    string
-	Name              string
-	EventTopics       json.RawMessage
-	SponsorUserID     int64
-	SponsorNativeID   int64
-	LocalAccountID    int64
-	CredentialVersion int64
+	ID                    uuid.UUID
+	ForgeURL              string
+	RepositoryID          int64
+	OwnerID               int64
+	RepositoryOwner       string
+	RepositoryName        string
+	Name                  string
+	EventTopics           json.RawMessage
+	SponsorUserID         int64
+	SponsorNativeID       int64
+	LocalAccountID        int64
+	CredentialVersion     int64
+	WorkflowNotifications int32
 }
 
 func (q *Queries) CreateWebhookSubscription(ctx context.Context, arg CreateWebhookSubscriptionParams) error {
@@ -135,6 +136,7 @@ func (q *Queries) CreateWebhookSubscription(ctx context.Context, arg CreateWebho
 		arg.SponsorNativeID,
 		arg.LocalAccountID,
 		arg.CredentialVersion,
+		arg.WorkflowNotifications,
 	)
 	return err
 }
@@ -309,7 +311,7 @@ func (q *Queries) ListWebhookDeliveries(ctx context.Context, arg ListWebhookDeli
 }
 
 const listWebhookSubscriptions = `-- name: ListWebhookSubscriptions :many
-SELECT id, forge_url, repository_id, owner_id, repository_owner, repository_name, name, version, epoch, event_topics, enabled, authorization_state, sponsor_user_id, sponsor_native_id, local_account_id, credential_version, created_at, updated_at FROM golf_webhook_subscriptions WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3 ORDER BY created_at,id LIMIT $5 OFFSET $4
+SELECT id, forge_url, repository_id, owner_id, repository_owner, repository_name, name, version, epoch, event_topics, enabled, authorization_state, sponsor_user_id, sponsor_native_id, local_account_id, credential_version, created_at, updated_at, workflow_notifications FROM golf_webhook_subscriptions WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3 ORDER BY created_at,id LIMIT $5 OFFSET $4
 `
 
 type ListWebhookSubscriptionsParams struct {
@@ -354,6 +356,7 @@ func (q *Queries) ListWebhookSubscriptions(ctx context.Context, arg ListWebhookS
 			&i.CredentialVersion,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.WorkflowNotifications,
 		); err != nil {
 			return nil, err
 		}
@@ -387,7 +390,7 @@ func (q *Queries) LockWebhookQueue(ctx context.Context, subscriptionID uuid.UUID
 }
 
 const lockWebhookSubscription = `-- name: LockWebhookSubscription :one
-SELECT id, forge_url, repository_id, owner_id, repository_owner, repository_name, name, version, epoch, event_topics, enabled, authorization_state, sponsor_user_id, sponsor_native_id, local_account_id, credential_version, created_at, updated_at FROM golf_webhook_subscriptions WHERE id=$1 AND forge_url=$2 AND repository_id=$3 FOR UPDATE
+SELECT id, forge_url, repository_id, owner_id, repository_owner, repository_name, name, version, epoch, event_topics, enabled, authorization_state, sponsor_user_id, sponsor_native_id, local_account_id, credential_version, created_at, updated_at, workflow_notifications FROM golf_webhook_subscriptions WHERE id=$1 AND forge_url=$2 AND repository_id=$3 FOR UPDATE
 `
 
 type LockWebhookSubscriptionParams struct {
@@ -418,20 +421,22 @@ func (q *Queries) LockWebhookSubscription(ctx context.Context, arg LockWebhookSu
 		&i.CredentialVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WorkflowNotifications,
 	)
 	return i, err
 }
 
 const recordWebhookConfiguration = `-- name: RecordWebhookConfiguration :exec
-INSERT INTO golf_webhook_configuration_events(subscription_id,version,sponsor_user_id,enabled,event_topics) VALUES($1,$2,$3,$4,$5)
+INSERT INTO golf_webhook_configuration_events(subscription_id,version,sponsor_user_id,enabled,event_topics,workflow_notifications) VALUES($1,$2,$3,$4,$5,$6)
 `
 
 type RecordWebhookConfigurationParams struct {
-	SubscriptionID uuid.UUID
-	Version        int64
-	SponsorUserID  int64
-	Enabled        bool
-	EventTopics    json.RawMessage
+	SubscriptionID        uuid.UUID
+	Version               int64
+	SponsorUserID         int64
+	Enabled               bool
+	EventTopics           json.RawMessage
+	WorkflowNotifications int32
 }
 
 func (q *Queries) RecordWebhookConfiguration(ctx context.Context, arg RecordWebhookConfigurationParams) error {
@@ -441,29 +446,31 @@ func (q *Queries) RecordWebhookConfiguration(ctx context.Context, arg RecordWebh
 		arg.SponsorUserID,
 		arg.Enabled,
 		arg.EventTopics,
+		arg.WorkflowNotifications,
 	)
 	return err
 }
 
 const updateWebhookSubscription = `-- name: UpdateWebhookSubscription :execrows
-UPDATE golf_webhook_subscriptions SET repository_owner=$2,repository_name=$3,name=$4,version=$5,epoch=epoch+1,event_topics=$6,enabled=$7,authorization_state=$8,sponsor_user_id=$9,sponsor_native_id=$10,local_account_id=$11,credential_version=$12,updated_at=clock_timestamp()
-WHERE id=$1 AND version=$13
+UPDATE golf_webhook_subscriptions SET repository_owner=$2,repository_name=$3,name=$4,version=$5,epoch=epoch+1,event_topics=$6,enabled=$7,authorization_state=$8,sponsor_user_id=$9,sponsor_native_id=$10,local_account_id=$11,credential_version=$12,workflow_notifications=$13,updated_at=clock_timestamp()
+WHERE id=$1 AND version=$14
 `
 
 type UpdateWebhookSubscriptionParams struct {
-	ID                 uuid.UUID
-	RepositoryOwner    string
-	RepositoryName     string
-	Name               string
-	Version            int64
-	EventTopics        json.RawMessage
-	Enabled            bool
-	AuthorizationState string
-	SponsorUserID      int64
-	SponsorNativeID    int64
-	LocalAccountID     int64
-	CredentialVersion  int64
-	ExpectedVersion    int64
+	ID                    uuid.UUID
+	RepositoryOwner       string
+	RepositoryName        string
+	Name                  string
+	Version               int64
+	EventTopics           json.RawMessage
+	Enabled               bool
+	AuthorizationState    string
+	SponsorUserID         int64
+	SponsorNativeID       int64
+	LocalAccountID        int64
+	CredentialVersion     int64
+	WorkflowNotifications int32
+	ExpectedVersion       int64
 }
 
 func (q *Queries) UpdateWebhookSubscription(ctx context.Context, arg UpdateWebhookSubscriptionParams) (int64, error) {
@@ -480,6 +487,7 @@ func (q *Queries) UpdateWebhookSubscription(ctx context.Context, arg UpdateWebho
 		arg.SponsorNativeID,
 		arg.LocalAccountID,
 		arg.CredentialVersion,
+		arg.WorkflowNotifications,
 		arg.ExpectedVersion,
 	)
 	if err != nil {
