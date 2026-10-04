@@ -117,11 +117,20 @@ def main():
             request={'scope':'EXECUTION_SCOPE_'+scope}
             if repository:request['repository']=repository
             return rpc('ExecutionPolicyService/GetExecutionPolicy',request)['policy']
-        def update(scope,old,enabled,repository=None):
+        def update(scope,old,enabled,repository=None,manual=None,push=False):
             request={'scope':'EXECUTION_SCOPE_'+scope,'scopeId':old['scopeId'],'expectedRevision':old.get('revision','0'),'expectedAuthorityRevision':old['authorityRevision'],
-                'mode':'EXECUTION_MODE_ALL' if enabled else 'EXECUTION_MODE_DISABLED','manualDispatchEnabled':enabled,'allowAllWorkflows':enabled}
+                'mode':'EXECUTION_MODE_ALL' if enabled else 'EXECUTION_MODE_DISABLED','manualDispatchEnabled':enabled if manual is None else manual,'pushAllowed':push,'allowAllWorkflows':enabled}
             if repository:request['repository']=repository
             return rpc('ExecutionPolicyService/UpdateExecutionPolicy',request)['policy']
+        def observe_policy(manual,push):
+            response=rpc('WorkflowService/InspectWorkflows',{'repository':repository,'repositoryId':str(native['id'])})
+            assert response['repositoryId']==str(native['id']), 'Inspection native identity mismatch'
+            revision=response.get('policyRevision','')
+            assert len(revision)==64 and all(c in '0123456789abcdef' for c in revision), 'Policy observation revision missing'
+            configurations=response.get('configurations',[])
+            assert len(configurations)==len(files), 'Unexpected workflow observation count'
+            assert all(item.get('manualPolicyAllowed') is manual and item.get('pushPolicyAllowed') is push for item in configurations), 'Independent policy observations mismatch'
+            return revision
         def dispatch(file,key=None):return rpc('WorkflowRunService/DispatchWorkflow',{'repository':repository,'workflowPath':file,'idempotencyKey':key or str(uuid.uuid4())})['run']
         def object_source(identifier):
             assert str(uuid.UUID(identifier)) == identifier, 'Invalid source run identity'
@@ -160,7 +169,7 @@ def main():
             repository={'owner':name,'name':'pipeline-proof'}
             base='repos/'+name+'/pipeline-proof'
             files={
-              '.github/workflows/actions.yml': 'name: Actions proof\non: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - name: Read source\n        run: |\n          test "$(id -u)" = 1000\n          test -f README.md\n          export STEP_PRIVATE=first\n          printf "actions proof\\n"\n      - name: Verify workspace\n        run: |\n          test -z "${STEP_PRIVATE:-}"\n          test -f README.md\n          printf "second step proof\\n"\n',
+              '.github/workflows/actions.yml': 'name: Actions proof\non: [workflow_dispatch, push]\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - name: Read source\n        run: |\n          test "$(id -u)" = 1000\n          test -f README.md\n          export STEP_PRIVATE=first\n          printf "actions proof\\n"\n      - name: Verify workspace\n        run: |\n          test -z "${STEP_PRIVATE:-}"\n          test -f README.md\n          printf "second step proof\\n"\n',
               '.gitlab-ci.yml': 'proof:\n  image: '+IMAGE+'\n  script:\n    - value=shared\n    - test "$value" = shared\n    - test -f README.md\n    - printf "gitlab proof\\n"\n',
               '.github/workflows/failure.yml': 'on: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: exit 7\n      - run: printf "must not execute\\n"\n',
               '.github/workflows/slow.yml': 'on: workflow_dispatch\njobs:\n  proof:\n    runs-on: linux\n    steps:\n      - run: sleep 60\n',
@@ -168,8 +177,19 @@ def main():
             }
             for file,content in files.items():smoke.provider(token,'POST',base+'/contents/'+file,{'content':base64.b64encode(content.encode()).decode(),'message':'Add controlled pipeline fixture'},expected=201)
             rpc('WorkflowRunService/DispatchWorkflow',{'repository':repository,'workflowPath':'.github/workflows/actions.yml','idempotencyKey':str(uuid.uuid4())},expected=403)
-            instance=update('INSTANCE',policy('INSTANCE'),True)
-            repo_policy=update('REPOSITORY',policy('REPOSITORY',repository),True,repository)
+            stage('known default deny and independent manual/push ceilings on actual inspection')
+            default_revision=observe_policy(False,False)
+            instance=update('INSTANCE',policy('INSTANCE'),True,push=True)
+            repo_policy=update('REPOSITORY',policy('REPOSITORY',repository),True,repository,push=True)
+            both_revision=observe_policy(True,True)
+            assert both_revision!=default_revision
+            repo_policy=update('REPOSITORY',repo_policy,True,repository,manual=False,push=True)
+            push_revision=observe_policy(False,True)
+            assert push_revision!=both_revision
+            rpc('WorkflowRunService/DispatchWorkflow',{'repository':repository,'workflowPath':'.github/workflows/actions.yml','idempotencyKey':str(uuid.uuid4())},expected=403)
+            repo_policy=update('REPOSITORY',repo_policy,True,repository,push=False)
+            manual_revision=observe_policy(True,False)
+            assert manual_revision!=push_revision
             stage('durable exact-commit queues survive core restart; idempotency retains original run')
             intent=str(uuid.uuid4());actions=dispatch('.github/workflows/actions.yml',intent)
             assert actions['state']=='WORKFLOW_RUN_STATE_QUEUED'

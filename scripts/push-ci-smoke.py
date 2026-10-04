@@ -300,6 +300,11 @@ def main():
             smoke.wait_for_push(token, full_name)
             assert not runs()
             policy('INSTANCE', True); policy('REPOSITORY', True)
+            inspection = rpc('WorkflowService/InspectWorkflows', {'repository': selection, 'repositoryId': created['id']})
+            assert inspection['repositoryId'] == created['id'] and len(inspection.get('policyRevision', '')) == 64
+            configurations = inspection.get('configurations', [])
+            assert len(configurations) == 1 and configurations[0]['path'] == workflow_path
+            assert configurations[0].get('manualPolicyAllowed') is False and configurations[0].get('pushPolicyAllowed') is True
             grant = rpc('AutomationGrantService/CreateAutomationGrant', {'repository': selection,
                 'expectedRepositoryId': created['id'], 'expectedOwnerId': str(native['id']),
                 'nativeToken': token, 'branches': ['main'], 'workflowPaths': [workflow_path],
