@@ -1328,6 +1328,7 @@ message UpdateExecutionPolicyResponse { ExecutionPolicy policy = 1; }
 service WorkflowRunService {
   rpc DispatchWorkflow(DispatchWorkflowRequest) returns (DispatchWorkflowResponse);
   rpc GetWorkflowRun(GetWorkflowRunRequest) returns (GetWorkflowRunResponse);
+  rpc GetWorkflowDispatch(GetWorkflowDispatchRequest) returns (GetWorkflowDispatchResponse);
   rpc ListWorkflowRuns(ListWorkflowRunsRequest) returns (ListWorkflowRunsResponse);
   rpc CancelWorkflowRun(CancelWorkflowRunRequest) returns (CancelWorkflowRunResponse);
   rpc GetWorkflowRunLogs(GetWorkflowRunLogsRequest) returns (GetWorkflowRunLogsResponse);
@@ -3630,4 +3631,24 @@ enum WorkflowNotificationMode {
  WORKFLOW_NOTIFICATION_MODE_ACTIVITY = 1;
  WORKFLOW_NOTIFICATION_MODE_COMPLETED = 2;
  WORKFLOW_NOTIFICATION_MODE_FAILURES = 3;
+}
+
+// Inspect one original managed manual dispatch whose original ref was a full SHA.
+// Named-ref dispatches are not adopted using their resolved commit. Absence is
+// not no-effect proof.
+message GetWorkflowDispatchRequest {
+ RepositoryKey repository = 1;
+ string repository_id = 2;
+ string owner_id = 3;
+ string commit_id = 4;
+ string workflow_path = 5;
+ string idempotency_key = 6;
+}
+message GetWorkflowDispatchResponse {
+ RepositoryKey repository = 1;
+ string repository_id = 2;
+ string owner_id = 3;
+ string native_actor_id = 4;
+ string idempotency_key = 5;
+ WorkflowRun run = 6;
 }
