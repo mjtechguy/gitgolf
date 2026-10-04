@@ -12,6 +12,7 @@ external ingress fencing, crash repair or full Danger readiness.
 import argparse
 import base64
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -239,8 +240,14 @@ def main():
             print('Runtime provenance: '+json.dumps(before_runtime, sort_keys=True), flush=True)
             import uuid
             stage('disposable native roles and managed password sessions')
+            account_buckets=set()
             for role in ('owner','reader','directadmin','outsider','golfadmin','nativeadmin') + (('uidark','uilight') if args.ui else ()):
-                name=project+'-'+role;actor={'name':name,'created':False,'session':smoke.client(),'loggedIn':False};actors[role]=actor
+                for _ in range(256):
+                    name=project+'-'+role+'-'+secrets.token_hex(1)
+                    bucket=int.from_bytes(hashlib.sha256(name.encode()).digest()[:2],'big')%1024+1
+                    if bucket not in account_buckets:account_buckets.add(bucket);break
+                else:raise RuntimeError('No distinct owned password-rate bucket available')
+                actor={'name':name,'created':False,'session':smoke.client(),'loggedIn':False};actors[role]=actor
                 options=['create','--username',name,'--email',name+'@example.invalid','--random-password','--must-change-password=false']
                 if role=='nativeadmin':options+=['--admin=true']
                 admin(*options);actor['created']=True
@@ -349,6 +356,7 @@ def main():
                 browser_before=sum(count_source(row['repositoryId']) for row in browser_fixtures.values())
                 result=subprocess.run(['node',str(ROOT/'scripts/repository-lifecycle-browser.mjs')],cwd=ROOT,env=environment,input=json.dumps(browser_config).encode(),capture_output=True,timeout=360)
                 assert len(result.stdout)<=65536 and len(result.stderr)<=65536
+                record(browserProcessReturnCode=result.returncode,browserManifestWritten=(OUTPUT/'browser-manifest.json').is_file())
                 proof=json.loads((OUTPUT/'browser-manifest.json').read_text());record(browser=proof['status'],captures=proof['captures'],browserProcedureStatusCounts=proof.get('procedureStatusCounts',{}),browserRequestCounts=proof.get('requestCounts',{}),browserFailedStage=proof.get('failedStage'))
                 assert result.returncode==0 and proof['status']=='browser_checks_passed_parent_native_cleanup_pending' and len(proof['captures'])==12 and proof['runtime']==before_runtime,'Browser proof failed; safe staged manifest available'
                 assert proof['requestCounts']['ChangeRepositoryArchiveState']==10 and sum(count_source(row['repositoryId']) for row in browser_fixtures.values())==browser_before+10
@@ -367,6 +375,10 @@ def main():
             for method,body in requests:call(owner,method,body,expected=401)
             assert not native_read()['archived'] and runtime()==before_runtime
             record(nativeChecks='passed',runtimeUnchanged=True);passed=True
+        except Exception as original:
+            frames=traceback.extract_tb(original.__traceback__)
+            record(originalFailureType=type(original).__name__,originalFailureLine=frames[-1].lineno,originalFailureStage=STAGE)
+            raise
         finally:
             if not passed:record(failedStage=STAGE,failedProcedure=PROOF.get('lastProcedure'))
             print('CHECK: owned fixture cleanup',flush=True);failures=[]
@@ -407,7 +419,15 @@ def main():
                 except Exception:failures.append('native organization')
             for actor in reversed(list(actors.values())):
                 if actor['created']:
-                    try:admin('delete','--username',actor['name'],'--purge')
+                    try:
+                        if actor is actors.get('nativeadmin'):
+                            # Supported native cleanup: an active last site
+                            # administrator cannot be purged. Disable only this
+                            # owned actor through its scoped admin API first.
+                            cleanup_admin=admin('generate-access-token','--username',actor['name'],'--token-name',project+'-cleanup','--scopes','write:admin','--raw')
+                            row=smoke.provider(cleanup_admin,'PATCH','admin/users/'+actor['name'],{'active':False})
+                            assert str(row['id'])==actor['id'] and row['login']==actor['name'] and row['active'] is False
+                        admin('delete','--username',actor['name'],'--purge')
                     except Exception:failures.append('native purge')
             try:
                 if started:

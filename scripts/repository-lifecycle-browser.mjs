@@ -6,6 +6,7 @@ import { writeFile, chmod } from 'node:fs/promises';
 let config, baseConfig, browser, context, page, stage = 'initialization';
 const captures = [], requests = [], replies = [], pending = [], errors = [];
 const counts = {}, statuses = {};
+let lostAcknowledgementStatus, lostAcknowledgementFailure;
 const methods = ['GetRepositoryLifecycle', 'ChangeRepositoryArchiveState', 'GetRepositoryLifecycleOperation'];
 function check(value) { if (!value) throw new Error('assertion'); }
 function identity(value) { check(value.repository?.owner+'/'+value.repository?.name === config.repository && value.repositoryId === config.repositoryId && value.ownerId === config.ownerId && /^[a-f0-9]{64}$/.test(value.revision)); }
@@ -113,14 +114,20 @@ try {
   stage = 'accepted server acknowledgement deliberately withheld from browser';
   const route = '**/rpc/golf.v1.RepositoryLifecycleService/ChangeRepositoryArchiveState'; let accepted;
   await page.route(route, async intercept => {
-    await page.unroute(route); const response = await intercept.fetch(); check(response.status() === 200); accepted = await response.json();
-    const intent = intercept.request().postDataJSON(); receipt(accepted.operation, intent); intents.set(intent.idempotencyKey, intent);
-    await intercept.abort('failed');
+    try {
+      const response = await intercept.fetch({ timeout: 20000 }); lostAcknowledgementStatus = response.status(); check(response.status() === 200); accepted = await response.json();
+      const intent = intercept.request().postDataJSON(); receipt(accepted.operation, intent); intents.set(intent.idempotencyKey, intent);
+    } catch (error) {
+      lostAcknowledgementFailure = error.name === 'TimeoutError' ? 'timeout' : 'receipt_or_transport'; errors.push(true);
+    } finally {
+      await intercept.abort('failed').catch(() => { lostAcknowledgementFailure = 'abort'; errors.push(true); });
+    }
   });
   const beforeLost = counts.ChangeRepositoryArchiveState; const lostDialog = await open(false);
   await lostDialog.getByRole('button', { name: 'Confirm archive repository', exact: true }).click();
   await lostDialog.waitFor({ state: 'detached' }); await panel.getByRole('heading', { name: 'Archive operation requires inspection', exact: true }).waitFor();
   check(accepted && counts.ChangeRepositoryArchiveState === beforeLost+1); await native(true);
+  await page.unroute(route);
   check(await panel.getByRole('button', { name: 'Unarchive repository', exact: true }).count() === 0);
   stage = 'inspect original accepted key without a repeated mutation';
   await panel.getByRole('button', { name: 'Inspect original archive operation', exact: true }).click();
@@ -143,7 +150,7 @@ try {
       await writeFile(join(config.screenshots, 'failure.txt'), text, { mode: 0o600 });
       failureCapture = { stage, image: 'failure.png', text: 'failure.txt', result: 'failed', caption: 'Failure-only served diagnostic, not qualification. Inputs/code masked and known credentials redacted.' };
     } catch { /* Safe staged metadata remains available. */ }
-    await writeFile(join(config.screenshots, 'browser-manifest.json'), JSON.stringify({ status: 'failed', failedStage: stage, runtime: config.runtime, requestCounts: counts, procedureStatusCounts: statuses, validationOrPageErrorCount: errors.length, captures, failureCapture }, null, 2), { mode: 0o600 });
+    await writeFile(join(config.screenshots, 'browser-manifest.json'), JSON.stringify({ status: 'failed', failedStage: stage, runtime: config.runtime, requestCounts: counts, procedureStatusCounts: statuses, validationOrPageErrorCount: errors.length, lostAcknowledgementStatus, lostAcknowledgementFailure, captures, failureCapture }, null, 2), { mode: 0o600 });
   }
 } finally {
   if (context && config) try { const response = await context.request.post(config.golf+'/rpc/golf.v1.SessionService/Logout', { headers: { Origin: config.golf, 'Connect-Protocol-Version': '1', 'Content-Type': 'application/json' }, data: {} }); check(response.status() === 200); } catch { console.error('Lifecycle browser logout failed'); process.exitCode = 1; }
