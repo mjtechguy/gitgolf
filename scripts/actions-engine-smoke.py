@@ -37,6 +37,12 @@ STATE = 'WORKFLOW_STEP_STATE_'
 STAGE = 'arguments'
 
 
+# Only closed operational codes are retained from trusted worker output.
+WORKER_STAGES = {'input_validation','worker_residue_check','daemon_image_validation','job_image_validation','owner_generation','volume_creation','daemon_creation','daemon_receipt_validation','daemon_start','daemon_readiness','image_transfer','helper_transfer','helper_local_hash','helper_remote_hash','helper_process_start','helper_input','helper_frames','durable_frame_ack','helper_ack_write','helper_completion','container_cleanup','volume_cleanup','unknown','coordinator_preparation'}
+def worker_failure_stages(text):
+    return sorted({line.removeprefix('Golf Actions lifecycle failure: stage=') for line in text.splitlines() if line.startswith('Golf Actions lifecycle failure: stage=') and line.removeprefix('Golf Actions lifecycle failure: stage=') in WORKER_STAGES})
+
+
 def stage(label):
     global STAGE
     STAGE = label
@@ -299,6 +305,9 @@ def main():
             manifest['runtimeAfter']=runtime();manifest['passed']=True
             print('PASS: actual manual five-instance graph and four-instance mixed matrix, exact source/attempt/graph/scoped-log receipts.',flush=True)
         finally:
+            if started:
+                try:manifest['workerFailureStages']=worker_failure_stages(command('logs','--no-log-prefix','--tail','100','runner'))
+                except Exception:manifest['workerDiagnosticsUnavailable']=True
             if session is not None:
                 try:rpc('SessionService/RevokeOtherSessions');rpc('SessionService/Logout')
                 except Exception:cleanup.append('managed session cleanup')

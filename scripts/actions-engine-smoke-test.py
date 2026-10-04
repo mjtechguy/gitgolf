@@ -11,6 +11,10 @@ spec=importlib.util.spec_from_file_location('actions_smoke',Path(__file__).with_
 proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)
 
 class ReceiptAssertions(unittest.TestCase):
+    def test_worker_diagnostics_keep_only_closed_stages(self):
+        raw='secret\nGolf Actions lifecycle failure: stage=daemon_image_validation\nGolf Actions lifecycle failure: stage=private-value\nGolf Actions lifecycle failure: stage=helper_completion token=private\n'
+        self.assertEqual(proof.worker_failure_stages(raw),['daemon_image_validation'])
+
     def setUp(self):
         self.native={'id':7,'owner':{'id':8}}
         self.head='a'*40;self.blob='b'*40
