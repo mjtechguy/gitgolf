@@ -1,3 +1,4 @@
+import { clearOtherWorkflowDispatchIntents, workflowDispatchIntentKey } from './workflowDispatchIntents';
 import { ReviewerPanel } from './ReviewerPanel';
 import { AgentTasks } from './AgentTasks';
 import { AgentUsagePanel } from './AgentUsagePanel';
@@ -23,17 +24,11 @@ import { ExecutionScope, WorkflowFormat, WorkflowInspectionState, type WorkflowC
 
 // Original request metadata only; no credential, script or response body persists.
 type DispatchIntent = { actorId:string; key:string; owner:string; name:string; repositoryId:string; ownerId:string; commitId:string; workflowPath:string; workflowBlobId:string };
-const dispatchPrefix = 'golf.workflow-dispatch.v1:';
-const dispatchStorageKey = (actor:string,repo:string) => `${dispatchPrefix}${location.origin}:${actor}:${repo}`;
 const workflowPath = (value:string) => /^(?:\.github\/workflows\/[^/]+\.ya?ml|\.gitlab-ci\.yml)$/.test(value) && new TextEncoder().encode(value).length<=4096 && !/[\\\p{Cc}\uD800-\uDFFF]/u.test(value);
 function validDispatchIntent(value:unknown, actor:string,repo:string):value is DispatchIntent {
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const v=value as Record<string,unknown>;
  return Object.keys(v).length===9 && v.actorId===actor && v.repositoryId===repo && sourceRepositoryID(actor) && sourceRepositoryID(repo) && typeof v.key==='string' && isRunID(v.key) && typeof v.ownerId==='string' && sourceRepositoryID(v.ownerId) && typeof v.owner==='string' && typeof v.name==='string' && [v.owner,v.name].every(part=>part.length>0&&part.length<=255&&!/[\/\\\p{Cc}\uD800-\uDFFF]/u.test(part)) && typeof v.commitId==='string' && isCommitID(v.commitId) && typeof v.workflowBlobId==='string' && isCommitID(v.workflowBlobId) && v.workflowBlobId.length===v.commitId.length && typeof v.workflowPath==='string' && workflowPath(v.workflowPath);
-}
-// Exported for the enclosing account/logout boundary; importing the editor is not required by the component itself.
-export function clearOtherWorkflowDispatchIntents(actor?:string) {
- try { const keep=actor?`${dispatchPrefix}${location.origin}:${actor}:`:'';for(const key of Object.keys(sessionStorage))if(key.startsWith(dispatchPrefix)&&(!keep||!key.startsWith(keep)))sessionStorage.removeItem(key); } catch { /* Unreadable storage blocks new dispatch below. */ }
 }
 function verifiedDispatchRun(run:WorkflowRun|undefined,intent:DispatchIntent,inspection=false):WorkflowRun {
  if(!run||!isRunID(run.id)||run.repositoryId!==intent.repositoryId||run.ownerId!==intent.ownerId||run.commitId!==intent.commitId||run.workflowPath!==intent.workflowPath||run.workflowBlobId!==intent.workflowBlobId||run.origin!==WorkflowRunOrigin.MANUAL||run.eventRef!==''||!/^([1-9][0-9]{0,18})$/.test(run.version)||BigInt(run.version)>9223372036854775807n||!/^\d{4}-\d\d-\d\dT/.test(run.createdAt)||!Number.isFinite(Date.parse(run.createdAt))||!/^([a-f0-9]{64})$/.test(run.sourceSha256)||run.state<WorkflowRunState.QUEUED||run.state>WorkflowRunState.LOST||(inspection&&run.canCancel))throw new ConnectError('The original dispatch receipt could not be verified.',Code.Internal);
@@ -90,7 +85,7 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
    return access;
   }});
   const access=accessQuery.isSuccess&&!accessQuery.isFetching&&!accessQuery.error&&!signingOut?accessQuery.data:undefined;
-  const storageScope=sourceRepositoryID(userId)&&sourceRepositoryID(effectiveRepositoryId)?dispatchStorageKey(userId,effectiveRepositoryId):'';
+  const storageScope=sourceRepositoryID(userId)&&sourceRepositoryID(effectiveRepositoryId)?workflowDispatchIntentKey(userId,effectiveRepositoryId):'';
   const scopeDenied=original.scope===storageScope&&original.denied;
   const inspectionError = identityError || query.error || accessQuery.error || (scopeDenied?new ConnectError('Current workflow authority is unavailable. Refresh to inspect the original dispatch.',Code.PermissionDenied):undefined);
   const refreshInspection = () => { setOriginal(prior=>({...prior,denied:false}));if(identityReady){void accessQuery.refetch();void query.refetch();}else if(!repositoryId)void metadata.refetch(); };
