@@ -28,6 +28,48 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 FORMAT = 'golf.backup.v1'
 SUPPORTED_SCHEMAS = {'202610020008', '202610020009', '202610020019', '202610020021'}
+ACCESS_SCHEMA = '202610040059'
+ACCESS_PROFILE = 'access-core059'
+ACCESS_PG_COMMAND = ['postgres', '-c', 'max_wal_size=64MB', '-c', 'min_wal_size=32MB', '-c', 'checkpoint_timeout=30s']
+# Closed source/restore eligibility, not a whole-platform recovery profile.
+ACCESS_EMPTY = {
+    'automation_grants': "golf_automation_grants WHERE enabled",
+    'push_materializations': "golf_push_materializations WHERE state IN ('pending','preparing')",
+    'agents': "golf_agent_tasks WHERE state IN ('queued','running')",
+    'reviewers': "golf_reviewer_runs WHERE state IN ('admitting','queued','running','publishing','publication_unknown') OR legacy_effect_block",
+    'bot_publications': "golf_reviewer_publications WHERE state IN ('reserved','dispatch_unknown')",
+    'overall_reviews': "golf_pull_review_mutations WHERE state='OUTCOME_UNKNOWN'",
+    'inline_reviews': "golf_inline_review_mutations WHERE phase IN ('RESERVED','DISPATCH_UNKNOWN')",
+    'lifecycle': "golf_repository_lifecycle_operations WHERE phase IN ('RESERVED','DISPATCH_UNKNOWN')",
+    'rules': "golf_repository_rule_mutations WHERE phase IN ('RESERVED','DISPATCH_UNKNOWN')",
+    'git_profiles': 'golf_git_transport_profiles WHERE suspended_at IS NULL',
+    'git_credentials': 'golf_git_credentials WHERE revoked_at IS NULL',
+    'git_receives': "golf_git_receive_operations WHERE phase IN ('RESERVED','UNKNOWN')",
+    'webhook_subscriptions': 'golf_webhook_subscriptions WHERE enabled',
+    'webhook_deliveries': "golf_webhook_deliveries WHERE state IN ('queued','retrying','sending')",
+    'email_subscriptions': 'golf_email_subscriptions WHERE enabled',
+    'email_deliveries': "golf_email_deliveries WHERE state IN ('queued','retrying','sending')",
+    'email_transport': 'golf_email_configuration WHERE transport_id IS NOT NULL',
+    'event_connections': 'golf_repository_event_connections',
+    'issue_mutations': "golf_issue_mutations WHERE state='OUTCOME_UNKNOWN'",
+    'repository_creations': "golf_repository_creations WHERE state='OUTCOME_UNKNOWN'",
+    # No active/leased or legacy queued work: only one unclaimed real typed run.
+    'unsupported_workflows': "golf_workflow_runs r WHERE r.state='running' OR (r.state='queued' AND (r.origin<>'manual' OR r.lease_token_hash IS NOT NULL OR NOT EXISTS(SELECT 1 FROM golf_workflow_dispatch_inputs i WHERE i.run_id=r.id)))",
+}
+KEY_FAMILIES = ('sessions', 'oauth_attempts', 'local_accounts', 'infrastructure_connections',
+                'automation_credentials', 'review_contents', 'conversation_contents', 'webhook_credentials',
+                'repository_execution_values', 'organization_execution_values',
+                'workflow_quarantined_outputs', 'notification_contents', 'workflow_dispatch_inputs')
+# Gitea1.27.3 maps cron.<name>, not a global cron.ENABLED switch.
+NATIVE_CRON_TASKS = ('update_mirrors', 'repo_health_check', 'check_repo_stats', 'archive_cleanup',
+    'sync_external_users', 'deleted_branches_cleanup', 'update_migration_poster_id',
+    'cleanup_hook_task_table', 'cleanup_packages', 'sync_repo_licenses',
+    'delete_inactive_accounts', 'delete_repo_archives', 'git_gc_repos', 'resync_all_sshkeys',
+    'resync_all_sshprincipals', 'resync_all_hooks', 'reinit_missing_repos', 'delete_missing_repos',
+    'delete_generated_repository_avatars', 'delete_old_actions', 'update_checker',
+    'delete_old_system_notices', 'gc_lfs', 'rebuild_issue_indexer')
+ACCESS_NATIVE_EMPTY = ('mirror', 'push_mirror', 'webhook', 'hook_task', 'action_run')
+
 FILES = {'compose.json', 'postgres-init.sh', 'golf.dump', 'gitea.dump',
          'gitea-data.tar', 'gitea-config.tar'}
 PROJECT = re.compile(r'^[a-z0-9][a-z0-9_-]{0,62}$')
@@ -175,6 +217,109 @@ def validate_source_bindings(pg, config, schema):
         require(run(['docker', 'exec', pg, 'psql', '-U', 'postgres', '-d', 'golf', '-Atc', query]).strip() == b'0')
 
 
+
+def validate_profile(schema, profile):
+    require((schema in SUPPORTED_SCHEMAS and profile is None) or
+            (schema == ACCESS_SCHEMA and profile == ACCESS_PROFILE))
+
+
+def validate_access_config(config):
+    require(set(config['services']) == {'golf', 'gitea', 'postgres'})
+    golf = config['services']['golf']['environment']
+    native = config['services']['gitea']['environment']
+    require(golf.get('GITEA_URL') == 'http://gitea:3000')
+    # Do not capture proxy transport, external intake or managed Git activation.
+    for key in ('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy',
+                'GOLF_REPOSITORY_EVENT_CONNECTIONS', 'GOLF_GIT_TRANSPORT_PROFILE',
+                'GOLF_INTERNAL_TLS_CERT_FILE', 'GOLF_INTERNAL_TLS_KEY_FILE'):
+        require(not golf.get(key))
+    require(golf.get('GOLF_PUSH_CI_ENABLED', 'false').lower() == 'false')
+    require(native.get('GITEA__actions__ENABLED', '').lower() == 'false' and
+            native.get('GITEA__mailer__ENABLED', '').lower() == 'false' and
+            all(native.get('GITEA__cron.' + name + '__ENABLED', '').lower() == 'false' for name in NATIVE_CRON_TASKS))
+    # No injected native global hook command or environment proxy.
+    require(not any(value for key, value in native.items()
+                    if key.upper() in {'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY'} or
+                    key.lower().startswith('gitea__git.config')))
+
+
+def validate_access_counts(counts):
+    require(isinstance(counts, dict) and set(counts) == set(ACCESS_EMPTY) |
+            {'typed_queued'} | {'native_' + name for name in ACCESS_NATIVE_EMPTY})
+    require(all(type(value) is int and value == 0 for key, value in counts.items() if key != 'typed_queued'))
+    require(type(counts['typed_queued']) is int and 0 <= counts['typed_queued'] <= 1)
+
+
+def access_profile_observation(pg, config):
+    validate_access_config(config)
+    counts = {}
+    for key, source in ACCESS_EMPTY.items():
+        raw = run(['docker', 'exec', pg, 'psql', '-U', 'postgres', '-d', 'golf', '-Atc',
+                   'SELECT count(*) FROM ' + source + ';']).strip()
+        require(raw.isdigit()); counts[key] = int(raw)
+    raw = run(['docker', 'exec', pg, 'psql', '-U', 'postgres', '-d', 'golf', '-Atc',
+               "SELECT count(*) FROM golf_workflow_runs WHERE state='queued';"]).strip()
+    require(raw.isdigit()); counts['typed_queued'] = int(raw)
+    for table in ACCESS_NATIVE_EMPTY:
+        raw = run(['docker', 'exec', pg, 'psql', '-U', 'postgres', '-d', 'gitea', '-Atc',
+                   'SELECT count(*) FROM ' + table + ';']).strip()
+        require(raw.isdigit()); counts['native_' + table] = int(raw)
+    validate_access_counts(counts)
+    return counts
+
+
+
+
+def validate_access_archive(stage):
+    with tarfile.open(stage/'gitea-config.tar', 'r:') as archive:
+        ini = configparser.ConfigParser(interpolation=None, strict=False)
+        ini.read_string('[DEFAULT]\n' + archive.extractfile('gitea/app.ini').read().decode())
+        require(ini.get('actions', 'ENABLED', fallback='').lower() == 'false' and
+                ini.get('mailer', 'ENABLED', fallback='').lower() == 'false' and
+                all(ini.get('cron.' + name, 'ENABLED', fallback='').lower() == 'false' for name in NATIVE_CRON_TASKS))
+        require(not ini.has_section('git.config') or
+                not any(key.lower() == 'core.hookspath' and value for key, value in ini['git.config'].items()))
+    with tarfile.open(stage/'gitea-data.tar', 'r:') as archive:
+        for member in archive:
+            parts = PurePosixPath(member.name).parts
+            require('custom_hooks' not in parts and not (parts[-1] == 'reference-transaction' and 'hooks' in parts))
+            for index, part in enumerate(parts):
+                if part in {'pre-receive.d', 'post-receive.d', 'update.d', 'proc-receive.d'}:
+                    require((index + 1 == len(parts) and member.isdir()) or
+                            (index + 2 == len(parts) and parts[-1] == 'gitea' and member.isfile()))
+            # Native Git configuration persists independently of app.ini. Do not
+            # restore an out-of-profile hook path or a deferred include override.
+            if member.name == 'gitea/git/.gitconfig' or ('/git/repositories/' in member.name and member.name.endswith('.git/config')):
+                require(member.isfile() and member.size <= 1 << 20)
+                git = configparser.ConfigParser(interpolation=None, strict=False)
+                git.read_string(archive.extractfile(member).read().decode())
+                for section in git.sections():
+                    require(not section.lower().startswith('include'))
+                    if section.lower() == 'core':
+                        require(not git.get(section, 'hooksPath', fallback=''))
+
+
+def checked_key_status(value):
+    require(isinstance(value, dict) and set(value) == {'active_key_id', 'configured_active_key_id', 'keys'} and
+            value['active_key_id'] == value['configured_active_key_id'] and isinstance(value['keys'], list) and
+            1 <= len(value['keys']) <= 32)
+    seen = set()
+    for row in value['keys']:
+        require(isinstance(row, dict) and set(row) == set(KEY_FAMILIES) | {'key_id', 'configured'} and
+                isinstance(row['key_id'], str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,63}', row['key_id']) and
+                row['key_id'] not in seen and row['configured'] is True and
+                all(type(row[key]) is int and 0 <= row[key] <= (1 << 63)-1 for key in KEY_FAMILIES))
+        seen.add(row['key_id'])
+    require(value['active_key_id'] in seen)
+    return value
+
+
+def access_key_status(compose):
+    value = json.loads(run([*compose, 'run', '--rm', '--no-deps', '-T', 'golf', 'keys', 'status']))
+    require(value.get('schema_version') == 'golf.keys.v1' and value.get('state') == 'complete')
+    return checked_key_status(value['result'])
+
+
 def matching_compose_files(label, supplied):
     # Compose may recreate only changed services, leaving older service labels
     # with fewer overlays. Every retained label must still describe this base
@@ -187,7 +332,7 @@ def matching_compose_files(label, supplied):
                 [expected.index(file) for file in selected] == sorted(expected.index(file) for file in selected))
 
 
-def snapshot(project, compose_files):
+def snapshot(project, compose_files, profile=None):
     rows = containers(project)
     require(len(rows) in {3, 4})
     services = {row['Config']['Labels'].get('com.docker.compose.service'): row for row in rows}
@@ -201,7 +346,9 @@ def snapshot(project, compose_files):
         require(not row['HostConfig']['Privileged'] and not row['HostConfig']['NetworkMode'].startswith('host'))
         image_config = docker_json('image', 'inspect', row['Image'])[0]['Config']
         require(all((row['Config'].get(key) or None) == (image_config.get(key) or None)
-                    for key in ['Entrypoint', 'Cmd', 'User', 'WorkingDir']))
+                    for key in ['Entrypoint', 'User', 'WorkingDir']))
+        require((row['Config'].get('Cmd') or None) == (image_config.get('Cmd') or None) or
+                (profile == ACCESS_PROFILE and row is services['postgres'] and row['Config'].get('Cmd') == ACCESS_PG_COMMAND))
         host = row['HostConfig']
         is_rustfs = row is services.get('rustfs')
         require(host['RestartPolicy']['Name'] in {'', 'no'} and
@@ -259,6 +406,8 @@ def snapshot(project, compose_files):
         config['services'][name] = {'image': image, 'pull_policy': 'never', 'environment': env,
                                     'restart': 'no'}
     golf, gitea, postgres = [config['services'][name] for name in ['golf', 'gitea', 'postgres']]
+    if profile == ACCESS_PROFILE and services['postgres']['Config'].get('Cmd') == ACCESS_PG_COMMAND:
+        postgres['command'] = list(ACCESS_PG_COMMAND)
     require(postgres['environment'].get('POSTGRES_PASSWORD') and
             postgres['environment'].get('GOLF_DB_PASSWORD') and postgres['environment'].get('GITEA_DB_PASSWORD'))
     require(gitea['environment'].get('GITEA__database__HOST') == 'postgres:5432' and
@@ -392,7 +541,7 @@ def validate_pair(stage):
 def backup(args, stage):
     require(not args.output.exists() and not args.output.is_symlink() and args.output.parent.is_dir())
     compose_files = [file.resolve() for file in args.compose_file]
-    services, config, initializer = snapshot(args.project, compose_files)
+    services, config, initializer = snapshot(args.project, compose_files, args.profile)
     rustfs = 'rustfs' in services
     files = profile_files(rustfs)
     pg = services['postgres']['Id']
@@ -402,7 +551,15 @@ def backup(args, stage):
     schema = run(['docker', 'exec', pg, 'psql', '-U', 'postgres', '-d', 'golf', '-Atc',
                   'SELECT max(version_id) FROM goose_db_version WHERE is_applied;']).decode().strip()
     require(pg_version == 'postgres (PostgreSQL) 18.4' and forge_version.startswith('gitea version 1.27.3 ') and
-            schema in SUPPORTED_SCHEMAS)
+            (schema in SUPPORTED_SCHEMAS or schema == ACCESS_SCHEMA))
+    validate_profile(schema, args.profile)
+    observation = access_profile_observation(pg, config) if args.profile else None
+    key_inventory = None
+    if args.profile:
+        compose = ['docker', 'compose', '-p', args.project]
+        for file in compose_files:
+            compose += ['-f', str(file)]
+        key_inventory = access_key_status(compose)
     validate_source_bindings(pg, config, schema)
     write(stage/'compose.json', json.dumps(config).encode())
     write(stage/'postgres-init.sh', initializer)
@@ -415,11 +572,15 @@ def backup(args, stage):
         run(['docker', 'cp', '-a', services['rustfs']['Id']+':/data', '-'], output=stage/'rustfs-data.tar', limit=args.max_bytes)
         validate_volume(stage/'rustfs-data.tar', rustfs=True)
     validate_pair(stage)
+    if args.profile:
+        validate_access_archive(stage)
     # Revalidate ordinary writer/container state and runtime configuration after
     # all components; the explicit drained-writers assertion remains required.
-    after, after_config, after_init = snapshot(args.project, compose_files)
+    after, after_config, after_init = snapshot(args.project, compose_files, args.profile)
     require(config == after_config and initializer == after_init and
             all(after[name]['Id'] == row['Id'] for name, row in services.items()))
+    if args.profile:
+        require(access_profile_observation(pg, config) == observation)
     sizes = {name: {'bytes': (stage/name).stat().st_size, 'sha256': digest(stage/name)} for name in files}
     total = sum(row['bytes'] for row in sizes.values())
     require(total <= args.max_bytes)
@@ -427,6 +588,10 @@ def backup(args, stage):
                 'created_at': datetime.now(timezone.utc).isoformat(), 'source_project': args.project,
                 'versions': {'postgres': pg_version, 'gitea': forge_version, 'golf_schema': schema},
                 'images': {name: row['Image'] for name, row in services.items()}, 'files': sizes}
+    if args.profile:
+        manifest['recovery_profile'] = args.profile
+        manifest['profile_observation'] = observation
+        manifest['key_inventory'] = key_inventory
     if rustfs:
         manifest['storage_profile'] = 'local_rustfs'
     write(stage/'manifest.json', json.dumps(manifest, sort_keys=True).encode())
@@ -471,7 +636,13 @@ def verified(args, stage):
             set(manifest['files']) == files and set(manifest['images']) == services)
     require(manifest['versions']['postgres'] == 'postgres (PostgreSQL) 18.4' and
             manifest['versions']['gitea'].startswith('gitea version 1.27.3 ') and
-            manifest['versions']['golf_schema'] in SUPPORTED_SCHEMAS)
+            (manifest['versions']['golf_schema'] in SUPPORTED_SCHEMAS or manifest['versions']['golf_schema'] == ACCESS_SCHEMA))
+    validate_profile(manifest['versions']['golf_schema'], manifest.get('recovery_profile'))
+    if manifest.get('recovery_profile'):
+        validate_access_counts(manifest.get('profile_observation'))
+        checked_key_status(manifest.get('key_inventory'))
+    else:
+        require('profile_observation' not in manifest and 'key_inventory' not in manifest)
     for name in files:
         require(manifest['files'][name] == {'bytes': (stage/name).stat().st_size, 'sha256': digest(stage/name)})
     require(sum(row['bytes'] for row in manifest['files'].values()) <= args.max_bytes)
@@ -486,9 +657,10 @@ def verified(args, stage):
             config['volumes'] == {name: {} for name in ['postgres-data', 'gitea-data', 'gitea-config', *(['rustfs-data'] if rustfs else [])]})
     for name, service in config['services'].items():
         require(service['image'] == manifest['images'][name] and re.fullmatch(r'sha256:[a-f0-9]{64}', service['image']))
-        require(set(service) <= {'image', 'pull_policy', 'environment', 'restart', 'volumes', 'ports', 'depends_on', 'healthcheck'} | ({'tmpfs', 'cap_drop', 'security_opt'} if name == 'rustfs' else set()))
+        require(set(service) <= {'image', 'pull_policy', 'environment', 'restart', 'volumes', 'ports', 'depends_on', 'healthcheck'} | ({'command'} if name == 'postgres' and manifest.get('recovery_profile') == ACCESS_PROFILE else set()) | ({'tmpfs', 'cap_drop', 'security_opt'} if name == 'rustfs' else set()))
         require(service['pull_policy'] == 'never' and service['restart'] == 'no' and isinstance(service['environment'], dict))
         require(all(isinstance(key, str) and isinstance(value, str) for key, value in service['environment'].items()))
+    require('command' not in config['services']['postgres'] or config['services']['postgres']['command'] == ACCESS_PG_COMMAND)
     require(config['services']['postgres']['volumes'] == ['postgres-data:/var/lib/postgresql', './postgres-init.sh:/docker-entrypoint-initdb.d/01-golf.sh:ro'])
     require(config['services']['gitea']['volumes'] == ['gitea-data:/var/lib/gitea', 'gitea-config:/etc/gitea'])
     require('volumes' not in config['services']['golf'])
@@ -499,6 +671,10 @@ def verified(args, stage):
                 service.get('security_opt') == ['no-new-privileges:true'] and
                 service['image'] == docker_json('image', 'inspect', RUSTFS_IMAGE)[0]['Id'])
     storage_fingerprint(config)
+    if manifest.get('recovery_profile'):
+        validate_access_archive(stage)
+        validate_access_config(config)
+        require(all(not service.get('extra_hosts') for service in config['services'].values()))
     return manifest
 
 
@@ -541,6 +717,8 @@ def restore(args, stage, manifest):
     schema = run(['docker', 'exec', rows['postgres']['Id'], 'psql', '-U', 'postgres', '-d', 'golf', '-Atc',
                   'SELECT max(version_id) FROM goose_db_version WHERE is_applied;']).decode().strip()
     require(schema == manifest['versions']['golf_schema'])
+    if manifest.get('recovery_profile'):
+        require(access_profile_observation(rows['postgres']['Id'], json.loads((stage/'compose.json').read_text())) == manifest['profile_observation'])
     for name, destination in [('gitea-data.tar', '/var/lib'), ('gitea-config.tar', '/etc')]:
         with (stage/name).open('rb') as file:
             run(['docker', 'cp', '-a', '-', rows['gitea']['Id']+':'+destination], input=file)
@@ -548,6 +726,8 @@ def restore(args, stage, manifest):
     if 'rustfs' in rows:
         with (stage/'rustfs-data.tar').open('rb') as file:
             run(['docker', 'cp', '-a', '-', rows['rustfs']['Id']+':/'], input=file)
+    if manifest.get('recovery_profile'):
+        require(access_key_status(compose) == manifest['key_inventory'])
     recovery = json.loads(run([*compose, 'run', '--rm', '--no-deps', '-T', 'golf', 'recovery', 'invalidate-sessions',
                               '--backup-id', manifest['backup_id']]))
     require(recovery['schema_version'] == 'golf.recovery.v1' and recovery['state'] == 'complete')
@@ -570,6 +750,7 @@ def main():
             command.add_argument('--writers-drained', action='store_true', required=True,
                                  help='Assert ALL application, Git and direct DB writers are fenced/drained')
         if name == 'backup':
+            command.add_argument('--profile', choices=[ACCESS_PROFILE], help='Explicit bounded schema059 Access-core profile; no other feature recovery is implied')
             command.add_argument('--compose-file', required=True, type=Path, action='append', help='Repeat for every source Compose file in runtime order')
             command.add_argument('--recipient', required=True, help='Public native age recipient')
             command.add_argument('--output', required=True, type=Path)
