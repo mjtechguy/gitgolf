@@ -204,8 +204,8 @@ func TestWorkflowNotificationsConsentPreservationAndRenderingPostgres(t *testing
 		t.Fatal("omitted email edit changed consent", e)
 	}
 	save.ExpectedVersion = "1"
-	if _, e = f.s.SaveRepositoryEmailSubscription(f.ctx, webhookRequest(f.webhookFixture, save)); connect.CodeOf(e) != connect.CodeAborted {
-		t.Fatal("stale mode edit accepted", e)
+	if _, e = f.s.SaveRepositoryEmailSubscription(f.ctx, webhookRequest(f.webhookFixture, save)); connect.CodeOf(e) != connect.CodeFailedPrecondition {
+		t.Fatal("stale mode edit did not preserve repository settings conflict", e)
 	}
 	save.ExpectedVersion = "2"
 	save.WorkflowNotifications = golfv1.WorkflowNotificationMode_WORKFLOW_NOTIFICATION_MODE_UNSPECIFIED.Enum()
