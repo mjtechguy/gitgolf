@@ -19,6 +19,38 @@ type GolfActiveObjectConnection struct {
 	Revision  int64
 }
 
+type GolfAgentConversation struct {
+	TaskID            uuid.UUID
+	AttemptID         string
+	ForgeURL          string
+	RepositoryID      int64
+	OwnerID           int64
+	UserID            int64
+	NativeUserID      int64
+	WorkerID          string
+	ConnectionID      uuid.UUID
+	ConnectionVersion int64
+	CommitID          string
+	BodyState         string
+	LastSequence      int64
+	ProjectedBytes    int64
+	CreatedAt         time.Time
+}
+
+type GolfAgentConversationContent struct {
+	ID               uuid.UUID
+	TaskID           uuid.UUID
+	AttemptID        string
+	ForgeURL         string
+	RepositoryID     int64
+	UserID           int64
+	Sequence         int64
+	EncryptedContent []byte
+	ContentBinding   []byte
+	CredentialKeyID  string
+	CreatedAt        time.Time
+}
+
 type GolfAgentModelCatalog struct {
 	ConnectionID      uuid.UUID
 	ConnectionVersion int64
@@ -56,6 +88,19 @@ type GolfAgentTask struct {
 	Patch             string
 	Reason            string
 	Tokens            int64
+}
+
+type GolfAgentTaskEvent struct {
+	TaskID         uuid.UUID
+	AttemptID      string
+	Sequence       int64
+	ContentID      uuid.UUID
+	Kind           string
+	Status         string
+	ToolKind       string
+	TotalTokens    sql.NullInt64
+	ProjectedBytes int32
+	CreatedAt      time.Time
 }
 
 type GolfAgentUsageEvent struct {
@@ -208,6 +253,7 @@ type GolfCryptoEvent struct {
 	InfrastructureConnectionsCount int64
 	AutomationCredentialsCount     int64
 	ReviewContentsCount            int64
+	ConversationContentsCount      int64
 }
 
 type GolfEncryptionKey struct {

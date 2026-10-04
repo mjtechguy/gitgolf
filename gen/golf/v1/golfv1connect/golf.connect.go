@@ -432,6 +432,9 @@ const (
 	// AgentTaskServiceCancelAgentTaskProcedure is the fully-qualified name of the AgentTaskService's
 	// CancelAgentTask RPC.
 	AgentTaskServiceCancelAgentTaskProcedure = "/golf.v1.AgentTaskService/CancelAgentTask"
+	// AgentTaskServiceListAgentTaskEventsProcedure is the fully-qualified name of the
+	// AgentTaskService's ListAgentTaskEvents RPC.
+	AgentTaskServiceListAgentTaskEventsProcedure = "/golf.v1.AgentTaskService/ListAgentTaskEvents"
 	// ReviewerServiceGetReviewerProcedure is the fully-qualified name of the ReviewerService's
 	// GetReviewer RPC.
 	ReviewerServiceGetReviewerProcedure = "/golf.v1.ReviewerService/GetReviewer"
@@ -4312,6 +4315,7 @@ type AgentTaskServiceClient interface {
 	ListAgentTasks(context.Context, *connect.Request[v1.ListAgentTasksRequest]) (*connect.Response[v1.ListAgentTasksResponse], error)
 	GetAgentTask(context.Context, *connect.Request[v1.GetAgentTaskRequest]) (*connect.Response[v1.GetAgentTaskResponse], error)
 	CancelAgentTask(context.Context, *connect.Request[v1.CancelAgentTaskRequest]) (*connect.Response[v1.CancelAgentTaskResponse], error)
+	ListAgentTaskEvents(context.Context, *connect.Request[v1.ListAgentTaskEventsRequest]) (*connect.Response[v1.ListAgentTaskEventsResponse], error)
 }
 
 // NewAgentTaskServiceClient constructs a client for the golf.v1.AgentTaskService service. By
@@ -4349,15 +4353,22 @@ func NewAgentTaskServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(agentTaskServiceMethods.ByName("CancelAgentTask")),
 			connect.WithClientOptions(opts...),
 		),
+		listAgentTaskEvents: connect.NewClient[v1.ListAgentTaskEventsRequest, v1.ListAgentTaskEventsResponse](
+			httpClient,
+			baseURL+AgentTaskServiceListAgentTaskEventsProcedure,
+			connect.WithSchema(agentTaskServiceMethods.ByName("ListAgentTaskEvents")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // agentTaskServiceClient implements AgentTaskServiceClient.
 type agentTaskServiceClient struct {
-	createAgentTask *connect.Client[v1.CreateAgentTaskRequest, v1.CreateAgentTaskResponse]
-	listAgentTasks  *connect.Client[v1.ListAgentTasksRequest, v1.ListAgentTasksResponse]
-	getAgentTask    *connect.Client[v1.GetAgentTaskRequest, v1.GetAgentTaskResponse]
-	cancelAgentTask *connect.Client[v1.CancelAgentTaskRequest, v1.CancelAgentTaskResponse]
+	createAgentTask     *connect.Client[v1.CreateAgentTaskRequest, v1.CreateAgentTaskResponse]
+	listAgentTasks      *connect.Client[v1.ListAgentTasksRequest, v1.ListAgentTasksResponse]
+	getAgentTask        *connect.Client[v1.GetAgentTaskRequest, v1.GetAgentTaskResponse]
+	cancelAgentTask     *connect.Client[v1.CancelAgentTaskRequest, v1.CancelAgentTaskResponse]
+	listAgentTaskEvents *connect.Client[v1.ListAgentTaskEventsRequest, v1.ListAgentTaskEventsResponse]
 }
 
 // CreateAgentTask calls golf.v1.AgentTaskService.CreateAgentTask.
@@ -4380,12 +4391,18 @@ func (c *agentTaskServiceClient) CancelAgentTask(ctx context.Context, req *conne
 	return c.cancelAgentTask.CallUnary(ctx, req)
 }
 
+// ListAgentTaskEvents calls golf.v1.AgentTaskService.ListAgentTaskEvents.
+func (c *agentTaskServiceClient) ListAgentTaskEvents(ctx context.Context, req *connect.Request[v1.ListAgentTaskEventsRequest]) (*connect.Response[v1.ListAgentTaskEventsResponse], error) {
+	return c.listAgentTaskEvents.CallUnary(ctx, req)
+}
+
 // AgentTaskServiceHandler is an implementation of the golf.v1.AgentTaskService service.
 type AgentTaskServiceHandler interface {
 	CreateAgentTask(context.Context, *connect.Request[v1.CreateAgentTaskRequest]) (*connect.Response[v1.CreateAgentTaskResponse], error)
 	ListAgentTasks(context.Context, *connect.Request[v1.ListAgentTasksRequest]) (*connect.Response[v1.ListAgentTasksResponse], error)
 	GetAgentTask(context.Context, *connect.Request[v1.GetAgentTaskRequest]) (*connect.Response[v1.GetAgentTaskResponse], error)
 	CancelAgentTask(context.Context, *connect.Request[v1.CancelAgentTaskRequest]) (*connect.Response[v1.CancelAgentTaskResponse], error)
+	ListAgentTaskEvents(context.Context, *connect.Request[v1.ListAgentTaskEventsRequest]) (*connect.Response[v1.ListAgentTaskEventsResponse], error)
 }
 
 // NewAgentTaskServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -4419,6 +4436,12 @@ func NewAgentTaskServiceHandler(svc AgentTaskServiceHandler, opts ...connect.Han
 		connect.WithSchema(agentTaskServiceMethods.ByName("CancelAgentTask")),
 		connect.WithHandlerOptions(opts...),
 	)
+	agentTaskServiceListAgentTaskEventsHandler := connect.NewUnaryHandler(
+		AgentTaskServiceListAgentTaskEventsProcedure,
+		svc.ListAgentTaskEvents,
+		connect.WithSchema(agentTaskServiceMethods.ByName("ListAgentTaskEvents")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/golf.v1.AgentTaskService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AgentTaskServiceCreateAgentTaskProcedure:
@@ -4429,6 +4452,8 @@ func NewAgentTaskServiceHandler(svc AgentTaskServiceHandler, opts ...connect.Han
 			agentTaskServiceGetAgentTaskHandler.ServeHTTP(w, r)
 		case AgentTaskServiceCancelAgentTaskProcedure:
 			agentTaskServiceCancelAgentTaskHandler.ServeHTTP(w, r)
+		case AgentTaskServiceListAgentTaskEventsProcedure:
+			agentTaskServiceListAgentTaskEventsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -4452,6 +4477,10 @@ func (UnimplementedAgentTaskServiceHandler) GetAgentTask(context.Context, *conne
 
 func (UnimplementedAgentTaskServiceHandler) CancelAgentTask(context.Context, *connect.Request[v1.CancelAgentTaskRequest]) (*connect.Response[v1.CancelAgentTaskResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AgentTaskService.CancelAgentTask is not implemented"))
+}
+
+func (UnimplementedAgentTaskServiceHandler) ListAgentTaskEvents(context.Context, *connect.Request[v1.ListAgentTaskEventsRequest]) (*connect.Response[v1.ListAgentTaskEventsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AgentTaskService.ListAgentTaskEvents is not implemented"))
 }
 
 // ReviewerServiceClient is a client for the golf.v1.ReviewerService service.

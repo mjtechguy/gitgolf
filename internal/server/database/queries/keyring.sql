@@ -37,23 +37,17 @@ UPDATE golf_encryption_policy SET active_key_id = $1 WHERE singleton;
 SELECT pg_advisory_xact_lock(74191526730202002);
 
 -- name: CountCredentialKeys :many
-SELECT credential_key_id, sum(session_count)::bigint AS sessions, sum(attempt_count)::bigint AS oauth_attempts, sum(local_count)::bigint AS local_accounts, sum(infrastructure_count)::bigint AS infrastructure_connections, sum(automation_count)::bigint AS automation_credentials, sum(review_count)::bigint AS review_contents
+SELECT credential_key_id,sum(s)::bigint AS sessions,sum(o)::bigint AS oauth_attempts,sum(l)::bigint AS local_accounts,sum(i)::bigint AS infrastructure_connections,sum(a)::bigint AS automation_credentials,sum(r)::bigint AS review_contents,sum(c)::bigint AS conversation_contents
 FROM (
-    SELECT credential_key_id, count(*) AS session_count, 0::bigint AS attempt_count, 0::bigint AS local_count, 0::bigint AS infrastructure_count, 0::bigint AS automation_count, 0::bigint AS review_count FROM golf_sessions GROUP BY credential_key_id
-    UNION ALL
-    SELECT credential_key_id, 0::bigint, count(*), 0::bigint, 0::bigint, 0::bigint ,0::bigint FROM golf_oauth_attempts GROUP BY credential_key_id
-    UNION ALL
-    SELECT credential_key_id, 0::bigint, 0::bigint, count(*), 0::bigint, 0::bigint ,0::bigint FROM golf_local_accounts GROUP BY credential_key_id
-    UNION ALL
-    SELECT credential_key_id, 0::bigint, 0::bigint, 0::bigint, count(*), 0::bigint ,0::bigint FROM golf_infrastructure_connection_versions GROUP BY credential_key_id
-    UNION ALL
-    SELECT credential_key_id, 0::bigint, 0::bigint, 0::bigint, 0::bigint, count(*) ,0::bigint FROM golf_automation_credentials GROUP BY credential_key_id
-    UNION ALL
-    SELECT credential_key_id, 0::bigint, 0::bigint, 0::bigint, count(*), 0::bigint ,0::bigint FROM golf_codex_auth GROUP BY credential_key_id
-    UNION ALL
-    SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,count(*) FROM golf_review_contents GROUP BY credential_key_id
-) counts
-GROUP BY credential_key_id ORDER BY credential_key_id;
+ SELECT credential_key_id,count(*) AS s,0::bigint AS o,0::bigint AS l,0::bigint AS i,0::bigint AS a,0::bigint AS r,0::bigint AS c FROM golf_sessions GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,count(*),0,0,0,0,0 FROM golf_oauth_attempts GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,count(*),0,0,0,0 FROM golf_local_accounts GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,count(*),0,0,0 FROM golf_infrastructure_connection_versions GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,0,count(*),0,0 FROM golf_automation_credentials GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,count(*),0,0,0 FROM golf_codex_auth GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,0,0,count(*),0 FROM golf_review_contents GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,0,0,0,count(*) FROM golf_agent_conversation_contents GROUP BY credential_key_id
+) counts GROUP BY credential_key_id ORDER BY credential_key_id;
 
 -- name: LockRotationSessions :many
 SELECT token_hash, encrypted_token, credential_key_id
@@ -73,8 +67,8 @@ FOR UPDATE SKIP LOCKED;
 UPDATE golf_oauth_attempts SET encrypted_verifier = $2, credential_key_id = $3 WHERE state_hash = $1;
 
 -- name: AppendCryptoEvent :exec
-INSERT INTO golf_crypto_events (operation_id, action, key_id, sessions_count, oauth_attempts_count, local_accounts_count,infrastructure_connections_count,automation_credentials_count,review_contents_count)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
+INSERT INTO golf_crypto_events (operation_id, action, key_id, sessions_count, oauth_attempts_count, local_accounts_count,infrastructure_connections_count,automation_credentials_count,review_contents_count,conversation_contents_count)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
 
 -- name: GetKeyFingerprint :one
 SELECT fingerprint FROM golf_encryption_keys WHERE key_id = $1;
@@ -127,3 +121,12 @@ SELECT grant_id::text,encrypted_credential,credential_binding
 FROM golf_automation_credentials
 WHERE credential_key_id='legacy' AND grant_id::text>sqlc.arg(after_grant)::text
 ORDER BY grant_id LIMIT 500;
+
+-- name: LockRotationConversationContents :many
+SELECT id::text,encrypted_content,content_binding,credential_key_id FROM golf_agent_conversation_contents
+WHERE credential_key_id<>sqlc.arg(active_key_id) ORDER BY id LIMIT sqlc.arg(row_limit) FOR UPDATE SKIP LOCKED;
+-- name: UpdateKeyedConversationContent :exec
+UPDATE golf_agent_conversation_contents SET encrypted_content=$2,credential_key_id=$3 WHERE id=$1;
+-- name: BootstrapLegacyConversationContents :many
+SELECT id::text,encrypted_content,content_binding FROM golf_agent_conversation_contents
+WHERE credential_key_id='legacy' AND id::text>sqlc.arg(after_id)::text ORDER BY id LIMIT 500;

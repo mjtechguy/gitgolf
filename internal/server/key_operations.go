@@ -14,7 +14,7 @@ import (
 var errKeyPolicy = errors.New("Encryption configuration does not match the database policy or stored key labels.")
 var errKeyMaterial = errors.New("Encryption key material does not match its registered label.")
 var errKeyBootstrap = errors.New("Legacy encryption validation failed; preserve all keys and credentials and resolve configuration before retrying.")
-var errKeyRetirement = errors.New("Key retirement requires a configured inactive key with zero stored session, OAuth-attempt, local-account, infrastructure-profile and automation-credential and private-review-content uses.")
+var errKeyRetirement = errors.New("Key retirement requires a configured inactive key with zero stored session, OAuth-attempt, local-account, infrastructure-profile and automation-credential and private-review-content and private-conversation-content uses.")
 
 // Safe operator output contains labels and counts, never fingerprints, binding
 // hashes, ciphertext, credentials, key material or database connection strings.
@@ -26,6 +26,7 @@ type CredentialKeyUsage struct {
 	InfrastructureConnections uint64 `json:"infrastructure_connections"`
 	AutomationCredentials     uint64 `json:"automation_credentials"`
 	ReviewContents            uint64 `json:"review_contents"`
+	ConversationContents      uint64 `json:"conversation_contents"`
 	Configured                bool   `json:"configured"`
 }
 type CredentialKeyStatus struct {
@@ -43,6 +44,7 @@ type CredentialKeyOperation struct {
 	RotatedInfrastructureConnections uint64              `json:"rotated_infrastructure_connections"`
 	RotatedAutomationCredentials     uint64              `json:"rotated_automation_credentials"`
 	RotatedReviewContents            uint64              `json:"rotated_review_contents"`
+	RotatedConversationContents      uint64              `json:"rotated_conversation_contents"`
 	Complete                         bool                `json:"complete"`
 	Status                           CredentialKeyStatus `json:"status"`
 }
@@ -64,7 +66,7 @@ func keyStatus(ctx context.Context, q *database.Queries, keys *Keyring) (Credent
 		byID[id] = CredentialKeyUsage{KeyID: id, Configured: true}
 	}
 	for _, row := range counts {
-		byID[row.CredentialKeyID] = CredentialKeyUsage{KeyID: row.CredentialKeyID, Sessions: uint64(row.Sessions), OAuthAttempts: uint64(row.OauthAttempts), LocalAccounts: uint64(row.LocalAccounts), InfrastructureConnections: uint64(row.InfrastructureConnections), AutomationCredentials: uint64(row.AutomationCredentials), ReviewContents: uint64(row.ReviewContents), Configured: keys.keys[row.CredentialKeyID] != nil}
+		byID[row.CredentialKeyID] = CredentialKeyUsage{KeyID: row.CredentialKeyID, Sessions: uint64(row.Sessions), OAuthAttempts: uint64(row.OauthAttempts), LocalAccounts: uint64(row.LocalAccounts), InfrastructureConnections: uint64(row.InfrastructureConnections), AutomationCredentials: uint64(row.AutomationCredentials), ReviewContents: uint64(row.ReviewContents), ConversationContents: uint64(row.ConversationContents), Configured: keys.keys[row.CredentialKeyID] != nil}
 	}
 	if _, exists := byID[active]; !exists {
 		byID[active] = CredentialKeyUsage{KeyID: active, Configured: keys.keys[active] != nil}
@@ -136,7 +138,7 @@ func ensureLegacyBinding(ctx context.Context, db *sql.DB, keys *Keyring) error {
 			return keyOperationError(ctx)
 		}
 		for _, row := range counts {
-			if row.CredentialKeyID == "legacy" && row.Sessions+row.OauthAttempts+row.LocalAccounts+row.InfrastructureConnections+row.AutomationCredentials+row.ReviewContents != 0 {
+			if row.CredentialKeyID == "legacy" && row.Sessions+row.OauthAttempts+row.LocalAccounts+row.InfrastructureConnections+row.AutomationCredentials+row.ReviewContents+row.ConversationContents != 0 {
 				return errKeyPolicy
 			}
 		}
@@ -272,6 +274,23 @@ func ensureLegacyBinding(ctx context.Context, db *sql.DB, keys *Keyring) error {
 			break
 		}
 	}
+	conversationCursor := ""
+	for {
+		rows, err := q.BootstrapLegacyConversationContents(ctx, conversationCursor)
+		if err != nil {
+			return keyOperationError(ctx)
+		}
+		for _, row := range rows {
+			if _, err := keys.open("legacy", conversationContentDomain, row.EncryptedContent, row.ContentBinding); err != nil {
+				return errKeyBootstrap
+			}
+			conversationCursor = row.ID
+		}
+		if len(rows) < 500 {
+			break
+		}
+	}
+
 	fingerprint := keys.fingerprints["legacy"]
 	if err := q.RegisterKeyFingerprint(ctx, database.RegisterKeyFingerprintParams{KeyID: "legacy", Fingerprint: fingerprint[:]}); err != nil {
 		return keyOperationError(ctx)
@@ -320,7 +339,7 @@ func requiredKeys(status CredentialKeyStatus, matchActive bool) error {
 		return errKeyPolicy
 	}
 	for _, usage := range status.Keys {
-		if !usage.Configured && (usage.Sessions != 0 || usage.OAuthAttempts != 0 || usage.LocalAccounts != 0 || usage.InfrastructureConnections != 0 || usage.AutomationCredentials != 0 || usage.ReviewContents != 0 || (matchActive && usage.KeyID == status.ActiveKeyID)) {
+		if !usage.Configured && (usage.Sessions != 0 || usage.OAuthAttempts != 0 || usage.LocalAccounts != 0 || usage.InfrastructureConnections != 0 || usage.AutomationCredentials != 0 || usage.ReviewContents != 0 || usage.ConversationContents != 0 || (matchActive && usage.KeyID == status.ActiveKeyID)) {
 			return errKeyPolicy
 		}
 	}
@@ -338,7 +357,7 @@ func checkRuntimeKeys(ctx context.Context, db *sql.DB, keys *Keyring) error {
 	// A nonlegacy stored label without its permanent binding cannot be trusted.
 	q := database.New(db)
 	for _, usage := range status.Keys {
-		if usage.Sessions == 0 && usage.OAuthAttempts == 0 && usage.LocalAccounts == 0 && usage.InfrastructureConnections == 0 && usage.AutomationCredentials == 0 && usage.ReviewContents == 0 && usage.KeyID != status.ActiveKeyID {
+		if usage.Sessions == 0 && usage.OAuthAttempts == 0 && usage.LocalAccounts == 0 && usage.InfrastructureConnections == 0 && usage.AutomationCredentials == 0 && usage.ReviewContents == 0 && usage.ConversationContents == 0 && usage.KeyID != status.ActiveKeyID {
 			continue
 		}
 		if _, err := q.GetKeyFingerprint(ctx, usage.KeyID); err != nil {
@@ -358,12 +377,18 @@ func beginKeyOperation(ctx context.Context, db *sql.DB, keys *Keyring, action st
 	return result, err
 }
 
-func appendCrypto(ctx context.Context, q *database.Queries, operation, action, keyID string, sessions, attempts, locals, infrastructure, automation uint64, review ...uint64) error {
-	var reviewCount uint64
-	if len(review) > 0 {
-		reviewCount = review[0]
+func appendCrypto(ctx context.Context, q *database.Queries, operation, action, keyID string, sessions, attempts, locals, infrastructure, automation uint64, contents ...uint64) error {
+	var reviewCount, conversationCount uint64
+	if len(contents) > 2 {
+		return errStorageUnavailable
 	}
-	if err := q.AppendCryptoEvent(ctx, database.AppendCryptoEventParams{OperationID: operation, Action: action, KeyID: keyID, SessionsCount: int64(sessions), OauthAttemptsCount: int64(attempts), LocalAccountsCount: int64(locals), InfrastructureConnectionsCount: int64(infrastructure), AutomationCredentialsCount: int64(automation), ReviewContentsCount: int64(reviewCount)}); err != nil {
+	if len(contents) > 0 {
+		reviewCount = contents[0]
+	}
+	if len(contents) > 1 {
+		conversationCount = contents[1]
+	}
+	if err := q.AppendCryptoEvent(ctx, database.AppendCryptoEventParams{OperationID: operation, Action: action, KeyID: keyID, SessionsCount: int64(sessions), OauthAttemptsCount: int64(attempts), LocalAccountsCount: int64(locals), InfrastructureConnectionsCount: int64(infrastructure), AutomationCredentialsCount: int64(automation), ReviewContentsCount: int64(reviewCount), ConversationContentsCount: int64(conversationCount)}); err != nil {
 		return keyOperationError(ctx)
 	}
 	return nil
@@ -423,7 +448,7 @@ func ActivateKey(ctx context.Context, db *sql.DB, keys *Keyring) (CredentialKeyO
 	if err := q.SetEncryptionPolicy(ctx, keys.active); err != nil {
 		return result, keyOperationError(ctx)
 	}
-	var sessions, attempts, locals, infrastructure, automation, review uint64
+	var sessions, attempts, locals, infrastructure, automation, review, conversation uint64
 	for _, usage := range status.Keys {
 		sessions += usage.Sessions
 		attempts += usage.OAuthAttempts
@@ -431,8 +456,9 @@ func ActivateKey(ctx context.Context, db *sql.DB, keys *Keyring) (CredentialKeyO
 		infrastructure += usage.InfrastructureConnections
 		automation += usage.AutomationCredentials
 		review += usage.ReviewContents
+		conversation += usage.ConversationContents
 	}
-	if err := appendCrypto(ctx, q, result.OperationID, result.Action, keys.active, sessions, attempts, locals, infrastructure, automation, review); err != nil {
+	if err := appendCrypto(ctx, q, result.OperationID, result.Action, keys.active, sessions, attempts, locals, infrastructure, automation, review, conversation); err != nil {
 		return result, err
 	}
 	status.ActiveKeyID = keys.active
@@ -447,7 +473,7 @@ func remainingCredentials(status CredentialKeyStatus) uint64 {
 	var remaining uint64
 	for _, usage := range status.Keys {
 		if usage.KeyID != status.ActiveKeyID {
-			remaining += usage.Sessions + usage.OAuthAttempts + usage.LocalAccounts + usage.InfrastructureConnections + usage.AutomationCredentials + usage.ReviewContents
+			remaining += usage.Sessions + usage.OAuthAttempts + usage.LocalAccounts + usage.InfrastructureConnections + usage.AutomationCredentials + usage.ReviewContents + usage.ConversationContents
 		}
 	}
 	return remaining
@@ -477,7 +503,7 @@ func RotateCredentials(ctx context.Context, db *sql.DB, keys *Keyring, batchSize
 			result.Complete = true
 			return result, nil
 		}
-		sessions, attempts, locals, infrastructure, automation, review, status, err := rotateCredentialBatch(ctx, db, keys, result.OperationID, batchSize)
+		sessions, attempts, locals, infrastructure, automation, review, conversation, status, err := rotateCredentialBatch(ctx, db, keys, result.OperationID, batchSize)
 		if err != nil {
 			return result, err
 		}
@@ -488,23 +514,24 @@ func RotateCredentials(ctx context.Context, db *sql.DB, keys *Keyring, batchSize
 		result.RotatedInfrastructureConnections += infrastructure
 		result.RotatedAutomationCredentials += automation
 		result.RotatedReviewContents += review
-		if sessions+attempts+locals+infrastructure+automation+review > 0 {
+		result.RotatedConversationContents += conversation
+		if sessions+attempts+locals+infrastructure+automation+review+conversation > 0 {
 			result.Batches++
 		}
 		if remainingCredentials(status) == 0 {
 			result.Complete = true
 			return result, nil
 		}
-		if sessions+attempts+locals+infrastructure+automation+review == 0 {
+		if sessions+attempts+locals+infrastructure+automation+review+conversation == 0 {
 			return result, nil
 		} // Busy rows remain; resume later.
 	}
 	return result, nil
 }
 
-func rotateCredentialBatch(ctx context.Context, db *sql.DB, keys *Keyring, operation string, batchSize int) (uint64, uint64, uint64, uint64, uint64, uint64, CredentialKeyStatus, error) {
-	fail := func(err error) (uint64, uint64, uint64, uint64, uint64, uint64, CredentialKeyStatus, error) {
-		return 0, 0, 0, 0, 0, 0, CredentialKeyStatus{}, err
+func rotateCredentialBatch(ctx context.Context, db *sql.DB, keys *Keyring, operation string, batchSize int) (uint64, uint64, uint64, uint64, uint64, uint64, uint64, CredentialKeyStatus, error) {
+	fail := func(err error) (uint64, uint64, uint64, uint64, uint64, uint64, uint64, CredentialKeyStatus, error) {
+		return 0, 0, 0, 0, 0, 0, 0, CredentialKeyStatus{}, err
 	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -553,6 +580,24 @@ func rotateCredentialBatch(ctx context.Context, db *sql.DB, keys *Keyring, opera
 	if err != nil {
 		return fail(keyOperationError(ctx))
 	}
+	conversation, err := q.LockRotationConversationContents(ctx, database.LockRotationConversationContentsParams{ActiveKeyID: active, RowLimit: int32(batchSize - len(sessions) - len(attempts) - len(locals) - len(infrastructure) - codexCount - len(automation) - len(review))})
+	if err != nil {
+		return fail(keyOperationError(ctx))
+	}
+	for _, row := range conversation {
+		plain, err := keys.open(row.CredentialKeyID, conversationContentDomain, row.EncryptedContent, row.ContentBinding)
+		if err != nil {
+			return fail(err)
+		}
+		cipher, key, err := keys.seal(conversationContentDomain, plain, row.ContentBinding)
+		if err != nil {
+			return fail(err)
+		}
+		if err := q.UpdateKeyedConversationContent(ctx, database.UpdateKeyedConversationContentParams{ID: uuid.MustParse(row.ID), EncryptedContent: cipher, CredentialKeyID: key}); err != nil {
+			return fail(keyOperationError(ctx))
+		}
+	}
+
 	for _, row := range review {
 		plain, err := keys.open(row.CredentialKeyID, reviewContentDomain, row.EncryptedContent, row.ContentBinding)
 		if err != nil {
@@ -631,9 +676,9 @@ func rotateCredentialBatch(ctx context.Context, db *sql.DB, keys *Keyring, opera
 			return fail(keyOperationError(ctx))
 		}
 	}
-	sc, ac, lc, ic, gc, rc := uint64(len(sessions)), uint64(len(attempts)), uint64(len(locals)), uint64(len(infrastructure)+codexCount), uint64(len(automation)), uint64(len(review))
-	if sc+ac+lc+ic+gc+rc > 0 {
-		if err := appendCrypto(ctx, q, operation, "CREDENTIAL_BATCH_REENCRYPTED", active, sc, ac, lc, ic, gc, rc); err != nil {
+	sc, ac, lc, ic, gc, rc, cc := uint64(len(sessions)), uint64(len(attempts)), uint64(len(locals)), uint64(len(infrastructure)+codexCount), uint64(len(automation)), uint64(len(review)), uint64(len(conversation))
+	if sc+ac+lc+ic+gc+rc+cc > 0 {
+		if err := appendCrypto(ctx, q, operation, "CREDENTIAL_BATCH_REENCRYPTED", active, sc, ac, lc, ic, gc, rc, cc); err != nil {
 			return fail(err)
 		}
 	}
@@ -644,7 +689,7 @@ func rotateCredentialBatch(ctx context.Context, db *sql.DB, keys *Keyring, opera
 	if err := txCommitKey(ctx, tx); err != nil {
 		return fail(err)
 	}
-	return sc, ac, lc, ic, gc, rc, status, nil
+	return sc, ac, lc, ic, gc, rc, cc, status, nil
 }
 
 // CheckKeyRetirement records an eligible zero-use check; it never erases keys.
@@ -691,7 +736,7 @@ func CheckKeyRetirement(ctx context.Context, db *sql.DB, keys *Keyring, keyID st
 		return result, keyOperationError(ctx)
 	}
 	for _, usage := range status.Keys {
-		if usage.KeyID == keyID && usage.Sessions+usage.OAuthAttempts+usage.LocalAccounts+usage.InfrastructureConnections+usage.AutomationCredentials+usage.ReviewContents != 0 {
+		if usage.KeyID == keyID && usage.Sessions+usage.OAuthAttempts+usage.LocalAccounts+usage.InfrastructureConnections+usage.AutomationCredentials+usage.ReviewContents+usage.ConversationContents != 0 {
 			return result, errKeyRetirement
 		}
 	}

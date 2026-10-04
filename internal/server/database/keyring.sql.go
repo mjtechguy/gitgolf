@@ -13,8 +13,8 @@ import (
 )
 
 const appendCryptoEvent = `-- name: AppendCryptoEvent :exec
-INSERT INTO golf_crypto_events (operation_id, action, key_id, sessions_count, oauth_attempts_count, local_accounts_count,infrastructure_connections_count,automation_credentials_count,review_contents_count)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO golf_crypto_events (operation_id, action, key_id, sessions_count, oauth_attempts_count, local_accounts_count,infrastructure_connections_count,automation_credentials_count,review_contents_count,conversation_contents_count)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 `
 
 type AppendCryptoEventParams struct {
@@ -27,6 +27,7 @@ type AppendCryptoEventParams struct {
 	InfrastructureConnectionsCount int64
 	AutomationCredentialsCount     int64
 	ReviewContentsCount            int64
+	ConversationContentsCount      int64
 }
 
 func (q *Queries) AppendCryptoEvent(ctx context.Context, arg AppendCryptoEventParams) error {
@@ -40,6 +41,7 @@ func (q *Queries) AppendCryptoEvent(ctx context.Context, arg AppendCryptoEventPa
 		arg.InfrastructureConnectionsCount,
 		arg.AutomationCredentialsCount,
 		arg.ReviewContentsCount,
+		arg.ConversationContentsCount,
 	)
 	return err
 }
@@ -67,6 +69,40 @@ func (q *Queries) BootstrapLegacyAutomationCredentials(ctx context.Context, afte
 	for rows.Next() {
 		var i BootstrapLegacyAutomationCredentialsRow
 		if err := rows.Scan(&i.GrantID, &i.EncryptedCredential, &i.CredentialBinding); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const bootstrapLegacyConversationContents = `-- name: BootstrapLegacyConversationContents :many
+SELECT id::text,encrypted_content,content_binding FROM golf_agent_conversation_contents
+WHERE credential_key_id='legacy' AND id::text>$1::text ORDER BY id LIMIT 500
+`
+
+type BootstrapLegacyConversationContentsRow struct {
+	ID               string
+	EncryptedContent []byte
+	ContentBinding   []byte
+}
+
+func (q *Queries) BootstrapLegacyConversationContents(ctx context.Context, afterID string) ([]BootstrapLegacyConversationContentsRow, error) {
+	rows, err := q.db.QueryContext(ctx, bootstrapLegacyConversationContents, afterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BootstrapLegacyConversationContentsRow
+	for rows.Next() {
+		var i BootstrapLegacyConversationContentsRow
+		if err := rows.Scan(&i.ID, &i.EncryptedContent, &i.ContentBinding); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -199,23 +235,17 @@ func (q *Queries) BootstrapLegacySessions(ctx context.Context, afterID int64) ([
 }
 
 const countCredentialKeys = `-- name: CountCredentialKeys :many
-SELECT credential_key_id, sum(session_count)::bigint AS sessions, sum(attempt_count)::bigint AS oauth_attempts, sum(local_count)::bigint AS local_accounts, sum(infrastructure_count)::bigint AS infrastructure_connections, sum(automation_count)::bigint AS automation_credentials, sum(review_count)::bigint AS review_contents
+SELECT credential_key_id,sum(s)::bigint AS sessions,sum(o)::bigint AS oauth_attempts,sum(l)::bigint AS local_accounts,sum(i)::bigint AS infrastructure_connections,sum(a)::bigint AS automation_credentials,sum(r)::bigint AS review_contents,sum(c)::bigint AS conversation_contents
 FROM (
-    SELECT credential_key_id, count(*) AS session_count, 0::bigint AS attempt_count, 0::bigint AS local_count, 0::bigint AS infrastructure_count, 0::bigint AS automation_count, 0::bigint AS review_count FROM golf_sessions GROUP BY credential_key_id
-    UNION ALL
-    SELECT credential_key_id, 0::bigint, count(*), 0::bigint, 0::bigint, 0::bigint ,0::bigint FROM golf_oauth_attempts GROUP BY credential_key_id
-    UNION ALL
-    SELECT credential_key_id, 0::bigint, 0::bigint, count(*), 0::bigint, 0::bigint ,0::bigint FROM golf_local_accounts GROUP BY credential_key_id
-    UNION ALL
-    SELECT credential_key_id, 0::bigint, 0::bigint, 0::bigint, count(*), 0::bigint ,0::bigint FROM golf_infrastructure_connection_versions GROUP BY credential_key_id
-    UNION ALL
-    SELECT credential_key_id, 0::bigint, 0::bigint, 0::bigint, 0::bigint, count(*) ,0::bigint FROM golf_automation_credentials GROUP BY credential_key_id
-    UNION ALL
-    SELECT credential_key_id, 0::bigint, 0::bigint, 0::bigint, count(*), 0::bigint ,0::bigint FROM golf_codex_auth GROUP BY credential_key_id
-    UNION ALL
-    SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,count(*) FROM golf_review_contents GROUP BY credential_key_id
-) counts
-GROUP BY credential_key_id ORDER BY credential_key_id
+ SELECT credential_key_id,count(*) AS s,0::bigint AS o,0::bigint AS l,0::bigint AS i,0::bigint AS a,0::bigint AS r,0::bigint AS c FROM golf_sessions GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,count(*),0,0,0,0,0 FROM golf_oauth_attempts GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,count(*),0,0,0,0 FROM golf_local_accounts GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,count(*),0,0,0 FROM golf_infrastructure_connection_versions GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,0,count(*),0,0 FROM golf_automation_credentials GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,count(*),0,0,0 FROM golf_codex_auth GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,0,0,count(*),0 FROM golf_review_contents GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,0,0,0,count(*) FROM golf_agent_conversation_contents GROUP BY credential_key_id
+) counts GROUP BY credential_key_id ORDER BY credential_key_id
 `
 
 type CountCredentialKeysRow struct {
@@ -226,6 +256,7 @@ type CountCredentialKeysRow struct {
 	InfrastructureConnections int64
 	AutomationCredentials     int64
 	ReviewContents            int64
+	ConversationContents      int64
 }
 
 func (q *Queries) CountCredentialKeys(ctx context.Context) ([]CountCredentialKeysRow, error) {
@@ -245,6 +276,7 @@ func (q *Queries) CountCredentialKeys(ctx context.Context) ([]CountCredentialKey
 			&i.InfrastructureConnections,
 			&i.AutomationCredentials,
 			&i.ReviewContents,
+			&i.ConversationContents,
 		); err != nil {
 			return nil, err
 		}
@@ -448,6 +480,51 @@ func (q *Queries) LockRotationAutomationCredentials(ctx context.Context, arg Loc
 	return items, nil
 }
 
+const lockRotationConversationContents = `-- name: LockRotationConversationContents :many
+SELECT id::text,encrypted_content,content_binding,credential_key_id FROM golf_agent_conversation_contents
+WHERE credential_key_id<>$1 ORDER BY id LIMIT $2 FOR UPDATE SKIP LOCKED
+`
+
+type LockRotationConversationContentsParams struct {
+	ActiveKeyID string
+	RowLimit    int32
+}
+
+type LockRotationConversationContentsRow struct {
+	ID               string
+	EncryptedContent []byte
+	ContentBinding   []byte
+	CredentialKeyID  string
+}
+
+func (q *Queries) LockRotationConversationContents(ctx context.Context, arg LockRotationConversationContentsParams) ([]LockRotationConversationContentsRow, error) {
+	rows, err := q.db.QueryContext(ctx, lockRotationConversationContents, arg.ActiveKeyID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LockRotationConversationContentsRow
+	for rows.Next() {
+		var i LockRotationConversationContentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EncryptedContent,
+			&i.ContentBinding,
+			&i.CredentialKeyID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockRotationInfrastructureConnections = `-- name: LockRotationInfrastructureConnections :many
 SELECT profile_id::text,version,encrypted_credential,credential_binding,credential_key_id
 FROM golf_infrastructure_connection_versions
@@ -636,6 +713,21 @@ func (q *Queries) UpdateKeyedAutomationCredential(ctx context.Context, arg Updat
 		arg.GrantID,
 		arg.Version,
 	)
+	return err
+}
+
+const updateKeyedConversationContent = `-- name: UpdateKeyedConversationContent :exec
+UPDATE golf_agent_conversation_contents SET encrypted_content=$2,credential_key_id=$3 WHERE id=$1
+`
+
+type UpdateKeyedConversationContentParams struct {
+	ID               uuid.UUID
+	EncryptedContent []byte
+	CredentialKeyID  string
+}
+
+func (q *Queries) UpdateKeyedConversationContent(ctx context.Context, arg UpdateKeyedConversationContentParams) error {
+	_, err := q.db.ExecContext(ctx, updateKeyedConversationContent, arg.ID, arg.EncryptedContent, arg.CredentialKeyID)
 	return err
 }
 

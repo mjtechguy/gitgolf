@@ -1752,6 +1752,7 @@ service AgentTaskService {
  rpc ListAgentTasks(ListAgentTasksRequest) returns (ListAgentTasksResponse);
  rpc GetAgentTask(GetAgentTaskRequest) returns (GetAgentTaskResponse);
  rpc CancelAgentTask(CancelAgentTaskRequest) returns (CancelAgentTaskResponse);
+ rpc ListAgentTaskEvents(ListAgentTaskEventsRequest) returns (ListAgentTaskEventsResponse);
 }
 message AgentTask {
  string id = 1;
@@ -2187,4 +2188,47 @@ message GetActionRunResponse {
   AgentTask task = 4;
   ReviewerRun review = 5;
  }
+}
+
+// Private single-attempt Codex observations. Text/native IDs are withheld until
+// original and refreshed credential screening completes under current authority.
+enum AgentEventBodyState {
+ AGENT_EVENT_BODY_STATE_UNSPECIFIED = 0;
+ AGENT_EVENT_BODY_STATE_WITHHELD = 1;
+ AGENT_EVENT_BODY_STATE_AVAILABLE = 2;
+ AGENT_EVENT_BODY_STATE_UNAVAILABLE = 3;
+}
+message AgentEventPlanStep { string step = 1; string status = 2; }
+message AgentTaskEvent {
+ string sequence = 1;
+ string kind = 2;
+ string created_at = 3;
+ string status = 4;
+ string tool_kind = 5;
+ optional string total_tokens = 6;
+ AgentEventBodyState body_state = 7;
+ string text = 8;
+ string thread_id = 9;
+ string turn_id = 10;
+ string item_id = 11;
+ string phase = 12;
+ repeated AgentEventPlanStep plan = 13;
+}
+message ListAgentTaskEventsRequest {
+ RepositoryKey repository = 1;
+ string repository_id = 2;
+ string task_id = 3;
+ string attempt_id = 4;
+ string after_sequence = 5;
+ uint32 limit = 6;
+}
+message ListAgentTaskEventsResponse {
+ string repository_id = 1;
+ string task_id = 2;
+ string attempt_id = 3;
+ string commit_id = 4;
+ string native_initiator_id = 5;
+ AgentEventBodyState body_state = 6;
+ repeated AgentTaskEvent events = 7;
+ string next_sequence = 8;
 }

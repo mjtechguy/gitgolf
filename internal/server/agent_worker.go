@@ -291,8 +291,21 @@ func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor
 		job.ImageDigest = s.config.ReviewImage
 		result, executionErr = executor.ExecuteReview(run, job)
 	} else {
+		if e = s.startConversation(run, t, r, worker, attempt, c.Instructions, []byte(plain)); e != nil {
+			stop()
+			<-heartbeatDone
+			s.finishAgentFailure(ctx, t.ID, attempt, "Private conversation admission failed; no native task was launched.")
+			return e
+		}
+		job.Observe = func(observeCtx context.Context, v runner.AgentObservation) error {
+			if !codexOwnerAlive(observeCtx, &codexRuntime{conn: owner, ownerID: codexLockID(r.ID)}) {
+				return errCodexUnavailable
+			}
+			return s.observeConversation(observeCtx, t, r, worker, attempt, v, []byte(plain))
+		}
 		result, executionErr = executor.ExecuteAgent(run, job)
 	}
+	journaled := job.Observe != nil
 	stop()
 	<-heartbeatDone
 	if executionErr != nil {
@@ -313,7 +326,7 @@ func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor
 	}
 	// Defend against accidental native echo. The command sandbox must separately
 	// pass the credential-read denial qualification; redaction is not that boundary.
-	if agentContainsCredential(result.Summary, result.Auth) || agentContainsCredential(result.Patch, result.Auth) {
+	if agentContainsCredential(result.Summary, []byte(plain)) || agentContainsCredential(result.Patch, []byte(plain)) || agentContainsCredential(result.Summary, result.Auth) || agentContainsCredential(result.Patch, result.Auth) || journaled && !validConversationAuth(result.Auth) {
 		result.State = "failed"
 		result.Summary = ""
 		result.Patch = ""
@@ -331,27 +344,32 @@ func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor
 		if e := tx.QueryRowContext(finish, `SELECT state FROM golf_agent_tasks WHERE id=$1 AND attempt_id=$2 AND worker_id=$3 AND lease_expires_at>clock_timestamp() FOR UPDATE`, t.ID, attempt, worker).Scan(&state); e != nil || (state != "running" && state != "cancelled") {
 			return errExecutionPolicyConflict
 		}
-		// The rotating credential returns only to the original, current authorized
-		// connection. Never overwrite a newer login or resurrect a disconnected one.
-		if len(result.Auth) > 0 {
-			encrypted, key, e := s.keyring.seal(infrastructureConnectionDomain, string(result.Auth), codexBinding(r.ID))
-			if e != nil {
-				return e
+		conversationSafe := false
+		if journaled {
+			var screenErr error
+			conversationSafe, screenErr = s.screenConversation(finish, tx, t, attempt, []byte(plain), result.Auth)
+			if screenErr != nil {
+				return screenErr
 			}
-			if _, e = tx.ExecContext(finish, `UPDATE golf_codex_auth SET encrypted_credential=$2,credential_key_id=$3 WHERE connection_id=$1`, r.ID, encrypted, key); e != nil {
-				return errStorageUnavailable
-			}
-			if _, e = tx.ExecContext(finish, `UPDATE golf_codex_connections SET version=version+1,checked_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1`, r.ID); e != nil {
-				return errStorageUnavailable
-			}
-			if _, e = tx.ExecContext(finish, `UPDATE golf_agent_model_catalogs SET connection_version=$2 WHERE connection_id=$1 AND connection_version=$3`, r.ID, r.Version+1, r.Version); e != nil {
-				return errStorageUnavailable
+			if !conversationSafe && result.State == "succeeded" {
+				result.State = "failed"
+				result.Summary = ""
+				result.Patch = ""
 			}
 		}
+		// The rotating credential returns only to the original, current authorized
+		// connection. Never overwrite a newer login or resurrect a disconnected one.
+		if e := s.persistAgentCredential(finish, tx, r, result.Auth); e != nil {
+			return e
+		}
+
 		if state == "cancelled" {
 			// Preserve native renewal under the original current account fence while
 			// never reviving cancellation or retaining its proposed output.
 			_, e := tx.ExecContext(finish, `UPDATE golf_agent_tasks SET tokens=GREATEST(tokens,$2) WHERE id=$1 AND state='cancelled'`, t.ID, result.Tokens)
+			if e == nil && journaled {
+				e = s.finalizeConversation(finish, tx, t, attempt, false)
+			}
 			return e
 		}
 		reason := ""
@@ -362,7 +380,18 @@ func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor
 			}
 		}
 		_, e := tx.ExecContext(finish, `UPDATE golf_agent_tasks SET state=$2,version=version+1,finished_at=clock_timestamp(),summary=$3,patch=$4,tokens=$5,reason=$6 WHERE id=$1`, t.ID, result.State, result.Summary, result.Patch, result.Tokens, reason)
-		return e
+		if e != nil {
+			return e
+		}
+		if journaled {
+			if e = s.finalizeConversation(finish, tx, t, attempt, conversationSafe && result.State == "succeeded" && executionErr == nil); e != nil {
+				return e
+			}
+		}
+		if _, e = s.taskActor(finish, t); e != nil {
+			return e
+		}
+		return s.reviewTaskAccess(finish, t)
 	})
 	if e != nil {
 		s.finishAgentFailure(finish, t.ID, attempt, "Policy/account authority changed; no result was published.")
@@ -370,7 +399,18 @@ func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor
 	return e
 }
 func (s *Server) finishAgentFailure(ctx context.Context, id, attempt, reason string) {
-	_, _ = s.db.ExecContext(ctx, `UPDATE golf_agent_tasks SET state='lost',reason=$3,version=version+1,finished_at=clock_timestamp(),summary='',patch='' WHERE id=$1 AND attempt_id=$2 AND state='running'`, id, attempt, reason)
+	tx, e := s.db.BeginTx(ctx, nil)
+	if e != nil {
+		return
+	}
+	defer tx.Rollback()
+	if _, e = tx.ExecContext(ctx, `UPDATE golf_agent_tasks SET state='lost',reason=$3,version=version+1,finished_at=clock_timestamp(),summary='',patch='' WHERE id=$1 AND attempt_id=$2 AND state='running'`, id, attempt, reason); e != nil {
+		return
+	}
+	if _, e = tx.ExecContext(ctx, `UPDATE golf_agent_conversations SET body_state='UNAVAILABLE' WHERE task_id=$1 AND attempt_id=$2 AND body_state='WITHHELD'`, id, attempt); e != nil {
+		return
+	}
+	_ = tx.Commit()
 }
 func runnerAttemptID() (string, error) { return runner.NewAttemptID() }
 func agentContainsCredential(text string, raw []byte) bool {
@@ -399,4 +439,38 @@ func agentContainsCredential(text string, raw []byte) bool {
 		return false
 	}
 	return check(value)
+}
+
+// Preserve the last known native cache when recovery failed or returned a
+// malformed/non-object payload. This is the existing broker cache-shape bound,
+// not a claim that syntactically valid credentials can still authenticate.
+func (s *Server) persistAgentCredential(ctx context.Context, tx *sql.Tx, r codexRecord, auth []byte) error {
+	if !validConversationAuth(auth) {
+		return nil
+	}
+	encrypted, key, e := s.keyring.seal(infrastructureConnectionDomain, string(auth), codexBinding(r.ID))
+	if e != nil {
+		return e
+	}
+	result, e := tx.ExecContext(ctx, `UPDATE golf_codex_auth SET encrypted_credential=$2,credential_key_id=$3 WHERE connection_id=$1 AND EXISTS(SELECT 1 FROM golf_codex_connections c WHERE c.id=$1 AND c.version=$4 AND c.state='CONNECTED')`, r.ID, encrypted, key, r.Version)
+	if e != nil {
+		return errStorageUnavailable
+	}
+	n, _ := result.RowsAffected()
+	if n != 1 {
+		return errCodexConflict
+	}
+	result, e = tx.ExecContext(ctx, `UPDATE golf_codex_connections SET version=version+1,checked_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND version=$2 AND state='CONNECTED'`, r.ID, r.Version)
+	if e != nil {
+		return errStorageUnavailable
+	}
+	n, _ = result.RowsAffected()
+	if n != 1 {
+		return errCodexConflict
+	}
+	_, e = tx.ExecContext(ctx, `UPDATE golf_agent_model_catalogs SET connection_version=$2 WHERE connection_id=$1 AND connection_version=$3`, r.ID, r.Version+1, r.Version)
+	if e != nil {
+		return errStorageUnavailable
+	}
+	return nil
 }
