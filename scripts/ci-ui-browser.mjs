@@ -95,7 +95,9 @@ try{
           await page.getByRole('heading',{name:config.run.workflowPath,exact:true}).waitFor();
           if(id==='actions-selected-step'){
             result.check='selected-step-navigation';
+            result.check='selected-step-open-jobs';
             if(width===390)await page.getByLabel('Jobs and steps').locator('summary').click();
+            result.check='selected-step-visible-link';
             await page.getByLabel('Jobs and steps').getByRole('link',{name:/Read source/}).click();
             await page.waitForURL(url=>url.searchParams.get('step')==='0');
             assert(new URL(page.url()).searchParams.get('step')==='0','Selected step URL differs');
@@ -104,8 +106,10 @@ try{
             // request identities fence any late responses from the old one.
             inflight.clear();
             await page.reload({waitUntil:'domcontentloaded'});
-            await page.getByLabel('Jobs and steps').getByRole('link',{name:/Read source/}).waitFor({state:width===390?'attached':'visible'});
-            assert(await page.getByLabel('Jobs and steps').getByRole('link',{name:/Read source/}).getAttribute('aria-current')==='page','Reload lost selected step');
+            result.check='selected-step-reload-binding';
+            const selectedLink=page.getByLabel('Jobs and steps').getByRole('link',{name:/Read source/,includeHidden:width===390});
+            await selectedLink.waitFor({state:width===390?'attached':'visible'});
+            assert(await selectedLink.getAttribute('aria-current')==='page','Reload lost selected step');
           }
           const log=page.getByLabel('Workflow run log',{exact:true});await log.waitFor();
           result.check='controlled-output';
