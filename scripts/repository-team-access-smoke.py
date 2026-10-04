@@ -49,6 +49,35 @@ def stage(value):
     print('CHECK: '+value, flush=True)
 
 
+def checked_rpc(session, procedure, payload=None, expected=200, headers=None, code=None):
+    """One dispatch; persist only procedure/status/code, never bodies or messages."""
+    import urllib.error
+    import urllib.request
+    assert re.fullmatch(r'[A-Za-z]+Service/[A-Za-z]+',procedure)
+    request=urllib.request.Request(smoke.GOLF+'/rpc/golf.v1.'+procedure, data=json.dumps({} if payload is None else payload).encode(), method='POST', headers={'Origin':smoke.GOLF,'Content-Type':'application/json','Connect-Protocol-Version':'1',**(headers or {})})
+    try:response=session.open(request,timeout=15)
+    except urllib.error.HTTPError as error:response=error
+    except (urllib.error.URLError,OSError) as error:
+        record(lastProcedure={'procedure':procedure,'status':None,'transportFailure':type(error).__name__})
+        raise RuntimeError('RPC transport unavailable; safe metadata recorded') from None
+    with response:
+        raw=response.read((1<<20)+1)
+        metadata={'procedure':procedure,'status':response.status,'noStore':response.headers.get('Cache-Control')=='no-store'}
+        result=None
+        if len(raw)<=1<<20:
+            try:result=json.loads(raw) if raw else None
+            except (ValueError,UnicodeError):pass
+        if isinstance(result,dict) and isinstance(result.get('code'),str) and re.fullmatch(r'[a-z_]{1,64}',result['code']):metadata['code']=result['code']
+        observations=PROOF.get('procedureObservations',[])
+        assert len(observations)<256
+        observations.append(metadata);record(lastProcedure=metadata,procedureObservations=observations)
+        assert len(raw)<=1<<20 and response.status==expected and metadata['noStore'],'RPC status/protocol mismatch; safe procedure metadata recorded'
+        if expected!=200:
+            codes={400:'invalid_argument',401:'unauthenticated',403:'permission_denied',404:'not_found',429:'resource_exhausted',503:'unavailable'}
+            assert isinstance(result,dict) and result.get('code')==(code or codes[expected]) and result.get('message'),'RPC error code mismatch; safe procedure metadata recorded'
+        return result
+
+
 def native_team(row):
     assert type(row['id']) is int and row['id'] > 0
     assert type(row['includes_all_repositories']) is bool
@@ -110,6 +139,20 @@ def self_check():
         with tempfile.TemporaryDirectory(prefix='golf-team-access-pure-') as temporary:
             OUTPUT=Path(temporary);OUTPUT.chmod(0o700);PROOF={}
             record(status='failed',failedStage='initial predicate',cleanup='passed')
+            import io
+            class FakeResponse(io.BytesIO):
+                status=400
+                headers={'Cache-Control':'no-store'}
+            class FakeSession:
+                def open(self,request,timeout):
+                    assert request.method=='POST' and timeout==15
+                    return FakeResponse(json.dumps({'code':'failed_precondition','message':'PRIVATE_MESSAGE_SENTINEL'}).encode())
+            result=checked_rpc(FakeSession(),'RepositoryAccessService/GetRepositoryAccess',{},expected=400,code='failed_precondition')
+            assert result['code']=='failed_precondition' and PROOF['lastProcedure']=={'procedure':'RepositoryAccessService/GetRepositoryAccess','status':400,'noStore':True,'code':'failed_precondition'}
+            assert 'PRIVATE_MESSAGE_SENTINEL' not in (OUTPUT/'manifest.json').read_text()
+            try:checked_rpc(FakeSession(),'RepositoryAccessService/GetRepositoryAccess',{})
+            except AssertionError:pass
+            else:raise AssertionError('Unexpected status was weakened')
             assert json.loads((OUTPUT/'manifest.json').read_text())['failedStage']=='initial predicate'
             assert OUTPUT.stat().st_mode&0o777==0o700 and (OUTPUT/'manifest.json').stat().st_mode&0o777==0o600
     finally: OUTPUT,PROOF=prior_output,prior_proof
@@ -182,7 +225,7 @@ def main():
             assert observed['image'] == image and observed['reference'] == image and observed['revision'] == revision
             observed['nativeVersion'] = smoke.request(smoke.client(), 'GET', smoke.GITEA+'/api/v1/version')['version']; assert observed['nativeVersion'] == '1.27.3'
             return observed
-        def call(actor, method, payload, **kwargs): return smoke.rpc(actor['session'], SERVICE+method, payload, **kwargs)
+        def call(actor, method, payload, **kwargs): return checked_rpc(actor['session'], SERVICE+method, payload, **kwargs)
         try:
             stage('fresh base stack, CI and agents unconfigured')
             record(cleanup='pending'); started = True; command('up', '-d', '--no-build', '--pull', 'never', timeout=180); smoke.ready(); before_runtime = runtime()
@@ -190,13 +233,13 @@ def main():
             print('Runtime provenance: '+json.dumps(before_runtime, sort_keys=True), flush=True)
             stage('disposable native ordinary actors and managed password sessions')
             for role in ('owner','member','admin','nonmember','outsider','golfadmin'):
-                name=project+'-'+role; actor={'name':name,'created':False,'session':smoke.client(),'loggedIn':False}; actors[role]=actor
+                name=project+'-'+role; actor={'role':role,'name':name,'created':False,'session':smoke.client(),'loggedIn':False}; actors[role]=actor
                 admin('create','--username',name,'--email',name+'@example.invalid','--random-password','--must-change-password=false');actor['created']=True
                 actor['token']=admin('generate-access-token','--username',name,'--token-name',project,'--scopes','write:user,write:organization,write:repository','--raw')
                 user=smoke.provider(actor['token'],'GET','user');assert not user['is_admin']
                 actor.update(id=str(user['id']),email=name+'@golf.invalid',password='Team fixture '+secrets.token_urlsafe(24));enrolled.append(actor)
                 operator('create',{'username':name,'email':actor['email'],'password':actor['password'],'forge_token':actor['token'],'is_instance_admin':role=='golfadmin'})
-                user=smoke.rpc(actor['session'],'SessionService/LoginWithPassword',{'username':actor['email'],'password':actor['password']})['user'];assert user['id']==actor['id'] and user.get('isInstanceAdmin',False)==(role=='golfadmin');actor['loggedIn']=True
+                user=checked_rpc(actor['session'],'SessionService/LoginWithPassword',{'username':actor['email'],'password':actor['password']})['user'];assert user['id']==actor['id'] and user.get('isInstanceAdmin',False)==(role=='golfadmin');actor['loggedIn']=True
             owner,member,member_admin,nonmember,outsider,golfadmin=(actors[k] for k in ('owner','member','admin','nonmember','outsider','golfadmin'))
             stage('supported private organization, exact repository and native strict team fields')
             organization=project+'-org';org=smoke.provider(owner['token'],'POST','orgs',{'username':organization,'visibility':'private'},201);organizations.append(organization)
@@ -219,7 +262,8 @@ def main():
             assert int(builders['id']) not in associations(owner['token'],native['full_name'],int(org_id))
             record(nativeStrictFields='observed_present',nativeAssociations='bounded_unpaged_supported_collection')
             def access(actor=owner):
-                value=smoke.rpc(actor['session'],'RepositoryAccessService/GetRepositoryAccess',{'repository':repository})['access']
+                stage('exact repository access observation · '+actor['role'])
+                value=checked_rpc(actor['session'],'RepositoryAccessService/GetRepositoryAccess',{'repository':repository})['access']
                 assert value['repositoryId']==repo_id and value['ownerId']==org_id and value['organizationOwned'];assert re.fullmatch(r'[0-9a-f]{64}',value['revision']);return value
             def target(value):return {'repository':repository,'repositoryId':value['repositoryId'],'ownerId':value['ownerId'],'expectedRevision':value['revision']}
             def inspect(actor=owner):
@@ -308,14 +352,14 @@ def main():
             restored=smoke.provider(owner['token'],'PATCH','repos/'+renamed['full_name'],{'name':'team-access'});assert str(restored['id'])==repo_id
             owner_target,inventory=inspect();assert inventory['canManage']
             stage('Origin, delegated bearer and logout cannot read or write private team inventory')
-            credential=smoke.rpc(owner['session'],'ApiCredentialService/CreateApiCredential',{'label':'Team association qualifier'});bearers.append((owner,credential['credential']['id']))
+            credential=checked_rpc(owner['session'],'ApiCredentialService/CreateApiCredential',{'label':'Team association qualifier'});bearers.append((owner,credential['credential']['id']))
             row=selected_row(inventory);unchanged=associations(owner['token'],native['full_name'],int(org_id))
             for method in ('ListRepositoryTeamAccess','AttachRepositoryTeam','DetachRepositoryTeam'):
                 payload={**owner_target,'page':{'page':1,'limit':20}} if method.startswith('List') else mutation_target(owner_target,row)
                 call(owner,method,payload,headers={'Origin':'https://other.invalid'},expected=403)
-                smoke.rpc(smoke.client(),SERVICE+method,payload,headers={'Authorization':'Bearer '+credential['token']},expected=403)
-            smoke.rpc(owner['session'],'ApiCredentialService/RevokeApiCredential',{'credentialId':credential['credential']['id']});bearers.clear()
-            smoke.rpc(owner['session'],'SessionService/Logout');owner['loggedIn']=False
+                checked_rpc(smoke.client(),SERVICE+method,payload,headers={'Authorization':'Bearer '+credential['token']},expected=403)
+            checked_rpc(owner['session'],'ApiCredentialService/RevokeApiCredential',{'credentialId':credential['credential']['id']});bearers.clear()
+            checked_rpc(owner['session'],'SessionService/Logout');owner['loggedIn']=False
             for method in ('ListRepositoryTeamAccess','AttachRepositoryTeam','DetachRepositoryTeam'):
                 payload={**owner_target,'page':{'page':1,'limit':20}} if method.startswith('List') else mutation_target(owner_target,row)
                 call(owner,method,payload,expected=401)
@@ -325,11 +369,11 @@ def main():
             if not passed:record(failedStage=STAGE)
             print('CHECK: owned fixture cleanup',flush=True);failures=[]
             for actor,identifier in bearers:
-                try:smoke.rpc(actor['session'],'ApiCredentialService/RevokeApiCredential',{'credentialId':identifier})
+                try:checked_rpc(actor['session'],'ApiCredentialService/RevokeApiCredential',{'credentialId':identifier})
                 except Exception:failures.append('bearer')
             for actor in actors.values():
                 if actor['loggedIn']:
-                    try:smoke.rpc(actor['session'],'SessionService/RevokeOtherSessions');smoke.rpc(actor['session'],'SessionService/Logout')
+                    try:checked_rpc(actor['session'],'SessionService/RevokeOtherSessions');checked_rpc(actor['session'],'SessionService/Logout')
                     except Exception:failures.append('session')
             for actor in reversed(enrolled):
                 try:assert operator('disable',{'username':actor['name']})['disabled']
