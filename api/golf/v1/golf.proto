@@ -1144,8 +1144,18 @@ message WorkflowConfiguration {
   repeated WorkflowJobSummary jobs = 7;
   repeated string events = 8;
   repeated WorkflowDiagnostic diagnostics = 9;
+  // Policy ceilings only. Presence is known allow/deny; absence is unavailable.
+  // Neither flag grants execution, proves source compatibility/native write,
+  // verifies a live worker, or establishes an active push sponsor grant.
+  optional bool manual_policy_allowed = 10;
+  optional bool push_policy_allowed = 11;
 }
-message InspectWorkflowsRequest { RepositoryKey repository = 1; string ref = 2; }
+message InspectWorkflowsRequest {
+  RepositoryKey repository = 1;
+  string ref = 2;
+  // Optional compatibility guard; when supplied it must match the native ID.
+  string repository_id = 3;
+}
 message InspectWorkflowsResponse {
   string repository_id = 1;
   string commit_id = 2;
@@ -1153,6 +1163,9 @@ message InspectWorkflowsResponse {
   bool execution_available = 4;
   repeated WorkflowConfiguration configurations = 5;
   repeated WorkflowDiagnostic diagnostics = 6;
+  // Opaque required-scope policy epoch observation, not a dispatch/CAS receipt.
+  // Empty when the read-only policy snapshot is unavailable.
+  string policy_revision = 7;
 }
 message DisableLocalAccountRequest {
   string account_id = 1;

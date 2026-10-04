@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha1"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -423,6 +425,65 @@ func workflowBlobMatches(data []byte, expected string) bool {
 	return len(expected) == 64 && hex.EncodeToString(digest[:]) == expected
 }
 
+// Only the native owner identity/kind is needed for required-scope ceilings.
+// This projection does not require native write/admin permission and exposes no
+// selected repository inventory. The enclosing read boundary checks the caller.
+type workflowOwnerBinding struct {
+	ownerID      int64
+	organization bool
+}
+
+func (s *Server) workflowOwner(ctx context.Context, token forgeCredential, base string, repo Repository) (workflowOwnerBinding, error) {
+	var row struct {
+		Repository
+		Owner *User `json:"owner"`
+	}
+	if _, err := s.forge(ctx, http.MethodGet, base, token, nil, &row); err != nil {
+		return workflowOwnerBinding{}, err
+	}
+	owner, _, ok := strings.Cut(repo.FullName, "/")
+	if !ok || row.ID != repo.ID || !strings.EqualFold(row.FullName, repo.FullName) || row.Owner == nil || row.Owner.ID <= 0 || !validOrganizationName(row.Owner.Login) || !strings.EqualFold(row.Owner.Login, owner) {
+		return workflowOwnerBinding{}, errInvalidForgeResponse
+	}
+	organization, err := s.repositoryOwnerKind(ctx, token, *row.Owner)
+	return workflowOwnerBinding{row.Owner.ID, organization}, err
+}
+
+// This is a policy observation, not executable authority. A single read-only
+// database snapshot covers all paths and both event kinds; source/native policy
+// changes after it are re-admitted by the separate execution writers.
+func (s *Server) observeWorkflowPolicies(ctx context.Context, repositoryID int64, owner workflowOwnerBinding, result *golfv1.InspectWorkflowsResponse) error {
+	if s.db == nil {
+		return errStorageUnavailable
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	if err != nil {
+		return errStorageUnavailable
+	}
+	defer tx.Rollback()
+	states, epochs, err := s.readExecutionPolicyStates(ctx, tx, repositoryID, owner.ownerID, owner.organization, false)
+	if err != nil {
+		return err
+	}
+	// Complete/close the read before releasing any known flags. Commit failure
+	// leaves the entire observation unknown; no partial row results are returned.
+	if err = tx.Commit(); err != nil {
+		return errStorageUnavailable
+	}
+	data, err := json.Marshal(epochs)
+	if err != nil {
+		return errStorageUnavailable
+	}
+	digest := sha256.Sum256(data)
+	result.PolicyRevision = hex.EncodeToString(digest[:])
+	for _, config := range result.Configurations {
+		manual := executionPoliciesAllow(states, repositoryID, owner.ownerID, owner.organization, "manual", config.Path)
+		push := executionPoliciesAllow(states, repositoryID, owner.ownerID, owner.organization, "push", config.Path)
+		config.ManualPolicyAllowed, config.PushPolicyAllowed = &manual, &push
+	}
+	return nil
+}
+
 func (s *Server) InspectWorkflows(ctx context.Context, req *connect.Request[golfv1.InspectWorkflowsRequest]) (*connect.Response[golfv1.InspectWorkflowsResponse], error) {
 	token, err := rpcToken(ctx)
 	if err != nil {
@@ -434,10 +495,24 @@ func (s *Server) InspectWorkflows(ctx context.Context, req *connect.Request[golf
 	if !validRef(req.Msg.Ref) {
 		return nil, rpcError(invalid("Select a branch, tag or full commit ID, not a revision expression."))
 	}
+	var expectedID int64
+	if req.Msg.RepositoryId != "" {
+		expectedID, err = strconv.ParseInt(req.Msg.RepositoryId, 10, 64)
+		if err != nil || expectedID <= 0 || strconv.FormatInt(expectedID, 10) != req.Msg.RepositoryId {
+			return nil, rpcError(invalid("Select a positive canonical repository ID."))
+		}
+	}
 	result := &golfv1.InspectWorkflowsResponse{CatalogVersion: workflowCatalog, ExecutionAvailable: len(s.runnerKeys) > 0 && len(s.runnerImages) > 0}
 	err = s.withRepositoryRead(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), func(base string, repo Repository) error {
+		if expectedID > 0 && repo.ID != expectedID {
+			return errIssueTargetChanged
+		}
 		if repo.Empty {
 			return errEmptyRepository
+		}
+		owner, err := s.workflowOwner(ctx, token, base, repo)
+		if err != nil {
+			return err
 		}
 		commits, _, err := s.readCommits(ctx, base, token, req.Msg.Ref, 1, 1)
 		if err != nil {
@@ -534,6 +609,19 @@ func (s *Server) InspectWorkflows(ctx context.Context, req *connect.Request[golf
 				continue
 			}
 			inspectWorkflow(config, data)
+		}
+		if err := s.observeWorkflowPolicies(ctx, repo.ID, owner, result); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			result.Diagnostics = append(result.Diagnostics, workflowDiagnostic("policy_unavailable", "Execution policy observations are unavailable. Inspect current policies before attempting execution.", nil))
+		}
+		after, err := s.workflowOwner(ctx, token, base, repo)
+		if err != nil {
+			return err
+		}
+		if after != owner {
+			return errIssueTargetChanged
 		}
 		return nil
 	})

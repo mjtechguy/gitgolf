@@ -511,9 +511,20 @@ func (s *Server) readEffectiveExecutionPolicy(ctx context.Context, tx *sql.Tx, r
 // Event kind is explicit at admission and every later authority fence. A manual
 // grant never implies push authority, and unsupported event kinds fail closed.
 func (s *Server) readEffectiveExecutionPolicyForEvent(ctx context.Context, tx *sql.Tx, repositoryID, ownerID int64, organizationOwned bool, event, workflowPath string) (ExecutionAdmission, error) {
-	result := ExecutionAdmission{SourceOwnerID: ownerID}
+	states, epochs, err := s.readExecutionPolicyStates(ctx, tx, repositoryID, ownerID, organizationOwned, true)
+	result := ExecutionAdmission{SourceOwnerID: ownerID, Epochs: epochs}
+	if err != nil {
+		return result, err
+	}
+	result.Allowed = executionPoliciesAllow(states, repositoryID, ownerID, organizationOwned, event, workflowPath)
+	return result, nil
+}
+
+// Execution admission keeps its existing row locks; read-only inspection passes
+// lock=false inside one repeatable-read transaction and never ensures a policy.
+func (s *Server) readExecutionPolicyStates(ctx context.Context, tx *sql.Tx, repositoryID, ownerID int64, organizationOwned, lock bool) ([]executionPolicyState, []ExecutionPolicyEpoch, error) {
 	if tx == nil {
-		return result, errStorageUnavailable
+		return nil, nil, errStorageUnavailable
 	}
 	q := database.New(s.db).WithTx(tx)
 	authorities := []executionAuthority{{Scope: "instance", ID: "instance"}, {Scope: "repository", ID: strconv.FormatInt(repositoryID, 10), OwnerID: ownerID}}
@@ -521,14 +532,14 @@ func (s *Server) readEffectiveExecutionPolicyForEvent(ctx context.Context, tx *s
 		authorities = []executionAuthority{{Scope: "instance", ID: "instance"}, {Scope: "organization", ID: strconv.FormatInt(ownerID, 10), OwnerID: ownerID}, authorities[1]}
 	}
 	states := []executionPolicyState{}
+	epochs := []ExecutionPolicyEpoch{}
 	for _, a := range authorities {
-		state, err := s.loadExecutionPolicy(ctx, q, a, true)
+		state, err := s.loadExecutionPolicy(ctx, q, a, lock)
 		if err != nil {
-			return result, err
+			return states, epochs, err
 		}
 		states = append(states, state)
-		result.Epochs = append(result.Epochs, ExecutionPolicyEpoch{a.Scope, a.ID, state.Revision, state.RevocationEpoch})
+		epochs = append(epochs, ExecutionPolicyEpoch{a.Scope, a.ID, state.Revision, state.RevocationEpoch})
 	}
-	result.Allowed = executionPoliciesAllow(states, repositoryID, ownerID, organizationOwned, event, workflowPath)
-	return result, nil
+	return states, epochs, nil
 }

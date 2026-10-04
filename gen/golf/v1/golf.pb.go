@@ -11825,18 +11825,23 @@ func (x *WorkflowJobSummary) GetStepCount() uint32 {
 }
 
 type WorkflowConfiguration struct {
-	state         protoimpl.MessageState  `protogen:"open.v1"`
-	Path          string                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	BlobId        string                  `protobuf:"bytes,2,opt,name=blob_id,json=blobId,proto3" json:"blob_id,omitempty"`
-	ByteSize      uint64                  `protobuf:"varint,3,opt,name=byte_size,json=byteSize,proto3" json:"byte_size,omitempty"`
-	Format        WorkflowFormat          `protobuf:"varint,4,opt,name=format,proto3,enum=golf.v1.WorkflowFormat" json:"format,omitempty"`
-	State         WorkflowInspectionState `protobuf:"varint,5,opt,name=state,proto3,enum=golf.v1.WorkflowInspectionState" json:"state,omitempty"`
-	Name          string                  `protobuf:"bytes,6,opt,name=name,proto3" json:"name,omitempty"`
-	Jobs          []*WorkflowJobSummary   `protobuf:"bytes,7,rep,name=jobs,proto3" json:"jobs,omitempty"`
-	Events        []string                `protobuf:"bytes,8,rep,name=events,proto3" json:"events,omitempty"`
-	Diagnostics   []*WorkflowDiagnostic   `protobuf:"bytes,9,rep,name=diagnostics,proto3" json:"diagnostics,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState  `protogen:"open.v1"`
+	Path        string                  `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	BlobId      string                  `protobuf:"bytes,2,opt,name=blob_id,json=blobId,proto3" json:"blob_id,omitempty"`
+	ByteSize    uint64                  `protobuf:"varint,3,opt,name=byte_size,json=byteSize,proto3" json:"byte_size,omitempty"`
+	Format      WorkflowFormat          `protobuf:"varint,4,opt,name=format,proto3,enum=golf.v1.WorkflowFormat" json:"format,omitempty"`
+	State       WorkflowInspectionState `protobuf:"varint,5,opt,name=state,proto3,enum=golf.v1.WorkflowInspectionState" json:"state,omitempty"`
+	Name        string                  `protobuf:"bytes,6,opt,name=name,proto3" json:"name,omitempty"`
+	Jobs        []*WorkflowJobSummary   `protobuf:"bytes,7,rep,name=jobs,proto3" json:"jobs,omitempty"`
+	Events      []string                `protobuf:"bytes,8,rep,name=events,proto3" json:"events,omitempty"`
+	Diagnostics []*WorkflowDiagnostic   `protobuf:"bytes,9,rep,name=diagnostics,proto3" json:"diagnostics,omitempty"`
+	// Policy ceilings only. Presence is known allow/deny; absence is unavailable.
+	// Neither flag grants execution, proves source compatibility/native write,
+	// verifies a live worker, or establishes an active push sponsor grant.
+	ManualPolicyAllowed *bool `protobuf:"varint,10,opt,name=manual_policy_allowed,json=manualPolicyAllowed,proto3,oneof" json:"manual_policy_allowed,omitempty"`
+	PushPolicyAllowed   *bool `protobuf:"varint,11,opt,name=push_policy_allowed,json=pushPolicyAllowed,proto3,oneof" json:"push_policy_allowed,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *WorkflowConfiguration) Reset() {
@@ -11932,10 +11937,26 @@ func (x *WorkflowConfiguration) GetDiagnostics() []*WorkflowDiagnostic {
 	return nil
 }
 
+func (x *WorkflowConfiguration) GetManualPolicyAllowed() bool {
+	if x != nil && x.ManualPolicyAllowed != nil {
+		return *x.ManualPolicyAllowed
+	}
+	return false
+}
+
+func (x *WorkflowConfiguration) GetPushPolicyAllowed() bool {
+	if x != nil && x.PushPolicyAllowed != nil {
+		return *x.PushPolicyAllowed
+	}
+	return false
+}
+
 type InspectWorkflowsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Repository    *RepositoryKey         `protobuf:"bytes,1,opt,name=repository,proto3" json:"repository,omitempty"`
-	Ref           string                 `protobuf:"bytes,2,opt,name=ref,proto3" json:"ref,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Repository *RepositoryKey         `protobuf:"bytes,1,opt,name=repository,proto3" json:"repository,omitempty"`
+	Ref        string                 `protobuf:"bytes,2,opt,name=ref,proto3" json:"ref,omitempty"`
+	// Optional compatibility guard; when supplied it must match the native ID.
+	RepositoryId  string `protobuf:"bytes,3,opt,name=repository_id,json=repositoryId,proto3" json:"repository_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -11984,6 +12005,13 @@ func (x *InspectWorkflowsRequest) GetRef() string {
 	return ""
 }
 
+func (x *InspectWorkflowsRequest) GetRepositoryId() string {
+	if x != nil {
+		return x.RepositoryId
+	}
+	return ""
+}
+
 type InspectWorkflowsResponse struct {
 	state              protoimpl.MessageState   `protogen:"open.v1"`
 	RepositoryId       string                   `protobuf:"bytes,1,opt,name=repository_id,json=repositoryId,proto3" json:"repository_id,omitempty"`
@@ -11992,8 +12020,11 @@ type InspectWorkflowsResponse struct {
 	ExecutionAvailable bool                     `protobuf:"varint,4,opt,name=execution_available,json=executionAvailable,proto3" json:"execution_available,omitempty"`
 	Configurations     []*WorkflowConfiguration `protobuf:"bytes,5,rep,name=configurations,proto3" json:"configurations,omitempty"`
 	Diagnostics        []*WorkflowDiagnostic    `protobuf:"bytes,6,rep,name=diagnostics,proto3" json:"diagnostics,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Opaque required-scope policy epoch observation, not a dispatch/CAS receipt.
+	// Empty when the read-only policy snapshot is unavailable.
+	PolicyRevision string `protobuf:"bytes,7,opt,name=policy_revision,json=policyRevision,proto3" json:"policy_revision,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *InspectWorkflowsResponse) Reset() {
@@ -12066,6 +12097,13 @@ func (x *InspectWorkflowsResponse) GetDiagnostics() []*WorkflowDiagnostic {
 		return x.Diagnostics
 	}
 	return nil
+}
+
+func (x *InspectWorkflowsResponse) GetPolicyRevision() string {
+	if x != nil {
+		return x.PolicyRevision
+	}
+	return ""
 }
 
 type DisableLocalAccountRequest struct {
@@ -23780,7 +23818,7 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
 	"\x05stage\x18\x03 \x01(\tR\x05stage\x12\x1d\n" +
 	"\n" +
-	"step_count\x18\x04 \x01(\rR\tstepCount\"\xe6\x02\n" +
+	"step_count\x18\x04 \x01(\rR\tstepCount\"\x86\x04\n" +
 	"\x15WorkflowConfiguration\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x17\n" +
 	"\ablob_id\x18\x02 \x01(\tR\x06blobId\x12\x1b\n" +
@@ -23790,19 +23828,26 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x04name\x18\x06 \x01(\tR\x04name\x12/\n" +
 	"\x04jobs\x18\a \x03(\v2\x1b.golf.v1.WorkflowJobSummaryR\x04jobs\x12\x16\n" +
 	"\x06events\x18\b \x03(\tR\x06events\x12=\n" +
-	"\vdiagnostics\x18\t \x03(\v2\x1b.golf.v1.WorkflowDiagnosticR\vdiagnostics\"c\n" +
+	"\vdiagnostics\x18\t \x03(\v2\x1b.golf.v1.WorkflowDiagnosticR\vdiagnostics\x127\n" +
+	"\x15manual_policy_allowed\x18\n" +
+	" \x01(\bH\x00R\x13manualPolicyAllowed\x88\x01\x01\x123\n" +
+	"\x13push_policy_allowed\x18\v \x01(\bH\x01R\x11pushPolicyAllowed\x88\x01\x01B\x18\n" +
+	"\x16_manual_policy_allowedB\x16\n" +
+	"\x14_push_policy_allowed\"\x88\x01\n" +
 	"\x17InspectWorkflowsRequest\x126\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x16.golf.v1.RepositoryKeyR\n" +
 	"repository\x12\x10\n" +
-	"\x03ref\x18\x02 \x01(\tR\x03ref\"\xbd\x02\n" +
+	"\x03ref\x18\x02 \x01(\tR\x03ref\x12#\n" +
+	"\rrepository_id\x18\x03 \x01(\tR\frepositoryId\"\xe6\x02\n" +
 	"\x18InspectWorkflowsResponse\x12#\n" +
 	"\rrepository_id\x18\x01 \x01(\tR\frepositoryId\x12\x1b\n" +
 	"\tcommit_id\x18\x02 \x01(\tR\bcommitId\x12'\n" +
 	"\x0fcatalog_version\x18\x03 \x01(\tR\x0ecatalogVersion\x12/\n" +
 	"\x13execution_available\x18\x04 \x01(\bR\x12executionAvailable\x12F\n" +
 	"\x0econfigurations\x18\x05 \x03(\v2\x1e.golf.v1.WorkflowConfigurationR\x0econfigurations\x12=\n" +
-	"\vdiagnostics\x18\x06 \x03(\v2\x1b.golf.v1.WorkflowDiagnosticR\vdiagnostics\"\xb0\x01\n" +
+	"\vdiagnostics\x18\x06 \x03(\v2\x1b.golf.v1.WorkflowDiagnosticR\vdiagnostics\x12'\n" +
+	"\x0fpolicy_revision\x18\a \x01(\tR\x0epolicyRevision\"\xb0\x01\n" +
 	"\x1aDisableLocalAccountRequest\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12>\n" +
@@ -26098,6 +26143,7 @@ func file_golf_v1_golf_proto_init() {
 	file_golf_v1_golf_proto_msgTypes[85].OneofWrappers = []any{}
 	file_golf_v1_golf_proto_msgTypes[127].OneofWrappers = []any{}
 	file_golf_v1_golf_proto_msgTypes[138].OneofWrappers = []any{}
+	file_golf_v1_golf_proto_msgTypes[155].OneofWrappers = []any{}
 	file_golf_v1_golf_proto_msgTypes[165].OneofWrappers = []any{}
 	file_golf_v1_golf_proto_msgTypes[166].OneofWrappers = []any{}
 	file_golf_v1_golf_proto_msgTypes[177].OneofWrappers = []any{}

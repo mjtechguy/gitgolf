@@ -184,7 +184,27 @@ func newWorkflowFixture(t *testing.T) (*workflowFixture, loginResult) {
 			if mode == "replacement" {
 				id = 12
 			}
-			write(Repository{ID: id, Name: "private", FullName: "alice/private", HTMLURL: "https://forge.invalid/alice/private", Private: true, Empty: mode == "empty"})
+			ownerID := int64(42)
+			if mode == "owner-replaced" {
+				ownerID = 55
+			}
+			write(struct {
+				Repository
+				Owner *User `json:"owner"`
+			}{Repository{ID: id, Name: "private", FullName: "alice/private", HTMLURL: "https://forge.invalid/alice/private", Private: true, Empty: mode == "empty"}, &User{ID: ownerID, Login: "alice"}})
+			return
+		}
+		if r.URL.Path == "/api/v1/users/search" {
+			id, _ := strconv.ParseInt(r.URL.Query().Get("uid"), 10, 64)
+			data := []User{{ID: id, Login: "alice"}}
+			if mode == "organization" {
+				data = []User{}
+			}
+			write(map[string]any{"ok": true, "data": data})
+			return
+		}
+		if r.URL.Path == "/api/v1/orgs/alice" {
+			write(forgeOrganization{ID: 42, Name: "alice", Visibility: "private"})
 			return
 		}
 		if r.URL.Path == base+"/commits" {
@@ -318,7 +338,7 @@ func TestWorkflowDiscoveryPostgres(t *testing.T) {
 }
 
 func TestWorkflowPostWaitDenialPostgres(t *testing.T) {
-	for _, mode := range []string{"logout", "denied", "identity", "replacement"} {
+	for _, mode := range []string{"logout", "denied", "identity", "replacement", "owner-replaced", "organization"} {
 		t.Run(mode, func(t *testing.T) {
 			f, session := newWorkflowFixture(t)
 			f.mode.Store("wait")
@@ -345,6 +365,8 @@ func TestWorkflowPostWaitDenialPostgres(t *testing.T) {
 					want = 404
 				} else if mode == "replacement" {
 					want = 503
+				} else if mode == "owner-replaced" || mode == "organization" {
+					want = 400
 				}
 				if response.Code != want || strings.Contains(response.Body.String(), "configurations") {
 					t.Fatal("post-wait disclosure", response.Code)
