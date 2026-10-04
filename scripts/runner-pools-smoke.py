@@ -322,6 +322,7 @@ def self_check():
     proto=(ROOT/'api/golf/v1/golf.proto').read_text();assert 'service RunnerPoolService' in proto and 'RUNNER_POOL_STATE_DRAINING = 2;' in proto and 'WorkflowRunnerPlacement runner_placement = 31;' in proto
     text=Path(__file__).read_text();assert 'runner-second' in text and 'io.golf.runner.attempt' in text and '--pull=never' in text and b'sleep 16' in SLOW_SOURCE
     overlay_source=text.rsplit("helpers.private_write(override,f'''services:",1)[1].split("''')",1)[0]
+    assert 'tmpfs: ["/tmp:size=33554432,mode=1777"]' in overlay_source, 'Comma-containing YAML inline items must be quoted'
     assert re.search(r'  runner:\n(?:    #.*\n)?    build: !reset null\n    image: \{worker\}\n    pull_policy: never',overlay_source) and overlay_source.count('build: !reset null')==1
     print('PASS: pure pool/placement receipts and private subprocess diagnostic guards; actual Docker/native/browser qualification unrun.')
 
@@ -405,7 +406,7 @@ def main():
       DOCKER_CERT_PATH: /certs/client
     volumes: [runner-client-certs:/certs/client:ro]
     read_only: true
-    tmpfs: [/tmp:size=33554432,mode=1777]
+    tmpfs: ["/tmp:size=33554432,mode=1777"]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     depends_on:
