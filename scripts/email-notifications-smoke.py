@@ -197,6 +197,7 @@ def self_check():
     assert 'write_text' not in SINK and 'bodyBase64' not in SINK and 'log_message(self,*args):pass' in SINK
     assert ACCOUNT_PATH=='/account/settings' and ADMIN_PATH=='/admin/settings/notifications'
     assert 'CA:TRUE' in CA_CONFIG and 'CA:FALSE' in SERVER_EXTENSIONS
+    assert 'ISSUE_MUTATION_STATE_SUCCEEDED = 2;' in source and 'ISSUE_MUTATION_STATE_COMPLETE' not in source
     print('PASS: pure SMTP receiver AST, immutable receipt counterexamples, wire inventory, route and no-code/body persistence checks; no Docker/HTTP/SMTP/native operations',flush=True)
 
 
@@ -362,7 +363,7 @@ networks:
         def subscribe(role,selected,enabled=True,previous=None):
             state=own(role);body={'target':selected,'id':previous['id'] if previous else str(uuid.uuid4()),'expectedVersion':previous['version'] if previous else '0','expectedContactVersion':state['contactVersion'],'eventTopics':['issues'],'enabled':enabled,'authorizeBackground':enabled};out=call(role,'SaveRepositoryEmailSubscription',body);assert out['target']==selected and out['subscription']['id']==body['id'] and out['subscription']['version']==str(int(body['expectedVersion'])+1) and out['subscription']['contactVersion']==state['contactVersion'] and out['subscription']['eventTopics']==body['eventTopics'] and out['subscription'].get('enabled',False)==enabled;return out['subscription']
         def activity():
-            result=rpc('owner','RepositoryService/CreateIssue',{'repository':target['repository'],'repositoryId':target['repositoryId'],'title':'Owned category event','body':'PRIVATE_EMAIL_QUALIFIER_BODY','idempotencyKey':str(uuid.uuid4())});assert result['mutation']['state']=='ISSUE_MUTATION_STATE_COMPLETE'
+            result=rpc('owner','RepositoryService/CreateIssue',{'repository':target['repository'],'repositoryId':target['repositoryId'],'title':'Owned category event','body':'PRIVATE_EMAIL_QUALIFIER_BODY','idempotencyKey':str(uuid.uuid4())});assert result['mutation']['state']=='ISSUE_MUTATION_STATE_SUCCEEDED'
         def pending(role):return until(lambda:next((v for v in history(role,target) if v['state']=='queued'),None))
         try:
             stage('fresh core and local TLS receiver; worker initially stopped');started=True;command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','120','postgres','gitea','golf','receiver',timeout=180);smoke.ready();assert smoke.provider('','GET','version')['version']=='1.27.3'
