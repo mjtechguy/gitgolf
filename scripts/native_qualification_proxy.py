@@ -59,11 +59,11 @@ def valid_fault(project: str, value: dict) -> bool:
 
 
 def checked_snapshot(value: object, project: str) -> dict:
-    assert isinstance(value, dict) and set(value) == {'project', 'nativeDestination', 'counts', 'observations', 'forwardRequestCount', 'lost', 'failures', 'callerCancelled', 'armed'}, 'Safe control snapshot shape mismatch'
+    assert isinstance(value, dict) and set(value) == {'project', 'nativeDestination', 'counts', 'observations', 'forwardRequestCount', 'lost', 'failures', 'callerCancelled', 'rejectedWrites', 'armed'}, 'Safe control snapshot shape mismatch'
     assert value['project'] == project and value['nativeDestination'] == NATIVE_DESTINATION, 'Control fixture identity mismatch'
-    for key in ('forwardRequestCount', 'lost', 'failures', 'callerCancelled'):
+    for key in ('forwardRequestCount', 'lost', 'failures', 'callerCancelled', 'rejectedWrites'):
         assert type(value[key]) is int and 0 <= value[key] <= (1 << 53) - 1, 'Control counter mismatch'
-    assert value['lost'] <= 1 and (value['armed'] is None or isinstance(value['armed'], dict) and valid_fault(project, value['armed'])), 'Control fault identity mismatch'
+    assert value['lost'] <= (2 if project.startswith('golf-access48-') else 1) and (value['armed'] is None or isinstance(value['armed'], dict) and valid_fault(project, value['armed'])), 'Control fault identity mismatch'
     counts, observations = value['counts'], value['observations']
     assert isinstance(counts, list) and len(counts) <= 256 and isinstance(observations, list) and len(observations) <= 64, 'Control collection bound mismatch'
     pairs = set()
@@ -193,6 +193,10 @@ class NativeProxy:
         # A lost control acknowledgement does not authorize a second arm.
         assert self._request('POST', '/arm', value) == {'state': 'armed'}, 'Fault arm acknowledgement mismatch'
 
+    @property
+    def rejected_writes(self):
+        return self.snapshot()['rejectedWrites']
+
     def total(self, repository):
         name = self._repository_name(repository)
         prefix = '/api/v1/repos/' + name
@@ -246,7 +250,7 @@ def self_check():
     assert owned_write(project, 'POST', path) and not owned_write(project, 'POST', path + '?extra=1') and not owned_write(project, 'DELETE', '/api/v1/repos/foreign/rules')
     assert valid_fault(project, {'method': 'POST', 'path': path, 'status': 201, 'ruleName': 'unknown/*'})
     assert not valid_fault(project, {'method': 'POST', 'path': path, 'status': 200, 'ruleName': 'unknown/*'})
-    value = {'project': project, 'nativeDestination': NATIVE_DESTINATION, 'counts': [{'method': 'POST', 'path': path, 'count': 1}], 'observations': [{'method': 'POST', 'category': 'branch_protections', 'status': 201, 'elapsedMs': 1}], 'forwardRequestCount': 1, 'lost': 1, 'failures': 0, 'callerCancelled': 0, 'armed': None}
+    value = {'project': project, 'nativeDestination': NATIVE_DESTINATION, 'counts': [{'method': 'POST', 'path': path, 'count': 1}], 'observations': [{'method': 'POST', 'category': 'branch_protections', 'status': 201, 'elapsedMs': 1}], 'forwardRequestCount': 1, 'lost': 1, 'failures': 0, 'callerCancelled': 0, 'rejectedWrites': 0, 'armed': None}
     assert checked_snapshot(value, project) is value
     for patch in ({'lost': 2}, {'forwardRequestCount': 0}, {'counts': [value['counts'][0], value['counts'][0]]}, {'observations': [{'method': 'GET', 'category': 'authority', 'elapsedMs': 0, 'failure': 'private response text'}]}):
         try:
@@ -255,6 +259,18 @@ def self_check():
             pass
         else:
             raise AssertionError('Malformed control metadata accepted')
+    for invalid in ({key:item for key,item in value.items() if key!='rejectedWrites'},
+                    {**value,'rejectedWrites':True}, {**value,'rejectedWrites':-1}, {**value,'rejectedWrites':1<<53}):
+        try:checked_snapshot(invalid,project)
+        except AssertionError:pass
+        else:raise AssertionError('Missing or malformed refused-write counter accepted')
+    checked_snapshot({**value,'rejectedWrites':1},project)
+    access_project='golf-access48-0123456789'
+    access={**value,'project':access_project,'counts':[], 'forwardRequestCount':2,'lost':2}
+    checked_snapshot(access,access_project)
+    try:checked_snapshot({**access,'lost':3},access_project)
+    except AssertionError:pass
+    else:raise AssertionError('More than two Access response-loss faults accepted')
     proxy = NativeProxy(39001, project)
     aborted = {**value,'callerCancelled':1,'observations':[{'method':'GET','category':'authority','elapsedMs':1,'failure':'preheaders_cancelled','callerCancelled':True}]}
     checked_snapshot(aborted,project)

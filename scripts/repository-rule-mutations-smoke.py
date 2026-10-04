@@ -202,7 +202,7 @@ def startup_proxy_source_check():
     project = 'golf-rules49-0123456789'
     baseline = {'project':project,'nativeDestination':native_proxy.NATIVE_DESTINATION,'counts':[],
                 'observations':[{'method':'GET','category':'authority','status':200,'elapsedMs':1}],
-                'forwardRequestCount':1,'lost':0,'failures':0,'callerCancelled':0,'armed':None}
+                'forwardRequestCount':1,'lost':0,'failures':0,'callerCancelled':0,'rejectedWrites':0,'armed':None}
     checked_startup_proxy(baseline, project)
     cancelled = {**baseline,'forwardRequestCount':2,'callerCancelled':1,'observations':[*baseline['observations'], {'method':'GET','category':'authority','elapsedMs':1,'failure':'preheaders_cancelled','callerCancelled':True}]}
     checked_proxy_progress(cancelled, baseline, project)

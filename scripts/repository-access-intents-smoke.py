@@ -130,7 +130,7 @@ def verify_proxy_runtime(run, command, proxy, binary, binary_sha, image, source)
 
 def checked_startup_proxy(value, project):
     value = native_proxy.checked_snapshot(value, project)
-    assert value['lost'] == 0 and value['armed'] is None and value['counts'] == [], 'Startup baseline must have no mutation dispatch or loss arm'
+    assert value['lost'] == 0 and value['rejectedWrites'] == 0 and value['armed'] is None and value['counts'] == [], 'Startup baseline must have no mutation dispatch or loss arm'
     failures = [row for row in value['observations'] if row.get('failure') and not row.get('callerCancelled')]
     assert len(failures) == value['failures'], 'All startup failures must remain accounted in the bounded observation window'
     assert all(row['method'] == 'GET' and row['failure'] in {'preheaders_timeout','preheaders_cancelled','preheaders_disconnected','preheaders_transport'} and 'status' not in row and 'bytes' not in row for row in failures), 'Only pre-header startup reads may be distinguished from qualification failures'
@@ -141,7 +141,7 @@ def checked_startup_proxy(value, project):
 def checked_proxy_progress(value, baseline, project):
     checked_startup_proxy(baseline, project)
     value = native_proxy.checked_snapshot(value, project)
-    assert value['failures'] == baseline['failures'] and value['forwardRequestCount'] >= baseline['forwardRequestCount'] and value['callerCancelled'] >= baseline['callerCancelled'], 'Post-readiness transport failure or reset is not startup noise'
+    assert value['rejectedWrites'] == 0 and value['failures'] == baseline['failures'] and value['forwardRequestCount'] >= baseline['forwardRequestCount'] and value['callerCancelled'] >= baseline['callerCancelled'], 'Post-readiness transport failure or reset is not startup noise'
     return value
 
 
@@ -149,7 +149,7 @@ def startup_proxy_source_check():
     project = 'golf-rules49-0123456789'
     baseline = {'project':project,'nativeDestination':native_proxy.NATIVE_DESTINATION,'counts':[],
                 'observations':[{'method':'GET','category':'authority','status':200,'elapsedMs':1}],
-                'forwardRequestCount':1,'lost':0,'failures':0,'callerCancelled':0,'armed':None}
+                'forwardRequestCount':1,'lost':0,'failures':0,'callerCancelled':0,'rejectedWrites':0,'armed':None}
     checked_startup_proxy(baseline, project)
     cancelled = {**baseline,'forwardRequestCount':2,'callerCancelled':1,'observations':[*baseline['observations'], {'method':'GET','category':'authority','elapsedMs':1,'failure':'preheaders_cancelled','callerCancelled':True}]}
     checked_proxy_progress(cancelled, baseline, project)
@@ -158,7 +158,7 @@ def startup_proxy_source_check():
         {'method':'GET','category':'authority','elapsedMs':2,'failure':'preheaders_transport'}, *baseline['observations']]}
     checked_startup_proxy(startup, project)
     checked_proxy_progress({**startup,'forwardRequestCount':4,'lost':1}, startup, project)
-    for bad in ({**startup,'failures':3}, {**baseline,'lost':1}, {**baseline,'armed':{'method':'POST','path':'/api/v1/repos/'+project+'-owner/rules/branch_protections','status':201,'ruleName':'unknown/*'}},
+    for bad in ({**baseline,'rejectedWrites':1}, {**startup,'failures':3}, {**baseline,'lost':1}, {**baseline,'armed':{'method':'POST','path':'/api/v1/repos/'+project+'-owner/rules/branch_protections','status':201,'ruleName':'unknown/*'}},
                 {**baseline,'counts':[{'method':'PATCH','path':'/api/v1/repos/'+project+'-owner/rules','count':1}]},
                 {**startup,'observations':[{**startup['observations'][0],'failure':'response_transport'},*startup['observations'][1:]]},
                 {**startup,'observations':[{**startup['observations'][0],'method':'POST'},*startup['observations'][1:]]}):
@@ -166,7 +166,7 @@ def startup_proxy_source_check():
         except AssertionError:pass
         else:raise AssertionError('Unaccounted/private/mutation startup failure accepted')
     for first in (baseline,startup):
-        for bad in ({**first,'failures':first['failures']+1}, {**first,'forwardRequestCount':0}):
+        for bad in ({**first,'rejectedWrites':1}, {**first,'failures':first['failures']+1}, {**first,'forwardRequestCount':0}):
             try:checked_proxy_progress(bad,first,project)
             except AssertionError:pass
             else:raise AssertionError('Post-readiness failure/reset suppressed')
@@ -260,9 +260,10 @@ def checked_invitation_unknown(receipt):
     return receipt
 
 def checked_owner_proxy_unchanged(before,after):
-    # The proxy intentionally excludes owner mutations. Forwarded mutations must
-    # remain absent; native-rejected owner attempts additionally fail the exact
-    # RPC pre-reservation status/marker and retained-generation checks below.
+    # The route allowlist still excludes owner writes. Observe refusals separately
+    # from forwarded mutations, without retaining any refused request metadata.
+    assert type(before['rejectedWrites']) is int and before['rejectedWrites']==0
+    assert type(after['rejectedWrites']) is int and after['rejectedWrites']==0
     assert after['counts']==before['counts']
     for field in ('failures','lost','armed'):
         assert after[field]==before[field]
@@ -273,10 +274,11 @@ def checked_owner_refusals(receipts):
     assert isinstance(receipts,list) and len(receipts)==4
     assert {r['action'] for r in receipts}==expected
     for r in receipts:
-        assert set(r)=={'action','nativeOwner','nativeMutations','generationBefore','generationAfter','proxyCountersUnchanged','preReservationRefusal'}
+        assert set(r)=={'action','nativeOwner','nativeMutations','generationBefore','generationAfter','proxyCountersUnchanged','preReservationRefusal','rejectedWriteAttempts'}
         assert r['nativeOwner'] is True and type(r['nativeMutations']) is int and r['nativeMutations']==0
         assert re.fullmatch(r'0|[1-9][0-9]*',r['generationBefore'])
         assert r['generationAfter']==r['generationBefore'] and r['proxyCountersUnchanged'] is True
+        assert type(r['rejectedWriteAttempts']) is int and r['rejectedWriteAttempts']==0
         assert r['preReservationRefusal'] is (r['action'] in {'set','remove'})
     return receipts
 
@@ -325,23 +327,28 @@ def self_check():
         except AssertionError:pass
         else:raise AssertionError('Incomplete, duplicate or unconfirmed invitation role matrix accepted')
     refused=[{'action':action,'nativeOwner':True,'nativeMutations':0,'generationBefore':'0','generationAfter':'0',
-              'proxyCountersUnchanged':True,'preReservationRefusal':action in {'set','remove'}}
+              'proxyCountersUnchanged':True,'preReservationRefusal':action in {'set','remove'},'rejectedWriteAttempts':0}
              for action in ('set','remove','invitation-preview','invitation-create')]
     assert checked_owner_refusals(refused) is refused
     for invalid in (refused[:-1],refused[:-1]+[refused[0]],
                     [{**r,'nativeOwner':False} if i==0 else r for i,r in enumerate(refused)],
                     [{**r,'nativeMutations':1} if i==0 else r for i,r in enumerate(refused)],
                     [{**r,'generationAfter':'1'} if i==0 else r for i,r in enumerate(refused)],
-                    [{**r,'preReservationRefusal':False} if i==0 else r for i,r in enumerate(refused)]):
+                    [{**r,'preReservationRefusal':False} if i==0 else r for i,r in enumerate(refused)],
+                    [{**r,'rejectedWriteAttempts':1} if i==0 else r for i,r in enumerate(refused)]):
         try:checked_owner_refusals(invalid)
         except AssertionError:pass
         else:raise AssertionError('Missing ownership proof or effectful protected-owner refusal accepted')
-    owner_state={'counts':[{'method':'PUT','path':'owned-recipient','count':1}],'failures':1,'lost':0,'armed':None}
+    owner_state={'counts':[{'method':'PUT','path':'owned-recipient','count':1}],'failures':1,'lost':0,'rejectedWrites':0,'armed':None}
     assert checked_owner_proxy_unchanged(owner_state,dict(owner_state))==owner_state
-    for field,value in (('counts',[{'method':'PUT','path':'owned-recipient','count':2}]),('failures',2),('lost',1),('armed',{'unexpected':True})):
+    for field,value in (('counts',[{'method':'PUT','path':'owned-recipient','count':2}]),('failures',2),('lost',1),('rejectedWrites',1),('armed',{'unexpected':True})):
         try:checked_owner_proxy_unchanged(owner_state,{**owner_state,field:value})
         except AssertionError:pass
         else:raise AssertionError('Unexpected protected-owner mutation/proxy failure accepted')
+    for absent in ({key:item for key,item in owner_state.items() if key!='rejectedWrites'}, {**owner_state,'rejectedWrites':True}):
+        try:checked_owner_proxy_unchanged(absent,owner_state)
+        except (AssertionError,KeyError):pass
+        else:raise AssertionError('Old or malformed proxy refusal counter accepted')
     unknown={'observed204':True,'closedBeforeGolfReceipt':True,'phase':'DISPATCH_UNKNOWN','invitationState':'GRANTING',
              'nativeEffectivePermission':'read','generationBefore':'0','generationAfter':'1','generationAfterRestart':'1',
              'dispatchCountBefore':0,'dispatchCountAfter':1,'dispatchCountAfterReplay':1,'dispatchCountAfterRestart':1,
@@ -548,7 +555,7 @@ def main():
                 checked_owner_proxy_unchanged(protected_proxy_before,proxy.snapshot())
                 protected_receipts.append({'action':action,'nativeOwner':True,
                     'nativeMutations':proxy.total(orgrepo)-protected_count,'proxyCountersUnchanged':True,
-                    'preReservationRefusal':action in {'set','remove'},
+                    'preReservationRefusal':action in {'set','remove'},'rejectedWriteAttempts':proxy.rejected_writes,
                     'generationBefore':protected_before['generation'],'generationAfter':protected_after['generation']})
             assert call(direct,'ListRepositoryInvitations',{**protected_target,'page':{'page':1,'limit':20}})==protected_invitations
             record(organizationOwnerRefusals=checked_owner_refusals(protected_receipts))

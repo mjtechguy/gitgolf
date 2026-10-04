@@ -20,6 +20,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"os/signal"
@@ -98,6 +99,7 @@ type snapshot struct {
 	Lost                uint64        `json:"lost"`
 	Failures            uint64        `json:"failures"`
 	CallerCancelled     uint64        `json:"callerCancelled"`
+	RejectedWrites      uint64        `json:"rejectedWrites"` // refused before dispatch; no path, method, headers or body retained
 	Armed               *fault        `json:"armed"`
 }
 type adapter struct {
@@ -284,20 +286,36 @@ func callerReadCancelled(r *http.Request, err error) bool {
 	// Never discount cancellation of any possibly dispatched native write.
 	return r.Method == http.MethodGet && errors.Is(r.Context().Err(), context.Canceled) && errors.Is(err, context.Canceled)
 }
+func (a *adapter) rejectWrite(method string) {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		// Saturation prevents wrapping to zero. Qualification requires zero, so
+		// saturation cannot hide another refused attempt in a passing fixture.
+		if a.state.RejectedWrites < (1<<53)-1 {
+			a.state.RejectedWrites++
+		}
+	}
+}
+
 func (a *adapter) forward(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
 	path := r.URL.RequestURI()
 	if r.URL.IsAbs() || r.URL.Host != "" || !strings.HasPrefix(path, "/api/v1/") || len(path) > 4096 || len(r.TransferEncoding) != 0 || r.ContentLength > maxRequest || r.Method != http.MethodGet && !a.allowedWrite(r.Method, path) {
+		a.rejectWrite(r.Method)
 		http.Error(w, "Owned qualification route refused", http.StatusForbidden)
 		return
 	}
 	payload, err := io.ReadAll(io.LimitReader(r.Body, maxRequest+1))
 	if err != nil || len(payload) > maxRequest || r.Method == http.MethodGet && len(payload) != 0 {
+		a.rejectWrite(r.Method)
 		http.Error(w, "Owned qualification request refused", http.StatusBadRequest)
 		return
 	}
 	request, err := http.NewRequestWithContext(r.Context(), r.Method, nativeDestination+path, bytes.NewReader(payload))
 	if err != nil {
+		a.rejectWrite(r.Method)
 		http.Error(w, "Owned qualification request refused", http.StatusBadRequest)
 		return
 	}
@@ -305,6 +323,7 @@ func (a *adapter) forward(w http.ResponseWriter, r *http.Request) {
 	request.GetBody = nil // never make a mutation replayable
 	request.Close = true
 	if !a.begin(r.Method, path) {
+		a.rejectWrite(r.Method)
 		http.Error(w, "Owned qualification counter bound reached", http.StatusServiceUnavailable)
 		return
 	}
@@ -402,6 +421,48 @@ func writeJSON(w http.ResponseWriter, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 func selfCheck() {
+	refused, _ := newAdapter("golf-access48-0123456789", strings.Repeat("e", 64))
+	ownerPath := "/api/v1/repos/golf-access48-0123456789-org/owned/collaborators/golf-access48-0123456789-owner"
+	for _, method := range []string{http.MethodPut, http.MethodDelete, http.MethodPost, http.MethodPatch} {
+		request := httptest.NewRequest(method, ownerPath, strings.NewReader("private-fixture-body"))
+		request.Header.Set("Authorization", "token private-fixture-token")
+		response := httptest.NewRecorder()
+		refused.forward(response, request)
+		if response.Code != http.StatusForbidden {
+			panic("source protected owner route was not refused")
+		}
+	}
+	request := httptest.NewRequest(http.MethodGet, "/not-native", nil)
+	response := httptest.NewRecorder()
+	refused.forward(response, request)
+	if response.Code != http.StatusForbidden || refused.state.RejectedWrites != 4 || refused.state.ForwardRequestCount != 0 || len(refused.state.Counts) != 0 || len(refused.state.Observations) != 0 || refused.state.Failures != 0 {
+		panic("source refused writes must remain distinct from reads and native dispatch")
+	}
+	oversized := httptest.NewRequest(http.MethodPut, strings.Replace(ownerPath, "-owner", "-recipient", 1), strings.NewReader(strings.Repeat("x", maxRequest+1)))
+	oversized.ContentLength = -1
+	response = httptest.NewRecorder()
+	refused.forward(response, oversized)
+	if response.Code != http.StatusBadRequest || refused.state.RejectedWrites != 5 || refused.state.ForwardRequestCount != 0 {
+		panic("source pre-dispatch payload refusal count")
+	}
+	var rejectionChecks sync.WaitGroup
+	for range 32 {
+		rejectionChecks.Add(1)
+		go func() { defer rejectionChecks.Done(); refused.rejectWrite(http.MethodPut) }()
+	}
+	rejectionChecks.Wait()
+	if refused.state.RejectedWrites != 37 {
+		panic("source concurrent aggregate refusal count")
+	}
+	refusedJSON, _ := json.Marshal(refused.state)
+	if bytes.Contains(refusedJSON, []byte(ownerPath)) || bytes.Contains(refusedJSON, []byte("private-fixture")) || bytes.Contains(refusedJSON, []byte(refused.nonce)) {
+		panic("source refused request metadata leak")
+	}
+	refused.state.RejectedWrites = (1 << 53) - 1
+	refused.rejectWrite(http.MethodDelete)
+	if refused.state.RejectedWrites != (1<<53)-1 {
+		panic("source refusal counter wrapped")
+	}
 	comparison := compareTagReceipt([]byte(`{"name_pattern":"v*","whitelist_usernames":["private-b","private-a"],"whitelist_teams":[]}`), []byte(`{"name_pattern":"v*","whitelist_usernames":["private-a","private-b"],"whitelist_teams":[]}`))
 	diagnosticJSON, _ := json.Marshal(comparison)
 	if comparison == nil || !comparison.UsersEqual || comparison.RequestedUsers != 2 || strings.Contains(string(diagnosticJSON), "private") {
@@ -496,7 +557,7 @@ func selfCheck() {
 	if bytes.Contains(encoded, []byte(a.nonce)) || bytes.Contains(encoded, []byte("fixture-value")) {
 		panic("source safe snapshot check")
 	}
-	fmt.Println("PASS: pure owned-route/once-only-fault/header/bounds checks; no native calls or listeners")
+	fmt.Println("PASS: pure owned-route/refused-write/once-only-fault/header/bounds checks; no native calls or listeners")
 }
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "--self-check" {
