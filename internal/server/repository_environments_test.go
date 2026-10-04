@@ -7,6 +7,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -501,43 +503,74 @@ func TestEnvironmentConfiguredIdentitiesPostgres(t *testing.T) {
 // Editing another creator's environment must acquire both before the repository
 // gate, because the immutable version's creator FK takes a KEY SHARE lock.
 func TestEnvironmentIndependentAdministratorCreatorLockPostgres(t *testing.T) {
-	f, creatorLogin, target := environmentFixture(t)
+	f := newWorkflowRunFixture(t)
+	f.row.HTMLURL = "https://forge.invalid/alice/example"
+	upstream, e := url.Parse(f.server.config.GiteaURL)
+	if e != nil {
+		t.Fatal(e)
+	}
+	const secondCredential = "environment-second-admin-fixture"
+	secondUser := User{ID: 43, Login: "bob"}
+	// Operator enrollment verifies native credentials with its own HTTP client.
+	// Serve both actors through the configured native fixture, rather than only
+	// intercepting requests made by the application's client.
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		second := auth == "token "+secondCredential || auth == "Bearer "+secondCredential
+		if second {
+			w.Header().Set("Content-Type", "application/json")
+			switch r.URL.Path {
+			case "/api/v1/user":
+				json.NewEncoder(w).Encode(secondUser)
+				return
+			case "/api/v1/repos/alice/example/collaborators/bob/permission":
+				json.NewEncoder(w).Encode(map[string]any{"permission": "admin", "user": secondUser})
+				return
+			case "/api/v1/repos/alice/example/collaborators/bob":
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+		}
+		forward := r.Clone(r.Context())
+		forward.URL.Scheme, forward.URL.Host = upstream.Scheme, upstream.Host
+		forward.Host, forward.RequestURI = upstream.Host, ""
+		forward.Header = r.Header.Clone()
+		if second {
+			forward.Header.Set("Authorization", "token run-fixture")
+		}
+		response, err := http.DefaultTransport.RoundTrip(forward)
+		if err != nil {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		defer response.Body.Close()
+		for key, values := range response.Header {
+			w.Header()[key] = values
+		}
+		w.WriteHeader(response.StatusCode)
+		io.Copy(w, response.Body)
+	}))
+	t.Cleanup(provider.Close)
+	config := f.server.config
+	config.GiteaURL = provider.URL
+	f.server, e = New(config, f.server.db)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, config.GiteaURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture", IsInstanceAdmin: true}); e != nil {
+		t.Fatal(e)
+	}
+	creatorLogin, e := f.server.loginLocalSession(t.Context(), "alice", localTestPassword, "")
+	if e != nil {
+		t.Fatal(e)
+	}
+	a := runnerPlacementFixture(t, f, creatorLogin)
+	target := &golfv1.RepositoryEnvironmentTarget{Repository: a.Repository, RepositoryId: a.RepositoryId, OwnerId: a.OwnerId, AccessRevision: a.ExpectedRevision}
 	initial := environmentInput(target)
 	first, e := environmentSave(t, f, creatorLogin, initial)
 	if e != nil {
 		t.Fatal(e)
 	}
-	underlying := f.server.client.Transport
-	if underlying == nil {
-		underlying = http.DefaultTransport
-	}
-	const secondCredential = "environment-second-admin-fixture"
-	secondUser := User{ID: 43, Login: "bob"}
-	f.server.client.Transport = environmentRoundTripper(func(r *http.Request) (*http.Response, error) {
-		if r.Header.Get("Authorization") != "token "+secondCredential && r.Header.Get("Authorization") != "Bearer "+secondCredential {
-			return underlying.RoundTrip(r)
-		}
-		reply := func(status int, value any) (*http.Response, error) {
-			body, e := json.Marshal(value)
-			if e != nil {
-				return nil, e
-			}
-			return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(bytes.NewReader(body)), Request: r}, nil
-		}
-		switch r.URL.Path {
-		case "/api/v1/user":
-			return reply(http.StatusOK, secondUser)
-		case "/api/v1/repos/alice/example/collaborators/bob/permission":
-			return reply(http.StatusOK, map[string]any{"permission": "admin", "user": secondUser})
-		case "/api/v1/repos/alice/example/collaborators/bob":
-			return reply(http.StatusNoContent, nil)
-		default:
-			clone := r.Clone(r.Context())
-			clone.Header = r.Header.Clone()
-			clone.Header.Set("Authorization", "token run-fixture")
-			return underlying.RoundTrip(clone)
-		}
-	})
 	if _, e = ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.GiteaURL, "create", LocalAccountInput{Username: "bob", Password: localTestPassword, ForgeToken: secondCredential}); e != nil {
 		t.Fatal(e)
 	}
