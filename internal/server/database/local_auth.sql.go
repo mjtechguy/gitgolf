@@ -118,6 +118,32 @@ func (q *Queries) ConsumeLocalLoginLimit(ctx context.Context, arg ConsumeLocalLo
 	return attempts, err
 }
 
+const consumeReservedLocalLoginLimit = `-- name: ConsumeReservedLocalLoginLimit :one
+UPDATE golf_local_login_limits SET
+attempts = CASE WHEN resets_at <= clock_timestamp() THEN 1 ELSE LEAST(attempts + 1,$1::integer + 1) END,
+resets_at = CASE WHEN resets_at <= clock_timestamp() THEN clock_timestamp() + make_interval(secs => $2::double precision) ELSE resets_at END
+WHERE bucket = $3 RETURNING attempts,resets_at
+`
+
+type ConsumeReservedLocalLoginLimitParams struct {
+	MaxAttempts   int32
+	WindowSeconds float64
+	Bucket        int16
+}
+
+type ConsumeReservedLocalLoginLimitRow struct {
+	Attempts int32
+	ResetsAt time.Time
+}
+
+// A successful verification releases only its own exact-window reservation.
+func (q *Queries) ConsumeReservedLocalLoginLimit(ctx context.Context, arg ConsumeReservedLocalLoginLimitParams) (ConsumeReservedLocalLoginLimitRow, error) {
+	row := q.db.QueryRowContext(ctx, consumeReservedLocalLoginLimit, arg.MaxAttempts, arg.WindowSeconds, arg.Bucket)
+	var i ConsumeReservedLocalLoginLimitRow
+	err := row.Scan(&i.Attempts, &i.ResetsAt)
+	return i, err
+}
+
 const createLocalAccount = `-- name: CreateLocalAccount :one
 INSERT INTO golf_local_accounts(user_id,username,password_hash,encrypted_forge_token,credential_binding,credential_key_id,is_instance_admin,email)
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, user_id, username, password_hash, encrypted_forge_token, credential_binding, credential_key_id, credential_version, is_instance_admin, disabled_at, created_at, email
@@ -498,6 +524,27 @@ func (q *Queries) LockRotationLocalAccounts(ctx context.Context, arg LockRotatio
 		return nil, err
 	}
 	return items, nil
+}
+
+const releaseReservedLocalLoginLimit = `-- name: ReleaseReservedLocalLoginLimit :execrows
+UPDATE golf_local_login_limits SET attempts=attempts-1
+WHERE bucket=$1 AND bucket BETWEEN 1 AND 1024
+AND resets_at=$2 AND attempts BETWEEN 1 AND $3::integer
+`
+
+type ReleaseReservedLocalLoginLimitParams struct {
+	Bucket      int16
+	ResetsAt    time.Time
+	MaxAttempts int32
+}
+
+// Saturation preserves denied/failed overflow charges; no decrement in a new window.
+func (q *Queries) ReleaseReservedLocalLoginLimit(ctx context.Context, arg ReleaseReservedLocalLoginLimitParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, releaseReservedLocalLoginLimit, arg.Bucket, arg.ResetsAt, arg.MaxAttempts)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const resetLocalLoginLimit = `-- name: ResetLocalLoginLimit :exec

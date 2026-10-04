@@ -476,10 +476,7 @@ func (s *Server) SetRepositoryRunnerPlacement(ctx context.Context, req *connect.
 	if e != nil {
 		return nil, runnerPoolRPCError(e)
 	}
-	if e = s.consumeLocalLogin(ctx, initial.Username); e != nil {
-		return nil, runnerPoolRPCError(e)
-	}
-	correct, e := verifyLocalPassword(ctx, m.CurrentPassword, initial.PasswordHash)
+	correct, e := s.verifyLocalPasswordAttempt(ctx, initial.Username, m.CurrentPassword, initial.PasswordHash)
 	if e != nil {
 		return nil, runnerPoolRPCError(e)
 	}

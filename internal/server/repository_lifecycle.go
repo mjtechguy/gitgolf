@@ -471,10 +471,7 @@ func (s *Server) ChangeRepositoryArchiveState(ctx context.Context, req *connect.
 	if e != nil {
 		return nil, lifecycleRPCError(e)
 	}
-	if e = s.consumeLocalLogin(ctx, initial.Username); e != nil {
-		return nil, lifecycleRPCError(e)
-	}
-	correct, e := verifyLocalPassword(ctx, m.CurrentPassword, initial.PasswordHash)
+	correct, e := s.verifyLocalPasswordAttempt(ctx, initial.Username, m.CurrentPassword, initial.PasswordHash)
 	if e != nil {
 		return nil, lifecycleRPCError(e)
 	}

@@ -237,10 +237,7 @@ func (s *Server) DeleteRepository(ctx context.Context, req *connect.Request[golf
 	if e != nil {
 		return nil, deletionRPCError(e)
 	}
-	if e = s.consumeLocalLogin(ctx, initial.Username); e != nil {
-		return nil, deletionRPCError(e)
-	}
-	correct, e := verifyLocalPassword(ctx, m.CurrentPassword, initial.PasswordHash)
+	correct, e := s.verifyLocalPasswordAttempt(ctx, initial.Username, m.CurrentPassword, initial.PasswordHash)
 	if e != nil {
 		return nil, deletionRPCError(e)
 	}

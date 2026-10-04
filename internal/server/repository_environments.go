@@ -204,10 +204,7 @@ func (s *Server) environmentPassword(ctx context.Context, value string, token fo
 	if e != nil {
 		return initial, e
 	}
-	if e = s.consumeLocalLogin(ctx, initial.Username); e != nil {
-		return initial, e
-	}
-	correct, e := verifyLocalPassword(ctx, password, initial.PasswordHash)
+	correct, e := s.verifyLocalPasswordAttempt(ctx, initial.Username, password, initial.PasswordHash)
 	if e != nil {
 		return initial, e
 	}

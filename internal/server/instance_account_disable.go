@@ -49,10 +49,7 @@ func (s *Server) DisableLocalAccount(ctx context.Context, req *connect.Request[g
 	if err != nil {
 		return nil, rpcError(errStorageUnavailable)
 	}
-	if err := s.consumeLocalLogin(ctx, initial.Username); err != nil {
-		return nil, rpcError(err)
-	}
-	correct, err := verifyLocalPassword(ctx, req.Msg.PasswordConfirmation, initial.PasswordHash)
+	correct, err := s.verifyLocalPasswordAttempt(ctx, initial.Username, req.Msg.PasswordConfirmation, initial.PasswordHash)
 	if err != nil {
 		return nil, rpcError(err)
 	}

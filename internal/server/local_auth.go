@@ -136,34 +136,6 @@ func localLoginBucket(username string) int16 {
 	digest := sha256.Sum256([]byte(username))
 	return int16(binary.BigEndian.Uint16(digest[:2])%1024) + 1
 }
-func (s *Server) consumeLocalLogin(ctx context.Context, username string) error {
-	if s.db == nil {
-		return errStorageUnavailable
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return errStorageUnavailable
-	}
-	defer tx.Rollback()
-	q := database.New(s.db).WithTx(tx)
-	global, err := q.ConsumeLocalLoginLimit(ctx, database.ConsumeLocalLoginLimitParams{Bucket: 0, MaxAttempts: 120, WindowSeconds: 60})
-	if err != nil {
-		return errStorageUnavailable
-	}
-	// ponytail: fixed1024 username buckets can collide; a future distributed
-	// limiter can isolate accounts without permitting unbounded attacker keys.
-	account, err := q.ConsumeLocalLoginLimit(ctx, database.ConsumeLocalLoginLimitParams{Bucket: localLoginBucket(username), MaxAttempts: 10, WindowSeconds: 300})
-	if err != nil {
-		return errStorageUnavailable
-	}
-	if err := tx.Commit(); err != nil {
-		return errStorageUnavailable
-	}
-	if global > 120 || account > 10 {
-		return errLocalRateLimited
-	}
-	return nil
-}
 func (s *Server) loginLocalSession(ctx context.Context, username, password, oldValue string) (loginResult, error) {
 	username = strings.ToLower(strings.TrimSpace(username))
 	email, isEmail := canonicalLocalEmail(username)
@@ -192,7 +164,8 @@ func (s *Server) loginLocalSession(ctx context.Context, username, password, oldV
 	if err == nil {
 		bucketName = row.Username
 	}
-	if limitErr := s.consumeLocalLogin(ctx, bucketName); limitErr != nil {
+	reservation, limitErr := s.reserveLocalPasswordAttempt(ctx, bucketName)
+	if limitErr != nil {
 		return loginResult{}, limitErr
 	}
 	exists := err == nil
@@ -219,7 +192,15 @@ func (s *Server) loginLocalSession(ctx context.Context, username, password, oldV
 		return loginResult{}, errLocalCredentials
 	}
 	user.IsInstanceAdmin = row.IsInstanceAdmin
-	return s.createSessionBound(ctx, user, "local", token, oldValue, &localLoginBinding{row.ID, row.UserID, row.CredentialVersion})
+	result, err := s.createSessionBound(ctx, user, "local", token, oldValue, &localLoginBinding{row.ID, row.UserID, row.CredentialVersion})
+	if err != nil {
+		return loginResult{}, err
+	}
+	// Session binding already committed. Counter housekeeping cannot turn that
+	// sign-in into a false failure or create an unacknowledged replacement.
+	// Release is once-only; SQL/cancellation failure gets no refund retry.
+	_ = s.releaseLocalPasswordAttempt(ctx, reservation)
+	return result, nil
 }
 
 // Every successful local-authenticated RPC rechecks this after provider work.

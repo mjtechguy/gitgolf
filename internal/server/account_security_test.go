@@ -309,7 +309,7 @@ func TestAccountSecurityThrottlePostgres(t *testing.T) {
 	actor := enrollLocal(t, f, "alice", false)
 	session := localLogin(t, f, "alice")
 	input := ownSecurityChange{accountID: mustProfileID(t, actor.ID), userID: 42, version: 1, confirmation: "Wrong but valid-length password", password: "Unused replacement password", action: "SELF_PASSWORD_CHANGED"}
-	for range 9 {
+	for range 10 {
 		if _, err := f.s.changeOwnSecurity(t.Context(), session.Value, forgeCredential{Kind: "pat", Token: "alice-management-token", Local: true}, input); !errors.Is(err, errPasswordConfirmation) {
 			t.Fatal("wrong confirmation not charged correctly", err)
 		}

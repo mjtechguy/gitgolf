@@ -58,6 +58,19 @@ attempts = CASE WHEN resets_at <= clock_timestamp() THEN 1 ELSE LEAST(attempts +
 resets_at = CASE WHEN resets_at <= clock_timestamp() THEN clock_timestamp() + make_interval(secs => sqlc.arg(window_seconds)::double precision) ELSE resets_at END
 WHERE bucket = sqlc.arg(bucket) RETURNING attempts;
 
+-- A successful verification releases only its own exact-window reservation.
+-- name: ConsumeReservedLocalLoginLimit :one
+UPDATE golf_local_login_limits SET
+attempts = CASE WHEN resets_at <= clock_timestamp() THEN 1 ELSE LEAST(attempts + 1,sqlc.arg(max_attempts)::integer + 1) END,
+resets_at = CASE WHEN resets_at <= clock_timestamp() THEN clock_timestamp() + make_interval(secs => sqlc.arg(window_seconds)::double precision) ELSE resets_at END
+WHERE bucket = sqlc.arg(bucket) RETURNING attempts,resets_at;
+
+-- Saturation preserves denied/failed overflow charges; no decrement in a new window.
+-- name: ReleaseReservedLocalLoginLimit :execrows
+UPDATE golf_local_login_limits SET attempts=attempts-1
+WHERE bucket=sqlc.arg(bucket) AND bucket BETWEEN 1 AND 1024
+AND resets_at=sqlc.arg(resets_at) AND attempts BETWEEN 1 AND sqlc.arg(max_attempts)::integer;
+
 -- name: LockRotationLocalAccounts :many
 SELECT id,encrypted_forge_token,credential_key_id,credential_binding
 FROM golf_local_accounts WHERE credential_key_id <> sqlc.arg(active_key_id)

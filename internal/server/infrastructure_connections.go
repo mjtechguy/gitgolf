@@ -154,10 +154,7 @@ func (s *Server) confirmInfrastructureAdmin(ctx context.Context, value string, c
 	if err != nil {
 		return empty, errStorageUnavailable
 	}
-	if err = s.consumeLocalLogin(ctx, row.Username); err != nil {
-		return empty, err
-	}
-	correct, err := verifyLocalPassword(ctx, password, row.PasswordHash)
+	correct, err := s.verifyLocalPasswordAttempt(ctx, row.Username, password, row.PasswordHash)
 	if err != nil {
 		return empty, err
 	}

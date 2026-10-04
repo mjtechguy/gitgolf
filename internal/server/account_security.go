@@ -111,10 +111,7 @@ func (s *Server) changeOwnSecurity(ctx context.Context, value string, token forg
 	if input.action == "SELF_EMAIL_CHANGED" && initial.Email.Valid && initial.Email.String == input.email {
 		return empty, invalid("Choose a different Golf sign-in email alias.")
 	}
-	if err := s.consumeLocalLogin(ctx, initial.Username); err != nil {
-		return empty, err
-	}
-	correct, err := verifyLocalPassword(ctx, input.confirmation, initial.PasswordHash)
+	correct, err := s.verifyLocalPasswordAttempt(ctx, initial.Username, input.confirmation, initial.PasswordHash)
 	if err != nil {
 		return empty, err
 	}
