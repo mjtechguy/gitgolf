@@ -1,9 +1,10 @@
 # Repository deletion source contract
 
 This is a bounded owner-only source consumer, not qualified deletion readiness.
-Migration054 and the authored PostgreSQL fault/concurrency cases still require
-the root's managed test run. No native fixture, deployment or bootstrap
-enrollment was performed by this packet.
+Migration054 and the PostgreSQL fault/concurrency consumer cases pass the root's
+managed test run (54.113s), including positive requests through Server.ServeHTTP.
+These use an owned controlled native provider and synthetic profile, not actual
+native deletion, deployment or bootstrap enrollment.
 
 ## Native boundary and availability
 
@@ -96,7 +97,7 @@ automatic downgrade, truncation and journal deletion are refused.
 
 Three pure/browser-caller source guards pass under race; package compilation,
 vet, protobuf lint, generated-query drift and whitespace checks pass. Authored
-PostgreSQL cases are source fixtures pending execution: default unavailable/no
+PostgreSQL cases pass in the root's disposable database: default unavailable/no
 reservation, personal and current-org owner204, wrong password, exact replay,
 replacement non-adoption, non204/lost receipt, actor/org/owner drift, stale
 revision rejection, prior-family active work, suspended qualification,
