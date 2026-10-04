@@ -54,7 +54,7 @@ ACCESS_EMPTY = {
     'issue_mutations': "golf_issue_mutations WHERE state='OUTCOME_UNKNOWN'",
     'repository_creations': "golf_repository_creations WHERE state='OUTCOME_UNKNOWN'",
     # No active/leased or legacy queued work: only one unclaimed real typed run.
-    'unsupported_workflows': "golf_workflow_runs r WHERE r.state='running' OR (r.state='queued' AND (r.origin<>'manual' OR r.lease_token_hash IS NOT NULL OR NOT EXISTS(SELECT 1 FROM golf_workflow_dispatch_inputs i WHERE i.run_id=r.id)))",
+    'unsupported_workflows': "golf_workflow_runs r WHERE r.state='running' OR (r.state='queued' AND (r.origin<>'manual' OR r.lease_token_hash IS NOT NULL OR r.attempt_id<>'' OR r.runner_id<>'' OR r.lease_expires_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM golf_workflow_dispatch_inputs i WHERE i.run_id=r.id)))",
 }
 KEY_FAMILIES = ('sessions', 'oauth_attempts', 'local_accounts', 'infrastructure_connections',
                 'automation_credentials', 'review_contents', 'conversation_contents', 'webhook_credentials',

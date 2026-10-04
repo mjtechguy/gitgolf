@@ -163,6 +163,34 @@ def equal_history(before, after):
     assert all(before[table] == after[table] for table in HISTORY), 'Original Access/invitation history changed'
 
 
+def check_restored_history(before, after):
+    # Migration044 intentionally expires PENDING invitations when recovery
+    # disables/version-invalidates their issuer. Everything else is exact.
+    changed = {'golf_repository_invitations', 'golf_repository_invitation_events'}
+    assert set(before) == set(after) == set(HISTORY)
+    assert all(before[t] == after[t] for t in HISTORY if t not in changed)
+    original = json.loads(before['golf_repository_invitations'])
+    current = json.loads(after['golf_repository_invitations'])
+    assert len(original) == len(current) and [r['id'] for r in original] == [r['id'] for r in current]
+    expired = {}
+    for a, b in zip(original, current):
+        if a['state'] != 'PENDING':
+            assert a == b
+            continue
+        assert b['state'] == 'EXPIRED' and b['revision'] == a['revision'] + 1
+        assert datetime.datetime.fromisoformat(b['updated_at']) >= datetime.datetime.fromisoformat(a['updated_at'])
+        assert {k:v for k,v in a.items() if k not in {'state','revision','updated_at'}} == {k:v for k,v in b.items() if k not in {'state','revision','updated_at'}}
+        expired[a['id']] = b['revision']
+    events = json.loads(before['golf_repository_invitation_events'])
+    observed = json.loads(after['golf_repository_invitation_events'])
+    assert observed[:len(events)] == events
+    added = observed[len(events):]
+    assert len(added) == len(expired) and len({r['invitation_id'] for r in added}) == len(expired)
+    assert all(r['state'] == 'EXPIRED' and expired.get(r['invitation_id']) == r['revision'] and
+               type(r['id']) is int and r['id'] > max((v['id'] for v in events), default=0) for r in added)
+    return len(expired)
+
+
 def reject(check):
     try: check()
     except (ValueError, AssertionError): return
@@ -239,6 +267,19 @@ def self_check():
     assert all(len('golf-access059-0123456789-'+role)<=40 for role in ('bootstrap','recipient','outsider','owner'))
     rows = {table: '[]' for table in HISTORY}; equal_history(rows, dict(rows))
     reject(lambda: equal_history(rows, dict(rows, golf_repository_access_generations='[{}]')))
+    before = dict(rows)
+    invitation = {'id':'original','state':'PENDING','revision':1,'updated_at':'2026-10-04T00:00:00+00:00',
+                  'issuer_account_version':1,'input_hash':'retained-original','persistent_consent':True}
+    before['golf_repository_invitations'] = json.dumps([invitation])
+    before['golf_repository_invitation_events'] = json.dumps([{'id':1,'invitation_id':'original','state':'PENDING','revision':1}])
+    after = dict(before)
+    after['golf_repository_invitations'] = json.dumps([invitation|{'state':'EXPIRED','revision':2,'updated_at':'2026-10-04T00:01:00+00:00'}])
+    after['golf_repository_invitation_events'] = json.dumps(json.loads(before['golf_repository_invitation_events'])+[{'id':2,'invitation_id':'original','state':'EXPIRED','revision':2}])
+    assert check_restored_history(before, after)==1
+    for key,value in [('issuer_account_version',2),('persistent_consent',False),('state','ACCEPTED')]:
+        changed=dict(after);changed['golf_repository_invitations']=json.dumps([json.loads(after['golf_repository_invitations'])[0]|{key:value}])
+        reject(lambda:check_restored_history(before,changed))
+    reject(lambda:check_restored_history(before,dict(after,golf_repository_invitation_events=before['golf_repository_invitation_events'])))
     config = {'services': {'golf': {'environment': {'GITEA_URL': 'http://gitea:3000'}},
               'gitea': {'environment': {'GITEA__actions__ENABLED': 'false', 'GITEA__mailer__ENABLED': 'false', **{'GITEA__cron.'+name+'__ENABLED':'false' for name in recovery.NATIVE_CRON_TASKS}}}, 'postgres': {}}}
     recovery.validate_access_config(config)
@@ -495,6 +536,18 @@ def main():
             admitted=rpc(owner,'WorkflowRunService/DispatchWorkflow',dispatch)['run']; assert admitted['state']=='WORKFLOW_RUN_STATE_QUEUED' and admitted['commitId']==head
             assert sql('SELECT count(*) FROM golf_workflow_dispatch_inputs;')=='1'
             assert sql('SELECT count(*) FROM golf_workflow_run_logs;')=='0'
+            original_input={k:prepared[k] for k in ('repository','repositoryId','ownerId','commitId','workflowPath','workflowBlobId','schemaSha256','submittedSha256','effectiveSha256','inputContract')}|{'idempotencyKey':dispatch['idempotencyKey']}
+            def typed_original():
+                value=rpc(owner,'WorkflowRunService/GetWorkflowDispatch',original_input)
+                assert value['idempotencyKey']==dispatch['idempotencyKey']
+                for field in ('repository','repositoryId','ownerId','nativeActorId','schemaSha256','submittedSha256','effectiveSha256','inputContract'):
+                    assert value[field]==prepared[field]
+                observed=value['run'];assert observed['id']==admitted['id'] and not observed.get('canCancel',False)
+                for field in ('repositoryId','ownerId','commitId','workflowPath','workflowBlobId','schemaSha256','submittedSha256','effectiveSha256','inputContract'):
+                    assert observed[field]==prepared[field]
+                assert observed['engineCatalog']==CATALOG and re.fullmatch('[a-f0-9]{64}',observed['sourceSha256'])
+                return observed
+            assert typed_original()['state']=='WORKFLOW_RUN_STATE_QUEUED'
             record(realTypedAdmission=True,typedRunId=admitted['id'],jobsExecuted=0)
             stage('actual native204 response loss with unchanged canonical forge URL')
             native_id=container('gitea'); netrows=json.loads(run('docker','inspect',native_id))[0]['NetworkSettings']['Networks'];assert len(netrows)==1
@@ -579,7 +632,8 @@ def main():
             assert restored['backup_id']==backup['backup_id'] and restored['sessions_count']==session_count and restored['local_accounts_disabled_count']==3
             active_project=target;active_config=Path(restored['compose_file'])
             assert all(not json.loads(run('docker','inspect',container(s)))[0]['State']['Running'] for s in ('golf','gitea'))
-            equal_history(history,histories());assert rows('golf_workflow_dispatch_inputs','run_id')==ciphertext
+            restored_history=histories();expired_count=check_restored_history(history,restored_history);assert expired_count==1
+            assert rows('golf_workflow_dispatch_inputs','run_id')==ciphertext
             assert json.loads(rows('golf_crypto_events','id'))==crypto_history
             assert rows('golf_encryption_keys','key_id')==registry and rows('golf_encryption_policy','singleton')==policy_before
             after_accounts=json.loads(rows('golf_local_accounts','id'));assert len(after_accounts)==len(accounts)
@@ -595,8 +649,17 @@ def main():
             stage('wrong and missing restored content keys refuse supported operator inventory')
             wrong_keys=json.dumps({'a':base64.b64encode(secrets.token_bytes(32)).decode(),'b':key_b})
             keys('status',success=False,overrides=('-e','GOLF_ENCRYPTION_KEYS='+wrong_keys))
-            keys('status',success=False,overrides=('-e','GOLF_ENCRYPTION_KEYS='+json.dumps({'b':key_b})))
-            assert rows('golf_workflow_dispatch_inputs','run_id')==ciphertext;equal_history(history,histories())
+            missing_keys=json.dumps({'b':key_b})
+            missing_status=keys('status',overrides=('-e','GOLF_ENCRYPTION_KEYS='+missing_keys))
+            missing_row=next(r for r in missing_status['keys'] if r['key_id']=='a')
+            assert missing_row['configured'] is False and missing_row['workflow_dispatch_inputs']==1 and missing_row['local_accounts']==3
+            reject(lambda:recovery.checked_key_status(missing_status))
+            for material in (wrong_keys,missing_keys):
+                # Server.New checks registered fingerprints and required key
+                # families before native calls or opening an HTTP listener.
+                compose('run','--rm','--no-deps','-T','-e','GOLF_ENCRYPTION_KEYS='+material,'golf',success=False,timeout=90)
+            assert all(not json.loads(run('docker','inspect',container(s)))[0]['State']['Running'] for s in ('golf','gitea'))
+            assert rows('golf_workflow_dispatch_inputs','run_id')==ciphertext;equal_history(restored_history,histories())
             stage('bounded supported rotation authenticates retained encrypted inputs, with immutable bindings')
             status=keys('status');assert inventory(status)==inventory(key_before)|{'sessions':0,'oauth_attempts':0}
             rotated=keys('rotate','--batch-size','1','--max-batches','32');assert rotated['complete'] and rotated['rotated_workflow_dispatch_inputs']==1
@@ -606,8 +669,9 @@ def main():
             opened=json.loads(rows('golf_workflow_dispatch_inputs','run_id'));old=json.loads(ciphertext)
             assert opened[0]['credential_key_id']=='b' and opened[0]['encrypted_content']!=old[0]['encrypted_content']
             assert {k:v for k,v in opened[0].items() if k not in {'credential_key_id','encrypted_content'}}=={k:v for k,v in old[0].items() if k not in {'credential_key_id','encrypted_content'}}
-            equal_history(history,histories())
+            equal_history(restored_history,histories())
             record(historyHashes={t:hashlib.sha256(v.encode()).hexdigest() for t,v in history.items()},historyCounts={t:len(json.loads(v)) for t,v in history.items()},
+                restoredHistoryHashes={t:hashlib.sha256(v.encode()).hexdigest() for t,v in restored_history.items()},pendingInvitationsExpired=expired_count,
                 keyFamilies=list(recovery.KEY_FAMILIES),wrongKeyDenied=True,missingKeyDenied=True,typedRetainedCancelledAndAuthenticated=True,
                 restoredSessionsInvalidated=True,issuerCredentialVersionsAdvanced=True)
             stage('controlled native/core validation restart and explicit current-account enrollment')
@@ -615,9 +679,11 @@ def main():
             for a in actors.values():
                 rpc(a,'SessionService/GetSession',{},expected=401)
                 rpc({'session':smoke.client()},'SessionService/LoginWithPassword',{'username':a['email'],'password':a['password']},expected=401)
+            rpc(owner,'WorkflowRunService/GetWorkflowDispatch',original_input,expected=401)
             for a in actors.values():
                 operator('enable',{'username':a['name'],'password':a['password'],'forge_token':a['token']})
                 a['session']=smoke.client();rpc(a,'SessionService/LoginWithPassword',{'username':a['email'],'password':a['password']})
+            original_cancelled=typed_original();assert original_cancelled['state']=='WORKFLOW_RUN_STATE_CANCELLED' and original_cancelled['version']==str(run_before[0]['version']+1)
             assert inspect(unknown_intent)==unknown
             for p,r in known:
                 assert inspect(p)==r
@@ -630,7 +696,7 @@ def main():
                     rpc(recipient,'RepositoryInvitationService/GetRepositoryInvitationOperation',{'invitationId':row['id'],'idempotencyKey':response['idempotencyKey']},expected=403)
                     rpc(recipient,'RepositoryInvitationService/RespondRepositoryInvitation',response,expected=403)
             rpc(recipient,'RepositoryInvitationService/RespondRepositoryInvitation',{'invitationId':invitations[-2][0]['id'],'expectedRevision':invitations[-2][0]['revision'],
-                'decision':'REPOSITORY_INVITATION_DECISION_ACCEPT','idempotencyKey':str(uuid.uuid4())},expected=403)
+                'decision':'REPOSITORY_INVITATION_DECISION_ACCEPT','idempotencyKey':str(uuid.uuid4())},expected=400,code='failed_precondition')
             # UNKNOWN still blocks new direct work and archive after restore.
             fresh_invitation_target=intent(repos[3],recipient,'write')
             rpc(owner,'RepositoryAccessService/SetRepositoryCollaborator',fresh_invitation_target,expected=400,code='failed_precondition')
@@ -641,10 +707,12 @@ def main():
                     'ownerId':blocked_repo['ownerId'],'expectedRevision':current['revision'],'archived':True,'confirmationName':blocked_repo['full'],
                     'currentPassword':owner['password'],'idempotencyKey':str(uuid.uuid4())})['operation']
                 assert refused['phase']=='REJECTED' and refused['failureCode']=='preflight_refused'
-            equal_history(history,histories());assert native_snapshot()==native_before
+            equal_history(restored_history,histories());assert native_snapshot()==native_before
             compose('restart','gitea','golf');smoke.ready();assert inspect(unknown_intent)==unknown
-            equal_history(history,histories());assert native_snapshot()==native_before
-            record(originalDirectStatusAndReplay=True,staleInvitationConsentDeniedAfterReenrollment=True,nativeBindingsAndSharedDeployKeysUnchanged=True,unknownInvitationConsentNotUpgraded=True,
+            equal_history(restored_history,histories());assert native_snapshot()==native_before
+            assert typed_original()==original_cancelled and sql('SELECT count(*) FROM golf_workflow_runs;')==sql('SELECT count(*) FROM golf_workflow_dispatch_inputs;')=='1'
+            assert sql('SELECT count(*) FROM golf_workflow_run_logs;')=='0'
+            record(originalTypedStatusAfterReenrollment=True,originalDirectStatusAndReplay=True,staleInvitationConsentDeniedAfterReenrollment=True,nativeBindingsAndSharedDeployKeysUnchanged=True,unknownInvitationConsentNotUpgraded=True,
                 queuedRunNeverReplayed=True,controlledRestartPreserved=True)
             passed=True
         except BaseException as error:
