@@ -2,7 +2,7 @@ import { disabledAgentUsage } from './rpc';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, GetProfileResponseSchema, GetRepositorySettingsResponseSchema, UpdateRepositorySettingsRequestSchema, UpdateRepositorySettingsResponseSchema, GetOrganizationResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, RepositorySettingsSchema, RepositoryFeatureMode, UpdateRepositoryTopicsRequestSchema, UpdateRepositoryTopicsResponseSchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
+import { GetRepositoryLifecycleResponseSchema, GetRepositoryResponseSchema, GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, GetProfileResponseSchema, GetRepositorySettingsResponseSchema, UpdateRepositorySettingsRequestSchema, UpdateRepositorySettingsResponseSchema, GetOrganizationResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, RepositorySettingsSchema, RepositoryFeatureMode, UpdateRepositoryTopicsRequestSchema, UpdateRepositoryTopicsResponseSchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 async function backend(page: Page, admin = true) {
@@ -16,6 +16,8 @@ async function backend(page: Page, admin = true) {
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, {});
     if (method === 'GetOrganization') return state.denied ? reject(route, 'not_found', 'Organization unavailable.') : respond(route, GetOrganizationResponseSchema, { organization: { id: '21', name: 'team', fullName: 'Team' } });
+    if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository: { id: state.settings.repositoryId, name: 'demo', fullName: 'alex/demo', defaultBranch: 'main' } });
+    if (method === 'GetRepositoryLifecycle') return state.denied ? reject(route, 'permission_denied', 'Repository lifecycle access denied.') : respond(route, GetRepositoryLifecycleResponseSchema, { lifecycle: { repository: { owner: 'alex', name: 'demo' }, repositoryId: state.settings.repositoryId, ownerId: state.settings.ownerId, revision: state.settings.revision, canManage: false, blockedReason: 'ownership_required' } });
     if (method === 'GetRepositorySettings') return state.denied ? reject(route, 'permission_denied', 'Repository settings access denied.') : respond(route, GetRepositorySettingsResponseSchema, { settings: state.settings });
     if (method === 'UpdateRepositorySettings') {
       const input = request(route, UpdateRepositorySettingsRequestSchema);
@@ -121,7 +123,7 @@ test('lost settings response blocks retry until current values are inspected and
   expect(state.writes).toHaveLength(1);
   state.denied = true;
   await page.getByRole('button', { name: 'Refresh repository settings', exact: true }).click();
-  await expect(page.getByRole('alert')).toHaveText('Repository settings access denied.');
+  await expect(page.getByRole('region', { name: 'General', exact: true }).getByRole('alert')).toHaveText('Repository settings access denied.');
   await expect(page.getByText('Applied without receipt', { exact: true })).toHaveCount(0);
   await expect(page.locator('tr[data-row-id="general"]').getByText('Ready', { exact: true })).toHaveCount(0);
   await expect(page.locator('tr[data-row-id="general"]').getByText('Partial', { exact: true })).toBeVisible();
@@ -170,7 +172,7 @@ for(const theme of ['dark','light'])for(const width of [390,1440])test(`General 
 test('settings refresh preserves dirty draft but refuses externally changed revision; denial clears it',async({page})=>{
  const state=await backend(page);await page.goto('/alex/demo/settings');await page.getByRole('button',{name:'Edit general settings',exact:true}).click();await page.getByLabel('Description',{exact:true}).fill('Private unsaved draft');
  state.settings.description='External update';state.settings.revision='d'.repeat(64);await page.getByRole('button',{name:'Refresh repository settings',exact:true}).click();await expect(page.getByLabel('Description',{exact:true})).toHaveValue('Private unsaved draft');await page.getByRole('button',{name:'Save repository settings',exact:true}).click();await expect(page.getByRole('alert')).toContainText('Current settings changed');expect(state.writes).toHaveLength(0);
- state.denied=true;await page.getByRole('button',{name:'Refresh repository settings',exact:true}).click();await expect(page.getByRole('alert')).toHaveText('Repository settings access denied.');await expect(page.getByLabel('Description',{exact:true})).toHaveCount(0);await expect(page.getByText('External update',{exact:true})).toHaveCount(0);
+ state.denied=true;await page.getByRole('button',{name:'Refresh repository settings',exact:true}).click();await expect(page.getByRole('region', { name: 'General', exact: true }).getByRole('alert')).toHaveText('Repository settings access denied.');await expect(page.getByLabel('Description',{exact:true})).toHaveCount(0);await expect(page.getByText('External update',{exact:true})).toHaveCount(0);
 });
 
 test('wrong immutable settings receipt blocks success and further writes',async({page})=>{

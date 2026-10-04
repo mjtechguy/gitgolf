@@ -1,3 +1,4 @@
+import { RepositoryLifecycleSettings } from './RepositoryLifecycleSettings';
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from '@tanstack/react-form';
 import { Code, ConnectError } from '@connectrpc/connect';
@@ -113,6 +114,7 @@ export function RepositorySettings({ userId, owner, name, signingOut }: { userId
       {settings && notice ? <p role="status" className="session-notice">{notice}</p> : null}
     </section>
     {(settings || editing?.kind === 'topics' && !query.error && !signingOut) && !uncertain ? <section className="browser-panel credential-list-panel" aria-labelledby="repository-topics-title"><div className="browser-panel-heading"><h2 id="repository-topics-title">Topics</h2>{settings?.canEdit ? <button className="button secondary" disabled={Boolean(editing) || mutation.isPending} onClick={() => begin('topics')}>Edit topics</button> : null}</div>{editing?.kind === 'topics' && !query.error && !signingOut ? <div hidden={!settings} inert={!settings}>{settings && settings.revision !== editing.settings.revision ? <p className="field-help">Current values changed. Your unsaved draft is retained; inspect the new values before a separate edit.</p> : null}<TopicsEditor settings={editing.settings} pending={mutation.isPending || !settings?.canEdit} onSave={(topics) => save({ kind: 'topics', topics })} onCancel={cancel} />{validation ? <p role="alert" className="error">{validation}</p> : null}</div> : settings ? <div className="credential-form-content"><p>{settings.topics.length ? settings.topics.join(', ') : 'No topics configured.'}</p></div> : null}</section> : null}
+    <RepositoryLifecycleSettings userId={userId} owner={owner} name={name} signingOut={signingOut} />
     <SettingsInventory scope="repository" repository={{ owner, name }} generalObservation={settings ? { canEdit: settings.canEdit, implemented: settings.generalEditImplemented, issues: modeName(settings.issuesMode), wiki: modeName(settings.wikiMode) } : undefined} />
   </section></RepositorySettingsLayout>;
 }

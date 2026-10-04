@@ -16,6 +16,33 @@ import (
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 )
 
+func TestRepositoryLifecycleHTTPBoundary(t *testing.T) {
+	s, err := New(testConfig("http://forge.invalid"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, method := range []string{"GetRepositoryLifecycle", "ChangeRepositoryArchiveState", "GetRepositoryLifecycleOperation"} {
+		path := "/golf.v1.RepositoryLifecycleService/" + method
+		for _, origin := range []string{s.config.PublicURL, "https://other.invalid"} {
+			req := httptest.NewRequest("POST", "/rpc"+path, strings.NewReader("malformed"))
+			req.Header.Set("Origin", origin)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			s.ServeHTTP(w, req)
+			want := http.StatusUnauthorized
+			if origin != s.config.PublicURL {
+				want = http.StatusForbidden
+			}
+			if w.Code != want || w.Header().Get("Cache-Control") != "no-store" {
+				t.Fatalf("%s boundary: status=%d cache=%q", method, w.Code, w.Header().Get("Cache-Control"))
+			}
+		}
+		if response := apiRequest(s, apiTokenPrefix+strings.Repeat("A", 43), path, "malformed"); response.Code != http.StatusForbidden {
+			t.Fatalf("%s allowed delegated API access: %d", method, response.Code)
+		}
+	}
+}
+
 func TestRepositoryLifecycleWritePaths(t *testing.T) {
 	for _, c := range []struct {
 		method, path string

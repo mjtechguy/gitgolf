@@ -514,9 +514,17 @@ networks:
             before=len(records());command('start','webhook-worker');cancelled=terminal(sub,pending)
             assert cancelled['state']=='cancelled' and cancelled['failureCode']=='background_authority_revoked' and len(records())==before
             paused=next(row for row in list_subs() if row['id']==sub['id']);assert not paused.get('enabled') and paused['authorizationState']=='authority_unavailable'
-            stage('explicit local-account disable does not resurrect consent')
+            stage('pending delivery cancelled by local-account disable without receiver bytes')
+            command('stop','webhook-worker')
+            smoke.provider(actors['owner']['token'],'PUT',route+'/collaborators/'+actors['admin']['name'],{'permission':'admin'},expected=204)
+            reauthorized=save('Explicitly reauthorized owned receiver',old=paused)
+            pending_disabled,_=queue(reauthorized)
             result=json.loads(command('exec','-T','golf','golf','local-account','disable',payload={'username':actors['admin']['name']}));assert result['result']['disabled']
             smoke.rpc(actors['admin']['session'],SERVICE+METHODS[0],{'target':target},expected=401)
+            before=len(records());command('start','webhook-worker');disabled_delivery=terminal(reauthorized,pending_disabled)
+            assert disabled_delivery['state']=='cancelled' and disabled_delivery['failureCode']=='background_authority_revoked' and len(records())==before
+            paused_disabled=next(row for row in list_subs() if row['id']==reauthorized['id'])
+            assert not paused_disabled.get('enabled') and paused_disabled['authorizationState']=='authority_unavailable'
             retained_receipts=receipt_metadata(records(),key)
             observed_deliveries=[{field:row[field] for field in ('id','subscriptionId','subscriptionVersion','eventId','eventTopic','state','attempts','responseStatus','failureCode','possibleDuplicate','createdAt','completedAt') if field in row} for subscription in list_subs() for row in history(subscription)]
             results.update(runtimeAfter=runtime(), signaturesIndependentlyVerified=True, receiverRequests=len(retained_receipts),
@@ -524,6 +532,7 @@ networks:
                            logoutContinuedDelivery=True, restartNoRepost=True, activityBodyExcluded=True,
                            transientRetry=True, lostHTTPAckPossibleDuplicate=True, explicitStableEventRedelivery=True,
                            tlsHostnameDeniedBeforeBody=True, redirectsNotFollowed=True, currentAdminRevocationNoSend=True,
+                           localAccountDisablePendingNoSend=True,
                            actualBrowser=bool(screens), passed=True)
             assert results['runtimeAfter']==baseline
             success=True

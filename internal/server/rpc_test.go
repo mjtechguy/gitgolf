@@ -34,6 +34,7 @@ func TestRPCErrorMapping(t *testing.T) {
 		{errors.New("secret-token-and-SQL-dsn"), connect.CodeInternal},
 		{fmt.Errorf("secret-token-and-SQL-dsn: %w", errWebhookDestination), connect.CodeInvalidArgument},
 		{fmt.Errorf("secret-token-and-SQL-dsn: %w", errWebhookNetwork), connect.CodeUnavailable},
+		{fmt.Errorf("secret-token-and-SQL-dsn: %w", errLifecycleBlocked), connect.CodeFailedPrecondition},
 	} {
 		err := rpcError(tc.err)
 		if connect.CodeOf(err) != tc.code || strings.Contains(err.Error(), "secret-token-and-SQL-dsn") {
