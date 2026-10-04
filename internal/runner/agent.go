@@ -13,6 +13,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Agent tasks use a separate approved image and native permission profile. No
@@ -22,7 +24,57 @@ type AgentJob struct {
 	Auth                                        []byte
 	Model, Reasoning, Instructions, SeccompPath string
 	TokenBudget                                 uint32
+	// Observe must durably accept the private projection, or fail closed. The
+	// consumer screens credentials and fences current authority before storage.
+	Observe func(context.Context, AgentObservation) error
 }
+
+// AgentObservation is a bounded private projection of native observations, not
+// a raw protocol event or permission to resume/retry native execution. Completed
+// messages are authoritative; reasoning, command arguments/output, paths, diffs
+// and provider errors never enter this projection. Text still requires the
+// coordinator's credential screening before durable private storage.
+type AgentObservation struct {
+	Sequence    int64           `json:"sequence"`
+	Kind        string          `json:"kind"`
+	ThreadID    string          `json:"threadId,omitempty"`
+	TurnID      string          `json:"turnId,omitempty"`
+	ItemID      string          `json:"itemId,omitempty"`
+	Phase       string          `json:"phase,omitempty"`
+	Text        string          `json:"text,omitempty"`
+	Status      string          `json:"status,omitempty"`
+	ToolKind    string          `json:"toolKind,omitempty"`
+	Plan        []AgentPlanStep `json:"plan,omitempty"`
+	TotalTokens *int64          `json:"totalTokens,omitempty"`
+}
+type AgentPlanStep struct {
+	Step   string `json:"step"`
+	Status string `json:"status"`
+}
+
+func agentObservationText(s string, limit int) bool {
+	if len(s) > limit || !utf8.ValidString(s) {
+		return false
+	}
+	for _, r := range s {
+		if unicode.IsControl(r) && r != '\n' && r != '\r' && r != '\t' {
+			return false
+		}
+	}
+	return true
+}
+func agentNativeID(s string) bool {
+	if s == "" || len(s) > 128 || !utf8.ValidString(s) {
+		return false
+	}
+	for _, r := range s {
+		if unicode.IsControl(r) || unicode.IsSpace(r) {
+			return false
+		}
+	}
+	return true
+}
+
 type AgentResult struct {
 	State, Summary, Patch string
 	Stage                 string
@@ -255,8 +307,8 @@ git -c core.hooksPath=/dev/null -c user.name=Golf -c user.email=task@golf.invali
 	return
 }
 
-// Only final assistant text and usage enter the result. Command output,
-// reasoning, provider errors and arbitrary protocol payloads stay private.
+// Only assistant text, usage and bounded observations leave this transport.
+// Raw command output, reasoning, provider errors and protocol payloads do not.
 func agentProtocol(ctx context.Context, in io.Writer, output io.Reader, j AgentJob) (out AgentResult, err error) {
 	out.State = "failed"
 	send := func(id int, method string, params any) error {
@@ -274,6 +326,33 @@ func agentProtocol(ctx context.Context, in io.Writer, output io.Reader, j AgentJ
 	scanner.Buffer(make([]byte, 4096), 1<<20)
 	var thread, turn string
 	started := false
+	initialized := false
+	var sequence int64
+	projectedBytes := 0
+	observedItems := map[string]bool{}
+	activeItems := map[string]string{}
+	observe := func(v AgentObservation) error {
+		if j.Observe == nil {
+			return nil
+		}
+		if ctx.Err() != nil {
+			return ErrInfrastructure
+		}
+		v.Sequence = sequence + 1
+		if v.Sequence > 512 {
+			return ErrInfrastructure
+		}
+		b, e := json.Marshal(v)
+		if e != nil || projectedBytes+len(b) > 256<<10 {
+			return ErrInfrastructure
+		}
+		if e = j.Observe(ctx, v); e != nil || ctx.Err() != nil {
+			return ErrInfrastructure
+		}
+		sequence = v.Sequence
+		projectedBytes += len(b)
+		return nil
+	}
 	total := 0
 	for scanner.Scan() {
 		total += len(scanner.Bytes())
@@ -297,13 +376,35 @@ func agentProtocol(ctx context.Context, in io.Writer, output io.Reader, j AgentJ
 			if m.Method != "item/commandExecution/requestApproval" && m.Method != "item/fileChange/requestApproval" {
 				return out, ErrInfrastructure
 			}
+			var p struct {
+				ThreadID string `json:"threadId"`
+				TurnID   string `json:"turnId"`
+				ItemID   string `json:"itemId"`
+			}
+			if json.Unmarshal(m.Params, &p) != nil || !started || p.ThreadID != thread || p.TurnID != turn || !agentNativeID(p.ItemID) {
+				return out, ErrInfrastructure
+			}
 			b, _ := json.Marshal(map[string]any{"id": json.RawMessage(m.ID), "result": map[string]string{"decision": "decline"}})
+			if j.Observe != nil && activeItems[p.ItemID] != strings.TrimSuffix(strings.TrimPrefix(m.Method, "item/"), "/requestApproval") {
+				return out, ErrInfrastructure
+			}
 			if _, e := in.Write(append(b, '\n')); e != nil {
+				return out, ErrInfrastructure
+			}
+			tool := "commandExecution"
+			if m.Method == "item/fileChange/requestApproval" {
+				tool = "fileChange"
+			}
+			if observe(AgentObservation{Kind: "approval_declined", ThreadID: thread, TurnID: turn, ItemID: p.ItemID, ToolKind: tool, Status: "declined"}) != nil {
 				return out, ErrInfrastructure
 			}
 			continue
 		}
 		if string(m.ID) == "1" {
+			if initialized || thread != "" {
+				return out, ErrInfrastructure
+			}
+			initialized = true
 			if _, e := in.Write([]byte("{\"method\":\"initialized\"}\n")); e != nil {
 				return out, ErrInfrastructure
 			}
@@ -317,10 +418,16 @@ func agentProtocol(ctx context.Context, in io.Writer, output io.Reader, j AgentJ
 					ID string `json:"id"`
 				} `json:"thread"`
 			}
-			if json.Unmarshal(m.Result, &r) != nil || r.Thread.ID == "" || len(r.Thread.ID) > 128 {
+			if json.Unmarshal(m.Result, &r) != nil || !agentNativeID(r.Thread.ID) {
+				return out, ErrInfrastructure
+			}
+			if thread != "" || !initialized {
 				return out, ErrInfrastructure
 			}
 			thread = r.Thread.ID
+			if observe(AgentObservation{Kind: "thread_started", ThreadID: thread}) != nil {
+				return out, ErrInfrastructure
+			}
 			p := map[string]any{"threadId": thread, "input": []map[string]string{{"type": "text", "text": j.Instructions}}, "model": j.Model}
 			if j.Reasoning != "" {
 				p["effort"] = j.Reasoning
@@ -335,26 +442,38 @@ func agentProtocol(ctx context.Context, in io.Writer, output io.Reader, j AgentJ
 					ID string `json:"id"`
 				} `json:"turn"`
 			}
-			if json.Unmarshal(m.Result, &r) != nil || r.Turn.ID == "" {
+			if json.Unmarshal(m.Result, &r) != nil || !agentNativeID(r.Turn.ID) {
+				return out, ErrInfrastructure
+			}
+			if started || thread == "" {
 				return out, ErrInfrastructure
 			}
 			turn = r.Turn.ID
 			started = true
+			if observe(AgentObservation{Kind: "turn_started", ThreadID: thread, TurnID: turn, Status: "inProgress"}) != nil {
+				return out, ErrInfrastructure
+			}
 		}
 		switch m.Method {
 		case "thread/tokenUsage/updated":
 			var p struct {
 				ThreadID   string `json:"threadId"`
+				TurnID     string `json:"turnId"`
 				TokenUsage struct {
 					Total struct {
-						TotalTokens int64 `json:"totalTokens"`
+						TotalTokens *int64 `json:"totalTokens"`
 					} `json:"total"`
 				} `json:"tokenUsage"`
 			}
-			if json.Unmarshal(m.Params, &p) != nil || p.ThreadID != thread {
+			if json.Unmarshal(m.Params, &p) != nil || p.ThreadID != thread || (p.TurnID != "" && p.TurnID != turn) || !started || p.TokenUsage.Total.TotalTokens == nil || *p.TokenUsage.Total.TotalTokens < 0 {
 				return out, ErrInfrastructure
 			}
-			out.Tokens = max(out.Tokens, p.TokenUsage.Total.TotalTokens)
+			nativeTotal := *p.TokenUsage.Total.TotalTokens
+			reportedTotal := nativeTotal
+			if observe(AgentObservation{Kind: "usage_updated", ThreadID: thread, TurnID: turn, TotalTokens: &reportedTotal}) != nil {
+				return out, ErrInfrastructure
+			}
+			out.Tokens = max(out.Tokens, nativeTotal)
 			if out.Tokens > int64(j.TokenBudget) {
 				_ = send(4, "turn/interrupt", map[string]string{"threadId": thread, "turnId": turn})
 				out.State = "budget_exceeded"
@@ -362,20 +481,96 @@ func agentProtocol(ctx context.Context, in io.Writer, output io.Reader, j AgentJ
 			}
 		case "model/rerouted":
 			return out, ErrInfrastructure
-		case "item/completed":
+		case "turn/plan/updated":
 			var p struct {
-				ThreadID string                      `json:"threadId"`
-				TurnID   string                      `json:"turnId"`
-				Item     struct{ Type, Text string } `json:"item"`
+				ThreadID string          `json:"threadId"`
+				TurnID   string          `json:"turnId"`
+				Plan     []AgentPlanStep `json:"plan"`
 			}
-			if json.Unmarshal(m.Params, &p) != nil {
+			if json.Unmarshal(m.Params, &p) != nil || !started || p.ThreadID != thread || p.TurnID != turn || p.Plan == nil || len(p.Plan) > 32 {
 				return out, ErrInfrastructure
 			}
-			if p.ThreadID == thread && p.TurnID == turn && p.Item.Type == "agentMessage" {
-				if len(p.Item.Text) > 65536 {
+			size := 0
+			for _, step := range p.Plan {
+				size += len(step.Step)
+				if strings.TrimSpace(step.Step) == "" || !agentObservationText(step.Step, 512) || (step.Status != "pending" && step.Status != "inProgress" && step.Status != "completed") {
 					return out, ErrInfrastructure
 				}
-				out.Summary = p.Item.Text
+			}
+			if size > 16384 || observe(AgentObservation{Kind: "plan_updated", ThreadID: thread, TurnID: turn, Plan: p.Plan}) != nil {
+				return out, ErrInfrastructure
+			}
+		case "item/started", "item/completed":
+			var p struct {
+				ThreadID string `json:"threadId"`
+				TurnID   string `json:"turnId"`
+				Item     struct {
+					ID     string `json:"id"`
+					Type   string `json:"type"`
+					Text   string `json:"text"`
+					Phase  string `json:"phase"`
+					Status string `json:"status"`
+				} `json:"item"`
+			}
+			if json.Unmarshal(m.Params, &p) != nil || !started || p.ThreadID != thread || p.TurnID != turn {
+				return out, ErrInfrastructure
+			}
+			completed := m.Method == "item/completed"
+			selected := p.Item.Type == "agentMessage" || p.Item.Type == "commandExecution" || p.Item.Type == "fileChange"
+			if j.Observe != nil && selected {
+				if !agentNativeID(p.Item.ID) || observedItems[m.Method+":"+p.Item.ID] {
+					return out, ErrInfrastructure
+				}
+				if !completed {
+					if _, exists := activeItems[p.Item.ID]; exists {
+						return out, ErrInfrastructure
+					}
+					activeItems[p.Item.ID] = p.Item.Type
+				} else {
+					if activeItems[p.Item.ID] != p.Item.Type {
+						return out, ErrInfrastructure
+					}
+					delete(activeItems, p.Item.ID)
+				}
+				// Mark only after shape-specific checks below for emitted observations.
+				if !completed && p.Item.Type == "agentMessage" {
+					observedItems[m.Method+":"+p.Item.ID] = true
+				}
+			}
+			if p.Item.Type == "agentMessage" && completed {
+				if !agentObservationText(p.Item.Text, 65536) || (p.Item.Phase != "" && p.Item.Phase != "commentary" && p.Item.Phase != "final_answer") {
+					return out, ErrInfrastructure
+				}
+				if j.Observe != nil && (!agentNativeID(p.Item.ID) || observedItems[m.Method+":"+p.Item.ID]) {
+					return out, ErrInfrastructure
+				}
+				observedItems[m.Method+":"+p.Item.ID] = true
+				if observe(AgentObservation{Kind: "assistant_message", ThreadID: thread, TurnID: turn, ItemID: p.Item.ID, Text: p.Item.Text, Phase: p.Item.Phase}) != nil {
+					return out, ErrInfrastructure
+				}
+				if p.Item.Phase == "" || p.Item.Phase == "final_answer" {
+					out.Summary = p.Item.Text
+				}
+			}
+			if p.Item.Type == "commandExecution" || p.Item.Type == "fileChange" {
+				// Existing final-result consumers do not require tool metadata. An enabled
+				// durable observer requires exact native identity and known lifecycle state.
+				if j.Observe != nil {
+					if !agentNativeID(p.Item.ID) || observedItems[m.Method+":"+p.Item.ID] {
+						return out, ErrInfrastructure
+					}
+					if (!completed && p.Item.Status != "inProgress") || (completed && p.Item.Status != "completed" && p.Item.Status != "failed" && p.Item.Status != "declined") {
+						return out, ErrInfrastructure
+					}
+					observedItems[m.Method+":"+p.Item.ID] = true
+					kind := "tool_started"
+					if completed {
+						kind = "tool_completed"
+					}
+					if observe(AgentObservation{Kind: kind, ThreadID: thread, TurnID: turn, ItemID: p.Item.ID, ToolKind: p.Item.Type, Status: p.Item.Status}) != nil {
+						return out, ErrInfrastructure
+					}
+				}
 			}
 		case "turn/completed":
 			var p struct {
@@ -383,6 +578,15 @@ func agentProtocol(ctx context.Context, in io.Writer, output io.Reader, j AgentJ
 				Turn     struct{ ID, Status string } `json:"turn"`
 			}
 			if json.Unmarshal(m.Params, &p) != nil || !started || p.ThreadID != thread || p.Turn.ID != turn {
+				return out, ErrInfrastructure
+			}
+			if p.Turn.Status == "completed" && j.Observe != nil && len(activeItems) != 0 {
+				return out, ErrInfrastructure
+			}
+			if p.Turn.Status != "completed" && p.Turn.Status != "failed" && p.Turn.Status != "interrupted" {
+				return out, ErrInfrastructure
+			}
+			if observe(AgentObservation{Kind: "turn_completed", ThreadID: thread, TurnID: turn, Status: p.Turn.Status}) != nil {
 				return out, ErrInfrastructure
 			}
 			if p.Turn.Status == "completed" {
