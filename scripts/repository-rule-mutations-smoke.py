@@ -507,8 +507,11 @@ def main():
             native(owner['token'],'PATCH',path+'/branch_protections/main',{'required_approvals':4})
             change(owner,stale,'REJECTED')
             stale_access=intent(owner,personal,'CREATE_BRANCH',ruleName='stale-access/*',desiredBranch={'ruleName':'stale-access/*','priority':'0','requiredApprovals':'0'})
-            native(owner['token'],'PUT',path+'/collaborators/'+actors['reader']['name'],{'permission':'write'},204)
-            change(owner,stale_access,'REJECTED'); native(owner['token'],'PUT',path+'/collaborators/'+actors['reader']['name'],{'permission':'read'},204)
+            # Access revision binds repository identity/visibility metadata,
+            # not an unrelated reader's effective role. Current caller authority
+            # loss is exercised independently above.
+            native(owner['token'],'PATCH',path,{'private':False})
+            change(owner,stale_access,'REJECTED'); native(owner['token'],'PATCH',path,{'private':True})
             for field in ('repositoryId','ownerId'):
                 rpc(owner['session'],MUTATE,{**intent(owner,personal,'CREATE_BRANCH',ruleName='wrong/*',desiredBranch={'ruleName':'wrong/*','priority':'0','requiredApprovals':'0'}),field:'9223372036854775807'},expected=400,code='failed_precondition')
             record(staleObservationFences='passed',knownReplayNoNativeWrite='passed')
