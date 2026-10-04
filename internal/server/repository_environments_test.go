@@ -3,6 +3,9 @@ package server
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,6 +15,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 	"github.com/mjtechguy/golf-git/internal/server/database"
 	"google.golang.org/protobuf/proto"
@@ -490,5 +494,166 @@ func TestEnvironmentConfiguredIdentitiesPostgres(t *testing.T) {
 	var n int
 	if e := f.server.db.QueryRow(`SELECT count(*) FROM golf_repository_environment_operations`).Scan(&n); e != nil || n != 1 {
 		t.Fatal("refused configuration persisted", n, e)
+	}
+}
+
+// Different current native administrators have different locked Golf user rows.
+// Editing another creator's environment must acquire both before the repository
+// gate, because the immutable version's creator FK takes a KEY SHARE lock.
+func TestEnvironmentIndependentAdministratorCreatorLockPostgres(t *testing.T) {
+	f, creatorLogin, target := environmentFixture(t)
+	initial := environmentInput(target)
+	first, e := environmentSave(t, f, creatorLogin, initial)
+	if e != nil {
+		t.Fatal(e)
+	}
+	underlying := f.server.client.Transport
+	if underlying == nil {
+		underlying = http.DefaultTransport
+	}
+	const secondCredential = "environment-second-admin-fixture"
+	secondUser := User{ID: 43, Login: "bob"}
+	f.server.client.Transport = environmentRoundTripper(func(r *http.Request) (*http.Response, error) {
+		if r.Header.Get("Authorization") != "token "+secondCredential && r.Header.Get("Authorization") != "Bearer "+secondCredential {
+			return underlying.RoundTrip(r)
+		}
+		reply := func(status int, value any) (*http.Response, error) {
+			body, e := json.Marshal(value)
+			if e != nil {
+				return nil, e
+			}
+			return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(bytes.NewReader(body)), Request: r}, nil
+		}
+		switch r.URL.Path {
+		case "/api/v1/user":
+			return reply(http.StatusOK, secondUser)
+		case "/api/v1/repos/alice/example/collaborators/bob/permission":
+			return reply(http.StatusOK, map[string]any{"permission": "admin", "user": secondUser})
+		case "/api/v1/repos/alice/example/collaborators/bob":
+			return reply(http.StatusNoContent, nil)
+		default:
+			clone := r.Clone(r.Context())
+			clone.Header = r.Header.Clone()
+			clone.Header.Set("Authorization", "token run-fixture")
+			return underlying.RoundTrip(clone)
+		}
+	})
+	if _, e = ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.GiteaURL, "create", LocalAccountInput{Username: "bob", Password: localTestPassword, ForgeToken: secondCredential}); e != nil {
+		t.Fatal(e)
+	}
+	secondLogin, e := f.server.loginLocalSession(t.Context(), "bob", localTestPassword, "")
+	if e != nil {
+		t.Fatal(e)
+	}
+	var creatorGolfID, secondGolfID int64
+	if e = f.server.db.QueryRow(`SELECT creator_user_id FROM golf_repository_environment_versions WHERE forge_url=$1 AND environment_id=$2 AND version=1`, f.server.config.GiteaURL, initial.EnvironmentId).Scan(&creatorGolfID); e != nil {
+		t.Fatal(e)
+	}
+	if e = f.server.db.QueryRow(`SELECT id FROM golf_users WHERE forge_url=$1 AND forge_user_id=43`, f.server.config.GiteaURL).Scan(&secondGolfID); e != nil || creatorGolfID == secondGolfID {
+		t.Fatal("actors must be independent", e)
+	}
+	held, e := f.server.db.BeginTx(t.Context(), nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer held.Rollback()
+	if _, e = held.Exec(`SELECT pg_advisory_xact_lock(hashtextextended($1||'/repository-environments/'||$2::bigint::text,0))`, f.server.config.GiteaURL, f.row.ID); e != nil {
+		t.Fatal(e)
+	}
+	type outcome struct {
+		response *golfv1.SaveRepositoryEnvironmentResponse
+		err      error
+	}
+	run := func(login loginResult, input *golfv1.SaveRepositoryEnvironmentRequest, result chan<- outcome) {
+		request, ctx := environmentRequest(f, login, input)
+		ctx, cancel := context.WithCancel(ctx)
+		stop := context.AfterFunc(t.Context(), cancel)
+		defer stop()
+		defer cancel()
+		response, e := f.server.SaveRepositoryEnvironment(ctx, request)
+		if response == nil {
+			result <- outcome{err: e}
+			return
+		}
+		result <- outcome{response: response.Msg, err: e}
+	}
+	editor := proto.Clone(initial).(*golfv1.SaveRepositoryEnvironmentRequest)
+	editor.ExpectedVersion = "1"
+	editor.OperationId = uuid.NewString()
+	editor.Name = "Independent editor"
+	editorResult := make(chan outcome, 1)
+	go run(secondLogin, editor, editorResult)
+	// Observe this exact repository advisory waiter, not a scheduling sleep.
+	deadline := time.Now().Add(5 * time.Second)
+	waiting := false
+	var editorPID int
+	for time.Now().Before(deadline) {
+		var n int
+		e = f.server.db.QueryRow(`SELECT count(*),coalesce(min(pid),0) FROM pg_locks WHERE locktype='advisory' AND NOT granted AND classid=((hashtextextended($1||'/repository-environments/'||$2::bigint::text,0)>>32)&4294967295)::oid AND objid=(hashtextextended($1||'/repository-environments/'||$2::bigint::text,0)&4294967295)::oid AND objsubid=1`, f.server.config.GiteaURL, f.row.ID).Scan(&n, &editorPID)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if n == 1 {
+			waiting = true
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !waiting {
+		t.Fatal("second administrator never reached repository lock")
+	}
+	// Both native actors are ordinary, independent identities. The second actor
+	// must already hold the immutable creator's row before waiting on the gate.
+	for _, id := range []int64{creatorGolfID, secondGolfID} {
+		probe, e := f.server.db.BeginTx(t.Context(), nil)
+		if e != nil {
+			t.Fatal(e)
+		}
+		var observed int64
+		e = probe.QueryRow(`SELECT id FROM golf_users WHERE id=$1 FOR UPDATE NOWAIT`, id).Scan(&observed)
+		probe.Rollback()
+		var pe *pgconn.PgError
+		if !errors.As(e, &pe) || pe.Code != "55P03" {
+			t.Fatal("editor did not lock both actor and creator before repository", id, e)
+		}
+	}
+	creatorEdit := proto.Clone(initial).(*golfv1.SaveRepositoryEnvironmentRequest)
+	creatorEdit.ExpectedVersion = "1"
+	creatorEdit.OperationId = uuid.NewString()
+	creatorEdit.Name = "Competing creator"
+	creatorResult := make(chan outcome, 1)
+	go run(creatorLogin, creatorEdit, creatorResult)
+	deadline = time.Now().Add(5 * time.Second)
+	waiting = false
+	for time.Now().Before(deadline) {
+		var n int
+		if e = f.server.db.QueryRow(`SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND $1=ANY(pg_blocking_pids(pid))`, editorPID).Scan(&n); e != nil {
+			t.Fatal(e)
+		}
+		if n > 0 {
+			waiting = true
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !waiting {
+		t.Fatal("creator did not contend on its already-held user lock")
+	}
+	if e = held.Rollback(); e != nil {
+		t.Fatal(e)
+	}
+	edited, competing := <-editorResult, <-creatorResult
+	if edited.err != nil || edited.response == nil || edited.response.Environment.Version != "2" || edited.response.Environment.CreatorId != first.Environment.CreatorId || edited.response.Environment.UpdaterId != "43" {
+		t.Fatal("independent admin edit failed", edited.err)
+	}
+	if connect.CodeOf(competing.err) != connect.CodeAborted {
+		t.Fatal("creator's original version must fail CAS after serialized edit", competing.err)
+	}
+	var versions, operations int
+	if e = f.server.db.QueryRow(`SELECT count(*) FROM golf_repository_environment_versions WHERE forge_url=$1 AND environment_id=$2`, f.server.config.GiteaURL, initial.EnvironmentId).Scan(&versions); e != nil {
+		t.Fatal(e)
+	}
+	if e = f.server.db.QueryRow(`SELECT count(*) FROM golf_repository_environment_operations WHERE forge_url=$1 AND environment_id=$2`, f.server.config.GiteaURL, initial.EnvironmentId).Scan(&operations); e != nil || versions != 2 || operations != 2 {
+		t.Fatal("competing actor created a duplicate version/receipt", versions, operations, e)
 	}
 }

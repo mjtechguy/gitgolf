@@ -359,6 +359,26 @@ func (s *Server) changeRepositoryEnvironment(ctx context.Context, token forgeCre
 	var env *golfv1.RepositoryEnvironment
 	var receipt *golfv1.RepositoryEnvironmentOperation
 	e = s.withForgeCaller(ctx, session, token, func(caller User) error {
+		// Retained creator metadata has a foreign key to another Golf user. Lock
+		// that immutable identity with the caller, in sorted order, before any
+		// repository lock; otherwise an editor can wait on the creator while the
+		// creator waits on this editor's repository lock.
+		var creator *database.GolfRepositoryEnvironmentVersion
+		var additionalUsers []int64
+		if in.version > 0 {
+			if e := s.environmentAuthority(ctx, token, key, caller, in.target, false, false); e != nil {
+				return e
+			}
+			observed, e := database.New(s.db).GetRepositoryEnvironment(ctx, database.GetRepositoryEnvironmentParams{ForgeURL: s.config.GiteaURL, ID: uuid.MustParse(in.id), RepositoryID: repo, OwnerID: owner})
+			if errors.Is(e, sql.ErrNoRows) {
+				return errResourceNotFound
+			}
+			if e != nil || observed.CreatorUserID <= 0 || observed.CreatorNativeID <= 0 || observed.EnvironmentCreatedAt.IsZero() {
+				return errStorageUnavailable
+			}
+			creator = &observed
+			additionalUsers = []int64{observed.CreatorUserID}
+		}
 		txErr := s.workflowTransaction(ctx, session, caller.ID, func(tx *sql.Tx, actor database.LockManagedSessionRow, hash []byte) error {
 			q := database.New(s.db).WithTx(tx)
 			if e := environmentPasswordCurrent(ctx, q, hash, s.config.GiteaURL, initial); e != nil {
@@ -371,6 +391,9 @@ func (s *Server) changeRepositoryEnvironment(ctx context.Context, token forgeCre
 			}
 			op, v, e := s.environmentOriginal(ctx, q, actor.UserID, uuid.MustParse(in.operation), repo, owner)
 			if e == nil {
+				if creator != nil && (v.CreatorUserID != creator.CreatorUserID || v.CreatorNativeID != creator.CreatorNativeID || !v.EnvironmentCreatedAt.Equal(creator.EnvironmentCreatedAt)) {
+					return errEnvironmentCAS
+				}
 				if !bytes.Equal(op.InputFingerprint, in.fingerprint) {
 					return errEnvironmentIntent
 				}
@@ -417,7 +440,7 @@ func (s *Server) changeRepositoryEnvironment(ctx context.Context, token forgeCre
 				if e != nil {
 					return errStorageUnavailable
 				}
-				if prior.Deleted || prior.Version != in.version {
+				if prior.Deleted || prior.Version != in.version || creator == nil || prior.CreatorUserID != creator.CreatorUserID || prior.CreatorNativeID != creator.CreatorNativeID || !prior.EnvironmentCreatedAt.Equal(creator.EnvironmentCreatedAt) {
 					return errEnvironmentCAS
 				}
 			}
@@ -500,7 +523,7 @@ func (s *Server) changeRepositoryEnvironment(ctx context.Context, token forgeCre
 			}
 			receipt, env, e = wireEnvironmentOperation(op, v)
 			return e
-		})
+		}, additionalUsers...)
 		if txErr != nil {
 			return txErr
 		}
