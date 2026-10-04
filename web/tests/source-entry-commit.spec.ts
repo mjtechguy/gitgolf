@@ -345,3 +345,56 @@ for(const theme of ['dark','light']) test(`projected selected-head changes prese
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true);
   expect(state.calls).toHaveLength(0);
 });
+
+// Mount the real shared row with deliberately invalid props. Repository-level
+// guards otherwise refuse these inputs before a row can be reached.
+async function mountProjectedRow(page:Page, target:Partial<{userId:string;repositoryId:string;commitId:string;path:string}>={}) {
+  await page.goto('/');
+  await expect(page.locator('main')).toBeVisible();
+  await page.evaluate(async ({target,ref,repositoryId,latestChange})=>{
+    const main=await (await fetch('/src/main.tsx')).text();
+    const url=(module:string)=>{
+      const imports=Array.from(main.matchAll(/from ["']([^"']+)["']/g),match=>match[1]!);
+      const found=imports.find(value=>value.includes(`/deps/${module}.js`));
+      if(!found)throw new Error(`Missing test runtime module ${module}`);return found;
+    };
+    const [ReactModule,domModule,query,routerAPI,component,routerModule]=await Promise.all([
+      import(url('react')),import(url('react-dom_client')),import(url('@tanstack_react-query')),import(url('@tanstack_react-router')),
+      import('/src/SourceEntryCommit.tsx' as string),import('/src/router.tsx' as string),
+    ]);
+    const React=ReactModule.default||ReactModule,dom=domModule.default||domModule;
+    const node=document.createElement('div');node.className='projected-row-harness';(document.querySelector('main')||document.body).prepend(node);
+    const root=dom.createRoot(node),client=new query.QueryClient();
+    const props={userId:'17',repositoryId,commitId:ref,path:'row-000.ts',location:{owner:'alex',name:'entry-history',view:'source',ref,path:''},latestChange,...target};
+    const render=(changes:typeof target={})=>{
+      Object.assign(props,changes);
+      root.render(React.createElement(query.QueryClientProvider,{client},React.createElement(routerAPI.RouterContextProvider,{router:routerModule.router},React.createElement(component.SourceEntryCommit,props))));
+    };
+    (window as Window&{renderProjectedRow?:(changes:typeof target)=>void}).renderProjectedRow=render;
+    render();
+  },{target,ref,repositoryId,latestChange:projected()});
+}
+
+for(const [label,target] of [
+ ['missing actor',{userId:''}],['zero actor',{userId:'0'}],['noncanonical actor',{userId:'017'}],
+ ['missing repository',{repositoryId:''}],['overflow repository',{repositoryId:'9223372036854775808'}],
+ ['empty path',{path:''}],['traversal path',{path:'../secret'}],['invalid UTF-16 path',{path:'bad\ud800'}],['backslash path',{path:'src\\secret'}],
+] as const) test(`projected row refuses ${label} before rendering or requesting history`,async({page})=>{
+ const state=await fixture(page);await mountProjectedRow(page,target);
+ await expect(page.locator('.projected-row-harness')).toHaveText('Latest change unavailable');
+ await expect(page.locator('.projected-row-harness').getByRole('link')).toHaveCount(0);
+ expect(state.calls).toHaveLength(0);
+});
+
+test('projected row clears its private observation on invalid identity and changed source head',async({page})=>{
+ const state=await fixture(page);await mountProjectedRow(page);
+ await expect(page.locator('.projected-row-harness').getByRole('link')).toHaveText('PRIVATE selected-head change');
+ await page.evaluate(()=> (window as unknown as Window&{renderProjectedRow:(changes:{userId:string})=>void}).renderProjectedRow({userId:'0'}));
+ await expect(page.locator('.projected-row-harness')).toHaveText('Latest change unavailable');expect(state.calls).toHaveLength(0);
+ state.invalid='denied';
+ await page.evaluate(head=>(window as unknown as Window&{renderProjectedRow:(changes:{userId:string;commitId:string})=>void}).renderProjectedRow({userId:'17',commitId:head}),latest);
+ await page.locator('.projected-row-harness').scrollIntoViewIfNeeded();
+ await expect(page.locator('.projected-row-harness')).toHaveText('Latest change unavailable');
+ await expect(page.locator('.projected-row-harness')).not.toContainText('PRIVATE');
+ expect(state.calls).toHaveLength(1);expect(state.calls[0]).toMatchObject({repositoryId,ref:latest,path:'row-000.ts'});
+});

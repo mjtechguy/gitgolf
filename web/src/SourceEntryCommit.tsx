@@ -5,7 +5,7 @@ import { Code, ConnectError } from '@connectrpc/connect';
 import { repositoryClient } from './api';
 import { isCommitID, repositoryOptions } from './navigation';
 import type { RepositoryLocation } from './navigation';
-import { validSourceLatestChange } from './sourceReads';
+import { sourceRepositoryID, sourcePath, validSourceLatestChange } from './sourceReads';
 import type { Commit } from './gen/golf/v1/golf_pb';
 import { DateLabel, privateSnapshotQuery } from './RepositoryUI';
 
@@ -36,8 +36,9 @@ export function SourceEntryCommit({ userId, repositoryId, commitId, path, locati
   const [visibleIdentity, setVisibleIdentity] = useState('');
   const [finishedIdentity, setFinishedIdentity] = useState('');
   const finished = finishedIdentity === identity;
-  const projected = latestChange && validSourceLatestChange(latestChange, commitId) ? latestChange : undefined;
-  const eligible = Boolean(!projected && userId && /^[1-9][0-9]{0,18}$/.test(repositoryId) && BigInt(repositoryId) <= 9223372036854775807n && isCommitID(commitId) && path && new TextEncoder().encode(path).byteLength <= 4096 && !/[\\\p{Cc}]/u.test(path) && path.split('/').every(part => part && part !== '.' && part !== '..'));
+  const validTarget = sourceRepositoryID(userId) && sourceRepositoryID(repositoryId) && isCommitID(commitId) && path !== '' && sourcePath(path);
+  const projected = validTarget && latestChange && validSourceLatestChange(latestChange, commitId) ? latestChange : undefined;
+  const eligible = validTarget && !projected;
   const visible = visibleIdentity === identity;
   useEffect(() => {
     const element = target.current;
