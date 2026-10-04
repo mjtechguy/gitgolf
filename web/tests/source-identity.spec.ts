@@ -3,7 +3,7 @@ import {
   GetAuthenticationOptionsResponseSchema, GetContentsRequestSchema, GetContentsResponseSchema,
   GetRepositoryImageRequestSchema, GetRepositoryImageResponseSchema, GetRepositoryResponseSchema,
   GetSessionResponseSchema, ListBranchesResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema,
-  LogoutResponseSchema, RepositorySourceRefKind, ResolveRepositorySourceRequestSchema, ResolveRepositorySourceResponseSchema,
+  LogoutResponseSchema, RepositorySourceResolution, RepositorySourceRefKind, ResolveRepositorySourceRequestSchema, ResolveRepositorySourceResponseSchema,
   SourceEntryType,
 } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
@@ -33,10 +33,16 @@ async function fixture(page: Page) {
       if (state.deniedResolver && input.selector?.kind === RepositorySourceRefKind.TAG) return reject(route, 'permission_denied', 'Current ref authority is unavailable.');
       const branches: Record<string, string> = { main: head, 'feature/UI': feature, release: feature, [shaName]: feature };
       const tags: Record<string, string> = { release: tagHead, [shaName]: tagHead };
+      if(input.suffix){
+        if(state.deniedResolver)return reject(route,'permission_denied','Current ref authority is unavailable.');
+        const candidates=[RepositorySourceRefKind.BRANCH,RepositorySourceRefKind.TAG].flatMap(kind=>Object.entries(kind===RepositorySourceRefKind.BRANCH?branches:tags).filter(([name])=>input.suffix===name||input.suffix.startsWith(`${name}/`)).map(([name,commitId])=>({selection:{kind,name,commitId,tagObjectId:kind===RepositorySourceRefKind.TAG?blob:undefined},path:input.suffix===name?'':input.suffix.slice(name.length+1)})));
+        if(!candidates.length)return reject(route,'not_found','Exact native ref not found.');
+        return respond(route,ResolveRepositorySourceResponseSchema,{repositoryId,repository:{owner:'alex',name:'identity'},resolution:candidates.length===1?RepositorySourceResolution.RESOLVED:RepositorySourceResolution.AMBIGUOUS,suffix:input.suffix,candidates,selection:candidates.length===1?candidates[0]!.selection:undefined,path:candidates.length===1?candidates[0]!.path:''});
+      }
       const kind = input.selector!.kind, name = kind === RepositorySourceRefKind.DEFAULT_BRANCH ? 'main' : input.selector!.name;
       const commitId = kind === RepositorySourceRefKind.TAG ? tags[name] : branches[name];
       if (!commitId) return reject(route, 'not_found', 'Exact native ref not found.');
-      return respond(route, ResolveRepositorySourceResponseSchema, {
+      return respond(route, ResolveRepositorySourceResponseSchema, { resolution: RepositorySourceResolution.RESOLVED,
         repositoryId: state.badResolver === 'repositoryId' ? '18' : repositoryId,
         repository: { owner: state.badResolver === 'repository' ? 'other' : 'alex', name: 'identity' },
         path: state.badResolver === 'path' ? 'other.txt' : input.path,
@@ -106,14 +112,14 @@ for (const [type, expected] of [['branch', feature], ['tag', tagHead]] as const)
   expect(state.resolverReads.every(input => input.selector?.kind === (type === 'branch' ? RepositorySourceRefKind.BRANCH : RepositorySourceRefKind.TAG) && input.selector.name === shaName)).toBe(true);
   expect(state.resolverReads[0]?.selector).toMatchObject({ kind: type === 'branch' ? RepositorySourceRefKind.BRANCH : RepositorySourceRefKind.TAG, name: shaName });
   expect(state.reads[0]).toMatchObject({ repositoryId, ref: expected, path: 'src/file.ts' });
-  await expect(page).toHaveURL(new RegExp(`/blob/${expected}/src/file.ts`));
+  await expect(page).toHaveURL(new RegExp(`/blob/${shaName}/src/file.ts`));
 });
 
 test('untyped branch/tag collision remains ambiguous and sends no source request', async ({ page }) => {
   const state = await fixture(page);
   await page.goto('/repositories/alex/identity?ref=release&path=src/file.ts');
-  await expect(alert(page)).toContainText('both a branch and a tag');
-  expect(new Set(state.resolverReads.map(input => input.selector?.kind))).toEqual(new Set([RepositorySourceRefKind.BRANCH, RepositorySourceRefKind.TAG])); expect(state.reads).toHaveLength(0);
+  await expect(page.getByRole('list',{name:'Source address candidates'}).getByRole('link')).toHaveCount(2);
+  expect(state.resolverReads[0]?.suffix).toBe('release/src/file.ts'); expect(state.reads).toHaveLength(0);
   await expect(page).toHaveURL(/ref=release/);
   await page.locator('.branch-picker > summary').click();
   await page.getByRole('link', { name: `main Listed at ${head.slice(0, 12)}` }).click();

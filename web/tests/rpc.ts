@@ -1,4 +1,4 @@
-import { ResolveRepositorySourceRequestSchema, ResolveRepositorySourceResponseSchema, RepositorySourceRefKind, ListAgentTasksResponseSchema, GetAgentUsageRequestSchema, GetAgentUsageResponseSchema } from '../src/gen/golf/v1/golf_pb';
+import { ResolveRepositorySourceRequestSchema, ResolveRepositorySourceResponseSchema, RepositorySourceResolution, RepositorySourceRefKind, ListAgentTasksResponseSchema, GetAgentUsageRequestSchema, GetAgentUsageResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import { create, fromJson, toJson } from '@bufbuild/protobuf';
 import type { DescMessage, MessageInitShape } from '@bufbuild/protobuf';
 import type { Route } from '@playwright/test';
@@ -27,12 +27,17 @@ export function disabledAgentUsage(route: Route) {
 export function disabledAgentTasks(route:Route){return respond(route,ListAgentTasksResponseSchema,{reason:"Managed worker is not connected."});}
 
 // Explicit native fixture inventories; never inferred from the requested ID/ref.
-export function resolveSourceFixture(route: Route, repositoryId: string, repository: { owner: string; name: string }, defaultBranch: string, branches: Record<string, string>, tags: Record<string, string> = {}) {
+export function resolveSourceFixture(route: Route, repositoryId: string, repository: { owner: string; name: string }, defaultBranch: string, branches: Record<string, string>, tags: Record<string, string> = {}, tagObjects: Record<string,string> = {}) {
   const input = request(route, ResolveRepositorySourceRequestSchema);
   if (input.repositoryId !== repositoryId || input.repository?.owner !== repository.owner || input.repository.name !== repository.name) return reject(route, 'failed_precondition', 'Source fixture target changed.');
+  if (input.suffix) {
+    const candidates = [RepositorySourceRefKind.BRANCH,RepositorySourceRefKind.TAG].flatMap(kind=>Object.entries(kind===RepositorySourceRefKind.BRANCH?branches:tags).filter(([name])=>input.suffix===name||input.suffix.startsWith(`${name}/`)).map(([name,commitId])=>({selection:{kind,name,commitId,tagObjectId:kind===RepositorySourceRefKind.TAG?tagObjects[name]||commitId:undefined},path:input.suffix===name?'':input.suffix.slice(name.length+1)})));
+    if(!candidates.length)return reject(route,'not_found','Exact fixture suffix not found.');
+    return respond(route,ResolveRepositorySourceResponseSchema,{repositoryId,repository,suffix:input.suffix,candidates,resolution:candidates.length===1?RepositorySourceResolution.RESOLVED:RepositorySourceResolution.AMBIGUOUS,selection:candidates.length===1?candidates[0]!.selection:undefined,path:candidates.length===1?candidates[0]!.path:''});
+  }
   const kind = input.selector?.kind;
   const name = kind === RepositorySourceRefKind.DEFAULT_BRANCH ? defaultBranch : input.selector?.name || '';
   const commitId = kind === RepositorySourceRefKind.DEFAULT_BRANCH || kind === RepositorySourceRefKind.BRANCH ? branches[name] : kind === RepositorySourceRefKind.TAG ? tags[name] : kind === RepositorySourceRefKind.COMMIT ? name : undefined;
   if (!commitId) return reject(route, 'not_found', 'Exact fixture ref not found.');
-  return respond(route, ResolveRepositorySourceResponseSchema, { repositoryId, repository, path: input.path, selection: { kind, name, commitId } });
+  return respond(route, ResolveRepositorySourceResponseSchema, { repositoryId, repository, resolution: RepositorySourceResolution.RESOLVED, path: input.path, selection: { kind, name, commitId, tagObjectId:kind===RepositorySourceRefKind.TAG?tagObjects[name]||commitId:undefined } });
 }

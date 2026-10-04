@@ -72,7 +72,7 @@ test('unknown outcome freezes one UUID and exact payload; status observation com
   await expect(page.getByRole('button', { name: 'Start a new request' })).toHaveCount(0);
   const saved = await stored(page);
   expect(saved).toHaveLength(1);
-  expect(saved[0]![0]).toContain('http://127.0.0.1:4179:9007199254740993');
+  expect(saved[0]![0]).toContain(`${new URL(page.url()).origin}:9007199254740993`);
   expect(JSON.parse(saved[0]![1])).toEqual({ key: state.posts[0]!.idempotencyKey, name: 'recovery-project', private: false });
   await page.getByRole('button', { name: 'Retry same request' }).click();
   await expect.poll(() => state.posts.length).toBe(2);

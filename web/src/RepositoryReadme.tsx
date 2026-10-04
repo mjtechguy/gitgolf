@@ -1,3 +1,4 @@
+import type { RepositoryLocation } from './navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { BookOpen } from 'lucide-react';
@@ -6,7 +7,7 @@ import { SourceEntryType, type SourceEntry } from './gen/golf/v1/golf_pb';
 import { FileContent } from './RepositoryContent';
 import { Loading, PanelError, privateQuery } from './RepositoryUI';
 
-export function RepositoryReadme({owner,name,refId,path,entries,userId,repositoryId}:{repositoryId:string;owner:string;name:string;refId:string;path:string;entries:SourceEntry[];userId:string}) {
+export function RepositoryReadme({owner,name,refId,path,entries,userId,repositoryId,location}:{location?:RepositoryLocation;repositoryId:string;owner:string;name:string;refId:string;path:string;entries:SourceEntry[];userId:string}) {
  const query=useQuery({...privateQuery,queryKey:['repository',userId,owner,name,'readme',repositoryId,refId,path],queryFn:async({signal})=>{
   const repository={owner,name};
   const choose=(rows:SourceEntry[])=>rows.filter(e=>e.type===SourceEntryType.FILE&&/^readme\.(md|markdown|mdown)$/i.test(e.name)).sort((a,b)=>a.name.localeCompare(b.name))[0];
@@ -28,5 +29,5 @@ export function RepositoryReadme({owner,name,refId,path,entries,userId,repositor
  const file=query.data?.file;
  if(!file?.entry)return null;
  const heading=<h2><BookOpen size={17}/> {file.entry.path}</h2>;
- return <section className="browser-panel" aria-label="Repository README">{file.previewReason||file.entry.size>256n*1024n||file.content===undefined?<><div className="browser-panel-heading">{heading}</div><p className="panel-footnote">{file.previewReason||'README exceeds the preview limit.'}</p></>:<FileContent key={file.entry.sha} text={file.content} path={file.entry.path} heading={heading} context={{repositoryId,owner,name,ref:refId,path:file.entry.path,userId}}/>}</section>;
+ return <section className="browser-panel" aria-label="Repository README">{file.previewReason||file.entry.size>256n*1024n||file.content===undefined?<><div className="browser-panel-heading">{heading}</div><p className="panel-footnote">{file.previewReason||'README exceeds the preview limit.'}</p></>:<FileContent key={file.entry.sha} text={file.content} path={file.entry.path} heading={heading} context={{repositoryId,owner,name,ref:refId,path:file.entry.path,userId,sourceAddress:location?.refKind?{kind:location.refKind,name:location.refName!}:undefined}}/>}</section>;
 }

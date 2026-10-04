@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter, notFound, redirect, Outlet, stripSearchParams } from '@tanstack/react-router';
 import { App } from './App';
 import { defaultRepositorySearch, isCommitID, isRunID } from './navigation';
+import { sourcePath, sourceRef } from './sourceReads';
 import type { RepositorySearch } from './navigation';
 
 const rootRoute = createRootRoute({
@@ -106,6 +107,7 @@ const organizationRoute = createRoute({
   component: OrganizationPage,
 });
 const validateRepositorySearch = (search: Record<string, unknown>): RepositorySearch => {
+    if (search.refKind !== undefined && search.refKind !== 'branch' && search.refKind !== 'tag' || (search.refKind === undefined) !== (search.refName === undefined) || search.refName !== undefined && (typeof search.refName !== 'string' || !sourceRef(search.refName))) throw notFound();
     const issue = search.issue === undefined ? undefined : typeof search.issue === 'number' ? search.issue : typeof search.issue === 'string' && /^[1-9][0-9]*$/.test(search.issue) ? Number(search.issue) : NaN;
     const pull = search.pull === undefined ? undefined : typeof search.pull === 'number' ? search.pull : typeof search.pull === 'string' && /^[1-9][0-9]*$/.test(search.pull) ? Number(search.pull) : NaN;
     return {
@@ -114,6 +116,7 @@ const validateRepositorySearch = (search: Record<string, unknown>): RepositorySe
       base:typeof search.base==='string'?search.base:undefined,head:typeof search.head==='string'?search.head:undefined,sourceOwner:typeof search.sourceOwner==='string'?search.sourceOwner:undefined,sourceName:typeof search.sourceName==='string'?search.sourceName:undefined,
       branch: typeof search.branch === 'string' ? search.branch : '',
       tag: typeof search.tag === 'string' ? search.tag : undefined,
+      refKind: search.refKind as RepositorySearch['refKind'], refName: search.refName as string | undefined,
       historyPath:typeof search.historyPath==='string'?search.historyPath:undefined,
       issueNew:search.issueNew===true?true:undefined,
       state: search.state === 'closed' || search.state === 'all' ? search.state : 'open', issue, pull,
@@ -152,10 +155,18 @@ function canonicalLocation(owner:string,name:string,tail:string,search:Repositor
   const parts=tail.split('/');
   const item=parts[1]||'';
   if(parts[0]==='tree'||parts[0]==='blob') {
-    if(!isCommitID(item)) throw notFound();
-    const path=parts.slice(2).join('/');
-    if(path.split('/').some(p=>p==='.'||p==='..')||/[\\\u0000-\u001f]/.test(path)) throw notFound();
-    return {...location,view:'source' as const,ref:item,path};
+    const suffix=parts.slice(1).join('/');
+    if (!suffix || !sourcePath(suffix)) throw notFound();
+    if (search.refKind) {
+      const name=search.refName!;
+      if(search.refKind==='tag'&&search.branch===name||search.refKind==='branch'&&search.tag===name)throw notFound();
+      if(suffix!==name&&!suffix.startsWith(`${name}/`)) throw notFound();
+      const path=suffix===name?'':suffix.slice(name.length+1);
+      if(!sourcePath(path)) throw notFound();
+      return {...location,view:'source' as const,ref:name,path,sourceRoute:parts[0] as 'tree'|'blob'};
+    }
+    if(isCommitID(item)) return {...location,view:'source' as const,ref:item,path:parts.slice(2).join('/'),sourceRoute:parts[0] as 'tree'|'blob'};
+    return {...location,view:'source' as const,ref:'',path:'',sourceSuffix:suffix,sourceRoute:parts[0] as 'tree'|'blob'};
   }
   if(tail==='compare')return {...location,view:'compare' as const};
   if(parts[0]==='commits'&&parts.length>=3&&isCommitID(item)) {
@@ -179,7 +190,7 @@ const canonicalRepositoryPageRoute=createRoute({getParentRoute:()=>rootRoute,pat
     const tail=params._splat||'';
     canonicalLocation(params.owner,params.name,tail,search);
     const parts=tail.split('/');
-    const ownsRef=isCommitID(parts[1]||'') && (parts[0]==='tree'||parts[0]==='blob'||parts[0]==='commits'&&parts.length>=3);
+    const ownsRef=parts[0]==='tree'||parts[0]==='blob'||isCommitID(parts[1]||'')&&parts[0]==='commits'&&parts.length>=3;
     // The installed search middleware has no route params. Normalize only
     // after validating the incoming selectors, keeping empty-tail aliases and
     // deliberate source return-context on issue, pull and commit pages.
@@ -228,7 +239,12 @@ export const router = createRouter({
   routeTree: rootRoute.addChildren([homeRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountSecurityRoute, accountAgentsRoute, sessionsRoute]),
   defaultPreload: false,
   // Refs and paths are opaque strings, including names such as "1234" or "true".
-  parseSearch: (search) => Object.fromEntries(new URLSearchParams(search)),
+  parseSearch: (search) => {
+    try { for (const part of search.replace(/^\?/, '').split('&')) for(const value of part.split('=')) decodeURIComponent(value.replace(/\+/g,' ')); } catch { return {refKind:'invalid'}; }
+    const query=new URLSearchParams(search);
+    if (['refKind','refName','ref','path','branch','tag'].some(key=>query.getAll(key).length>1)) return {refKind:'invalid'};
+    return Object.fromEntries(query);
+  },
   stringifySearch: (search) => {
     const query = new URLSearchParams(Object.entries(search).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)])).toString();
     return query ? `?${query}` : '';

@@ -3,7 +3,7 @@ import DOMPurify from 'dompurify';
 import { repositoryClient } from './api';
 import { sourceRepositoryID, validateSourceImage } from './sourceReads';
 import { privateQuery } from './RepositoryUI';
-export type DocumentContext={repositoryId:string;owner:string;name:string;ref:string;path:string;userId?:string};
+export type DocumentContext={repositoryId:string;owner:string;name:string;ref:string;path:string;userId?:string;sourceAddress?:{kind:'branch'|'tag';name:string}};
 function dataURL(bytes:Uint8Array,type:string){let text='';for(const value of bytes)text+=String.fromCharCode(value);return `data:${type};base64,${btoa(text)}`;}
 export function imageDataURL(bytes:Uint8Array,type:string):string {
  if(bytes.length>256*1024)throw new Error('Image exceeds preview limits.');

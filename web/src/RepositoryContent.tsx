@@ -1,3 +1,4 @@
+import { useNavigate } from '@tanstack/react-router';
 import { lazy, Suspense, useState, type ReactNode } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -34,7 +35,10 @@ export function contentLink(href:string, context?:DocumentContext):string|undefi
   const parts=target.startsWith('/')?[]:base;
   for (const part of target.split('/')) { const decoded=decodeURIComponent(part); if (!decoded||decoded==='.') continue; if (decoded==='..') { if (!parts.length) return undefined; parts.pop(); } else {if (/[/\\\u0000-\u001f]/.test(decoded)) return undefined;parts.push(decoded);} }
   const fragment=href.includes('#')?`#user-content-${href.split('#').slice(1).join('#')}`:'';
-  return `/${encodeURIComponent(context.owner)}/${encodeURIComponent(context.name)}/tree/${context.ref}/${parts.map(encodeURIComponent).join('/')}${fragment}`;
+  const named=context.sourceAddress;
+  const suffix=[...(named?named.name.split('/'):[context.ref]),...parts].map(encodeURIComponent).join('/');
+  const query=named?`?${new URLSearchParams({refKind:named.kind,refName:named.name})}`:'';
+  return `/${encodeURIComponent(context.owner)}/${encodeURIComponent(context.name)}/tree/${suffix}${query}${fragment}`;
  } catch {return undefined;}
 }
 function headingAnchors(){return (tree:Root)=>{
@@ -45,10 +49,11 @@ function headingAnchors(){return (tree:Root)=>{
  }};visit(tree);
 };}
 export function MarkdownBody({text,label,context}:{text:string;label:string;context?:DocumentContext}) {
+ const navigate=useNavigate();
  return <div className="markdown-body" aria-label={label} tabIndex={0}><Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw,[rehypeSanitize,{...defaultSchema,attributes:{...defaultSchema.attributes,div:[...(defaultSchema.attributes?.div||[]),'align'],p:[...(defaultSchema.attributes?.p||[]),'align'],img:[...(defaultSchema.attributes?.img||[]),'height','width']}}],headingAnchors]} urlTransform={(value,key)=>key==='src'?value:contentLink(value,context)||''} components={{
   div:({children,node})=><div className={node?.properties.align==='center'?'markdown-align-center':node?.properties.align==='right'?'markdown-align-right':undefined}>{children}</div>,
   p:({children,node})=><p className={node?.properties.align==='center'?'markdown-align-center':node?.properties.align==='right'?'markdown-align-right':undefined}>{children}</p>,
-  a:({href,children})=>href?<a href={href} target={/^https?:/.test(href)?'_blank':undefined} rel="noopener noreferrer">{children}</a>:<span>{children}</span>,
+  a:({href,children})=>href?<a href={href} onClick={event=>{if(href.startsWith('/')&&!event.metaKey&&!event.ctrlKey&&!event.shiftKey&&!event.altKey&&event.button===0){event.preventDefault();void navigate({href});}}} target={/^https?:/.test(href)?'_blank':undefined} rel="noopener noreferrer">{children}</a>:<span>{children}</span>,
   img:({src,alt,height,width})=><RepositoryImage src={src} alt={alt} height={height} width={width} context={context}/>,
   code:({className,children})=><code className={className}><Tokens text={String(children)} language={className?.replace(/^language-/,'')||''}/></code>,
   pre:({children,node})=><div className="code-block"><CopyButton text={node?.children.map(nodeText).join('')||''} label="Copy code block"/><pre>{children}</pre></div>,

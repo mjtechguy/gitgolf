@@ -26,8 +26,8 @@ export function RepositoryCommitSummary({ location, repositoryId, commitId, user
   return <div className="repository-latest-commit" aria-label="Latest commit">
     {commit ? <>
       <span className="latest-commit-author" title={commit.authorName}>{commit.authorName || 'Unknown author'}</span>
-      <Link className="latest-commit-message" title={commit.message} {...repositoryOptions(location, { view: 'commits', commit: commit.sha, historyPath: undefined })}>{commit.message.split('\n')[0] || 'Untitled commit'}</Link>
-      <Link className="latest-commit-sha" title={commit.sha} {...repositoryOptions(location, { view: 'commits', commit: commit.sha, historyPath: undefined })}><code>{shortSHA(commit.sha)}</code></Link>
+      <Link className="latest-commit-message" title={commit.message} {...repositoryOptions(location, { view: 'commits', ref:commitId, refKind:undefined,refName:undefined, commit: commit.sha, historyPath: undefined })}>{commit.message.split('\n')[0] || 'Untitled commit'}</Link>
+      <Link className="latest-commit-sha" title={commit.sha} {...repositoryOptions(location, { view: 'commits', ref:commitId, refKind:undefined,refName:undefined, commit: commit.sha, historyPath: undefined })}><code>{shortSHA(commit.sha)}</code></Link>
       <DateLabel relative value={commit.authoredAt}/>
     </> : <span className="muted" role="status">{query.isError ? 'Latest commit unavailable' : 'Loading latest commit…'}</span>}
   </div>;

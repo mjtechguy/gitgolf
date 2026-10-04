@@ -5,7 +5,7 @@ import {
   ResolveRepositorySourceRequestSchema, RepositorySourceRefKind, GetAuthenticationOptionsResponseSchema, GetRepositoryImageRequestSchema, GetRepositoryImageResponseSchema, GetContentsRequestSchema, GetContentsResponseSchema, GetIssueRequestSchema, GetIssueResponseSchema, GetRepositoryResponseSchema,
   GetSessionResponseSchema, IssueSchema, IssueState, ListBranchesRequestSchema, ListBranchesResponseSchema, ListCapabilitiesResponseSchema,
   ListCommitsRequestSchema, ListCommitsResponseSchema, ListTagsRequestSchema, ListTagsResponseSchema, ListIssueCommentsResponseSchema, ListIssuesRequestSchema, ListIssuesResponseSchema, ListRepositoriesResponseSchema,
-  LoginWithGiteaTokenResponseSchema, LogoutResponseSchema, RepositorySchema, SourceEntrySchema, SourceEntryType, UserSchema,
+  LoginWithPasswordResponseSchema, LogoutResponseSchema, RepositorySchema, SourceEntrySchema, SourceEntryType, UserSchema,
 } from '../src/gen/golf/v1/golf_pb';
 import type { GetContentsRequest } from '../src/gen/golf/v1/golf_pb';
 import { resolveSourceFixture, reject, request, respond } from './rpc';
@@ -35,8 +35,8 @@ async function backend(page: Page) {
     expect(route.request().method()).toBe('POST');
     expect(route.request().headers()['connect-protocol-version']).toBe('1');
     const error = (status: number, message: string) => reject(route, status === 401 ? 'unauthenticated' : status === 403 ? 'permission_denied' : status === 404 ? 'not_found' : status === 502 ? 'resource_exhausted' : 'unavailable', message);
-    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { providerLabel: 'Gitea' });
-    if (method === 'LoginWithGiteaToken') { state.signedIn = true; return respond(route, LoginWithGiteaTokenResponseSchema, { user }); }
+    if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
+    if (method === 'LoginWithPassword') { state.signedIn = true; return respond(route, LoginWithPasswordResponseSchema, { user }); }
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (method === 'GetSession') return state.signedIn ? respond(route, GetSessionResponseSchema, { user }) : error(401, 'Sign in required.');
     if (!state.signedIn) return error(401, 'Your session expired.');
@@ -45,7 +45,7 @@ async function backend(page: Page) {
     if (method === 'GetRepository') return state.metadataStatus === 200 ? respond(route, GetRepositoryResponseSchema, { repository: { ...repository, empty: state.empty, issuesEnabled: state.issuesEnabled, pullRequestsEnabled: state.pullRequestsEnabled } }) : error(state.metadataStatus, 'Repository not found or inaccessible.');
     if (method === 'ListBranches') return respond(route, ListBranchesResponseSchema, request(route, ListBranchesRequestSchema).page?.page === 2 ? { branches: [{ name: 'feature/UI', commitId: feature }] } : { branches: [{ name: 'main', commitId: head, protected: true }], page: { nextPage: 2 } });
     if(method==='GetRepositoryImage') { const image=request(route,GetRepositoryImageRequestSchema);return respond(route,GetRepositoryImageResponseSchema,{repositoryId:repository.id,commitId:image.commitId,documentPath:image.documentPath,imageUrl:image.imageUrl,mediaType:'image/svg+xml',content:new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 30"><path fill="green" d="M0 0h100v30H0z"/><script>window.executed=true</script><image href="https://tracker.invalid/pixel"/></svg>')});}
-    if (method === 'ResolveRepositorySource') { state.resolverRequests.push(request(route, ResolveRepositorySourceRequestSchema)); return resolveSourceFixture(route, repository.id, { owner: 'alex', name: 'design-system' }, 'main', { main: head, 'feature/UI': state.featureHead, '1234': head }); }
+    if (method === 'ResolveRepositorySource') { state.resolverRequests.push(request(route, ResolveRepositorySourceRequestSchema)); return resolveSourceFixture(route, repository.id, { owner: 'alex', name: 'design-system' }, 'main', { main: head, 'feature/UI': state.featureHead, '1234': head },{'v1.0':feature,'release/2.0':older},{'v1.0':older,'release/2.0':feature}); }
     if (method === 'GetContents') {
       const input = request(route, GetContentsRequestSchema);
       state.sourceRequests.push(input);
@@ -92,9 +92,9 @@ test('repository navigation pins snapshots, paginates branches, supports slash r
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
   await page.getByRole('link', { name: 'alex/design-system', exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`tree/${head}`));
+  await expect(page).toHaveURL(/\/alex\/design-system$/);
   await page.getByRole('link', { name: 'src Directory', exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`tree/${head}/src`));
+  await expect(page).toHaveURL(/tree\/main\/src\?refKind=branch&refName=main/);
   await page.getByRole('link', { name: 'index.ts File 40 B', exact: true }).click();
   await expect(page.getByLabel('Plain text preview of index.ts')).toContainText('PRIVATE_SOURCE');
   await page.goBack();
@@ -107,15 +107,16 @@ test('repository navigation pins snapshots, paginates branches, supports slash r
   await page.locator('.branch-picker > summary').click();
   await page.getByRole('button', { name: 'Load more branches' }).click();
   await page.getByRole('link', { name: `feature/UI Listed at ${feature.slice(0, 12)}` }).click();
-  await expect(page).toHaveURL(new RegExp(`tree/${feature}\\?branch=feature%2FUI`));
+  await expect(page).toHaveURL(new RegExp('tree/feature/UI\\?refKind=branch&refName=feature%2FUI'));
   await expect(page.getByRole('link', { name: 'README.md File 128 B', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Latest branch head' }).click();
-  await expect(page).toHaveURL(new RegExp(`tree/${feature}\\?branch=feature%2FUI`));
+  await expect(page).toHaveURL(new RegExp('tree/feature/UI\\?refKind=branch&refName=feature%2FUI'));
   expect(state.sourceRequests.every((input) => /^[a-f0-9]{40}$/.test(input.ref) && input.repositoryId === repository.id)).toBe(true);
   state.featureHead = older;
   await page.locator('.branch-picker > summary').click();
   await page.getByRole('link', { name: `feature/UI Listed at ${feature.slice(0, 12)}` }).click();
-  await expect(page).toHaveURL(new RegExp(`tree/${older}\\?branch=feature%2FUI`));
+  await expect(page).toHaveURL(new RegExp('tree/feature/UI\\?refKind=branch&refName=feature%2FUI'));
+  await expect.poll(()=>state.sourceRequests.at(-1)?.ref).toBe(older);
   expect(errors).toEqual([]);
 });
 
@@ -266,9 +267,7 @@ test('permission denial hides cached source through retries; expiry and sign-out
   await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible();
   await expect(page.getByText('PRIVATE_SOURCE', { exact: false })).toHaveCount(0);
   state.metadataStatus = 404;
-  await page.getByText('Advanced token sign-in', { exact: true }).click();
-  await page.getByLabel('Provider access token').fill('another-session-token');
-  await page.getByRole('button', { name: 'Continue to workspace' }).click();
+  await page.getByLabel('Email or username', { exact: true }).fill('fixture-account'); await page.getByLabel('Password', { exact: true }).fill('another-session-token'); await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Repository not found or inaccessible.');
   await expect(page.getByText('PRIVATE_SOURCE', { exact: false })).toHaveCount(0);
   state.metadataStatus = 200;
@@ -380,7 +379,7 @@ test('README renders GFM, highlights code, pins relative links and blocks active
  await expect(readme.getByRole('table')).toContainText('local');
  await expect(readme.getByRole('checkbox')).toBeChecked();await expect(readme.getByRole('checkbox')).toBeDisabled();
  await expect(readme.locator('.hljs-keyword')).toHaveText('const');
- await expect(readme.getByRole('link',{name:'Source',exact:true})).toHaveAttribute('href',`/alex/design-system/tree/${head}/src/index.ts`);
+ await expect(readme.getByRole('link',{name:'Source',exact:true})).toHaveAttribute('href','/alex/design-system/tree/main/src/index.ts?refKind=branch&refName=main');
  await expect(readme.getByRole('link',{name:'Unsafe'})).toHaveCount(0);await expect(readme.locator('img,script,iframe')).toHaveCount(0);expect(requests).toEqual([]);
  expect(await page.evaluate(()=> 'executed' in window)).toBe(false);
  for(const theme of ['light','dark']){await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);}
@@ -518,11 +517,13 @@ for (const width of [320, 1280, 1920]) for (const theme of ['dark', 'light']) te
   await expect(tags).toHaveText('2 Tags');
   await page.getByRole('button', { name: 'Load more tags', exact: true }).click();
   await page.getByRole('link', { name: /release\/2.0 Listed at/ }).click();
-  await expect(page).toHaveURL(new RegExp(`/tree/${older}`));
-  expect(new URL(page.url()).searchParams.get('tag')).toBe('release/2.0');
+  await expect(page).toHaveURL(/\/tree\/release\/2.0\?refKind=tag&refName=release%2F2.0/);
+  expect(new URL(page.url()).searchParams.get('refKind')).toBe('tag');
+  expect(new URL(page.url()).searchParams.get('refName')).toBe('release/2.0');
   expect(new URL(page.url()).searchParams.get('branch')).toBeNull();
   await expect(page.locator('.branch-picker>summary')).toHaveText('release/2.0');
   await expect(page.getByRole('button', { name: 'Latest branch head', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Latest tag version',exact:true})).toBeVisible();
   await expect(banner.locator('.latest-commit-sha')).toHaveAttribute('title', older);
   await page.reload(); await expect(page.locator('.branch-picker>summary')).toHaveText('release/2.0');
   await expect(page.locator('html')).toHaveAttribute('data-theme', theme);

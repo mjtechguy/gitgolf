@@ -4,6 +4,8 @@ export type RepositorySearch = {
   path: string;
   branch: string;
   tag?: string;
+  refKind?: 'branch' | 'tag';
+  refName?: string;
   state: 'open' | 'closed' | 'all';
   issue?: number;
   issueNew?: boolean;
@@ -19,7 +21,7 @@ export type RepositorySearch = {
   historyPath?: string;
 };
 export const defaultRepositorySearch: RepositorySearch = { view: 'source', ref: '', path: '', branch: '', state: 'open' };
-export type RepositoryLocation = RepositorySearch & { kind: 'repository'; owner: string; name: string };
+export type RepositoryLocation = RepositorySearch & { kind: 'repository'; owner: string; name: string; sourceSuffix?: string; sourceRoute?: 'tree' | 'blob' };
 export type OrganizationLocation = { kind: 'organizations'; organization?: string; team?: string };
 export type Location = RepositoryLocation | OrganizationLocation | { kind: 'repository-settings' | 'repository-access-settings' | 'repository-workflows'; owner: string; name: string } | { kind: 'organization-team-settings'; organization: string; teamId: string } | { kind: 'organization-settings'; organization: string } | { kind: 'instance-settings'; view?: 'overview' | 'accounts' | 'execution' | 'organizations' | 'infrastructure' | 'agents' } | { kind: 'status' } | { kind: 'audit' } | { kind: 'api-credentials' } | { kind: 'ssh-keys' } | { kind: 'account-agents' } | { kind: 'account-security' } | { kind: 'settings' } | { kind: 'sessions' } | { kind: 'home'; oauthFailed?: boolean } | { kind: 'missing' };
 export const isRunID = (value: string) => /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value);
@@ -31,8 +33,11 @@ export function organizationOptions({ organization, team }: { organization: stri
 
 export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | 'name'> & Partial<RepositorySearch>, changes: Partial<RepositorySearch> = {}, sourceKind?:'file') {
   const next = { ...defaultRepositorySearch, ...location, ...changes };
+  if (changes.ref !== undefined && changes.ref !== location.ref && changes.refKind === undefined) { next.refKind = undefined; next.refName = undefined; }
+  if(next.view === 'commits') { next.refKind=undefined; next.refName=undefined; }
   const search: RepositorySearch = {
     view: next.view, ref: next.ref, path: next.view === 'source' ? next.path : '', branch: next.branch, tag: next.tag,
+    refKind: next.refKind, refName: next.refName,
     state: next.view === 'issues' || next.view === 'pulls' ? next.state : 'open', issue: next.view === 'issues' ? next.issue : undefined,
     issueNew:next.view==='issues'&&!next.issue?next.issueNew:undefined,
     pull: next.view === 'pulls' ? next.pull : undefined,
@@ -51,13 +56,20 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
   else if(next.view==='pulls') path=next.pull?`pull/${next.pull}${next.pullView&&next.pullView!=='conversation'?'/'+next.pullView:''}`:'pulls';
   else if(next.view==='actions') path=next.run?`actions/runs/${next.run}`:'actions';
   else if(next.view==='commits') path=next.commit?`commit/${next.commit}`:next.historyPath&&isCommitID(next.ref)?`commits/${next.ref}/${next.historyPath}`:'commits';
+  else if(next.refKind && next.refName) path=`${sourceKind==='file'?'blob':'tree'}/${next.refName}${next.path?`/${next.path}`:''}`;
   else if(isCommitID(next.ref)) path=`${sourceKind==='file'?'blob':'tree'}/${next.ref}${next.path?`/${next.path}`:''}`;
   // Canonical paths carry their own view and detail selectors. Keep only
   // deliberate source/history return context and relevant list filters.
   search.view = 'source'; search.path = '';
+  if(next.view==='source'&&next.refKind){search.branch='';search.tag=undefined;}
   search.issue = undefined; search.issueNew = undefined; search.pull = undefined; search.pullView = undefined; search.commit = undefined; search.run = undefined;
   if (next.view === 'commits' && next.historyPath && isCommitID(next.ref)) search.historyPath = undefined;
   // The path is authoritative for source and path-history snapshots.
-  if ((next.view === 'source' && isCommitID(next.ref)) || (next.view === 'commits' && !next.commit && next.historyPath && isCommitID(next.ref))) search.ref = '';
+  if ((next.view === 'source' && (isCommitID(next.ref) || Boolean(next.refKind))) || (next.view === 'commits' && !next.commit && next.historyPath && isCommitID(next.ref))) search.ref = '';
   return {to:'/$owner/$name/$' as const,params:{...params,_splat:path},search,activeOptions:{exact:true}};
+}
+
+// Browsing retains an explicit named address; immutable operations use commitId.
+export function sourceOptions(location: RepositoryLocation, commitId: string, path: string, file = false) {
+  return repositoryOptions(location, { view: 'source', ref: location.refKind ? location.refName || '' : commitId, path, historyPath: undefined }, file ? 'file' : undefined);
 }

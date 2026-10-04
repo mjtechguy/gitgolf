@@ -24,10 +24,13 @@ async function backend(page: Page) {
   return state;
 }
 test('infrastructure inventory is compact, searchable and starts without settings forms', async ({ page }) => {
-  await backend(page); await page.goto('/admin/settings/infrastructure');
+  const state = await backend(page);
+  state.profiles.push(create(InfrastructureConnectionSchema, { id: '12345678-1234-4234-8234-123456789abf', version: '1', label: 'Remote source storage', kind: 'OBJECT_STORAGE', backend: 'S3', endpoint: 'https://s3.example', bucket: 'remote-sources', activationState: 'saved_not_active' }));
+  await page.goto('/admin/settings/infrastructure');
   await expect(page.getByRole('heading', { name: 'Infrastructure connections', exact: true })).toBeVisible();
   await expect(page.locator('input:not([type=search]),textarea,select:not(.data-table-page-size):not(.data-table-page-size select)')).toHaveCount(0);
   await expect(page.getByRole('table', { name: 'Current databases', exact: true }).getByText('postgres:5432')).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Object-storage profiles', exact: true }).locator('tbody tr[data-row-id]')).toHaveCount(2);
   await page.getByRole('searchbox', { name: 'Search loaded Object-storage profiles', exact: true }).fill('RustFS');
   await expect(page.getByRole('table', { name: 'Object-storage profiles', exact: true }).locator('tbody tr[data-row-id]')).toHaveCount(1);
   await expect(page.getByText('Private source storage · version 2', { exact: false })).toBeVisible();

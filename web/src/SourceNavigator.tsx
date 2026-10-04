@@ -6,7 +6,7 @@ import { ChevronDown, ChevronRight, File, Folder, FolderOpen, GitCommitHorizonta
 import { readExactSource, sourcePath } from './sourceReads';
 import { SourceEntryType } from './gen/golf/v1/golf_pb';
 import type { SourceEntry } from './gen/golf/v1/golf_pb';
-import { isCommitID, repositoryOptions } from './navigation';
+import { isCommitID, sourceOptions } from './navigation';
 import type { RepositoryLocation } from './navigation';
 import { Loading, PanelError, privateQuery } from './RepositoryUI';
 
@@ -67,7 +67,7 @@ function Folders({ location, commitId, repositoryId, userId }: Props) {
   }
   function entryLink(entry: SourceEntry, fullPath = false) {
     const Icon = entry.type === SourceEntryType.DIRECTORY ? expanded.has(entry.path) ? FolderOpen : Folder : entry.type === SourceEntryType.FILE ? File : entry.type === SourceEntryType.SYMLINK ? Link2 : GitCommitHorizontal;
-    return <Link {...repositoryOptions(location, { view: 'source', ref: commitId, path: entry.path, historyPath: undefined }, entry.type === SourceEntryType.FILE ? 'file' : undefined)} aria-current={location.path === entry.path ? 'page' : undefined} title={entry.path}><Icon size={15} aria-hidden="true"/><span>{fullPath ? entry.path : entry.name}</span></Link>;
+    return <Link {...sourceOptions(location, commitId, entry.path, entry.type !== SourceEntryType.DIRECTORY)} aria-current={location.path === entry.path ? 'page' : undefined} title={entry.path}><Icon size={15} aria-hidden="true"/><span>{fullPath ? entry.path : entry.name}</span></Link>;
   }
   function directory(path: string, depth: number) {
     const query = folders.get(path);
@@ -80,7 +80,7 @@ function Folders({ location, commitId, repositoryId, userId }: Props) {
     </li>)}</ul> : <p className="field-help">This folder is empty.</p>;
   }
   return <nav aria-label="Repository files">
-    <Link className="source-navigator-root" {...repositoryOptions(location, { view: 'source', ref: commitId, path: '', historyPath: undefined })} aria-current={!location.path ? 'page' : undefined}><Folder size={15} aria-hidden="true"/>{location.name}</Link>
+    <Link className="source-navigator-root" {...sourceOptions(location, commitId, '')} aria-current={!location.path ? 'page' : undefined}><Folder size={15} aria-hidden="true"/>{location.name}</Link>
     <input className="source-navigator-search" type="search" aria-label="Filter expanded folder entries" placeholder="Filter expanded folders…" autoComplete="off" value={filter} onChange={event => setFilter(event.target.value)}/>
     <p className="field-help source-navigator-help">Filter includes loaded entries in expanded folders.</p>
     {failed ? <PanelError error={failed.error!} retry={() => void failed.refetch()}/> : !root.isSuccess || root.isFetching ? <Loading label="Loading repository files…"/> : filter ? <ul className="source-navigator-results">{sorted(loaded.filter(entry => entry.path.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))).map(entry => <li key={entry.path}>{entryLink(entry, true)}</li>)}{!loaded.some(entry => entry.path.toLocaleLowerCase().includes(filter.toLocaleLowerCase())) ? <li className="field-help">No loaded entries match.</li> : null}</ul> : directory('', 0)}
