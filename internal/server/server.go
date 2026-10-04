@@ -41,6 +41,7 @@ type Config struct {
 	Telemetry                                                  *telemetry.Runtime
 }
 type Server struct {
+	managedGit                    managedGitConfiguration
 	activity                      activityLimits
 	codexMu                       sync.Mutex
 	codexRuntimes                 map[string]*codexRuntime
@@ -58,6 +59,10 @@ type Server struct {
 }
 
 func New(config Config, db *sql.DB) (*Server, error) {
+	gitConfig, gitErr := managedGitConfig(os.Getenv)
+	if gitErr != nil {
+		return nil, gitErr
+	}
 	if err := ValidateEmailEgressPolicy(os.Getenv("GOLF_EMAIL_EGRESS_POLICY")); err != nil {
 		return nil, errors.New("Email operator egress policy is invalid")
 	}
@@ -104,7 +109,7 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	}
 	config.PublicURL = public.Scheme + "://" + public.Host
 	config.GiteaURL = strings.TrimRight(config.GiteaURL, "/")
-	s := &Server{config: config, db: db, keyring: keyring, client: &http.Client{Timeout: 10 * time.Second,
+	s := &Server{managedGit: gitConfig, config: config, db: db, keyring: keyring, client: &http.Client{Timeout: 10 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 	if config.Telemetry != nil {
 		s.client.Transport = config.Telemetry.HTTPTransport(http.DefaultTransport)
@@ -183,7 +188,17 @@ func New(config Config, db *sql.DB) (*Server, error) {
 		}
 	}
 	r.NotFound(http.NotFound)
-	s.handler = s.observeHTTP(r, webEnabled)
+	ordinary := s.observeHTTP(r, webEnabled)
+	// The smart-HTTP exchange has its own bounded context. RPC's 15s middleware
+	// must not truncate it; security and request observation still apply.
+	git := s.observeHTTP(s.security(http.HandlerFunc(s.managedGitTransport)), false)
+	s.handler = http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if managedGitRouteNamespace(request.URL.Path) {
+			git.ServeHTTP(w, request)
+			return
+		}
+		ordinary.ServeHTTP(w, request)
+	})
 	return s, nil
 }
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handler.ServeHTTP(w, r) }

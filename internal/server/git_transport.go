@@ -150,7 +150,7 @@ func (s *Server) managedGitTransport(w http.ResponseWriter, r *http.Request) {
 		gitHTTPFailure(w, errGitTransportDisabled)
 		return
 	}
-	if !gitRequestEncrypted(r, config) || r.Header.Get("Origin") != "" || len(r.Header.Values("Cookie")) != 0 {
+	if !gitRequestEncrypted(r, config) || len(r.Header.Values("Origin")) != 0 || len(r.Header.Values("Cookie")) != 0 {
 		gitHTTPFailure(w, errUnauthenticated)
 		return
 	}

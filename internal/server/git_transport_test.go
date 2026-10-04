@@ -122,6 +122,9 @@ func newGitTransportFixture(t *testing.T) *gitTransportFixture {
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": repoID, "name": "example", "full_name": "alice/example", "owner": map[string]any{"id": 42, "login": "alice"}, "default_branch": "main", "private": true, "empty": false, "archived": false, "mirror": false, "has_actions": false, "permissions": map[string]bool{"pull": pull, "push": push}})
 		case "/api/v1/repos/alice/example/branch_protections", "/api/v1/repos/alice/example/tag_protections", "/api/v1/repos/alice/example/push_mirrors":
+			if strings.HasSuffix(r.URL.Path, "/push_mirrors") {
+				w.Header().Set("X-Total-Count", "0")
+			}
 			fmt.Fprint(w, `[]`)
 		case "/api/v1/repos/alice/example/git/refs/heads/topic":
 			fmt.Fprintf(w, `[{"ref":"refs/heads/topic","object":{"sha":"%s","type":"commit"}}]`, strings.Repeat("2", 40))
@@ -156,6 +159,10 @@ func newGitTransportFixture(t *testing.T) *gitTransportFixture {
 		}
 	}))
 	t.Cleanup(provider.Close)
+	t.Setenv("GOLF_MANAGED_HTTP_GIT", "true")
+	t.Setenv("GOLF_MANAGED_HTTP_GIT_PUBLIC_URL", "http://127.0.0.1:8080")
+	t.Setenv("GOLF_MANAGED_HTTP_GIT_ALLOW_LOOPBACK", "true")
+	t.Setenv("GOLF_MANAGED_HTTP_GIT_INCARNATION", "")
 	var e error
 	f.server, e = New(testConfig(provider.URL), db)
 	if e != nil {
@@ -166,10 +173,6 @@ func newGitTransportFixture(t *testing.T) *gitTransportFixture {
 		t.Fatal(e)
 	}
 	f.ctx = context.WithValue(t.Context(), sessionTokenKey{}, f.credential)
-	t.Setenv("GOLF_MANAGED_HTTP_GIT", "true")
-	t.Setenv("GOLF_MANAGED_HTTP_GIT_PUBLIC_URL", "http://127.0.0.1:8080")
-	t.Setenv("GOLF_MANAGED_HTTP_GIT_ALLOW_LOOPBACK", "true")
-	t.Setenv("GOLF_MANAGED_HTTP_GIT_INCARNATION", "")
 	return f
 }
 func gitTransportRequest[T any](f *gitTransportFixture, msg *T) *connect.Request[T] {
@@ -260,7 +263,7 @@ func TestManagedGitWriteUnqualifiedAndNoBypassPostgres(t *testing.T) {
 func seedManagedGitWriteFixture(t *testing.T, f *gitTransportFixture, created *golfv1.CreateGitCredentialResponse) (gitCredentialRecord, managedGitConfiguration) {
 	t.Helper()
 	incarnation := uuid.NewString()
-	t.Setenv("GOLF_MANAGED_HTTP_GIT_INCARNATION", incarnation)
+	f.server.managedGit.Incarnation = incarnation
 	// Own disposable Golf schema only: synthetic enrollment is source fault evidence,
 	// never claimed as independent native/background/deployment qualification.
 	if _, e := f.server.db.Exec(`INSERT INTO golf_git_transport_profiles(forge_url,incarnation,native_version,receipt_sha256,qualifier_source_commit,golf_image_digest,native_image_digest,native_runtime_id) VALUES($1,$2,'1.27.3',$3,$4,$5,$5,$3)`, f.server.config.GiteaURL, incarnation, strings.Repeat("a", 64), strings.Repeat("b", 40), "sha256:"+strings.Repeat("c", 64)); e != nil {
@@ -375,11 +378,17 @@ func TestManagedGitDispatchFailureRetainsUnknownPostgres(t *testing.T) {
 		t.Fatal("native error released blocker", e)
 	}
 	f.mode.Store(0)
+	var before, after int
+	if e = f.server.db.QueryRow(`SELECT count(*) FROM golf_git_credentials WHERE mode='WRITE'`).Scan(&before); e != nil {
+		t.Fatal(e)
+	}
 	replacement, e := f.server.CreateGitCredential(f.ctx, gitTransportRequest(f, &golfv1.CreateGitCredentialRequest{Repository: &golfv1.RepositoryKey{Owner: "alice", Name: "example"}, RepositoryId: "91", OwnerId: "42", Label: "replacement fixture", Mode: golfv1.GitCredentialMode_GIT_CREDENTIAL_MODE_WRITE}))
-	if !errors.Is(e, errLifecycleBlocked) {
+	if connect.CodeOf(e) != connect.CodeFailedPrecondition || replacement != nil {
 		t.Fatal("new WRITE capability issued across unknown", e)
 	}
-	_ = replacement
+	if e = f.server.db.QueryRow(`SELECT count(*) FROM golf_git_credentials WHERE mode='WRITE'`).Scan(&after); e != nil || after != before {
+		t.Fatal("refused credential insertion changed inventory", e)
+	}
 	if w := fixtureGitHTTP(f, response.Msg.Secret, "POST", "/git/alice/example.git/git-receive-pack", managedReceive("refs/heads/topic")); w.Code != 409 || f.posts.Load() != 1 {
 		t.Fatal("new credential bypassed unresolved repo effect", w.Code)
 	}

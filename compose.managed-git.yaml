@@ -1,0 +1,18 @@
+# Fresh opt-in READ foundation, not a WRITE/background-quiescence certification.
+# Never apply to an adopted installation and assume it closed old/native ingress.
+# Root qualifier/operator must verify actual private-native topology separately.
+services:
+  gitea:
+    ports: !reset []
+    environment:
+      GITEA__server__DISABLE_SSH: 'true'
+      GITEA__server__START_SSH_SERVER: 'false'
+      GITEA__actions__ENABLED: 'false'
+  golf:
+    environment:
+      GOLF_MANAGED_HTTP_GIT: 'true'
+      GOLF_MANAGED_HTTP_GIT_PUBLIC_URL: ${GOLF_MANAGED_HTTP_GIT_PUBLIC_URL:?Set the actual direct-TLS managed Git public origin}
+      # Explicit genuine loopback development only; never a proxy/header TLS claim.
+      GOLF_MANAGED_HTTP_GIT_ALLOW_LOOPBACK: ${GOLF_MANAGED_HTTP_GIT_ALLOW_LOOPBACK:-false}
+      # No WRITE enrollment consumer exists in this foundation.
+      GOLF_MANAGED_HTTP_GIT_INCARNATION: ''

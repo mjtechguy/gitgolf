@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -70,7 +69,7 @@ func isLoopbackHost(host string) bool {
 	return host == "localhost" || ip != nil && ip.IsLoopback()
 }
 func (s *Server) gitConfiguration() (managedGitConfiguration, error) {
-	return managedGitConfig(os.Getenv)
+	return s.managedGit, nil
 }
 func gitTokenHash(secret string) ([]byte, error) {
 	if len(secret) != len(gitCredentialPrefix)+43 || !strings.HasPrefix(secret, gitCredentialPrefix) {
@@ -195,11 +194,15 @@ func (s *Server) gitWritePrerequisites(ctx context.Context, db database.DBTX, cr
 	base, _ := repositoryPath(key)
 	for _, endpoint := range []string{"/branch_protections", "/tag_protections", "/push_mirrors"} {
 		var rows []map[string]any
-		h, e := s.forge(ctx, http.MethodGet, base+endpoint, credential, nil, &rows)
+		url := base + endpoint
+		if endpoint == "/push_mirrors" {
+			url += "?page=1&limit=1"
+		}
+		h, e := s.forge(ctx, http.MethodGet, url, credential, nil, &rows)
 		if e != nil {
 			return errGitBackgroundUnqualified
 		}
-		if rows == nil || len(rows) != 0 || h.Get("Link") != "" {
+		if !gitEmptyInventory(endpoint, rows, h) {
 			return errGitBackgroundUnqualified
 		}
 	}
@@ -493,4 +496,38 @@ func (s *Server) RevokeGitCredential(ctx context.Context, req *connect.Request[g
 		return nil, gitTransportError(e)
 	}
 	return connect.NewResponse(&golfv1.RevokeGitCredentialResponse{CredentialId: req.Msg.CredentialId, Revoked: true}), nil
+}
+
+// Opt-in changes the product clone destination, never default deployments or
+// bearer read authority. No native SSH URL is advertised in this profile.
+func (s *Server) wireGitRepository(repo Repository) *golfv1.Repository {
+	result := wireRepository(repo)
+	if !s.managedGit.Enabled {
+		return result
+	}
+	result.CloneUrl = ""
+	result.SshUrl = ""
+	parts := strings.Split(repo.FullName, "/")
+	if len(parts) != 2 {
+		return result
+	}
+	key := repositoryKey{parts[0], parts[1]}
+	if _, err := repositoryPath(key); err != nil || repo.Name != key.Name {
+		return result
+	}
+	result.CloneUrl = s.managedGit.PublicURL + "/git/" + key.Owner + "/" + key.Name + ".git"
+	return result
+}
+
+// Protections are unpaged in pinned1.27.3. Push mirrors are paged and can omit
+// rows whose converter fails, so only native total0 proves complete absence.
+func gitEmptyInventory(endpoint string, rows []map[string]any, headers http.Header) bool {
+	if rows == nil || len(rows) != 0 || len(headers.Values("Link")) != 0 {
+		return false
+	}
+	counts := headers.Values("X-Total-Count")
+	if endpoint == "/push_mirrors" {
+		return len(counts) == 1 && counts[0] == "0"
+	}
+	return len(counts) == 0 || len(counts) == 1 && counts[0] == "0"
 }

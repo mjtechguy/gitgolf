@@ -31,6 +31,7 @@ export function RepositorySettingsLayout({ children, owner, name }: { children: 
   return <div className="account-layout"><nav className="account-navigation" aria-label="Repository settings"><span className="eyebrow">REPOSITORY SETTINGS</span>
     <Link to="/$owner/$name/settings" params={{ owner, name }} activeOptions={{ exact: true }}><UserRound size={18} />General</Link>
     <Link to="/$owner/$name/settings/access" params={{ owner, name }} activeOptions={{ exact: true }}><ShieldCheck size={18} />Access</Link>
+    <Link to="/$owner/$name/settings/git" params={{owner,name}} activeOptions={{exact:true}}><KeyRound size={18}/>Git credentials</Link>
     <Link to="/$owner/$name/settings/runners" params={{ owner, name }} activeOptions={{ exact:true }}><Server size={18}/>Runners</Link>
     <Link to="/$owner/$name/settings/rules" params={{ owner, name }} activeOptions={{ exact:true }}><ShieldCheck size={18}/>Rules and merge policy</Link>
     <Link to="/$owner/$name/settings/secrets" params={{ owner, name }} activeOptions={{ exact:true }}><KeyRound size={18}/>Secrets and variables</Link>

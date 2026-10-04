@@ -97,6 +97,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewAuditServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewApiCredentialServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewGitAccessServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewGitTransportServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositorySettingsServiceHandler(s, options...))
 	return mux
 }
@@ -341,7 +342,7 @@ func (s *Server) ListRepositories(ctx context.Context, req *connect.Request[golf
 	}
 	response := &golfv1.ListRepositoriesResponse{Page: wirePage(next)}
 	for _, row := range rows {
-		response.Repositories = append(response.Repositories, wireRepository(row))
+		response.Repositories = append(response.Repositories, s.wireGitRepository(row))
 	}
 	return connect.NewResponse(response), nil
 }
@@ -372,7 +373,7 @@ func (s *Server) CreateRepository(ctx context.Context, req *connect.Request[golf
 	}
 	response := &golfv1.CreateRepositoryResponse{Creation: wireRepositoryCreation(creation)}
 	if repo != nil {
-		response.Repository = wireRepository(*repo)
+		response.Repository = s.wireGitRepository(*repo)
 	}
 	return connect.NewResponse(response), nil
 }
@@ -387,7 +388,7 @@ func (s *Server) GetRepositoryCreation(ctx context.Context, req *connect.Request
 	}
 	response := &golfv1.GetRepositoryCreationResponse{Creation: wireRepositoryCreation(creation)}
 	if repo != nil {
-		response.Repository = wireRepository(*repo)
+		response.Repository = s.wireGitRepository(*repo)
 	}
 	return connect.NewResponse(response), nil
 }
@@ -400,7 +401,7 @@ func (s *Server) GetRepository(ctx context.Context, req *connect.Request[golfv1.
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	return connect.NewResponse(&golfv1.GetRepositoryResponse{Repository: wireRepository(repo)}), nil
+	return connect.NewResponse(&golfv1.GetRepositoryResponse{Repository: s.wireGitRepository(repo)}), nil
 }
 func (s *Server) ListBranches(ctx context.Context, req *connect.Request[golfv1.ListBranchesRequest]) (*connect.Response[golfv1.ListBranchesResponse], error) {
 	token, err := rpcToken(ctx)
@@ -741,7 +742,7 @@ func (s *Server) ListTeamRepositories(ctx context.Context, req *connect.Request[
 	}
 	response := &golfv1.ListTeamRepositoriesResponse{Page: wirePage(next)}
 	for _, row := range rows {
-		response.Repositories = append(response.Repositories, wireRepository(row))
+		response.Repositories = append(response.Repositories, s.wireGitRepository(row))
 	}
 	return connect.NewResponse(response), nil
 }

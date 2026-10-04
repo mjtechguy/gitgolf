@@ -364,3 +364,10 @@ func filterGitAdvertisement(body []byte, service string) ([]byte, error) {
 func ordinaryGitUpdate(r gitReceiveRequest) bool {
 	return len(r.Commands) == 1 && strings.HasPrefix(r.Commands[0].Ref, "refs/heads/") && strings.Trim(r.Commands[0].Old, "0") != "" && strings.Trim(r.Commands[0].New, "0") != ""
 }
+
+// Preserve ordinary /git/REPO Golf pages if a native user is named git. Only
+// the explicit .git transport marker selects the separate endpoint namespace.
+func managedGitRouteNamespace(path string) bool {
+	parts := strings.Split(path, "/")
+	return len(parts) >= 4 && parts[1] == "git" && strings.HasSuffix(parts[3], ".git")
+}
