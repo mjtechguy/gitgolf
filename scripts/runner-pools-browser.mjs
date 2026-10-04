@@ -6,6 +6,19 @@ let config,browser,context,page,stage='initialization';
 const captures=[],problems=[],pending=[],requests=[];
 const counts={};
 const proof={passed:false,complete:false,captures,scope:'Actual scoped pool inventories/requested editors and placement receipts; Docker capacity evidence is independently recorded by parent helper, not inferred from UI.'};
+const observations=[];
+proof.observations=observations;
+const observedProcedures=new Set(['GetRepositoryAccess','GetRepositoryRunnerPlacement','ListRunnerPools','SaveRunnerPool','SetRepositoryRunnerPlacement']);
+async function observe(response){
+ const method=new URL(response.url()).pathname.split('/').at(-1);
+ if(!observedProcedures.has(method)||observations.length>=128)return;
+ const observation={procedure:method,status:response.status(),noStore:response.headers()['cache-control']==='no-store'};
+ observations.push(observation);
+ if(response.status()!==200)return;
+ const body=await response.json();
+ if(method==='GetRepositoryAccess')Object.assign(observation,{canManage:body.access?.canManage===true,repositoryIdEqual:body.access?.repositoryId===config.repositoryId,ownerIdEqual:body.access?.ownerId===config.ownerId,revisionValid:/^[a-f0-9]{64}$/.test(body.access?.revision??'')});
+ if(method==='GetRepositoryRunnerPlacement')Object.assign(observation,{canEdit:body.canEdit===true,passwordConfirmationAvailable:body.passwordConfirmationAvailable===true,placementPresent:Boolean(body.placement),selectedPoolPresent:Boolean(body.selectedPool),eligiblePoolCount:Array.isArray(body.eligiblePools)?body.eligiblePools.length:0});
+}
 const check=value=>{if(!value)throw new Error('assertion');};
 const version=(value,positive=false)=>typeof value==='string'&&(positive?/^[1-9][0-9]{0,18}$/:/^(0|[1-9][0-9]{0,18})$/).test(value)&&BigInt(value)<=9223372036854775807n;
 const uuid=value=>typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value);
@@ -27,6 +40,7 @@ try{
   for(const theme of ['dark','light'])for(const width of [1440,390]){
     const actor=config.fixtures[theme+width];check(actor);context=await browser.newContext({viewport:{width,height:900}});page=await context.newPage();
     page.on('pageerror',()=>problems.push('page-error'));
+    page.on('response',response=>{pending.push(observe(response).catch(()=>problems.push('diagnostic-contract')));});
     page.on('request',request=>{const url=new URL(request.url());if(!url.pathname.startsWith('/rpc/golf.v1.RunnerPoolService/'))return;const method=url.pathname.split('/').at(-1);counts[method]=(counts[method]??0)+1;try{const body=request.postDataJSON();if(method==='SaveRunnerPool')check(body.id===config.poolId&&version(body.expectedVersion,true)&&body.currentPassword===actor.password);if(method==='SetRepositoryRunnerPlacement')check(body.repositoryId===config.repositoryId&&body.ownerId===config.ownerId&&body.poolId===config.poolId&&body.currentPassword===actor.password&&version(body.expectedPlacementVersion)&&version(body.expectedPoolVersion,true));requests.push({method,...body,currentPassword:undefined});}catch{problems.push('request-contract');}});
     page.on('response',response=>{const url=new URL(response.url());if(!url.pathname.startsWith('/rpc/golf.v1.RunnerPoolService/'))return;const method=url.pathname.split('/').at(-1);pending.push((async()=>{check(response.status()===200&&response.headers()['cache-control']==='no-store');const body=await response.json();if(method==='ListRunnerPools'){check(body.pools.length===1&&body.pools[0].id===config.poolId);pool(body.pools[0]);}else if(method==='GetRepositoryRunnerPlacement'){placement(body.placement);pool(body.selectedPool);}else{const request=requests.filter(row=>row.method===method).at(-1);check(request);if(method==='SaveRunnerPool'){const value=pool(body.pool);check(value.version===(BigInt(request.expectedVersion)+1n).toString()&&value.name===request.name);}else{const value=placement(body.placement);check(value.version===(BigInt(request.expectedPlacementVersion)+1n).toString()&&value.poolVersion===request.expectedPoolVersion);}}})().catch(()=>problems.push('response-contract')));});
     stage='managed sign-in '+theme+' '+width;await page.goto(config.golf);await page.getByLabel('Email or username',{exact:true}).fill(actor.email);await page.getByLabel('Password',{exact:true}).fill(actor.password);await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.getByRole('form',{name:'Golf account sign-in',exact:true}).waitFor({state:'detached'});
@@ -38,5 +52,5 @@ try{
     const logout=await context.request.post(config.golf+'/rpc/golf.v1.SessionService/Logout',{headers:{Origin:config.golf,'Content-Type':'application/json','Connect-Protocol-Version':'1'},data:{}});check(logout.status()===200);await context.close();context=undefined;
   }
   check(captures.length===12&&problems.length===0);Object.assign(proof,{passed:true,complete:true,runtime:config.runtime,explicitPoolEdits:counts.SaveRunnerPool??0,explicitPlacementEdits:counts.SetRepositoryRunnerPlacement??0,storedPrivateCredentials:false});console.log('PASS: twelve actual pool inventory/requested editor/placement captures; no execution readiness inferred from UI.');
-}catch(error){proof.failure={stage,type:error.constructor?.name??'Error'};console.error('Pool browser qualifier failed at '+stage+'; private diagnostics withheld.');process.exitCode=1;}
+}catch(error){proof.failure={stage,type:error.constructor?.name??'Error',categories:[...new Set(problems)]};console.error('Pool browser qualifier failed at '+stage+'; private diagnostics withheld.');process.exitCode=1;}
 finally{if(context)await context.close().catch(()=>{});if(browser)await browser.close().catch(()=>{});if(config?.screenshots){await writeFile(join(config.screenshots,'manifest.json'),JSON.stringify(proof,null,2)+'\n',{mode:0o600});await chmod(join(config.screenshots,'manifest.json'),0o600);}}
