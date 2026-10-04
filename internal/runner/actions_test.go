@@ -200,3 +200,33 @@ func TestHelperTransferStreamsBoundedBinaryIntoLiveNamespaceAndChecksFullDigest(
 		})
 	}
 }
+
+func TestActionsHelperDiagnosticAcceptsOnlyCompleteClosedLine(t *testing.T) {
+	valid := ActionsEngineFailureDiagnostic("engine_job_mounts")
+	for _, raw := range []string{"", "engine_job_mounts", strings.TrimSuffix(valid, "\n"), valid + "\n", valid + "private stderr", "private stderr\n" + valid, "GOLF_ACTIONS_FAILURE_STAGE=private_token\n", strings.ReplaceAll(valid, "\n", "\r\n"), strings.Repeat("x", 129)} {
+		if parseActionsEngineFailure([]byte(raw)) != "" {
+			t.Fatal("untrusted/ambiguous stderr became a diagnostic")
+		}
+	}
+	if parseActionsEngineFailure([]byte(valid)) != "engine_job_mounts" {
+		t.Fatal("exact trusted line refused")
+	}
+	var output actionsEngineDiagnostic
+	for _, piece := range []string{valid[:12], valid[12:]} {
+		if _, err := output.Write([]byte(piece)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if parseActionsEngineFailure(output.data) != "engine_job_mounts" {
+		t.Fatal("pipe chunking changed classification")
+	}
+	output.Write(bytes.Repeat([]byte{'x'}, 129))
+	output.Write([]byte(valid))
+	if !output.invalid || len(output.data) != 0 || parseActionsEngineFailure(output.data) != "" {
+		t.Fatal("overflow resurrected an earlier/later diagnostic")
+	}
+	classified := &actionsStageError{"engine_job_mounts", ErrInfrastructure}
+	if ActionsFailureStage(classified) != "engine_job_mounts" || !errors.Is(classified, ErrInfrastructure) {
+		t.Fatal("inner fixed code changed runner failure policy")
+	}
+}

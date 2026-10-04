@@ -40,8 +40,56 @@ func ActionsFailureStage(err error) string {
 	case "input_validation", "worker_residue_check", "daemon_image_validation", "job_image_validation", "owner_generation", "volume_creation", "daemon_creation", "daemon_receipt_validation", "daemon_start", "daemon_readiness", "image_transfer", "helper_transfer", "helper_local_hash", "helper_remote_hash", "helper_process_start", "helper_input", "helper_frames", "durable_frame_ack", "helper_ack_write", "helper_completion", "container_cleanup", "volume_cleanup":
 		return classified.stage
 	default:
+		if ActionsEngineFailureDiagnostic(classified.stage) != "" {
+			return classified.stage
+		}
 		return "unknown"
 	}
+}
+
+// The separately pinned helper owns stderr exclusively. Only this closed line
+// is an operator diagnostic; arbitrary native/source stderr is never exposed.
+func ActionsEngineFailureDiagnostic(stage string) string {
+	switch stage {
+	case "engine_input_validation", "engine_environment_validation", "engine_plan_binding",
+		"engine_daemon_empty", "engine_image_map_validation", "engine_image_receipt_validation",
+		"engine_workspace_open", "engine_source_extract", "engine_job_source_open", "engine_job_source_copy",
+		"engine_event_write", "engine_native_execution", "engine_observation", "engine_graph_completion",
+		"engine_inner_cleanup", "engine_completion_ack", "engine_job_inventory", "engine_job_receipt",
+		"engine_job_shape", "engine_job_environment", "engine_job_mounts", "engine_job_source_transfer",
+		"engine_job_volume_ownership", "engine_job_action_ancestors", "engine_job_source_readback":
+		return "GOLF_ACTIONS_FAILURE_STAGE=" + stage + "\n"
+	default:
+		return ""
+	}
+}
+
+// Any overflow invalidates the entire diagnostic, including an earlier valid
+// line. Consume/discard excess so stderr cannot block or grow without bound.
+type actionsEngineDiagnostic struct {
+	data    []byte
+	invalid bool
+}
+
+func (b *actionsEngineDiagnostic) Write(p []byte) (int, error) {
+	if b.invalid || len(b.data)+len(p) > 128 {
+		b.invalid = true
+		b.data = nil
+	} else {
+		b.data = append(b.data, p...)
+	}
+	return len(p), nil
+}
+
+func parseActionsEngineFailure(data []byte) string {
+	if len(data) > 128 || !bytes.HasPrefix(data, []byte("GOLF_ACTIONS_FAILURE_STAGE=")) || !bytes.HasSuffix(data, []byte("\n")) {
+		return ""
+	}
+	stage := string(data[len("GOLF_ACTIONS_FAILURE_STAGE=") : len(data)-1])
+	if diagnostic := ActionsEngineFailureDiagnostic(stage); diagnostic != "" && diagnostic == string(data) {
+		return stage
+	}
+	return ""
 }
 
 type ActionsExecutor struct {
@@ -213,7 +261,8 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 	input.ResolvedImages = images
 	phase = "helper_process_start"
 	cmd := exec.CommandContext(runCtx, e.config.DockerBinary, "exec", "-i", container, "env", "-i", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME=/root", "DOCKER_HOST=unix:///var/run/docker.sock", "GOLF_OWNED_ACTIONS_DAEMON=1", "/golf/engine", "execute")
-	cmd.Stderr = io.Discard
+	var diagnostic actionsEngineDiagnostic
+	cmd.Stderr = &diagnostic
 	cmd.WaitDelay = 2 * time.Second
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -290,6 +339,11 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 	if err != nil || scanner.Err() != nil || waitErr != nil || !complete {
 		if err == nil {
 			phase = "helper_completion"
+			if runCtx.Err() == nil {
+				if stage := parseActionsEngineFailure(diagnostic.data); stage != "" {
+					phase = stage
+				}
+			}
 		}
 		return result, ErrInfrastructure
 	}

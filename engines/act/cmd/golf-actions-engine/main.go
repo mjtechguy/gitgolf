@@ -78,17 +78,27 @@ func readLine(r *bufio.Reader, max int) ([]byte, error) {
 		}
 	}
 }
+
+// Only fixed helper-owned classifications cross stderr. Native/source errors
+// are never formatted; stdout remains exclusively the acknowledged protocol.
+func reportFailure(out io.Writer, err error) int {
+	if errors.Is(err, engine.ErrEvent) {
+		fmt.Fprintln(out, "Actions event not matched.")
+		return 2
+	}
+	if errors.Is(err, engine.ErrProfile) {
+		fmt.Fprintln(out, "Actions source is outside the selected profile.")
+		return 3
+	}
+	if diagnostic := protocol.ActionsEngineFailureDiagnostic(engine.ExecutionFailureStage(err)); diagnostic != "" {
+		io.WriteString(out, diagnostic)
+	} else {
+		fmt.Fprintln(out, "Actions engine operation refused or unconfirmed.")
+	}
+	return 1
+}
 func main() {
 	if err := run(); err != nil {
-		if errors.Is(err, engine.ErrEvent) {
-			fmt.Fprintln(os.Stderr, "Actions event not matched.")
-			os.Exit(2)
-		}
-		if errors.Is(err, engine.ErrProfile) {
-			fmt.Fprintln(os.Stderr, "Actions source is outside the selected profile.")
-			os.Exit(3)
-		}
-		fmt.Fprintln(os.Stderr, "Actions engine operation refused or unconfirmed.")
-		os.Exit(1)
+		os.Exit(reportFailure(os.Stderr, err))
 	}
 }

@@ -32,29 +32,59 @@ var imageID = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
 var containerID = regexp.MustCompile(`^[a-f0-9]{64}$`)
 var ErrExecution = errors.New("Actions engine execution or observation failed")
 
+// executionStageError preserves failure policy without formatting native errors.
+type executionStageError struct {
+	stage string
+	cause error
+}
+
+func (e *executionStageError) Error() string {
+	return "Actions engine failed at " + ExecutionFailureStage(e)
+}
+func (e *executionStageError) Unwrap() error { return e.cause }
+func ExecutionFailureStage(err error) string {
+	var classified *executionStageError
+	if errors.As(err, &classified) && protocol.ActionsEngineFailureDiagnostic(classified.stage) != "" {
+		return classified.stage
+	}
+	return ""
+}
+func classifyExecution(stage string, err error) error {
+	if err == nil || ExecutionFailureStage(err) != "" {
+		return err
+	}
+	return &executionStageError{stage, errors.Join(ErrExecution, err)}
+}
+
 // Execute runs only inside the newly owned Unix-only child daemon. Callback
 // acknowledgements are synchronous; a missing/refused durable acknowledgement
 // cancels execution and cannot be interpreted as a successful run.
-func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe func(protocol.ActionFrame) error) error {
+func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe func(protocol.ActionFrame) error) (err error) {
+	phase := "engine_input_validation"
+	defer func() { err = classifyExecution(phase, err) }()
 	if os.Getenv("DOCKER_HOST") != "unix:///var/run/docker.sock" || os.Getenv("GOLF_OWNED_ACTIONS_DAEMON") != "1" || (input.Input.Event != "workflow_dispatch" && input.Input.Event != "push") || input.TimeoutSeconds < 1 || input.TimeoutSeconds > 900 || !fullObjectPattern.MatchString(input.CommitID) || len(input.EventJSON) > 16<<10 {
 		return ErrExecution
 	}
+	phase = "engine_environment_validation"
 	for _, env := range os.Environ() {
 		key := strings.SplitN(env, "=", 2)[0]
 		if strings.HasPrefix(key, "GOLF_") && key != "GOLF_OWNED_ACTIONS_DAEMON" {
 			return ErrExecution
 		}
 	}
+	phase = "engine_plan_binding"
 	plan, native, files, err := admit(input.Input)
 	if err != nil || !reflect.DeepEqual(plan, input.Plan) {
 		return ErrExecution
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(input.TimeoutSeconds)*time.Second)
 	defer cancel()
+	phase = "engine_daemon_empty"
 	initial, err := docker(ctx, nil, "ps", "-aq", "--no-trunc")
 	if err != nil || len(bytes.TrimSpace(initial)) != 0 {
 		return ErrExecution
 	}
+	phase = "engine_image_map_validation"
 	if len(input.ResolvedImages) < 1 || len(input.ResolvedImages) > 12 {
 		return ErrExecution
 	}
@@ -67,6 +97,7 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 			return ErrExecution
 		}
 	}
+	phase = "engine_image_receipt_validation"
 	resolved := map[string]string{}
 	for label, digest := range input.Input.Images {
 		used := false
@@ -90,6 +121,7 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 		}
 		resolved[label] = rows[0].ID
 	}
+	phase = "engine_workspace_open"
 	if err = os.MkdirAll(workspace, 0755); err != nil {
 		return ErrExecution
 	}
@@ -99,6 +131,7 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 	}
 	defer root.Close()
 	protected := protectedActionDirs(plan)
+	phase = "engine_job_source_open"
 	if err = os.MkdirAll(jobSource, 0755); err != nil {
 		return ErrExecution
 	}
@@ -107,6 +140,7 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 		return ErrExecution
 	}
 	defer copyRoot.Close()
+	phase = "engine_source_extract"
 	for name, entry := range files {
 		if entry.directory {
 			if err = root.MkdirAll(name, 0755); err != nil {
@@ -127,6 +161,7 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 			return ErrExecution
 		}
 	}
+	phase = "engine_job_source_copy"
 	for name, entry := range files {
 		omit := false
 		for _, dir := range protected {
@@ -158,6 +193,7 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 	for _, dir := range protected {
 		options += " --mount=type=bind,source=" + workspace + "/" + dir + ",target=" + workspace + "/" + dir + ",readonly"
 	}
+	phase = "engine_event_write"
 	if err = os.WriteFile("/golf/event.json", input.EventJSON, 0600); err != nil {
 		return ErrExecution
 	}
@@ -168,17 +204,22 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 	logger := logrus.New()
 	logger.SetOutput(io.Discard)
 	ctx = act.WithJobLoggerFactory(common.WithLogger(ctx, logger.WithField("engine", true)), observer)
+	phase = "engine_native_execution"
 	executionErr := executeNativePlan(ctx, native, config, string(input.EventJSON), observer, nativeInstanceExecutor)
 	observer.mu.Lock()
 	defer observer.mu.Unlock()
 	if observer.err != nil {
-		return ErrExecution
+		return observer.err
+	}
+	if executionErr == nil {
+		phase = "engine_graph_completion"
 	}
 	for _, job := range plan.Jobs {
 		if !observer.finished[job.InstanceID] {
 			return ErrExecution
 		}
 	}
+	phase = "engine_inner_cleanup"
 	cleanupCtx, stop := context.WithTimeout(context.Background(), 5*time.Second)
 	defer stop()
 	left, err := docker(cleanupCtx, nil, "ps", "-aq", "--no-trunc")
@@ -189,6 +230,7 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 	if executionErr != nil {
 		state = "failure"
 	}
+	phase = "engine_completion_ack"
 	if err = observer.emit(protocol.ActionFrame{Kind: "complete", State: state}); err != nil {
 		return ErrExecution
 	}
@@ -216,9 +258,10 @@ func (o *engineObserver) WithJobLogger() *logrus.Logger {
 	return l
 }
 func (o *engineObserver) Levels() []logrus.Level { return logrus.AllLevels }
-func (o *engineObserver) fail() {
+func (o *engineObserver) fail()                  { o.failWith(classifyExecution("engine_observation", ErrExecution)) }
+func (o *engineObserver) failWith(err error) {
 	if o.err == nil {
-		o.err = ErrExecution
+		o.err = classifyExecution("engine_observation", err)
 		o.cancel()
 	}
 }
@@ -318,8 +361,12 @@ func (o *engineObserver) Fire(entry *logrus.Entry) error {
 	}
 	result, present := entry.Data["stepResult"]
 	if len(ids) == 1 && ids[0] == "--setup-job" && present && result == model.StepStatusSuccess {
-		if o.started[job.InstanceID] || o.prepare() != nil {
+		if o.started[job.InstanceID] {
 			o.fail()
+			return nil
+		}
+		if err := o.prepare(); err != nil {
+			o.failWith(err)
 			return nil
 		}
 		if o.emit(protocol.ActionFrame{Kind: "job_started", InstanceID: job.InstanceID}) != nil {
@@ -393,18 +440,22 @@ type inspected struct {
 	}
 }
 
-func (o *engineObserver) prepare() error {
+func (o *engineObserver) prepare() (err error) {
+	phase := "engine_job_inventory"
+	defer func() { err = classifyExecution(phase, err) }()
 	raw, err := docker(o.ctx, nil, "ps", "-q", "--no-trunc")
 	if err != nil {
 		return ErrExecution
 	}
 	for _, id := range strings.Fields(string(raw)) {
+		phase = "engine_job_inventory"
 		if !containerID.MatchString(id) {
 			return ErrExecution
 		}
 		if o.prepared[id] {
 			continue
 		}
+		phase = "engine_job_receipt"
 		body, err := docker(o.ctx, nil, "inspect", id)
 		var rows []inspected
 		if err != nil || json.Unmarshal(body, &rows) != nil || len(rows) != 1 {
@@ -415,18 +466,22 @@ func (o *engineObserver) prepare() error {
 		for _, image := range o.resolved {
 			allowedImage = allowedImage || image == r.Image
 		}
+		phase = "engine_job_shape"
 		if !allowedImage || r.ID != id || r.Config.User != "1000:1000" || r.HostConfig.NetworkMode != "none" || r.HostConfig.Privileged || len(r.HostConfig.Binds) > 0 || len(r.HostConfig.CapAdd) > 0 || len(r.HostConfig.Devices) > 0 || r.HostConfig.Memory != 268435456 || r.HostConfig.MemorySwap != 268435456 || r.HostConfig.NanoCpus != 1000000000 || r.HostConfig.PidsLimit == nil || *r.HostConfig.PidsLimit != 64 || !contains(r.HostConfig.CapDrop, "ALL") || !contains(r.HostConfig.SecurityOpt, "no-new-privileges") {
 			return ErrExecution
 		}
+		phase = "engine_job_environment"
 		for _, env := range r.Config.Env {
 			if strings.HasPrefix(env, "GOLF_") || strings.HasPrefix(env, "DOCKER_") {
 				return ErrExecution
 			}
 		}
 		protected := protectedActionDirs(o.plan)
+		phase = "engine_job_mounts"
 		if !validJobMounts(r, protected) {
 			return ErrExecution
 		}
+		phase = "engine_job_source_transfer"
 		if _, err = docker(o.ctx, nil, "cp", jobSource+"/.", id+":"+workspace); err != nil {
 			return ErrExecution
 		}
@@ -437,14 +492,17 @@ func (o *engineObserver) prepare() error {
 			if o.volumes[mount.Source] {
 				continue
 			}
+			phase = "engine_job_volume_ownership"
 			if err = ownVolume(o.ctx, mount.Source); err != nil {
 				return err
 			}
+			phase = "engine_job_action_ancestors"
 			if mount.Destination == workspace && protectActionAncestors(o.ctx, mount.Source, protected) != nil {
 				return ErrExecution
 			}
 			o.volumes[mount.Source] = true
 		}
+		phase = "engine_job_source_readback"
 		// Independent source readback occurs before ACK releases any source step.
 		sourcePaths := []string{o.plan.WorkflowPath}
 		for _, dependency := range o.plan.LocalActions {
