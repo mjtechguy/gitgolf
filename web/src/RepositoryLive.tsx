@@ -37,7 +37,7 @@ export function useRepositoryLive(userId:string,owner:string,name:string,reposit
     let received=false,rotate=false;
     for await(const event of repositoryActivityClient.watchRepository({repository:{owner,name},repositoryId,cursor},{signal:controller.signal,timeoutMs:14000})){
      if(!live||controller.signal.aborted)return;
-     if(event.repositoryId!==repositoryId||!['reset','change','heartbeat','reconnect'].includes(event.kind)||event.topics.some(t=>!allowedTopics.includes(t))||event.cursor&&(!/^[1-9][0-9]{0,18}$/.test(event.cursor)||BigInt(event.cursor)>9223372036854775807n)||cursor&&event.cursor&&BigInt(event.cursor)<BigInt(cursor))throw new Error('Invalid live activity response.');
+     if(event.repositoryId!==repositoryId||!['reset','change','heartbeat','reconnect'].includes(event.kind)||event.topics.some(t=>!allowedTopics.includes(t))||(!/^(0|[1-9][0-9]{0,18})$/.test(event.cursor)||BigInt(event.cursor)>9223372036854775807n)||cursor&&BigInt(event.cursor)<BigInt(cursor))throw new Error('Invalid live activity response.');
      received=true;failures=0;setStatus('live');
      if(event.kind==='reset')refresh(['issues','pulls','actions','agents'],true);
      else if(event.kind==='change'){if(event.topics.includes('source')||pin.current&&event.topics.includes('pulls'))setNewSource(true);refresh(event.topics,true);}

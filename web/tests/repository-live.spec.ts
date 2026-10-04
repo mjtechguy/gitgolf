@@ -8,7 +8,7 @@ import {GetSessionResponseSchema,GetRepositoryResponseSchema,ListRepositoriesRes
 const head='a'.repeat(40);
 function envelope(flag:number,body:unknown){const text=Buffer.from(JSON.stringify(body));const size=Buffer.alloc(5);size[0]=flag;size.writeUInt32BE(text.length,1);return Buffer.concat([size,text]);}
 async function fixture(page:Page){
- const state={workflowName:'Original CI',manualAllowed:true,inspections:0,dispatches:0,cursor:1,title:'Original issue',topics:[] as string[],denied:false,offline:false,cursors:[] as string[],sources:0,pullHead:head,pullReads:0,checkState:ReportedCheckState.PENDING,commitReads:0,checkReads:0,issuesEnabled:undefined as boolean|undefined,metadataReads:0};
+ const state={workflowName:'Original CI',manualAllowed:true,inspections:0,dispatches:0,cursor:1,title:'Original issue',topics:[] as string[],denied:false,offline:false,cursors:[] as string[],sources:0,pullHead:head,pullReads:0,checkState:ReportedCheckState.PENDING,commitReads:0,checkReads:0,issuesEnabled:undefined as boolean|undefined,metadataReads:0,eventCursor:undefined as string|undefined};
  await page.route('**/rpc/**',async(route:Route)=>{
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
   if(method==='WatchRepository'){
@@ -16,7 +16,7 @@ async function fixture(page:Page){
    await new Promise(r=>setTimeout(r,150));
    if(state.offline)return reject(route,'unavailable','Live updates unavailable.');
    if(state.denied)return route.fulfill({status:200,contentType:'application/connect+json',body:envelope(2,{error:{code:'permission_denied',message:'Repository access removed.'}})});
-   const cursor=String(state.cursor);const kind=input.cursor ? input.cursor!==cursor?'change':'heartbeat' : 'reset';
+   const cursor=state.eventCursor??String(state.cursor);const kind=input.cursor ? input.cursor!==cursor?'change':'heartbeat' : 'reset';
    const message=toJson(WatchRepositoryResponseSchema,create(WatchRepositoryResponseSchema,{repositoryId:'11',cursor,kind,topics:kind==='change'?state.topics:[]}));
    const reconnect={repositoryId:'11',cursor,kind:'reconnect'};
    return route.fulfill({status:200,contentType:'application/connect+json',body:Buffer.concat([envelope(0,message),envelope(0,reconnect),envelope(2,{})])});
@@ -144,4 +144,45 @@ test('Actions source and run events refresh workflow observations without dispat
  await expect(page.locator('.workflow-selected-heading')).toContainText('Manual: Ceilings deny');
  expect(state.dispatches).toBe(0);
  expect(page.url()).toBe(url);
+});
+
+
+test('empty activity watermark resumes idle rotations without refetching or replacing source controls',async({page})=>{
+ const state=await fixture(page);state.cursor=0;
+ await page.goto('/alex/demo');
+ await expect(page.getByText('Live',{exact:true})).toBeVisible();
+ await expect(page.locator('.source-tree')).toBeVisible();
+ await expect.poll(()=>state.cursors.length).toBeGreaterThanOrEqual(3);
+ const metadata=state.metadataReads,source=state.sources,rotations=state.cursors.length;
+ await page.getByLabel('Source actions',{exact:true}).click();
+ await expect(page.locator('.source-action-options')).toBeVisible();
+ await page.locator('.source-tree').evaluate(node=>{(window as unknown as {acceptedTree:Element}).acceptedTree=node;});
+ await expect.poll(()=>state.cursors.length).toBeGreaterThanOrEqual(rotations+4);
+ expect(state.cursors[0]).toBe('');expect(state.cursors.slice(1).every(cursor=>cursor==='0')).toBe(true);
+ expect(state.metadataReads).toBe(metadata);expect(state.sources).toBe(source);
+ expect(await page.locator('.source-tree').evaluate(node=>node===(window as unknown as {acceptedTree:Element}).acceptedTree)).toBe(true);
+ await expect(page.locator('.source-action-options')).toBeVisible();
+ state.topics=['source'];state.cursor=1;
+ await expect(page.getByRole('status').filter({hasText:'This source snapshot stays pinned'})).toBeVisible();
+ await expect.poll(()=>state.metadataReads).toBeGreaterThan(metadata);
+ expect(state.sources).toBe(source);expect(state.cursors).toContain('0');
+ state.denied=true;await expect(page.getByRole('alert')).toContainText('Repository access removed');
+ await expect(page.locator('.source-tree')).toHaveCount(0);
+});
+
+for(const cursor of ['', '00','01','+0','-1','9223372036854775808']){
+ test(`live cursor rejects noncanonical watermark ${cursor||'missing'}`,async({page})=>{
+  const state=await fixture(page);state.eventCursor=cursor;
+  await page.goto('/alex/demo');
+  await expect(page.getByRole('button',{name:'Reconnect live updates',exact:true})).toBeVisible();
+  expect(state.cursors.every(value=>value==='')).toBe(true);
+ });
+}
+
+test('live cursor cannot regress a positive observation to zero',async({page})=>{
+ const state=await fixture(page);await page.goto('/alex/demo');
+ await expect(page.getByText('Live',{exact:true})).toBeVisible();
+ await expect.poll(()=>state.cursors).toContain('1');state.eventCursor='0';
+ await expect(page.getByRole('button',{name:'Reconnect live updates',exact:true})).toBeVisible();
+ expect(state.cursors.slice(1).every(value=>value==='1')).toBe(true);
 });

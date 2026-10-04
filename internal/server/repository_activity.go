@@ -55,7 +55,7 @@ func (s *Server) WatchRepository(ctx context.Context, req *connect.Request[golfv
 	cursor := int64(0)
 	if req.Msg.Cursor != "" {
 		cursor, e = strconv.ParseInt(req.Msg.Cursor, 10, 64)
-		if e != nil || cursor <= 0 || strconv.FormatInt(cursor, 10) != req.Msg.Cursor {
+		if e != nil || cursor < 0 || strconv.FormatInt(cursor, 10) != req.Msg.Cursor {
 			return rpcError(invalid("Invalid activity cursor."))
 		}
 	}
@@ -89,7 +89,7 @@ func (s *Server) WatchRepository(ctx context.Context, req *connect.Request[golfv
 					return invalid("Activity cursor does not belong to this repository and caller.")
 				}
 			}
-			if initial && cursor == 0 {
+			if initial && req.Msg.Cursor == "" {
 				e = s.db.QueryRowContext(ctx, `SELECT COALESCE(max(id),0) FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=$2 AND recipient_user_id IN (0,$3)`, s.config.GiteaURL, repoID, actor).Scan(&last)
 				if e != nil {
 					return errStorageUnavailable
@@ -134,10 +134,9 @@ func (s *Server) WatchRepository(ctx context.Context, req *connect.Request[golfv
 				return rpcError(e)
 			}
 		}
-		message := &golfv1.WatchRepositoryResponse{RepositoryId: req.Msg.RepositoryId, Kind: kind, Topics: topics}
-		if last > 0 {
-			message.Cursor = strconv.FormatInt(last, 10)
-		}
+		// Zero is a real empty-history watermark. Only an omitted request cursor
+		// starts a fresh observation; resuming zero must replay the first event.
+		message := &golfv1.WatchRepositoryResponse{RepositoryId: req.Msg.RepositoryId, Kind: kind, Topics: topics, Cursor: strconv.FormatInt(last, 10)}
 		if e := stream.Send(message); e != nil {
 			return e
 		}

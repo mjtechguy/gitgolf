@@ -106,7 +106,7 @@ func TestActivityCursorPostgres(t *testing.T) {
 	client := activityClient(t, f, session)
 	start := appendActivity(t, f, 11, 0, "issues")
 	last := appendActivity(t, f, 11, 0, "actions")
-	for _, cursor := range []string{"00", "-1", "9223372036854775808", appendActivity(t, f, 12, 0, "source"), appendActivity(t, f, 11, 99999, "agents")} {
+	for _, cursor := range []string{"00", "01", "+0", " 0", "-1", "9223372036854775808", appendActivity(t, f, 12, 0, "source"), appendActivity(t, f, 11, 99999, "agents")} {
 		stream, e := client.WatchRepository(context.Background(), activityRequest(f, session, cursor))
 		if e == nil {
 			stream.Receive()
@@ -203,5 +203,107 @@ func TestActivityLimits(t *testing.T) {
 	s.releaseActivity(1)
 	if !s.admitActivity(30) {
 		t.Fatal("cancellation slot not reusable")
+	}
+}
+
+// An empty durable history has a resumable watermark, not a fresh subscription.
+// Exercise the real ten-second rotation and a first event committed between
+// streams; neither global sequence gaps nor other recipients belong to this read.
+func TestActivityEmptyWatermarkPostgres(t *testing.T) {
+	f := newPullFixture(t)
+	session := f.session(t, "pat")
+	client := activityClient(t, f, session)
+	appendActivity(t, f, 12, 0, "source")
+	appendActivity(t, f, 11, 99999, "agents")
+	ctx, cancel := context.WithTimeout(context.Background(), 14*time.Second)
+	defer cancel()
+	stream, e := client.WatchRepository(ctx, activityRequest(f, session, ""))
+	if e != nil {
+		t.Fatal(e)
+	}
+	resets, heartbeats, rotations := 0, 0, 0
+	for stream.Receive() {
+		m := stream.Msg()
+		if m.RepositoryId != "11" || m.Cursor != "0" || len(m.Topics) != 0 {
+			t.Fatal("empty watermark scope", m)
+		}
+		switch m.Kind {
+		case "reset":
+			resets++
+		case "heartbeat":
+			heartbeats++
+		case "reconnect":
+			rotations++
+		default:
+			t.Fatal("unexpected empty-history event", m)
+		}
+	}
+	if stream.Err() != nil || resets != 1 || heartbeats == 0 || rotations != 1 {
+		t.Fatal("idle stream rotation", resets, heartbeats, rotations, stream.Err())
+	}
+	stream.Close()
+	resumeCtx, resumeCancel := context.WithCancel(context.Background())
+	resumed, e := client.WatchRepository(resumeCtx, activityRequest(f, session, "0"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	if !resumed.Receive() {
+		t.Fatal("zero resume", resumed.Err())
+	}
+	if m := resumed.Msg(); m.Kind != "heartbeat" || m.Cursor != "0" || len(m.Topics) != 0 {
+		t.Fatal("zero was reset", m)
+	}
+	resumeCancel()
+	resumed.Close()
+	first := appendActivity(t, f, 11, 0, "issues")
+	replayCtx, replayCancel := context.WithCancel(context.Background())
+	defer replayCancel()
+	replay, e := client.WatchRepository(replayCtx, activityRequest(f, session, "0"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer replay.Close()
+	if !replay.Receive() {
+		t.Fatal("missing first replay", replay.Err())
+	}
+	if m := replay.Msg(); m.Kind != "change" || m.Cursor != first || len(m.Topics) != 1 || m.Topics[0] != "issues" {
+		t.Fatal("first event skipped or foreign event replayed", m)
+	}
+	replayCancel()
+	replay.Close()
+	wrong := activityRequest(f, session, "0")
+	wrong.Msg.RepositoryId = "12"
+	denied, e := client.WatchRepository(context.Background(), wrong)
+	if e == nil {
+		denied.Receive()
+		e = denied.Err()
+		denied.Close()
+	}
+	if connect.CodeOf(e) != connect.CodeNotFound {
+		t.Fatal("zero bypassed exact repository identity", e)
+	}
+	f.mode.Store("repository-denied")
+	privateDenied, e := client.WatchRepository(context.Background(), activityRequest(f, session, "0"))
+	if e == nil {
+		privateDenied.Receive()
+		e = privateDenied.Err()
+		privateDenied.Close()
+	}
+	if connect.CodeOf(e) != connect.CodeNotFound {
+		t.Fatal("zero bypassed current native authority", e)
+	}
+	f.mode.Store("")
+	hash, _ := sessionHash(session.Value)
+	if _, e = f.db.Exec("DELETE FROM golf_sessions WHERE token_hash=$1", hash); e != nil {
+		t.Fatal(e)
+	}
+	revoked, e := client.WatchRepository(context.Background(), activityRequest(f, session, "0"))
+	if e == nil {
+		revoked.Receive()
+		e = revoked.Err()
+		revoked.Close()
+	}
+	if connect.CodeOf(e) != connect.CodeUnauthenticated {
+		t.Fatal("zero bypassed revoked session", e)
 	}
 }
