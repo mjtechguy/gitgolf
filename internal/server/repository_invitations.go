@@ -61,44 +61,7 @@ func (s *Server) invitationAdmin(ctx context.Context, token forgeCredential, key
 	if e != nil {
 		return nil, e
 	}
-	row, _, e := s.readRepositorySettings(ctx, token, key)
-	if e != nil {
-		return nil, e
-	}
-	if a.RepositoryId != strconv.FormatInt(row.ID, 10) || a.OwnerId != strconv.FormatInt(row.Owner.ID, 10) {
-		return nil, errRepositoryAccessConflict
-	}
-	if !row.Permissions.Admin || *row.Archived || *row.Mirror {
-		return nil, forgeError{http.StatusForbidden}
-	}
-	manage := a.CanManage
-	if a.OrganizationOwned {
-		var org forgeOrganization
-		_, e = s.forge(ctx, http.MethodGet, "/orgs/"+key.Owner, token, nil, &org)
-		if e != nil {
-			return nil, e
-		}
-		if !validOrganization(org) || strconv.FormatInt(org.ID, 10) != a.OwnerId {
-			return nil, errRepositoryAccessConflict
-		}
-		_, e = s.forgeJSON(ctx, http.MethodGet, "/orgs/"+org.Name+"/members/"+caller.Login, token, nil, nil, http.StatusNoContent)
-		if e != nil {
-			return nil, e
-		}
-		owner, e := s.organizationOwner(ctx, token, org, caller)
-		if e != nil {
-			return nil, e
-		}
-		manage = owner && (a.CurrentPermission == "owner" || a.CurrentPermission == "admin")
-		if !manage && a.CurrentPermission == "admin" {
-			base, _ := repositoryPath(key)
-			manage, e = s.directCollaborator(ctx, token, base, caller)
-			if e != nil {
-				return nil, e
-			}
-		}
-	}
-	if !manage {
+	if !a.CanManage {
 		return nil, forgeError{http.StatusForbidden}
 	}
 	return a, nil
@@ -852,19 +815,12 @@ func (s *Server) invitationGrant(ctx context.Context, value string, token forgeC
 		if actorNative.ID != current.RecipientNativeID || !strings.EqualFold(actorNative.Login, current.RecipientLogin) {
 			return errUnauthenticated
 		}
-		if _, e = tx.ExecContext(ctx, `SELECT golf_repository_lifecycle_lock($1,$2,false)`, current.ForgeURL, current.RepositoryID); e != nil {
-			return errStorageUnavailable
-		}
-		var blocked bool
-		e = tx.QueryRowContext(ctx, `SELECT golf_repository_lifecycle_blocked($1,$2)`, current.ForgeURL, current.RepositoryID).Scan(&blocked)
+		writeCtx, e := s.lockRepositoryLifecycleTransaction(ctx, tx, current.RepositoryID)
 		if e != nil {
-			return errStorageUnavailable
-		}
-		if blocked {
-			return errLifecycleBlocked
+			return e
 		}
 		base, _ := repositoryPath(invitationKey(current))
-		_, dispatchErr := s.forgeJSON(ctx, http.MethodPut, base+"/collaborators/"+current.RecipientLogin, issuerToken, map[string]string{"permission": current.Permission}, nil, http.StatusNoContent)
+		_, dispatchErr := s.forgeJSON(writeCtx, http.MethodPut, base+"/collaborators/"+current.RecipientLogin, issuerToken, map[string]string{"permission": current.Permission}, nil, http.StatusNoContent)
 		// Even uncertain effects require current issuer/recipient authority before
 		// releasing their private original receipt. No arbitrary error becomes refusal.
 		_, _, after, e := s.invitationIssuer(ctx, q, current, false)
@@ -885,7 +841,7 @@ func (s *Server) invitationGrant(ctx context.Context, value string, token forgeC
 		if e != nil {
 			return nil
 		}
-		if member.User.Id != strconv.FormatInt(current.RecipientNativeID, 10) || !member.IsDirect || member.Permission != current.Permission || after.Revision != current.AccessRevision {
+		if member.User.Id != strconv.FormatInt(current.RecipientNativeID, 10) || !member.IsDirect || !observedAccessAllows(member.Permission, current.Permission) || after.Revision != current.AccessRevision {
 			return nil
 		}
 		// Collaborator readback is another external await: issuer/target

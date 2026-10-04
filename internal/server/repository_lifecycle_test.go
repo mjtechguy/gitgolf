@@ -546,3 +546,55 @@ func TestRepositoryLifecycleExternalUnarchiveDriftPostgres(t *testing.T) {
 		t.Fatal("drift dispatched", e, result)
 	}
 }
+
+func TestRepositoryLifecycleHeldTransactionNestedWriterPostgres(t *testing.T) {
+	f := newRepositoryLifecycleFixture(t)
+	ctx, cancel := context.WithTimeout(f.ctx(t), 3*time.Second)
+	defer cancel()
+	tx, e := f.s.db.BeginTx(ctx, nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer tx.Rollback()
+	held, e := f.s.lockRepositoryLifecycleTransaction(ctx, tx, 9007199254740993)
+	if e != nil {
+		t.Fatal(e)
+	}
+	blocked := make(chan error, 1)
+	go func() {
+		_, e := f.s.db.ExecContext(ctx, `-- name: HeldLifecycleArchiveWaiter
+SELECT golf_repository_lifecycle_lock($1,$2,true)`, f.s.config.GiteaURL, int64(9007199254740993))
+		blocked <- e
+	}()
+	waitManagementLock(t, f.s.db, "HeldLifecycleArchiveWaiter", 1)
+	request, _ := http.NewRequestWithContext(held, "PUT", "http://native.invalid", nil)
+	release, e := f.s.beginRepositoryLifecycleWrite(held, "PUT", "/repos/alice/example/contents/a", f.credential, nil, request)
+	if e != nil {
+		t.Fatal("nested writer deadlocked behind exclusive waiter", e)
+	}
+	release()
+	select {
+	case <-blocked:
+		t.Fatal("nested writer released its caller's lifecycle gate")
+	default:
+	}
+	// A copied private scope cannot authorize a different current native identity.
+	wrong := context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{f.s.config.GiteaURL, 999, tx})
+	if release, e := f.s.beginRepositoryLifecycleWrite(wrong, "PUT", "/repos/alice/example/contents/a", f.credential, nil, request); !errors.Is(e, errLifecycleBlocked) {
+		if e == nil {
+			release()
+		}
+		t.Fatal("foreign held scope accepted", e)
+	}
+	if e = tx.Rollback(); e != nil {
+		t.Fatal(e)
+	}
+	select {
+	case e := <-blocked:
+		if e != nil {
+			t.Fatal(e)
+		}
+	case <-ctx.Done():
+		t.Fatal("held lifecycle gate leaked", ctx.Err())
+	}
+}

@@ -96,16 +96,9 @@ func (s *Server) readRepositoryAccess(ctx context.Context, token forgeCredential
 	if err != nil {
 		return nil, err
 	}
-	manage := false
-	if !org && row.Permissions.Admin && !*row.Archived && !*row.Mirror {
-		if caller.ID == row.Owner.ID {
-			manage = permission == "owner"
-		} else if permission == "admin" {
-			manage, err = s.directCollaborator(ctx, token, base, caller)
-			if err != nil {
-				return nil, err
-			}
-		}
+	manage, err := s.repositoryAccessAdministrator(ctx, token, key, row, org, permission, caller)
+	if err != nil {
+		return nil, err
 	}
 	access := &golfv1.RepositoryAccess{RepositoryId: strconv.FormatInt(row.ID, 10), OwnerId: strconv.FormatInt(row.Owner.ID, 10), Owner: wireUser(*row.Owner), OrganizationOwned: org, CanManage: manage, CurrentPermission: permission}
 	// Observation fence only. Native collaborator routes have no atomic CAS.
@@ -116,6 +109,56 @@ func (s *Server) readRepositoryAccess(ctx context.Context, token forgeCredential
 	}{row.ID, row.Owner.ID, strings.ToLower(row.FullName), row.Private, *row.Archived, *row.Mirror, org})
 	return access, nil
 }
+
+// Positive current ownership/direct administration, not effective permission
+// alone. Organization visibility and membership are required; neither a native
+// site administrator nor an admin team supplies this delegation authority.
+func (s *Server) repositoryAccessAdministrator(ctx context.Context, token forgeCredential, key repositoryKey, row forgeRepositorySettings, org bool, permission string, caller User) (bool, error) {
+	if !row.Permissions.Admin || *row.Archived || *row.Mirror {
+		return false, nil
+	}
+	base, _ := repositoryPath(key)
+	if !org {
+		if caller.ID == row.Owner.ID {
+			return permission == "owner", nil
+		}
+		if permission == "admin" {
+			return s.directCollaborator(ctx, token, base, caller)
+		}
+		return false, nil
+	}
+	var native forgeOrganization
+	if _, err := s.forge(ctx, http.MethodGet, "/orgs/"+key.Owner, token, nil, &native); err != nil {
+		return false, err
+	}
+	if !validOrganization(native) || native.ID != row.Owner.ID || !strings.EqualFold(native.Name, key.Owner) {
+		return false, errRepositoryAccessConflict
+	}
+	if _, err := s.forgeJSON(ctx, http.MethodGet, "/orgs/"+native.Name+"/members/"+caller.Login, token, nil, nil, http.StatusNoContent); err != nil {
+		return false, err
+	}
+	owner, err := s.organizationOwner(ctx, token, native, caller)
+	if err != nil {
+		return false, err
+	}
+	if owner && (permission == "owner" || permission == "admin") {
+		return true, nil
+	}
+	if permission == "admin" {
+		return s.directCollaborator(ctx, token, base, caller)
+	}
+	return false, nil
+}
+
+// The native permission read is aggregate effective access. A successful native
+// 204 acknowledges the requested direct role; it does not expose its stored mode.
+func observedAccessAllows(permission, requested string) bool {
+	level := map[string]int{"none": 0, "read": 1, "write": 2, "admin": 3, "owner": 4}
+	actual, ok := level[permission]
+	needed, valid := level[requested]
+	return ok && valid && needed >= 1 && needed <= 3 && actual >= needed
+}
+
 func accessMatches(access *golfv1.RepositoryAccess, repoID, ownerID, revision string) error {
 	if !access.CanManage {
 		return forgeError{http.StatusForbidden}
@@ -333,7 +376,7 @@ func (s *Server) mutateRepositoryCollaborator(ctx context.Context, value string,
 			if target.Permission == "owner" {
 				return forgeError{http.StatusForbidden}
 			}
-			if remove && !target.IsDirect || !remove && target.IsDirect && target.Permission == permission {
+			if remove && !target.IsDirect {
 				return errRepositoryAccessConflict
 			}
 			return nil
@@ -378,7 +421,7 @@ func (s *Server) mutateRepositoryCollaborator(ctx context.Context, value string,
 		if err != nil {
 			return err
 		}
-		if observed.User.Id != userID || (remove && observed.IsDirect) || (!remove && (!observed.IsDirect || observed.Permission != permission)) {
+		if observed.User.Id != userID || (remove && observed.IsDirect) || (!remove && (!observed.IsDirect || !observedAccessAllows(observed.Permission, permission))) {
 			return errInvalidForgeResponse
 		}
 		result = observed

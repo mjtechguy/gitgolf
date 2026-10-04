@@ -79,6 +79,7 @@ func TestRepositoryAccessNativeProjection(t *testing.T) {
 	kind := "personal"
 	permission := "owner"
 	direct := false
+	member, orgOwner := true, false
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -100,6 +101,14 @@ func TestRepositoryAccessNativeProjection(t *testing.T) {
 			} else {
 				w.WriteHeader(404)
 			}
+		case strings.Contains(r.URL.Path, "/members/"):
+			if member {
+				w.WriteHeader(204)
+			} else {
+				w.WriteHeader(404)
+			}
+		case strings.HasSuffix(r.URL.Path, "/permissions"):
+			json.NewEncoder(w).Encode(map[string]bool{"is_owner": orgOwner})
 		case strings.HasSuffix(r.URL.Path, "/permission"):
 			json.NewEncoder(w).Encode(map[string]any{"permission": permission, "user": caller})
 		case strings.Contains(r.URL.Path, "/collaborators/"):
@@ -148,9 +157,39 @@ func TestRepositoryAccessNativeProjection(t *testing.T) {
 	}
 	kind = "org"
 	permission = "admin"
-	if access := read(); !access.OrganizationOwned || access.CanManage {
-		t.Fatal("organization owned repository editable")
+	if access := read(); !access.OrganizationOwned || !access.CanManage {
+		t.Fatal("current organization member/direct admin cannot manage")
 	}
+	direct = false
+	if read().CanManage {
+		t.Fatal("effective team administration bypassed direct/owner evidence")
+	}
+	orgOwner = true
+	permission = "owner"
+	if !read().CanManage {
+		t.Fatal("current organization owner cannot manage")
+	}
+	orgOwner = false
+	direct = true
+	if read().CanManage {
+		t.Fatal("native site owner-level permission bypassed organization ownership")
+	}
+	permission = "admin"
+	member = false
+	if _, err = s.readRepositoryAccess(t.Context(), forgeCredential{Kind: "pat", Token: "fixture"}, repositoryKey{"alice", "example"}, caller); err == nil {
+		t.Fatal("nonmember native direct admin acquired organization delegation")
+	}
+	member = true
+	row.Archived = func() *bool { v := true; return &v }()
+	if read().CanManage {
+		t.Fatal("archived organization editable")
+	}
+	row.Archived = func() *bool { v := false; return &v }()
+	row.Mirror = func() *bool { v := true; return &v }()
+	if read().CanManage {
+		t.Fatal("mirror organization editable")
+	}
+	row.Mirror = func() *bool { v := false; return &v }()
 	kind = "hidden-org"
 	if _, err = s.readRepositoryAccess(t.Context(), forgeCredential{Kind: "pat", Token: "fixture"}, repositoryKey{"alice", "example"}, caller); err == nil {
 		t.Fatal("hidden organization 404 became personal owner")
@@ -166,6 +205,7 @@ func TestRepositoryAccessPostgres(t *testing.T) {
 	target := User{ID: 77, Login: "bob"}
 	direct := false
 	permission := "none"
+	inherited := ""
 	writes := 0
 	lost := false
 	var onTarget func()
@@ -200,7 +240,11 @@ func TestRepositoryAccessPostgres(t *testing.T) {
 		case "/api/v1/repos/alice/example/collaborators/alice":
 			w.WriteHeader(404)
 		case "/api/v1/repos/alice/example/collaborators/bob/permission":
-			json.NewEncoder(w).Encode(map[string]any{"permission": permission, "user": target})
+			observed := permission
+			if inherited != "" {
+				observed = inherited
+			}
+			json.NewEncoder(w).Encode(map[string]any{"permission": observed, "user": target})
 		case "/api/v1/repos/alice/example/collaborators/bob":
 			if r.Method == "GET" {
 				if direct {
@@ -303,6 +347,26 @@ func TestRepositoryAccessPostgres(t *testing.T) {
 	if writes != 3 {
 		t.Fatal("unexpected write count", writes)
 	}
+	// A lower requested direct role can coexist with higher observed access.
+	// Native GET does not expose the stored direct mode, so acknowledge the
+	// exact PUT204 separately from the bound effective observation.
+	mu.Lock()
+	inherited = "admin"
+	mu.Unlock()
+	for _, requested := range []string{"read", "write"} {
+		candidate = resolve(access, "bob")
+		got, e := set(access, candidate, requested)
+		if e != nil || !got.Msg.Collaborator.IsDirect || got.Msg.Collaborator.Permission != "admin" {
+			t.Fatal("inherited effective access mistaken for rejected direct role", requested, e)
+		}
+	}
+	if writes != 5 {
+		t.Fatal("inherited requests repeated or missing", writes)
+	}
+	mu.Lock()
+	inherited = ""
+	mu.Unlock()
+	candidate = resolve(access, "bob")
 	owner := resolve(access, "alice")
 	if _, err = set(access, owner, "read"); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatal("owner downgrade accepted", err)
@@ -333,7 +397,7 @@ func TestRepositoryAccessPostgres(t *testing.T) {
 	if _, err = set(public, candidate, "write"); connect.CodeOf(err) != connect.CodeUnavailable {
 		t.Fatal("lost write was success", err)
 	}
-	if writes != 5 || !resolve(public, "bob").IsDirect {
+	if writes != 7 || !resolve(public, "bob").IsDirect {
 		t.Fatal("lost write retried or disappeared", writes)
 	}
 	mu.Lock()
@@ -358,7 +422,7 @@ func TestRepositoryAccessPostgres(t *testing.T) {
 	if _, err := remove(adminAccess, self); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatal("admin self removal accepted", err)
 	}
-	if writes != 5 {
+	if writes != 7 {
 		t.Fatal("self mutation dispatched")
 	}
 	if err := s.logoutSession(t.Context(), adminSession.Value); err != nil {
@@ -372,7 +436,7 @@ func TestRepositoryAccessPostgres(t *testing.T) {
 	candidate = resolve(public, "bob")
 	// Native revocation after target lookup and before fresh authority read.
 	onTarget = func() { onTarget = nil; row.Permissions.Admin = false }
-	if _, err = set(public, candidate, "admin"); connect.CodeOf(err) != connect.CodePermissionDenied || writes != 5 {
+	if _, err = set(public, candidate, "admin"); connect.CodeOf(err) != connect.CodePermissionDenied || writes != 7 {
 		t.Fatal("revoked authority dispatched", err)
 	}
 	mu.Lock()
@@ -385,7 +449,18 @@ func TestRepositoryAccessPostgres(t *testing.T) {
 			t.Error(err)
 		}
 	}
-	if _, err = set(public, candidate, "admin"); connect.CodeOf(err) != connect.CodeUnauthenticated || writes != 5 {
+	if _, err = set(public, candidate, "admin"); connect.CodeOf(err) != connect.CodeUnauthenticated || writes != 7 {
 		t.Fatal("revoked session dispatched", err)
+	}
+}
+
+func TestRepositoryAccessEffectivePermission(t *testing.T) {
+	for _, tc := range []struct {
+		actual, requested string
+		allow             bool
+	}{{"admin", "read", true}, {"write", "read", true}, {"owner", "admin", true}, {"read", "admin", false}, {"none", "read", false}, {"ADMIN", "read", false}, {"admin", "owner", false}, {"admin", "", false}} {
+		if observedAccessAllows(tc.actual, tc.requested) != tc.allow {
+			t.Fatalf("effective %q/request %q", tc.actual, tc.requested)
+		}
 	}
 }

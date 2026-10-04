@@ -45,7 +45,7 @@ function Removal({ intent, pending, onCancel, onConfirm }: { intent: Intent; pen
 export function RepositoryDeployKeys({ userId, owner, name, access, signingOut }: { userId: string; owner: string; name: string; access: RepositoryAccess; signingOut: boolean }) {
   const client = useQueryClient(); const target: Target = { repositoryId: access.repositoryId, ownerId: access.ownerId, expectedRevision: access.revision };
   const queryKey = ['repository-deploy-keys', userId, owner, name, target.repositoryId, target.ownerId, target.expectedRevision];
-  const canManage = access.canManage && !access.organizationOwned && (access.currentPermission === 'admin' || (access.currentPermission === 'owner' && access.ownerId === userId));
+  const canManage = access.canManage && (access.currentPermission === 'admin' || (access.currentPermission === 'owner' && (access.organizationOwned || access.ownerId === userId)));
   const query = useInfiniteQuery({ ...privateQuery, queryKey, enabled: canManage && !signingOut, initialPageParam: 1,
     queryFn: async ({ pageParam, signal }) => {
       const response = await repositoryDeployKeyClient.listRepositoryDeployKeys({ repository: { owner, name }, ...target, page: { page: pageParam, limit: 20 } }, { signal, timeoutMs: 15_000 });

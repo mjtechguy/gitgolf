@@ -113,6 +113,34 @@ func lifecycleWriteRepository(method, path string) (repositoryKey, bool, error) 
 	_, e = repositoryPath(key)
 	return key, true, e
 }
+
+// A private held scope is constructed only after the same transaction acquired
+// the shared lifecycle gate. Nested supported native writes reuse that gate so
+// an exclusive archive waiter cannot deadlock the existing holder.
+type repositoryLifecycleTransactionKey struct{}
+type repositoryLifecycleTransaction struct {
+	forge        string
+	repositoryID int64
+	tx           *sql.Tx
+}
+
+func (s *Server) lockRepositoryLifecycleTransaction(ctx context.Context, tx *sql.Tx, repositoryID int64) (context.Context, error) {
+	if tx == nil || repositoryID <= 0 {
+		return nil, errStorageUnavailable
+	}
+	if _, e := tx.ExecContext(ctx, `SELECT golf_repository_lifecycle_lock($1,$2,false)`, s.config.GiteaURL, repositoryID); e != nil {
+		return nil, errStorageUnavailable
+	}
+	var blocked bool
+	if e := tx.QueryRowContext(ctx, `SELECT golf_repository_lifecycle_blocked($1,$2)`, s.config.GiteaURL, repositoryID).Scan(&blocked); e != nil {
+		return nil, errStorageUnavailable
+	}
+	if blocked {
+		return nil, errLifecycleBlocked
+	}
+	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.GiteaURL, repositoryID, tx}), nil
+}
+
 func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path string, token forgeCredential, input any, request *http.Request) (releaseResult func(), resultErr error) {
 	key, scoped, e := lifecycleWriteRepository(method, path)
 	if e != nil {
@@ -136,6 +164,22 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 	}
 	if !validRepository(repo.Repository) || !strings.EqualFold(repo.Name, key.Name) || !strings.EqualFold(repo.FullName, key.Owner+"/"+key.Name) {
 		return nil, errInvalidForgeResponse
+	}
+	if held, ok := ctx.Value(repositoryLifecycleTransactionKey{}).(repositoryLifecycleTransaction); ok {
+		if held.tx == nil || held.forge != s.config.GiteaURL || held.repositoryID != repo.ID {
+			cancel()
+			return nil, errLifecycleBlocked
+		}
+		var blocked bool
+		if e = held.tx.QueryRowContext(ctx, `SELECT golf_repository_lifecycle_blocked($1,$2)`, s.config.GiteaURL, repo.ID).Scan(&blocked); e != nil {
+			cancel()
+			return nil, errStorageUnavailable
+		}
+		if blocked {
+			cancel()
+			return nil, errLifecycleBlocked
+		}
+		return cancel, nil
 	}
 	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
