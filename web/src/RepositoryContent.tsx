@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useState, type ReactNode } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -54,7 +54,7 @@ export function MarkdownBody({text,label,context}:{text:string;label:string;cont
   pre:({children,node})=><div className="code-block"><CopyButton text={node?.children.map(nodeText).join('')||''} label="Copy code block"/><pre>{children}</pre></div>,
  }}>{text}</Markdown></div>;
 }
-export function FileContent({text,path,context}:{text:string;path:string;context:DocumentContext}) {
+export function FileContent({text,path,context,heading}:{text:string;path:string;context:DocumentContext;heading?:ReactNode}) {
  const [raw,setRaw]=useState(false);
- return <><div className="content-view-controls"><button className="text-button" onClick={()=>setRaw(!raw)} aria-pressed={raw}>{raw?<Eye size={15}/>:<Code2 size={15}/>} {raw?'Rendered':'Source'}</button></div>{raw?<CodePreview text={text} path={path}/>:<MarkdownBody text={text} label={`Rendered ${path}`} context={context}/>}</>;
+ return <><div className={heading?'browser-panel-heading':'content-view-controls'}>{heading}<button className="text-button" onClick={()=>setRaw(!raw)} aria-pressed={raw}>{raw?<Eye size={15}/>:<Code2 size={15}/>} {raw?'Rendered':'Source'}</button></div>{raw?<CodePreview text={text} path={path}/>:<MarkdownBody text={text} label={`Rendered ${path}`} context={context}/>}</>;
 }

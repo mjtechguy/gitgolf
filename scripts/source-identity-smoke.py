@@ -15,6 +15,7 @@ from pathlib import Path
 import secrets
 import subprocess
 import sys
+import time
 from urllib.parse import quote
 
 sys.dont_write_bytecode = True
@@ -31,6 +32,10 @@ try{
  page.on('request',request=>{if(/RepositoryService\/(GetContents|GetRepositoryImage)$/.test(request.url()))requests.push({procedure:request.url().split('/').at(-1),body:request.postDataJSON()});});
  page.on('response',async response=>{if(response.status()!==200||!/RepositoryService\/(GetContents|GetRepositoryImage)$/.test(response.url()))return;try{receipts.push({procedure:response.url().split('/').at(-1),body:await response.json()});}catch{errors.push(true);}});
  stage='served default source and referenced image';await page.goto(config.golf+'/'+config.repository);const readme=page.getByRole('region',{name:'Repository README',exact:true});await readme.getByRole('heading',{name:'Moved source identity',exact:true}).waitFor();const logo=readme.getByRole('img',{name:'Fixture logo',exact:true});await logo.waitFor();check((await logo.getAttribute('src')).startsWith('data:image/svg+xml;base64,'));
+ if(config.overview){
+  stage='served root repository sidebar';const sidebar=page.getByRole('complementary',{name:'About this repository',exact:true});await sidebar.getByRole('heading',{name:'About',exact:true}).waitFor();await sidebar.getByText('Repository overview qualification',{exact:true}).waitFor();await sidebar.getByRole('link',{name:'example.invalid/golf',exact:true}).waitFor();await sidebar.getByText('agentic',{exact:true}).waitFor();await sidebar.getByText('Python',{exact:true}).waitFor();
+  for(const theme of ['dark','light'])for(const width of [1280,390]){await page.setViewportSize({width,height:900});const toggle=page.getByRole('button',{name:'Switch to '+theme+' theme',exact:true});if(await toggle.count())await toggle.click();check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:join(config.screenshots,'repository-overview-'+theme+'-'+width+'.png'),fullPage:true});await writeFile(join(config.screenshots,'repository-overview-'+theme+'-'+width+'.txt'),await page.locator('body').innerText(),{mode:0o600});}
+ }
  stage='served immutable README after ref movement';await page.goto(config.golf+'/'+config.repository+'/blob/'+config.commit+'/README.md');await page.getByRole('heading',{name:'Exact source identity',exact:true}).waitFor();await page.getByRole('img',{name:'Fixture logo',exact:true}).waitFor();check(!new URL(page.url()).searchParams.has('ref'));
  const metrics=[];for(const theme of ['dark','light'])for(const width of [1280,390]){
   stage='served exact source capture '+theme+' '+width;await page.setViewportSize({width,height:900});const toggle=page.getByRole('button',{name:'Switch to '+theme+' theme',exact:true});if(await toggle.count())await toggle.click();check(await page.locator('html').getAttribute('data-theme')===theme);
@@ -40,7 +45,9 @@ try{
  stage='all served content and image requests use exact identity';await page.waitForTimeout(100);check(requests.some(row=>row.procedure==='GetContents')&&requests.some(row=>row.procedure==='GetRepositoryImage')&&receipts.some(row=>row.procedure==='GetRepositoryImage'));
  for(const row of requests){check(row.body.repositoryId===config.repositoryId);check(/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(row.body.ref||row.body.commitId));}
  for(const row of receipts){check(row.body.repositoryId===config.repositoryId);if(row.procedure==='GetRepositoryImage')check(row.body.documentPath==='README.md'&&row.body.imageUrl==='./logo.svg'&&[config.commit,config.latest].includes(row.body.commitId));else check([config.commit,config.latest].includes(row.body.commitId));}
+ let overviewPage;if(config.overview){stage='second-tab current root sidebar';overviewPage=await context.newPage();await overviewPage.goto(config.golf+'/'+config.repository);await overviewPage.getByText('Repository overview qualification',{exact:true}).waitFor();}
  stage='live private source revocation';check((await context.request.delete(config.gitea+'/api/v1/repos/'+config.repository+'/collaborators/'+config.user,{headers:{Authorization:'token '+config.ownerToken}})).status()===204);await page.getByLabel('Plain text preview of '+config.path.split('/').at(-1),{exact:true}).waitFor({state:'detached',timeout:20000});check(!(await page.locator('body').innerText()).includes(config.text.trim().split('\n').at(-1))&&errors.length===0);
+ if(overviewPage){await overviewPage.getByText('Repository overview qualification',{exact:true}).waitFor({state:'detached',timeout:20000});check(!(await overviewPage.locator('body').innerText()).includes('Repository overview qualification'));}
  await writeFile(join(config.screenshots,'source-identity-metrics.json'),JSON.stringify({runtime:config.runtime,captureKind:'Actual exact source/README/image receipts; named route behavior not qualified',metrics},null,2),{mode:0o600});
  console.log('PASS: served exact source/README/image receipts, immutable source after branch movement, Unicode fragment/reload, four theme/mobile captures and live private revocation');
 }catch(failure){console.error('Source identity browser failed at '+stage+'; '+(failure.name==='TimeoutError'?'TimeoutError':'assertion/error')+'; private diagnostics withheld');process.exitCode=1;}
@@ -53,6 +60,7 @@ def main():
     parser.add_argument('--stack-root', required=True, type=Path)
     parser.add_argument('--screenshots', type=Path)
     parser.add_argument('--cli', type=Path, help='Optional current Golf CLI binary')
+    parser.add_argument('--overview', action='store_true', help='Also qualify the integrated repository overview and root sidebar')
     args = parser.parse_args()
     stack = args.stack_root.resolve()
     if not all((stack / item).is_file() for item in ('compose.yaml', '.env', 'web/node_modules/playwright/index.mjs')):
@@ -119,6 +127,10 @@ def main():
 
         svg = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40"><rect width="80" height="40" fill="#b8f36a"/></svg>'
         write('logo.svg', svg)
+        if args.overview:
+            write('app.py', 'def greet(name):\n    return f"Hello {name}"\n')
+            smoke.provider(owner['token'], 'PATCH', route, {'description': 'Repository overview qualification', 'website': 'https://example.invalid/golf'})
+            smoke.provider(owner['token'], 'PUT', route + '/topics', {'topics': ['agentic', 'golf', 'self-hosted']}, 204)
         path, text = 'docs/source % #? ü.txt', 'Source identity fixture\nExact immutable Unicode content\n'
         write(path, text)
         original = '# Exact source identity\n\n![Fixture logo](./logo.svg)\n'
@@ -143,6 +155,34 @@ def main():
             assert response['selection']['kind'] == 'REPOSITORY_SOURCE_REF_KIND_' + kind and response['selection']['commitId'] == selected
             assert response['selection']['name'] == (repo['default_branch'] if kind == 'DEFAULT_BRANCH' else name)
             return response
+
+        if args.overview:
+            stage = 'current native repository overview observations'
+            observed = smoke.provider(reader['token'], 'GET', route)
+            # Native language indexing is asynchronous. Require meaningful real
+            # fixture data, without representing it as selected-commit proof.
+            for attempt in range(30):
+                languages = smoke.provider(reader['token'], 'GET', route + '/languages')
+                if languages.get('Python', 0) > 0:
+                    break
+                time.sleep(1)
+            assert languages.get('Python', 0) > 0
+            licenses = smoke.provider(reader['token'], 'GET', route + '/licenses')
+            overview_request = {'repository': key, 'repositoryId': rid}
+            overview = rpc(reader, 'GetRepositoryOverview', overview_request)
+            assert overview['repository'] == key and overview['repositoryId'] == rid
+            assert overview['description'] == observed['description'] == 'Repository overview qualification'
+            assert overview['website'] == observed['website'] == 'https://example.invalid/golf'
+            assert sorted(overview['topics']) == sorted(observed['topics']) == ['agentic', 'golf', 'self-hosted']
+            for field, native in [('starsCount', 'stars_count'), ('watchersCount', 'watchers_count'), ('forksCount', 'forks_count')]:
+                assert overview[field] == str(observed[native])
+            assert overview['languagesState'] == 'REPOSITORY_OVERVIEW_SECTION_STATE_AVAILABLE'
+            assert {entry['name']: int(entry['byteCount']) for entry in overview['languages']} == languages
+            assert overview['licensesState'] == 'REPOSITORY_OVERVIEW_SECTION_STATE_AVAILABLE'
+            assert sorted(overview.get('licenseIds', [])) == sorted(licenses)
+            rpc(reader, 'GetRepositoryOverview', {**overview_request, 'repositoryId': str(repo['id'] + 1000000)}, 400, 'failed_precondition')
+            rpc(outsider, 'GetRepositoryOverview', overview_request, 404)
+            print('PASS: exact-ID authorized native overview, real indexed language bytes, topics/website/counts/license observations and private/wrong-ID denial', flush=True)
 
         stage = 'typed namespace and immutable source receipts'
         resolve('DEFAULT_BRANCH', '', latest)
@@ -172,6 +212,8 @@ def main():
         assert selected['repositoryId'] == rid and selected['selection']['commitId'] == commit
         assert smoke.rpc(bearer, 'RepositoryService/GetContents', exact, headers=authorization)['file']['entry']['sha'] == blob
         assert smoke.rpc(bearer, 'RepositoryService/GetRepositoryImage', image_request, headers=authorization)['repositoryId'] == rid
+        if args.overview:
+            assert smoke.rpc(bearer, 'RepositoryService/GetRepositoryOverview', overview_request, headers=authorization)['repositoryId'] == rid
         smoke.rpc(reader['session'], 'ApiCredentialService/RevokeApiCredential', {'credentialId': delegated['credential']['id']})
         smoke.rpc(bearer, 'RepositoryService/GetContents', exact, headers=authorization, expected=401)
         print('PASS: typed default/slash branch/tag/commit selection, same-name branch/tag explicit namespaces, exact ID/SHA/path/blob/image receipts, wrong-ID/private denials and additive legacy receipt', flush=True)
@@ -187,7 +229,7 @@ def main():
             assert data['repositoryId'] == rid and data['commitId'] == commit and data['path'] == path and data['file']['content'] == text
             print('PASS: current CLI explicit slash-tag selection and exact source identity', flush=True)
         stage = 'actual served exact source browser'
-        config = {'golf': smoke.GOLF, 'gitea': smoke.GITEA, 'email': reader['email'], 'password': reader['password'], 'user': reader['name'], 'ownerToken': owner['token'], 'repository': full, 'repositoryId': rid, 'commit': commit, 'latest': latest, 'path': path, 'text': text, 'screenshots': str(screens), 'runtime': baseline}
+        config = {'golf': smoke.GOLF, 'gitea': smoke.GITEA, 'email': reader['email'], 'password': reader['password'], 'user': reader['name'], 'ownerToken': owner['token'], 'repository': full, 'repositoryId': rid, 'commit': commit, 'latest': latest, 'path': path, 'text': text, 'screenshots': str(screens), 'runtime': baseline, 'overview': args.overview}
         result = subprocess.run(['node', '--input-type=module', '-e', BROWSER], cwd=stack, input=json.dumps(config), capture_output=True, text=True, timeout=150)
         if result.returncode:
             for line in result.stderr.splitlines():

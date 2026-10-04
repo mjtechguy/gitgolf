@@ -27,5 +27,6 @@ export function RepositoryReadme({owner,name,refId,path,entries,userId,repositor
  if(query.isPending||query.isFetching)return <Loading label="Reading README…"/>;
  const file=query.data?.file;
  if(!file?.entry)return null;
- return <section className="browser-panel" aria-label="Repository README"><div className="browser-panel-heading"><h2><BookOpen size={17}/> {file.entry.path}</h2></div>{file.previewReason||file.entry.size>256n*1024n||file.content===undefined?<p className="panel-footnote">{file.previewReason||'README exceeds the preview limit.'}</p>:<FileContent key={file.entry.sha} text={file.content} path={file.entry.path} context={{repositoryId,owner,name,ref:refId,path:file.entry.path,userId}}/>}</section>;
+ const heading=<h2><BookOpen size={17}/> {file.entry.path}</h2>;
+ return <section className="browser-panel" aria-label="Repository README">{file.previewReason||file.entry.size>256n*1024n||file.content===undefined?<><div className="browser-panel-heading">{heading}</div><p className="panel-footnote">{file.previewReason||'README exceeds the preview limit.'}</p></>:<FileContent key={file.entry.sha} text={file.content} path={file.entry.path} heading={heading} context={{repositoryId,owner,name,ref:refId,path:file.entry.path,userId}}/>}</section>;
 }
