@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -41,6 +42,25 @@ func TestRepositoryInvitationValidation(t *testing.T) {
 	}
 	if hidden.Id != row.ID.String() || hidden.Revision != "1" {
 		t.Fatal("own metadata missing")
+	}
+}
+
+func TestRepositoryInvitationRespondError(t *testing.T) {
+	for _, err := range []error{errRepositoryAccessUnresolved, fmt.Errorf("private diagnostic: %w", errRepositoryAccessUnresolved)} {
+		mapped := invitationRespondError(err)
+		if mapped != errRepositoryAccessUnresolved || connect.CodeOf(mapped) != connect.CodeFailedPrecondition || strings.Contains(mapped.Error(), "private diagnostic") {
+			t.Fatal("shared original-slot refusal lost its closed inspection guidance", mapped)
+		}
+		var ce *connect.Error
+		if !errors.As(mapped, &ce) || ce.Meta().Get("Golf-Access-Effect") != "" {
+			t.Fatal("unresolved original effect falsely declared absent")
+		}
+	}
+	for _, err := range []error{errors.New("private SQL diagnostic"), connect.NewError(connect.CodeFailedPrecondition, errors.New("private transport diagnostic"))} {
+		mapped := invitationRespondError(err)
+		if connect.CodeOf(mapped) != connect.CodeInternal || strings.Contains(mapped.Error(), "private") {
+			t.Fatal("arbitrary error escaped the closed mapper", mapped)
+		}
 	}
 }
 
@@ -664,5 +684,57 @@ func TestRepositoryInvitationConcurrentIssuerQuotaPostgres(t *testing.T) {
 	}
 	if succeeded != 1 || refused != 1 || count != 100 || operations != 0 || f.writes != 0 {
 		t.Fatal(fmt.Sprintf("quota outcomes: admitted=%d refused=%d pending=%d operations=%d nativeWrites=%d", succeeded, refused, count, operations, f.writes))
+	}
+}
+
+func TestRepositoryInvitationUnresolvedDirectAccessPostgres(t *testing.T) {
+	f := newInvitationFixture(t)
+	invite := f.create(t)
+	actor := f.actors["alice"]
+	ctx := context.WithValue(t.Context(), sessionTokenKey{}, actor.token)
+	a, err := f.s.readRepositoryAccess(ctx, actor.token, repositoryKey{"alice", "example"}, actor.user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := f.s.readRepositoryCollaborator(ctx, actor.token, repositoryKey{"alice", "example"}, a, "bob")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, request := invitationReq(f, "alice", &golfv1.SetRepositoryCollaboratorRequest{Repository: &golfv1.RepositoryKey{Owner: "alice", Name: "example"}, RepositoryId: "17", OwnerId: "42", ExpectedRevision: a.Revision, UserLogin: "bob", UserId: "43", ExpectedCollaboratorRevision: target.Revision, Permission: "write", IdempotencyKey: uuid.NewString()})
+	f.mode = "lost"
+	original, err := f.s.SetRepositoryCollaborator(ctx, request)
+	if err != nil || original == nil || original.Msg.Operation.Phase != "DISPATCH_UNKNOWN" || original.Msg.Collaborator != nil || f.writes != 1 {
+		t.Fatal("native effect did not retain its uncertain direct intent", original, err)
+	}
+	f.mode = ""
+	responseKey := uuid.NewString()
+	for _, key := range []string{responseKey, responseKey, uuid.NewString()} {
+		result, err := f.respond("bob", invite, key, golfv1.RepositoryInvitationDecision_REPOSITORY_INVITATION_DECISION_ACCEPT)
+		if result != nil || connect.CodeOf(err) != connect.CodeFailedPrecondition || !errors.Is(err, errRepositoryAccessUnresolved) || f.writes != 1 {
+			t.Fatal("pending invitation bypassed uncertainty or lost its inspection refusal", result, err)
+		}
+	}
+	var state string
+	var version, operations, generation, activities int64
+	if err := f.db.QueryRow(`SELECT state,revision FROM golf_repository_invitations WHERE id=$1`, invite.Id).Scan(&state, &version); err != nil || state != "PENDING" || version != 1 {
+		t.Fatal("refusal changed the pending invitation", state, version, err)
+	}
+	if err := f.db.QueryRow(`SELECT count(*) FROM golf_repository_invitation_operations WHERE invitation_id=$1`, invite.Id).Scan(&operations); err != nil || operations != 0 {
+		t.Fatal("rolled-back reservation became a fabricated invitation receipt", operations, err)
+	}
+	if err := f.db.QueryRow(`SELECT generation FROM golf_repository_access_generations WHERE forge_url=$1 AND repository_id=17 AND recipient_id=43`, f.s.config.GiteaURL).Scan(&generation); err != nil || generation != 1 {
+		t.Fatal("refusal changed the original shared generation", generation, err)
+	}
+	if err := f.db.QueryRow(`SELECT count(*) FROM golf_repository_activity WHERE repository_id=17`).Scan(&activities); err != nil || activities != 0 {
+		t.Fatal("uncertain/refused effects published activity", activities, err)
+	}
+	statusCtx, statusRequest := invitationReq(f, "alice", &golfv1.GetRepositoryAccessOperationRequest{Repository: request.Msg.Repository, RepositoryId: "17", OwnerId: "42", ExpectedRevision: a.Revision, UserId: "43", IdempotencyKey: request.Msg.IdempotencyKey})
+	status, err := f.s.GetRepositoryAccessOperation(statusCtx, statusRequest)
+	if err != nil || status == nil || !proto.Equal(status.Msg.Operation, original.Msg.Operation) || status.Msg.Collaborator != nil {
+		t.Fatal("invitation refusal changed original direct-access history", status, err)
+	}
+	replay, err := f.s.SetRepositoryCollaborator(ctx, request)
+	if err != nil || replay == nil || !proto.Equal(replay.Msg.Operation, original.Msg.Operation) || replay.Msg.Collaborator != nil || f.writes != 1 {
+		t.Fatal("original direct intent resent after invitation refusal", replay, err)
 	}
 }

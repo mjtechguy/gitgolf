@@ -650,6 +650,15 @@ func (s *Server) RevokeRepositoryInvitation(ctx context.Context, req *connect.Re
 	}
 	return connect.NewResponse(&golfv1.RevokeRepositoryInvitationResponse{Invitation: invitationWire(result, true)}), nil
 }
+func invitationRespondError(err error) error {
+	// Only this closed shared-slot refusal survives as an inspection instruction.
+	// Arbitrary Connect, SQL and transport errors still use the closed mapper.
+	if errors.Is(err, errRepositoryAccessUnresolved) {
+		return errRepositoryAccessUnresolved
+	}
+	return rpcError(err)
+}
+
 func (s *Server) RespondRepositoryInvitation(ctx context.Context, req *connect.Request[golfv1.RespondRepositoryInvitationRequest]) (*connect.Response[golfv1.RespondRepositoryInvitationResponse], error) {
 	token, value, e := s.reviewDraftCaller(ctx, req.Header())
 	if e != nil {
@@ -787,7 +796,7 @@ func (s *Server) RespondRepositoryInvitation(ctx context.Context, req *connect.R
 		return nil
 	})
 	if e != nil {
-		return nil, rpcError(e)
+		return nil, invitationRespondError(e)
 	}
 	if !details {
 		return nil, rpcError(errInvitationAuthority)
@@ -796,7 +805,7 @@ func (s *Server) RespondRepositoryInvitation(ctx context.Context, req *connect.R
 		// No recovery resend: only this first reserved invocation may enter this block.
 		e = s.invitationGrant(ctx, value, token, &invite, &operation)
 		if e != nil {
-			return nil, rpcError(e)
+			return nil, invitationRespondError(e)
 		}
 	}
 	return connect.NewResponse(&golfv1.RespondRepositoryInvitationResponse{Invitation: invitationWire(invite, details), Operation: invitationOperationWire(operation, invite)}), nil
