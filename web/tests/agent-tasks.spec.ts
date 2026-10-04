@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, GetRepositoryAccessResponseSchema, GetRepositorySettingsResponseSchema, ListCapabilitiesResponseSchema, GetExecutionPolicyResponseSchema, ListWorkflowRunsResponseSchema, InspectWorkflowsResponseSchema, ListAgentTasksResponseSchema, GetAgentUsageResponseSchema, ListCodexConnectionsResponseSchema, ListAgentModelsResponseSchema, GetCodexConnectionResponseSchema, CreateAgentTaskRequestSchema, CreateAgentTaskResponseSchema, GetAgentTaskResponseSchema, CancelAgentTaskRequestSchema, CancelAgentTaskResponseSchema, AgentUsageScope, CodexConnectionState, CodexLoginMethod } from '../src/gen/golf/v1/golf_pb';
+import { GetRepositoryResponseSchema, GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, GetRepositoryAccessResponseSchema, GetRepositorySettingsResponseSchema, ListCapabilitiesResponseSchema, GetExecutionPolicyResponseSchema, ListWorkflowRunsResponseSchema, InspectWorkflowsResponseSchema, ListAgentTasksResponseSchema, GetAgentUsageResponseSchema, ListCodexConnectionsResponseSchema, ListAgentModelsResponseSchema, GetCodexConnectionResponseSchema, CreateAgentTaskRequestSchema, CreateAgentTaskResponseSchema, GetAgentTaskResponseSchema, CancelAgentTaskRequestSchema, CancelAgentTaskResponseSchema, AgentUsageScope, CodexConnectionState, CodexLoginMethod } from '../src/gen/golf/v1/golf_pb';
 import { request, respond, reject } from './rpc';
 
 test('manual tasks bind current account and policy, cancel only after confirmation and clear results on denial', async ({ page }) => {
@@ -15,7 +15,8 @@ test('manual tasks bind current account and policy, cancel only after confirmati
   if(method==='GetRepositorySettings')return respond(route,GetRepositorySettingsResponseSchema,{settings:{repositoryId:'12',ownerId:'42',canEdit:true}});
   if(method==='GetExecutionPolicy')return respond(route,GetExecutionPolicyResponseSchema,{});
   if(method==='ListWorkflowRuns')return respond(route,ListWorkflowRunsResponseSchema,{});
-  if(method==='InspectWorkflows')return respond(route,InspectWorkflowsResponseSchema,{});
+    if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, {repository:{id:'12',name:'private',fullName:'alex/private',defaultBranch:'main'}});
+  if(method==='InspectWorkflows')return respond(route,InspectWorkflowsResponseSchema,{repositoryId:'12'});
   if(method==='GetAgentUsage')return respond(route,GetAgentUsageResponseSchema,{settings:{scope:AgentUsageScope.REPOSITORY,scopeId:'12',revision:'7',authorityRevision:'authority',canEdit:true,config,effective:config}});
   if(method==='ListAgentTasks')return denied?reject(route,'permission_denied','Task access denied'):respond(route,ListAgentTasksResponseSchema,{executionAvailable:true,tasks:creates?[state]:[]});
   if(method==='ListCodexConnections')return respond(route,ListCodexConnectionsResponseSchema,{connections:[connection]});

@@ -1,7 +1,7 @@
 import { disabledAgentTasks, disabledAgentUsage } from './rpc';
 import { expect, test, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { ExecutionMode, ExecutionScope, ExecutionPolicySchema, GetExecutionPolicyResponseSchema, UpdateExecutionPolicyRequestSchema, UpdateExecutionPolicyResponseSchema, GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, InspectWorkflowsResponseSchema, GetOrganizationResponseSchema, GetRepositorySettingsResponseSchema, GetRepositoryAccessResponseSchema } from '../src/gen/golf/v1/golf_pb';
+import { ExecutionMode, ExecutionScope, ExecutionPolicySchema, GetExecutionPolicyResponseSchema, UpdateExecutionPolicyRequestSchema, UpdateExecutionPolicyResponseSchema, GetRepositoryResponseSchema, GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, InspectWorkflowsResponseSchema, GetOrganizationResponseSchema, GetRepositorySettingsResponseSchema, GetRepositoryAccessResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import { request, respond, reject } from './rpc';
 const path = '/repositories/alex/private/settings/workflows';
 async function backend(page: Page, scope = ExecutionScope.REPOSITORY) {
@@ -16,6 +16,7 @@ async function backend(page: Page, scope = ExecutionScope.REPOSITORY) {
     if (method === 'GetRepositorySettings') return respond(route, GetRepositorySettingsResponseSchema, { settings: { repositoryId: '9007199254740997', ownerId: '9007199254740993', canEdit: false } });
     if (method === 'GetOrganization') return respond(route, GetOrganizationResponseSchema, { organization: { id: '9007199254740997', name: 'acme' } });
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, {repository:{id:'9007199254740997',name:'private',fullName:'alex/private',defaultBranch:'main'}});
     if (method === 'InspectWorkflows') return respond(route, InspectWorkflowsResponseSchema, { repositoryId: state.policy.scopeId, commitId: 'b'.repeat(40), catalogVersion: 'golf.workflow.inspect.v1' });
     if (method === 'GetExecutionPolicy') { state.reads++; if (state.denied) return reject(route, 'permission_denied', 'Policy access ended.'); return respond(route, GetExecutionPolicyResponseSchema, { policy: state.policy }); }
     if (method === 'UpdateExecutionPolicy') {

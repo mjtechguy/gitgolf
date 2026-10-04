@@ -1,7 +1,7 @@
 import { disabledAgentTasks, disabledAgentUsage } from './rpc';
 import { test, expect, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, InspectWorkflowsResponseSchema, GetExecutionPolicyResponseSchema, ExecutionScope, GetRepositorySettingsResponseSchema, GetRepositoryAccessResponseSchema, ListAutomationGrantsRequestSchema, ListAutomationGrantsResponseSchema, CreateAutomationGrantRequestSchema, CreateAutomationGrantResponseSchema, RevokeAutomationGrantRequestSchema, RevokeAutomationGrantResponseSchema, AutomationGrantSchema } from '../src/gen/golf/v1/golf_pb';
+import { GetRepositoryResponseSchema, GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, InspectWorkflowsResponseSchema, GetExecutionPolicyResponseSchema, ExecutionScope, GetRepositorySettingsResponseSchema, GetRepositoryAccessResponseSchema, ListAutomationGrantsRequestSchema, ListAutomationGrantsResponseSchema, CreateAutomationGrantRequestSchema, CreateAutomationGrantResponseSchema, RevokeAutomationGrantRequestSchema, RevokeAutomationGrantResponseSchema, AutomationGrantSchema } from '../src/gen/golf/v1/golf_pb';
 import { request, respond, reject } from './rpc';
 const path = '/repositories/alex/private/settings/workflows';
 const grantId = '11111111-1111-4111-8111-111111111111';
@@ -14,6 +14,7 @@ async function backend(page: Page) {
   if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
   if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: { id: '9007199254740993', login: 'alex' } });
   if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, {repository:{id:'9007199254740997',name:'private',fullName:'alex/private',defaultBranch:'main'}});
   if (method === 'InspectWorkflows') return respond(route, InspectWorkflowsResponseSchema, { repositoryId: '9007199254740997', commitId: 'a'.repeat(40), catalogVersion: 'catalog' });
   if (method === 'GetExecutionPolicy') return respond(route, GetExecutionPolicyResponseSchema, { policy: { scope: ExecutionScope.REPOSITORY, scopeId: '9007199254740997', authorityRevision: 'b'.repeat(64) } });
   if (method === 'GetRepositoryAccess') return state.denied ? reject(route, 'permission_denied', 'Repository access ended.') : respond(route, GetRepositoryAccessResponseSchema, { access: { repositoryId: '9007199254740997', ownerId: '9007199254740993', currentPermission: state.permission } });

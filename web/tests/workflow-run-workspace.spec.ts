@@ -132,3 +132,18 @@ test('a direct pending-step link waits for a real start event before reading its
  await expect(page.getByRole('status').filter({hasText:'The selected step has no recorded output'})).toBeVisible();expect(state.stepReads).toEqual([]);
  state.startSecond=true;state.cursor++;await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveText('Second step output');expect(state.stepReads).toContain(1);
 });
+
+for (const theme of ['dark','light']) for (const width of [390,320]) test(`mobile ${theme}/${width} opens the selected log before optional jobs and preserves keyboard step links`,async({page},testInfo)=>{
+ const state=await backend(page);state.progress=true;state.state=WorkflowRunState.SUCCEEDED;
+ await page.setViewportSize({width,height:844});await page.addInitScript(theme=>localStorage.setItem('golf.theme',theme),theme);
+ await page.goto(path+'?step=1');const log=page.getByLabel('Workflow run log',{exact:true});await expect(log).toHaveText('Second step output');
+ const jobs=page.locator('.workflow-jobs-disclosure');await expect(jobs).not.toHaveAttribute('open','');
+ await expect(page.getByRole('link',{name:'First step 10s'})).toBeHidden();
+ const box=await log.boundingBox();console.log('Actions mobile first log',{theme,width,y:box!.y});expect(box!.y).toBeLessThan(width===390?650:700);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ const summary=jobs.locator('summary');await summary.focus();await page.keyboard.press('Enter');await expect(page.getByRole('link',{name:'First step 10s'})).toBeVisible();
+ await page.getByRole('link',{name:'First step 10s'}).click();await expect(page).toHaveURL(/step=0/);await expect(log).toHaveText('First step output');
+ await page.reload();await expect(jobs).not.toHaveAttribute('open','');await expect(log).toHaveText('First step output');
+ await page.getByRole('button',{name:'Search loaded run log',exact:true}).click();const search=page.getByRole('searchbox',{name:'Search loaded run log',exact:true});await expect(search).toBeVisible();await search.fill('First');await expect(log.locator('mark')).toHaveCount(1);
+ expect(state.stepReads.every(step=>step===0||step===1)).toBe(true);await page.screenshot({path:testInfo.outputPath('actions-mobile-log-first.png'),fullPage:true});
+});

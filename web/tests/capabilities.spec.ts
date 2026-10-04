@@ -55,6 +55,22 @@ for (const isInstanceAdmin of [false, true]) test(`status setup respects adminis
   await expect(cloudflare.locator('tbody tr[data-row-id]')).toHaveCount(27);
   await page.setViewportSize({ width: 320, height: 800 });
   await expect(page.getByRole('button', { name: 'Refresh status', exact: true })).toBeVisible();
+  for (const width of [390,320]) for (const theme of ['dark','light']) {
+    await page.setViewportSize({width,height:844});
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    for (const table of [platform,agents,cloudflare]) {
+      const panel = table.locator('..');
+      const box = await panel.boundingBox();
+      expect(box!.x+box!.width).toBeLessThanOrEqual(width);
+      expect(await table.locator('td').first().evaluate(cell=>Number.parseFloat(getComputedStyle(cell).fontSize))).toBeGreaterThanOrEqual(14);
+    }
+  }
+  const scrolling = cloudflare.locator('..');
+  await scrolling.focus();
+  expect(await scrolling.evaluate(node=>node.scrollWidth>node.clientWidth)).toBe(true);
+  await scrolling.evaluate(node=>node.scrollLeft=node.scrollWidth);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   denied = true;
   await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
   await expect(page.getByRole('alert')).toBeVisible();

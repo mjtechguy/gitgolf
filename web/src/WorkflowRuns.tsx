@@ -9,28 +9,32 @@ import { DataTable, type DataTableColumn } from './DataTable';
 import { DateLabel, Loading, More, PanelError, privateQuery } from './RepositoryUI';
 import { repositoryOptions } from './navigation';
 
-export function runState(state: WorkflowRunState) { return WorkflowRunState[state]?.toLowerCase().replaceAll('_', ' ') || 'unknown'; }
-function RunState({state}:{state:WorkflowRunState}) {
- const Icon = state===WorkflowRunState.SUCCEEDED?CheckCircle2:state===WorkflowRunState.FAILED?XCircle:state===WorkflowRunState.RUNNING?LoaderCircle:state===WorkflowRunState.CANCELLED?CircleSlash:CircleDashed;
- return <span className={`run-state run-state-${runState(state)}`}><Icon size={16} className={state===WorkflowRunState.RUNNING?'spin':undefined}/>{runState(state)}</span>;
+function useWideWorkflowLayout() {
+ const [wide,setWide]=useState(()=>window.matchMedia('(min-width:701px)').matches);
+ useEffect(()=>{const media=window.matchMedia('(min-width:701px)');const changed=()=>setWide(media.matches);media.addEventListener('change',changed);return()=>media.removeEventListener('change',changed);},[]);
+ return wide;
 }
-export function WorkflowRuns({ userId, owner, name, signingOut }: { userId: string; owner: string; name: string; signingOut: boolean }) {
+
+export function runState(state: WorkflowRunState) { return WorkflowRunState[state]?.toLowerCase().replaceAll('_', ' ') || 'unknown'; }
+function RunState({state,compact=false}:{state:WorkflowRunState;compact?:boolean}) {
+ const Icon = state===WorkflowRunState.SUCCEEDED?CheckCircle2:state===WorkflowRunState.FAILED?XCircle:state===WorkflowRunState.RUNNING?LoaderCircle:state===WorkflowRunState.CANCELLED?CircleSlash:CircleDashed;
+ return <span title={runState(state)} className={`run-state run-state-${runState(state)}`}><Icon size={16} aria-hidden="true" className={state===WorkflowRunState.RUNNING?'spin':undefined}/><span className={compact?'sr-only':undefined}>{runState(state)}</span></span>;
+}
+export function WorkflowRuns({ userId, owner, name, signingOut, workflowPath }: { userId: string; owner: string; name: string; signingOut: boolean; workflowPath?:string }) {
  const query = useInfiniteQuery({ ...privateQuery, queryKey: ['workflow-runs', userId, owner, name], enabled: !signingOut, initialPageParam: 1,
   queryFn: ({ signal, pageParam }) => workflowRunClient.listWorkflowRuns({ repository: { owner, name }, page: { page: pageParam, limit: 20 } }, { signal, timeoutMs: 12_000 }),
   getNextPageParam: (page, _pages, current) => page.page?.nextPage && page.page.nextPage > current ? page.page.nextPage : undefined });
  const loading = query.isPending || (query.isFetching && !query.isFetchingNextPage);
  const rows = query.isSuccess && !query.error && !loading && !signingOut ? [...new Map(query.data.pages.flatMap(page => page.runs).map(run => [run.id, run])).values()] : [];
+ const filteredRows = workflowPath ? rows.filter(run=>run.workflowPath===workflowPath) : rows;
  const columns = useMemo<DataTableColumn<WorkflowRun>[]>(() => [
-  { id: 'workflow', accessorFn: row => row.workflowPath, header: 'Workflow', cell: ({ row }) => <><Link className="text-button" {...repositoryOptions({owner,name},{view:'actions',run:row.original.id})}>{row.original.workflowPath}</Link><small>{row.original.id.slice(0,8)}</small></> },
-  { id: 'origin', accessorFn: row => row.origin === WorkflowRunOrigin.PUSH ? 'Push' : row.origin === WorkflowRunOrigin.MANUAL ? 'Manual' : 'Unknown', header: 'Trigger' },
-  { id: 'state', accessorFn: row => runState(row.state), header: 'State', cell:({row})=><RunState state={row.original.state}/> },
-  { accessorKey: 'commitId', header: 'Commit', cell: ({ row }) => <Link {...repositoryOptions({owner,name},{view:'commits',commit:row.original.commitId})}><code title={row.original.commitId}>{row.original.commitId.slice(0,12)}</code></Link> },
-  { accessorKey: 'createdAt', header: 'Created', cell: ({ row }) => <DateLabel value={row.original.createdAt} /> },
-  { accessorKey: 'runnerId', header: 'Worker', cell: ({ row }) => row.original.runnerId || 'Awaiting assignment' },
+  { id: 'workflow', accessorFn: row => `${row.workflowPath} ${runState(row.state)} ${row.eventRef} ${row.id} ${row.commitId}`, header: 'Run', cell: ({ row }) => <div className="workflow-run-row"><RunState state={row.original.state} compact/><div><Link {...repositoryOptions({owner,name},{view:'actions',run:row.original.id})}>{row.original.workflowPath}</Link><small>{row.original.origin===WorkflowRunOrigin.PUSH?'Push':row.original.origin===WorkflowRunOrigin.MANUAL?'Manual':'Unknown trigger'}{row.original.eventRef?` · ${row.original.eventRef}`:''} · {row.original.id.slice(0,8)}</small><Link className="workflow-run-commit" {...repositoryOptions({owner,name},{view:'commits',commit:row.original.commitId})}><GitCommitHorizontal size={13}/><code title={row.original.commitId}>{row.original.commitId.slice(0,12)}</code></Link></div></div> },
+  { accessorKey: 'createdAt', header: 'Created', cell: ({ row }) => <><DateLabel value={row.original.createdAt}/><small>{elapsed(row.original)}</small></> },
  ], [owner,name]);
- return <section className="browser-panel credential-list-panel" aria-labelledby="workflow-runs-title">
-  <div className="browser-panel-heading"><h2 id="workflow-runs-title">Workflow runs</h2><button className="button secondary manual-refresh" disabled={signingOut || query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={15} />Refresh runs</button></div>
-  {query.error ? <PanelError error={query.error} retry={() => void query.refetch()} /> : loading ? <Loading label="Loading runs…" /> : <DataTable label="Workflow runs" data={rows} columns={columns} getRowId={row => row.id} emptyMessage="No workflow runs." />}
+ return <section className="browser-panel credential-list-panel workflow-runs-panel" aria-labelledby="workflow-runs-title">
+  <div className="browser-panel-heading"><h2 id="workflow-runs-title">{workflowPath?'Selected workflow runs':'Workflow runs'}</h2><button className="button secondary manual-refresh" disabled={signingOut || query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={15} />Refresh runs</button></div>
+  {query.error ? <PanelError error={query.error} retry={() => void query.refetch()} /> : loading ? <Loading label="Loading runs…" /> : <DataTable label="Workflow runs" data={filteredRows} columns={columns} getRowId={row => row.id} emptyMessage={workflowPath?'No runs for this workflow in the loaded pages.':'No workflow runs.'} />}
+  {workflowPath?<p className="panel-footnote">Filtering loaded runs for <code>{workflowPath}</code>. Load more to inspect earlier server pages; this is not a complete history count.</p>:null}
   <More hasMore={Boolean(query.hasNextPage)} loading={query.isFetchingNextPage || signingOut} load={() => void query.fetchNextPage()} label="workflow runs" />
  </section>;
 }
@@ -63,7 +67,8 @@ function LogHighlight({text,search}:{text:string;search:string}) {
  parts.push(text.slice(cursor));return parts;
 }
 function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex}:{userId:string;owner:string;name:string;runId:string;truncated:boolean;enabled:boolean;stepIndex?:number}) {
- const [search,setSearch]=useState('');const searchId=useId();const end=useRef<HTMLSpanElement>(null);
+ const [search,setSearch]=useState('');const searchId=useId();
+ const wide=useWideWorkflowLayout(),[searchOpen,setSearchOpen]=useState(false);const end=useRef<HTMLSpanElement>(null);
  const query=useInfiniteQuery({...privateQuery,queryKey:['workflow-run-logs',userId,owner,name,runId,stepIndex??'all'],enabled,initialPageParam:0n,
   queryFn:async({signal,pageParam})=>{
    const page=await workflowRunClient.getWorkflowRunLogs({runId,afterSequence:pageParam,stepIndex},{signal,timeoutMs:12_000});
@@ -82,8 +87,8 @@ function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex}:{
   const link=document.createElement('a');link.href=url;link.download=`golf-run-${runId}${stepIndex!==undefined?'-step-'+(stepIndex+1):''}${query.hasNextPage?'-loaded':''}.log`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
  }
  return <section className="browser-panel workflow-log-panel" aria-labelledby="workflow-log-title">
-  <div className="browser-panel-heading"><h2 id="workflow-log-title">Run log</h2><div className="row-actions"><button className="icon-button manual-refresh" aria-label="Refresh run log" title="Refresh run log" disabled={query.isFetching||!enabled} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button><button className="icon-button" aria-label="Download loaded log" title="Download loaded log" disabled={denied||loading||!text} onClick={download}><Download size={16}/></button><button className="icon-button" aria-label="Go to end of loaded log" title="Go to end of loaded log" disabled={denied||loading||!text} onClick={()=>end.current?.scrollIntoView({block:'end'})}><ArrowDownToLine size={16}/></button></div></div>
-  <div className="repository-list-controls"><div className="search-input"><label className="sr-only" htmlFor={searchId}>Search loaded run log</label><Search size={16} aria-hidden="true"/><input id={searchId} type="search" aria-label="Search loaded run log" placeholder="Search loaded log…" value={search} onChange={event=>setSearch(event.target.value)} disabled={denied}/></div><span className="loaded-list-count" role="status">{search?`${matches} match${matches===1?'':'es'}${matches>200?' · first 200 highlighted':''}`:query.hasNextPage?'More output available':'Loaded output'}</span></div>
+  <div className="browser-panel-heading"><h2 id="workflow-log-title">Run log</h2><div className="row-actions"><button className="icon-button workflow-log-search-toggle" aria-label="Search loaded run log" title="Search loaded run log" aria-expanded={searchOpen} aria-controls={searchId+'-controls'} disabled={denied} onClick={()=>setSearchOpen(value=>!value)}><Search size={16}/></button><button className="icon-button manual-refresh" aria-label="Refresh run log" title="Refresh run log" disabled={query.isFetching||!enabled} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button><button className="icon-button" aria-label="Download loaded log" title="Download loaded log" disabled={denied||loading||!text} onClick={download}><Download size={16}/></button><button className="icon-button" aria-label="Go to end of loaded log" title="Go to end of loaded log" disabled={denied||loading||!text} onClick={()=>end.current?.scrollIntoView({block:'end'})}><ArrowDownToLine size={16}/></button></div></div>
+  <div id={searchId+'-controls'} className="workflow-log-search" hidden={!wide&&!searchOpen}><div className="repository-list-controls"><div className="search-input"><label className="sr-only" htmlFor={searchId}>Search loaded run log</label><Search size={16} aria-hidden="true"/><input id={searchId} type="search" aria-label="Search loaded run log" placeholder="Search loaded log…" value={search} onChange={event=>setSearch(event.target.value)} disabled={denied}/></div><span className="loaded-list-count" role="status">{search?`${matches} match${matches===1?'':'es'}${matches>200?' · first 200 highlighted':''}`:query.hasNextPage?'More output available':'Loaded output'}</span></div></div>
   {query.error?<PanelError error={query.error} retry={()=>void query.refetch()}/>:loading?<Loading label="Loading run log…"/>:null}
   {!denied&&query.isSuccess?<div hidden={loading}><pre className="source-code execution-log" tabIndex={0} aria-label="Workflow run log"><LogHighlight text={text||'No log output yet.'} search={search}/><span ref={end}/></pre></div>:null}
   {!denied&&!loading?<More hasMore={Boolean(query.hasNextPage)} loading={query.isFetchingNextPage} load={()=>void query.fetchNextPage()} label="log output"/>:null}
@@ -94,6 +99,8 @@ function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex}:{
 
 export function WorkflowRunPage({userId,owner,name,repositoryId,runId,signingOut,selectedStep}:{userId:string;owner:string;name:string;repositoryId:string;runId:string;signingOut:boolean;selectedStep?:number}) {
  const [notice,setNotice]=useState('');const [pending,setPending]=useState(false);
+ const desktop=useWideWorkflowLayout();
+ const [mobileJobsOpen,setMobileJobsOpen]=useState(false);
  const controller=useRef<AbortController|null>(null);const alive=useRef(true);
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;controller.current?.abort();};},[]);
  useEffect(()=>{if(signingOut){controller.current?.abort();setNotice('');}},[signingOut]);
@@ -110,19 +117,19 @@ export function WorkflowRunPage({userId,owner,name,repositoryId,runId,signingOut
   }catch(error){if(alive.current&&!request.signal.aborted)setNotice(`${errorMessage(error instanceof Error?error:new Error('Cancellation could not be confirmed.'))} Inspect the run before another action. No automatic retry was made.`);}
   finally{if(controller.current===request)controller.current=null;if(alive.current)setPending(false);}
  }
- return <section className="page-stack" aria-label="Workflow run workspace">
+ return <section className="page-stack workflow-run-workspace" aria-label="Workflow run workspace">
   <Link className="text-button" {...repositoryOptions({owner,name},{view:'actions'})}><ArrowLeft size={16}/>All workflow runs</Link>
   {query.error?<PanelError error={query.error} retry={()=>void query.refetch()}/>:!run?<Loading label="Loading selected run…"/>:null}
   {run?<><div hidden={query.isFetching} className="page-stack">
    <header className="discussion-summary workflow-run-summary"><div><h2>{run.workflowPath}</h2><p><RunState state={run.state}/><span>{run.origin===WorkflowRunOrigin.PUSH?'Push':run.origin===WorkflowRunOrigin.MANUAL?'Manual':'Unknown trigger'}{run.eventRef?` · ${run.eventRef}`:''}</span><span><Clock3 size={14}/>{elapsed(run)}</span></p></div><div className="row-actions"><button className="icon-button manual-refresh" aria-label="Refresh selected run" title="Refresh selected run" disabled={pending||query.isFetching||signingOut} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button>{run.canCancel?<button className="button secondary" disabled={pending||signingOut||query.isFetching} onClick={()=>void cancel()}>Cancel run</button>:null}</div></header>
-   <section className="browser-panel workflow-run-metadata" aria-label="Run summary"><dl><div><dt>Commit</dt><dd><Link {...repositoryOptions({owner,name},{view:'commits',commit:run.commitId})}><GitCommitHorizontal size={14}/><code title={run.commitId}>{run.commitId.slice(0,12)}</code></Link></dd></div><div><dt>Created</dt><dd><DateLabel value={run.createdAt}/></dd></div><div><dt>Worker</dt><dd>{run.runnerId||'Awaiting assignment'}</dd></div><div><dt>Exit code</dt><dd>{run.exitCode??'Not reported'}</dd></div></dl><details><summary>Execution receipt</summary><dl><div><dt>Run</dt><dd><code>{run.id}</code></dd></div><div><dt>Workflow source</dt><dd><Link {...repositoryOptions({owner,name},{ref:run.commitId,path:run.workflowPath},'file')}>{run.workflowPath}</Link></dd></div><div><dt>Workflow blob</dt><dd><code>{run.workflowBlobId}</code></dd></div><div><dt>Source archive</dt><dd><code>{run.sourceSha256}</code></dd></div>{run.origin===WorkflowRunOrigin.PUSH?<><div><dt>Event</dt><dd>{run.repositoryEventId}</dd></div><div><dt>Automation grant</dt><dd><code>{run.automationGrantId}</code></dd></div></>:null}</dl></details></section>
+   <section className="browser-panel workflow-run-metadata" aria-label="Run summary"><dl><div><dt>Commit</dt><dd><Link {...repositoryOptions({owner,name},{view:'commits',commit:run.commitId})}><GitCommitHorizontal size={14}/><code title={run.commitId}>{run.commitId.slice(0,12)}</code></Link></dd></div><div><dt>Created</dt><dd><DateLabel value={run.createdAt}/></dd></div></dl><details><summary>Execution receipt</summary><dl><div><dt>Worker</dt><dd>{run.runnerId||'Awaiting assignment'}</dd></div><div><dt>Exit code</dt><dd>{run.exitCode??'Not reported'}</dd></div><div><dt>Run</dt><dd><code>{run.id}</code></dd></div><div><dt>Workflow source</dt><dd><Link {...repositoryOptions({owner,name},{ref:run.commitId,path:run.workflowPath},'file')}>{run.workflowPath}</Link></dd></div><div><dt>Workflow blob</dt><dd><code>{run.workflowBlobId}</code></dd></div><div><dt>Source archive</dt><dd><code>{run.sourceSha256}</code></dd></div>{run.origin===WorkflowRunOrigin.PUSH?<><div><dt>Event</dt><dd>{run.repositoryEventId}</dd></div><div><dt>Automation grant</dt><dd><code>{run.automationGrantId}</code></dd></div></>:null}</dl></details></section>
    {run.reason?<p className="panel-footnote">{run.reason}</p>:null}
-   <div className="automation-run-layout"><aside className="automation-job-navigation" aria-label="Jobs and steps">
+   <div className="automation-run-layout"><aside className="automation-job-navigation" aria-label="Jobs and steps"><details className="workflow-jobs-disclosure" open={desktop||mobileJobsOpen} onToggle={event=>{if(!desktop)setMobileJobsOpen(event.currentTarget.open)}}><summary>Jobs · {run.progress?.name||run.progress?.jobId||'Job'}{selectedStep!==undefined?` · ${run.progress?.steps.find(step=>step.index===selectedStep)?.name||'Selected step'}`:' · All run output'}</summary><div className="workflow-jobs-content">
     <h3>Jobs</h3><strong>{run.progress?.name||run.progress?.jobId||'Job'}</strong>{run.progress?.stage?<span className="muted">{run.progress.stage}</span>:null}
     <Link className="automation-step-link" aria-current={selectedStep===undefined?'page':undefined} {...repositoryOptions({owner,name},{view:'actions',run:runId,step:undefined})}>All run output</Link>
     {run.progress?.steps.length?<ol>{run.progress.steps.map(step=><li key={step.index}>{step.startedAt?<Link className="automation-step-link" aria-current={selectedStep===step.index?'page':undefined} {...repositoryOptions({owner,name},{view:'actions',run:runId,step:step.index})}><StepState step={step}/><span>{step.name}<small>{stepDuration(step)}</small></span></Link>:<div className="automation-step-link"><StepState step={step}/><span>{step.name}<small>{stepLabel(step.state)}</small></span></div>}</li>)}</ol>:<p className="field-help">Step events were not recorded for this run.</p>}
     {run.progress&&!run.progress.eventsRecorded&&run.state!==WorkflowRunState.QUEUED&&run.state!==WorkflowRunState.RUNNING?<p className="field-help">This run has no recorded step outcomes. Its overall result does not establish individual step results.</p>:null}
-   </aside><div className="automation-run-output">
+   </div></details></aside><div className="automation-run-output">
     {selectedStep!==undefined?<h3>{run.progress?.steps.find(step=>step.index===selectedStep)?.name||'Selected step'}</h3>:null}
     {selectedStep!==undefined&&!run.progress?.steps.find(step=>step.index===selectedStep)?.startedAt?<p className="panel-footnote" role="status">The selected step has no recorded output. Choose all run output or a step that started.</p>:<WorkflowRunLogs key={selectedStep??'all'} userId={userId} owner={owner} name={name} runId={runId} stepIndex={selectedStep} truncated={run.logsTruncated} enabled={!query.isFetching&&!signingOut}/>}
    </div></div>

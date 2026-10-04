@@ -462,7 +462,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 }
 @media(max-width:380px) { .workspace-switcher > button span { display:none; } .workspace-switcher > button { justify-content:center; } }
 
-.capability-groups { display:grid; gap:28px; margin-top:24px; }
+.capability-groups { display:grid; grid-template-columns:minmax(0,1fr); gap:28px; margin-top:24px; }
 .capability-groups .section-description { margin-bottom:14px; }
 
 .visibility.available { color:var(--accent); border-color:var(--accent); background:color-mix(in srgb,var(--accent) 12%,var(--panel)); font-weight:600; }
@@ -1096,4 +1096,48 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
  .login-story { grid-row:2; }
  .login-story>.eyebrow,.login-story>p { display:none; }
  .login-story h1 { font-size:1.5rem; margin-top:0; }
+}
+
+/* Workflow work views share compact repository navigation and tables. */
+.actions-workspace { display:grid; grid-template-columns:220px minmax(0,1fr); gap:24px; align-items:start; min-width:0; }
+.actions-main,.workflow-navigation-panel { min-width:0; }
+.workflow-navigation-panel h2 { font-size:1rem; margin:0 0 12px; }
+.workflow-navigation { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.workflow-nav-link { display:flex; align-items:center; gap:8px; min-width:0; min-height:40px; padding:9px 12px; text-align:left; background:none; border:0; border-radius:4px; font-size:.875rem; color:var(--text); }
+.workflow-nav-link>svg { flex-shrink:0; }
+.workflow-nav-link>span { min-width:0; overflow-wrap:anywhere; }
+.workflow-nav-link[aria-current="page"] { background:var(--hover); color:var(--accent); box-shadow:inset 3px 0 var(--accent); }
+.workflow-navigation-panel .field-help { margin:12px 0; }
+.workflow-readiness { font-size:.875rem; color:var(--muted); line-height:1.6; }
+.workflow-inspection-disclosure { border:1px solid var(--line); border-radius:4px; min-width:0; }
+.workflow-inspection-disclosure>summary { padding:12px 16px; font-size:.875rem; cursor:pointer; }
+.workflow-inspection-disclosure>.browser-panel { border:0; border-top:1px solid var(--line); margin:0; }
+.workflow-run-row { display:flex; gap:10px; align-items:flex-start; min-width:0; }
+.workflow-run-row>div { min-width:0; }
+.workflow-run-row>.run-state { flex-shrink:0; width:18px; gap:0; margin-top:3px; }
+.workflow-run-row>div>a:first-child { font-size:.9375rem; font-weight:600; overflow-wrap:anywhere; }
+.workflow-run-commit { display:inline-flex; align-items:center; gap:5px; font-size:.8125rem; color:var(--muted); margin-top:4px; }
+.workflow-runs-panel .data-table td:first-child { width:100%; }
+.workflow-runs-panel .data-table td:last-child { min-width:110px; white-space:nowrap; }
+.workflow-jobs-disclosure>summary,.workflow-log-search-toggle { display:none; }
+.workflow-jobs-content { display:flex; flex-direction:column; gap:8px; }
+@media(max-width:700px) {
+ .actions-workspace { grid-template-columns:minmax(0,1fr); gap:16px; }
+ .workflow-navigation-panel h2 { display:none; }
+ .workflow-navigation { flex-direction:row; overflow-x:auto; padding:4px; }
+ .workflow-nav-link { flex:0 0 auto; white-space:nowrap; min-height:44px; }
+ .workflow-navigation-panel .field-help { margin:8px 0; }
+ .workflow-run-metadata { padding:12px; }
+ .workflow-run-metadata>dl { gap:10px; margin-bottom:10px; }
+ .workflow-jobs-disclosure>summary { display:list-item; padding:10px 12px; border:1px solid var(--line); border-radius:4px; font-size:.875rem; cursor:pointer; overflow-wrap:anywhere; }
+ .workflow-jobs-content { padding-top:12px; }
+ .workflow-run-workspace,.workflow-run-workspace>.page-stack { gap:14px; }
+ .workflow-run-summary { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+ .workflow-run-summary h2 { font-size:1.25rem; }
+ .automation-run-output>h3 { display:none; }
+ .workflow-log-search-toggle { display:inline-flex; }
+ .workflow-run-summary p { margin-top:5px; gap:10px; }
+ .workflow-log-panel .repository-list-controls { margin:10px 12px; gap:8px; }
+ .workflow-runs-panel .data-table th,.workflow-runs-panel .data-table td { padding:10px 9px; }
+ .workflow-runs-panel .data-table td:last-child { min-width:100px; }
 }

@@ -16,7 +16,7 @@ async function fixture(page: Page) {
   await page.route('**/rpc/**', async route => {
     const method = route.request().url().split('/').at(-1)!;
     state.methods.push(method);
-    if (['GetRepositorySettings', 'GetRepositoryAccess', 'InspectWorkflows'].includes(method)) state.authorityURLs.push(page.url());
+    if (['GetRepository', 'GetRepositorySettings', 'GetRepositoryAccess', 'InspectWorkflows'].includes(method)) state.authorityURLs.push(page.url());
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
     if (method === 'GetSession') return state.signedIn ? respond(route, GetSessionResponseSchema, { user }) : reject(route, 'unauthenticated', 'Signed out.');
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
@@ -28,7 +28,7 @@ async function fixture(page: Page) {
       repositoryId: repository.id, ownerId: user.id, owner: user, canManage: true, currentPermission: 'admin', revision: 'access-v1',
     } });
     if (method === 'ListRepositoryCollaborators') return respond(route, ListRepositoryCollaboratorsResponseSchema, {});
-    if (method === 'InspectWorkflows') return respond(route, InspectWorkflowsResponseSchema, { commitId: snapshot, catalogVersion: 'routing-fixture' });
+    if (method === 'InspectWorkflows') return respond(route, InspectWorkflowsResponseSchema, { repositoryId:repository.id, commitId: snapshot, catalogVersion: 'routing-fixture' });
     if (method === 'GetAgentUsage') return disabledAgentUsage(route);
     if (method === 'ListAgentTasks') return disabledAgentTasks(route);
     if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository });
@@ -62,7 +62,7 @@ for (const [tail, heading, method] of settingsPages) test(`legacy ${tail} normal
   await expect.poll(() => state.methods.filter(value => value === method).length).toBeGreaterThan(0);
   const reads = state.methods.filter(value => value === method).length;
   expect(state.authorityURLs.every(url => new URL(url).pathname === `/alex/demo/${tail}`)).toBe(true);
-  expect(state.methods).not.toContain('GetRepository');
+  if(tail==='settings/workflows') { expect(state.methods).toContain('GetRepository'); expect(state.methods.indexOf('GetRepository')).toBeLessThan(state.methods.indexOf('InspectWorkflows')); } else expect(state.methods).not.toContain('GetRepository');
   await page.reload();
   await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
   await expect.poll(() => state.methods.filter(value => value === method).length).toBeGreaterThan(reads);
@@ -90,7 +90,7 @@ for (const [tail, , method] of settingsPages) test(`canonical and legacy ${tail}
     await expect(page.getByRole('alert').filter({ hasText: 'Current repository access denied.' }).first()).toBeVisible();
     await expect(page.getByText('PRIVATE route settings', { exact: true })).toHaveCount(0);
   }
-  expect(state.methods.filter(value => value === method).length).toBeGreaterThanOrEqual(2);
+  if(tail==='settings/workflows') { expect(state.methods.filter(value=>value==='GetRepository').length).toBeGreaterThanOrEqual(2); expect(state.methods).not.toContain('InspectWorkflows'); } else expect(state.methods.filter(value => value === method).length).toBeGreaterThanOrEqual(2);
   expect(state.authorityURLs.every(url => new URL(url).pathname === `/alex/demo/${tail}`)).toBe(true);
 });
 
