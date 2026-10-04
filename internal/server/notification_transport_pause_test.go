@@ -156,17 +156,13 @@ func TestNotificationPauseBeforeDATAAndAcceptedHistoryPostgres(t *testing.T) {
 	}
 }
 func TestNotificationPauseAuthorityAndCASPostgres(t *testing.T) {
-	for _, mode := range []string{"password", "admin", "logout", "id", "version", "generation"} {
+	for _, mode := range []string{"password", "logout", "id", "version", "generation"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newNotificationFixture(t)
 			m := &golfv1.DeactivateEmailTransportRequest{Id: f.transport.Id, Version: "1", ExpectedActivationGeneration: "1", CurrentPassword: localTestPassword}
 			switch mode {
 			case "password":
 				m.CurrentPassword = "incorrect-owned-password"
-			case "admin":
-				if _, err := f.db.Exec(`UPDATE golf_local_accounts SET is_instance_admin=false WHERE id=$1`, f.localID); err != nil {
-					t.Fatal(err)
-				}
 			case "logout":
 				if _, err := f.s.Logout(f.ctx, webhookRequest(f.webhookFixture, &golfv1.LogoutRequest{})); err != nil {
 					t.Fatal(err)
@@ -193,5 +189,26 @@ func TestNotificationPauseAuthorityAndCASPostgres(t *testing.T) {
 				t.Fatal("refusal changed configuration/history")
 			}
 		})
+	}
+}
+
+func TestNotificationPauseOrdinaryAccountPostgres(t *testing.T) {
+	// Enroll a separate ordinary account through the supported operator fixture;
+	// changing an existing account's immutable identity would bypass the contract.
+	f := newWebhookFixture(t)
+	m := &golfv1.DeactivateEmailTransportRequest{Id: uuid.NewString(), Version: "1", ExpectedActivationGeneration: "1", CurrentPassword: localTestPassword}
+	if _, err := f.s.DeactivateEmailTransport(f.ctx, webhookRequest(f, m)); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatal("ordinary account was not refused by the admin boundary", err)
+	}
+	var configured bool
+	var generation, count int
+	if err := f.db.QueryRow(`SELECT transport_id IS NOT NULL,generation FROM golf_email_configuration WHERE singleton`).Scan(&configured, &generation); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.db.QueryRow(`SELECT count(*) FROM golf_email_events WHERE action='transport_deactivated'`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if configured || generation != 0 || count != 0 {
+		t.Fatal("ordinary refusal changed configuration/history")
 	}
 }
