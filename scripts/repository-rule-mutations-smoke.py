@@ -447,7 +447,10 @@ def main():
                 t={'namePattern':pattern,'allowedUsernames':usernames,'allowedTeams':[team['name']] if team else []}
                 change(actor,intent(actor,repository,'CREATE_TAG',desiredTag=t))
             _,value=read(actor,repository); tag=next(row for row in value['tagProtections'] if row['namePattern']=='v*')
-            t={'namePattern':'v*','allowedUsernames':usernames+[actors['direct']['name']],'allowedTeams':[team['name']] if team else []}
+            # Native tag observations emit accounts with current repository
+            # reader access. Use this organization's actual member direct-admin,
+            # rather than the unrelated personal-repository administrator.
+            t={'namePattern':'v*','allowedUsernames':usernames+[actors['memberdirect' if team else 'direct']['name']],'allowedTeams':[team['name']] if team else []}
             change(actor,intent(actor,repository,'EDIT_TAG',tagId=tag['id'],desiredTag={'namePattern':'v*'}))
             _,cleared=read(actor,repository);empty=next(row for row in cleared['tagProtections'] if row['id']==tag['id']);assert not empty.get('allowedUsernames',[]) and not empty.get('allowedTeams',[])
             change(actor,intent(actor,repository,'EDIT_TAG',tagId=tag['id'],desiredTag=t))
