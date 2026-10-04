@@ -161,7 +161,6 @@ def main():
         # A valid Git ref can look exactly like another object's full ID. The
         # native contents endpoint guesses branches first; exact source must
         # still read the original object, not this deliberately different head.
-        smoke.provider(owner['token'], 'POST', route + '/branches', {'new_branch_name': commit, 'old_branch_name': repo['default_branch']}, 201)
         if args.readable:
             # Git forbids feature and feature/topic in ONE refs namespace.
             # Cross-namespace names exercise real URL-boundary ambiguity.
@@ -169,6 +168,12 @@ def main():
                 smoke.provider(owner['token'], 'POST', route + '/branches', {'new_branch_name': branch, 'old_branch_name': named if branch == 'topic/über%' else repo['default_branch']}, 201)
             for tag in ('boundary/nested', 'review/topic'):
                 smoke.provider(owner['token'], 'POST', route + '/tags', {'tag_name': tag, 'target': commit}, 201)
+
+        if args.readable:
+            stage = 'independent percent-branch fixture head'
+            observed = smoke.provider(owner['token'], 'GET', route + '/branches/' + quote('topic/über%', safe=''))
+            assert observed['commit']['id'] == commit
+        smoke.provider(owner['token'], 'POST', route + '/branches', {'new_branch_name': commit, 'old_branch_name': repo['default_branch']}, 201)
 
 
         def rpc(actor, procedure, payload, expected=200, code=None):
@@ -217,7 +222,11 @@ def main():
         resolve('BRANCH', commit, latest)
         if args.readable:
             stage = 'exhaustive native suffix selection and ambiguity'
+            suffix_case = 0
             def suffix_read(value):
+                nonlocal stage, suffix_case
+                suffix_case += 1
+                stage = 'native suffix qualification case ' + str(suffix_case)
                 out = rpc(reader, 'ResolveRepositorySource', {'repository': key, 'repositoryId': rid, 'suffix': value})
                 assert out['repositoryId'] == rid and out['repository'] == key and out['suffix'] == value
                 return out
@@ -238,7 +247,9 @@ def main():
             assert unicode_ref['resolution'] == 'REPOSITORY_SOURCE_RESOLUTION_RESOLVED' and unicode_ref['selection']['name'] == 'topic/über%25' and unicode_ref['selection']['commitId'] == latest and unicode_ref['path'] == path
             percent_ref = suffix_read('topic/über%/' + path)
             assert percent_ref['resolution'] == 'REPOSITORY_SOURCE_RESOLUTION_RESOLVED' and percent_ref['selection']['name'] == 'topic/über%' and percent_ref['selection']['commitId'] == commit and percent_ref['path'] == path
+            stage = 'native suffix proven absence'
             rpc(reader, 'ResolveRepositorySource', {'repository': key, 'repositoryId': rid, 'suffix': 'absent-namespace/' + path}, 404)
+            stage = 'native suffix bounded split exhaustion'
             rpc(reader, 'ResolveRepositorySource', {'repository': key, 'repositoryId': rid, 'suffix': '/'.join(['a'] * 33)}, 429)
             for extra in ({'path': path}, {'selector': {'kind': 'REPOSITORY_SOURCE_REF_KIND_BRANCH', 'name': repo['default_branch']}}):
                 rpc(reader, 'ResolveRepositorySource', {'repository': key, 'repositoryId': rid, 'suffix': repo['default_branch'] + '/' + path, **extra}, 400)
