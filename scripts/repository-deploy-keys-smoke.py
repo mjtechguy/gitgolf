@@ -38,12 +38,40 @@ def host_pin(value):
     return value
 
 
+def host_alias(port):
+    assert isinstance(port, int) and not isinstance(port, bool) and 1 <= port <= 65535
+    return 'localhost' if port == 22 else '[localhost]:'+str(port)
+
+
+def ssh_options(key_file, known, port):
+    # OpenSSH 9.7p1 sshconnect.c uses HostKeyAlias verbatim, without adding port.
+    # https://github.com/openssh/openssh-portable/blob/V_9_7_P1/sshconnect.c#L627-L633
+    return ['ssh', '-4', '-F', os.devnull, '-i', str(key_file), '-o',
+            'Port='+str(port), '-o', 'IdentityAgent=none', '-o', 'IdentitiesOnly=yes',
+            '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o',
+            'HostKeyAlias='+host_alias(port), '-o', 'UserKnownHostsFile='+str(known),
+            '-o', 'GlobalKnownHostsFile='+os.devnull, '-o', 'HostKeyAlgorithms=ssh-ed25519',
+            '-o', 'UpdateHostKeys=no', '-o', 'ControlMaster=no', '-o', 'ControlPath=none']
+
+
+def git_failure_category(stderr):
+    # Classify bounded output locally; persist only fixed categories, never text.
+    message = stderr[:65536].lower()
+    if any(text in message for text in ('host key verification failed', 'remote host identification has changed', 'host key is known for')):
+        return 'host_verification'
+    if any(text in message for text in ('permission denied', 'is not authorized to', 'cannot find key')):
+        return 'authorization'
+    if any(text in message for text in ('connection refused', 'connection timed out', 'connection reset', 'connection closed', 'could not resolve hostname', 'no route to host')):
+        return 'connection'
+    return 'unclassified'
+
+
 def known_host(scan, port, expected=None):
     assert isinstance(scan, str) and 0 < len(scan) <= 4096 and '\r' not in scan
     rows = scan.strip().splitlines()
     assert len(rows) == 1, 'Require exactly one explicit Ed25519 host key'
     fields = rows[0].split()
-    assert len(fields) == 3 and fields[0] == ('localhost' if port == 22 else '[localhost]:'+str(port))
+    assert len(fields) == 3 and fields[0] == host_alias(port)
     assert fields[1] == 'ssh-ed25519'
     raw = base64.b64decode(fields[2], validate=True)
     # SSH wire public-key envelope: algorithm string followed by exactly32 key bytes.
@@ -56,6 +84,8 @@ def known_host(scan, port, expected=None):
 
 
 def ssh_repository_url(value, port, repository):
+    host_alias(port)
+    assert isinstance(value, str) and 0 < len(value) <= 4096 and not any(ord(char) < 32 or ord(char) == 127 for char in value)
     parsed = urllib.parse.urlparse(value)
     assert parsed.scheme == 'ssh' and parsed.hostname in ('localhost', '127.0.0.1')
     assert parsed.username == 'git' and parsed.password is None and parsed.port == port
@@ -117,10 +147,39 @@ def self_check(root, contract_file=None):
             pass
         else:
             raise AssertionError('Unverified SSH host identity admitted')
+    # Real OpenSSH lookup/config parsing only: no connection or private key needed.
+    with tempfile.TemporaryDirectory(prefix='golf-host-pin-self-check-') as directory:
+        local = Path(directory); local.chmod(0o700)
+        known = local/'known_hosts'; known.write_text(canonical); known.chmod(0o600)
+        for query, expected in ((host_alias(2222), 0), ('localhost', 1), (host_alias(2223), 1)):
+            lookup = subprocess.run(['ssh-keygen', '-F', query, '-f', str(known)], capture_output=True, text=True, timeout=5)
+            assert lookup.returncode == expected, 'OpenSSH exact pinned host lookup differs'
+            if expected == 0: assert canonical.strip() in lookup.stdout
+        for port in (22, 2222):
+            options = ssh_options(local/'unused-private-key', known, port)
+            config = subprocess.run(options+['-G', 'git@127.0.0.1'], capture_output=True, text=True, timeout=5)
+            assert config.returncode == 0
+            observed = dict(line.split(' ', 1) for line in config.stdout.splitlines())
+            expected = {'hostkeyalias': host_alias(port), 'port': str(port), 'addressfamily': 'inet',
+                        'identityagent': 'none', 'identitiesonly': 'yes', 'batchmode': 'yes',
+                        'stricthostkeychecking': 'true', 'userknownhostsfile': str(known),
+                        'globalknownhostsfile': os.devnull, 'hostkeyalgorithms': 'ssh-ed25519',
+                        'updatehostkeys': 'false', 'controlmaster': 'false'}
+            assert all(observed.get(key) == value for key, value in expected.items()), 'SSH pin/config isolation differs'
+            assert 'ControlPath=none' in options and 'controlpath' not in observed
+    for output, category in (('Host key verification failed. private-url', 'host_verification'),
+                             ('No ED25519 host key is known for private-host', 'host_verification'),
+                             ('Permission denied (publickey). private-key', 'authorization'),
+                             ('User is not authorized to write to private-repo', 'authorization'),
+                             ('Connection refused private-host', 'connection'),
+                             ('Connection reset by peer', 'connection'), ('private unknown output', 'unclassified')):
+        assert git_failure_category(output) == category
+    print('PASS: local OpenSSH exact host/port lookup and isolated options; no SSH connection executed')
     repo = {'owner': 'owned', 'name': 'private'}
     exact = 'ssh://git@localhost:2222/owned/private.git'
     assert ssh_repository_url(exact, 2222, repo) == exact
-    for bad_url in (exact.replace('git@', 'other@'), exact.replace('git@', 'git:password@'), exact.replace('private.git', 'replacement.git'), exact+'?credential=invalid', exact+'#alias', exact.replace('localhost', 'other.invalid')):
+    assert ssh_repository_url(exact.replace('localhost', '127.0.0.1'), 2222, repo).endswith('/owned/private.git')
+    for bad_url in (exact.replace('git@', 'other@'), exact.replace('git@', 'git:password@'), exact.replace('private.git', 'replacement.git'), exact+'?credential=invalid', exact+'#alias', exact.replace('localhost', 'other.invalid'), exact.replace('2222', '2223'), exact+'\n', exact.replace('localhost', 'local\thost')):
         try:
             ssh_repository_url(bad_url, 2222, repo)
         except (AssertionError, ValueError):
@@ -163,7 +222,7 @@ def self_check(root, contract_file=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--self-check', action='store_true', help='Pure validation only; no network, Git or container changes')
+    parser.add_argument('--self-check', action='store_true', help='Pure validation and local OpenSSH config/host lookup only; no connections, Git or container changes')
     parser.add_argument('--contract-file', type=Path, help='Optional frozen protobuf file for pure self-check')
     parser.add_argument('--stack-root', type=Path, help='Existing deployed Compose checkout; never deploys or restarts it')
     parser.add_argument('--browser', action='store_true', help='Actual settings Add/list/reload/delete in both modes/themes at1440/390')
@@ -204,7 +263,7 @@ def main():
     passed = False
     original_failure = None
     observations = []
-    transport = {'hostTrust': 'independent-operator-pin' if args.expected_ssh_host_key_sha256 else 'keyscan-only', 'hostKeyFingerprint': None, 'repositories': [], 'readOnlyClone': False, 'readOnlyPushDenied': False, 'writePush': False, 'firstRevokedNewConnectionDenied': False, 'secondAssociationSurvivingPush': False, 'finalRevokedNewConnectionDenied': False}
+    transport = {'hostTrust': 'independent-operator-pin' if args.expected_ssh_host_key_sha256 else 'keyscan-only', 'hostKeyFingerprint': None, 'repositories': [], 'readOnlyClone': False, 'readOnlyPushDenied': False, 'writePush': False, 'firstRevokedNewConnectionDenied': False, 'secondAssociationSurvivingPush': False, 'finalRevokedNewConnectionDenied': False, 'gitFailures': []}
     original_request = smoke.request
     if args.proof_output:
         assert not args.proof_output.exists(), 'Use a fresh proof manifest'
@@ -386,9 +445,18 @@ def main():
             # Inherited GIT_CONFIG_* or GIT_SSH_* must not rewrite the owned URL
             # or bypass the explicit key/host pin. Native localhost/127 URLs use
             # the same independently checked localhost host-key alias.
-            env = {**{key: value for key, value in os.environ.items() if not key.startswith('GIT_')}, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_TERMINAL_PROMPT': '0', 'GIT_ALLOW_PROTOCOL': 'ssh', 'GIT_SSH_VARIANT': 'ssh', 'GIT_SSH_COMMAND': shlex.join(['ssh', '-4', '-F', os.devnull, '-i', str(key_file), '-o', 'IdentityAgent=none', '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'HostKeyAlias=localhost', '-o', 'UserKnownHostsFile='+str(known), '-o', 'ControlMaster=no', '-o', 'ControlPath=none'])}
+            env = {**{key: value for key, value in os.environ.items() if not key.startswith('GIT_')}, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_TERMINAL_PROMPT': '0', 'GIT_ALLOW_PROTOCOL': 'ssh', 'GIT_SSH_VARIANT': 'ssh', 'GIT_SSH_COMMAND': shlex.join(ssh_options(key_file, known, args.ssh_port))}
             def git(work, *arguments, denied=False, denial=()):
-                result = subprocess.run(['git', '-c', 'credential.helper=', '-c', 'core.hooksPath='+os.devnull, '-c', 'commit.gpgsign=false', *arguments], cwd=work, env=env, capture_output=True, text=True, timeout=35)
+                operation = next((value for value in arguments if value in ('clone', 'push', 'ls-remote', 'checkout', 'add', 'commit', 'rev-parse')), 'other')
+                try:
+                    result = subprocess.run(['git', '-c', 'credential.helper=', '-c', 'core.hooksPath='+os.devnull, '-c', 'commit.gpgsign=false', *arguments], cwd=work, env=env, capture_output=True, text=True, timeout=35)
+                except subprocess.TimeoutExpired:
+                    assert len(transport['gitFailures']) < 32
+                    transport['gitFailures'].append({'operation': operation, 'category': 'timeout', 'expectedDenial': denied})
+                    raise AssertionError('Git transport timed out; sensitive output withheld') from None
+                if result.returncode != 0:
+                    assert len(transport['gitFailures']) < 32
+                    transport['gitFailures'].append({'operation': operation, 'category': git_failure_category(result.stderr), 'returnCode': result.returncode, 'expectedDenial': denied})
                 assert (result.returncode != 0) if denied else (result.returncode == 0), 'Git transport result unexpected; sensitive output withheld'
                 if denied and denial:
                     assert any(expected in result.stderr.lower() for expected in denial), 'Expected native authorization refusal was not observed; output withheld'
@@ -401,7 +469,7 @@ def main():
                 return git(work, 'rev-parse', 'HEAD')
             # Pinned native authorization text: https://raw.githubusercontent.com/go-gitea/gitea/v1.27.3/routers/private/serv.go
             stage = 'real read-only private clone and denied push'
-            ro_work = local/'read-only'; git(local, 'clone', native_repos[0]['ssh_url'], str(ro_work))
+            ro_work = local/'read-only'; git(local, 'clone', ssh_repository_url(native_repos[0]['ssh_url'], args.ssh_port, first['repository']), str(ro_work))
             assert git(ro_work, 'rev-parse', 'HEAD') == native_ref(first, native_repos[0]['default_branch'])
             transport['readOnlyClone'] = True
             transport['repositories'][0]['clonedCommitId'] = git(ro_work, 'rev-parse', 'HEAD')
@@ -410,7 +478,7 @@ def main():
             assert git(ro_work, 'ls-remote', 'origin', 'refs/heads/denied-deploy-key-push') == ''
             transport['readOnlyPushDenied'] = True
             stage = 'real read/write push and independent native commit readback'
-            rw_work = local/'read-write'; git(local, 'clone', native_repos[1]['ssh_url'], str(rw_work))
+            rw_work = local/'read-write'; git(local, 'clone', ssh_repository_url(native_repos[1]['ssh_url'], args.ssh_port, second['repository']), str(rw_work))
             sha = candidate(rw_work, 'allowed-deploy-key-push')
             git(rw_work, 'push', 'origin', 'HEAD:refs/heads/allowed-deploy-key-push')
             assert native_ref(second, 'allowed-deploy-key-push') == sha
