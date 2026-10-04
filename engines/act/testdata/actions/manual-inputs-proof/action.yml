@@ -6,6 +6,8 @@ runs:
     - id: literal
       shell: sh
       run: |
-        test "$INPUT_VALUE" = 'literal <>& 世界 ${{ inputs.flag }} $(touch /tmp/should-not-exist)'
+        dollar='$'
+        expected="literal <>& 世界 ${dollar}{{ inputs.flag }} ${dollar}(touch /tmp/should-not-exist)"
+        test "$INPUT_VALUE" = "$expected"
         test ! -e /tmp/should-not-exist
         echo 'typed-composite-nonrecursive-verified'

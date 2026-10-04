@@ -103,6 +103,9 @@ def self_check():
             assert not any(isinstance(value,ast.Name) and value.id in {'execute','command'} for value in ast.walk(target))
     files = source_files(); assert len(files)==2 and b'if:' in files[PATH] and b'INPUT_VALUE' in files['actions/manual-inputs-proof/action.yml']
     assert b'should-not-exist' in files[PATH] and b'should-not-exist' in files['actions/manual-inputs-proof/action.yml']
+    for data in files.values():
+        assert b'${dollar}{{ inputs.flag }}' in data and b'${dollar}(touch /tmp/should-not-exist)' in data
+        assert "'literal <>& 世界 ${{ inputs.flag }}".encode() not in data
     target={'repository':{'owner':'owned','name':'proof'},'repositoryId':'7','ownerId':'42'}
     prepared=target|{'nativeActorId':'42','commitId':'a'*40,'workflowPath':PATH,'workflowBlobId':'b'*40,'schemaSha256':'c'*64,'submittedSha256':'d'*64,'effectiveSha256':'e'*64,'inputContract':CONTRACT,'definitions':[{'name':name,'type':'WORKFLOW_DISPATCH_INPUT_TYPE_'+kind} for name,kind in [('count','NUMBER'),('flag','BOOLEAN'),('mode','CHOICE'),('text','STRING')]]}
     prepared_receipt(prepared,target,'a'*40,'b'*40)

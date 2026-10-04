@@ -14,7 +14,9 @@ jobs:
       - id: literal
         env: {VALUE: '${{ inputs.text }}', NUMBER: '${{ inputs.count }}', MODE: '${{ inputs.mode }}'}
         run: |
-          test "$VALUE" = 'literal <>& 世界 ${{ inputs.flag }} $(touch /tmp/should-not-exist)'
+          dollar='$'
+          expected="literal <>& 世界 ${dollar}{{ inputs.flag }} ${dollar}(touch /tmp/should-not-exist)"
+          test "$VALUE" = "$expected"
           test "$NUMBER" = 2.5
           test "$MODE" = b
           test ! -e /tmp/should-not-exist
