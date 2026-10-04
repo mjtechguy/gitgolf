@@ -61,7 +61,7 @@ func TestRepositoryEnvironmentRequiresVerifiedHTTPS(t *testing.T) {
 	}
 	env := &runner.ExecutionEnvironment{Secrets: map[string]string{"BUILD_CREDENTIAL": "private-test"}}
 	c := coordinator{origin: "http://127.0.0.1:8080", actions: &runner.ActionsExecutor{}}
-	a := assignment{EngineCatalog: runner.ActionsCatalog, ExecutionEnvironment: env, ActionsPlan: &runner.ActionPlan{Catalog: runner.ActionsCatalog, ArchiveSHA256: strings.Repeat("a", 64), Jobs: []runner.ActionJob{{InstanceID: strings.Repeat("a", 32)}}}, SourceSHA256: strings.Repeat("a", 64), EventJSON: []byte("{}")}
+	a := assignment{TimeoutSeconds: 900, JobResources: testResourceBinding(), EngineCatalog: runner.ActionsCatalog, ExecutionEnvironment: env, ActionsPlan: &runner.ActionPlan{Catalog: runner.ActionsCatalog, ArchiveSHA256: strings.Repeat("a", 64), Jobs: []runner.ActionJob{{InstanceID: strings.Repeat("a", 32)}}}, SourceSHA256: strings.Repeat("a", 64), EventJSON: []byte("{}")}
 	if c.validAssignment(a) {
 		t.Fatal("repository credential assignment accepted over HTTP")
 	}

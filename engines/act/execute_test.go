@@ -339,3 +339,43 @@ func TestLowercaseSetupFieldCannotPromoteRawOutputOrOrdinarySteps(t *testing.T) 
 		t.Fatal("conflicting trusted field spellings authorized a receipt")
 	}
 }
+
+func TestAdmittedJobLimitsAreInspectedBeforeSourceTransfer(t *testing.T) {
+	limits := protocol.JobLimits{CPUMillis: 250, MemoryBytes: "67108864", Pids: 16, TimeoutSeconds: 30}
+	for _, match := range []bool{false, true} {
+		t.Run(map[bool]string{false: "wrong", true: "exact"}[match], func(t *testing.T) {
+			var receipt []inspected
+			if json.Unmarshal([]byte(diagnosticJobReceipt(t, "")), &receipt) != nil {
+				t.Fatal("fixture")
+			}
+			if match {
+				receipt[0].HostConfig.Memory = 67108864
+				receipt[0].HostConfig.MemorySwap = 67108864
+				receipt[0].HostConfig.NanoCpus = 250000000
+				pids := int64(16)
+				receipt[0].HostConfig.PidsLimit = &pids
+			}
+			raw, _ := json.Marshal(receipt)
+			directory := t.TempDir()
+			trace := filepath.Join(directory, "trace")
+			binary := filepath.Join(directory, "docker")
+			script := "#!/bin/sh\ncase \"$1\" in ps) printf '%s' '" + strings.Repeat("a", 64) + "';; inspect) printf '%s' '" + string(raw) + "';; cp) printf 'transfer' > '" + trace + "'; exit 9;; *) exit 9;; esac\n"
+			if os.WriteFile(binary, []byte(script), 0700) != nil {
+				t.Fatal("fixture")
+			}
+			t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+			o := testObserver(t, func(protocol.ActionFrame) error { t.Fatal("invalid job emitted progress"); return nil })
+			o.limits = limits
+			o.resolved = map[string]string{"linux": "sha256:" + strings.Repeat("b", 64)}
+			err := o.prepare()
+			_, sent := os.Stat(trace)
+			want := "engine_job_shape"
+			if match {
+				want = "engine_job_source_transfer"
+			}
+			if ExecutionFailureStage(err) != want || (sent == nil) != match {
+				t.Fatal("source released without exact effective resource receipt", ExecutionFailureStage(err))
+			}
+		})
+	}
+}

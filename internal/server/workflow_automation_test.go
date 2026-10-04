@@ -194,7 +194,7 @@ func TestAutomationRunRunnerFencesPostgres(t *testing.T) {
 				}
 				f.server = reloaded
 			}
-			poll := automationRunnerCall(f, "/internal/ci/poll", "", "{}")
+			poll := automationRunnerCall(f, "/internal/ci/poll", "", `{"capabilities":["golf.runner.job-limits.v1"]}`)
 			queuedDenied := scenario == "manual-only" || scenario == "revoke-queued" || scenario == "expired" || scenario == "native-denied" || scenario == "native-owner-change" || scenario == "native-principal-change" || scenario == "native-archived" || scenario == "native-mirror"
 			if queuedDenied {
 				if poll.Code != 204 {

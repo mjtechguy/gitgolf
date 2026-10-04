@@ -46,6 +46,7 @@ type coordinator struct {
 	actions         *runner.ActionsExecutor
 }
 type assignment struct {
+	JobResources         *runner.JobResourceBinding   `json:"jobResources"`
 	RunID                string                       `json:"runId"`
 	AttemptID            string                       `json:"attemptId"`
 	AttemptToken         string                       `json:"attemptToken"`
@@ -293,7 +294,7 @@ func (c *coordinator) execute(parent context.Context, e *runner.Executor, a assi
 			}
 		}
 	} else if err == nil {
-		job := runner.Job{AttemptID: a.AttemptID, JobID: a.JobID, SourceCommit: a.CommitID, ImageDigest: a.ImageDigest, Timeout: time.Duration(a.TimeoutSeconds) * time.Second, SourceArchivePath: source}
+		job := runner.Job{AttemptID: a.AttemptID, JobID: a.JobID, SourceCommit: a.CommitID, ImageDigest: a.ImageDigest, Timeout: time.Duration(a.TimeoutSeconds) * time.Second, SourceArchivePath: source, Resources: &a.JobResources.Limits}
 		for _, step := range a.Steps {
 			job.Steps = append(job.Steps, runner.Step{Script: step.Run, Shell: step.Shell})
 		}
@@ -443,19 +444,22 @@ func main() {
 }
 
 func (c *coordinator) pollCapabilities() any {
-	if c.actions == nil {
-		return struct{}{}
-	}
 	out := struct {
 		Catalogs     []string `json:"catalogs"`
 		Capabilities []string `json:"capabilities,omitempty"`
-	}{Catalogs: []string{runner.ActionsCatalog}}
-	if strings.HasPrefix(c.origin, "https://") {
-		out.Capabilities = []string{runner.ExecutionValuesCapability}
+	}{Capabilities: []string{runner.JobLimitsCapability}}
+	if c.actions != nil {
+		out.Catalogs = []string{runner.ActionsCatalog}
+	}
+	if c.actions != nil && strings.HasPrefix(c.origin, "https://") {
+		out.Capabilities = append(out.Capabilities, runner.ExecutionValuesCapability)
 	}
 	return out
 }
 func (c *coordinator) validAssignment(a assignment) bool {
+	if a.JobResources == nil || a.JobResources.Validate() != nil || a.TimeoutSeconds != int(a.JobResources.Limits.TimeoutSeconds) {
+		return false
+	}
 	if a.ExecutionEnvironment != nil && (!strings.HasPrefix(c.origin, "https://") || a.ExecutionEnvironment.Validate() != nil || a.EngineCatalog != runner.ActionsCatalog) {
 		return false
 	}
@@ -508,7 +512,7 @@ func (c *coordinator) executeActions(ctx context.Context, a assignment, source s
 	if json.Unmarshal([]byte(os.Getenv("GOLF_RUNNER_ACTIONS_PLATFORMS")), &images) != nil || len(images) == 0 {
 		return runner.Result{}, errTransport
 	}
-	input := runner.ActionExecutionInput{Input: runner.ActionPlanInput{Catalog: runner.ActionsCatalog, WorkflowPath: a.ActionsPlan.WorkflowPath, WorkflowBlobID: a.ActionsPlan.WorkflowBlobID, Archive: archive, Event: a.ActionsPlan.Event, Ref: a.ActionsPlan.Ref, Images: images}, Plan: *a.ActionsPlan, EventJSON: a.EventJSON, CommitID: a.CommitID, TimeoutSeconds: a.TimeoutSeconds, ExecutionEnvironment: a.ExecutionEnvironment}
+	input := runner.ActionExecutionInput{Input: runner.ActionPlanInput{Catalog: runner.ActionsCatalog, WorkflowPath: a.ActionsPlan.WorkflowPath, WorkflowBlobID: a.ActionsPlan.WorkflowBlobID, Archive: archive, Event: a.ActionsPlan.Event, Ref: a.ActionsPlan.Ref, Images: images}, Plan: *a.ActionsPlan, EventJSON: a.EventJSON, CommitID: a.CommitID, TimeoutSeconds: a.TimeoutSeconds, ExecutionEnvironment: a.ExecutionEnvironment, JobResources: a.JobResources}
 	var acknowledgementFailure error
 	result, err := c.actions.Execute(ctx, a.AttemptID, input, func(ctx context.Context, frame runner.ActionFrame) error {
 		acknowledgementFailure = c.acknowledgeActionFrame(ctx, a, forward, frame)

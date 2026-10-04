@@ -88,7 +88,7 @@ func TestRunnerLeasesResultsAndRevocationPostgres(t *testing.T) {
 		f.server.ServeHTTP(response, request)
 		return response
 	}
-	poll := call("POST", "/internal/ci/poll", "", "{}")
+	poll := call("POST", "/internal/ci/poll", "", `{"capabilities":["golf.runner.job-limits.v1"]}`)
 	if poll.Code != 200 {
 		t.Fatalf("poll: %d %s", poll.Code, poll.Body.String())
 	}
@@ -101,7 +101,7 @@ func TestRunnerLeasesResultsAndRevocationPostgres(t *testing.T) {
 		t.Fatal("assignment missing immutable run/attempt")
 	}
 	prefix := "/internal/ci/attempt/" + lease.AttemptID
-	if got := call("POST", "/internal/ci/poll", "", "{}"); got.Code != 204 {
+	if got := call("POST", "/internal/ci/poll", "", `{"capabilities":["golf.runner.job-limits.v1"]}`); got.Code != 204 {
 		t.Fatal("duplicate poll reassigned busy worker", got.Code)
 	}
 	if got := call("GET", prefix+"/source", base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{9}, 32)), ""); got.Code != 403 {
@@ -140,7 +140,7 @@ func TestRunnerLeasesResultsAndRevocationPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	poll = call("POST", "/internal/ci/poll", "", "{}")
+	poll = call("POST", "/internal/ci/poll", "", `{"capabilities":["golf.runner.job-limits.v1"]}`)
 	if poll.Code != 200 {
 		t.Fatal("second assignment failed", poll.Code)
 	}
@@ -161,7 +161,7 @@ func TestRunnerLeasesResultsAndRevocationPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	poll = call("POST", "/internal/ci/poll", "", "{}")
+	poll = call("POST", "/internal/ci/poll", "", `{"capabilities":["golf.runner.job-limits.v1"]}`)
 	if poll.Code != 200 {
 		t.Fatal("third assignment failed", poll.Code)
 	}
@@ -173,7 +173,7 @@ func TestRunnerLeasesResultsAndRevocationPostgres(t *testing.T) {
 	if got := call("POST", prefix+"/finish", lease.AttemptToken, `{"exitCode":0}`); got.Code != 403 {
 		t.Fatal("expired lease result accepted")
 	}
-	if got := call("POST", "/internal/ci/poll", "", "{}"); got.Code != 204 {
+	if got := call("POST", "/internal/ci/poll", "", `{"capabilities":["golf.runner.job-limits.v1"]}`); got.Code != 204 {
 		t.Fatal("lost attempt auto-replayed")
 	}
 	status, err = f.server.loadWorkflowRun(t.Context(), third.Msg.Run.Id)
@@ -184,7 +184,7 @@ func TestRunnerLeasesResultsAndRevocationPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	poll = call("POST", "/internal/ci/poll", "", "{}")
+	poll = call("POST", "/internal/ci/poll", "", `{"capabilities":["golf.runner.job-limits.v1"]}`)
 	if poll.Code != 200 {
 		t.Fatal("fourth assignment failed", poll.Code)
 	}

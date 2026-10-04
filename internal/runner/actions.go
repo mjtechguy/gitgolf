@@ -121,6 +121,9 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 			err = &actionsStageError{phase, err}
 		}
 	}()
+	if input.JobResources != nil && (input.JobResources.Validate() != nil || input.TimeoutSeconds != int(input.JobResources.Limits.TimeoutSeconds)) {
+		return result, ErrInvalidJob
+	}
 	if input.ExecutionEnvironment.Validate() != nil || !attemptPattern.MatchString(attempt) || input.Plan.Catalog != ActionsCatalog || input.Plan.ArchiveSHA256 == "" || input.TimeoutSeconds < 1 || input.TimeoutSeconds > 900 || onFrame == nil {
 		return result, ErrInvalidJob
 	}

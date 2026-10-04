@@ -246,13 +246,13 @@ func executionDispatch(t *testing.T, f *workflowRunFixture) *golfv1.WorkflowRun 
 }
 func executionLease(t *testing.T, f *workflowRunFixture) engineLease {
 	t.Helper()
-	body := map[string]any{"catalogs": []string{runner.ActionsCatalog}, "capabilities": []string{runner.ExecutionValuesCapability}}
+	body := map[string]any{"catalogs": []string{runner.ActionsCatalog}, "capabilities": []string{runner.JobLimitsCapability, runner.ExecutionValuesCapability}}
 	for _, version := range []uint16{0, tls.VersionTLS12} {
 		if r := executionWorkerCall(f, engineLease{}, "poll", body, version); r.Code != 204 {
 			t.Fatal("insecure worker obtained value assignment", r.Code)
 		}
 	}
-	if r := executionWorkerCall(f, engineLease{}, "poll", map[string]any{"catalogs": []string{runner.ActionsCatalog}}, tls.VersionTLS13); r.Code != 204 {
+	if r := executionWorkerCall(f, engineLease{}, "poll", map[string]any{"catalogs": []string{runner.ActionsCatalog}, "capabilities": []string{runner.JobLimitsCapability}}, tls.VersionTLS13); r.Code != 204 {
 		t.Fatal("old worker obtained broker assignment")
 	}
 	response := executionWorkerCall(f, engineLease{}, "poll", body, tls.VersionTLS13)

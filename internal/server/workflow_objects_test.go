@@ -121,7 +121,7 @@ func objectRunnerCall(s *Server, method, route, token, body string) *httptest.Re
 }
 func objectLease(t *testing.T, f *workflowRunFixture) (string, string) {
 	t.Helper()
-	rec := objectRunnerCall(f.server, "POST", "/internal/ci/poll", "", "{}")
+	rec := objectRunnerCall(f.server, "POST", "/internal/ci/poll", "", `{"capabilities":["golf.runner.job-limits.v1"]}`)
 	if rec.Code != 200 {
 		t.Fatal("runner assignment failed", rec.Code)
 	}

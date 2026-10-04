@@ -231,17 +231,32 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 	if !runnerDecode(w, r, &input, 512) {
 		return
 	}
-	secureBroker := false
-	if len(input.Capabilities) > 1 {
+	secureBroker, resourceConsumer := false, false
+	if len(input.Capabilities) > 2 {
 		runnerFail(w, 400)
 		return
 	}
+	seenCaps := map[string]bool{}
 	for _, capability := range input.Capabilities {
-		if capability != runner.ExecutionValuesCapability {
+		if seenCaps[capability] {
 			runnerFail(w, 400)
 			return
 		}
-		secureBroker = r.TLS != nil && r.TLS.Version >= tls.VersionTLS13
+		seenCaps[capability] = true
+		switch capability {
+		case runner.JobLimitsCapability:
+			resourceConsumer = true
+		case runner.ExecutionValuesCapability:
+			secureBroker = r.TLS != nil && r.TLS.Version >= tls.VersionTLS13
+		default:
+			runnerFail(w, 400)
+			return
+		}
+	}
+	// Enrollment alone never authorizes an old executor to adopt new limits.
+	if !resourceConsumer {
+		w.WriteHeader(204)
+		return
 	}
 	catalogs := []string{workflowExecutionCatalog}
 	if len(input.Catalogs) > 2 {
@@ -357,6 +372,19 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(204)
 		return
 	}
+	if err = s.runnerResourceFence(ctx, tx, run); err != nil {
+		tx.Rollback()
+		if errors.Is(err, errRunnerResourcesStale) {
+			if e := s.rejectRunnerResourcesRun(ctx, run); e != nil {
+				runnerFail(w, 503)
+				return
+			}
+			w.WriteHeader(204)
+		} else {
+			runnerFail(w, 503)
+		}
+		return
+	}
 	raw := make([]byte, 32)
 	if _, err = rand.Read(raw); err != nil {
 		runnerFail(w, 503)
@@ -395,9 +423,21 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if err = s.runnerResourceObservation(ctx, run); err != nil {
+		if !errors.Is(err, errRunnerResourcesStale) {
+			runnerFail(w, 503)
+			return
+		}
+		if e := s.cancelRunnerResourceAttempt(ctx, run.ID); e != nil {
+			runnerFail(w, 503)
+			return
+		}
+		runnerFail(w, 403)
+		return
+	}
 	if plan.Actions != nil {
 		eventJSON, _ := json.Marshal(map[string]any{"ref": plan.Actions.Ref, "after": run.CommitID, "repository": map[string]any{"id": run.RepositoryID, "name": run.RepositoryName, "full_name": run.RepositoryOwner + "/" + run.RepositoryName, "owner": map[string]any{"id": run.OwnerID, "login": run.RepositoryOwner}}})
-		assignment := map[string]any{"runId": run.ID, "attemptId": attempt, "attemptToken": token, "imageDigest": plan.ImageDigest, "commitId": run.CommitID, "sourceSha256": run.SourceSHA256, "timeoutSeconds": 900, "leaseSeconds": runnerLeaseSeconds, "engineCatalog": runner.ActionsCatalog, "actionsPlan": plan.Actions, "eventJson": eventJSON}
+		assignment := map[string]any{"runId": run.ID, "attemptId": attempt, "attemptToken": token, "imageDigest": plan.ImageDigest, "commitId": run.CommitID, "sourceSha256": run.SourceSHA256, "timeoutSeconds": run.Resources.TimeoutSeconds, "jobResources": resourceBinding(run), "leaseSeconds": runnerLeaseSeconds, "engineCatalog": runner.ActionsCatalog, "actionsPlan": plan.Actions, "eventJson": eventJSON}
 		if environment != nil {
 			assignment["executionEnvironment"] = environment
 		}
@@ -405,7 +445,7 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		respond(w, 200, assignment)
 		return
 	}
-	respond(w, 200, map[string]any{"runId": run.ID, "attemptId": attempt, "attemptToken": token, "imageDigest": plan.ImageDigest, "commitId": run.CommitID, "sourceSha256": run.SourceSHA256, "steps": plan.Steps, "jobId": plan.JobID, "timeoutSeconds": 900, "leaseSeconds": runnerLeaseSeconds})
+	respond(w, 200, map[string]any{"runId": run.ID, "attemptId": attempt, "attemptToken": token, "imageDigest": plan.ImageDigest, "commitId": run.CommitID, "sourceSha256": run.SourceSHA256, "steps": plan.Steps, "jobId": plan.JobID, "timeoutSeconds": run.Resources.TimeoutSeconds, "jobResources": resourceBinding(run), "leaseSeconds": runnerLeaseSeconds})
 }
 func isRunnerAuthorityDenied(err error) bool {
 	var upstream forgeError
@@ -533,6 +573,10 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		runnerFail(w, 403)
 		return
 	}
+	if err = s.lockRunnerPlacement(ctx, tx, run.RepositoryID); err != nil {
+		runnerFail(w, 503)
+		return
+	}
 	var state string
 	if err = s.lockRunnerControl(ctx, tx, id); err != nil {
 		runnerFail(w, 503)
@@ -545,6 +589,25 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 	}
 	if control == "revoked" {
 		runnerFail(w, 403)
+		return
+	}
+	if run.RunnerPlacement.PoolID.Valid {
+		if err = s.lockRunnerPool(ctx, tx, run.RunnerPlacement.PoolID.String); err != nil {
+			runnerFail(w, 503)
+			return
+		}
+	}
+	if err = s.runnerResourceFence(ctx, tx, run); err != nil {
+		tx.Rollback()
+		if errors.Is(err, errRunnerResourcesStale) {
+			if e := s.cancelRunnerResourceAttempt(ctx, run.ID); e != nil {
+				runnerFail(w, 503)
+				return
+			}
+			runnerFail(w, 403)
+		} else {
+			runnerFail(w, 503)
+		}
 		return
 	}
 	err = tx.QueryRowContext(ctx, `SELECT state FROM golf_workflow_runs WHERE id=$1 AND forge_url=$2 AND runner_id=$3 AND attempt_id=$4 AND lease_token_hash=$5 AND lease_expires_at>clock_timestamp() FOR UPDATE`, run.ID, s.config.GiteaURL, id, attempt, hash[:]).Scan(&state)

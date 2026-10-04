@@ -108,7 +108,7 @@ func TestLogNormalizationSequenceAndJSONBounds(t *testing.T) {
 }
 func TestPollValidationAndDenial(t *testing.T) {
 	state := "valid"
-	a := assignment{RunID: "17", AttemptID: strings.Repeat("a", 32), AttemptToken: strings.Repeat("b", 43), JobID: "check", ImageDigest: "alpine@sha256:" + strings.Repeat("c", 64), CommitID: strings.Repeat("d", 40), SourceSHA256: strings.Repeat("e", 64), TimeoutSeconds: 900, LeaseSeconds: 45}
+	a := assignment{RunID: "17", AttemptID: strings.Repeat("a", 32), AttemptToken: strings.Repeat("b", 43), JobID: "check", ImageDigest: "alpine@sha256:" + strings.Repeat("c", 64), CommitID: strings.Repeat("d", 40), SourceSHA256: strings.Repeat("e", 64), TimeoutSeconds: 900, LeaseSeconds: 45, JobResources: testResourceBinding()}
 	a.Steps = append(a.Steps, struct {
 		Name  string
 		Run   string
@@ -152,7 +152,7 @@ func TestPollValidationAndDenial(t *testing.T) {
 
 func TestActionsAssignmentRequiresExplicitQualifiedConsumer(t *testing.T) {
 	var c coordinator
-	a := assignment{EngineCatalog: runner.ActionsCatalog, SourceSHA256: strings.Repeat("a", 64), EventJSON: []byte(`{"ref":"refs/heads/main"}`), ActionsPlan: &runner.ActionPlan{Catalog: runner.ActionsCatalog, ArchiveSHA256: strings.Repeat("a", 64), Jobs: []runner.ActionJob{{InstanceID: strings.Repeat("b", 32)}}}}
+	a := assignment{TimeoutSeconds: 900, JobResources: testResourceBinding(), EngineCatalog: runner.ActionsCatalog, SourceSHA256: strings.Repeat("a", 64), EventJSON: []byte(`{"ref":"refs/heads/main"}`), ActionsPlan: &runner.ActionPlan{Catalog: runner.ActionsCatalog, ArchiveSHA256: strings.Repeat("a", 64), Jobs: []runner.ActionJob{{InstanceID: strings.Repeat("b", 32)}}}}
 	if c.validAssignment(a) {
 		t.Fatal("old worker admitted engine graph")
 	}
@@ -200,5 +200,31 @@ func TestActionsOperatorDiagnosticCannotExposeErrorOrExecutionData(t *testing.T)
 	reportActionsFailure(&output, err)
 	if output.String() != "Golf Actions lifecycle failure: stage=input_validation\n" || !errors.Is(err, runner.ErrInvalidJob) {
 		t.Fatal("fixed classification or policy lost")
+	}
+}
+
+func testResourceBinding() *runner.JobResourceBinding {
+	return &runner.JobResourceBinding{Profile: runner.JobLimitsProfile, Limits: runner.DefaultJobLimits(), InstanceVersion: "0", PlacementVersion: "0", Bound: true}
+}
+func TestResourceConsumerCapabilityAndNoLegacyAdoption(t *testing.T) {
+	c := coordinator{origin: "http://localhost"}
+	raw, _ := json.Marshal(c.pollCapabilities())
+	var caps struct{ Capabilities []string }
+	if json.Unmarshal(raw, &caps) != nil || len(caps.Capabilities) != 1 || caps.Capabilities[0] != runner.JobLimitsCapability {
+		t.Fatal("shell consumer missing resource declaration")
+	}
+	a := assignment{TimeoutSeconds: 900, JobResources: testResourceBinding()}
+	a.Steps = []struct{ Name, Run, Shell string }{{Run: "true", Shell: "sh"}}
+	if !c.validAssignment(a) {
+		t.Fatal("bound shell refused")
+	}
+	a.JobResources = nil
+	if c.validAssignment(a) {
+		t.Fatal("missing snapshot adopted")
+	}
+	a.JobResources = testResourceBinding()
+	a.TimeoutSeconds = 899
+	if c.validAssignment(a) {
+		t.Fatal("timeout does not echo snapshot")
 	}
 }

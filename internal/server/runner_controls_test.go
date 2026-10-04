@@ -156,7 +156,7 @@ func TestRunnerControlTransportDrainRevokePostgres(t *testing.T) {
 		}
 	}
 	set("draining")
-	if r := call("POST", "/internal/ci/poll", "", "{}"); r.Code != 204 {
+	if r := call("POST", "/internal/ci/poll", "", `{"capabilities":["golf.runner.job-limits.v1"]}`); r.Code != 204 {
 		t.Fatal("drain claimed", r.Code)
 	}
 	run, e := f.server.loadWorkflowRun(t.Context(), dispatched.Msg.Run.Id)
@@ -164,7 +164,7 @@ func TestRunnerControlTransportDrainRevokePostgres(t *testing.T) {
 		t.Fatal("drain cancelled queued", e)
 	}
 	set("active")
-	r := call("POST", "/internal/ci/poll", "", "{}")
+	r := call("POST", "/internal/ci/poll", "", `{"capabilities":["golf.runner.job-limits.v1"]}`)
 	if r.Code != 200 {
 		t.Fatal("claim", r.Code)
 	}
@@ -188,7 +188,7 @@ func TestRunnerControlTransportDrainRevokePostgres(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	r = call("POST", "/internal/ci/poll", "", "{}")
+	r = call("POST", "/internal/ci/poll", "", `{"capabilities":["golf.runner.job-limits.v1"]}`)
 	if r.Code != 200 {
 		t.Fatal(r.Code)
 	}
@@ -208,7 +208,7 @@ func TestRunnerControlTransportDrainRevokePostgres(t *testing.T) {
 	if e != nil || run.State != "cancelled" || len(run.LeaseTokenHash) != 0 {
 		t.Fatal("cancel fence", e)
 	}
-	if r := call("POST", "/internal/ci/poll", "", "{}"); r.Code != 204 {
+	if r := call("POST", "/internal/ci/poll", "", `{"capabilities":["golf.runner.job-limits.v1"]}`); r.Code != 204 {
 		t.Fatal("revoked claim", r.Code)
 	}
 }
@@ -230,7 +230,7 @@ func TestRunnerControlLockSerializesClaimPostgres(t *testing.T) {
 	result := make(chan int, 1)
 	go func() {
 		close(started)
-		r := httptest.NewRequest("POST", "/internal/ci/poll", strings.NewReader("{}"))
+		r := httptest.NewRequest("POST", "/internal/ci/poll", strings.NewReader(`{"capabilities":["golf.runner.job-limits.v1"]}`))
 		r.Header.Set("Golf-Runner-ID", "fixture")
 		r.Header.Set("Authorization", "Bearer "+base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)))
 		w := httptest.NewRecorder()

@@ -36,6 +36,9 @@ var errWorkflowPolicyDenied = errors.New("manual workflow execution is disabled 
 
 // No command/source payload is loaded by status/list/log queries.
 type workflowRunRecord struct {
+	Resources                                                                                     runner.JobLimits
+	ResourceBound                                                                                 bool
+	ResourceInstanceVersion                                                                       int64
 	SourceStorage, SourceKey, SourceFingerprint                                                   string
 	SourceProfileID                                                                               sql.NullString
 	SourceProfileVersion                                                                          sql.NullInt64
@@ -72,13 +75,13 @@ type workflowRunRecord struct {
 	RunnerPlacement                                                                               runnerPoolBinding
 }
 
-const workflowRunColumns = `id::text,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,policy_epochs,idempotency_key::text,input_hash,state,version,created_at,started_at,finished_at,exit_code,reason,runner_id,attempt_id,lease_token_hash,lease_expires_at,cancel_requested,logs_truncated,source_sha256,log_bytes,log_sequence,source_storage,source_key,source_fingerprint,source_profile_id::text,source_profile_version,origin,automation_grant_id::text,automation_grant_revision,automation_grant_epoch,automation_credential_version,repository_event_id,event_ref,engine_catalog,runner_pool_id::text,runner_pool_version,runner_placement_version`
+const workflowRunColumns = `id::text,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,policy_epochs,idempotency_key::text,input_hash,state,version,created_at,started_at,finished_at,exit_code,reason,runner_id,attempt_id,lease_token_hash,lease_expires_at,cancel_requested,logs_truncated,source_sha256,log_bytes,log_sequence,source_storage,source_key,source_fingerprint,source_profile_id::text,source_profile_version,origin,automation_grant_id::text,automation_grant_revision,automation_grant_epoch,automation_credential_version,repository_event_id,event_ref,engine_catalog,runner_pool_id::text,runner_pool_version,runner_placement_version,resource_bound,resource_instance_version,resource_cpu_millis,resource_memory_bytes,resource_pids,resource_timeout_seconds`
 
 type workflowRunScanner interface{ Scan(...any) error }
 
 func scanWorkflowRun(row workflowRunScanner) (workflowRunRecord, error) {
 	var r workflowRunRecord
-	err := row.Scan(&r.ID, &r.ForgeURL, &r.RepositoryID, &r.OwnerID, &r.RepositoryOwner, &r.RepositoryName, &r.OrganizationOwned, &r.UserID, &r.SessionHash, &r.CommitID, &r.WorkflowPath, &r.BlobID, &r.Format, &r.PolicyEpochs, &r.IdempotencyKey, &r.InputHash, &r.State, &r.Version, &r.CreatedAt, &r.StartedAt, &r.FinishedAt, &r.ExitCode, &r.Reason, &r.RunnerID, &r.AttemptID, &r.LeaseTokenHash, &r.LeaseExpiresAt, &r.CancelRequested, &r.LogsTruncated, &r.SourceSHA256, &r.LogBytes, &r.LogSequence, &r.SourceStorage, &r.SourceKey, &r.SourceFingerprint, &r.SourceProfileID, &r.SourceProfileVersion, &r.Origin, &r.AutomationGrantID, &r.AutomationGrantRevision, &r.AutomationGrantEpoch, &r.AutomationCredentialVersion, &r.RepositoryEventID, &r.EventRef, &r.EngineCatalog, &r.RunnerPlacement.PoolID, &r.RunnerPlacement.PoolVersion, &r.RunnerPlacement.PlacementVersion)
+	err := row.Scan(&r.ID, &r.ForgeURL, &r.RepositoryID, &r.OwnerID, &r.RepositoryOwner, &r.RepositoryName, &r.OrganizationOwned, &r.UserID, &r.SessionHash, &r.CommitID, &r.WorkflowPath, &r.BlobID, &r.Format, &r.PolicyEpochs, &r.IdempotencyKey, &r.InputHash, &r.State, &r.Version, &r.CreatedAt, &r.StartedAt, &r.FinishedAt, &r.ExitCode, &r.Reason, &r.RunnerID, &r.AttemptID, &r.LeaseTokenHash, &r.LeaseExpiresAt, &r.CancelRequested, &r.LogsTruncated, &r.SourceSHA256, &r.LogBytes, &r.LogSequence, &r.SourceStorage, &r.SourceKey, &r.SourceFingerprint, &r.SourceProfileID, &r.SourceProfileVersion, &r.Origin, &r.AutomationGrantID, &r.AutomationGrantRevision, &r.AutomationGrantEpoch, &r.AutomationCredentialVersion, &r.RepositoryEventID, &r.EventRef, &r.EngineCatalog, &r.RunnerPlacement.PoolID, &r.RunnerPlacement.PoolVersion, &r.RunnerPlacement.PlacementVersion, &r.ResourceBound, &r.ResourceInstanceVersion, &r.Resources.CPUMillis, &r.Resources.MemoryBytes, &r.Resources.Pids, &r.Resources.TimeoutSeconds)
 	return r, err
 }
 func (s *Server) loadWorkflowRun(ctx context.Context, id string) (workflowRunRecord, error) {
@@ -101,6 +104,7 @@ func (s *Server) loadWorkflowRun(ctx context.Context, id string) (workflowRunRec
 func wireWorkflowRun(r workflowRunRecord, canCancel bool) *golfv1.WorkflowRun {
 	w := &golfv1.WorkflowRun{Id: r.ID, RepositoryId: strconv.FormatInt(r.RepositoryID, 10), OwnerId: strconv.FormatInt(r.OwnerID, 10), CommitId: r.CommitID, WorkflowPath: r.WorkflowPath, WorkflowBlobId: r.BlobID, Format: golfv1.WorkflowFormat(r.Format), State: golfv1.WorkflowRunState(golfv1.WorkflowRunState_value["WORKFLOW_RUN_STATE_"+strings.ToUpper(r.State)]), Version: strconv.FormatInt(r.Version, 10), CreatedAt: r.CreatedAt.Format(time.RFC3339Nano), Reason: r.Reason, RunnerId: r.RunnerID, SourceSha256: r.SourceSHA256, LogsTruncated: r.LogsTruncated, CanCancel: canCancel && (r.State == "queued" || r.State == "running")}
 	w.RunnerPlacement = runnerPoolBindingWire(r.RunnerPlacement)
+	w.JobResources = resourceBindingWire(r)
 	w.OutputState = r.OutputState
 	w.ExecutionBindingId = r.ExecutionBindingID
 	w.ExecutionBindingVersion = r.ExecutionBindingVersion

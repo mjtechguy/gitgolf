@@ -69,7 +69,7 @@ func TestRunnerPoolProductionTransportAndReplayPostgres(t *testing.T) {
 		}
 	}
 	poll := func(worker, key string) *httptest.ResponseRecorder {
-		r := httptest.NewRequest("POST", "/internal/ci/poll", strings.NewReader(`{}`))
+		r := httptest.NewRequest("POST", "/internal/ci/poll", strings.NewReader(`{"capabilities":["golf.runner.job-limits.v1"]}`))
 		r.Header.Set("Golf-Runner-ID", worker)
 		r.Header.Set("Authorization", "Bearer "+key)
 		w := httptest.NewRecorder()

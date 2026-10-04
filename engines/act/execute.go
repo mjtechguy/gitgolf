@@ -62,6 +62,13 @@ func classifyExecution(stage string, err error) error {
 func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe func(protocol.ActionFrame) error) (err error) {
 	phase := "engine_input_validation"
 	defer func() { err = classifyExecution(phase, err) }()
+	limits := protocol.DefaultJobLimits()
+	if input.JobResources != nil {
+		if input.JobResources.Validate() != nil || uint32(input.TimeoutSeconds) != input.JobResources.Limits.TimeoutSeconds {
+			return ErrExecution
+		}
+		limits = input.JobResources.Limits
+	}
 	if input.ExecutionEnvironment.Validate() != nil || os.Getenv("DOCKER_HOST") != "unix:///var/run/docker.sock" || os.Getenv("GOLF_OWNED_ACTIONS_DAEMON") != "1" || (input.Input.Event != "workflow_dispatch" && input.Input.Event != "push") || input.TimeoutSeconds < 1 || input.TimeoutSeconds > 900 || !fullObjectPattern.MatchString(input.CommitID) || len(input.EventJSON) > 16<<10 {
 		return ErrExecution
 	}
@@ -189,7 +196,7 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 			return ErrExecution
 		}
 	}
-	options := "--user=1000:1000 --security-opt=no-new-privileges --cpus=1 --memory=268435456 --memory-swap=268435456 --pids-limit=64"
+	options := "--user=1000:1000 --security-opt=no-new-privileges " + strings.Join(limits.DockerOptions(), " ")
 	for _, dir := range protected {
 		options += " --mount=type=bind,source=" + workspace + "/" + dir + ",target=" + workspace + "/" + dir + ",readonly"
 	}
@@ -197,7 +204,7 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 	if err = os.WriteFile("/golf/event.json", input.EventJSON, 0600); err != nil {
 		return ErrExecution
 	}
-	observer := &engineObserver{ctx: ctx, cancel: cancel, send: observe, plan: plan, resolved: resolved, prepared: map[string]bool{}, volumes: map[string]bool{}, started: map[string]bool{}, finished: map[string]bool{}, nativeResults: map[string]string{}}
+	observer := &engineObserver{ctx: ctx, cancel: cancel, send: observe, plan: plan, resolved: resolved, prepared: map[string]bool{}, volumes: map[string]bool{}, started: map[string]bool{}, finished: map[string]bool{}, nativeResults: map[string]string{}, limits: limits}
 	logrus.SetOutput(io.Discard)
 	logrus.SetLevel(logrus.DebugLevel)
 	config := &act.Config{Actor: "unavailable", Workdir: workspace, EventName: input.Input.Event, EventPath: "/golf/event.json", Env: map[string]string{"SHA_REF": input.CommitID, "GITHUB_REF": input.Input.Ref, "GITHUB_RUN_ID": "unavailable", "GITHUB_RUN_NUMBER": "unavailable", "GITHUB_SERVER_URL": "urn:golf:platform-context-unavailable", "GITHUB_API_URL": "urn:golf:github-rest-unavailable", "GITHUB_GRAPHQL_URL": "urn:golf:github-graphql-unavailable"}, Platforms: resolved, GitHubInstance: "golf.invalid", ContainerDaemonSocket: "-", ContainerNetworkMode: "none", BindWorkdir: false, ActionOfflineMode: true, ForcePull: false, Privileged: false, AutoRemove: true, ConcurrentJobs: 2, ContainerCapDrop: []string{"ALL"}, ContainerOptions: options}
@@ -244,6 +251,7 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 }
 
 type engineObserver struct {
+	limits                                     protocol.JobLimits
 	mu                                         sync.Mutex
 	ctx                                        context.Context
 	cancel                                     context.CancelFunc
@@ -485,7 +493,7 @@ func (o *engineObserver) prepare() (err error) {
 			allowedImage = allowedImage || image == r.Image
 		}
 		phase = "engine_job_shape"
-		if !allowedImage || r.ID != id || r.Config.User != "1000:1000" || r.HostConfig.NetworkMode != "none" || r.HostConfig.Privileged || len(r.HostConfig.Binds) > 0 || len(r.HostConfig.CapAdd) > 0 || len(r.HostConfig.Devices) > 0 || r.HostConfig.Memory != 268435456 || r.HostConfig.MemorySwap != 268435456 || r.HostConfig.NanoCpus != 1000000000 || r.HostConfig.PidsLimit == nil || *r.HostConfig.PidsLimit != 64 || !contains(r.HostConfig.CapDrop, "ALL") || !contains(r.HostConfig.SecurityOpt, "no-new-privileges") {
+		if !allowedImage || r.ID != id || r.Config.User != "1000:1000" || r.HostConfig.NetworkMode != "none" || r.HostConfig.Privileged || len(r.HostConfig.Binds) > 0 || len(r.HostConfig.CapAdd) > 0 || len(r.HostConfig.Devices) > 0 || r.HostConfig.Memory != o.jobLimits().Memory() || r.HostConfig.MemorySwap != o.jobLimits().Memory() || r.HostConfig.NanoCpus != int64(o.jobLimits().CPUMillis)*1000000 || r.HostConfig.PidsLimit == nil || *r.HostConfig.PidsLimit != int64(o.jobLimits().Pids) || !contains(r.HostConfig.CapDrop, "ALL") || !contains(r.HostConfig.SecurityOpt, "no-new-privileges") {
 			return ErrExecution
 		}
 		phase = "engine_job_environment"
@@ -700,4 +708,11 @@ func applyRepositoryEnvironment(config *act.Config, env *protocol.ExecutionEnvir
 		config.Env[name] = value
 	}
 	return nil
+}
+
+func (o *engineObserver) jobLimits() protocol.JobLimits {
+	if o.limits == (protocol.JobLimits{}) {
+		return protocol.DefaultJobLimits()
+	}
+	return o.limits
 }

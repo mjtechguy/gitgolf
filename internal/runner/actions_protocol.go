@@ -54,6 +54,7 @@ type ActionPlan struct {
 	LocalActions   []ActionDependency `json:"localActions"`
 }
 type ActionExecutionInput struct {
+	JobResources         *JobResourceBinding   `json:"jobResources,omitempty"`
 	Input                ActionPlanInput       `json:"input"`
 	Plan                 ActionPlan            `json:"plan"`
 	EventJSON            []byte                `json:"eventJson"`

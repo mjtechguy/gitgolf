@@ -37,7 +37,7 @@ func TestWorkflowProgressBoundariesPostgres(t *testing.T) {
 		AttemptID    string `json:"attemptId"`
 		AttemptToken string `json:"attemptToken"`
 	}
-	poll := call("/internal/ci/poll", "", "{}")
+	poll := call("/internal/ci/poll", "", `{"capabilities":["golf.runner.job-limits.v1"]}`)
 	if poll.Code != 200 || json.Unmarshal(poll.Body.Bytes(), &lease) != nil {
 		t.Fatal("poll failed", poll.Code)
 	}

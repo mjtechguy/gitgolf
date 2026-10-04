@@ -60,6 +60,7 @@ type StepEvent struct {
 	ExitCode int
 }
 type Job struct {
+	Resources         *JobLimits                             `json:"job_resources,omitempty"`
 	AttemptID         string                                 `json:"attempt_id"`
 	JobID             string                                 `json:"job_id"`
 	SourceCommit      string                                 `json:"source_commit"`
@@ -109,7 +110,16 @@ func New(config Config) (*Executor, error) {
 	config.ApprovedImages = append([]string(nil), config.ApprovedImages...)
 	return &Executor{config}, nil
 }
+func jobLimits(job Job) JobLimits {
+	if job.Resources != nil {
+		return *job.Resources
+	}
+	return DefaultJobLimits()
+}
 func (e *Executor) validate(job Job) error {
+	if jobLimits(job).Validate() != nil || job.Timeout > time.Duration(jobLimits(job).TimeoutSeconds)*time.Second {
+		return ErrInvalidJob
+	}
 	allowed := false
 	for _, image := range e.config.ApprovedImages {
 		allowed = allowed || image == job.ImageDigest
@@ -396,7 +406,8 @@ func (e *Executor) Execute(ctx context.Context, job Job, onLog func(context.Cont
 	}
 	volumeCreated = true
 	create := func(readonly bool) (string, error) {
-		args := []string{"container", "create", "--pull=never", "--network=none", "--user=1000:1000", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--cpus=1", "--memory=268435456", "--memory-swap=268435456", "--pids-limit=64", "--restart=no", "--no-healthcheck", "--log-driver=none"}
+		args := []string{"container", "create", "--pull=never", "--network=none", "--user=1000:1000", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--restart=no", "--no-healthcheck", "--log-driver=none"}
+		args = append(args, jobLimits(job).DockerOptions()...)
 		args = append(args, labels...)
 		mount := "type=volume,src=" + volume + ",dst=/golf,volume-nocopy"
 		if readonly {
@@ -414,6 +425,9 @@ func (e *Executor) Execute(ctx context.Context, job Job, onLog func(context.Cont
 	if helper, err = create(false); err != nil {
 		return
 	}
+	if err = e.inspectJobLimits(runCtx, helper, jobLimits(job)); err != nil {
+		return
+	}
 	if _, err = e.command(runCtx, bytes.NewReader(archive), "container", "cp", "-a", "-", helper+":/golf"); err != nil {
 		return
 	}
@@ -422,6 +436,9 @@ func (e *Executor) Execute(ctx context.Context, job Job, onLog func(context.Cont
 	}
 	helper = ""
 	if container, err = create(true); err != nil {
+		return
+	}
+	if err = e.inspectJobLimits(runCtx, container, jobLimits(job)); err != nil {
 		return
 	}
 	if _, err = e.command(runCtx, nil, "container", "start", container); err != nil {
@@ -524,6 +541,25 @@ func (e *Executor) CleanupWorker(ctx context.Context) error {
 		if !attemptPattern.MatchString(labels[attemptLabel]) || !attemptPattern.MatchString(labels[ownerLabel]) || name != "golf-source-"+labels[attemptLabel]+"-"+labels[ownerLabel] || e.removeVolume(ctx, name, labels[attemptLabel], labels[ownerLabel]) != nil {
 			return ErrCleanup
 		}
+	}
+	return nil
+}
+
+func (e *Executor) inspectJobLimits(ctx context.Context, id string, limits JobLimits) error {
+	raw, err := e.command(ctx, nil, "container", "inspect", id)
+	var rows []struct {
+		ID         string `json:"Id"`
+		HostConfig struct {
+			Memory, MemorySwap, NanoCpus int64
+			PidsLimit                    *int64
+		}
+	}
+	if err != nil || json.Unmarshal(raw, &rows) != nil || len(rows) != 1 || rows[0].ID != id {
+		return ErrInfrastructure
+	}
+	h := rows[0].HostConfig
+	if h.Memory != limits.Memory() || h.MemorySwap != limits.Memory() || h.NanoCpus != int64(limits.CPUMillis)*1000000 || h.PidsLimit == nil || *h.PidsLimit != int64(limits.Pids) {
+		return ErrInfrastructure
 	}
 	return nil
 }

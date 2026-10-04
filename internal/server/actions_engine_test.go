@@ -78,7 +78,7 @@ func engineAssigned(t *testing.T, f *workflowRunFixture) engineLease {
 	if old.Code != 204 {
 		t.Fatal("legacy worker claimed graph", old.Code)
 	}
-	response := engineWorkerCall(f, engineLease{}, "poll", map[string]any{"catalogs": []string{runner.ActionsCatalog}})
+	response := engineWorkerCall(f, engineLease{}, "poll", map[string]any{"catalogs": []string{runner.ActionsCatalog}, "capabilities": []string{runner.JobLimitsCapability}})
 	var lease engineLease
 	if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &lease) != nil || len(lease.ActionsPlan.Jobs) != 3 {
 		t.Fatal("upgraded assignment", response.Code)
@@ -251,7 +251,7 @@ func TestActionsEngineLeaseLossRestartCannotReexecutePostgres(t *testing.T) {
 	if _, err = f.server.db.Exec(`UPDATE golf_workflow_runs SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1`, lease.RunID); err != nil {
 		t.Fatal(err)
 	}
-	if engineWorkerCall(f, engineLease{}, "poll", map[string]any{"catalogs": []string{runner.ActionsCatalog}}).Code != 204 {
+	if engineWorkerCall(f, engineLease{}, "poll", map[string]any{"catalogs": []string{runner.ActionsCatalog}, "capabilities": []string{runner.JobLimitsCapability}}).Code != 204 {
 		t.Fatal("lost run automatically reassigned")
 	}
 	if engineWorkerCall(f, lease, "graph", map[string]any{"sequence": 2, "jobInstanceId": lease.ActionsPlan.Jobs[0].InstanceID, "stepId": lease.ActionsPlan.Jobs[0].Steps[0].ID, "kind": "step_started"}).Code != 403 {

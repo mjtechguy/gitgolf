@@ -124,6 +124,9 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	if err := s.configureRunners(); err != nil {
 		return nil, err
 	}
+	if err := s.ensureInstanceRunnerLimits(context.Background()); err != nil {
+		return nil, err
+	}
 	if err := s.validateActionsEngineConfig(); err != nil {
 		return nil, err
 	}
