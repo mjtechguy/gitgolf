@@ -47,6 +47,10 @@ func (s *Server) rpcHandler() http.Handler {
 		connect.WithReadMaxBytes(16 << 10), connect.WithSendMaxBytes(16 << 20), connect.WithRequireConnectProtocolHeader(),
 		connect.WithConditionalHandlerOptions(func(spec connect.Spec) []connect.HandlerOption {
 			switch spec.Procedure {
+			case golfv1connect.OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure:
+				// Eight-KiB values can double under JSON escaping; organization
+				// requests also carry bounded selected-repository identities.
+				return []connect.HandlerOption{connect.WithReadMaxBytes(64 << 10)}
 			case golfv1connect.RepositoryServiceSavePullRequestReviewDraftProcedure:
 				return []connect.HandlerOption{connect.WithReadMaxBytes(2 << 20), connect.WithSendMaxBytes(6 << 20)}
 			case golfv1connect.RepositoryServiceGetPullRequestReviewDraftProcedure:
@@ -83,6 +87,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewRepositoryLifecycleServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewEmailNotificationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryExecutionValueServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewOrganizationExecutionValueServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryInvitationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryRulesServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRunnerControlServiceHandler(s, options...))
