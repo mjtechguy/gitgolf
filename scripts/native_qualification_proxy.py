@@ -54,6 +54,8 @@ def valid_fault(project: str, value: dict) -> bool:
     method, path, status = value.get('method'), value.get('path'), value.get('status')
     if not isinstance(method, str) or not isinstance(path, str) or not owned_write(project, method, path) or type(status) is not int:
         return False
+    if project.startswith('golf-access48-'):
+        return bool(method == 'PUT' and status == 204 and '/collaborators/' in path and value.get('ruleName', '') == '')
     return bool(method == 'POST' and status == 201 and path.endswith('/branch_protections') and value.get('ruleName') == 'unknown/*'
                 or method == 'PUT' and status == 204 and '/collaborators/' in path and value.get('ruleName', '') == '')
 
@@ -265,6 +267,8 @@ def self_check():
         except AssertionError:pass
         else:raise AssertionError('Missing or malformed refused-write counter accepted')
     checked_snapshot({**value,'rejectedWrites':1},project)
+    assert not valid_fault('golf-access48-0123456789', {'method':'POST','path':path.replace(project,'golf-access48-0123456789'),'status':201,'ruleName':'unknown/*'})
+    assert valid_fault('golf-access48-0123456789', {'method':'PUT','path':'/api/v1/repos/golf-access48-0123456789-owner/owned/collaborators/golf-access48-0123456789-recipient','status':204})
     access_project='golf-access48-0123456789'
     access={**value,'project':access_project,'counts':[], 'forwardRequestCount':2,'lost':2}
     checked_snapshot(access,access_project)

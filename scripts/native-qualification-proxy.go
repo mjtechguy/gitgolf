@@ -109,6 +109,8 @@ type adapter struct {
 	state          snapshot
 	stop           chan struct{}
 	stopOnce       sync.Once
+	armHistory     [2]fault // private, bounded reservation history; never serialized
+	armCount       int
 }
 
 func newAdapter(project, nonce string) (*adapter, error) {
@@ -152,6 +154,9 @@ func (a *adapter) allowedWrite(method, path string) bool {
 func (a *adapter) validFault(f fault) bool {
 	if !a.allowedWrite(f.Method, f.Path) || strings.Contains(f.Path, "?") {
 		return false
+	}
+	if strings.HasPrefix(a.project, "golf-access48-") {
+		return f.Method == http.MethodPut && f.Status == http.StatusNoContent && f.RuleName == "" && strings.Contains(f.Path, "/collaborators/")
 	}
 	if f.Method == http.MethodPost && f.Status == http.StatusCreated && f.RuleName == "unknown/*" && strings.HasSuffix(f.Path, "/branch_protections") {
 		return true
@@ -399,11 +404,23 @@ func (a *adapter) control(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.mu.Lock()
-		if a.state.Armed != nil || a.state.Lost != 0 {
+		limit := 1
+		if strings.HasPrefix(a.project, "golf-access48-") {
+			limit = 2
+		}
+		repeated := false
+		for _, previous := range a.armHistory[:a.armCount] {
+			if previous.Method == f.Method && previous.Path == f.Path {
+				repeated = true
+			}
+		}
+		if a.state.Armed != nil || a.armCount >= limit || repeated {
 			a.mu.Unlock()
 			http.Error(w, "Fault already reserved", http.StatusConflict)
 			return
 		}
+		a.armHistory[a.armCount] = f
+		a.armCount++
 		a.state.Armed = &f
 		a.mu.Unlock()
 		writeJSON(w, map[string]string{"state": "armed"})
@@ -420,7 +437,90 @@ func writeJSON(w http.ResponseWriter, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(value)
 }
+func selfCheckFaultControl() {
+	controlArm := func(a *adapter, f fault, status int) {
+		payload, _ := json.Marshal(f)
+		request := httptest.NewRequest(http.MethodPost, "/arm", bytes.NewReader(payload))
+		request.Header.Set(nonceHeader, a.nonce)
+		response := httptest.NewRecorder()
+		a.control(response, request)
+		if response.Code != status || response.Header().Get("Cache-Control") != "no-store" {
+			panic("source control arm status/metadata fence")
+		}
+		if status == http.StatusOK && strings.TrimSpace(response.Body.String()) != `{"state":"armed"}` {
+			panic("source control arm receipt")
+		}
+	}
+	a, _ := newAdapter("golf-access48-0123456789", strings.Repeat("f", 64))
+	first := fault{Method: http.MethodPut, Path: "/api/v1/repos/" + a.project + "-owner/direct-unknown/collaborators/" + a.project + "-recipient", Status: http.StatusNoContent}
+	second := first
+	second.Path = strings.Replace(first.Path, "/direct-unknown/", "/invitation-unknown/", 1)
+	third := first
+	third.Path = strings.Replace(first.Path, "/direct-unknown/", "/third-unknown/", 1)
+	concurrent, _ := newAdapter(a.project, strings.Repeat("c", 64))
+	statuses := make(chan int, 2)
+	for _, candidate := range []fault{first, second} {
+		go func(f fault) {
+			payload, _ := json.Marshal(f)
+			request := httptest.NewRequest(http.MethodPost, "/arm", bytes.NewReader(payload))
+			request.Header.Set(nonceHeader, concurrent.nonce)
+			response := httptest.NewRecorder()
+			concurrent.control(response, request)
+			statuses <- response.Code
+		}(candidate)
+	}
+	results := []int{<-statuses, <-statuses}
+	slices.Sort(results)
+	if !slices.Equal(results, []int{http.StatusOK, http.StatusConflict}) || concurrent.armCount != 1 || concurrent.state.Armed == nil {
+		panic("source simultaneous control arms were not serialized")
+	}
+	controlArm(a, first, http.StatusOK)
+	controlArm(a, second, http.StatusConflict) // an active arm cannot be replaced
+	if a.armCount != 1 || *a.state.Armed != first {
+		panic("source concurrent arm changed original reservation")
+	}
+	if !a.shouldDrop(first.Method, first.Path, first.Status, nil) || a.state.Lost != 1 {
+		panic("source first control-arm drop")
+	}
+	controlArm(a, first, http.StatusConflict) // a consumed exact target cannot rearm
+	controlArm(a, second, http.StatusOK)
+	if !a.shouldDrop(second.Method, second.Path, second.Status, nil) || a.state.Lost != 2 || a.armCount != 2 {
+		panic("source second distinct control-arm drop")
+	}
+	controlArm(a, second, http.StatusConflict)
+	controlArm(a, third, http.StatusConflict)
+	accessRule := fault{Method: http.MethodPost, Path: "/api/v1/repos/" + a.project + "-owner/rules/branch_protections", Status: http.StatusCreated, RuleName: "unknown/*"}
+	controlArm(a, accessRule, http.StatusBadRequest)
+	freshAccess, _ := newAdapter(a.project, strings.Repeat("a", 64))
+	controlArm(freshAccess, accessRule, http.StatusBadRequest) // no rule fault via Access, even first
+	if freshAccess.armCount != 0 {
+		panic("source invalid profile consumed an arm")
+	}
+	rules, _ := newAdapter("golf-rules49-0123456789", strings.Repeat("b", 64))
+	rule := fault{Method: http.MethodPost, Path: "/api/v1/repos/" + rules.project + "-owner/rules/branch_protections", Status: http.StatusCreated, RuleName: "unknown/*"}
+	controlArm(rules, rule, http.StatusOK)
+	otherRule := rule
+	otherRule.Path = strings.Replace(rule.Path, "/rules/", "/other-rules/", 1)
+	controlArm(rules, otherRule, http.StatusConflict)
+	if !rules.shouldDrop(rule.Method, rule.Path, rule.Status, []byte(`{"rule_name":"unknown/*"}`)) {
+		panic("source Rules control-arm drop")
+	}
+	controlArm(rules, rule, http.StatusConflict)
+	controlArm(rules, otherRule, http.StatusConflict)
+	if rules.armCount != 1 || rules.state.Lost != 1 {
+		panic("source Rules total arm ceiling")
+	}
+	request := httptest.NewRequest(http.MethodGet, "/state", nil)
+	request.Header.Set(nonceHeader, a.nonce)
+	response := httptest.NewRecorder()
+	a.control(response, request)
+	if response.Code != http.StatusOK || strings.Contains(response.Body.String(), first.Path) || strings.Contains(response.Body.String(), second.Path) || strings.Contains(response.Body.String(), "armHistory") || strings.Contains(response.Body.String(), a.nonce) {
+		panic("source private consumed-arm history exposed")
+	}
+}
+
 func selfCheck() {
+	selfCheckFaultControl()
 	refused, _ := newAdapter("golf-access48-0123456789", strings.Repeat("e", 64))
 	ownerPath := "/api/v1/repos/golf-access48-0123456789-org/owned/collaborators/golf-access48-0123456789-owner"
 	for _, method := range []string{http.MethodPut, http.MethodDelete, http.MethodPost, http.MethodPatch} {
