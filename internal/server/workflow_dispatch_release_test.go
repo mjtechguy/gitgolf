@@ -264,6 +264,9 @@ func TestWorkflowManualReleaseLateAuthorityPostgres(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f, admitted := releaseTypedAdmission(t)
 			original := f.server.client.Transport
+			if original == nil {
+				original = http.DefaultTransport
+			}
 			changed := false
 			f.server.client.Transport = creationRoundTripper(func(req *http.Request) (*http.Response, error) {
 				response, err := original.RoundTrip(req)
