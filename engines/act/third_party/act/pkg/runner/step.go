@@ -260,6 +260,16 @@ func setupEnv(ctx context.Context, step step) error {
 	exprEval = rc.NewExpressionEvaluatorWithEnv(ctx, *step.getEnv())
 	for k, v := range *step.getEnv() {
 		if strings.HasPrefix(k, "INPUT_") {
+			// Golf: composite INPUT_ values were already evaluated by the
+			// parent action. They are data, even when they contain ${{ }}.
+			// An explicit source step-env override still evaluates normally.
+			if rc.Parent != nil {
+				if inherited, ok := rc.Env[k]; ok && inherited == v {
+					if _, override := step.getStepModel().GetEnv()[k]; !override {
+						continue
+					}
+				}
+			}
 			(*step.getEnv())[k] = exprEval.Interpolate(ctx, v)
 		}
 	}

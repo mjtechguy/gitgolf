@@ -1,21 +1,10 @@
 --- a/pkg/runner/expression.go
 +++ b/pkg/runner/expression.go
-@@ -4,9 +4,11 @@
- 	"bytes"
- 	"context"
- 	"fmt"
+@@ -6,0 +7 @@
 +	"math"
- 	"path"
- 	"reflect"
- 	"regexp"
+@@ -9,0 +11 @@
 +	"strconv"
- 	"strings"
- 	"time"
- 
-@@ -508,6 +510,16 @@
- 				if v.Type == "boolean" {
- 					inputs[k] = value == "true"
- 				} else {
+@@ -510,0 +513,10 @@
 +					// Golf: workflow_dispatch event inputs remain strings; only the
 +					// declared numeric evaluator context receives a finite number.
 +					// Admission validates canonical numeric strings before execution.
@@ -26,6 +15,16 @@
 +							}
 +						}
 +					}
- 					inputs[k] = value
- 				}
- 			}
+--- a/pkg/runner/step.go
++++ b/pkg/runner/step.go
+@@ -262,0 +263,10 @@
++			// Golf: composite INPUT_ values were already evaluated by the
++			// parent action. They are data, even when they contain ${{ }}.
++			// An explicit source step-env override still evaluates normally.
++			if rc.Parent != nil {
++				if inherited, ok := rc.Env[k]; ok && inherited == v {
++					if _, override := step.getStepModel().GetEnv()[k]; !override {
++						continue
++					}
++				}
++			}

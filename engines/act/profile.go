@@ -21,7 +21,9 @@ import (
 	"unicode/utf8"
 
 	protocol "github.com/mjtechguy/golf-git/internal/runner"
+	"github.com/mjtechguy/golf-git/internal/workflowinputs"
 	"github.com/nektos/act/pkg/model"
+	"github.com/rhysd/actionlint"
 	"gopkg.in/yaml.v3"
 )
 
@@ -273,7 +275,8 @@ func Plan(input protocol.ActionPlanInput) (protocol.ActionPlan, error) {
 }
 func admit(input protocol.ActionPlanInput) (protocol.ActionPlan, *model.Plan, map[string]file, error) {
 	out := protocol.ActionPlan{}
-	if input.Catalog != protocol.ActionsCatalog || !safePath(input.WorkflowPath) || !fullObjectPattern.MatchString(input.WorkflowBlobID) || (input.Event != "workflow_dispatch" && input.Event != "push" && input.Event != "inspect") || input.Event == "push" && (!strings.HasPrefix(input.Ref, "refs/heads/") || !safePath(strings.TrimPrefix(input.Ref, "refs/heads/"))) || len(input.Images) < 1 || len(input.Images) > 20 {
+	typed := input.Catalog == protocol.ActionsInputsCatalog
+	if (input.Catalog != protocol.ActionsCatalog && !typed) || !safePath(input.WorkflowPath) || !fullObjectPattern.MatchString(input.WorkflowBlobID) || (input.Event != "workflow_dispatch" && input.Event != "push" && input.Event != "inspect") || input.Event == "push" && (!strings.HasPrefix(input.Ref, "refs/heads/") || !safePath(strings.TrimPrefix(input.Ref, "refs/heads/"))) || len(input.Images) < 1 || len(input.Images) > 20 {
 		return out, nil, nil, ErrProfile
 	}
 	for label, image := range input.Images {
@@ -293,12 +296,23 @@ func admit(input protocol.ActionPlanInput) (protocol.ActionPlan, *model.Plan, ma
 	if err != nil || !mapping(root, "name", "on", "env", "defaults", "jobs") || !env(field(root, "env")) || !defaults(field(root, "defaults")) {
 		return out, nil, nil, ErrProfile
 	}
-	// The first catalog deliberately refuses unavailable platform/service/token
-	// contexts instead of exposing act's GitHub defaults as Golf capabilities.
-	if err = validateExpressions(root, false); err != nil {
+	if typed {
+		if input.ManualInputsContract != protocol.ManualInputsCapability || !fullObjectPattern.MatchString(input.Ref) || (input.Event != "workflow_dispatch" && input.Event != "inspect") {
+			return out, nil, nil, ErrProfile
+		}
+		schema, e := workflowinputs.Parse(workflow.body)
+		if e != nil || schema.SHA256 != input.ManualInputsSchemaSHA256 {
+			return out, nil, nil, ErrProfile
+		}
+	} else if input.ManualInputsContract != "" || input.ManualInputsSchemaSHA256 != "" {
+		return out, nil, nil, ErrProfile
+	}
+	// V1 keeps its original refusal. V2 validates actual expression ASTs and
+	// their source positions, permitting only the bounded input namespaces.
+	if err = validateExpressions(root, false, typed); err != nil {
 		return out, nil, nil, err
 	}
-	matched, err := eventMatches(field(root, "on"), input.Event, input.Ref)
+	matched, err := eventMatches(field(root, "on"), input.Event, input.Ref, typed)
 	if err != nil {
 		return out, nil, nil, err
 	}
@@ -338,7 +352,7 @@ func admit(input protocol.ActionPlanInput) (protocol.ActionPlan, *model.Plan, ma
 			return out, nil, nil, ErrProfile
 		}
 		expanded := 0
-		if err = validateSteps(steps, files, dependencies, nil, 0, false, &expanded); err != nil {
+		if err = validateSteps(steps, files, dependencies, nil, 0, false, typed, &expanded); err != nil {
 			return out, nil, nil, err
 		}
 		expandedSteps[id] = expanded
@@ -449,7 +463,9 @@ func admit(input protocol.ActionPlanInput) (protocol.ActionPlan, *model.Plan, ma
 	depJSON, _ := json.Marshal(dependencies)
 	depSHA := sha256.Sum256(depJSON)
 	archiveSHA := sha256.Sum256(input.Archive)
-	out.Catalog = protocol.ActionsCatalog
+	out.Catalog = input.Catalog
+	out.ManualInputsContract = input.ManualInputsContract
+	out.ManualInputsSchemaSHA256 = input.ManualInputsSchemaSHA256
 	out.EngineCommit = protocol.ActionsEngineCommit
 	out.WorkflowPath = input.WorkflowPath
 	out.WorkflowBlobID = input.WorkflowBlobID
@@ -474,7 +490,7 @@ func blobMatches(data []byte, id string) bool {
 	return hex.EncodeToString(h[:]) == id
 }
 
-func eventMatches(n *yaml.Node, event, ref string) (bool, error) {
+func eventMatches(n *yaml.Node, event, ref string, typed bool) (bool, error) {
 	if n == nil {
 		return false, ErrProfile
 	}
@@ -506,7 +522,7 @@ func eventMatches(n *yaml.Node, event, ref string) (bool, error) {
 			continue
 		}
 		if e == "workflow_dispatch" {
-			if !mapping(v) || len(v.Content) != 0 {
+			if !typed && (!mapping(v) || len(v.Content) != 0) {
 				return false, ErrProfile
 			}
 			continue
@@ -540,7 +556,10 @@ func eventMatches(n *yaml.Node, event, ref string) (bool, error) {
 	}
 	return true, nil
 }
-func validateExpressions(n *yaml.Node, composite bool) error {
+func validateExpressions(n *yaml.Node, composite, typed bool) error {
+	if typed {
+		return validateTypedExpressions(n, composite, nil)
+	}
 	if strings.Contains(n.Value, "${{") {
 		for _, bad := range []string{"github", "runner", "secrets", "vars", "strategy"} {
 			if regexp.MustCompile(`\b` + bad + `\b`).MatchString(n.Value) {
@@ -552,13 +571,142 @@ func validateExpressions(n *yaml.Node, composite bool) error {
 		}
 	}
 	for _, c := range n.Content {
-		if err := validateExpressions(c, composite); err != nil {
+		if err := validateExpressions(c, composite, false); err != nil {
 			return err
 		}
 	}
 	return nil
 }
-func validateSteps(steps *yaml.Node, files map[string]file, deps map[string]string, stack map[string]bool, depth int, composite bool, budget *int) error {
+
+func expressionPosition(parts []string, composite bool) bool {
+	if composite {
+		if len(parts) == 3 && ((parts[0] == "inputs" && parts[2] == "default") || (parts[0] == "outputs" && parts[2] == "value")) {
+			return true
+		}
+		if len(parts) >= 4 && parts[0] == "runs" && parts[1] == "steps" {
+			return len(parts) == 4 && (parts[3] == "run" || parts[3] == "if") || len(parts) == 5 && (parts[3] == "env" || parts[3] == "with")
+		}
+		return false
+	}
+	if len(parts) == 2 && parts[0] == "env" {
+		return true
+	}
+	if len(parts) >= 3 && parts[0] == "jobs" {
+		if len(parts) == 3 && parts[2] == "if" || len(parts) == 4 && (parts[2] == "env" || parts[2] == "outputs") {
+			return true
+		}
+		if len(parts) >= 5 && parts[2] == "steps" {
+			return len(parts) == 5 && (parts[4] == "run" || parts[4] == "if") || len(parts) == 6 && (parts[4] == "env" || parts[4] == "with")
+		}
+	}
+	return false
+}
+
+func validateTypedExpressions(n *yaml.Node, composite bool, parts []string) error {
+	// Dispatch declarations are literal data independently admitted by Parse;
+	// they are not evaluator positions. No submitted values enter this walk.
+	if !composite && len(parts) == 3 && parts[0] == "on" && parts[1] == "workflow_dispatch" && parts[2] == "inputs" {
+		return nil
+	}
+	if n.Kind == yaml.MappingNode {
+		for i := 0; i < len(n.Content); i += 2 {
+			if strings.Contains(n.Content[i].Value, "${{") || validateTypedExpressions(n.Content[i+1], composite, append(append([]string{}, parts...), n.Content[i].Value)) != nil {
+				return ErrProfile
+			}
+		}
+		return nil
+	}
+	if n.Kind == yaml.SequenceNode {
+		for i, child := range n.Content {
+			if validateTypedExpressions(child, composite, append(append([]string{}, parts...), strconv.Itoa(i))) != nil {
+				return ErrProfile
+			}
+		}
+		return nil
+	}
+	value := n.Value
+	if len(parts) > 0 && parts[len(parts)-1] == "if" && !strings.Contains(value, "${{") && strings.TrimSpace(value) != "" {
+		if !expressionPosition(parts, composite) {
+			return ErrProfile
+		}
+		value = "${{ " + value + " }}"
+	}
+	for {
+		index := strings.Index(value, "${{")
+		if index < 0 {
+			return nil
+		}
+		if !expressionPosition(parts, composite) {
+			return ErrProfile
+		}
+		remaining := value[index+3:]
+		lexer := actionlint.NewExprLexer(remaining)
+		node, err := actionlint.NewExprParser().Parse(lexer)
+		if err != nil || lexer.Offset() < 2 || lexer.Offset() > len(remaining) || !strings.HasSuffix(remaining[:lexer.Offset()], "}}") || !inputExpressionAST(node) {
+			return ErrProfile
+		}
+		value = remaining[lexer.Offset():]
+	}
+}
+
+func inputExpressionAST(root actionlint.ExprNode) bool {
+	parents := map[actionlint.ExprNode]actionlint.ExprNode{}
+	count := 0
+	actionlint.VisitExprNode(root, func(node, parent actionlint.ExprNode, entering bool) {
+		if entering {
+			parents[node] = parent
+			count++
+		}
+	})
+	if count > 512 {
+		return false
+	}
+	valid := true
+	actionlint.VisitExprNode(root, func(node, _ actionlint.ExprNode, entering bool) {
+		if !entering {
+			return
+		}
+		switch n := node.(type) {
+		case *actionlint.VariableNode:
+			switch n.Name {
+			case "inputs", "env", "job", "steps", "matrix", "needs":
+			case "github":
+				var properties []string
+				for top := node; parents[top] != nil; {
+					switch parent := parents[top].(type) {
+					case *actionlint.ObjectDerefNode:
+						if parent.Receiver != top {
+							break
+						}
+						properties = append(properties, strings.ToLower(parent.Property))
+						top = parent
+						continue
+					case *actionlint.IndexAccessNode:
+						index, ok := parent.Index.(*actionlint.StringNode)
+						if parent.Operand != top || !ok {
+							break
+						}
+						properties = append(properties, strings.ToLower(index.Value))
+						top = parent
+						continue
+					}
+					break
+				}
+				valid = valid && len(properties) >= 2 && properties[0] == "event" && properties[1] == "inputs"
+			default:
+				valid = false
+			}
+		case *actionlint.FuncCallNode:
+			switch strings.ToLower(n.Callee) {
+			case "contains", "startswith", "endswith", "format", "join", "tojson", "fromjson", "hashfiles", "always", "success", "failure", "cancelled":
+			default:
+				valid = false
+			}
+		}
+	})
+	return valid
+}
+func validateSteps(steps *yaml.Node, files map[string]file, deps map[string]string, stack map[string]bool, depth int, composite, typed bool, budget *int) error {
 	if depth > 4 {
 		return ErrProfile
 	}
@@ -619,7 +767,7 @@ func validateSteps(steps *yaml.Node, files map[string]file, deps map[string]stri
 			}
 		}
 		root, err := tree(meta.body)
-		if err != nil || !mapping(root, "name", "description", "inputs", "outputs", "runs") || validateExpressions(root, true) != nil {
+		if err != nil || !mapping(root, "name", "description", "inputs", "outputs", "runs") || validateExpressions(root, true, typed) != nil {
 			return ErrProfile
 		}
 		runs := field(root, "runs")
@@ -674,7 +822,7 @@ func validateSteps(steps *yaml.Node, files map[string]file, deps map[string]stri
 		}
 		deps[metadataPath] = hex.EncodeToString(h[:])
 		stack[directory] = true
-		err = validateSteps(children, files, deps, stack, depth+1, true, budget)
+		err = validateSteps(children, files, deps, stack, depth+1, true, typed, budget)
 		delete(stack, directory)
 		if err != nil {
 			return err

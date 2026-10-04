@@ -13,9 +13,112 @@ import (
 	"testing"
 
 	protocol "github.com/mjtechguy/golf-git/internal/runner"
+	"github.com/mjtechguy/golf-git/internal/workflowinputs"
 )
 
 const testWorkflowPath = ".github/workflows/graph.yml"
+
+func typedInput(t *testing.T, source string, extra map[string]string) protocol.ActionPlanInput {
+	t.Helper()
+	in := testInput(t, source, extra)
+	schema, err := workflowinputs.Parse([]byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	in.Catalog = protocol.ActionsInputsCatalog
+	in.ManualInputsContract = protocol.ManualInputsCapability
+	in.ManualInputsSchemaSHA256 = schema.SHA256
+	return in
+}
+
+const typedWorkflow = `on:
+  workflow_dispatch:
+    inputs:
+      enabled: {type: boolean, default: false}
+      count: {type: number, default: 0}
+      message: {type: string}
+      choice: {type: choice, options: [one, two], default: one}
+jobs:
+  check:
+    runs-on: linux
+    if: inputs.enabled || inputs.count == 0
+    env: {MESSAGE: '${{ inputs.message }}'}
+    outputs: {value: '${{ steps.emit.outputs.value }}'}
+    steps:
+      - id: emit
+        if: "${{ github['event'].inputs.count == '0' }}"
+        run: echo "${{ toJSON(inputs.count) }}"
+`
+
+func TestTypedInputsCatalogExactSchemaAndLegacyBoundary(t *testing.T) {
+	in := typedInput(t, typedWorkflow, nil)
+	plan, err := Plan(in)
+	if err != nil || plan.Catalog != protocol.ActionsInputsCatalog || plan.ManualInputsContract != protocol.ManualInputsCapability || plan.ManualInputsSchemaSHA256 != in.ManualInputsSchemaSHA256 {
+		t.Fatal("typed source/schema contract not bound", err)
+	}
+	inspect := in
+	inspect.Event = "inspect"
+	if _, err := Plan(inspect); err != nil {
+		t.Fatal("typed schema inspection refused", err)
+	}
+	for _, mutate := range []func(*protocol.ActionPlanInput){
+		func(in *protocol.ActionPlanInput) { in.Catalog = protocol.ActionsCatalog },
+		func(in *protocol.ActionPlanInput) { in.ManualInputsContract = "" },
+		func(in *protocol.ActionPlanInput) { in.ManualInputsSchemaSHA256 = strings.Repeat("c", 64) },
+		func(in *protocol.ActionPlanInput) { in.Ref = "main" },
+		func(in *protocol.ActionPlanInput) { in.Event = "push"; in.Ref = "refs/heads/main" },
+	} {
+		changed := in
+		mutate(&changed)
+		if _, err := Plan(changed); err == nil {
+			t.Fatal("invalid typed planning contract admitted")
+		}
+	}
+	legacy := testInput(t, "on: workflow_dispatch\njobs:\n  check:\n    runs-on: linux\n    steps: [{run: 'true'}]\n", nil)
+	legacy.ManualInputsContract = protocol.ManualInputsCapability
+	if _, err := Plan(legacy); err == nil {
+		t.Fatal("v1 accepted a typed-contract extension")
+	}
+}
+
+func TestTypedInputsASTPositionsAndAuthorityNamespaces(t *testing.T) {
+	for _, expression := range []string{
+		"inputs.message", "github.event.inputs.message", "GITHUB['EVENT']['INPUTS'].message",
+		"format('github.token is literal', inputs.message)", "needs.before.outputs.value",
+		"contains(toJSON(github.event.inputs), 'message')", "inputs['message']",
+	} {
+		source := strings.Replace(typedWorkflow, "toJSON(inputs.count)", expression, 1)
+		if _, err := Plan(typedInput(t, source, nil)); err != nil {
+			t.Fatalf("admitted expression %q refused: %v", expression, err)
+		}
+	}
+	for _, expression := range []string{
+		"github", "github.event", "github.token", "github.event.repository.private",
+		"GITHUB['token']", "github[inputs.message].inputs", "github.event.*.inputs",
+		"runner.name", "secrets.VALUE", "vars.VALUE", "strategy.max-parallel",
+		"jobs.before.outputs.value", "unknown.value", "inputs.message + 1", "github.event.inputs.message || secrets.VALUE",
+	} {
+		source := strings.Replace(typedWorkflow, "toJSON(inputs.count)", expression, 1)
+		if _, err := Plan(typedInput(t, source, nil)); err == nil {
+			t.Fatalf("authority/malformed expression %q admitted", expression)
+		}
+	}
+	for _, replacement := range []struct{ old, next string }{
+		{"runs-on: linux", "runs-on: '${{ inputs.message }}'"},
+		{"    runs-on: linux", "    runs-on: linux\n    needs: '${{ inputs.message }}'"},
+		{"    runs-on: linux", "    runs-on: linux\n    strategy: {matrix: '${{ inputs.message }}'}"},
+		{"    runs-on: linux", "    runs-on: linux\n    name: '${{ inputs.message }}'"},
+		{"      - id: emit", "      - id: '${{ inputs.message }}'"},
+		{"        run:", "        shell: '${{ inputs.message }}'\n        run:"},
+		{"if: inputs.enabled || inputs.count == 0", "if: github.token"},
+	} {
+		source := strings.Replace(typedWorkflow, replacement.old, replacement.next, 1)
+		if _, err := Plan(typedInput(t, source, nil)); err == nil {
+			t.Fatal("input-driven graph/image/unsupported position admitted", replacement.next)
+		}
+	}
+}
+
 const testWorkflow = `name: Explicit graph
 on: [push, workflow_dispatch]
 defaults: {run: {shell: sh}}

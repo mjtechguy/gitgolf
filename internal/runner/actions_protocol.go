@@ -1,23 +1,36 @@
 package runner
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/mjtechguy/golf-git/internal/workflowinputs"
+)
 
 // These versioned messages contain source and operator-approved public runtime
 // identities. Only the execute envelope may carry explicitly brokered repository
 // values; it never carries Golf/native controller credentials. The act dependency stays in the
 // separately built engine module.
 const ActionsCatalog = "golf.workflow.act.v0.2.89.linux.v1"
+const ActionsInputsCatalog = "golf.workflow.act.v0.2.89.linux.v2"
+const ManualInputsCapability = "golf.workflow.dispatch.inputs.v1"
 const ActionsEngineCommit = "4f411281417e88660bea1c1a1749aa71ae0bd60f"
 const ActionsDaemonImage = "docker:29.8.1-dind@sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0"
 
+// This identifies known wire catalogs, not configured availability or authority.
+func IsActionsCatalog(c string) bool {
+	return c == ActionsCatalog || c == ActionsInputsCatalog
+}
+
 type ActionPlanInput struct {
-	Catalog        string            `json:"catalog"`
-	WorkflowPath   string            `json:"workflowPath"`
-	WorkflowBlobID string            `json:"workflowBlobId"`
-	Archive        []byte            `json:"archive"`
-	Event          string            `json:"event"`
-	Ref            string            `json:"ref"`
-	Images         map[string]string `json:"images"`
+	ManualInputsContract     string            `json:"manualInputsContract,omitempty"`
+	ManualInputsSchemaSHA256 string            `json:"manualInputsSchemaSha256,omitempty"`
+	Catalog                  string            `json:"catalog"`
+	WorkflowPath             string            `json:"workflowPath"`
+	WorkflowBlobID           string            `json:"workflowBlobId"`
+	Archive                  []byte            `json:"archive"`
+	Event                    string            `json:"event"`
+	Ref                      string            `json:"ref"`
+	Images                   map[string]string `json:"images"`
 }
 type ActionMatrixEntry struct {
 	Name  string `json:"name"`
@@ -41,19 +54,22 @@ type ActionDependency struct {
 	MetadataSHA256 string `json:"metadataSha256"`
 }
 type ActionPlan struct {
-	Catalog        string             `json:"catalog"`
-	EngineCommit   string             `json:"engineCommit"`
-	WorkflowPath   string             `json:"workflowPath"`
-	WorkflowBlobID string             `json:"workflowBlobId"`
-	ArchiveSHA256  string             `json:"archiveSha256"`
-	Event          string             `json:"event"`
-	Ref            string             `json:"ref"`
-	Jobs           []ActionJob        `json:"jobs"`
-	Events         []string           `json:"events"`
-	ActionsSHA256  string             `json:"actionsSha256"`
-	LocalActions   []ActionDependency `json:"localActions"`
+	ManualInputsContract     string             `json:"manualInputsContract,omitempty"`
+	ManualInputsSchemaSHA256 string             `json:"manualInputsSchemaSha256,omitempty"`
+	Catalog                  string             `json:"catalog"`
+	EngineCommit             string             `json:"engineCommit"`
+	WorkflowPath             string             `json:"workflowPath"`
+	WorkflowBlobID           string             `json:"workflowBlobId"`
+	ArchiveSHA256            string             `json:"archiveSha256"`
+	Event                    string             `json:"event"`
+	Ref                      string             `json:"ref"`
+	Jobs                     []ActionJob        `json:"jobs"`
+	Events                   []string           `json:"events"`
+	ActionsSHA256            string             `json:"actionsSha256"`
+	LocalActions             []ActionDependency `json:"localActions"`
 }
 type ActionExecutionInput struct {
+	ManualInputs         *ActionManualInputs   `json:"manualInputs,omitempty"`
 	JobResources         *JobResourceBinding   `json:"jobResources,omitempty"`
 	Input                ActionPlanInput       `json:"input"`
 	Plan                 ActionPlan            `json:"plan"`
@@ -62,6 +78,17 @@ type ActionExecutionInput struct {
 	TimeoutSeconds       int                   `json:"timeoutSeconds"`
 	ResolvedImages       map[string]string     `json:"resolvedImages"`
 	ExecutionEnvironment *ExecutionEnvironment `json:"executionEnvironment,omitempty"`
+}
+
+// Values remain private execution data. Schema/values digests bind the exact
+// canonical producer contract; event.inputs remains a separate string map.
+type ActionManualInputs struct {
+	Contract        string                 `json:"contract"`
+	SchemaSHA256    string                 `json:"schemaSha256"`
+	SubmittedSHA256 string                 `json:"submittedSha256"`
+	EffectiveSHA256 string                 `json:"effectiveSha256"`
+	Submitted       []workflowinputs.Value `json:"submitted"`
+	Effective       []workflowinputs.Value `json:"effective"`
 }
 
 // Source stdout always has Kind=log and can never set observation fields.

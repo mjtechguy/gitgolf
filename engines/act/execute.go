@@ -14,11 +14,13 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	protocol "github.com/mjtechguy/golf-git/internal/runner"
+	"github.com/mjtechguy/golf-git/internal/workflowinputs"
 	"github.com/nektos/act/pkg/common"
 	"github.com/nektos/act/pkg/model"
 	act "github.com/nektos/act/pkg/runner"
@@ -82,6 +84,10 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 	phase = "engine_plan_binding"
 	plan, native, files, err := admit(input.Input)
 	if err != nil || !reflect.DeepEqual(plan, input.Plan) {
+		return ErrExecution
+	}
+	phase = "engine_input_validation"
+	if !validatedManualInputs(input, files) {
 		return ErrExecution
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(input.TimeoutSeconds)*time.Second)
@@ -248,6 +254,69 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 		return ErrExecution
 	}
 	return nil
+}
+
+func validatedManualInputs(input protocol.ActionExecutionInput, files map[string]file) bool {
+	if input.Input.Catalog == protocol.ActionsCatalog {
+		return input.ManualInputs == nil
+	}
+	m := input.ManualInputs
+	if input.Input.Catalog != protocol.ActionsInputsCatalog || input.Input.Event != "workflow_dispatch" || input.CommitID != input.Input.Ref || m == nil || m.Contract != protocol.ManualInputsCapability || m.SchemaSHA256 != input.Input.ManualInputsSchemaSHA256 || m.SchemaSHA256 != input.Plan.ManualInputsSchemaSHA256 || len(input.EventJSON) == 0 || len(input.EventJSON) > 16<<10 {
+		return false
+	}
+	schema, err := workflowinputs.Parse(files[input.Input.WorkflowPath].body)
+	if err != nil || schema.SHA256 != m.SchemaSHA256 {
+		return false
+	}
+	values, err := workflowinputs.Validate(schema, m.Submitted)
+	if err != nil || values.SubmittedSHA256 != m.SubmittedSHA256 || values.EffectiveSHA256 != m.EffectiveSHA256 || !reflect.DeepEqual(values.Submitted, m.Submitted) || !reflect.DeepEqual(values.Effective, m.Effective) {
+		return false
+	}
+	expected := make(map[string]string, len(values.Effective))
+	for _, value := range values.Effective {
+		switch value.Type {
+		case workflowinputs.String, workflowinputs.Choice:
+			expected[value.Name] = value.String
+		case workflowinputs.Boolean:
+			expected[value.Name] = strconv.FormatBool(value.Boolean)
+		case workflowinputs.Number:
+			expected[value.Name] = value.Number
+		default:
+			return false
+		}
+	}
+	observed, ok := dispatchEventInputs(input.EventJSON, input.CommitID)
+	return ok && reflect.DeepEqual(expected, observed)
+}
+
+func dispatchEventInputs(body []byte, commitID string) (map[string]string, bool) {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
+	var event map[string]any
+	if decoder.Decode(&event) != nil || event == nil {
+		return nil, false
+	}
+	var extra any
+	if decoder.Decode(&extra) != io.EOF || event["after"] != commitID || event["ref"] != commitID {
+		return nil, false
+	}
+	canonical, err := json.Marshal(event)
+	if err != nil || !bytes.Equal(canonical, body) {
+		return nil, false // includes duplicate keys and alternate event encodings.
+	}
+	values, ok := event["inputs"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	inputs := make(map[string]string, len(values))
+	for name, raw := range values {
+		value, ok := raw.(string)
+		if !ok {
+			return nil, false
+		}
+		inputs[name] = value
+	}
+	return inputs, true
 }
 
 type engineObserver struct {

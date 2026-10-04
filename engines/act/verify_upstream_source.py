@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the closed, pinned act runtime subset and its single source patch.
+"""Verify the closed, pinned act runtime subset and its two source adaptations.
 
 No module-cache writes, downloads, Go builds, or network requests. An optional
 --upstream-dir independently checks every baseline byte against a local v0.2.89
@@ -33,7 +33,7 @@ def verify(root, manifest, upstream=None):
     if manifest.get("schemaVersion") != 1 or manifest.get("upstream") != PIN:
         raise ValueError("unexpected source pin or manifest schema")
     entries = manifest["files"]
-    golf_files = {".golf-upstream/expression.go.txt", ".golf-upstream/numeric-inputs.patch",
+    golf_files = {".golf-upstream/expression.go.txt", ".golf-upstream/step.go.txt", ".golf-upstream/manual-inputs.patch",
                   "pkg/runner/golf_dispatch_inputs_test.go"}
     expected = {}
     for row in entries:
@@ -64,7 +64,7 @@ def verify(root, manifest, upstream=None):
         if baseline is not None:
             if not re.fullmatch(r"[a-f0-9]{64}", baseline):
                 raise ValueError("invalid upstream digest")
-            if path != "pkg/runner/expression.go" and baseline != row["sha256"]:
+            if path not in ("pkg/runner/expression.go", "pkg/runner/step.go") and baseline != row["sha256"]:
                 raise ValueError("unrecorded upstream patch: " + path)
             if upstream is not None and sha((upstream / path).read_bytes()) != baseline:
                 raise ValueError("independent upstream byte mismatch: " + path)
@@ -73,14 +73,18 @@ def verify(root, manifest, upstream=None):
                  "pkg/schema/action_schema.json"):
         if expected[path].get("upstreamSha256") != expected[path]["sha256"]:
             raise ValueError("license/module/embed baseline changed")
-    original = (root / ".golf-upstream/expression.go.txt").read_bytes()
-    patched = (root / "pkg/runner/expression.go").read_bytes()
-    diff = "".join(difflib.unified_diff(
-        original.decode().splitlines(True), patched.decode().splitlines(True),
-        fromfile="a/pkg/runner/expression.go", tofile="b/pkg/runner/expression.go")).encode()
-    patch = (root / ".golf-upstream/numeric-inputs.patch").read_bytes()
-    if (sha(original) != expected["pkg/runner/expression.go"]["upstreamSha256"]
-            or diff != patch or sha(patch) != manifest["patchSha256"]):
+    diff = b""
+    for name in ("expression.go", "step.go"):
+        original = (root / (".golf-upstream/" + name + ".txt")).read_bytes()
+        path = "pkg/runner/" + name
+        patched = (root / path).read_bytes()
+        if sha(original) != expected[path]["upstreamSha256"]:
+            raise ValueError("recorded upstream baseline mismatch")
+        diff += "".join(difflib.unified_diff(
+            original.decode().splitlines(True), patched.decode().splitlines(True),
+            fromfile="a/" + path, tofile="b/" + path, n=0)).encode()
+    patch = (root / ".golf-upstream/manual-inputs.patch").read_bytes()
+    if diff != patch or sha(patch) != manifest["patchSha256"]:
         raise ValueError("baseline/patch reconstruction mismatch")
     return len(entries)
 

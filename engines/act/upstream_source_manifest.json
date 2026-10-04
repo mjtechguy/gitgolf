@@ -8,8 +8,8 @@
     "goModSum": "h1:9djXFAZR+ltqh1k/8I0G2/3ypi2UrcuFlrC25L6WoCA=",
     "goModuleZipSHA256": "b4e568212d680a32076455b84ab572d17fe65eb83a6fd6dce6a05164bd68fcc9"
   },
-  "scope": "Complete pkg runtime subset, excluding upstream tests/testdata; module files, exact license and embeds retained. Only workflow_dispatch declared numeric evaluator context is patched. Current product profile/catalog is unchanged.",
-  "patchSha256": "b9c6c2d28d92f7f982dfb8e604b6b8e19df5f1ceac9fc0010cc7cc6639694cdc",
+  "scope": "Complete pkg runtime subset, excluding upstream tests/testdata; exact module files, license and embeds retained. Manual declared numbers receive finite numeric context; already-resolved inherited composite INPUT_ strings do not recursively evaluate. Product activation requires explicit versioned v2 schema/value binding; v1 remains unchanged.",
+  "patchSha256": "1df7c201fdc776159c458a0185b5777e09f08b6790a29968444992b5fa695e3e",
   "files": [
     {
       "path": ".golf-upstream/expression.go.txt",
@@ -17,9 +17,14 @@
       "sha256": "9c6dc1a44612b291e5c1a22208bd500c06567b6fadfdf36733d953160c2a47fb"
     },
     {
-      "path": ".golf-upstream/numeric-inputs.patch",
+      "path": ".golf-upstream/manual-inputs.patch",
       "upstreamSha256": null,
-      "sha256": "b9c6c2d28d92f7f982dfb8e604b6b8e19df5f1ceac9fc0010cc7cc6639694cdc"
+      "sha256": "1df7c201fdc776159c458a0185b5777e09f08b6790a29968444992b5fa695e3e"
+    },
+    {
+      "path": ".golf-upstream/step.go.txt",
+      "upstreamSha256": null,
+      "sha256": "43694c61aeaea14cd6141d900b9f362ca77818c491f0d39f034f0eb485ba635e"
     },
     {
       "path": "LICENSE",
@@ -359,7 +364,7 @@
     {
       "path": "pkg/runner/golf_dispatch_inputs_test.go",
       "upstreamSha256": null,
-      "sha256": "715d63da887fba47095bdd659ea2bf5c490435cf72109ed464fbd8517e367708"
+      "sha256": "8dd83d2b88cedaa7d79d15105420b2318c2a0510d88035c74a3ec662dc6a0be5"
     },
     {
       "path": "pkg/runner/hashfiles/index.js",
@@ -404,7 +409,7 @@
     {
       "path": "pkg/runner/step.go",
       "upstreamSha256": "43694c61aeaea14cd6141d900b9f362ca77818c491f0d39f034f0eb485ba635e",
-      "sha256": "43694c61aeaea14cd6141d900b9f362ca77818c491f0d39f034f0eb485ba635e"
+      "sha256": "0ce4ef4599edd3af1f08fc37985dcef3cb45ebfa7c5dd497beb89f880e5e5ab3"
     },
     {
       "path": "pkg/runner/step_action_local.go",
