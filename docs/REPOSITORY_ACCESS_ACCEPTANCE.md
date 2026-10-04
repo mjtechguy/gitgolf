@@ -18,6 +18,10 @@ All following actual tests use supported Gitea **1.27.3** APIs/Git and disposabl
 
 The organization-key capture helper incorrectly captioned its role `personal-owner`. Its separate organization scope and native identity receipts prove the organization fixture. Preserve the caption defect; do not relabel the old images. Earlier failed attempts remain failed, even where individual captures or native steps succeeded. Full details and source/PG checks remain in [the ledger](IMPLEMENTATION_STATUS.md).
 
+## Current059 supplement
+
+[Access059 attempt3](../.tmp/repository-access059-served-attempt3/manifest.json) qualifies the complete twelve-case invitation role matrix, all four actual organization-owner refusals with zero native/refused-write attempts, retained generation ABA and two distinct actual native204 acknowledgement-loss originals across restart without replay. It uses component source `e04a07ca`, core `fa4abeb7`, schema059 and includes twelve actual served captures with cleanup passed. This closes those specific missing cases in the historical requirement map below; it does not rewrite its eight-case048 receipt. Attempts1/2 remain failed with their helper/control-handler defects and cleanup scope recorded in the ledger. Current key/Git consumers, the new explicit059 Access recovery drill, service-backed observation and topology acceptance retain their separate gates.
+
 ## Requirement-by-requirement result
 
 | Required behavior | Implemented contract and available evidence | Remaining closure check |
