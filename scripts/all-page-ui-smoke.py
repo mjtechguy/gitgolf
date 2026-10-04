@@ -27,6 +27,7 @@ def main():
     parser.add_argument('--stack-root', required=True, type=Path)
     parser.add_argument('--screenshots', type=Path)
     parser.add_argument('--served-source', help='Deployed product source SHA supplied by the deployment owner; git HEAD is separately recorded')
+    parser.add_argument('--only', action='append', default=[], metavar='PAGE_ID', help='Capture only named page/state IDs; repeat to select several. The manifest explicitly records selective coverage.')
     parser.add_argument('--setup-only', action='store_true', help='Qualify owned native fixture setup/readback and cleanup without browser capture or private config')
     args = parser.parse_args()
     if args.served_source and (len(args.served_source) != 40 or any(c not in '0123456789abcdef' for c in args.served_source)):
@@ -35,6 +36,10 @@ def main():
     for name in ('compose.yaml', '.env', 'web/node_modules/playwright/index.mjs'):
         if not (stack / name).is_file():
             parser.error('--stack-root requires a deployed Compose stack and installed Playwright')
+    if args.only:
+        preflight = subprocess.run(['node', str(Path(__file__).with_name('all-page-ui-browser.mjs')), '--check-pages', *args.only], cwd=stack, capture_output=True, text=True, timeout=15)
+        if preflight.returncode != 0:
+            parser.error('--only requires unique known page/state IDs; no fixtures were created')
     screenshots = (args.screenshots or stack / '.tmp/all-page-ui-review').resolve()
     screenshots.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(screenshots, 0o700)
@@ -184,7 +189,7 @@ def main():
             return
 
         stage = 'actual page capture'
-        config = {'golf': smoke.GOLF, 'screenshots': str(screenshots), 'runtime': baseline, 'workingTreeHead': command('git', 'rev-parse', 'HEAD'), 'servedSourceCommit': args.served_source, 'actors': {role: {k: actor[k] for k in ('name', 'email', 'password')} for role, actor in actors.items()}, 'repository': full, 'emptyRepository': empty['full_name'], 'orgRepository': orgrepo['full_name'], 'repositoryId': str(repo['id']), 'defaultBranch': repo['default_branch'], 'commit': head, 'beforeCommit': before, 'path': path, 'issue': issue['number'], 'closedIssue': closed['number'], 'pull': pull['number'], 'organization': organization, 'teamId': str(team['id'])}
+        config = {'only': args.only, 'golf': smoke.GOLF, 'screenshots': str(screenshots), 'runtime': baseline, 'workingTreeHead': command('git', 'rev-parse', 'HEAD'), 'servedSourceCommit': args.served_source, 'actors': {role: {k: actor[k] for k in ('name', 'email', 'password')} for role, actor in actors.items()}, 'repository': full, 'emptyRepository': empty['full_name'], 'orgRepository': orgrepo['full_name'], 'repositoryId': str(repo['id']), 'defaultBranch': repo['default_branch'], 'commit': head, 'beforeCommit': before, 'path': path, 'issue': issue['number'], 'closedIssue': closed['number'], 'pull': pull['number'], 'organization': organization, 'teamId': str(team['id'])}
         fd = os.open(private_config, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         config_created = True
         with os.fdopen(fd, 'w') as destination:

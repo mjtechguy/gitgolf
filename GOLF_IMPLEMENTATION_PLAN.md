@@ -1349,6 +1349,8 @@ Depends on: Phase 1; engine proofs from Phase 0; forge event integration.
 
 Gate: supported Actions/GitLab pipelines run on customer Linux infrastructure with security semantics preserved.
 
+Implementation order and explicit conformance cases are detailed in the [Actions compatibility packet](docs/ACTIONS_COMPATIBILITY_IMPLEMENTATION.md). Manual dispatch and configured push are independent first-class paths; test manual-only, push-only, both and neither, using an actual Git push as well as explicit dispatch. Import never enables execution automatically. AC-0 qualifies a pinned maintained execution engine under Golf admission rather than extending the shell-only compiler into a general interpreter; ignored engine fields must be enforced or rejected before execution. AC-1–AC-9 cover event policy, durable job graphs, exact checkout/actions, controls/data flow, tokens/secrets/artifact/cache services, reuse/events, portable scaling, Cloudflare/hybrid execution and release/upgrade gates. The current shell catalog and actual run/log proofs do not establish full Actions compatibility, and native automatic scheduling must not bypass Golf policy or introduce a second execution owner.
+
 ### Phase 5 — Agent automations and inference
 
 Depends on: Phase 4 isolation/evidence and origin/forge operations.

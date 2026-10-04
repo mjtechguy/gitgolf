@@ -92,6 +92,13 @@ function pages(c) {
   ];
 }
 
+function selectedPages(c) {
+  const inventory=pages(c);
+  if(c.only===undefined||c.only.length===0)return inventory;
+  if(!Array.isArray(c.only)||c.only.length>inventory.length||new Set(c.only).size!==c.only.length||c.only.some(id=>typeof id!=='string'||!inventory.some(item=>item.id===id)))throw Error('Invalid selected page identifiers');
+  return inventory.filter(item=>c.only.includes(item.id));
+}
+
 let config,browser,stage='configuration';
 const contexts=[],results=[];
 const pending=[
@@ -103,9 +110,16 @@ const pending=[
   {family:'Authenticated GitHub settings/write controls',reason:'This driver captures Golf only; no imported GitHub session or authenticated reference is invented.'},
 ];
 
-if(process.argv.includes('--self-check')){
+if(process.argv.includes('--self-check')||process.argv.includes('--check-pages')){
   const c={repository:'owner/workspace',emptyRepository:'owner/empty',orgRepository:'example-org/work',organization:'example-org',teamId:'42',commit:'a'.repeat(40),path:'src/app ü%.py',defaultBranch:'main',issue:1,closedIssue:2,pull:3};
   const inventory=pages(c);
+  if(process.argv.includes('--check-pages')){
+    selectedPages({...c,only:process.argv.slice(process.argv.indexOf('--check-pages')+1)});
+    console.log('PASS: selected page identifiers are valid; no browser or native fixture run.');
+    process.exit(0);
+  }
+  if(selectedPages({...c,only:['status','actions']}).length!==2)throw Error('Selected page filtering changed');
+  for(const only of [['unknown'],['status','status'],[null]]){let rejected=false;try{selectedPages({...c,only});}catch{rejected=true;}if(!rejected)throw Error('Invalid page selection accepted');}
   if(new Set(inventory.map(value=>value.id)).size!==inventory.length)throw Error('Duplicate page identifier');
   if(inventory.some(value=>!value.selector||!value.route.startsWith('/')||!['owner','reader','outsider','anonymous'].includes(value.role)))throw Error('Invalid page entry');
   if(!inventory.find(value=>value.id==='file').route.endsWith('/src/app%20%C3%BC%25.py'))throw Error('Literal path encoding changed');
@@ -122,6 +136,7 @@ try {
   if(!config.golf?.startsWith('http://localhost:')||!config.screenshots||!config.actors?.owner)throw Error('Invalid local fixture configuration');
   const {chromium}=await import(pathToFileURL(join(process.cwd(),'web/node_modules/playwright/index.mjs')));
   browser=await chromium.launch();
+  const inventory=selectedPages(config);
   for(const width of [1440,390])for(const theme of ['dark','light']){
     const roleContexts={};
     for(const role of ['owner','reader','outsider','anonymous']){
@@ -136,7 +151,7 @@ try {
       await context.addInitScript(value=>{localStorage.setItem('golf.theme',value);},theme);
       roleContexts[role]=context;
     }
-    for(const item of pages(config)){
+    for(const item of inventory){
       stage=item.id;
       const context=roleContexts[item.role],page=await context.newPage();
       const rpc=[],privateErrors=[],writes=[];let inflight=0,lastResponse=Date.now();
@@ -215,7 +230,7 @@ try {
     }
     console.log('Capture batch recorded: '+theme+' '+width+'; inspect owner-only manifest for actual states.');
   }
-  await writeFile(join(config.screenshots,'manifest.json'),JSON.stringify({workingTreeHead:config.workingTreeHead,servedSourceCommit:config.servedSourceCommit??null,runtime:config.runtime,captureKind:'Actual local Golf read-only browser audit on disposable native fixture',complete:true,passed:results.every(value=>['captured','pending-configuration'].includes(value.status)),results,pending},null,2),{mode:0o600});
+  await writeFile(join(config.screenshots,'manifest.json'),JSON.stringify({workingTreeHead:config.workingTreeHead,servedSourceCommit:config.servedSourceCommit??null,runtime:config.runtime,captureKind:config.only?.length?'Actual selected-page local Golf read-only browser audit on disposable native fixture':'Actual local Golf read-only browser audit on disposable native fixture',selectedPageIds:config.only??[],pageStateCount:inventory.length,complete:true,passed:results.every(value=>['captured','pending-configuration'].includes(value.status)),results,pending},null,2),{mode:0o600});
   if(results.some(value=>!['captured','pending-configuration'].includes(value.status)))throw Error('One or more page captures failed');
   console.log('PASS: real route-family captures; no browser mutation dispatched; pending coverage explicitly recorded.');
 }catch{
