@@ -12,7 +12,7 @@ func TestEmailNotificationManagedBrowserBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, method := range []string{"ListEmailTransports", "SaveEmailTransport", "ActivateEmailTransport", "GetOwnEmailNotifications", "RequestEmailVerification", "ConfirmEmailVerification", "SaveOwnEmailPreference", "GetRepositoryEmailSubscription", "SaveRepositoryEmailSubscription", "ListOwnEmailDeliveries", "RedeliverOwnEmail"} {
+	for _, method := range []string{"ListEmailTransports", "SaveEmailTransport", "ActivateEmailTransport", "DeactivateEmailTransport", "GetOwnEmailNotifications", "RequestEmailVerification", "ConfirmEmailVerification", "SaveOwnEmailPreference", "GetRepositoryEmailSubscription", "SaveRepositoryEmailSubscription", "ListOwnEmailDeliveries", "RedeliverOwnEmail"} {
 		path := "/golf.v1.EmailNotificationService/" + method
 		for _, origin := range []string{s.config.PublicURL, "https://other.invalid"} {
 			req := httptest.NewRequest(http.MethodPost, "/rpc"+path, strings.NewReader("malformed"))

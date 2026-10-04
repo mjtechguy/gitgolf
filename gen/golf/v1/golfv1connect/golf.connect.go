@@ -561,6 +561,9 @@ const (
 	// EmailNotificationServiceActivateEmailTransportProcedure is the fully-qualified name of the
 	// EmailNotificationService's ActivateEmailTransport RPC.
 	EmailNotificationServiceActivateEmailTransportProcedure = "/golf.v1.EmailNotificationService/ActivateEmailTransport"
+	// EmailNotificationServiceDeactivateEmailTransportProcedure is the fully-qualified name of the
+	// EmailNotificationService's DeactivateEmailTransport RPC.
+	EmailNotificationServiceDeactivateEmailTransportProcedure = "/golf.v1.EmailNotificationService/DeactivateEmailTransport"
 	// EmailNotificationServiceGetOwnEmailNotificationsProcedure is the fully-qualified name of the
 	// EmailNotificationService's GetOwnEmailNotifications RPC.
 	EmailNotificationServiceGetOwnEmailNotificationsProcedure = "/golf.v1.EmailNotificationService/GetOwnEmailNotifications"
@@ -5764,6 +5767,7 @@ type EmailNotificationServiceClient interface {
 	ListEmailTransports(context.Context, *connect.Request[v1.ListEmailTransportsRequest]) (*connect.Response[v1.ListEmailTransportsResponse], error)
 	SaveEmailTransport(context.Context, *connect.Request[v1.SaveEmailTransportRequest]) (*connect.Response[v1.SaveEmailTransportResponse], error)
 	ActivateEmailTransport(context.Context, *connect.Request[v1.ActivateEmailTransportRequest]) (*connect.Response[v1.ActivateEmailTransportResponse], error)
+	DeactivateEmailTransport(context.Context, *connect.Request[v1.DeactivateEmailTransportRequest]) (*connect.Response[v1.DeactivateEmailTransportResponse], error)
 	GetOwnEmailNotifications(context.Context, *connect.Request[v1.GetOwnEmailNotificationsRequest]) (*connect.Response[v1.GetOwnEmailNotificationsResponse], error)
 	RequestEmailVerification(context.Context, *connect.Request[v1.RequestEmailVerificationRequest]) (*connect.Response[v1.RequestEmailVerificationResponse], error)
 	ConfirmEmailVerification(context.Context, *connect.Request[v1.ConfirmEmailVerificationRequest]) (*connect.Response[v1.ConfirmEmailVerificationResponse], error)
@@ -5801,6 +5805,12 @@ func NewEmailNotificationServiceClient(httpClient connect.HTTPClient, baseURL st
 			httpClient,
 			baseURL+EmailNotificationServiceActivateEmailTransportProcedure,
 			connect.WithSchema(emailNotificationServiceMethods.ByName("ActivateEmailTransport")),
+			connect.WithClientOptions(opts...),
+		),
+		deactivateEmailTransport: connect.NewClient[v1.DeactivateEmailTransportRequest, v1.DeactivateEmailTransportResponse](
+			httpClient,
+			baseURL+EmailNotificationServiceDeactivateEmailTransportProcedure,
+			connect.WithSchema(emailNotificationServiceMethods.ByName("DeactivateEmailTransport")),
 			connect.WithClientOptions(opts...),
 		),
 		getOwnEmailNotifications: connect.NewClient[v1.GetOwnEmailNotificationsRequest, v1.GetOwnEmailNotificationsResponse](
@@ -5859,6 +5869,7 @@ type emailNotificationServiceClient struct {
 	listEmailTransports             *connect.Client[v1.ListEmailTransportsRequest, v1.ListEmailTransportsResponse]
 	saveEmailTransport              *connect.Client[v1.SaveEmailTransportRequest, v1.SaveEmailTransportResponse]
 	activateEmailTransport          *connect.Client[v1.ActivateEmailTransportRequest, v1.ActivateEmailTransportResponse]
+	deactivateEmailTransport        *connect.Client[v1.DeactivateEmailTransportRequest, v1.DeactivateEmailTransportResponse]
 	getOwnEmailNotifications        *connect.Client[v1.GetOwnEmailNotificationsRequest, v1.GetOwnEmailNotificationsResponse]
 	requestEmailVerification        *connect.Client[v1.RequestEmailVerificationRequest, v1.RequestEmailVerificationResponse]
 	confirmEmailVerification        *connect.Client[v1.ConfirmEmailVerificationRequest, v1.ConfirmEmailVerificationResponse]
@@ -5882,6 +5893,11 @@ func (c *emailNotificationServiceClient) SaveEmailTransport(ctx context.Context,
 // ActivateEmailTransport calls golf.v1.EmailNotificationService.ActivateEmailTransport.
 func (c *emailNotificationServiceClient) ActivateEmailTransport(ctx context.Context, req *connect.Request[v1.ActivateEmailTransportRequest]) (*connect.Response[v1.ActivateEmailTransportResponse], error) {
 	return c.activateEmailTransport.CallUnary(ctx, req)
+}
+
+// DeactivateEmailTransport calls golf.v1.EmailNotificationService.DeactivateEmailTransport.
+func (c *emailNotificationServiceClient) DeactivateEmailTransport(ctx context.Context, req *connect.Request[v1.DeactivateEmailTransportRequest]) (*connect.Response[v1.DeactivateEmailTransportResponse], error) {
+	return c.deactivateEmailTransport.CallUnary(ctx, req)
 }
 
 // GetOwnEmailNotifications calls golf.v1.EmailNotificationService.GetOwnEmailNotifications.
@@ -5932,6 +5948,7 @@ type EmailNotificationServiceHandler interface {
 	ListEmailTransports(context.Context, *connect.Request[v1.ListEmailTransportsRequest]) (*connect.Response[v1.ListEmailTransportsResponse], error)
 	SaveEmailTransport(context.Context, *connect.Request[v1.SaveEmailTransportRequest]) (*connect.Response[v1.SaveEmailTransportResponse], error)
 	ActivateEmailTransport(context.Context, *connect.Request[v1.ActivateEmailTransportRequest]) (*connect.Response[v1.ActivateEmailTransportResponse], error)
+	DeactivateEmailTransport(context.Context, *connect.Request[v1.DeactivateEmailTransportRequest]) (*connect.Response[v1.DeactivateEmailTransportResponse], error)
 	GetOwnEmailNotifications(context.Context, *connect.Request[v1.GetOwnEmailNotificationsRequest]) (*connect.Response[v1.GetOwnEmailNotificationsResponse], error)
 	RequestEmailVerification(context.Context, *connect.Request[v1.RequestEmailVerificationRequest]) (*connect.Response[v1.RequestEmailVerificationResponse], error)
 	ConfirmEmailVerification(context.Context, *connect.Request[v1.ConfirmEmailVerificationRequest]) (*connect.Response[v1.ConfirmEmailVerificationResponse], error)
@@ -5965,6 +5982,12 @@ func NewEmailNotificationServiceHandler(svc EmailNotificationServiceHandler, opt
 		EmailNotificationServiceActivateEmailTransportProcedure,
 		svc.ActivateEmailTransport,
 		connect.WithSchema(emailNotificationServiceMethods.ByName("ActivateEmailTransport")),
+		connect.WithHandlerOptions(opts...),
+	)
+	emailNotificationServiceDeactivateEmailTransportHandler := connect.NewUnaryHandler(
+		EmailNotificationServiceDeactivateEmailTransportProcedure,
+		svc.DeactivateEmailTransport,
+		connect.WithSchema(emailNotificationServiceMethods.ByName("DeactivateEmailTransport")),
 		connect.WithHandlerOptions(opts...),
 	)
 	emailNotificationServiceGetOwnEmailNotificationsHandler := connect.NewUnaryHandler(
@@ -6023,6 +6046,8 @@ func NewEmailNotificationServiceHandler(svc EmailNotificationServiceHandler, opt
 			emailNotificationServiceSaveEmailTransportHandler.ServeHTTP(w, r)
 		case EmailNotificationServiceActivateEmailTransportProcedure:
 			emailNotificationServiceActivateEmailTransportHandler.ServeHTTP(w, r)
+		case EmailNotificationServiceDeactivateEmailTransportProcedure:
+			emailNotificationServiceDeactivateEmailTransportHandler.ServeHTTP(w, r)
 		case EmailNotificationServiceGetOwnEmailNotificationsProcedure:
 			emailNotificationServiceGetOwnEmailNotificationsHandler.ServeHTTP(w, r)
 		case EmailNotificationServiceRequestEmailVerificationProcedure:
@@ -6058,6 +6083,10 @@ func (UnimplementedEmailNotificationServiceHandler) SaveEmailTransport(context.C
 
 func (UnimplementedEmailNotificationServiceHandler) ActivateEmailTransport(context.Context, *connect.Request[v1.ActivateEmailTransportRequest]) (*connect.Response[v1.ActivateEmailTransportResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.EmailNotificationService.ActivateEmailTransport is not implemented"))
+}
+
+func (UnimplementedEmailNotificationServiceHandler) DeactivateEmailTransport(context.Context, *connect.Request[v1.DeactivateEmailTransportRequest]) (*connect.Response[v1.DeactivateEmailTransportResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.EmailNotificationService.DeactivateEmailTransport is not implemented"))
 }
 
 func (UnimplementedEmailNotificationServiceHandler) GetOwnEmailNotifications(context.Context, *connect.Request[v1.GetOwnEmailNotificationsRequest]) (*connect.Response[v1.GetOwnEmailNotificationsResponse], error) {
