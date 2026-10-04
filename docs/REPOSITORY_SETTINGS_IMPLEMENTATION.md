@@ -10,6 +10,8 @@ Replace hard-coded coverage declarations with service-backed observations as con
 
 `Ready` requires the complete promised section below, with evidence linked in the implementation ledger. Intermediate slices remain `Partial`; do not silently remove unmet requirements or relabel them to turn the table green. Cloudflare-specific destinations are optional implementations of the same generic capability. Readiness must not require a paid model or Cloudflare account for the portable core.
 
+General configuration now has actual pinned-native save/readback, archive/rename/replacement fences and twelve served dark/light desktop/mobile captures in the implementation ledger. Its coverage can report Ready only with a verified current service observation. This completes that configuration row; it does not close the independent wiki workspace, the other nine rows or broader release/track acceptance.
+
 ## Section requirements and qualification
 
 | Section | Required controls and behavior | Completion evidence |

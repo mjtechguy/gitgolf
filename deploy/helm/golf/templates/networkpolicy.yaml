@@ -67,6 +67,12 @@ spec:
             matchLabels:
               {{- include "golf.selector" . | nindent 14 }}
               app.kubernetes.io/component: golf
+        {{- if .Values.webhooks.enabled }}
+        - podSelector:
+            matchLabels:
+              {{- include "golf.selector" . | nindent 14 }}
+              app.kubernetes.io/component: webhooks
+        {{- end }}
       ports: [{protocol: TCP, port: 3000}]
     {{- with .Values.networkPolicy.giteaIngressFrom }}
     - from: {{ toYaml . | nindent 8 }}
@@ -111,6 +117,12 @@ spec:
             matchLabels:
               {{- include "golf.selector" . | nindent 14 }}
               app.kubernetes.io/component: golf
+        {{- if .Values.webhooks.enabled }}
+        - podSelector:
+            matchLabels:
+              {{- include "golf.selector" . | nindent 14 }}
+              app.kubernetes.io/component: webhooks
+        {{- end }}
         {{- if .Values.gitea.enabled }}
         - podSelector:
             matchLabels:
@@ -123,5 +135,46 @@ spec:
       ports: [{protocol: TCP, port: 5432}]
     {{- end }}
   egress: []
+{{- end }}
+{{- if .Values.webhooks.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "golf.fullname" . }}-webhooks
+  labels:
+    {{- include "golf.labels" . | nindent 4 }}
+    app.kubernetes.io/component: webhooks
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "golf.selector" . | nindent 6 }}
+      app.kubernetes.io/component: webhooks
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    {{- include "golf.dnsEgress" . | nindent 4 }}
+    {{- if .Values.gitea.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "golf.selector" . | nindent 14 }}
+              app.kubernetes.io/component: gitea
+      ports: [{protocol: TCP, port: 3000}]
+    {{- end }}
+    {{- if .Values.postgresql.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "golf.selector" . | nindent 14 }}
+              app.kubernetes.io/component: postgres
+      ports: [{protocol: TCP, port: 5432}]
+    {{- end }}
+    {{- with .Values.networkPolicy.externalEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- with .Values.webhooks.httpsEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 {{- end }}
 {{- end }}

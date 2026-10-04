@@ -555,6 +555,25 @@
         "metrics",
         "tracing"
       ]
+    },
+    "webhooks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "httpsEgress": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "required": [
+        "enabled",
+        "httpsEgress"
+      ]
     }
   },
   "required": [
@@ -569,7 +588,8 @@
     "gitea",
     "postgresql",
     "ingress",
-    "networkPolicy"
+    "networkPolicy",
+    "webhooks"
   ],
   "$schema": "https://json-schema.org/draft-07/schema#"
 }

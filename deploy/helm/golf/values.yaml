@@ -11,6 +11,12 @@ allowInsecureCookies: false
 existingSecret: ""
 oauth:
   enabled: false
+# Optional durable outbound delivery consumer. HTTPS destinations remain
+# explicitly authorized in repository settings. With NetworkPolicy enabled,
+# supply narrowly approved egress rules; an empty list denies destination traffic.
+webhooks:
+  enabled: false
+  httpsEgress: []
 resources:
   requests:
     cpu: 100m

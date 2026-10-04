@@ -98,6 +98,25 @@ assert "port: 9090" in find(metrics, "Service", "check-golf")
 assert "port: 9090" in find(metrics, "NetworkPolicy", "check-golf")
 assert "GOLF_METRICS_TOKEN" not in core
 assert "port: 9090" not in find(core, "Service", "check-golf")
+assert 'name: check-golf-webhooks\n' not in core, 'default profile must not launch delivery consumer'
+hooks = render(merge(BASE, {'webhooks': {'enabled': True}}))
+worker = find(hooks, 'Deployment', 'check-golf-webhooks')
+for value in ('replicas: 1', 'strategy: {type: Recreate}', 'args: [webhook-worker]', 'automountServiceAccountToken: false', 'readOnlyRootFilesystem: true', 'runAsNonRoot: true'):
+    assert value in worker, 'optional delivery worker isolation contract changed'
+assert 'docker.sock' not in worker and 'hostPath:' not in worker and 'containerPort:' not in worker
+assert 'key: GOLF_WEBHOOK_EGRESS_POLICY, optional: true' in worker
+assert 'key: GOLF_WEBHOOK_EGRESS_POLICY, optional: true' in find(hooks, 'Deployment', 'check-golf')
+policy = find(hooks, 'NetworkPolicy', 'check-golf-webhooks')
+assert 'ingress: []' in policy and 'app.kubernetes.io/component: gitea' in policy and 'app.kubernetes.io/component: postgres' in policy
+assert 'port: 443' not in policy, 'destination traffic must remain denied without explicit approved rules'
+for name in ('check-golf-gitea', 'check-golf-postgres'):
+    assert 'app.kubernetes.io/component: webhooks' in find(hooks, 'NetworkPolicy', name), 'worker needs only explicit native/database ingress'
+receiver = {'to': [{'ipBlock': {'cidr': '203.0.113.10/32'}}], 'ports': [{'protocol': 'TCP', 'port': 443}]}
+approved = render(merge(BASE, {'webhooks': {'enabled': True, 'httpsEgress': [receiver]}}))
+assert 'cidr: 203.0.113.10/32' in find(approved, 'NetworkPolicy', 'check-golf-webhooks')
+assert 'cidr: 203.0.113.10/32' not in find(approved, 'NetworkPolicy', 'check-golf'), 'receiver rules must not broaden application egress'
+# Documentation-range address is a render fixture, never a successful receiver.
+assert 'kind: NetworkPolicy\n' not in render(merge(BASE, {'webhooks': {'enabled': True}, 'networkPolicy': {'enabled': False}}))
 render(merge(BASE, {"observability": {"tracing": {"endpoint": "http://collector:4318", "insecure": True}}, "networkPolicy": {"externalEgress": [{"to": [peer], "ports": [{"port": 4318}]}]}}))
 negative = [
     merge(BASE, {"observability": {"tracing": {"sampleRatio": 1.1}}}),
@@ -128,4 +147,4 @@ negative = [
 ]
 for case in negative:
     render(case, expected=False)
-print(f"Helm lint + bundled/external/OAuth/ingress/replica profiles passed; {len(negative)} invalid configurations rejected; canonical init script matches")
+print(f"Helm lint + bundled/external/OAuth/ingress/replica/optional-webhook profiles passed; {len(negative)} invalid configurations rejected; canonical init script matches")
