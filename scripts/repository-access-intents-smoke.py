@@ -239,6 +239,17 @@ def access_operation(row,original,actor,phase):
     else:assert not row.get('observedEffectivePermission','') and not row.get('observedDirectMembership',False)
     return row
 
+def checked_owner_refusals(receipts):
+    expected={'set','remove','invitation-preview','invitation-create'}
+    assert isinstance(receipts,list) and len(receipts)==4
+    assert {r['action'] for r in receipts}==expected
+    for r in receipts:
+        assert set(r)=={'action','nativeOwner','nativeMutations','generationBefore','generationAfter'}
+        assert r['nativeOwner'] is True and type(r['nativeMutations']) is int and r['nativeMutations']==0
+        assert re.fullmatch(r'0|[1-9][0-9]*',r['generationBefore'])
+        assert r['generationAfter']==r['generationBefore']
+    return receipts
+
 def checked_invitation_matrix(receipts):
     expected={(scope,issuer,permission)
               for scope in ('personal','organization')
@@ -283,6 +294,16 @@ def self_check():
         try:checked_invitation_matrix(invalid)
         except AssertionError:pass
         else:raise AssertionError('Incomplete, duplicate or unconfirmed invitation role matrix accepted')
+    refused=[{'action':action,'nativeOwner':True,'nativeMutations':0,'generationBefore':'0','generationAfter':'0'}
+             for action in ('set','remove','invitation-preview','invitation-create')]
+    assert checked_owner_refusals(refused) is refused
+    for invalid in (refused[:-1],refused[:-1]+[refused[0]],
+                    [{**r,'nativeOwner':False} if i==0 else r for i,r in enumerate(refused)],
+                    [{**r,'nativeMutations':1} if i==0 else r for i,r in enumerate(refused)],
+                    [{**r,'generationAfter':'1'} if i==0 else r for i,r in enumerate(refused)]):
+        try:checked_owner_refusals(invalid)
+        except AssertionError:pass
+        else:raise AssertionError('Missing ownership proof or effectful protected-owner refusal accepted')
     proxy_source_check()
     print('PASS: pure048 wire, exact actor/target/intent/phase receipts, inherited permission, exact twelve-case invitation matrix and unknown non-adoption; no runtime resources')
 
@@ -445,6 +466,38 @@ def main():
             stage('organization owner/member-direct admin roles below inherited admin; removal preserves team access')
             grant_cycle(orgrepo,owner,recipient,('read','write','admin'));grant_cycle(orgrepo,direct,recipient,('read',));assert member(orgrepo,recipient,False) is None
             effective=smoke.provider(owner['token'],'GET','repos/'+orgrepo['name']+'/collaborators/'+recipient['name']+'/permission');assert str(effective['user']['id'])==recipient['id'] and effective['permission']=='owner'
+            stage('actual organization-owner recipient protected from different member direct-admin edits and invitations')
+            ownership_route='users/'+owner['name']+'/orgs/'+organization+'/permissions'
+            assert smoke.provider(owner['token'],'GET',ownership_route)['is_owner'] is True
+            protected_target,protected_before=resolve(orgrepo,direct,owner)
+            assert protected_before.get('actualOrganizationOwner') is True and protected_before['permission']=='owner'
+            protected_count=proxy.count(orgrepo,owner)
+            protected_invitations=call(direct,'ListRepositoryInvitations',{**protected_target,'page':{'page':1,'limit':20}})
+            assert protected_invitations.get('page',{}).get('nextPage',0)==0
+            protected_receipts=[]
+            for action in ('set','remove','invitation-preview','invitation-create'):
+                if action in ('set','remove'):
+                    payload={**protected_target,'userLogin':owner['name'],'userId':owner['id'],
+                             'expectedCollaboratorRevision':protected_before['revision'],'idempotencyKey':key()}
+                    if action=='set':payload['permission']='read'
+                    checked_rpc(direct['session'],ACCESS+('SetRepositoryCollaborator' if action=='set' else 'RemoveRepositoryCollaborator'),payload,expected=403)
+                elif action=='invitation-preview':
+                    call(direct,'PreviewRepositoryInvitationRecipient',{**protected_target,'username':owner['name']},expected=400,code='failed_precondition')
+                else:
+                    payload={**protected_target,'recipientId':owner['id'],'recipientUsername':owner['name'],
+                             'recipientRevision':protected_before['revision'],'permission':'read',
+                             'expiresAt':datetime.datetime.fromtimestamp(time.time()+3600,datetime.timezone.utc).isoformat().replace('+00:00','Z'),
+                             'persistentConsent':True,'idempotencyKey':key()}
+                    call(direct,'CreateRepositoryInvitation',payload,expected=400,code='failed_precondition')
+                _,protected_after=resolve(orgrepo,direct,owner)
+                assert protected_after==protected_before
+                assert smoke.provider(owner['token'],'GET',ownership_route)['is_owner'] is True
+                assert member(orgrepo,owner,protected_before.get('isDirect',False))==('owner' if protected_before.get('isDirect',False) else None)
+                protected_receipts.append({'action':action,'nativeOwner':True,
+                    'nativeMutations':proxy.count(orgrepo,owner)-protected_count,
+                    'generationBefore':protected_before['generation'],'generationAfter':protected_after['generation']})
+            assert call(direct,'ListRepositoryInvitations',{**protected_target,'page':{'page':1,'limit':20}})==protected_invitations
+            record(organizationOwnerRefusals=checked_owner_refusals(protected_receipts))
             stage('existing-account invitations explicitly request each role; same-key status/replay sends no duplicate')
             invitation_receipts=[]
             for repository,issuer in ((personal,owner),(orgrepo,owner),(personal,direct),(orgrepo,direct)):
