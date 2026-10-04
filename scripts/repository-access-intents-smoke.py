@@ -259,15 +259,25 @@ def checked_invitation_unknown(receipt):
     assert receipt['lostCountAfter']==receipt['lostCountBefore']+1
     return receipt
 
+def checked_owner_proxy_unchanged(before,after):
+    # The proxy intentionally excludes owner mutations. Forwarded mutations must
+    # remain absent; native-rejected owner attempts additionally fail the exact
+    # RPC pre-reservation status/marker and retained-generation checks below.
+    assert after['counts']==before['counts']
+    for field in ('failures','lost','armed'):
+        assert after[field]==before[field]
+    return after
+
 def checked_owner_refusals(receipts):
     expected={'set','remove','invitation-preview','invitation-create'}
     assert isinstance(receipts,list) and len(receipts)==4
     assert {r['action'] for r in receipts}==expected
     for r in receipts:
-        assert set(r)=={'action','nativeOwner','nativeMutations','generationBefore','generationAfter'}
+        assert set(r)=={'action','nativeOwner','nativeMutations','generationBefore','generationAfter','proxyCountersUnchanged','preReservationRefusal'}
         assert r['nativeOwner'] is True and type(r['nativeMutations']) is int and r['nativeMutations']==0
         assert re.fullmatch(r'0|[1-9][0-9]*',r['generationBefore'])
-        assert r['generationAfter']==r['generationBefore']
+        assert r['generationAfter']==r['generationBefore'] and r['proxyCountersUnchanged'] is True
+        assert r['preReservationRefusal'] is (r['action'] in {'set','remove'})
     return receipts
 
 def checked_invitation_matrix(receipts):
@@ -314,16 +324,24 @@ def self_check():
         try:checked_invitation_matrix(invalid)
         except AssertionError:pass
         else:raise AssertionError('Incomplete, duplicate or unconfirmed invitation role matrix accepted')
-    refused=[{'action':action,'nativeOwner':True,'nativeMutations':0,'generationBefore':'0','generationAfter':'0'}
+    refused=[{'action':action,'nativeOwner':True,'nativeMutations':0,'generationBefore':'0','generationAfter':'0',
+              'proxyCountersUnchanged':True,'preReservationRefusal':action in {'set','remove'}}
              for action in ('set','remove','invitation-preview','invitation-create')]
     assert checked_owner_refusals(refused) is refused
     for invalid in (refused[:-1],refused[:-1]+[refused[0]],
                     [{**r,'nativeOwner':False} if i==0 else r for i,r in enumerate(refused)],
                     [{**r,'nativeMutations':1} if i==0 else r for i,r in enumerate(refused)],
-                    [{**r,'generationAfter':'1'} if i==0 else r for i,r in enumerate(refused)]):
+                    [{**r,'generationAfter':'1'} if i==0 else r for i,r in enumerate(refused)],
+                    [{**r,'preReservationRefusal':False} if i==0 else r for i,r in enumerate(refused)]):
         try:checked_owner_refusals(invalid)
         except AssertionError:pass
         else:raise AssertionError('Missing ownership proof or effectful protected-owner refusal accepted')
+    owner_state={'counts':[{'method':'PUT','path':'owned-recipient','count':1}],'failures':1,'lost':0,'armed':None}
+    assert checked_owner_proxy_unchanged(owner_state,dict(owner_state))==owner_state
+    for field,value in (('counts',[{'method':'PUT','path':'owned-recipient','count':2}]),('failures',2),('lost',1),('armed',{'unexpected':True})):
+        try:checked_owner_proxy_unchanged(owner_state,{**owner_state,field:value})
+        except AssertionError:pass
+        else:raise AssertionError('Unexpected protected-owner mutation/proxy failure accepted')
     unknown={'observed204':True,'closedBeforeGolfReceipt':True,'phase':'DISPATCH_UNKNOWN','invitationState':'GRANTING',
              'nativeEffectivePermission':'read','generationBefore':'0','generationAfter':'1','generationAfterRestart':'1',
              'dispatchCountBefore':0,'dispatchCountAfter':1,'dispatchCountAfterReplay':1,'dispatchCountAfterRestart':1,
@@ -503,7 +521,8 @@ def main():
             assert smoke.provider(owner['token'],'GET',ownership_route)['is_owner'] is True
             protected_target,protected_before=resolve(orgrepo,direct,owner)
             assert protected_before.get('actualOrganizationOwner') is True and protected_before['permission']=='owner'
-            protected_count=proxy.count(orgrepo,owner)
+            protected_count=proxy.total(orgrepo)
+            protected_proxy_before=proxy.snapshot()
             protected_invitations=call(direct,'ListRepositoryInvitations',{**protected_target,'page':{'page':1,'limit':20}})
             assert protected_invitations.get('page',{}).get('nextPage',0)==0
             protected_receipts=[]
@@ -513,6 +532,7 @@ def main():
                              'expectedCollaboratorRevision':protected_before['revision'],'idempotencyKey':key()}
                     if action=='set':payload['permission']='read'
                     checked_rpc(direct['session'],ACCESS+('SetRepositoryCollaborator' if action=='set' else 'RemoveRepositoryCollaborator'),payload,expected=403)
+                    assert PROOF['lastProcedure'].get('effect')=='none','Protected owner refusal must precede reservation/native dispatch'
                 elif action=='invitation-preview':
                     call(direct,'PreviewRepositoryInvitationRecipient',{**protected_target,'username':owner['name']},expected=400,code='failed_precondition')
                 else:
@@ -525,8 +545,10 @@ def main():
                 assert protected_after==protected_before
                 assert smoke.provider(owner['token'],'GET',ownership_route)['is_owner'] is True
                 assert member(orgrepo,owner,protected_before.get('isDirect',False))==('owner' if protected_before.get('isDirect',False) else None)
+                checked_owner_proxy_unchanged(protected_proxy_before,proxy.snapshot())
                 protected_receipts.append({'action':action,'nativeOwner':True,
-                    'nativeMutations':proxy.count(orgrepo,owner)-protected_count,
+                    'nativeMutations':proxy.total(orgrepo)-protected_count,'proxyCountersUnchanged':True,
+                    'preReservationRefusal':action in {'set','remove'},
                     'generationBefore':protected_before['generation'],'generationAfter':protected_after['generation']})
             assert call(direct,'ListRepositoryInvitations',{**protected_target,'page':{'page':1,'limit':20}})==protected_invitations
             record(organizationOwnerRefusals=checked_owner_refusals(protected_receipts))
