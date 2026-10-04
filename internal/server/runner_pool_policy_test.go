@@ -356,8 +356,9 @@ func TestRunnerPoolFinalSelectedSourceFencePostgres(t *testing.T) {
 	}
 	// Deliberate owned Golf metadata fault, never a native source mutation. The
 	// final locked read must reject what the earlier native/source checks did
-	// not inspect, even for the legacy shell record lacking graph immutability.
-	if _, e = holder.Exec(`UPDATE golf_workflow_runs SET commit_id=$2,version=version+1 WHERE id=$1`, id, strings.Repeat("c", 40)); e != nil {
+	// not inspect, even for a legacy shell archive-receipt field outside graph immutability.
+	// Native head/actor/origin fields already have stronger SQL immutability.
+	if _, e = holder.Exec(`UPDATE golf_workflow_runs SET source_sha256=$2,version=version+1 WHERE id=$1`, id, strings.Repeat("c", 64)); e != nil {
 		t.Fatal(e)
 	}
 	if e = holder.Commit(); e != nil {

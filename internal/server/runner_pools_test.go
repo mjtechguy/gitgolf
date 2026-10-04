@@ -51,7 +51,7 @@ func TestRunnerPoolAdmissionInput(t *testing.T) {
 	m := poolInput()
 	m.State = golfv1.RunnerPoolState_RUNNER_POOL_STATE_DRAINING
 	m.WorkerIds = nil
-	if _, _, e = validatePoolInput(m, keys); e != nil {
+	if _, workers, e := validatePoolInput(m, keys); e != nil || workers == nil || len(workers) != 0 {
 		t.Fatal("retained idle draining pool cannot release final worker", e)
 	}
 }
@@ -157,6 +157,7 @@ func runnerPlacementSetFixture(t *testing.T, f *workflowRunFixture, admin loginR
 	a := runnerPlacementFixture(t, f, admin)
 	m := &golfv1.SetRepositoryRunnerPlacementRequest{Repository: a.Repository, RepositoryId: a.RepositoryId, OwnerId: a.OwnerId, ExpectedRevision: a.ExpectedRevision, ExpectedPlacementVersion: version, PoolId: id, ExpectedPoolVersion: poolVersion, CurrentPassword: localTestPassword}
 	r, ctx := runnerControlRequest(f.server, admin, m)
+	r.Header().Set("Origin", f.server.config.PublicURL)
 	w, e := f.server.SetRepositoryRunnerPlacement(ctx, r)
 	if e != nil {
 		t.Fatal(e)
@@ -170,6 +171,7 @@ func TestRunnerPlacementCurrentAuthorityCASPostgres(t *testing.T) {
 	a := runnerPlacementFixture(t, f, admin)
 	get := func(m *golfv1.GetRepositoryRunnerPlacementRequest) (*connect.Response[golfv1.GetRepositoryRunnerPlacementResponse], error) {
 		r, ctx := runnerControlRequest(f.server, admin, m)
+		r.Header().Set("Origin", f.server.config.PublicURL)
 		return f.server.GetRepositoryRunnerPlacement(ctx, r)
 	}
 	initial, e := get(a)
@@ -182,6 +184,7 @@ func TestRunnerPlacementCurrentAuthorityCASPostgres(t *testing.T) {
 	}
 	m := &golfv1.SetRepositoryRunnerPlacementRequest{Repository: a.Repository, RepositoryId: a.RepositoryId, OwnerId: a.OwnerId, ExpectedRevision: a.ExpectedRevision, ExpectedPlacementVersion: "0", PoolId: pool.Id, ExpectedPoolVersion: pool.Version, CurrentPassword: localTestPassword}
 	r, ctx := runnerControlRequest(f.server, admin, m)
+	r.Header().Set("Origin", f.server.config.PublicURL)
 	if _, e = f.server.SetRepositoryRunnerPlacement(ctx, r); connect.CodeOf(e) != connect.CodeAborted {
 		t.Fatal("stale placement CAS", e)
 	}

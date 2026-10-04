@@ -63,7 +63,7 @@ func validatePoolInput(m *golfv1.SaveRunnerPoolRequest, keys map[string][32]byte
 			return 0, nil, invalid("Pool names cannot contain control characters.")
 		}
 	}
-	workers := append([]string(nil), m.WorkerIds...)
+	workers := append([]string{}, m.WorkerIds...)
 	sort.Strings(workers)
 	for i, id := range workers {
 		if _, enrolled := keys[id]; !enrolled || !runnerIdentifier.MatchString(id) || i > 0 && id == workers[i-1] {

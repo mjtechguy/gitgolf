@@ -204,6 +204,9 @@ func (s *Server) runnerPolicyFence(ctx context.Context, tx *sql.Tx, run workflow
 	} else {
 		return errUnauthenticated
 	}
+	if err := executionLifecycleGate(ctx, tx, run.ForgeURL, run.RepositoryID); err != nil {
+		return err
+	}
 	policy, err := s.readEffectiveExecutionPolicyForEvent(ctx, tx, run.RepositoryID, run.OwnerID, run.OrganizationOwned, event, run.WorkflowPath)
 	if err != nil {
 		return err
@@ -270,7 +273,7 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		runnerFail(w, 503)
 		return
 	}
-	run, err := scanWorkflowRun(s.db.QueryRowContext(ctx, `SELECT `+workflowRunColumns+` FROM golf_workflow_runs WHERE forge_url=$1 AND state='queued' AND engine_catalog=ANY($2) AND ($3 OR NOT EXISTS(SELECT 1 FROM golf_workflow_execution_bindings WHERE run_id=golf_workflow_runs.id)) ORDER BY created_at,id LIMIT 1`, s.config.GiteaURL, catalogs, secureBroker))
+	run, err := scanWorkflowRun(s.db.QueryRowContext(ctx, `SELECT `+workflowRunColumns+` FROM golf_workflow_runs WHERE forge_url=$1 AND state='queued' AND engine_catalog=ANY($2) AND ($3 OR NOT EXISTS(SELECT 1 FROM golf_workflow_execution_bindings WHERE run_id=golf_workflow_runs.id)) AND golf_runner_pool_candidate(forge_url,id,$4) ORDER BY created_at,id LIMIT 1`, s.config.GiteaURL, catalogs, secureBroker, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		w.WriteHeader(204)
 		return
@@ -313,7 +316,7 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 	}
 	if err = s.runnerPolicyFence(ctx, tx, run); err != nil {
 		tx.Rollback()
-		if errors.Is(err, errExecutionPolicyConflict) || errors.Is(err, errUnauthenticated) {
+		if errors.Is(err, errExecutionPolicyConflict) || errors.Is(err, errUnauthenticated) || errors.Is(err, errExecutionApproval) {
 			s.rejectQueuedRun(ctx, run.ID, "Execution policy or dispatch authority changed.")
 			w.WriteHeader(204)
 		} else {
@@ -332,26 +335,25 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	// Only one live assignment per enrolled ID. Poll retries cannot duplicate it.
-	if err = s.lockRunnerControl(ctx, tx, id); err != nil {
-		runnerFail(w, 503)
-		return
-	}
-	control, _, err := s.runnerControl(ctx, tx, id)
+	// Candidate selection intentionally held no run lock. Preserve the existing
+	// user/lifecycle/policy/broker order, then placement→worker→pool→run. Decrypted
+	// broker values remain server RAM only until this claim commits and authority
+	// is rechecked; backpressure/refusal never releases an environment.
+	allowed, err := s.runnerPoolClaimFence(ctx, tx, run, id)
 	if err != nil {
-		runnerFail(w, 503)
+		tx.Rollback()
+		if errors.Is(err, errRunnerPoolStale) {
+			if err = s.rejectRunnerPoolRun(ctx, run); err != nil {
+				runnerFail(w, 503)
+				return
+			}
+			w.WriteHeader(204)
+		} else {
+			runnerFail(w, 503)
+		}
 		return
 	}
-	if control != "active" {
-		w.WriteHeader(204)
-		return
-	}
-	var busy bool
-	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_workflow_runs WHERE forge_url=$1 AND runner_id=$2 AND state='running')`, s.config.GiteaURL, id).Scan(&busy); err != nil {
-		runnerFail(w, 503)
-		return
-	}
-	if busy {
+	if !allowed {
 		w.WriteHeader(204)
 		return
 	}
@@ -409,6 +411,17 @@ func isRunnerAuthorityDenied(err error) bool {
 	var upstream forgeError
 	return errors.As(err, &upstream) && (upstream.status == 401 || upstream.status == 403 || upstream.status == 404)
 }
+
+// Refuse only the original inspected queued admission; a competing claim,
+// cancellation or changed source version is never overwritten by a loser.
+func (s *Server) rejectRunnerPoolRun(ctx context.Context, run workflowRunRecord) error {
+	_, e := s.db.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='cancelled',version=version+1,finished_at=clock_timestamp(),reason='Runner placement or pool configuration changed; explicitly dispatch new work.' WHERE id=$1::uuid AND forge_url=$2 AND state='queued' AND version=$3 AND repository_id=$4 AND owner_id=$5 AND commit_id=$6 AND blob_id=$7 AND source_sha256=$8 AND runner_pool_id IS NOT DISTINCT FROM $9::uuid AND runner_pool_version IS NOT DISTINCT FROM $10 AND runner_placement_version=$11`, run.ID, s.config.GiteaURL, run.Version, run.RepositoryID, run.OwnerID, run.CommitID, run.BlobID, run.SourceSHA256, run.RunnerPlacement.PoolID, run.RunnerPlacement.PoolVersion, run.RunnerPlacement.PlacementVersion)
+	if e != nil {
+		return errStorageUnavailable
+	}
+	return nil
+}
+
 func (s *Server) rejectQueuedRun(ctx context.Context, id, reason string) {
 	_, _ = s.db.ExecContext(ctx, `UPDATE golf_workflow_runs SET state='cancelled',version=version+1,finished_at=clock_timestamp(),reason=$2 WHERE id=$1 AND forge_url=$3 AND state='queued'`, id, reason, s.config.GiteaURL)
 }
@@ -505,7 +518,7 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 	}
 	if err = s.runnerPolicyFence(ctx, tx, run); err != nil {
 		tx.Rollback()
-		if errors.Is(err, errExecutionPolicyConflict) || errors.Is(err, errUnauthenticated) {
+		if errors.Is(err, errExecutionPolicyConflict) || errors.Is(err, errUnauthenticated) || errors.Is(err, errExecutionApproval) {
 			s.cancelRunnerAttempt(ctx, run.ID, "Execution policy or dispatch authority changed.")
 			runnerFail(w, 403)
 		} else {

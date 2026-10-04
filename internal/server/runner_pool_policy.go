@@ -186,7 +186,7 @@ func (s *Server) runnerPoolClaimFence(ctx context.Context, tx *sql.Tx, r workflo
 // selected row must still be that exact actor, target, source and admission.
 // Do not load command/archive payload into this metadata-only comparison.
 func sameRunnerPoolClaimTarget(a, b workflowRunRecord) bool {
-	return a.ID == b.ID && a.ForgeURL == b.ForgeURL && a.Version == b.Version &&
+	return a.ID == b.ID && a.ForgeURL == b.ForgeURL && a.Version == b.Version && a.RunnerPlacement == b.RunnerPlacement &&
 		a.RepositoryID == b.RepositoryID && a.OwnerID == b.OwnerID && a.RepositoryOwner == b.RepositoryOwner && a.RepositoryName == b.RepositoryName && a.OrganizationOwned == b.OrganizationOwned &&
 		a.UserID == b.UserID && bytes.Equal(a.SessionHash, b.SessionHash) &&
 		a.CommitID == b.CommitID && a.WorkflowPath == b.WorkflowPath && a.BlobID == b.BlobID && a.Format == b.Format && a.SourceSHA256 == b.SourceSHA256 && a.EngineCatalog == b.EngineCatalog &&

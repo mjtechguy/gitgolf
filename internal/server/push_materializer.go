@@ -151,6 +151,10 @@ func (s *Server) materializePush(ctx context.Context) error {
 		reason = "repository_queue_capacity"
 	case errors.Is(err, errWorkflowPolicyDenied):
 		reason = "push_policy_denied"
+	case errors.Is(err, errRunnerPoolUnavailable):
+		reason = "runner_pool_unavailable"
+	case errors.Is(err, errRunnerPoolStale):
+		reason = "runner_placement_changed"
 	case errors.Is(err, errActionsProfile), errors.Is(err, errWorkflowExecutionUnsupported), errors.Is(err, errWorkflowSource), errors.Is(err, errRunnerUnavailable):
 		reason = "execution_contract_unsupported"
 	case errors.Is(err, errUnauthenticated), errors.Is(err, errResourceNotFound), isRunnerAuthorityDenied(err):
@@ -254,6 +258,9 @@ func (s *Server) preparePushMaterialization(ctx context.Context, m pushMateriali
 	if err = s.lockAutomationRunAuthority(ctx, tx, run); err != nil {
 		return err
 	}
+	if err = executionLifecycleGate(ctx, tx, g.ForgeURL, g.RepositoryID); err != nil {
+		return err
+	}
 	current, err := s.readEffectiveExecutionPolicyForEvent(ctx, tx, g.RepositoryID, g.OwnerID, g.OrganizationOwned, "push", m.Path)
 	if err != nil {
 		return err
@@ -269,6 +276,12 @@ func (s *Server) preparePushMaterialization(ctx context.Context, m pushMateriali
 	}
 	if queued >= 64 {
 		return errPushQueueCapacity
+	}
+	if err = lockExecutionAdmissionBroker(ctx, tx, run); err != nil {
+		return err
+	}
+	if err = s.runnerPoolAdmission(ctx, tx, g.RepositoryID, g.OwnerID); err != nil {
+		return err
 	}
 	var lease bool
 	if err = tx.QueryRowContext(ctx, `SELECT lease_id=$2 AND lease_expires_at>clock_timestamp() AND state='preparing' FROM golf_push_materializations WHERE id=$1 FOR UPDATE`, m.ID, m.LeaseID).Scan(&lease); err != nil {

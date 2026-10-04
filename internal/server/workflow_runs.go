@@ -69,15 +69,16 @@ type workflowRunRecord struct {
 	LogBytes, LogSequence                                                                         int64
 	OutputState                                                                                   golfv1.WorkflowOutputState
 	ExecutionBindingID, ExecutionBindingVersion                                                   string
+	RunnerPlacement                                                                               runnerPoolBinding
 }
 
-const workflowRunColumns = `id::text,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,policy_epochs,idempotency_key::text,input_hash,state,version,created_at,started_at,finished_at,exit_code,reason,runner_id,attempt_id,lease_token_hash,lease_expires_at,cancel_requested,logs_truncated,source_sha256,log_bytes,log_sequence,source_storage,source_key,source_fingerprint,source_profile_id::text,source_profile_version,origin,automation_grant_id::text,automation_grant_revision,automation_grant_epoch,automation_credential_version,repository_event_id,event_ref,engine_catalog`
+const workflowRunColumns = `id::text,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,policy_epochs,idempotency_key::text,input_hash,state,version,created_at,started_at,finished_at,exit_code,reason,runner_id,attempt_id,lease_token_hash,lease_expires_at,cancel_requested,logs_truncated,source_sha256,log_bytes,log_sequence,source_storage,source_key,source_fingerprint,source_profile_id::text,source_profile_version,origin,automation_grant_id::text,automation_grant_revision,automation_grant_epoch,automation_credential_version,repository_event_id,event_ref,engine_catalog,runner_pool_id::text,runner_pool_version,runner_placement_version`
 
 type workflowRunScanner interface{ Scan(...any) error }
 
 func scanWorkflowRun(row workflowRunScanner) (workflowRunRecord, error) {
 	var r workflowRunRecord
-	err := row.Scan(&r.ID, &r.ForgeURL, &r.RepositoryID, &r.OwnerID, &r.RepositoryOwner, &r.RepositoryName, &r.OrganizationOwned, &r.UserID, &r.SessionHash, &r.CommitID, &r.WorkflowPath, &r.BlobID, &r.Format, &r.PolicyEpochs, &r.IdempotencyKey, &r.InputHash, &r.State, &r.Version, &r.CreatedAt, &r.StartedAt, &r.FinishedAt, &r.ExitCode, &r.Reason, &r.RunnerID, &r.AttemptID, &r.LeaseTokenHash, &r.LeaseExpiresAt, &r.CancelRequested, &r.LogsTruncated, &r.SourceSHA256, &r.LogBytes, &r.LogSequence, &r.SourceStorage, &r.SourceKey, &r.SourceFingerprint, &r.SourceProfileID, &r.SourceProfileVersion, &r.Origin, &r.AutomationGrantID, &r.AutomationGrantRevision, &r.AutomationGrantEpoch, &r.AutomationCredentialVersion, &r.RepositoryEventID, &r.EventRef, &r.EngineCatalog)
+	err := row.Scan(&r.ID, &r.ForgeURL, &r.RepositoryID, &r.OwnerID, &r.RepositoryOwner, &r.RepositoryName, &r.OrganizationOwned, &r.UserID, &r.SessionHash, &r.CommitID, &r.WorkflowPath, &r.BlobID, &r.Format, &r.PolicyEpochs, &r.IdempotencyKey, &r.InputHash, &r.State, &r.Version, &r.CreatedAt, &r.StartedAt, &r.FinishedAt, &r.ExitCode, &r.Reason, &r.RunnerID, &r.AttemptID, &r.LeaseTokenHash, &r.LeaseExpiresAt, &r.CancelRequested, &r.LogsTruncated, &r.SourceSHA256, &r.LogBytes, &r.LogSequence, &r.SourceStorage, &r.SourceKey, &r.SourceFingerprint, &r.SourceProfileID, &r.SourceProfileVersion, &r.Origin, &r.AutomationGrantID, &r.AutomationGrantRevision, &r.AutomationGrantEpoch, &r.AutomationCredentialVersion, &r.RepositoryEventID, &r.EventRef, &r.EngineCatalog, &r.RunnerPlacement.PoolID, &r.RunnerPlacement.PoolVersion, &r.RunnerPlacement.PlacementVersion)
 	return r, err
 }
 func (s *Server) loadWorkflowRun(ctx context.Context, id string) (workflowRunRecord, error) {
@@ -99,6 +100,7 @@ func (s *Server) loadWorkflowRun(ctx context.Context, id string) (workflowRunRec
 }
 func wireWorkflowRun(r workflowRunRecord, canCancel bool) *golfv1.WorkflowRun {
 	w := &golfv1.WorkflowRun{Id: r.ID, RepositoryId: strconv.FormatInt(r.RepositoryID, 10), OwnerId: strconv.FormatInt(r.OwnerID, 10), CommitId: r.CommitID, WorkflowPath: r.WorkflowPath, WorkflowBlobId: r.BlobID, Format: golfv1.WorkflowFormat(r.Format), State: golfv1.WorkflowRunState(golfv1.WorkflowRunState_value["WORKFLOW_RUN_STATE_"+strings.ToUpper(r.State)]), Version: strconv.FormatInt(r.Version, 10), CreatedAt: r.CreatedAt.Format(time.RFC3339Nano), Reason: r.Reason, RunnerId: r.RunnerID, SourceSha256: r.SourceSHA256, LogsTruncated: r.LogsTruncated, CanCancel: canCancel && (r.State == "queued" || r.State == "running")}
+	w.RunnerPlacement = runnerPoolBindingWire(r.RunnerPlacement)
 	w.OutputState = r.OutputState
 	w.ExecutionBindingId = r.ExecutionBindingID
 	w.ExecutionBindingVersion = r.ExecutionBindingVersion
@@ -606,12 +608,21 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 			approvalUsers = []int64{approval.approverUser}
 		}
 		return s.workflowTransaction(ctx, s.cookieValue(req.Header()), user.ID, func(tx *sql.Tx, actor database.LockManagedSessionRow, hash []byte) error {
+			if e := executionLifecycleGate(ctx, tx, s.config.GiteaURL, repoID); e != nil {
+				return e
+			}
 			admission, e := s.readEffectiveExecutionPolicy(ctx, tx, repoID, ownerID, access.OrganizationOwned, m.WorkflowPath)
 			if e != nil {
 				return e
 			}
 			if !admission.Allowed {
 				return errWorkflowPolicyDenied
+			}
+			if e = lockExecutionAdmissionBroker(ctx, tx, admissionRun); e != nil {
+				return e
+			}
+			if e = s.runnerPoolAdmission(ctx, tx, repoID, ownerID); e != nil {
+				return e
 			}
 			epochs, e := json.Marshal(admission.Epochs)
 			if e != nil {
@@ -639,6 +650,9 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 		}, approvalUsers...)
 	})
 	if err != nil {
+		if errors.Is(err, errRunnerPoolStale) || errors.Is(err, errRunnerPoolUnavailable) {
+			return nil, runnerPoolRPCError(err)
+		}
 		return nil, rpcError(err)
 	}
 	result.OutputState, result.ExecutionBindingID, result.ExecutionBindingVersion, err = observeExecutionOutput(ctx, s.db, result.ID)

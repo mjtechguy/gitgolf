@@ -213,11 +213,27 @@ func (s *Server) executionBrokerFence(ctx context.Context, tx *sql.Tx, run workf
 	}
 	return env, nil
 }
-func (s *Server) attachExecutionBinding(ctx context.Context, tx *sql.Tx, run workflowRunRecord, b *executionBindingRecord) error {
+
+// Prelock before repository placement/pool/run admission. Absence is protected
+// too: a concurrent first broker/binding creation cannot invert this ordering.
+// This reads metadata only and does not open any execution value.
+func lockExecutionAdmissionBroker(ctx context.Context, tx *sql.Tx, run workflowRunRecord) error {
 	if e := executionLifecycleGate(ctx, tx, run.ForgeURL, run.RepositoryID); e != nil {
 		return e
 	}
 	if e := lockExecutionBrokerAbsence(ctx, tx, run.ForgeURL, run.RepositoryID, run.OwnerID); e != nil {
+		return e
+	}
+	var revision int64
+	e := tx.QueryRowContext(ctx, `SELECT revision FROM golf_execution_value_brokers WHERE forge_url=$1 AND repository_id=$2 AND owner_id=$3 FOR SHARE`, run.ForgeURL, run.RepositoryID, run.OwnerID).Scan(&revision)
+	if e != nil && !errors.Is(e, sql.ErrNoRows) {
+		return errStorageUnavailable
+	}
+	return nil
+}
+
+func (s *Server) attachExecutionBinding(ctx context.Context, tx *sql.Tx, run workflowRunRecord, b *executionBindingRecord) error {
+	if e := lockExecutionAdmissionBroker(ctx, tx, run); e != nil {
 		return e
 	}
 	if b == nil {
