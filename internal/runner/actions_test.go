@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mjtechguy/golf-git/internal/workflowinputs"
 )
 
 func TestActualActionsDaemonIsolationBeforeSource(t *testing.T) {
@@ -134,7 +136,7 @@ func TestActionsActualPreparationFailureHasOnlyFixedStage(t *testing.T) {
 	}
 	archive := []byte("controlled source not executed")
 	sum := sha256.Sum256(archive)
-	input := ActionExecutionInput{Input: ActionPlanInput{Archive: archive}, Plan: ActionPlan{Catalog: ActionsCatalog, ArchiveSHA256: hex.EncodeToString(sum[:])}, TimeoutSeconds: 1}
+	input := ActionExecutionInput{Input: ActionPlanInput{Catalog: ActionsCatalog, Archive: archive}, Plan: ActionPlan{Catalog: ActionsCatalog, ArchiveSHA256: hex.EncodeToString(sum[:])}, TimeoutSeconds: 1}
 	result, err := a.Execute(t.Context(), strings.Repeat("b", 32), input, func(context.Context, ActionFrame) error { t.Fatal("source reached observer"); return nil })
 	if !errors.Is(err, ErrInfrastructure) || ActionsFailureStage(err) != "daemon_image_validation" || result.ExitCode != 255 || strings.Contains(err.Error(), "private invalid") {
 		t.Fatal("actual preparation failure misclassified")
@@ -228,5 +230,117 @@ func TestActionsHelperDiagnosticAcceptsOnlyCompleteClosedLine(t *testing.T) {
 	classified := &actionsStageError{"engine_job_mounts", ErrInfrastructure}
 	if ActionsFailureStage(classified) != "engine_job_mounts" || !errors.Is(classified, ErrInfrastructure) {
 		t.Fatal("inner fixed code changed runner failure policy")
+	}
+}
+
+func manualInputExecutionFixture(t *testing.T) ActionExecutionInput {
+	t.Helper()
+	schema, err := workflowinputs.Parse([]byte(`on:
+  workflow_dispatch:
+    inputs:
+      message: {type: string, required: true}
+      enabled: {type: boolean, default: false}
+      count: {type: number, default: 0}
+`))
+	if err != nil {
+		t.Fatal("schema fixture")
+	}
+	values, err := workflowinputs.Validate(schema, []workflowinputs.Value{{Name: "message", Type: workflowinputs.String, String: "private <>& 世界"}})
+	if err != nil {
+		t.Fatal("value fixture")
+	}
+	archive := []byte("owned source fixture not executed")
+	sum := sha256.Sum256(archive)
+	commit := strings.Repeat("a", 40)
+	plan := ActionPlan{Catalog: ActionsInputsCatalog, EngineCommit: ActionsEngineCommit, WorkflowPath: ".github/workflows/main.yml", WorkflowBlobID: strings.Repeat("b", 40), ArchiveSHA256: hex.EncodeToString(sum[:]), Event: "workflow_dispatch", Ref: commit, ManualInputsContract: ManualInputsCapability, ManualInputsSchemaSHA256: schema.SHA256, Jobs: []ActionJob{{InstanceID: strings.Repeat("c", 32)}}}
+	event, _ := json.Marshal(map[string]any{"ref": commit, "after": commit, "inputs": map[string]string{"message": "private <>& 世界", "enabled": "false", "count": "0"}})
+	return ActionExecutionInput{Input: ActionPlanInput{Catalog: plan.Catalog, WorkflowPath: plan.WorkflowPath, WorkflowBlobID: plan.WorkflowBlobID, Archive: archive, Event: plan.Event, Ref: plan.Ref, ManualInputsContract: plan.ManualInputsContract, ManualInputsSchemaSHA256: plan.ManualInputsSchemaSHA256}, Plan: plan, CommitID: commit, EventJSON: event, TimeoutSeconds: 1, ManualInputs: &ActionManualInputs{Contract: ManualInputsCapability, SchemaSHA256: schema.SHA256, SubmittedSHA256: values.SubmittedSHA256, EffectiveSHA256: values.EffectiveSHA256, Submitted: values.Submitted, Effective: values.Effective}}
+}
+
+func TestVersionedManualInputEnvelopeRejectsPrivateDrift(t *testing.T) {
+	original := manualInputExecutionFixture(t)
+	if ValidateActionManualInputs(original.Plan, original.ManualInputs, original.EventJSON, original.CommitID) != nil {
+		t.Fatal("bound typed envelope refused")
+	}
+	for name, change := range map[string]func(*ActionExecutionInput){
+		"missing": func(v *ActionExecutionInput) { v.ManualInputs = nil }, "legacy_envelope": func(v *ActionExecutionInput) { v.Plan.Catalog = ActionsCatalog },
+		"unknown_catalog": func(v *ActionExecutionInput) { v.Plan.Catalog = "future" }, "wrong_engine": func(v *ActionExecutionInput) { v.Plan.EngineCommit = strings.Repeat("f", 40) },
+		"contract": func(v *ActionExecutionInput) { v.ManualInputs.Contract = "other" }, "schema": func(v *ActionExecutionInput) { v.ManualInputs.SchemaSHA256 = strings.Repeat("f", 64) },
+		"submitted_digest": func(v *ActionExecutionInput) { v.ManualInputs.SubmittedSHA256 = strings.Repeat("f", 64) }, "effective_digest": func(v *ActionExecutionInput) { v.ManualInputs.EffectiveSHA256 = strings.Repeat("f", 64) },
+		"null_submitted": func(v *ActionExecutionInput) { v.ManualInputs.Submitted = nil }, "null_effective": func(v *ActionExecutionInput) { v.ManualInputs.Effective = nil },
+		"unsorted": func(v *ActionExecutionInput) {
+			v.ManualInputs.Effective[0], v.ManualInputs.Effective[1] = v.ManualInputs.Effective[1], v.ManualInputs.Effective[0]
+		},
+		"noncanonical_number": func(v *ActionExecutionInput) { v.ManualInputs.Effective[0].Number = "0.0" },
+		"value":               func(v *ActionExecutionInput) { v.ManualInputs.Effective[2].String = "changed-private" },
+		"push":                func(v *ActionExecutionInput) { v.Plan.Event = "push" }, "commit": func(v *ActionExecutionInput) { v.CommitID = strings.Repeat("d", 40) },
+		"branch": func(v *ActionExecutionInput) { v.Plan.Ref = "refs/heads/main" },
+		"event_type": func(v *ActionExecutionInput) {
+			v.EventJSON = bytes.Replace(v.EventJSON, []byte(`"enabled":"false"`), []byte(`"enabled":false`), 1)
+		},
+		"event_duplicate": func(v *ActionExecutionInput) {
+			v.EventJSON = bytes.Replace(v.EventJSON, []byte(`"inputs":{`), []byte(`"inputs":{},"inputs":{`), 1)
+		},
+		"event_input_duplicate": func(v *ActionExecutionInput) {
+			v.EventJSON = bytes.Replace(v.EventJSON, []byte(`"count":"0"`), []byte(`"count":"wrong","count":"0"`), 1)
+		},
+		"event_extra": func(v *ActionExecutionInput) {
+			v.EventJSON = bytes.Replace(v.EventJSON, []byte(`"inputs":{`), []byte(`"inputs":{"extra":"private",`), 1)
+		},
+		"event_source": func(v *ActionExecutionInput) {
+			v.EventJSON = bytes.Replace(v.EventJSON, []byte(original.CommitID), []byte(strings.Repeat("d", 40)), 1)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			body, _ := json.Marshal(original)
+			var changed ActionExecutionInput
+			if json.Unmarshal(body, &changed) != nil {
+				t.Fatal("fixture clone")
+			}
+			change(&changed)
+			err := ValidateActionManualInputs(changed.Plan, changed.ManualInputs, changed.EventJSON, changed.CommitID)
+			if !errors.Is(err, ErrInvalidJob) || strings.Contains(err.Error(), "private") {
+				t.Fatal("bad envelope accepted or private error leaked")
+			}
+		})
+	}
+	for _, plan := range []ActionPlan{{Catalog: ActionsCatalog}, {Catalog: ActionsCatalog, Event: "push"}} {
+		if ValidateActionManualInputs(plan, nil, nil, "") != nil {
+			t.Fatal("legacy absent envelope changed")
+		}
+		plan.ManualInputsContract = ManualInputsCapability
+		if ValidateActionManualInputs(plan, nil, nil, "") == nil {
+			t.Fatal("legacy new fields accepted")
+		}
+	}
+}
+
+func TestManualEnvelopeRejectedBeforeDockerOrSourceTransfer(t *testing.T) {
+	dir := t.TempDir()
+	trace := filepath.Join(dir, "trace")
+	binary := filepath.Join(dir, "docker-fixture")
+	if os.WriteFile(binary, []byte("#!/bin/sh\nprintf 'called\\n' >> '"+trace+"'\n"), 0700) != nil {
+		t.Fatal("fixture binary")
+	}
+	e, err := New(Config{WorkerID: "owned", DockerBinary: binary, ApprovedImages: []string{"alpine@sha256:" + strings.Repeat("b", 64)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	executor, err := NewActions(e, binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, change := range []func(*ActionExecutionInput){
+		func(v *ActionExecutionInput) { v.ManualInputs = nil }, func(v *ActionExecutionInput) { v.Input.Catalog = ActionsCatalog }, func(v *ActionExecutionInput) { v.Input.ManualInputsSchemaSHA256 = strings.Repeat("f", 64) }, func(v *ActionExecutionInput) { v.Input.Ref = strings.Repeat("f", 40) },
+	} {
+		input := manualInputExecutionFixture(t)
+		change(&input)
+		_, err := executor.Execute(t.Context(), strings.Repeat("a", 32), input, func(context.Context, ActionFrame) error { t.Fatal("unexpected frame"); return nil })
+		if !errors.Is(err, ErrInvalidJob) || ActionsFailureStage(err) != "input_validation" {
+			t.Fatal("private envelope reached executor")
+		}
+	}
+	if _, err := os.Stat(trace); !os.IsNotExist(err) {
+		t.Fatal("invalid envelope touched Docker")
 	}
 }

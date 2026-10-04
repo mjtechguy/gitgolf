@@ -44,6 +44,7 @@ type coordinator struct {
 	origin, id, key string
 	client          *http.Client
 	actions         *runner.ActionsExecutor
+	verifiedTLS     atomic.Bool
 }
 type assignment struct {
 	JobResources         *runner.JobResourceBinding   `json:"jobResources"`
@@ -57,6 +58,7 @@ type assignment struct {
 	EngineCatalog        string                       `json:"engineCatalog"`
 	ActionsPlan          *runner.ActionPlan           `json:"actionsPlan"`
 	EventJSON            []byte                       `json:"eventJson"`
+	ManualInputs         *runner.ActionManualInputs   `json:"manualInputs,omitempty"`
 	ExecutionEnvironment *runner.ExecutionEnvironment `json:"executionEnvironment,omitempty"`
 	Steps                []struct {
 		Name  string
@@ -113,6 +115,7 @@ func (c *coordinator) request(ctx context.Context, method, route, attemptToken s
 		req.Header.Set("Golf-Attempt-Token", attemptToken)
 	}
 	response, err := c.client.Do(req)
+	c.verifiedTLS.Store(err == nil && c.verifiedResponseTLS(response))
 	if err != nil {
 		return nil, errTransport
 	}
@@ -443,6 +446,25 @@ func main() {
 	}
 }
 
+// Typed input advertisement follows an actual verified response, never a URL
+// prefix or forwarded assertion. Every response refreshes this observation.
+func (c *coordinator) verifyingHTTPS() bool {
+	origin, err := coordinatorURL(c.origin)
+	if err != nil || origin != c.origin || !strings.HasPrefix(origin, "https://") || c.client == nil {
+		return false
+	}
+	transport, ok := c.client.Transport.(*http.Transport)
+	return ok && transport.TLSClientConfig != nil && !transport.TLSClientConfig.InsecureSkipVerify && transport.TLSClientConfig.MinVersion >= tls.VersionTLS13
+}
+func (c *coordinator) verifiedResponseTLS(response *http.Response) bool {
+	if !c.verifyingHTTPS() || response == nil || response.TLS == nil || response.TLS.Version < tls.VersionTLS13 || len(response.TLS.VerifiedChains) == 0 || len(response.TLS.PeerCertificates) == 0 {
+		return false
+	}
+	parsed, _ := url.Parse(c.origin)
+	return response.TLS.PeerCertificates[0].VerifyHostname(parsed.Hostname()) == nil
+}
+func (c *coordinator) manualInputsReady() bool { return c.verifiedTLS.Load() && c.verifyingHTTPS() }
+
 func (c *coordinator) pollCapabilities() any {
 	out := struct {
 		Catalogs     []string `json:"catalogs"`
@@ -454,19 +476,23 @@ func (c *coordinator) pollCapabilities() any {
 	if c.actions != nil && strings.HasPrefix(c.origin, "https://") {
 		out.Capabilities = append(out.Capabilities, runner.ExecutionValuesCapability)
 	}
+	if c.actions != nil && c.manualInputsReady() {
+		out.Catalogs = append(out.Catalogs, runner.ActionsInputsCatalog)
+		out.Capabilities = append(out.Capabilities, runner.ManualInputsCapability)
+	}
 	return out
 }
 func (c *coordinator) validAssignment(a assignment) bool {
 	if a.JobResources == nil || a.JobResources.Validate() != nil || a.TimeoutSeconds != int(a.JobResources.Limits.TimeoutSeconds) {
 		return false
 	}
-	if a.ExecutionEnvironment != nil && (!strings.HasPrefix(c.origin, "https://") || a.ExecutionEnvironment.Validate() != nil || a.EngineCatalog != runner.ActionsCatalog) {
+	if a.ExecutionEnvironment != nil && (!strings.HasPrefix(c.origin, "https://") || a.ExecutionEnvironment.Validate() != nil || !runner.IsActionsCatalog(a.EngineCatalog)) {
 		return false
 	}
 	if a.EngineCatalog == "" {
-		return a.ActionsPlan == nil && len(a.Steps) >= 1 && len(a.Steps) <= 50
+		return a.ManualInputs == nil && a.ActionsPlan == nil && len(a.Steps) >= 1 && len(a.Steps) <= 50
 	}
-	return c.actions != nil && a.EngineCatalog == runner.ActionsCatalog && a.ActionsPlan != nil && len(a.Steps) == 0 && a.ActionsPlan.Catalog == runner.ActionsCatalog && a.ActionsPlan.ArchiveSHA256 == a.SourceSHA256 && len(a.ActionsPlan.Jobs) >= 1 && len(a.ActionsPlan.Jobs) <= 12 && len(a.EventJSON) > 0 && len(a.EventJSON) <= 16<<10
+	return c.actions != nil && (runner.IsActionsCatalog(a.EngineCatalog) && (a.EngineCatalog != runner.ActionsInputsCatalog || c.manualInputsReady())) && a.ActionsPlan != nil && len(a.Steps) == 0 && a.ActionsPlan.Catalog == a.EngineCatalog && runner.ValidateActionManualInputs(*a.ActionsPlan, a.ManualInputs, a.EventJSON, a.CommitID) == nil && a.ActionsPlan.ArchiveSHA256 == a.SourceSHA256 && len(a.ActionsPlan.Jobs) >= 1 && len(a.ActionsPlan.Jobs) <= 12 && len(a.EventJSON) > 0 && len(a.EventJSON) <= 16<<10
 }
 
 // Operator diagnostic only: never format untrusted error strings or run data.
@@ -500,6 +526,12 @@ func reportActionsFailure(output io.Writer, err error) {
 	}
 }
 
+// Construct the engine request from the original accepted assignment; neither
+// defaults nor a newer source/schema are substituted by the worker.
+func actionsExecutionInput(a assignment, archive []byte, images map[string]string) runner.ActionExecutionInput {
+	return runner.ActionExecutionInput{ManualInputs: a.ManualInputs, Input: runner.ActionPlanInput{Catalog: a.EngineCatalog, ManualInputsContract: a.ActionsPlan.ManualInputsContract, ManualInputsSchemaSHA256: a.ActionsPlan.ManualInputsSchemaSHA256, WorkflowPath: a.ActionsPlan.WorkflowPath, WorkflowBlobID: a.ActionsPlan.WorkflowBlobID, Archive: archive, Event: a.ActionsPlan.Event, Ref: a.ActionsPlan.Ref, Images: images}, Plan: *a.ActionsPlan, EventJSON: a.EventJSON, CommitID: a.CommitID, TimeoutSeconds: a.TimeoutSeconds, ExecutionEnvironment: a.ExecutionEnvironment, JobResources: a.JobResources}
+}
+
 func (c *coordinator) executeActions(ctx context.Context, a assignment, source string, forward *logForwarder) (runner.Result, error) {
 	archive, err := os.ReadFile(source)
 	if err != nil || len(archive) > sourceLimit {
@@ -512,7 +544,7 @@ func (c *coordinator) executeActions(ctx context.Context, a assignment, source s
 	if json.Unmarshal([]byte(os.Getenv("GOLF_RUNNER_ACTIONS_PLATFORMS")), &images) != nil || len(images) == 0 {
 		return runner.Result{}, errTransport
 	}
-	input := runner.ActionExecutionInput{Input: runner.ActionPlanInput{Catalog: runner.ActionsCatalog, WorkflowPath: a.ActionsPlan.WorkflowPath, WorkflowBlobID: a.ActionsPlan.WorkflowBlobID, Archive: archive, Event: a.ActionsPlan.Event, Ref: a.ActionsPlan.Ref, Images: images}, Plan: *a.ActionsPlan, EventJSON: a.EventJSON, CommitID: a.CommitID, TimeoutSeconds: a.TimeoutSeconds, ExecutionEnvironment: a.ExecutionEnvironment, JobResources: a.JobResources}
+	input := actionsExecutionInput(a, archive, images)
 	var acknowledgementFailure error
 	result, err := c.actions.Execute(ctx, a.AttemptID, input, func(ctx context.Context, frame runner.ActionFrame) error {
 		acknowledgementFailure = c.acknowledgeActionFrame(ctx, a, forward, frame)

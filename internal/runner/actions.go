@@ -16,6 +16,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/mjtechguy/golf-git/internal/workflowinputs"
 )
 
 // actionsStageError carries an operator-only fixed classification. The cause is
@@ -94,6 +96,84 @@ func parseActionsEngineFailure(data []byte) string {
 	return ""
 }
 
+// ValidateActionManualInputs checks only frozen execution-envelope consistency.
+// Native source/declaration authority and engine admission remain independent.
+// No values, source or provider text are ever included in the returned error.
+func ValidateActionManualInputs(plan ActionPlan, inputs *ActionManualInputs, eventJSON []byte, commit string) error {
+	if plan.Catalog == ActionsCatalog {
+		if inputs != nil || plan.ManualInputsContract != "" || plan.ManualInputsSchemaSHA256 != "" {
+			return ErrInvalidJob
+		}
+		return nil
+	}
+	digest := func(value string) bool {
+		decoded, err := hex.DecodeString(value)
+		return err == nil && len(decoded) == sha256.Size && hex.EncodeToString(decoded) == value
+	}
+	if plan.Catalog != ActionsInputsCatalog || inputs == nil || plan.EngineCommit != ActionsEngineCommit || plan.Event != "workflow_dispatch" || !commitPattern.MatchString(commit) || plan.Ref != commit || plan.ManualInputsContract != ManualInputsCapability || inputs.Contract != ManualInputsCapability || inputs.SchemaSHA256 != plan.ManualInputsSchemaSHA256 || !digest(inputs.SchemaSHA256) || !digest(inputs.SubmittedSHA256) || !digest(inputs.EffectiveSHA256) || inputs.Submitted == nil || inputs.Effective == nil || len(inputs.Submitted) > workflowinputs.MaxCount || len(inputs.Effective) > workflowinputs.MaxCount {
+		return ErrInvalidJob
+	}
+	schema := workflowinputs.Schema{Definitions: []workflowinputs.Definition{}}
+	for _, value := range inputs.Effective {
+		if value.Type == workflowinputs.Choice && (strings.TrimSpace(value.String) == "" || strings.Contains(value.String, "${{")) {
+			return ErrInvalidJob
+		}
+		definition := workflowinputs.Definition{Name: value.Name, Type: value.Type, Required: true, Default: &value}
+		if value.Type == workflowinputs.Choice {
+			definition.Options = []string{value.String}
+		}
+		schema.Definitions = append(schema.Definitions, definition)
+	}
+	schema.SHA256 = workflowinputs.Digest("golf.workflow.dispatch.schema.v1", schema.Definitions)
+	values, err := workflowinputs.Validate(schema, inputs.Submitted)
+	if err != nil || values.SubmittedSHA256 != inputs.SubmittedSHA256 || values.EffectiveSHA256 != inputs.EffectiveSHA256 {
+		return ErrInvalidJob
+	}
+	for _, maps := range [][2][]workflowinputs.Value{{inputs.Submitted, values.Submitted}, {inputs.Effective, values.Effective}} {
+		original, _ := json.Marshal(maps[0])
+		canonical, _ := json.Marshal(maps[1])
+		if !bytes.Equal(original, canonical) {
+			return ErrInvalidJob
+		}
+	}
+	if len(eventJSON) == 0 || len(eventJSON) > 16<<10 {
+		return ErrInvalidJob
+	}
+	// The coordinator constructs canonical Go JSON. Reencoding also rejects
+	// duplicate fields, alternate documents and competing event-input meanings.
+	var event map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(eventJSON))
+	decoder.UseNumber()
+	if decoder.Decode(&event) != nil || decoder.Decode(new(any)) != io.EOF || event == nil {
+		return ErrInvalidJob
+	}
+	canonical, err := json.Marshal(event)
+	if err != nil || !bytes.Equal(canonical, eventJSON) || event["after"] != commit || event["ref"] != plan.Ref {
+		return ErrInvalidJob
+	}
+	received, ok := event["inputs"].(map[string]any)
+	if !ok || len(received) != len(inputs.Effective) {
+		return ErrInvalidJob
+	}
+	for _, value := range inputs.Effective {
+		wanted := value.String
+		if value.Type == workflowinputs.Boolean {
+			if value.Boolean {
+				wanted = "true"
+			} else {
+				wanted = "false"
+			}
+		}
+		if value.Type == workflowinputs.Number {
+			wanted = value.Number
+		}
+		if received[value.Name] != wanted {
+			return ErrInvalidJob
+		}
+	}
+	return nil
+}
+
 type ActionsExecutor struct {
 	executor *Executor
 	helper   string
@@ -124,7 +204,7 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 	if input.JobResources != nil && (input.JobResources.Validate() != nil || input.TimeoutSeconds != int(input.JobResources.Limits.TimeoutSeconds)) {
 		return result, ErrInvalidJob
 	}
-	if input.ExecutionEnvironment.Validate() != nil || !attemptPattern.MatchString(attempt) || input.Plan.Catalog != ActionsCatalog || input.Plan.ArchiveSHA256 == "" || input.TimeoutSeconds < 1 || input.TimeoutSeconds > 900 || onFrame == nil {
+	if input.ExecutionEnvironment.Validate() != nil || !attemptPattern.MatchString(attempt) || input.Input.Catalog != input.Plan.Catalog || input.Input.Event != input.Plan.Event || input.Input.Ref != input.Plan.Ref || input.Input.WorkflowPath != input.Plan.WorkflowPath || input.Input.WorkflowBlobID != input.Plan.WorkflowBlobID || ValidateActionManualInputs(input.Plan, input.ManualInputs, input.EventJSON, input.CommitID) != nil || input.Input.ManualInputsContract != input.Plan.ManualInputsContract || input.Input.ManualInputsSchemaSHA256 != input.Plan.ManualInputsSchemaSHA256 || input.Plan.ArchiveSHA256 == "" || input.TimeoutSeconds < 1 || input.TimeoutSeconds > 900 || onFrame == nil {
 		return result, ErrInvalidJob
 	}
 	archiveSHA := sha256.Sum256(input.Input.Archive)
