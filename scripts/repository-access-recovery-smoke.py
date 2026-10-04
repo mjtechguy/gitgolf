@@ -262,6 +262,27 @@ def validate_local_fixture_auth(config):
                    ('GITEA_PUBLIC_URL','GITEA_OAUTH_CLIENT_ID','GITEA_OAUTH_CLIENT_SECRET'))
 
 
+def collaborator_snapshot(rows, read_permission):
+    # Pinned native list returns User only. Its separate permission endpoint
+    # observes aggregate access, not the stored direct-collaboration role/CAS.
+    assert isinstance(rows,list) and len(rows) < 50
+    result = []; ids = set(); names = set()
+    for user in rows:
+        assert isinstance(user,dict) and type(user.get('id')) is int and 0 < user['id'] <= (1 << 63)-1
+        name = user.get('login')
+        assert isinstance(name,str) and re.fullmatch('[A-Za-z0-9][A-Za-z0-9._-]{0,39}',name)
+        assert user['id'] not in ids and name.lower() not in names
+        ids.add(user['id']); names.add(name.lower())
+        permission = read_permission(name)
+        assert isinstance(permission,dict) and isinstance(permission.get('user'),dict)
+        observed = permission['user']
+        assert type(observed.get('id')) is int and observed['id'] == user['id'] and observed.get('login') == name
+        assert permission.get('permission') in {'none','read','write','admin','owner'}
+        assert permission.get('role_name') == permission['permission']
+        result.append((str(user['id']),name,permission['permission'],permission['role_name']))
+    return sorted(result)
+
+
 
 def proxy_self_check():
     # In-process fake transport proves harness guards only, never native effects.
@@ -306,6 +327,20 @@ def proxy_self_check():
 
 
 def self_check():
+    identities = [{'id':9007199254740993,'login':'fixture-reader'},{'id':2,'login':'fixture-admin'}]
+    def permissions(name):
+        user = next(row for row in identities if row['login']==name)
+        return {'user':dict(user),'permission':'read' if name.endswith('reader') else 'owner',
+                'role_name':'read' if name.endswith('reader') else 'owner'}
+    snapshot = collaborator_snapshot(identities,permissions)
+    assert snapshot == [('2','fixture-admin','owner','owner'),('9007199254740993','fixture-reader','read','read')]
+    assert collaborator_snapshot(list(reversed(identities)),permissions) == snapshot
+    reject(lambda:collaborator_snapshot(identities+identities[:1],permissions))
+    reject(lambda:collaborator_snapshot([{'id':1.0,'login':'fixture-reader'}],permissions))
+    for change in ({'user':{'id':3,'login':'fixture-reader'}},{'user':{'id':9007199254740993,'login':'replacement'}},
+                   {'permission':'maintain'},{'role_name':'write'},{'role_name':None}):
+        reject(lambda:collaborator_snapshot(identities,lambda name:permissions(name)|change))
+    assert collaborator_snapshot([],lambda _:None)==[]
     calls = []
     def initial_compose(*argv, **kw): calls.append(('compose',argv,kw))
     def initial_keys(action):
@@ -562,10 +597,11 @@ def main():
                 raw=smoke.provider(owner['token'],'GET','repos/'+repo['full'])
                 assert str(raw['id'])==repo['id'] and str(raw['owner']['id'])==repo['ownerId']
                 collaborators=smoke.provider(owner['token'],'GET','repos/'+repo['full']+'/collaborators?limit=100&page=1')
-                assert len(collaborators)<100
+                members=collaborator_snapshot(collaborators,lambda name:smoke.provider(owner['token'],'GET',
+                    'repos/'+repo['full']+'/collaborators/'+urllib.parse.quote(name,safe='')+'/permission'))
                 keys_=smoke.provider(owner['token'],'GET','repos/'+repo['full']+'/keys?limit=100&page=1');assert len(keys_)<100
                 result['repositories'].append({'id':repo['id'],'ownerId':repo['ownerId'],'full':raw['full_name'],
-                    'collaborators':sorted([(str(r['id']),r['login'],r['permissions']) for r in collaborators]),
+                    'collaborators':members,
                     'deployKeys':sorted([(str(r['id']),r['key'],r['read_only']) for r in keys_])})
             for actor in actors.values():
                 u=smoke.provider(actor['token'],'GET','user'); assert str(u['id'])==actor['id'] and u['is_admin'] is False
