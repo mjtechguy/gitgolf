@@ -195,7 +195,7 @@ def main():
     project = 'golf-team-access-proof-'+secrets.token_hex(5)
     ports = helpers.free_ports(2); previous = smoke.GOLF, smoke.GITEA
     smoke.GOLF, smoke.GITEA = 'http://127.0.0.1:'+str(ports[0]), 'http://127.0.0.1:'+str(ports[1])
-    actors, enrolled, bearers, organizations, repositories, started, passed = {}, [], [], [], [], False, False
+    actors, enrolled, bearers, organizations, repositories, started, passed = {}, [], [], {}, {}, False, False
     record(project=project, selectedImage=image, sourceRevision=revision, cleanup='not_created')
     with tempfile.TemporaryDirectory(prefix=project+'-') as temporary:
         directory = Path(temporary); directory.chmod(0o700)
@@ -242,9 +242,9 @@ def main():
                 user=checked_rpc(actor['session'],'SessionService/LoginWithPassword',{'username':actor['email'],'password':actor['password']})['user'];assert user['id']==actor['id'] and user.get('isInstanceAdmin',False)==(role=='golfadmin');actor['loggedIn']=True
             owner,member,member_admin,nonmember,outsider,golfadmin=(actors[k] for k in ('owner','member','admin','nonmember','outsider','golfadmin'))
             stage('supported private organization, exact repository and native strict team fields')
-            organization=project+'-org';org=smoke.provider(owner['token'],'POST','orgs',{'username':organization,'visibility':'private'},201);organizations.append(organization)
-            other_org=project+'-other';foreign_org=smoke.provider(owner['token'],'POST','orgs',{'username':other_org,'visibility':'private'},201);organizations.append(other_org)
-            native=smoke.provider(owner['token'],'POST','orgs/'+organization+'/repos',{'name':'team-access','private':True,'auto_init':True},201);repositories.append(native['full_name']);smoke.wait_for_push(owner['token'],native['full_name'])
+            organization=project+'-org';org=smoke.provider(owner['token'],'POST','orgs',{'username':organization,'visibility':'private'},201);organizations[organization]=org['id']
+            other_org=project+'-other';foreign_org=smoke.provider(owner['token'],'POST','orgs',{'username':other_org,'visibility':'private'},201);organizations[other_org]=foreign_org['id']
+            native=smoke.provider(owner['token'],'POST','orgs/'+organization+'/repos',{'name':'team-access','private':True,'auto_init':True},201);repositories[native['full_name']]=native['id'];smoke.wait_for_push(owner['token'],native['full_name'])
             repository={'owner':organization,'name':'team-access'};path='repos/'+native['full_name'];repo_id=str(native['id']);org_id=str(org['id'])
             assert str(native['owner']['id'])==org_id
             def create_team(name, permission='read', all_repos=False, organization_name=organization):
@@ -347,13 +347,13 @@ def main():
             owner_target,inventory=inspect();assert inventory['canManage']
             stage('native rename/replacement rejects former immutable repository target')
             pinned=owner_target;row=selected_row(inventory)
-            renamed=smoke.provider(owner['token'],'PATCH',path,{'name':'team-access-renamed'});repositories.append(renamed['full_name']);assert str(renamed['id'])==repo_id
-            replacement=smoke.provider(owner['token'],'POST','orgs/'+organization+'/repos',{'name':'team-access','private':True,'auto_init':True},201);assert str(replacement['id'])!=repo_id
+            renamed=smoke.provider(owner['token'],'PATCH',path,{'name':'team-access-renamed'});assert str(renamed['id'])==repo_id;repositories.pop(native['full_name']);repositories[renamed['full_name']]=renamed['id']
+            replacement=smoke.provider(owner['token'],'POST','orgs/'+organization+'/repos',{'name':'team-access','private':True,'auto_init':True},201);assert str(replacement['id'])!=repo_id;repositories[replacement['full_name']]=replacement['id']
             replacement_before=associations(owner['token'],replacement['full_name'],int(org_id))
             for method in ('AttachRepositoryTeam','DetachRepositoryTeam'):call(owner,method,mutation_target(pinned,row),expected=400,code='failed_precondition')
             assert associations(owner['token'],replacement['full_name'],int(org_id))==replacement_before
-            smoke.provider(owner['token'],'DELETE',path,expected=204)
-            restored=smoke.provider(owner['token'],'PATCH','repos/'+renamed['full_name'],{'name':'team-access'});assert str(restored['id'])==repo_id
+            smoke.provider(owner['token'],'DELETE',path,expected=204);repositories.pop(replacement['full_name'])
+            restored=smoke.provider(owner['token'],'PATCH','repos/'+renamed['full_name'],{'name':'team-access'});assert str(restored['id'])==repo_id;repositories.pop(renamed['full_name']);repositories[restored['full_name']]=restored['id']
             owner_target,inventory=inspect();assert inventory['canManage']
             stage('Origin, delegated bearer and logout cannot read or write private team inventory')
             credential=checked_rpc(owner['session'],'ApiCredentialService/CreateApiCredential',{'label':'Team association qualifier'});bearers.append((owner,credential['credential']['id']))
@@ -383,16 +383,31 @@ def main():
                 try:assert operator('disable',{'username':actor['name']})['disabled']
                 except Exception:failures.append('managed disable')
             import urllib.request,urllib.error
-            def remove(route):
-                request=urllib.request.Request(smoke.GITEA+'/api/v1/'+route,method='DELETE',headers={'Authorization':'token '+actors['owner']['token']})
-                try:response=smoke.client().open(request,timeout=15)
-                except urllib.error.HTTPError as error:response=error
-                with response:assert response.status in (204,404)
-            for full_name in reversed(list(dict.fromkeys(repositories))):
-                try:remove('repos/'+full_name)
+            class NoCleanupRedirect(urllib.request.HTTPRedirectHandler):
+                def redirect_request(self,request,fp,code,msg,headers,newurl):return None
+            cleanup_client=urllib.request.build_opener(NoCleanupRedirect)
+            def remove(route,role,identifier,owner_identifier=None):
+                # Never follow a stale alias or delete a different current native ID.
+                def native_request(method):
+                    request=urllib.request.Request(smoke.GITEA+'/api/v1/'+route,method=method,headers={'Authorization':'token '+actors['owner']['token']})
+                    try:response=cleanup_client.open(request,timeout=15)
+                    except urllib.error.HTTPError as error:response=error
+                    with response:
+                        metadata={'role':role,'method':method,'status':response.status}
+                        observations=PROOF.get('cleanupObservations',[]);observations.append(metadata);record(cleanupObservations=observations)
+                        raw=response.read((1<<20)+1);assert len(raw)<=1<<20
+                        return response.status,json.loads(raw) if raw else None
+                status,row=native_request('GET')
+                if status==404:return
+                assert status==200 and isinstance(row,dict) and row['id']==identifier
+                if owner_identifier is not None:assert row['owner']['id']==owner_identifier
+                assert native_request('DELETE')[0]==204
+                assert native_request('GET')[0]==404
+            for full_name,identifier in reversed(list(repositories.items())):
+                try:remove('repos/'+full_name,'repository',identifier,organizations[full_name.split('/')[0]])
                 except Exception:failures.append('native repository')
-            for name in reversed(organizations):
-                try:remove('orgs/'+name)
+            for name,identifier in reversed(list(organizations.items())):
+                try:remove('orgs/'+name,'organization',identifier)
                 except Exception:failures.append('native organization')
             for actor in reversed(list(actors.values())):
                 if actor['created']:
