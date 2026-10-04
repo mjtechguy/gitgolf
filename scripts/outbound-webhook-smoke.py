@@ -38,6 +38,23 @@ STAGE = 'initialization'
 LIMIT = 4 << 20
 NATIVE_IMAGE = 'gitea/gitea:1.27.3-rootless'
 PG_IMAGE = 'postgres:18.4-alpine3.24'
+CA_CONFIG = '''[req]
+distinguished_name=ca_subject
+x509_extensions=ca_extensions
+prompt=no
+[ca_subject]
+CN=Golf-owned webhook proof CA
+[ca_extensions]
+basicConstraints=critical,CA:TRUE,pathlen:0
+keyUsage=critical,keyCertSign,cRLSign
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid:always
+'''
+SERVER_EXTENSIONS = '''subjectAltName=DNS:receiver.golf.test
+extendedKeyUsage=serverAuth
+basicConstraints=critical,CA:FALSE
+keyUsage=critical,digitalSignature,keyEncipherment
+'''
 SINK = r'''
 import base64, hashlib, hmac, json, os, socket, ssl, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -132,6 +149,7 @@ def verify_records(records, key):
     for row in records:
         assert set(row) == {'eventId', 'deliveryId', 'timestamp', 'signature', 'bodyBase64', 'mode', 'requestIndex'}
         assert str(uuid.UUID(row['deliveryId'])) == row['deliveryId']
+        assert row['mode'] in ('accept', 'retry', 'drop', 'redirect') and type(row['requestIndex']) is int and 1 <= row['requestIndex'] <= 6
         assert row['timestamp'] == str(int(row['timestamp']))
         body = base64.b64decode(row['bodyBase64'], validate=True)
         assert 0 < len(body) <= 16384 and hmac.compare_digest(row['signature'], signed(key, row['timestamp'], row['eventId'], body))
@@ -146,6 +164,16 @@ def verify_records(records, key):
     return records
 
 
+def receipt_metadata(records, key):
+    # Revalidate exact raw bytes before deleting the private temporary fixture.
+    # Retain public signature/hash/identity observations, never body/key/URL.
+    verified = verify_records(records, key)
+    return [{**{field:row[field] for field in ('deliveryId', 'eventId', 'timestamp', 'signature', 'mode', 'requestIndex')},
+             'bodyBytes':len(base64.b64decode(row['bodyBase64'], validate=True)),
+             'bodySha256':hashlib.sha256(base64.b64decode(row['bodyBase64'], validate=True)).hexdigest(),
+             'signatureVerified':True} for row in verified]
+
+
 def self_check(stack):
     ast.parse(SINK)
     key, stamp, event = 'K'*32, '1791086400', 'test:'+str(uuid.uuid4())
@@ -153,6 +181,12 @@ def self_check(stack):
     row = {'eventId': event, 'deliveryId': str(uuid.uuid4()), 'timestamp': stamp,
            'signature': signed(key, stamp, event, body), 'bodyBase64': base64.b64encode(body).decode(), 'mode': 'accept', 'requestIndex': 1}
     verify_records([row], key)
+    metadata = receipt_metadata([row], key)
+    assert metadata[0]['bodySha256'] == hashlib.sha256(body).hexdigest() and metadata[0]['bodyBytes'] == len(body)
+    assert metadata[0]['signature'] == row['signature'] and metadata[0]['signatureVerified']
+    assert 'bodyBase64' not in metadata[0] and key not in json.dumps(metadata) and body.decode() not in json.dumps(metadata)
+    assert 'x509_extensions=ca_extensions' in CA_CONFIG and 'basicConstraints=critical,CA:TRUE,pathlen:0' in CA_CONFIG
+    assert 'keyUsage=critical,keyCertSign,cRLSign' in CA_CONFIG and 'basicConstraints=critical,CA:FALSE' in SERVER_EXTENSIONS
     for field in ('signature', 'eventId', 'bodyBase64'):
         wrong = {**row, field: 'invalid'}
         try:
@@ -248,9 +282,10 @@ def main():
         fixture.mkdir(mode=0o700); state_dir.mkdir(mode=0o700)
         private_write(fixture/'sink.py', SINK)
         private_write(fixture/'sink.json', json.dumps({'key':key, 'prefix':prefix}))
-        private_write(fixture/'extensions', 'subjectAltName=DNS:receiver.golf.test\nextendedKeyUsage=serverAuth\n')
+        private_write(fixture/'ca.conf', CA_CONFIG)
+        private_write(fixture/'extensions', SERVER_EXTENSIONS)
         stage('owned CA and server certificate; no insecure TLS')
-        run('openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=Golf-owned webhook proof CA','-keyout',str(fixture/'ca.key'),'-out',str(fixture/'ca.crt'))
+        run('openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1','-config',str(fixture/'ca.conf'),'-keyout',str(fixture/'ca.key'),'-out',str(fixture/'ca.crt'))
         run('openssl','req','-newkey','rsa:2048','-nodes','-subj','/CN=receiver.golf.test','-keyout',str(fixture/'server.key'),'-out',str(fixture/'server.csr'))
         run('openssl','x509','-req','-days','1','-in',str(fixture/'server.csr'),'-CA',str(fixture/'ca.crt'),'-CAkey',str(fixture/'ca.key'),'-CAcreateserial','-extfile',str(fixture/'extensions'),'-out',str(fixture/'server.crt'))
         (fixture/'ca.key').chmod(0o600); (fixture/'server.key').chmod(0o600); (fixture/'ca.crt').chmod(0o644)
@@ -475,7 +510,10 @@ networks:
             stage('explicit local-account disable does not resurrect consent')
             result=json.loads(command('exec','-T','golf','golf','local-account','disable',payload={'username':actors['admin']['name']}));assert result['result']['disabled']
             smoke.rpc(actors['admin']['session'],SERVICE+METHODS[0],{'target':target},expected=401)
-            results.update(runtimeAfter=runtime(), signaturesIndependentlyVerified=True, receiverRequests=len(records()),
+            retained_receipts=receipt_metadata(records(),key)
+            observed_deliveries=[{field:row[field] for field in ('id','subscriptionId','subscriptionVersion','eventId','eventTopic','state','attempts','responseStatus','failureCode','possibleDuplicate','createdAt','completedAt') if field in row} for subscription in list_subs() for row in history(subscription)]
+            results.update(runtimeAfter=runtime(), signaturesIndependentlyVerified=True, receiverRequests=len(retained_receipts),
+                           receiverReceipts=retained_receipts, deliveryReceipts=observed_deliveries,
                            logoutContinuedDelivery=True, restartNoRepost=True, activityBodyExcluded=True,
                            transientRetry=True, lostHTTPAckPossibleDuplicate=True, explicitStableEventRedelivery=True,
                            tlsHostnameDeniedBeforeBody=True, redirectsNotFollowed=True, currentAdminRevocationNoSend=True,
