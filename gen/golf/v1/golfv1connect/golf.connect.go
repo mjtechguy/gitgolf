@@ -338,6 +338,9 @@ const (
 	// RepositoryAccessServiceRemoveRepositoryCollaboratorProcedure is the fully-qualified name of the
 	// RepositoryAccessService's RemoveRepositoryCollaborator RPC.
 	RepositoryAccessServiceRemoveRepositoryCollaboratorProcedure = "/golf.v1.RepositoryAccessService/RemoveRepositoryCollaborator"
+	// RepositoryAccessServiceGetRepositoryAccessOperationProcedure is the fully-qualified name of the
+	// RepositoryAccessService's GetRepositoryAccessOperation RPC.
+	RepositoryAccessServiceGetRepositoryAccessOperationProcedure = "/golf.v1.RepositoryAccessService/GetRepositoryAccessOperation"
 	// WorkflowServiceInspectWorkflowsProcedure is the fully-qualified name of the WorkflowService's
 	// InspectWorkflows RPC.
 	WorkflowServiceInspectWorkflowsProcedure = "/golf.v1.WorkflowService/InspectWorkflows"
@@ -2936,6 +2939,7 @@ type RepositoryAccessServiceClient interface {
 	ResolveRepositoryCollaborator(context.Context, *connect.Request[v1.ResolveRepositoryCollaboratorRequest]) (*connect.Response[v1.ResolveRepositoryCollaboratorResponse], error)
 	SetRepositoryCollaborator(context.Context, *connect.Request[v1.SetRepositoryCollaboratorRequest]) (*connect.Response[v1.SetRepositoryCollaboratorResponse], error)
 	RemoveRepositoryCollaborator(context.Context, *connect.Request[v1.RemoveRepositoryCollaboratorRequest]) (*connect.Response[v1.RemoveRepositoryCollaboratorResponse], error)
+	GetRepositoryAccessOperation(context.Context, *connect.Request[v1.GetRepositoryAccessOperationRequest]) (*connect.Response[v1.GetRepositoryAccessOperationResponse], error)
 }
 
 // NewRepositoryAccessServiceClient constructs a client for the golf.v1.RepositoryAccessService
@@ -2979,6 +2983,12 @@ func NewRepositoryAccessServiceClient(httpClient connect.HTTPClient, baseURL str
 			connect.WithSchema(repositoryAccessServiceMethods.ByName("RemoveRepositoryCollaborator")),
 			connect.WithClientOptions(opts...),
 		),
+		getRepositoryAccessOperation: connect.NewClient[v1.GetRepositoryAccessOperationRequest, v1.GetRepositoryAccessOperationResponse](
+			httpClient,
+			baseURL+RepositoryAccessServiceGetRepositoryAccessOperationProcedure,
+			connect.WithSchema(repositoryAccessServiceMethods.ByName("GetRepositoryAccessOperation")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -2989,6 +2999,7 @@ type repositoryAccessServiceClient struct {
 	resolveRepositoryCollaborator *connect.Client[v1.ResolveRepositoryCollaboratorRequest, v1.ResolveRepositoryCollaboratorResponse]
 	setRepositoryCollaborator     *connect.Client[v1.SetRepositoryCollaboratorRequest, v1.SetRepositoryCollaboratorResponse]
 	removeRepositoryCollaborator  *connect.Client[v1.RemoveRepositoryCollaboratorRequest, v1.RemoveRepositoryCollaboratorResponse]
+	getRepositoryAccessOperation  *connect.Client[v1.GetRepositoryAccessOperationRequest, v1.GetRepositoryAccessOperationResponse]
 }
 
 // GetRepositoryAccess calls golf.v1.RepositoryAccessService.GetRepositoryAccess.
@@ -3017,6 +3028,11 @@ func (c *repositoryAccessServiceClient) RemoveRepositoryCollaborator(ctx context
 	return c.removeRepositoryCollaborator.CallUnary(ctx, req)
 }
 
+// GetRepositoryAccessOperation calls golf.v1.RepositoryAccessService.GetRepositoryAccessOperation.
+func (c *repositoryAccessServiceClient) GetRepositoryAccessOperation(ctx context.Context, req *connect.Request[v1.GetRepositoryAccessOperationRequest]) (*connect.Response[v1.GetRepositoryAccessOperationResponse], error) {
+	return c.getRepositoryAccessOperation.CallUnary(ctx, req)
+}
+
 // RepositoryAccessServiceHandler is an implementation of the golf.v1.RepositoryAccessService
 // service.
 type RepositoryAccessServiceHandler interface {
@@ -3025,6 +3041,7 @@ type RepositoryAccessServiceHandler interface {
 	ResolveRepositoryCollaborator(context.Context, *connect.Request[v1.ResolveRepositoryCollaboratorRequest]) (*connect.Response[v1.ResolveRepositoryCollaboratorResponse], error)
 	SetRepositoryCollaborator(context.Context, *connect.Request[v1.SetRepositoryCollaboratorRequest]) (*connect.Response[v1.SetRepositoryCollaboratorResponse], error)
 	RemoveRepositoryCollaborator(context.Context, *connect.Request[v1.RemoveRepositoryCollaboratorRequest]) (*connect.Response[v1.RemoveRepositoryCollaboratorResponse], error)
+	GetRepositoryAccessOperation(context.Context, *connect.Request[v1.GetRepositoryAccessOperationRequest]) (*connect.Response[v1.GetRepositoryAccessOperationResponse], error)
 }
 
 // NewRepositoryAccessServiceHandler builds an HTTP handler from the service implementation. It
@@ -3064,6 +3081,12 @@ func NewRepositoryAccessServiceHandler(svc RepositoryAccessServiceHandler, opts 
 		connect.WithSchema(repositoryAccessServiceMethods.ByName("RemoveRepositoryCollaborator")),
 		connect.WithHandlerOptions(opts...),
 	)
+	repositoryAccessServiceGetRepositoryAccessOperationHandler := connect.NewUnaryHandler(
+		RepositoryAccessServiceGetRepositoryAccessOperationProcedure,
+		svc.GetRepositoryAccessOperation,
+		connect.WithSchema(repositoryAccessServiceMethods.ByName("GetRepositoryAccessOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/golf.v1.RepositoryAccessService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case RepositoryAccessServiceGetRepositoryAccessProcedure:
@@ -3076,6 +3099,8 @@ func NewRepositoryAccessServiceHandler(svc RepositoryAccessServiceHandler, opts 
 			repositoryAccessServiceSetRepositoryCollaboratorHandler.ServeHTTP(w, r)
 		case RepositoryAccessServiceRemoveRepositoryCollaboratorProcedure:
 			repositoryAccessServiceRemoveRepositoryCollaboratorHandler.ServeHTTP(w, r)
+		case RepositoryAccessServiceGetRepositoryAccessOperationProcedure:
+			repositoryAccessServiceGetRepositoryAccessOperationHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -3103,6 +3128,10 @@ func (UnimplementedRepositoryAccessServiceHandler) SetRepositoryCollaborator(con
 
 func (UnimplementedRepositoryAccessServiceHandler) RemoveRepositoryCollaborator(context.Context, *connect.Request[v1.RemoveRepositoryCollaboratorRequest]) (*connect.Response[v1.RemoveRepositoryCollaboratorResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryAccessService.RemoveRepositoryCollaborator is not implemented"))
+}
+
+func (UnimplementedRepositoryAccessServiceHandler) GetRepositoryAccessOperation(context.Context, *connect.Request[v1.GetRepositoryAccessOperationRequest]) (*connect.Response[v1.GetRepositoryAccessOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryAccessService.GetRepositoryAccessOperation is not implemented"))
 }
 
 // WorkflowServiceClient is a client for the golf.v1.WorkflowService service.

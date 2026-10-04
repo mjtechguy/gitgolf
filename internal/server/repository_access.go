@@ -201,10 +201,12 @@ func (s *Server) readRepositoryCollaborator(ctx context.Context, token forgeCred
 		return nil, err
 	}
 	result := &golfv1.RepositoryCollaborator{User: wireUser(user), Permission: permission, IsDirect: direct}
-	result.Revision = accessRevision(struct {
-		RepoID, OwnerID, UserID, Login, Permission string
-		Direct                                     bool
-	}{access.RepositoryId, access.OwnerId, result.User.Id, strings.ToLower(user.Login), permission, direct})
+	generation, err := s.accessGeneration(ctx, access.RepositoryId, result.User.Id)
+	if err != nil {
+		return nil, err
+	}
+	result.Generation = strconv.FormatInt(generation, 10)
+	result.Revision = collaboratorRevision(access, result, generation)
 	return result, nil
 }
 func (s *Server) withRepositoryAccess(ctx context.Context, value string, token forgeCredential, key repositoryKey, repoID, ownerID, revision string, operation func(User, *golfv1.RepositoryAccess) error) error {
@@ -348,108 +350,27 @@ func (s *Server) ResolveRepositoryCollaborator(ctx context.Context, req *connect
 	}
 	return connect.NewResponse(result), nil
 }
-func (s *Server) mutateRepositoryCollaborator(ctx context.Context, value string, token forgeCredential, key repositoryKey, repoID, ownerID, revision, login, userID, targetRevision, permission string, remove bool) (*golfv1.RepositoryCollaborator, error) {
-	if login == "" {
-		return nil, invalid("Account username is required.")
-	}
-	if err := validateRepositoryAccess(key, repoID, ownerID, revision, login); err != nil {
-		return nil, err
-	}
-	if _, err := discussionID(userID); err != nil {
-		return nil, invalid("User ID must be a canonical positive decimal identifier.")
-	}
-	if !validAccessRevision(targetRevision) {
-		return nil, invalid("Resolve the account and review its current access before saving.")
-	}
-	if !remove && permission != "read" && permission != "write" && permission != "admin" {
-		return nil, invalid("Permission must be read, write, or admin.")
-	}
-	var result *golfv1.RepositoryCollaborator
-	err := s.withRepositoryAccess(ctx, value, token, key, repoID, ownerID, revision, func(caller User, access *golfv1.RepositoryAccess) error {
-		if userID == ownerID || userID == strconv.FormatInt(caller.ID, 10) {
-			return forgeError{http.StatusForbidden}
-		}
-		validateTarget := func(target *golfv1.RepositoryCollaborator) error {
-			if target.User.Id != userID || target.Revision != targetRevision {
-				return errRepositoryAccessConflict
-			}
-			if target.Permission == "owner" {
-				return forgeError{http.StatusForbidden}
-			}
-			if remove && !target.IsDirect {
-				return errRepositoryAccessConflict
-			}
-			return nil
-		}
-		before, err := s.readRepositoryCollaborator(ctx, token, key, access, login)
-		if err != nil {
-			return err
-		}
-		if err = validateTarget(before); err != nil {
-			return err
-		}
-		current, err := s.readRepositoryAccess(ctx, token, key, caller)
-		if err != nil {
-			return err
-		}
-		if err = accessMatches(current, repoID, ownerID, revision); err != nil {
-			return err
-		}
-		fresh, err := s.readRepositoryCollaborator(ctx, token, key, current, login)
-		if err != nil {
-			return err
-		}
-		if err = validateTarget(fresh); err != nil {
-			return err
-		}
-		if _, err = s.localSessionUser(ctx, value, caller); err != nil {
-			return err
-		}
-		base, _ := repositoryPath(key)
-		method := http.MethodPut
-		var body any = map[string]string{"permission": permission}
-		if remove {
-			method = http.MethodDelete
-			body = nil
-		}
-		// Exactly one dispatch. A lost/invalid receipt is uncertain, never retried.
-		_, err = s.forgeJSON(ctx, method, base+"/collaborators/"+fresh.User.Login, token, body, nil, http.StatusNoContent)
-		if err != nil {
-			return err
-		}
-		observed, err := s.readRepositoryCollaborator(ctx, token, key, current, login)
-		if err != nil {
-			return err
-		}
-		if observed.User.Id != userID || (remove && observed.IsDirect) || (!remove && (!observed.IsDirect || !observedAccessAllows(observed.Permission, permission))) {
-			return errInvalidForgeResponse
-		}
-		result = observed
-		return nil
-	})
-	return result, err
-}
 func (s *Server) SetRepositoryCollaborator(ctx context.Context, req *connect.Request[golfv1.SetRepositoryCollaboratorRequest]) (*connect.Response[golfv1.SetRepositoryCollaboratorResponse], error) {
-	token, err := rpcToken(ctx)
+	token, session, err := s.reviewDraftCaller(ctx, req.Header())
 	if err != nil {
 		return nil, err
 	}
 	m := req.Msg
-	result, err := s.mutateRepositoryCollaborator(ctx, s.cookieValue(req.Header()), token, keyFrom(m.Repository), m.RepositoryId, m.OwnerId, m.ExpectedRevision, m.UserLogin, m.UserId, m.ExpectedCollaboratorRevision, m.Permission, false)
+	result, operation, err := s.mutateRepositoryAccessIntent(ctx, session, token, keyFrom(m.Repository), m.RepositoryId, m.OwnerId, m.ExpectedRevision, m.UserLogin, m.UserId, m.ExpectedCollaboratorRevision, m.Permission, m.IdempotencyKey, false)
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	return connect.NewResponse(&golfv1.SetRepositoryCollaboratorResponse{Collaborator: result}), nil
+	return connect.NewResponse(&golfv1.SetRepositoryCollaboratorResponse{Collaborator: result, Operation: operation}), nil
 }
 func (s *Server) RemoveRepositoryCollaborator(ctx context.Context, req *connect.Request[golfv1.RemoveRepositoryCollaboratorRequest]) (*connect.Response[golfv1.RemoveRepositoryCollaboratorResponse], error) {
-	token, err := rpcToken(ctx)
+	token, session, err := s.reviewDraftCaller(ctx, req.Header())
 	if err != nil {
 		return nil, err
 	}
 	m := req.Msg
-	result, err := s.mutateRepositoryCollaborator(ctx, s.cookieValue(req.Header()), token, keyFrom(m.Repository), m.RepositoryId, m.OwnerId, m.ExpectedRevision, m.UserLogin, m.UserId, m.ExpectedCollaboratorRevision, "", true)
+	result, operation, err := s.mutateRepositoryAccessIntent(ctx, session, token, keyFrom(m.Repository), m.RepositoryId, m.OwnerId, m.ExpectedRevision, m.UserLogin, m.UserId, m.ExpectedCollaboratorRevision, "", m.IdempotencyKey, true)
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	return connect.NewResponse(&golfv1.RemoveRepositoryCollaboratorResponse{Collaborator: result}), nil
+	return connect.NewResponse(&golfv1.RemoveRepositoryCollaboratorResponse{Collaborator: result, Operation: operation}), nil
 }

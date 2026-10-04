@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 )
 
@@ -304,6 +305,7 @@ func TestRepositoryAccessPostgres(t *testing.T) {
 	get := func() *golfv1.RepositoryAccess {
 		req := connect.NewRequest(&golfv1.GetRepositoryAccessRequest{Repository: key})
 		req.Header().Set("Cookie", cookie)
+		req.Header().Set("Origin", s.config.PublicURL)
 		got, err := s.GetRepositoryAccess(ctx, req)
 		if err != nil {
 			t.Fatal(err)
@@ -313,6 +315,7 @@ func TestRepositoryAccessPostgres(t *testing.T) {
 	resolve := func(access *golfv1.RepositoryAccess, login string) *golfv1.RepositoryCollaborator {
 		req := connect.NewRequest(&golfv1.ResolveRepositoryCollaboratorRequest{Repository: key, RepositoryId: access.RepositoryId, OwnerId: access.OwnerId, ExpectedRevision: access.Revision, UserLogin: login})
 		req.Header().Set("Cookie", cookie)
+		req.Header().Set("Origin", s.config.PublicURL)
 		got, err := s.ResolveRepositoryCollaborator(ctx, req)
 		if err != nil {
 			t.Fatal(err)
@@ -320,13 +323,15 @@ func TestRepositoryAccessPostgres(t *testing.T) {
 		return got.Msg.Collaborator
 	}
 	set := func(access *golfv1.RepositoryAccess, member *golfv1.RepositoryCollaborator, grant string) (*connect.Response[golfv1.SetRepositoryCollaboratorResponse], error) {
-		req := connect.NewRequest(&golfv1.SetRepositoryCollaboratorRequest{Repository: key, RepositoryId: access.RepositoryId, OwnerId: access.OwnerId, ExpectedRevision: access.Revision, UserLogin: member.User.Login, UserId: member.User.Id, ExpectedCollaboratorRevision: member.Revision, Permission: grant})
+		req := connect.NewRequest(&golfv1.SetRepositoryCollaboratorRequest{Repository: key, RepositoryId: access.RepositoryId, OwnerId: access.OwnerId, ExpectedRevision: access.Revision, UserLogin: member.User.Login, UserId: member.User.Id, ExpectedCollaboratorRevision: member.Revision, Permission: grant, IdempotencyKey: uuid.NewString()})
 		req.Header().Set("Cookie", cookie)
+		req.Header().Set("Origin", s.config.PublicURL)
 		return s.SetRepositoryCollaborator(ctx, req)
 	}
 	remove := func(access *golfv1.RepositoryAccess, member *golfv1.RepositoryCollaborator) (*connect.Response[golfv1.RemoveRepositoryCollaboratorResponse], error) {
-		req := connect.NewRequest(&golfv1.RemoveRepositoryCollaboratorRequest{Repository: key, RepositoryId: access.RepositoryId, OwnerId: access.OwnerId, ExpectedRevision: access.Revision, UserLogin: member.User.Login, UserId: member.User.Id, ExpectedCollaboratorRevision: member.Revision})
+		req := connect.NewRequest(&golfv1.RemoveRepositoryCollaboratorRequest{Repository: key, RepositoryId: access.RepositoryId, OwnerId: access.OwnerId, ExpectedRevision: access.Revision, UserLogin: member.User.Login, UserId: member.User.Id, ExpectedCollaboratorRevision: member.Revision, IdempotencyKey: uuid.NewString()})
 		req.Header().Set("Cookie", cookie)
+		req.Header().Set("Origin", s.config.PublicURL)
 		return s.RemoveRepositoryCollaborator(ctx, req)
 	}
 	access := get()
@@ -394,7 +399,8 @@ func TestRepositoryAccessPostgres(t *testing.T) {
 	mu.Lock()
 	lost = true
 	mu.Unlock()
-	if _, err = set(public, candidate, "write"); connect.CodeOf(err) != connect.CodeUnavailable {
+	uncertain, err := set(public, candidate, "write")
+	if err != nil || uncertain.Msg.Operation.Phase != "DISPATCH_UNKNOWN" || uncertain.Msg.Collaborator != nil {
 		t.Fatal("lost write was success", err)
 	}
 	if writes != 7 || !resolve(public, "bob").IsDirect {
@@ -443,11 +449,8 @@ func TestRepositoryAccessPostgres(t *testing.T) {
 	row.Permissions.Admin = true
 	mu.Unlock()
 	candidate = resolve(public, "bob")
-	onTarget = func() {
-		onTarget = nil
-		if err := s.logoutSession(t.Context(), session.Value); err != nil {
-			t.Error(err)
-		}
+	if err := s.logoutSession(t.Context(), session.Value); err != nil {
+		t.Fatal(err)
 	}
 	if _, err = set(public, candidate, "admin"); connect.CodeOf(err) != connect.CodeUnauthenticated || writes != 7 {
 		t.Fatal("revoked session dispatched", err)

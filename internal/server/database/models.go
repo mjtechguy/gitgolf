@@ -746,6 +746,48 @@ type GolfRecoveryEvent struct {
 	LocalAccountsDisabledCount int64
 }
 
+type GolfRepositoryAccessGeneration struct {
+	ForgeURL              string
+	RepositoryID          int64
+	RecipientID           int64
+	Generation            int64
+	DirectOperationID     sql.NullInt64
+	InvitationOperationID sql.NullInt64
+}
+
+type GolfRepositoryAccessOperation struct {
+	ID                  int64
+	UserID              int64
+	ForgeURL            string
+	IdempotencyKey      string
+	RepositoryID        int64
+	OwnerID             int64
+	RepositoryOwner     string
+	RepositoryName      string
+	ActorID             int64
+	RecipientID         int64
+	RecipientLogin      string
+	AccessRevision      string
+	RecipientRevision   string
+	RequestedPermission string
+	Remove              bool
+	Generation          int64
+	InputHash           []byte
+	Phase               string
+	FailureCode         string
+	ObservedPermission  string
+	ObservedDirect      bool
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
+
+type GolfRepositoryAccessOperationEvent struct {
+	ID          int64
+	OperationID int64
+	Phase       string
+	OccurredAt  time.Time
+}
+
 type GolfRepositoryActivity struct {
 	ID              int64
 	ForgeURL        string

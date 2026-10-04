@@ -140,6 +140,16 @@ func newInvitationFixture(t *testing.T) *invitationFixture {
 				}
 				return
 			}
+			if r.Method == "DELETE" {
+				if login != "alice" {
+					w.WriteHeader(403)
+					return
+				}
+				f.writes++
+				delete(f.direct, target)
+				w.WriteHeader(204)
+				return
+			}
 			if r.Method == "PUT" {
 				if login != "alice" {
 					w.WriteHeader(403)

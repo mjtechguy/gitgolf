@@ -721,6 +721,16 @@ func (s *Server) RespondRepositoryInvitation(ctx context.Context, req *connect.R
 			details = authorityErr == nil
 			return invitationStorageError(e)
 		}
+		if _, e = s.lockAccessTarget(ctx, tx, current.RepositoryID, current.RecipientNativeID); e != nil {
+			return e
+		}
+		generation, direct, invitation, e := s.accessSlot(ctx, tx, current.RepositoryID, current.RecipientNativeID)
+		if e != nil {
+			return e
+		}
+		if e = s.accessSlotAvailable(ctx, tx, direct, invitation); e != nil {
+			return e
+		}
 		valid := authorityErr == nil && a.Revision == current.AccessRevision
 		if valid {
 			recipient, e := s.invitationRecipient(ctx, issuerToken, invitationKey(current), a, issuer, current.RecipientLogin)
@@ -752,6 +762,13 @@ func (s *Server) RespondRepositoryInvitation(ctx context.Context, req *connect.R
 		}
 		if native.ID != current.RecipientNativeID || !strings.EqualFold(native.Login, current.RecipientLogin) {
 			return errRepositoryAccessConflict
+		}
+		if generation == 9223372036854775807 {
+			return errRepositoryAccessConflict
+		}
+		_, e = tx.ExecContext(ctx, `UPDATE golf_repository_access_generations SET generation=generation+1,direct_operation_id=NULL,invitation_operation_id=$4 WHERE forge_url=$1 AND repository_id=$2 AND recipient_id=$3`, current.ForgeURL, current.RepositoryID, current.RecipientNativeID, op.ID)
+		if e != nil {
+			return errStorageUnavailable
 		}
 		_, e = tx.ExecContext(ctx, `UPDATE golf_repository_invitations SET state='GRANTING',revision=revision+1,updated_at=clock_timestamp() WHERE id=$1`, id)
 		if e != nil {
@@ -801,11 +818,22 @@ func (s *Server) invitationGrant(ctx context.Context, value string, token forgeC
 		if current.State != "GRANTING" || r.Phase != "DISPATCH_UNKNOWN" || !current.ExpiresAt.After(time.Now()) || a.Revision != current.AccessRevision {
 			return errRepositoryAccessConflict
 		}
+		writeCtx, e := s.lockAccessTarget(ctx, tx, current.RepositoryID, current.RecipientNativeID)
+		if e != nil {
+			return e
+		}
+		generation, _, invitation, e := s.accessSlot(ctx, tx, current.RepositoryID, current.RecipientNativeID)
+		if e != nil {
+			return e
+		}
+		if generation <= 0 || !invitation.Valid || invitation.Int64 != r.ID {
+			return errRepositoryAccessConflict
+		}
 		recipient, e := s.invitationRecipient(ctx, issuerToken, invitationKey(current), a, issuer, current.RecipientLogin)
 		if e != nil {
 			return e
 		}
-		if recipient.User.Id != strconv.FormatInt(current.RecipientNativeID, 10) || recipient.Revision != current.RecipientRevision {
+		if recipient.User.Id != strconv.FormatInt(current.RecipientNativeID, 10) || invitationRecipientRevision(a, recipient, generation-1) != current.RecipientRevision {
 			return errRepositoryAccessConflict
 		}
 		actorNative, e := s.currentUser(ctx, token)
@@ -814,10 +842,6 @@ func (s *Server) invitationGrant(ctx context.Context, value string, token forgeC
 		}
 		if actorNative.ID != current.RecipientNativeID || !strings.EqualFold(actorNative.Login, current.RecipientLogin) {
 			return errUnauthenticated
-		}
-		writeCtx, e := s.lockRepositoryLifecycleTransaction(ctx, tx, current.RepositoryID)
-		if e != nil {
-			return e
 		}
 		base, _ := repositoryPath(invitationKey(current))
 		_, dispatchErr := s.forgeJSON(writeCtx, http.MethodPut, base+"/collaborators/"+current.RecipientLogin, issuerToken, map[string]string{"permission": current.Permission}, nil, http.StatusNoContent)
@@ -870,6 +894,10 @@ func (s *Server) invitationGrant(ctx context.Context, value string, token forgeC
 		if e != nil {
 			return invitationStorageError(e)
 		}
+		_, e = tx.ExecContext(ctx, `UPDATE golf_repository_access_generations SET invitation_operation_id=NULL WHERE forge_url=$1 AND repository_id=$2 AND recipient_id=$3`, current.ForgeURL, current.RepositoryID, current.RecipientNativeID)
+		if e != nil {
+			return errStorageUnavailable
+		}
 		*invite, e = q.GetRepositoryInvitation(ctx, database.GetRepositoryInvitationParams{ID: current.ID, ForgeURL: s.config.GiteaURL})
 		return invitationStorageError(e)
 	})
@@ -906,4 +934,9 @@ func (s *Server) GetRepositoryInvitationOperation(ctx context.Context, req *conn
 		return nil, rpcError(e)
 	}
 	return connect.NewResponse(&golfv1.GetRepositoryInvitationOperationResponse{Operation: invitationOperationWire(result, invite)}), nil
+}
+
+func invitationRecipientRevision(a *golfv1.RepositoryAccess, r *golfv1.RepositoryInvitationRecipient, generation int64) string {
+	c := &golfv1.RepositoryCollaborator{User: r.User, Permission: r.EffectivePermission, IsDirect: false}
+	return collaboratorRevision(a, c, generation)
 }

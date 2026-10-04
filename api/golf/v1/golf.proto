@@ -1092,13 +1092,14 @@ message ListLocalAccountsResponse {
   PageResponse page = 2;
 }
 
-// Direct personal-repository grants are distinct from effective native access.
+// Direct membership/requested roles are distinct from effective native access.
 service RepositoryAccessService {
   rpc GetRepositoryAccess(GetRepositoryAccessRequest) returns (GetRepositoryAccessResponse);
   rpc ListRepositoryCollaborators(ListRepositoryCollaboratorsRequest) returns (ListRepositoryCollaboratorsResponse);
   rpc ResolveRepositoryCollaborator(ResolveRepositoryCollaboratorRequest) returns (ResolveRepositoryCollaboratorResponse);
   rpc SetRepositoryCollaborator(SetRepositoryCollaboratorRequest) returns (SetRepositoryCollaboratorResponse);
   rpc RemoveRepositoryCollaborator(RemoveRepositoryCollaboratorRequest) returns (RemoveRepositoryCollaboratorResponse);
+  rpc GetRepositoryAccessOperation(GetRepositoryAccessOperationRequest) returns (GetRepositoryAccessOperationResponse);
 }
 message RepositoryAccess {
   string repository_id = 1;
@@ -1114,6 +1115,7 @@ message RepositoryCollaborator {
   string permission = 2;
   bool is_direct = 3;
   string revision = 4;
+  string generation = 5;
 }
 message GetRepositoryAccessRequest { RepositoryKey repository = 1; }
 message GetRepositoryAccessResponse { RepositoryAccess access = 1; }
@@ -1145,8 +1147,12 @@ message SetRepositoryCollaboratorRequest {
   string user_id = 6;
   string expected_collaborator_revision = 7;
   string permission = 8;
+  string idempotency_key = 9;
 }
-message SetRepositoryCollaboratorResponse { RepositoryCollaborator collaborator = 1; }
+message SetRepositoryCollaboratorResponse {
+  RepositoryCollaborator collaborator = 1;
+  RepositoryAccessOperation operation = 2;
+}
 message RemoveRepositoryCollaboratorRequest {
   RepositoryKey repository = 1;
   string repository_id = 2;
@@ -1155,8 +1161,44 @@ message RemoveRepositoryCollaboratorRequest {
   string user_login = 5;
   string user_id = 6;
   string expected_collaborator_revision = 7;
+  string idempotency_key = 8;
 }
-message RemoveRepositoryCollaboratorResponse { RepositoryCollaborator collaborator = 1; }
+message RemoveRepositoryCollaboratorResponse {
+  RepositoryCollaborator collaborator = 1;
+  RepositoryAccessOperation operation = 2;
+}
+message RepositoryAccessOperation {
+  string idempotency_key = 1;
+  RepositoryKey repository = 2;
+  string repository_id = 3;
+  string owner_id = 4;
+  string recipient_id = 5;
+  string recipient_login = 6;
+  string actor_id = 7;
+  string requested_permission = 8;
+  bool remove = 9;
+  string generation = 10;
+  string phase = 11;
+  string failure_code = 12;
+  string created_at = 13;
+  string updated_at = 14;
+  string observed_effective_permission = 15;
+  bool observed_direct_membership = 16;
+}
+message GetRepositoryAccessOperationRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string expected_revision = 4;
+  string user_id = 5;
+  string idempotency_key = 6;
+}
+message GetRepositoryAccessOperationResponse {
+  RepositoryAccessOperation operation = 1;
+  RepositoryCollaborator collaborator = 2;
+}
+
+
 
 // Pinned, untrusted workflow-source inspection; this does not execute jobs.
 service WorkflowService {

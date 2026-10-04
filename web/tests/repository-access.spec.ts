@@ -1,15 +1,17 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { ListRepositoryTeamAccessResponseSchema, ListRepositoryDeployKeysResponseSchema, GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ListRepositoryCollaboratorsRequestSchema, ListRepositoryCollaboratorsResponseSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema, RemoveRepositoryCollaboratorRequestSchema, RemoveRepositoryCollaboratorResponseSchema, RepositoryAccessSchema, RepositoryCollaboratorSchema, ResolveRepositoryCollaboratorRequestSchema, ResolveRepositoryCollaboratorResponseSchema, SetRepositoryCollaboratorRequestSchema, SetRepositoryCollaboratorResponseSchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
+import { ListRepositoryTeamAccessResponseSchema, ListRepositoryDeployKeysResponseSchema, GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ListRepositoryCollaboratorsRequestSchema, ListRepositoryCollaboratorsResponseSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema, RemoveRepositoryCollaboratorRequestSchema, RemoveRepositoryCollaboratorResponseSchema, GetRepositoryAccessOperationRequestSchema, GetRepositoryAccessOperationResponseSchema, RepositoryAccessOperationSchema, RepositoryAccessSchema, RepositoryCollaboratorSchema, ResolveRepositoryCollaboratorRequestSchema, ResolveRepositoryCollaboratorResponseSchema, SetRepositoryCollaboratorRequestSchema, SetRepositoryCollaboratorResponseSchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
 import { emptyRepositoryInvitations, reject, request, respond } from './rpc';
 
+const rev=(digit:string)=>digit.repeat(64);
 const owner = create(UserSchema, { id: '9007199254740993', login: 'alex' });
-const first = create(RepositoryCollaboratorSchema, { user: { id: '9007199254740994', login: 'first-reader' }, permission: 'read', isDirect: true, revision: 'first-grant' });
+const first = create(RepositoryCollaboratorSchema, { user: { id: '9007199254740994', login: 'first-reader' }, permission: 'read', isDirect: true, revision: rev('1'), generation:'0' });
 const candidate = create(UserSchema, { id: '9007199254740997', login: 'new-collaborator' });
 const path = '/repositories/alex/project/settings/access';
 async function backend(page: Page) {
-  const state = { signedIn: true, user: create(UserSchema, { id: '17', login: 'maintainer', isInstanceAdmin: true }), access: create(RepositoryAccessSchema, { owner, ownerId: owner.id, repositoryId: '9007199254740998', currentPermission: 'admin', canManage: true, revision: 'reviewed-repository' }), collaborators: [first, create(RepositoryCollaboratorSchema, { user: { id: '17', login: 'maintainer' }, permission: 'admin', isDirect: true, revision: 'self-grant' }), create(RepositoryCollaboratorSchema, { user: { id: '9007199254740995', login: '<literal-account>' }, permission: 'write', isDirect: true, revision: 'later-grant' })], denied: false, listDenied: false, malformed: false, pages: [] as number[], resolves: [] as unknown[], requests: [] as unknown[], writes: [] as unknown[], drop: false, inherited: '' as string, barrier: undefined as Promise<void> | undefined, resolveBarrier: undefined as Promise<void> | undefined };
+  const operations=new Map<string,ReturnType<typeof create<typeof RepositoryAccessOperationSchema>>>();
+  const state = { operations, operationReads:[] as string[], operationDenied:false, malformedOperation:false, dropUnknown:false, signedIn: true, user: create(UserSchema, { id: '17', login: 'maintainer', isInstanceAdmin: true }), access: create(RepositoryAccessSchema, { owner, ownerId: owner.id, repositoryId: '9007199254740998', currentPermission: 'admin', canManage: true, revision: rev('2') }), collaborators: [first, create(RepositoryCollaboratorSchema, { user: { id: '17', login: 'maintainer' }, permission: 'admin', isDirect: true, revision: rev('3'), generation:'0' }), create(RepositoryCollaboratorSchema, { user: { id: '9007199254740995', login: '<literal-account>' }, permission: 'write', isDirect: true, revision: rev('4'), generation:'0' })], denied: false, listDenied: false, malformed: false, pages: [] as number[], resolves: [] as unknown[], requests: [] as unknown[], writes: [] as unknown[], drop: false, inherited: '' as string, barrier: undefined as Promise<void> | undefined, resolveBarrier: undefined as Promise<void> | undefined };
   await page.route('**/rpc/**', async (route) => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
@@ -32,25 +34,28 @@ async function backend(page: Page) {
     if (method === 'ResolveRepositoryCollaborator') {
       const input = request(route, ResolveRepositoryCollaboratorRequestSchema); state.resolves.push(input);
       const known = state.collaborators.find((collaborator) => collaborator.user?.login === input.userLogin);
-      const collaborator = known || create(RepositoryCollaboratorSchema, { user: input.userLogin === owner.login ? owner : candidate, permission: 'none', isDirect: false, revision: 'no-direct-grant' });
+      const collaborator = known || create(RepositoryCollaboratorSchema, { user: input.userLogin === owner.login ? owner : candidate, permission: 'none', isDirect: false, revision: rev('5'), generation:'0' });
       if (state.resolveBarrier) await state.resolveBarrier;
       return respond(route, ResolveRepositoryCollaboratorResponseSchema, { collaborator });
     }
+    if(method==='GetRepositoryAccessOperation'){const input=request(route,GetRepositoryAccessOperationRequestSchema);state.operationReads.push(input.idempotencyKey);if(state.operationDenied)return reject(route,'permission_denied','Original operation access denied.');const operation=operations.get(input.idempotencyKey);if(!operation)return reject(route,'not_found','Original operation not found.');return respond(route,GetRepositoryAccessOperationResponseSchema,{operation:state.malformedOperation?{...operation,generation:'0'}:operation});}
     if (method === 'SetRepositoryCollaborator' || method === 'RemoveRepositoryCollaborator') {
       const input = method === 'SetRepositoryCollaborator' ? request(route, SetRepositoryCollaboratorRequestSchema) : request(route, RemoveRepositoryCollaboratorRequestSchema);
       state.requests.push(input);
       if (!state.access.canManage || input.userId === owner.id || input.userId === state.user.id) return reject(route, 'permission_denied', 'Collaborator administration denied.');
-      if (input.expectedRevision !== state.access.revision) return reject(route, 'failed_precondition', 'Repository authority changed.');
+      if (input.expectedRevision !== state.access.revision) return route.fulfill({status:400,headers:{'Golf-Access-Effect':'none'},contentType:'application/json',json:{code:'failed_precondition',message:'Repository authority changed.'}});
       const known = state.collaborators.find((collaborator) => collaborator.user?.id === input.userId);
-      if (input.expectedCollaboratorRevision !== (known?.revision || 'no-direct-grant')) return reject(route, 'failed_precondition', 'Collaborator grant changed.');
+      if (input.expectedCollaboratorRevision !== (known?.revision || rev('5'))) return reject(route, 'failed_precondition', 'Collaborator grant changed.');
       const target = known?.user || candidate;
       expect(target.id).toBe(input.userId); expect(target.login).toBe(input.userLogin); expect(input.ownerId).toBe(owner.id);
       state.writes.push(input); const remove = method === 'RemoveRepositoryCollaborator';
-      const collaborator = create(RepositoryCollaboratorSchema, { user: target, permission: state.inherited || (remove ? 'none' : (input as { permission: string }).permission), isDirect: !remove, revision: `saved-${state.writes.length}` });
+      const collaborator = create(RepositoryCollaboratorSchema, { user: target, permission: state.inherited || (remove ? 'none' : (input as { permission: string }).permission), isDirect: !remove, revision: rev('8'), generation:String(Number(known?.generation || '0')+1) });
       state.collaborators = state.collaborators.filter((entry) => entry.user?.id !== input.userId); if (!remove) state.collaborators.unshift(collaborator);
+      expect(input.idempotencyKey).toMatch(/^[a-f0-9-]{36}$/);
+      const operation=create(RepositoryAccessOperationSchema,{idempotencyKey:input.idempotencyKey,repository:input.repository,repositoryId:input.repositoryId,ownerId:input.ownerId,recipientId:input.userId,recipientLogin:input.userLogin,actorId:state.user.id,requestedPermission:remove?'':(input as {permission:string}).permission,remove,generation:collaborator.generation,phase:state.dropUnknown?'DISPATCH_UNKNOWN':'SUCCEEDED',createdAt:'2026-10-04T10:00:00Z',updatedAt:'2026-10-04T10:00:01Z',observedEffectivePermission:state.dropUnknown?'':collaborator.permission,observedDirectMembership:state.dropUnknown?false:collaborator.isDirect});operations.set(input.idempotencyKey,operation);
       if (state.barrier) await state.barrier;
       if (state.drop) return route.abort('failed');
-      return remove ? respond(route, RemoveRepositoryCollaboratorResponseSchema, { collaborator }) : respond(route, SetRepositoryCollaboratorResponseSchema, { collaborator });
+      return remove ? respond(route, RemoveRepositoryCollaboratorResponseSchema, { collaborator,operation }) : respond(route, SetRepositoryCollaboratorResponseSchema, { collaborator,operation });
     }
     return reject(route, 'not_found', 'Unsupported access fixture.');
   });
@@ -78,7 +83,7 @@ test('admin access requires explicit identity/grant review and duplicate apply c
   let release!: () => void; state.barrier = new Promise<void>((resolve) => { release = resolve; });
   await page.getByRole('button', { name: 'Apply reviewed access', exact: true }).evaluate((button) => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); }); await expect.poll(() => state.writes.length).toBe(1); release();
   await expect(page.getByText(/^Requested direct permission acknowledged:/)).toBeVisible();
-  expect(state.writes).toMatchObject([{ repositoryId: state.access.repositoryId, ownerId: owner.id, userId: candidate.id, userLogin: candidate.login, permission: 'admin', expectedRevision: 'reviewed-repository', expectedCollaboratorRevision: 'no-direct-grant' }]);
+  expect(state.writes).toMatchObject([{ repositoryId: state.access.repositoryId, ownerId: owner.id, userId: candidate.id, userLogin: candidate.login, permission: 'admin', expectedRevision: rev('2'), expectedCollaboratorRevision: rev('5') }]);
   await expect(page.getByLabel('Account username', { exact: true })).toHaveCount(0); await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
@@ -91,14 +96,14 @@ test('change editor cancels drafts and changing a requested grant invalidates it
   await page.getByLabel('Requested permission', { exact: true }).selectOption('write'); await page.getByRole('button', { name: 'Resolve and review access', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Review collaborator access', exact: true })).toBeVisible(); await page.getByLabel('Requested permission', { exact: true }).selectOption('admin'); await expect(page.getByRole('heading', { name: 'Review collaborator access', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Resolve and review access', exact: true }).click(); await page.getByRole('button', { name: 'Apply reviewed access', exact: true }).click(); await expect(page.getByText(/^Requested direct permission acknowledged:/)).toBeVisible();
-  expect(state.writes).toMatchObject([{ userId: first.user!.id, permission: 'admin', expectedCollaboratorRevision: 'first-grant' }]);
+  expect(state.writes).toMatchObject([{ userId: first.user!.id, permission: 'admin', expectedCollaboratorRevision: rev('1') }]);
 });
 
 test('removal uses a short keyboard confirmation and preserves immutable target bindings', async ({ page }) => {
   const state = await backend(page); await open(page); const remove = page.getByRole('button', { name: 'Remove collaborator first-reader', exact: true });
   await remove.click(); await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused(); await page.keyboard.press('Escape'); await expect(remove).toBeFocused(); expect(state.writes).toHaveLength(0);
   await remove.click(); await page.getByRole('button', { name: 'Confirm remove collaborator', exact: true }).click(); await expect(page.getByText('Direct collaborator removed. Other grants may still provide access.', { exact: true })).toBeVisible();
-  expect(state.writes).toMatchObject([{ userId: first.user!.id, expectedCollaboratorRevision: 'first-grant' }]); await expect(remove).toHaveCount(0);
+  expect(state.writes).toMatchObject([{ userId: first.user!.id, expectedCollaboratorRevision: rev('1') }]); await expect(remove).toHaveCount(0);
 });
 
 test('lost grant response blocks retries until inspection and later inventory denial removes private rows', async ({ page }) => {
@@ -110,8 +115,8 @@ test('lost grant response blocks retries until inspection and later inventory de
 
 test('changed repository or collaborator revisions are not silently adopted', async ({ page }) => {
   const state = await backend(page); await open(page); await reviewNew(page);
-  state.access.revision = 'changed-repository'; await page.getByRole('button', { name: 'Apply reviewed access', exact: true }).click(); await expect(page.getByRole('heading', { name: 'Access change could not be confirmed', exact: true })).toBeVisible(); expect(state.writes).toHaveLength(0); expect(state.requests).toMatchObject([{ expectedRevision: 'reviewed-repository' }]);
-  await page.getByRole('button', { name: 'Refresh repository access', exact: true }).click(); await page.getByRole('button', { name: 'Change access for first-reader', exact: true }).click(); await page.getByLabel('Requested permission',{exact:true}).selectOption('write'); state.collaborators[0] = { ...first, revision: 'changed-grant', permission: 'write' }; await page.getByRole('button', { name: 'Resolve and review access', exact: true }).click(); await expect(page.getByRole('alert')).toHaveText('Collaborator access changed. Refresh and review it again.'); await expect(page.getByRole('heading', { name: 'Review collaborator access', exact: true })).toHaveCount(0); expect(state.writes).toHaveLength(0);
+  state.access.revision = rev('6'); await page.getByRole('button', { name: 'Apply reviewed access', exact: true }).click(); await expect(page.getByRole('heading', { name: 'Access change was refused', exact: true })).toBeVisible(); expect(state.writes).toHaveLength(0); expect(state.requests).toMatchObject([{ expectedRevision: rev('2') }]);
+  await page.getByRole('button',{name:'Dismiss refused request',exact:true}).click(); await page.getByRole('button', { name: 'Change access for first-reader', exact: true }).click(); await page.getByLabel('Requested permission',{exact:true}).selectOption('write'); state.collaborators[0] = { ...first, revision: rev('7'), permission: 'write' }; await page.getByRole('button', { name: 'Resolve and review access', exact: true }).click(); await expect(page.getByRole('alert')).toHaveText('Collaborator access changed. Refresh and review it again.'); await expect(page.getByRole('heading', { name: 'Review collaborator access', exact: true })).toHaveCount(0); expect(state.writes).toHaveLength(0);
 });
 
 for (const kind of ['read-only', 'organization-owned', 'exceptional owner'] as const) test(`${kind} displays inventory without fake administration even with a Golf instance role`, async ({ page }) => {
@@ -174,4 +179,37 @@ test('organization direct administrator manages requested roles while effective 
 test('organization owner uses server authority and no permission is inferred from its namespace', async ({ page }) => {
  const state=await backend(page); state.access.organizationOwned=true; state.access.currentPermission='owner'; await open(page); await expect(page.getByRole('button',{name:'Add collaborator',exact:true})).toBeVisible();
  state.access.canManage=false; await page.getByRole('button',{name:'Refresh repository access',exact:true}).click(); await expect(page.getByRole('button',{name:'Add collaborator',exact:true})).toHaveCount(0); await expect(page.getByRole('heading',{name:'Deploy keys',exact:true})).toHaveCount(0);
+});
+
+test('lost acknowledgement reload inspects only the original key and an unresolved receipt never enables retry', async ({page})=>{
+ const state=await backend(page);state.drop=true;state.dropUnknown=true;await open(page);await reviewNew(page,'write');await page.getByRole('button',{name:'Apply reviewed access',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Access change could not be confirmed',exact:true})).toBeVisible();
+ const [original]=state.operations.keys();expect(original).toBeTruthy();
+ await page.reload();await expect(page.getByText('Original operation remains unresolved. No retry is available.',{exact:true})).toBeVisible();
+ expect(state.operationReads.every(key=>key===original)).toBe(true);expect(state.writes).toHaveLength(1);expect(state.requests).toHaveLength(1);
+ await expect(page.getByRole('button',{name:'Add collaborator',exact:true})).toBeDisabled();
+ await expect(page.getByRole('button',{name:'Finish inspection',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Inspect original operations',exact:true}).click();await expect(page.getByText('Original operation remains unresolved. No retry is available.',{exact:true})).toBeVisible();expect(state.writes).toHaveLength(1);
+ const stored=await page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('golf.access-intent.')).map(([,value])=>JSON.parse(value)));
+ expect(stored).toHaveLength(1);expect(Object.keys(stored[0]).sort()).toEqual(['accessRevision','key','ownerId','permission','recipientId','recipientRevision','remove','repositoryId']);expect(JSON.stringify(stored)).not.toContain(candidate.login);
+});
+test('acknowledged historical original can be explicitly finished after response loss without replaying the write', async({page})=>{
+ const state=await backend(page);state.drop=true;await open(page);await reviewNew(page);await page.getByRole('button',{name:'Apply reviewed access',exact:true}).click();
+ await expect(page.getByText('Requested access operation was acknowledged. This receipt is historical.',{exact:true})).toBeVisible();
+ await page.reload();await expect(page.getByText('Requested access operation was acknowledged. This receipt is historical.',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Finish inspection',exact:true}).click();await expect(page.getByRole('button',{name:'Add collaborator',exact:true})).toBeEnabled();expect(state.writes).toHaveLength(1);expect(state.requests).toHaveLength(1);
+});
+test('malformed original receipt cannot clear intent or enable a replacement', async({page})=>{
+ const state=await backend(page);state.drop=true;state.malformedOperation=true;await open(page);await reviewNew(page);await page.getByRole('button',{name:'Apply reviewed access',exact:true}).click();
+ await expect(page.getByText('Original operation is unavailable. The original key is retained; no request was retried.',{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Finish inspection',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Add collaborator',exact:true})).toBeDisabled();expect(state.requests).toHaveLength(1);
+});
+test('denial during original inspection hides private inventory and preserves only the original metadata', async({page})=>{
+ const state=await backend(page);state.drop=true;state.operationDenied=true;await open(page);await reviewNew(page);await page.getByRole('button',{name:'Apply reviewed access',exact:true}).click();
+ await expect(page.getByRole('alert')).toHaveText('Original operation access denied.');await expect(page.getByRole('table',{name:'Repository collaborators',exact:true})).toHaveCount(0);await expect(page.getByText(candidate.login,{exact:true})).toHaveCount(0);
+ expect(await page.evaluate(()=>Object.keys(sessionStorage).filter(key=>key.startsWith('golf.access-intent.')).length)).toBe(1);expect(state.requests).toHaveLength(1);
+});
+test('malformed original metadata fails closed without source, status or mutation probes',async({page})=>{
+ const state=await backend(page);await page.addInitScript(()=>sessionStorage.setItem(`golf.access-intent.${location.origin}:17:9007199254740998:9007199254740997`,JSON.stringify({key:'not-an-original-key'})));await open(page);
+ await expect(page.getByText('Original access operation metadata is unavailable. No new change can be sent; sign out before switching accounts or targets.',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Add collaborator',exact:true})).toBeDisabled();expect(state.operationReads).toHaveLength(0);expect(state.resolves).toHaveLength(0);expect(state.requests).toHaveLength(0);
 });
