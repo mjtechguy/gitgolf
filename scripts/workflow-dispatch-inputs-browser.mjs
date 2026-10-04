@@ -42,7 +42,9 @@ async function logs(marker,other){
  for(let i=0;i<64;i++){
   const more=page.getByRole('button',{name:'Load more log output',exact:true});
   if(!await more.count())break;
-  await more.click();await page.waitForFunction(()=>!document.querySelector('button[disabled]')?.textContent?.includes('Load more log output'));
+  const response=page.waitForResponse(response=>response.url().endsWith('/GetWorkflowRunLogs'));
+  await more.click();await response;
+  await page.waitForFunction(()=>![...document.querySelectorAll('button')].some(button=>button.textContent?.includes('Load more log output')&&button.disabled));
  }
  assert((await log.innerText()).includes(marker),'Recorded marker missing');if(other)assert(!(await log.innerText()).includes(other),'Selected step leaked another scope');
 }
@@ -51,8 +53,9 @@ async function capture(surface,theme,width){
  const file=`${surface}-${theme}-${width}.png`;await page.screenshot({path:join(config.output,file),fullPage:true});manifest.captures.push({surface,theme,width,file});
 }
 try{
+ await page.goto(config.golf,{waitUntil:'domcontentloaded'});
  for(const width of [1440,390])for(const theme of ['dark','light']){
-  await page.setViewportSize({width,height:1000});await context.addInitScript(theme=>localStorage.setItem('golf.theme',theme),theme);
+  await page.setViewportSize({width,height:1000});await page.evaluate(theme=>localStorage.setItem('golf.theme',theme),theme);
   stage='typed-editor';await page.goto(config.golf+path+'/settings/workflows',{waitUntil:'domcontentloaded'});await page.getByRole('heading',{name:'Workflow configuration',exact:true}).waitFor();
   const runButton=page.getByRole('button',{name:'Run workflow',exact:true});await runButton.waitFor();await runButton.click();
   const form=page.getByRole('form',{name:'Workflow inputs',exact:true});await form.waitFor();assert(await form.locator('fieldset').count()===4,'Four declared inputs missing');
