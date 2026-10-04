@@ -303,7 +303,7 @@ def main():
                     capture_manifest=json.loads((screenshots/'manifest.json').read_text())
                     assert capture_manifest.get('complete') and capture_manifest.get('passed') and len(capture_manifest.get('results',[]))==12
                     capture_manifest['runtimeAfter']=runtime();capture_manifest['runtimeStable']=True
-                    helpers.private_write(screenshots/'manifest.json',json.dumps(capture_manifest,indent=2)+'\n')
+                    helpers.private_write(screenshots/'runtime-receipt.json',json.dumps({'runtimeBefore':baseline,'runtimeAfter':capture_manifest['runtimeAfter'],'runtimeStable':True,'browserManifestSha256':hashlib.sha256((screenshots/'manifest.json').read_bytes()).hexdigest()},indent=2)+'\n')
                     manifest['browser']={'passed':True,'captures':12,'graphSelection':selected+'/local','runtimeStable':True}
                 helpers.until(lambda:not command('exec','-T','runner-daemon','docker','ps','-aq','--filter','label=io.golf.runner.managed=true').strip(),timeout=30)
                 assert not command('exec','-T','runner-daemon','docker','volume','ls','-q','--filter','label=io.golf.runner.managed=true').strip(), 'Owned data volume retained'
