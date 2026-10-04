@@ -2866,3 +2866,127 @@ message SaveRepositoryExecutionBindingResponse { RepositoryExecutionValueMutatio
 message DeleteRepositoryExecutionBindingResponse { RepositoryExecutionValueMutationResponse operation = 1; }
 
 message GetRepositoryExecutionValueOperationResponse { RepositoryExecutionValueMutationResponse operation = 1; }
+
+
+// Existing-native-account invitations. Browser only; acceptance emits at most
+// one supported collaborator PUT using explicitly delegated local issuer consent.
+service RepositoryInvitationService {
+  rpc PreviewRepositoryInvitationRecipient(PreviewRepositoryInvitationRecipientRequest) returns (PreviewRepositoryInvitationRecipientResponse);
+  rpc CreateRepositoryInvitation(CreateRepositoryInvitationRequest) returns (CreateRepositoryInvitationResponse);
+  rpc ListRepositoryInvitations(ListRepositoryInvitationsRequest) returns (ListRepositoryInvitationsResponse);
+  rpc ListOwnRepositoryInvitations(ListOwnRepositoryInvitationsRequest) returns (ListOwnRepositoryInvitationsResponse);
+  rpc RespondRepositoryInvitation(RespondRepositoryInvitationRequest) returns (RespondRepositoryInvitationResponse);
+  rpc RevokeRepositoryInvitation(RevokeRepositoryInvitationRequest) returns (RevokeRepositoryInvitationResponse);
+  rpc GetRepositoryInvitationOperation(GetRepositoryInvitationOperationRequest) returns (GetRepositoryInvitationOperationResponse);
+}
+message RepositoryInvitationRecipient {
+  User user = 1;
+  string revision = 2;
+  string effective_permission = 3;
+}
+message RepositoryInvitation {
+  string id = 1;
+  RepositoryKey repository = 2;
+  string repository_id = 3;
+  string owner_id = 4;
+  User issuer = 5;
+  User recipient = 6;
+  string permission = 7;
+  string expires_at = 8;
+  string revision = 9;
+  string state = 10;
+  string created_at = 11;
+  bool organization_owned = 12;
+  // False withholds private target/account names when current issuer authority
+  // cannot be verified. The own recipient retains only inbox lifecycle metadata.
+  bool details_available = 13;
+}
+message RepositoryInvitationOperation {
+  string idempotency_key = 1;
+  string invitation_id = 2;
+  string invitation_revision = 3;
+  string repository_id = 4;
+  string owner_id = 5;
+  string recipient_id = 6;
+  string phase = 7;
+  string failure_code = 8;
+  string created_at = 9;
+  string updated_at = 10;
+}
+message PreviewRepositoryInvitationRecipientRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string expected_revision = 4;
+  string username = 5;
+}
+message PreviewRepositoryInvitationRecipientResponse {
+  RepositoryInvitationRecipient recipient = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string access_revision = 4;
+}
+message CreateRepositoryInvitationRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string expected_revision = 4;
+  string recipient_id = 5;
+  string recipient_username = 6;
+  string recipient_revision = 7;
+  string permission = 8;
+  string expires_at = 9;
+  // Explicitly authorizes this exact invitation to use the existing encrypted
+  // local-account credential after issuer logout, only while its version lives.
+  bool persistent_consent = 10;
+  string idempotency_key = 11;
+}
+message CreateRepositoryInvitationResponse {
+  RepositoryInvitation invitation = 1;
+  RepositoryInvitationOperation operation = 2;
+}
+message ListRepositoryInvitationsRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string expected_revision = 4;
+  PageRequest page = 5;
+}
+message ListOwnRepositoryInvitationsRequest { PageRequest page = 1; }
+message ListRepositoryInvitationsResponse {
+  repeated RepositoryInvitation invitations = 1;
+  PageResponse page = 2;
+  string repository_id = 3;
+  string owner_id = 4;
+  string access_revision = 5;
+  bool can_manage = 6;
+  bool local_issuer_available = 7;
+}
+enum RepositoryInvitationDecision {
+  REPOSITORY_INVITATION_DECISION_UNSPECIFIED = 0;
+  REPOSITORY_INVITATION_DECISION_ACCEPT = 1;
+  REPOSITORY_INVITATION_DECISION_REJECT = 2;
+}
+message RespondRepositoryInvitationRequest {
+  string invitation_id = 1;
+  string expected_revision = 2;
+  RepositoryInvitationDecision decision = 3;
+  string idempotency_key = 4;
+}
+message RevokeRepositoryInvitationRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string expected_revision = 4;
+  string invitation_id = 5;
+  string invitation_revision = 6;
+}
+message GetRepositoryInvitationOperationRequest {
+  string invitation_id = 1;
+  string idempotency_key = 2;
+}
+message GetRepositoryInvitationOperationResponse { RepositoryInvitationOperation operation = 1; }
+
+message RespondRepositoryInvitationResponse { RepositoryInvitation invitation = 1; RepositoryInvitationOperation operation = 2; }
+message RevokeRepositoryInvitationResponse { RepositoryInvitation invitation = 1; }
+message ListOwnRepositoryInvitationsResponse { repeated RepositoryInvitation invitations = 1; PageResponse page = 2; }

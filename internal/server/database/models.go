@@ -809,6 +809,63 @@ type GolfRepositoryEventPayload struct {
 	PushAdmissionRequested bool
 }
 
+type GolfRepositoryInvitation struct {
+	ID                   uuid.UUID
+	ForgeURL             string
+	RepositoryID         int64
+	OwnerID              int64
+	RepositoryOwner      string
+	RepositoryName       string
+	OrganizationOwned    bool
+	IssuerUserID         int64
+	IssuerNativeID       int64
+	IssuerLogin          string
+	IssuerAccountID      int64
+	IssuerAccountVersion int64
+	RecipientNativeID    int64
+	RecipientLogin       string
+	RecipientRevision    string
+	Permission           string
+	AccessRevision       string
+	PersistentConsent    bool
+	ExpiresAt            time.Time
+	Revision             int64
+	State                string
+	CreateKey            string
+	InputHash            []byte
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
+type GolfRepositoryInvitationEvent struct {
+	ID           int64
+	InvitationID uuid.UUID
+	State        string
+	Revision     int64
+	OccurredAt   time.Time
+}
+
+type GolfRepositoryInvitationOperation struct {
+	ID                 int64
+	InvitationID       uuid.UUID
+	UserID             int64
+	IdempotencyKey     string
+	InvitationRevision int64
+	Decision           string
+	InputHash          []byte
+	Phase              string
+	FailureCode        string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+type GolfRepositoryInvitationOperationEvent struct {
+	ID          int64
+	OperationID int64
+	Phase       string
+	OccurredAt  time.Time
+}
+
 type GolfRepositoryLifecycleEvent struct {
 	ID          int64
 	OperationID int64

@@ -91,6 +91,9 @@ const (
 	// RepositoryExecutionValueServiceName is the fully-qualified name of the
 	// RepositoryExecutionValueService service.
 	RepositoryExecutionValueServiceName = "golf.v1.RepositoryExecutionValueService"
+	// RepositoryInvitationServiceName is the fully-qualified name of the RepositoryInvitationService
+	// service.
+	RepositoryInvitationServiceName = "golf.v1.RepositoryInvitationService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -572,6 +575,27 @@ const (
 	// fully-qualified name of the RepositoryExecutionValueService's
 	// GetRepositoryExecutionValueOperation RPC.
 	RepositoryExecutionValueServiceGetRepositoryExecutionValueOperationProcedure = "/golf.v1.RepositoryExecutionValueService/GetRepositoryExecutionValueOperation"
+	// RepositoryInvitationServicePreviewRepositoryInvitationRecipientProcedure is the fully-qualified
+	// name of the RepositoryInvitationService's PreviewRepositoryInvitationRecipient RPC.
+	RepositoryInvitationServicePreviewRepositoryInvitationRecipientProcedure = "/golf.v1.RepositoryInvitationService/PreviewRepositoryInvitationRecipient"
+	// RepositoryInvitationServiceCreateRepositoryInvitationProcedure is the fully-qualified name of the
+	// RepositoryInvitationService's CreateRepositoryInvitation RPC.
+	RepositoryInvitationServiceCreateRepositoryInvitationProcedure = "/golf.v1.RepositoryInvitationService/CreateRepositoryInvitation"
+	// RepositoryInvitationServiceListRepositoryInvitationsProcedure is the fully-qualified name of the
+	// RepositoryInvitationService's ListRepositoryInvitations RPC.
+	RepositoryInvitationServiceListRepositoryInvitationsProcedure = "/golf.v1.RepositoryInvitationService/ListRepositoryInvitations"
+	// RepositoryInvitationServiceListOwnRepositoryInvitationsProcedure is the fully-qualified name of
+	// the RepositoryInvitationService's ListOwnRepositoryInvitations RPC.
+	RepositoryInvitationServiceListOwnRepositoryInvitationsProcedure = "/golf.v1.RepositoryInvitationService/ListOwnRepositoryInvitations"
+	// RepositoryInvitationServiceRespondRepositoryInvitationProcedure is the fully-qualified name of
+	// the RepositoryInvitationService's RespondRepositoryInvitation RPC.
+	RepositoryInvitationServiceRespondRepositoryInvitationProcedure = "/golf.v1.RepositoryInvitationService/RespondRepositoryInvitation"
+	// RepositoryInvitationServiceRevokeRepositoryInvitationProcedure is the fully-qualified name of the
+	// RepositoryInvitationService's RevokeRepositoryInvitation RPC.
+	RepositoryInvitationServiceRevokeRepositoryInvitationProcedure = "/golf.v1.RepositoryInvitationService/RevokeRepositoryInvitation"
+	// RepositoryInvitationServiceGetRepositoryInvitationOperationProcedure is the fully-qualified name
+	// of the RepositoryInvitationService's GetRepositoryInvitationOperation RPC.
+	RepositoryInvitationServiceGetRepositoryInvitationOperationProcedure = "/golf.v1.RepositoryInvitationService/GetRepositoryInvitationOperation"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -6054,4 +6078,236 @@ func (UnimplementedRepositoryExecutionValueServiceHandler) DeleteRepositoryExecu
 
 func (UnimplementedRepositoryExecutionValueServiceHandler) GetRepositoryExecutionValueOperation(context.Context, *connect.Request[v1.GetRepositoryExecutionValueOperationRequest]) (*connect.Response[v1.GetRepositoryExecutionValueOperationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryExecutionValueService.GetRepositoryExecutionValueOperation is not implemented"))
+}
+
+// RepositoryInvitationServiceClient is a client for the golf.v1.RepositoryInvitationService
+// service.
+type RepositoryInvitationServiceClient interface {
+	PreviewRepositoryInvitationRecipient(context.Context, *connect.Request[v1.PreviewRepositoryInvitationRecipientRequest]) (*connect.Response[v1.PreviewRepositoryInvitationRecipientResponse], error)
+	CreateRepositoryInvitation(context.Context, *connect.Request[v1.CreateRepositoryInvitationRequest]) (*connect.Response[v1.CreateRepositoryInvitationResponse], error)
+	ListRepositoryInvitations(context.Context, *connect.Request[v1.ListRepositoryInvitationsRequest]) (*connect.Response[v1.ListRepositoryInvitationsResponse], error)
+	ListOwnRepositoryInvitations(context.Context, *connect.Request[v1.ListOwnRepositoryInvitationsRequest]) (*connect.Response[v1.ListOwnRepositoryInvitationsResponse], error)
+	RespondRepositoryInvitation(context.Context, *connect.Request[v1.RespondRepositoryInvitationRequest]) (*connect.Response[v1.RespondRepositoryInvitationResponse], error)
+	RevokeRepositoryInvitation(context.Context, *connect.Request[v1.RevokeRepositoryInvitationRequest]) (*connect.Response[v1.RevokeRepositoryInvitationResponse], error)
+	GetRepositoryInvitationOperation(context.Context, *connect.Request[v1.GetRepositoryInvitationOperationRequest]) (*connect.Response[v1.GetRepositoryInvitationOperationResponse], error)
+}
+
+// NewRepositoryInvitationServiceClient constructs a client for the
+// golf.v1.RepositoryInvitationService service. By default, it uses the Connect protocol with the
+// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
+// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRepositoryInvitationServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepositoryInvitationServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	repositoryInvitationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryInvitationService").Methods()
+	return &repositoryInvitationServiceClient{
+		previewRepositoryInvitationRecipient: connect.NewClient[v1.PreviewRepositoryInvitationRecipientRequest, v1.PreviewRepositoryInvitationRecipientResponse](
+			httpClient,
+			baseURL+RepositoryInvitationServicePreviewRepositoryInvitationRecipientProcedure,
+			connect.WithSchema(repositoryInvitationServiceMethods.ByName("PreviewRepositoryInvitationRecipient")),
+			connect.WithClientOptions(opts...),
+		),
+		createRepositoryInvitation: connect.NewClient[v1.CreateRepositoryInvitationRequest, v1.CreateRepositoryInvitationResponse](
+			httpClient,
+			baseURL+RepositoryInvitationServiceCreateRepositoryInvitationProcedure,
+			connect.WithSchema(repositoryInvitationServiceMethods.ByName("CreateRepositoryInvitation")),
+			connect.WithClientOptions(opts...),
+		),
+		listRepositoryInvitations: connect.NewClient[v1.ListRepositoryInvitationsRequest, v1.ListRepositoryInvitationsResponse](
+			httpClient,
+			baseURL+RepositoryInvitationServiceListRepositoryInvitationsProcedure,
+			connect.WithSchema(repositoryInvitationServiceMethods.ByName("ListRepositoryInvitations")),
+			connect.WithClientOptions(opts...),
+		),
+		listOwnRepositoryInvitations: connect.NewClient[v1.ListOwnRepositoryInvitationsRequest, v1.ListOwnRepositoryInvitationsResponse](
+			httpClient,
+			baseURL+RepositoryInvitationServiceListOwnRepositoryInvitationsProcedure,
+			connect.WithSchema(repositoryInvitationServiceMethods.ByName("ListOwnRepositoryInvitations")),
+			connect.WithClientOptions(opts...),
+		),
+		respondRepositoryInvitation: connect.NewClient[v1.RespondRepositoryInvitationRequest, v1.RespondRepositoryInvitationResponse](
+			httpClient,
+			baseURL+RepositoryInvitationServiceRespondRepositoryInvitationProcedure,
+			connect.WithSchema(repositoryInvitationServiceMethods.ByName("RespondRepositoryInvitation")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeRepositoryInvitation: connect.NewClient[v1.RevokeRepositoryInvitationRequest, v1.RevokeRepositoryInvitationResponse](
+			httpClient,
+			baseURL+RepositoryInvitationServiceRevokeRepositoryInvitationProcedure,
+			connect.WithSchema(repositoryInvitationServiceMethods.ByName("RevokeRepositoryInvitation")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryInvitationOperation: connect.NewClient[v1.GetRepositoryInvitationOperationRequest, v1.GetRepositoryInvitationOperationResponse](
+			httpClient,
+			baseURL+RepositoryInvitationServiceGetRepositoryInvitationOperationProcedure,
+			connect.WithSchema(repositoryInvitationServiceMethods.ByName("GetRepositoryInvitationOperation")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// repositoryInvitationServiceClient implements RepositoryInvitationServiceClient.
+type repositoryInvitationServiceClient struct {
+	previewRepositoryInvitationRecipient *connect.Client[v1.PreviewRepositoryInvitationRecipientRequest, v1.PreviewRepositoryInvitationRecipientResponse]
+	createRepositoryInvitation           *connect.Client[v1.CreateRepositoryInvitationRequest, v1.CreateRepositoryInvitationResponse]
+	listRepositoryInvitations            *connect.Client[v1.ListRepositoryInvitationsRequest, v1.ListRepositoryInvitationsResponse]
+	listOwnRepositoryInvitations         *connect.Client[v1.ListOwnRepositoryInvitationsRequest, v1.ListOwnRepositoryInvitationsResponse]
+	respondRepositoryInvitation          *connect.Client[v1.RespondRepositoryInvitationRequest, v1.RespondRepositoryInvitationResponse]
+	revokeRepositoryInvitation           *connect.Client[v1.RevokeRepositoryInvitationRequest, v1.RevokeRepositoryInvitationResponse]
+	getRepositoryInvitationOperation     *connect.Client[v1.GetRepositoryInvitationOperationRequest, v1.GetRepositoryInvitationOperationResponse]
+}
+
+// PreviewRepositoryInvitationRecipient calls
+// golf.v1.RepositoryInvitationService.PreviewRepositoryInvitationRecipient.
+func (c *repositoryInvitationServiceClient) PreviewRepositoryInvitationRecipient(ctx context.Context, req *connect.Request[v1.PreviewRepositoryInvitationRecipientRequest]) (*connect.Response[v1.PreviewRepositoryInvitationRecipientResponse], error) {
+	return c.previewRepositoryInvitationRecipient.CallUnary(ctx, req)
+}
+
+// CreateRepositoryInvitation calls golf.v1.RepositoryInvitationService.CreateRepositoryInvitation.
+func (c *repositoryInvitationServiceClient) CreateRepositoryInvitation(ctx context.Context, req *connect.Request[v1.CreateRepositoryInvitationRequest]) (*connect.Response[v1.CreateRepositoryInvitationResponse], error) {
+	return c.createRepositoryInvitation.CallUnary(ctx, req)
+}
+
+// ListRepositoryInvitations calls golf.v1.RepositoryInvitationService.ListRepositoryInvitations.
+func (c *repositoryInvitationServiceClient) ListRepositoryInvitations(ctx context.Context, req *connect.Request[v1.ListRepositoryInvitationsRequest]) (*connect.Response[v1.ListRepositoryInvitationsResponse], error) {
+	return c.listRepositoryInvitations.CallUnary(ctx, req)
+}
+
+// ListOwnRepositoryInvitations calls
+// golf.v1.RepositoryInvitationService.ListOwnRepositoryInvitations.
+func (c *repositoryInvitationServiceClient) ListOwnRepositoryInvitations(ctx context.Context, req *connect.Request[v1.ListOwnRepositoryInvitationsRequest]) (*connect.Response[v1.ListOwnRepositoryInvitationsResponse], error) {
+	return c.listOwnRepositoryInvitations.CallUnary(ctx, req)
+}
+
+// RespondRepositoryInvitation calls
+// golf.v1.RepositoryInvitationService.RespondRepositoryInvitation.
+func (c *repositoryInvitationServiceClient) RespondRepositoryInvitation(ctx context.Context, req *connect.Request[v1.RespondRepositoryInvitationRequest]) (*connect.Response[v1.RespondRepositoryInvitationResponse], error) {
+	return c.respondRepositoryInvitation.CallUnary(ctx, req)
+}
+
+// RevokeRepositoryInvitation calls golf.v1.RepositoryInvitationService.RevokeRepositoryInvitation.
+func (c *repositoryInvitationServiceClient) RevokeRepositoryInvitation(ctx context.Context, req *connect.Request[v1.RevokeRepositoryInvitationRequest]) (*connect.Response[v1.RevokeRepositoryInvitationResponse], error) {
+	return c.revokeRepositoryInvitation.CallUnary(ctx, req)
+}
+
+// GetRepositoryInvitationOperation calls
+// golf.v1.RepositoryInvitationService.GetRepositoryInvitationOperation.
+func (c *repositoryInvitationServiceClient) GetRepositoryInvitationOperation(ctx context.Context, req *connect.Request[v1.GetRepositoryInvitationOperationRequest]) (*connect.Response[v1.GetRepositoryInvitationOperationResponse], error) {
+	return c.getRepositoryInvitationOperation.CallUnary(ctx, req)
+}
+
+// RepositoryInvitationServiceHandler is an implementation of the
+// golf.v1.RepositoryInvitationService service.
+type RepositoryInvitationServiceHandler interface {
+	PreviewRepositoryInvitationRecipient(context.Context, *connect.Request[v1.PreviewRepositoryInvitationRecipientRequest]) (*connect.Response[v1.PreviewRepositoryInvitationRecipientResponse], error)
+	CreateRepositoryInvitation(context.Context, *connect.Request[v1.CreateRepositoryInvitationRequest]) (*connect.Response[v1.CreateRepositoryInvitationResponse], error)
+	ListRepositoryInvitations(context.Context, *connect.Request[v1.ListRepositoryInvitationsRequest]) (*connect.Response[v1.ListRepositoryInvitationsResponse], error)
+	ListOwnRepositoryInvitations(context.Context, *connect.Request[v1.ListOwnRepositoryInvitationsRequest]) (*connect.Response[v1.ListOwnRepositoryInvitationsResponse], error)
+	RespondRepositoryInvitation(context.Context, *connect.Request[v1.RespondRepositoryInvitationRequest]) (*connect.Response[v1.RespondRepositoryInvitationResponse], error)
+	RevokeRepositoryInvitation(context.Context, *connect.Request[v1.RevokeRepositoryInvitationRequest]) (*connect.Response[v1.RevokeRepositoryInvitationResponse], error)
+	GetRepositoryInvitationOperation(context.Context, *connect.Request[v1.GetRepositoryInvitationOperationRequest]) (*connect.Response[v1.GetRepositoryInvitationOperationResponse], error)
+}
+
+// NewRepositoryInvitationServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRepositoryInvitationServiceHandler(svc RepositoryInvitationServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	repositoryInvitationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryInvitationService").Methods()
+	repositoryInvitationServicePreviewRepositoryInvitationRecipientHandler := connect.NewUnaryHandler(
+		RepositoryInvitationServicePreviewRepositoryInvitationRecipientProcedure,
+		svc.PreviewRepositoryInvitationRecipient,
+		connect.WithSchema(repositoryInvitationServiceMethods.ByName("PreviewRepositoryInvitationRecipient")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryInvitationServiceCreateRepositoryInvitationHandler := connect.NewUnaryHandler(
+		RepositoryInvitationServiceCreateRepositoryInvitationProcedure,
+		svc.CreateRepositoryInvitation,
+		connect.WithSchema(repositoryInvitationServiceMethods.ByName("CreateRepositoryInvitation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryInvitationServiceListRepositoryInvitationsHandler := connect.NewUnaryHandler(
+		RepositoryInvitationServiceListRepositoryInvitationsProcedure,
+		svc.ListRepositoryInvitations,
+		connect.WithSchema(repositoryInvitationServiceMethods.ByName("ListRepositoryInvitations")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryInvitationServiceListOwnRepositoryInvitationsHandler := connect.NewUnaryHandler(
+		RepositoryInvitationServiceListOwnRepositoryInvitationsProcedure,
+		svc.ListOwnRepositoryInvitations,
+		connect.WithSchema(repositoryInvitationServiceMethods.ByName("ListOwnRepositoryInvitations")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryInvitationServiceRespondRepositoryInvitationHandler := connect.NewUnaryHandler(
+		RepositoryInvitationServiceRespondRepositoryInvitationProcedure,
+		svc.RespondRepositoryInvitation,
+		connect.WithSchema(repositoryInvitationServiceMethods.ByName("RespondRepositoryInvitation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryInvitationServiceRevokeRepositoryInvitationHandler := connect.NewUnaryHandler(
+		RepositoryInvitationServiceRevokeRepositoryInvitationProcedure,
+		svc.RevokeRepositoryInvitation,
+		connect.WithSchema(repositoryInvitationServiceMethods.ByName("RevokeRepositoryInvitation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryInvitationServiceGetRepositoryInvitationOperationHandler := connect.NewUnaryHandler(
+		RepositoryInvitationServiceGetRepositoryInvitationOperationProcedure,
+		svc.GetRepositoryInvitationOperation,
+		connect.WithSchema(repositoryInvitationServiceMethods.ByName("GetRepositoryInvitationOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RepositoryInvitationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RepositoryInvitationServicePreviewRepositoryInvitationRecipientProcedure:
+			repositoryInvitationServicePreviewRepositoryInvitationRecipientHandler.ServeHTTP(w, r)
+		case RepositoryInvitationServiceCreateRepositoryInvitationProcedure:
+			repositoryInvitationServiceCreateRepositoryInvitationHandler.ServeHTTP(w, r)
+		case RepositoryInvitationServiceListRepositoryInvitationsProcedure:
+			repositoryInvitationServiceListRepositoryInvitationsHandler.ServeHTTP(w, r)
+		case RepositoryInvitationServiceListOwnRepositoryInvitationsProcedure:
+			repositoryInvitationServiceListOwnRepositoryInvitationsHandler.ServeHTTP(w, r)
+		case RepositoryInvitationServiceRespondRepositoryInvitationProcedure:
+			repositoryInvitationServiceRespondRepositoryInvitationHandler.ServeHTTP(w, r)
+		case RepositoryInvitationServiceRevokeRepositoryInvitationProcedure:
+			repositoryInvitationServiceRevokeRepositoryInvitationHandler.ServeHTTP(w, r)
+		case RepositoryInvitationServiceGetRepositoryInvitationOperationProcedure:
+			repositoryInvitationServiceGetRepositoryInvitationOperationHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRepositoryInvitationServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRepositoryInvitationServiceHandler struct{}
+
+func (UnimplementedRepositoryInvitationServiceHandler) PreviewRepositoryInvitationRecipient(context.Context, *connect.Request[v1.PreviewRepositoryInvitationRecipientRequest]) (*connect.Response[v1.PreviewRepositoryInvitationRecipientResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryInvitationService.PreviewRepositoryInvitationRecipient is not implemented"))
+}
+
+func (UnimplementedRepositoryInvitationServiceHandler) CreateRepositoryInvitation(context.Context, *connect.Request[v1.CreateRepositoryInvitationRequest]) (*connect.Response[v1.CreateRepositoryInvitationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryInvitationService.CreateRepositoryInvitation is not implemented"))
+}
+
+func (UnimplementedRepositoryInvitationServiceHandler) ListRepositoryInvitations(context.Context, *connect.Request[v1.ListRepositoryInvitationsRequest]) (*connect.Response[v1.ListRepositoryInvitationsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryInvitationService.ListRepositoryInvitations is not implemented"))
+}
+
+func (UnimplementedRepositoryInvitationServiceHandler) ListOwnRepositoryInvitations(context.Context, *connect.Request[v1.ListOwnRepositoryInvitationsRequest]) (*connect.Response[v1.ListOwnRepositoryInvitationsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryInvitationService.ListOwnRepositoryInvitations is not implemented"))
+}
+
+func (UnimplementedRepositoryInvitationServiceHandler) RespondRepositoryInvitation(context.Context, *connect.Request[v1.RespondRepositoryInvitationRequest]) (*connect.Response[v1.RespondRepositoryInvitationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryInvitationService.RespondRepositoryInvitation is not implemented"))
+}
+
+func (UnimplementedRepositoryInvitationServiceHandler) RevokeRepositoryInvitation(context.Context, *connect.Request[v1.RevokeRepositoryInvitationRequest]) (*connect.Response[v1.RevokeRepositoryInvitationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryInvitationService.RevokeRepositoryInvitation is not implemented"))
+}
+
+func (UnimplementedRepositoryInvitationServiceHandler) GetRepositoryInvitationOperation(context.Context, *connect.Request[v1.GetRepositoryInvitationOperationRequest]) (*connect.Response[v1.GetRepositoryInvitationOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryInvitationService.GetRepositoryInvitationOperation is not implemented"))
 }
