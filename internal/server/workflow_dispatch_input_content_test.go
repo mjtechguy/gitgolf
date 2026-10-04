@@ -197,13 +197,14 @@ func TestWorkflowDispatchInputContentPostgres(t *testing.T) {
 		t.Fatal("run fixture unavailable")
 	}
 	_, identity, schema, values := dispatchInputContentFixture(t)
-	identity.RunID = run.ID
+	sourceRunID := run.ID
+	identity.RunID = uuid.NewString()
 	identity.ForgeURL = run.ForgeURL
 	identity.UserID = run.UserID
 	identity.NativeActorID = f.user.ID
 	identity.RepositoryID = run.RepositoryID
 	identity.OwnerID = run.OwnerID
-	identity.IdempotencyKey = run.IdempotencyKey
+	identity.IdempotencyKey = uuid.NewString()
 	identity.CommitID = run.CommitID
 	identity.WorkflowPath = run.WorkflowPath
 	identity.BlobID = run.BlobID
@@ -218,15 +219,11 @@ func TestWorkflowDispatchInputContentPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	cloneID := uuid.NewString()
-	patch, _ := json.Marshal(map[string]any{"id": cloneID, "idempotency_key": cloneID})
-	if _, err = tx.Exec(`INSERT INTO golf_workflow_runs SELECT (jsonb_populate_record(NULL::golf_workflow_runs,to_jsonb(r)||$2::jsonb)).* FROM golf_workflow_runs r WHERE id=$1`, run.ID, string(patch)); err != nil {
-		tx.Rollback()
-		t.Fatal("run clone fixture failed", err)
-	}
 	bad := row
 	bad.Identity.RunID = cloneID
 	bad.Identity.IdempotencyKey = cloneID
 	bad.Identity.NativeActorID++
+	insertTypedWorkflowInputFixtureRun(t, tx, sourceRunID, bad)
 	if err = insertDispatchInputContent(t.Context(), tx, bad); err == nil {
 		tx.Rollback()
 		t.Fatal("foreign native actor admitted")
@@ -240,6 +237,7 @@ func TestWorkflowDispatchInputContentPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	insertTypedWorkflowInputFixtureRun(t, tx, sourceRunID, row)
 	if err = insertDispatchInputContent(t.Context(), tx, row); err != nil {
 		tx.Rollback()
 		t.Fatal("bound content insert failed", err)
@@ -247,6 +245,7 @@ func TestWorkflowDispatchInputContentPostgres(t *testing.T) {
 	if tx.Commit() != nil {
 		t.Fatal("content commit failed")
 	}
+	run.ID = identity.RunID
 	for _, statement := range []string{
 		`UPDATE golf_workflow_dispatch_inputs SET owner_id=owner_id+1`,
 		`UPDATE golf_workflow_dispatch_inputs SET payload_sha256=repeat('d',64)`,
@@ -270,13 +269,14 @@ func TestWorkflowDispatchInputContentPostgres(t *testing.T) {
 		t.Fatal("second run unavailable")
 	}
 	swapped := row
-	swapped.Identity.RunID = secondRun.ID
-	swapped.Identity.IdempotencyKey = secondRun.IdempotencyKey
+	swapped.Identity.RunID = uuid.NewString()
+	swapped.Identity.IdempotencyKey = uuid.NewString()
 	swapped.Binding = workflowDispatchInputBinding(swapped.Identity, swapped.PlainBytes, swapped.PlainSHA256)
 	tx, err = f.server.db.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	insertTypedWorkflowInputFixtureRun(t, tx, secondRun.ID, swapped)
 	if err = insertDispatchInputContent(t.Context(), tx, swapped); err != nil {
 		tx.Rollback()
 		t.Fatal("swap SQL fixture refused", err)

@@ -57,6 +57,7 @@ type workflowRunRecord struct {
 	PolicyEpochs                                                                                  []byte
 	IdempotencyKey                                                                                string
 	InputHash                                                                                     []byte
+	InputContract, SchemaSHA256, SubmittedSHA256, EffectiveSHA256                                 string
 	EngineCatalog                                                                                 string
 	ActionJobs                                                                                    []*golfv1.WorkflowJobInstance
 	State                                                                                         string
@@ -75,13 +76,13 @@ type workflowRunRecord struct {
 	RunnerPlacement                                                                               runnerPoolBinding
 }
 
-const workflowRunColumns = `id::text,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,policy_epochs,idempotency_key::text,input_hash,state,version,created_at,started_at,finished_at,exit_code,reason,runner_id,attempt_id,lease_token_hash,lease_expires_at,cancel_requested,logs_truncated,source_sha256,log_bytes,log_sequence,source_storage,source_key,source_fingerprint,source_profile_id::text,source_profile_version,origin,automation_grant_id::text,automation_grant_revision,automation_grant_epoch,automation_credential_version,repository_event_id,event_ref,engine_catalog,runner_pool_id::text,runner_pool_version,runner_placement_version,resource_bound,resource_instance_version,resource_cpu_millis,resource_memory_bytes,resource_pids,resource_timeout_seconds`
+const workflowRunColumns = `id::text,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,policy_epochs,idempotency_key::text,input_hash,state,version,created_at,started_at,finished_at,exit_code,reason,runner_id,attempt_id,lease_token_hash,lease_expires_at,cancel_requested,logs_truncated,source_sha256,log_bytes,log_sequence,source_storage,source_key,source_fingerprint,source_profile_id::text,source_profile_version,origin,automation_grant_id::text,automation_grant_revision,automation_grant_epoch,automation_credential_version,repository_event_id,event_ref,engine_catalog,runner_pool_id::text,runner_pool_version,runner_placement_version,resource_bound,resource_instance_version,resource_cpu_millis,resource_memory_bytes,resource_pids,resource_timeout_seconds,input_contract,input_schema_sha256,submitted_inputs_sha256,effective_inputs_sha256`
 
 type workflowRunScanner interface{ Scan(...any) error }
 
 func scanWorkflowRun(row workflowRunScanner) (workflowRunRecord, error) {
 	var r workflowRunRecord
-	err := row.Scan(&r.ID, &r.ForgeURL, &r.RepositoryID, &r.OwnerID, &r.RepositoryOwner, &r.RepositoryName, &r.OrganizationOwned, &r.UserID, &r.SessionHash, &r.CommitID, &r.WorkflowPath, &r.BlobID, &r.Format, &r.PolicyEpochs, &r.IdempotencyKey, &r.InputHash, &r.State, &r.Version, &r.CreatedAt, &r.StartedAt, &r.FinishedAt, &r.ExitCode, &r.Reason, &r.RunnerID, &r.AttemptID, &r.LeaseTokenHash, &r.LeaseExpiresAt, &r.CancelRequested, &r.LogsTruncated, &r.SourceSHA256, &r.LogBytes, &r.LogSequence, &r.SourceStorage, &r.SourceKey, &r.SourceFingerprint, &r.SourceProfileID, &r.SourceProfileVersion, &r.Origin, &r.AutomationGrantID, &r.AutomationGrantRevision, &r.AutomationGrantEpoch, &r.AutomationCredentialVersion, &r.RepositoryEventID, &r.EventRef, &r.EngineCatalog, &r.RunnerPlacement.PoolID, &r.RunnerPlacement.PoolVersion, &r.RunnerPlacement.PlacementVersion, &r.ResourceBound, &r.ResourceInstanceVersion, &r.Resources.CPUMillis, &r.Resources.MemoryBytes, &r.Resources.Pids, &r.Resources.TimeoutSeconds)
+	err := row.Scan(&r.ID, &r.ForgeURL, &r.RepositoryID, &r.OwnerID, &r.RepositoryOwner, &r.RepositoryName, &r.OrganizationOwned, &r.UserID, &r.SessionHash, &r.CommitID, &r.WorkflowPath, &r.BlobID, &r.Format, &r.PolicyEpochs, &r.IdempotencyKey, &r.InputHash, &r.State, &r.Version, &r.CreatedAt, &r.StartedAt, &r.FinishedAt, &r.ExitCode, &r.Reason, &r.RunnerID, &r.AttemptID, &r.LeaseTokenHash, &r.LeaseExpiresAt, &r.CancelRequested, &r.LogsTruncated, &r.SourceSHA256, &r.LogBytes, &r.LogSequence, &r.SourceStorage, &r.SourceKey, &r.SourceFingerprint, &r.SourceProfileID, &r.SourceProfileVersion, &r.Origin, &r.AutomationGrantID, &r.AutomationGrantRevision, &r.AutomationGrantEpoch, &r.AutomationCredentialVersion, &r.RepositoryEventID, &r.EventRef, &r.EngineCatalog, &r.RunnerPlacement.PoolID, &r.RunnerPlacement.PoolVersion, &r.RunnerPlacement.PlacementVersion, &r.ResourceBound, &r.ResourceInstanceVersion, &r.Resources.CPUMillis, &r.Resources.MemoryBytes, &r.Resources.Pids, &r.Resources.TimeoutSeconds, &r.InputContract, &r.SchemaSHA256, &r.SubmittedSHA256, &r.EffectiveSHA256)
 	return r, err
 }
 func (s *Server) loadWorkflowRun(ctx context.Context, id string) (workflowRunRecord, error) {
@@ -103,6 +104,7 @@ func (s *Server) loadWorkflowRun(ctx context.Context, id string) (workflowRunRec
 }
 func wireWorkflowRun(r workflowRunRecord, canCancel bool) *golfv1.WorkflowRun {
 	w := &golfv1.WorkflowRun{Id: r.ID, RepositoryId: strconv.FormatInt(r.RepositoryID, 10), OwnerId: strconv.FormatInt(r.OwnerID, 10), CommitId: r.CommitID, WorkflowPath: r.WorkflowPath, WorkflowBlobId: r.BlobID, Format: golfv1.WorkflowFormat(r.Format), State: golfv1.WorkflowRunState(golfv1.WorkflowRunState_value["WORKFLOW_RUN_STATE_"+strings.ToUpper(r.State)]), Version: strconv.FormatInt(r.Version, 10), CreatedAt: r.CreatedAt.Format(time.RFC3339Nano), Reason: r.Reason, RunnerId: r.RunnerID, SourceSha256: r.SourceSHA256, LogsTruncated: r.LogsTruncated, CanCancel: canCancel && (r.State == "queued" || r.State == "running")}
+	w.InputContract, w.SchemaSha256, w.SubmittedSha256, w.EffectiveSha256 = r.InputContract, r.SchemaSHA256, r.SubmittedSHA256, r.EffectiveSHA256
 	w.RunnerPlacement = runnerPoolBindingWire(r.RunnerPlacement)
 	w.JobResources = resourceBindingWire(r)
 	w.OutputState = r.OutputState
@@ -112,7 +114,7 @@ func wireWorkflowRun(r workflowRunRecord, canCancel bool) *golfv1.WorkflowRun {
 	if w.EngineCatalog == "" {
 		w.EngineCatalog = workflowExecutionCatalog
 	}
-	if w.EngineCatalog == runner.ActionsCatalog {
+	if w.EngineCatalog == runner.ActionsCatalog || w.EngineCatalog == workflowTypedEngineCatalog {
 		w.EngineCommit = runner.ActionsEngineCommit
 		w.Jobs = r.ActionJobs
 	}
@@ -554,11 +556,18 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 	if !creationKey.MatchString(m.IdempotencyKey) || !validRef(m.Ref) || !executionWorkflowPath(m.WorkflowPath) {
 		return nil, rpcError(invalid("Provide a canonical UUID v4, supported workflow path and plain ref."))
 	}
+	typedMode, expectedRepo, expectedOwner, err := workflowDispatchTypedMode(m)
+	if err != nil {
+		return nil, rpcError(err)
+	}
 	var result workflowRunRecord
-	err = s.withWorkflowRepository(ctx, s.cookieValue(req.Header()), credential, key, 0, 0, true, func(user User, access *golfv1.RepositoryAccess) error {
+	err = s.withWorkflowRepository(ctx, s.cookieValue(req.Header()), credential, key, expectedRepo, expectedOwner, true, func(user User, access *golfv1.RepositoryAccess) error {
 		repoID, _ := strconv.ParseInt(access.RepositoryId, 10, 64)
 		ownerID, _ := strconv.ParseInt(access.OwnerId, 10, 64)
 		inputHash := workflowIntentHash(key, m.Ref, m.WorkflowPath, repoID, ownerID)
+		if typedMode {
+			inputHash = workflowTypedIntentHash(key, m.Ref, m.WorkflowPath, repoID, ownerID, m.WorkflowBlobId, m.SchemaSha256, m.GetSubmittedSha256(), m.EffectiveSha256, m.GetInputContract())
+		}
 		checkEditable := func() error {
 			row, _, e := s.readRepositorySettings(ctx, credential, key)
 			if e != nil {
@@ -582,6 +591,11 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 				if !bytes.Equal(r.InputHash, inputHash) {
 					return errWorkflowRunConflict
 				}
+				if typedMode {
+					if e := s.verifyWorkflowTypedReplay(ctx, tx, r, user.ID, m); e != nil {
+						return e
+					}
+				}
 				result = r
 				existing = true
 				return nil
@@ -601,7 +615,15 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 		if e != nil || existing {
 			return e
 		}
-		commit, blob, plan, source, e := s.prepareWorkflowRun(ctx, credential, key, m.Ref, m.WorkflowPath)
+		var commit, blob string
+		var plan *workflowExecutionPlan
+		var source []byte
+		var typed *workflowDispatchTyped
+		if typedMode {
+			commit, blob, plan, source, typed, e = s.prepareWorkflowDispatchTyped(ctx, credential, key, m)
+		} else {
+			commit, blob, plan, source, e = s.prepareWorkflowRun(ctx, credential, key, m.Ref, m.WorkflowPath)
+		}
 		if e != nil {
 			return e
 		}
@@ -610,6 +632,13 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 			return e
 		}
 		plan.ImageDigest = image
+		if typedMode {
+			envelope := &runner.ActionManualInputs{Contract: workflowManualInputsContract, SchemaSHA256: typed.Schema.SHA256, SubmittedSHA256: typed.Values.SubmittedSHA256, EffectiveSHA256: typed.Values.EffectiveSHA256, Submitted: typed.Values.Submitted, Effective: typed.Values.Effective}
+			metadata := workflowRunRecord{CommitID: commit, RepositoryID: repoID, OwnerID: ownerID, RepositoryOwner: key.Owner, RepositoryName: key.Name}
+			if _, e = workflowActionEventJSON(metadata, *plan.Actions, envelope); e != nil {
+				return e
+			}
+		}
 		sourceBinding, e := s.storeWorkflowSource(ctx, source)
 		if e != nil {
 			return e
@@ -638,7 +667,13 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 		sum := sha256.Sum256(source)
 		admissionRun := workflowRunRecord{OrganizationOwned: access.OrganizationOwned, ID: id, ForgeURL: s.config.GiteaURL, RepositoryID: repoID, OwnerID: ownerID, RepositoryOwner: key.Owner, RepositoryName: key.Name, Origin: "manual", EventRef: m.Ref, CommitID: commit, BlobID: blob, WorkflowPath: m.WorkflowPath, SourceSHA256: hex.EncodeToString(sum[:]), EngineCatalog: workflowExecutionCatalog}
 		if plan.Actions != nil {
-			admissionRun.EngineCatalog = runner.ActionsCatalog
+			admissionRun.EngineCatalog = plan.Actions.Catalog
+		}
+		if typedMode {
+			admissionRun.InputContract = m.GetInputContract()
+			admissionRun.SchemaSHA256 = typed.Schema.SHA256
+			admissionRun.SubmittedSHA256 = typed.Values.SubmittedSHA256
+			admissionRun.EffectiveSHA256 = typed.Values.EffectiveSHA256
 		}
 		approval, e := s.executionApprovalForSource(ctx, admissionRun)
 		if e != nil {
@@ -669,7 +704,7 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 			if e != nil {
 				return errStorageUnavailable
 			}
-			_, e = tx.ExecContext(ctx, `INSERT INTO golf_workflow_runs(id,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,plan,source_archive,source_sha256,policy_epochs,idempotency_key,input_hash,source_storage,source_key,source_fingerprint,source_profile_id,source_profile_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) ON CONFLICT(forge_url,user_id,origin,idempotency_key) DO NOTHING`, id, s.config.GiteaURL, repoID, ownerID, key.Owner, key.Name, access.OrganizationOwned, actor.UserID, hash, commit, m.WorkflowPath, blob, int32(plan.Format), planJSON, sourceBinding.Archive, hex.EncodeToString(sum[:]), epochs, m.IdempotencyKey, inputHash, sourceBinding.Storage, sourceBinding.Key, sourceBinding.Fingerprint, sourceBinding.ProfileID, sourceBinding.ProfileVersion)
+			_, e = tx.ExecContext(ctx, `INSERT INTO golf_workflow_runs(id,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,plan,source_archive,source_sha256,policy_epochs,idempotency_key,input_hash,source_storage,source_key,source_fingerprint,source_profile_id,source_profile_version,input_contract,input_schema_sha256,submitted_inputs_sha256,effective_inputs_sha256) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28) ON CONFLICT(forge_url,user_id,origin,idempotency_key) DO NOTHING`, id, s.config.GiteaURL, repoID, ownerID, key.Owner, key.Name, access.OrganizationOwned, actor.UserID, hash, commit, m.WorkflowPath, blob, int32(plan.Format), planJSON, sourceBinding.Archive, hex.EncodeToString(sum[:]), epochs, m.IdempotencyKey, inputHash, sourceBinding.Storage, sourceBinding.Key, sourceBinding.Fingerprint, sourceBinding.ProfileID, sourceBinding.ProfileVersion, admissionRun.InputContract, admissionRun.SchemaSHA256, admissionRun.SubmittedSHA256, admissionRun.EffectiveSHA256)
 			if e != nil {
 				return errStorageUnavailable
 			}
@@ -680,7 +715,17 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 			if !bytes.Equal(result.InputHash, inputHash) {
 				return errWorkflowRunConflict
 			}
+			if result.ID != id && typedMode {
+				if e = s.verifyWorkflowTypedReplay(ctx, tx, result, user.ID, m); e != nil {
+					return e
+				}
+			}
 			if result.ID == id {
+				if typedMode {
+					if e = s.storeWorkflowDispatchTyped(ctx, tx, result, user.ID, typed); e != nil {
+						return e
+					}
+				}
 				admissionRun.UserID = actor.UserID
 				if e = s.attachExecutionBinding(ctx, tx, admissionRun, approval); e != nil {
 					return e
