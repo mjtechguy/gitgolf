@@ -159,7 +159,7 @@ def main():
     for digest in (args.expected_core_sha256,args.expected_runner_sha256,args.expected_engine_sha256):assert re.fullmatch('[a-f0-9]{64}',digest)
     output.mkdir(parents=True,mode=0o700);output.chmod(0o700)
     environment={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k!='DATABASE_URL'}
-    forbidden=[LITERAL];manifest={'complete':False,'passed':False,'proofKind':'typed-manual-inputs059','sourceRevision':args.source_revision,'limitations':['One full-SHA manual v2 run only; no UI, input-declaring push, secret binding, provider inference or full Actions parity.','Discarded actual response body after accepted HTTP headers; no arbitrary transport-loss guarantee.','Current native/lease fences source+PG-qualified separately; this runtime slice tests old/HTTP worker exclusion.']}
+    forbidden=[LITERAL];manifest={'complete':False,'passed':False,'proofKind':'typed-execution-values060' if args.execution_values else 'typed-manual-inputs059','sourceRevision':args.source_revision,'limitations':['One full-SHA manual v2 run only; no UI, input-declaring push, provider inference or full Actions parity.','Discarded actual response body after accepted HTTP headers; no arbitrary transport-loss guarantee.','Current native/lease fences source+PG-qualified separately; this runtime slice tests old/HTTP worker exclusion.']}
     def execute(*argv,payload=None,timeout=180,expected=0):
         result=subprocess.run(argv,input=None if payload is None else json.dumps(payload).encode(),cwd=stack,env=environment,capture_output=True,timeout=timeout)
         if result.returncode!=expected and not (output/'private-command-failure.json').exists():
