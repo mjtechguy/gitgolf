@@ -259,6 +259,7 @@ type GolfCryptoEvent struct {
 	QuarantinedOutputsCount          int64
 	NotificationContentsCount        int64
 	OrganizationExecutionValuesCount int64
+	WorkflowDispatchInputsCount      int64
 }
 
 type GolfEmailAttempt struct {
@@ -1445,6 +1446,30 @@ type GolfWebhookSubscription struct {
 	CreatedAt             time.Time
 	UpdatedAt             time.Time
 	WorkflowNotifications int32
+}
+
+type GolfWorkflowDispatchInput struct {
+	RunID            uuid.UUID
+	ContractVersion  int32
+	ForgeURL         string
+	UserID           int64
+	NativeActorID    int64
+	RepositoryID     int64
+	OwnerID          int64
+	IdempotencyKey   uuid.UUID
+	CommitID         string
+	WorkflowPath     string
+	BlobID           string
+	SourceSha256     string
+	SchemaSha256     string
+	SubmittedSha256  string
+	EffectiveSha256  string
+	PayloadBytes     int32
+	PayloadSha256    string
+	EncryptedContent []byte
+	ContentBinding   []byte
+	CredentialKeyID  string
+	CreatedAt        time.Time
 }
 
 type GolfWorkflowExecutionBinding struct {
