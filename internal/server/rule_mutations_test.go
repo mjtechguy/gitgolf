@@ -286,6 +286,20 @@ func newRuleMutationFixture(t *testing.T) *ruleMutationFixture {
 	original := f.provider.Config.Handler
 	f.provider.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
+			switch r.URL.Path {
+			case "/api/v1/users/alice":
+				json.NewEncoder(w).Encode(User{ID: 42, Login: "alice"})
+				return
+			case "/api/v1/users/direct":
+				json.NewEncoder(w).Encode(User{ID: 43, Login: "direct"})
+				return
+			case "/api/v1/repos/alice/example/collaborators/direct":
+				w.WriteHeader(204)
+				return
+			case "/api/v1/repos/alice/example/collaborators/direct/permission":
+				json.NewEncoder(w).Encode(map[string]any{"permission": "write", "user": User{ID: 43, Login: "direct"}})
+				return
+			}
 			original.ServeHTTP(w, r)
 			return
 		}
@@ -697,5 +711,104 @@ func TestRuleMutationsBranchAllowlistOrderPostgres(t *testing.T) {
 	slices.Reverse(m.DesiredBranch.PushUsernames)
 	if _, err = s.MutateRepositoryRules(ctx, request); connect.CodeOf(err) != connect.CodeFailedPrecondition || f.writes.Load() != 1 {
 		t.Fatal("set-equivalent input cannot change original key fingerprint", err)
+	}
+}
+
+// Requires the owned disposable Golf database harness. No live/native resources.
+func TestRuleMutationsTagPreflightRefusalPostgres(t *testing.T) {
+	for _, fault := range []string{"unrepresentable public read", "lost held direct membership", "replaced held user identity"} {
+		t.Run(fault, func(t *testing.T) {
+			db := testDatabase(t)
+			f := newRuleMutationFixture(t)
+			original := f.provider.Config.Handler
+			var userReads, collaborationReads atomic.Int64
+			f.provider.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet {
+					switch r.URL.Path {
+					case "/api/v1/users/direct":
+						id := int64(43)
+						if userReads.Add(1) > 1 && fault == "replaced held user identity" {
+							id = 44
+						}
+						json.NewEncoder(w).Encode(User{ID: id, Login: "direct"})
+						return
+					case "/api/v1/repos/alice/example/collaborators/direct":
+						if collaborationReads.Add(1) > 1 && fault == "lost held direct membership" {
+							w.WriteHeader(404)
+							return
+						}
+						w.WriteHeader(204)
+						return
+					case "/api/v1/repos/alice/example/collaborators/direct/permission":
+						permission := "write"
+						if fault == "unrepresentable public read" {
+							permission = "read"
+						}
+						id := int64(43)
+						if userReads.Load() > 1 && fault == "replaced held user identity" {
+							id = 44
+						}
+						json.NewEncoder(w).Encode(map[string]any{"permission": permission, "user": User{ID: id, Login: "direct"}})
+						return
+					}
+				}
+				original.ServeHTTP(w, r)
+			})
+			s, err := New(testConfig(f.provider.URL), db)
+			if err != nil {
+				t.Fatal(err)
+			}
+			session, err := s.createSession(t.Context(), User{ID: 42, Login: "alice"}, "pat", "rules-source-only", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			credential := forgeCredential{Kind: "pat", Token: "rules-source-only"}
+			ctx := context.WithValue(t.Context(), sessionTokenKey{}, credential)
+			before, err := s.currentRuleInventory(ctx, session.Value, credential, repositoryKey{"alice", "example"}, "9007199254740993", "42")
+			if err != nil {
+				t.Fatal(err)
+			}
+			m := ruleRequestFixture()
+			m.Action, m.RuleName, m.DesiredBranch = golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_EDIT_TAG, "", nil
+			m.TagId = before.TagProtections[0].Id
+			m.DesiredTag = &golfv1.RepositoryTagProtection{NamePattern: before.TagProtections[0].NamePattern, AllowedUsernames: []string{"direct"}}
+			m.ExpectedAccessRevision, m.ExpectedRulesRevision = before.AccessRevision, before.RulesRevision
+			request := connect.NewRequest(m)
+			request.Header().Set("Origin", s.config.PublicURL)
+			request.Header().Set("Cookie", s.sessionCookie(session.Value, session.Expires, 3600).String())
+			result, err := s.MutateRepositoryRules(ctx, request)
+			phase := "DISPATCH_UNKNOWN"
+			if fault == "unrepresentable public read" {
+				phase = "REJECTED"
+				if err != nil || result == nil || result.Msg.Operation.Phase != phase {
+					t.Fatal("early complete unsupported proof must durably reject", err)
+				}
+			} else if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+				t.Fatal("held positive-proof loss must fail closed", err)
+			}
+			if f.writes.Load() != 0 {
+				t.Fatal("refused selection sent native write")
+			}
+			status := connect.NewRequest(&golfv1.GetRepositoryRuleMutationRequest{Repository: m.Repository, RepositoryId: m.RepositoryId, OwnerId: m.OwnerId, OperationId: m.OperationId})
+			status.Header().Set("Origin", s.config.PublicURL)
+			status.Header().Set("Cookie", request.Header().Get("Cookie"))
+			inspected, err := s.GetRepositoryRuleMutation(ctx, status)
+			if err != nil || inspected.Msg.Operation.Phase != phase {
+				t.Fatal("original phase must remain inspectable", err)
+			}
+			// Restore source evidence; neither original replay nor UNKNOWN's new key
+			// may bypass the original once-only outcome boundary.
+			f.provider.Config.Handler = original
+			replay, err := s.MutateRepositoryRules(ctx, request)
+			if err != nil || replay.Msg.Operation.Phase != phase || f.writes.Load() != 0 {
+				t.Fatal("original inspection/replay changed effect", err)
+			}
+			if phase == "DISPATCH_UNKNOWN" {
+				m.OperationId = "54e788c6-7be6-4dd6-a71a-1a329fd7a4c6"
+				if _, err = s.MutateRepositoryRules(ctx, request); connect.CodeOf(err) != connect.CodeFailedPrecondition || f.writes.Load() != 0 {
+					t.Fatal("fresh key bypassed unknown exclusion", err)
+				}
+			}
+		})
 	}
 }

@@ -637,12 +637,16 @@ func (s *Server) MutateRepositoryRules(ctx context.Context, req *connect.Request
 		return nil
 	})
 	fresh, readErr := s.currentRuleInventory(ctx, session, token, key, m.RepositoryId, m.OwnerId)
+	var tagProof string
+	if e == nil && readErr == nil && access != nil && rulePreflight(m, fresh, access.OrganizationOwned) {
+		tagProof, e = s.tagAllowlistProof(ctx, token, key, m, access.OrganizationOwned)
+	}
 	if e != nil || readErr != nil || access == nil || !rulePreflight(m, fresh, access.OrganizationOwned) {
 		r, reject := s.advanceRuleMutation(ctx, session, token, r, "REJECTED", "")
 		if reject != nil {
 			return nil, ruleMutationRPCError(reject)
 		}
-		if e != nil {
+		if e != nil && !errors.Is(e, errTagAllowlistUnsupported) {
 			return nil, ruleMutationRPCError(e)
 		}
 		if readErr != nil {
@@ -681,6 +685,15 @@ func (s *Server) MutateRepositoryRules(ctx context.Context, req *connect.Request
 			}
 			if guarded.RulesRevision != m.ExpectedRulesRevision || guarded.AccessRevision != m.ExpectedAccessRevision {
 				return nil
+			}
+			// UNKNOWN is already durable. Lost/changed positive selection proof
+			// here issues zero writes but stays uncertain; no phase reversal/retry.
+			currentTagProof, err := s.tagAllowlistProof(writeCtx, token, key, m, access.OrganizationOwned)
+			if errors.Is(err, errTagAllowlistUnsupported) || err == nil && currentTagProof != tagProof {
+				return errRepositoryAccessConflict
+			}
+			if err != nil {
+				return err
 			}
 			base, _ := repositoryPath(key)
 			dispatched = true
