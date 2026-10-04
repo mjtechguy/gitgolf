@@ -117,7 +117,7 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
    {stored.blocked?<p role="alert">Original dispatch metadata is unavailable. New dispatches are blocked; no request was retried.</p>:null}
    {intent?<div className="page-stack"><p>Original workflow <code>{intent.workflowPath}</code> · Snapshot <code title={intent.commitId}>{intent.commitId.slice(0,12)}</code></p>
     {stored.run?<p role="status">Run {stored.run.id} recorded. <Link {...repositoryOptions({owner:intent.owner,name:intent.name,view:'actions',run:stored.run.id,runKind:'workflow'})}>View recorded run</Link>. This is a historical receipt; current eligibility is checked for each new dispatch.</p>:<p role="status">{notice||'Original dispatch outcome has not been inspected.'} This request remains inspection-only. No automatic retry or replacement dispatch is available.</p>}
-    <button type="button" className="button secondary" disabled={dispatching||stored.blocked||busy.current||!originalMatches} onClick={()=>void inspectDispatch()}><RefreshCw size={15}/>Inspect original dispatch</button>
+    <div className="credential-actions"><button type="button" className="button secondary" disabled={dispatching||stored.blocked||busy.current||!originalMatches} onClick={()=>void inspectDispatch()}><RefreshCw size={15}/>Inspect original dispatch</button></div>
    </div>:notice?<p role="status">{notice}</p>:null}
   </div>:null;
   const accepted=(stamp:number,request:AbortController)=>alive.current&&stamp===generation.current&&!request.signal.aborted&&available.current;
@@ -171,15 +171,19 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
 
   const configurationPanel = <section className="browser-panel credential-list-panel" aria-labelledby="workflow-inventory-title">
         <div className="browser-panel-heading"><h2 id="workflow-inventory-title">Configuration files</h2><button className="button secondary" disabled={query.isFetching || metadata.isFetching || signingOut} onClick={refreshInspection}><RefreshCw size={15} />Refresh workflow inspection</button></div>
-        <p className="panel-footnote">Manual execution requires every applicable execution policy to allow this repository and workflow, plus an operator-enrolled worker and approved image. A checked inspection subset alone does not grant execution.</p>
+        <p className="panel-footnote">Manual execution requires policy approval, an enrolled worker and an approved image.{result ? result.executionAvailable ? ' A workflow worker is configured.' : ' Workflow execution is unavailable.' : null}</p>
         {!workView?dispatchNotice:null}
         {inspectionError ? <PanelError error={inspectionError} retry={refreshInspection} /> : !result ? <Loading label="Inspecting workflow configuration…" /> : <>
-          <p className="panel-footnote">Pinned commit <Link {...repositoryOptions({ owner, name, ref: commit })}><code>{commit}</code></Link> · Catalog <code>{result.catalogVersion}</code>. Refresh resolves the current default branch again.</p>
+          <p className="panel-footnote">Pinned commit <Link {...repositoryOptions({ owner, name, ref: commit })}><code>{commit}</code></Link>. Refresh resolves the current default branch again.</p>
           {result.diagnostics.length ? <div role="status"><Diagnostics diagnostics={result.diagnostics} /></div> : null}
           <DataTable label="Workflow configurations" data={result.configurations} columns={columns} getRowId={item => item.path} emptyMessage="No matching workflow configuration files at this commit." />
-          <p className="panel-footnote">{result.configurations.length} configuration{result.configurations.length === 1 ? '' : 's'} inspected or reported as unsupported. Direct <code>.github/workflows/*.yml</code>/<code>*.yaml</code> and root <code>.gitlab-ci.yml</code> only; nested and custom locations are excluded.</p>
+          <p className="panel-footnote">{result.configurations.length} configuration{result.configurations.length === 1 ? '' : 's'} inspected or reported as unsupported.</p>
         </>}
-        <p className="panel-footnote">Limits: 20 files, 64 KiB per inspected file and 512 KiB in total. Oversized files stay metadata-only; an overfull inventory fails visibly. Scripts and provider-specific semantics remain untrusted. Automatic push execution requires configured policies and an active automation grant; deployments remain unavailable.</p>
+        <details className="metadata-details panel-disclosure"><summary>Inspection scope and execution requirements</summary>
+          {result ? <p className="panel-footnote">Catalog <code>{result.catalogVersion}</code>. Direct <code>.github/workflows/*.yml</code>/<code>*.yaml</code> and root <code>.gitlab-ci.yml</code> only; nested and custom locations are excluded.</p> : null}
+          <p className="panel-footnote">Limits: 20 files, 64 KiB per inspected file and 512 KiB in total. Oversized files stay metadata-only; an overfull inventory fails visibly.</p>
+          <p className="panel-footnote">Static inspection does not grant execution. Scripts and provider-specific semantics remain untrusted. Every applicable execution policy must allow the repository and workflow. Automatic pushes also require an active automation grant; deployments remain unavailable.</p>
+        </details>
       </section>;
 
   const content = <>

@@ -62,7 +62,19 @@ test('workflow inventory pins source links, exposes keyboard details and renders
   await page.emulateMedia({ colorScheme: 'dark' });
   const state = await backend(page); await open(page);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await expect(page.getByText('Manual execution requires every applicable execution policy', { exact: false })).toBeVisible();
+  await expect(page.getByText('Manual execution requires policy approval, an enrolled worker and an approved image.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Workflow execution is unavailable.', { exact: false })).toBeVisible();
+  const scope = page.locator('summary').filter({ hasText: 'Inspection scope and execution requirements' });
+  await expect(scope.locator('..')).not.toHaveAttribute('open', '');
+  await expect(page.getByText('Limits: 20 files', { exact: false })).not.toBeVisible();
+  const requestsBeforeDisclosure = state.methods.length;
+  await scope.focus(); await page.keyboard.press('Enter');
+  await expect(page.getByText('Limits: 20 files', { exact: false })).toBeVisible();
+  await expect(page.getByText('Static inspection does not grant execution.', { exact: false })).toBeVisible();
+  await expect(page.getByText('golf.workflow.inspect.v2', { exact: true })).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('Limits: 20 files', { exact: false })).not.toBeVisible();
+  expect(state.methods.length).toBe(requestsBeforeDisclosure);
   await expect(page.getByText('Inspection subset checked', { exact: true })).toBeVisible();
   const source = page.getByRole('link', { name: manual.path, exact: true });
   const url = new URL((await source.getAttribute('href'))!, page.url());
@@ -228,16 +240,22 @@ test('selected manual dispatch uncertainty survives inspection refresh without a
  await expect(notice).toBeVisible();await expect(action).toBeDisabled();expect(s.methods.filter(m=>m==='DispatchWorkflow')).toHaveLength(1);
 });
 
-for(const [theme,width] of [['dark',1440],['light',390]] as const)test(`accepted dispatch with discarded acknowledgement reloads inspection-only (${theme}/${width})`,async({page},testInfo)=>{
+for(const [theme,width] of [['dark',1440],['dark',390],['light',1440],['light',390]] as const)test(`accepted dispatch with discarded acknowledgement reloads inspection-only (${theme}/${width})`,async({page},testInfo)=>{
  const s=await backend(page);s.worker=true;s.manualPolicy=true;await page.addInitScript(()=>{const original=window.fetch;let discarded=false;window.fetch=async(...args)=>{const response=await original(...args);const input=args[0];const url=typeof input==='string'?input:input instanceof URL?input.href:input.url;if(!discarded&&url.endsWith('/DispatchWorkflow')&&response.ok){discarded=true;throw new TypeError('Accepted dispatch acknowledgement discarded.');}return response;};});await page.emulateMedia({colorScheme:theme});await page.setViewportSize({width,height:844});await open(page);
  await page.getByRole('button',{name:'Run workflow',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'Accepted dispatch acknowledgement discarded.'})).toBeVisible();expect(s.writes).toHaveLength(1);
+ const inspect=page.getByRole('button',{name:'Inspect original dispatch',exact:true});
+ await expect(inspect).toBeEnabled();
+ const dimensions=await inspect.evaluate(el=>({button:el.getBoundingClientRect().width,panel:el.closest('.browser-panel')!.getBoundingClientRect().width,font:parseFloat(getComputedStyle(el).fontSize),sharedActions:el.parentElement?.classList.contains('credential-actions')}));
+ expect(dimensions.sharedActions).toBe(true);expect(dimensions.button).toBeLessThan(dimensions.panel-24);expect(dimensions.font).toBeGreaterThanOrEqual(13);
+ await expect(page.getByRole('status').filter({hasText:'No automatic retry or replacement dispatch is available.'})).toBeVisible();
+ await expect(page.getByText('Limits: 20 files',{exact:false})).not.toBeVisible();
  const original=s.writes[0]!;const metadata=await page.evaluate(()=>Object.entries(sessionStorage).filter(([k])=>k.startsWith('golf.workflow-dispatch.v1:')));
  expect(metadata).toHaveLength(1);expect(JSON.parse(metadata[0]![1])).toEqual({actorId:s.actor,key:original.idempotencyKey,owner:'alex',name:'private',repositoryId:'9007199254740997',ownerId:s.actor,commitId:commit,workflowPath:manual.path,workflowBlobId:manual.blobId});
  expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain('literal-workflow');
  await page.reload();await expect(page.getByRole('button',{name:'Run workflow',exact:true})).toBeDisabled();await expect(page.getByText('Original dispatch outcome has not been inspected.',{exact:false})).toBeVisible();expect(s.writes).toHaveLength(1);expect(s.inspections).toHaveLength(0);
  s.manualPolicy=false;await page.getByRole('button',{name:'Refresh workflow inspection',exact:true}).click();await expect(page.getByText('Manual: Ceilings deny',{exact:false}).first()).toBeVisible();
  await page.getByRole('button',{name:'Inspect original dispatch',exact:true}).click();await expect(page.getByRole('link',{name:'View recorded run',exact:true})).toBeVisible();expect(s.inspections).toHaveLength(1);expect(s.inspections[0]).toMatchObject({repository:{owner:'alex',name:'private'},repositoryId:'9007199254740997',ownerId:s.actor,commitId:commit,workflowPath:manual.path,idempotencyKey:original.idempotencyKey});expect(s.writes).toHaveLength(1);
- await expect(page.getByRole('button',{name:'Run workflow',exact:true})).toBeDisabled();await page.evaluate(()=>document.fonts.ready);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:testInfo.outputPath('original-dispatch-inspected.png'),fullPage:true});
+ await expect(page.getByRole('button',{name:'Run workflow',exact:true})).toBeDisabled();await page.evaluate(()=>document.fonts.ready);expect(await page.evaluate(()=>document.fonts.check('16px Archivo'))).toBe(true);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:testInfo.outputPath('original-dispatch-inspected.png'),fullPage:true});
  s.manualPolicy=true;s.dispatchLost=false;await page.getByRole('button',{name:'Refresh workflow inspection',exact:true}).click();await expect(page.getByRole('button',{name:'Run workflow',exact:true})).toBeEnabled();await page.getByRole('button',{name:'Run workflow',exact:true}).click();await expect.poll(()=>s.writes.length).toBe(2);expect(s.writes[1]!.idempotencyKey).not.toBe(original.idempotencyKey);
 });
 
