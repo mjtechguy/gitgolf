@@ -75,6 +75,9 @@ const (
 	RepositoryActivityServiceName = "golf.v1.RepositoryActivityService"
 	// ActionRunServiceName is the fully-qualified name of the ActionRunService service.
 	ActionRunServiceName = "golf.v1.ActionRunService"
+	// RepositoryDeployKeyServiceName is the fully-qualified name of the RepositoryDeployKeyService
+	// service.
+	RepositoryDeployKeyServiceName = "golf.v1.RepositoryDeployKeyService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -456,6 +459,15 @@ const (
 	// ActionRunServiceGetActionRunProcedure is the fully-qualified name of the ActionRunService's
 	// GetActionRun RPC.
 	ActionRunServiceGetActionRunProcedure = "/golf.v1.ActionRunService/GetActionRun"
+	// RepositoryDeployKeyServiceListRepositoryDeployKeysProcedure is the fully-qualified name of the
+	// RepositoryDeployKeyService's ListRepositoryDeployKeys RPC.
+	RepositoryDeployKeyServiceListRepositoryDeployKeysProcedure = "/golf.v1.RepositoryDeployKeyService/ListRepositoryDeployKeys"
+	// RepositoryDeployKeyServiceAddRepositoryDeployKeyProcedure is the fully-qualified name of the
+	// RepositoryDeployKeyService's AddRepositoryDeployKey RPC.
+	RepositoryDeployKeyServiceAddRepositoryDeployKeyProcedure = "/golf.v1.RepositoryDeployKeyService/AddRepositoryDeployKey"
+	// RepositoryDeployKeyServiceDeleteRepositoryDeployKeyProcedure is the fully-qualified name of the
+	// RepositoryDeployKeyService's DeleteRepositoryDeployKey RPC.
+	RepositoryDeployKeyServiceDeleteRepositoryDeployKeyProcedure = "/golf.v1.RepositoryDeployKeyService/DeleteRepositoryDeployKey"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -4796,4 +4808,127 @@ func (UnimplementedActionRunServiceHandler) ListActionRuns(context.Context, *con
 
 func (UnimplementedActionRunServiceHandler) GetActionRun(context.Context, *connect.Request[v1.GetActionRunRequest]) (*connect.Response[v1.GetActionRunResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ActionRunService.GetActionRun is not implemented"))
+}
+
+// RepositoryDeployKeyServiceClient is a client for the golf.v1.RepositoryDeployKeyService service.
+type RepositoryDeployKeyServiceClient interface {
+	ListRepositoryDeployKeys(context.Context, *connect.Request[v1.ListRepositoryDeployKeysRequest]) (*connect.Response[v1.ListRepositoryDeployKeysResponse], error)
+	AddRepositoryDeployKey(context.Context, *connect.Request[v1.AddRepositoryDeployKeyRequest]) (*connect.Response[v1.AddRepositoryDeployKeyResponse], error)
+	DeleteRepositoryDeployKey(context.Context, *connect.Request[v1.DeleteRepositoryDeployKeyRequest]) (*connect.Response[v1.DeleteRepositoryDeployKeyResponse], error)
+}
+
+// NewRepositoryDeployKeyServiceClient constructs a client for the
+// golf.v1.RepositoryDeployKeyService service. By default, it uses the Connect protocol with the
+// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
+// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRepositoryDeployKeyServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepositoryDeployKeyServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	repositoryDeployKeyServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryDeployKeyService").Methods()
+	return &repositoryDeployKeyServiceClient{
+		listRepositoryDeployKeys: connect.NewClient[v1.ListRepositoryDeployKeysRequest, v1.ListRepositoryDeployKeysResponse](
+			httpClient,
+			baseURL+RepositoryDeployKeyServiceListRepositoryDeployKeysProcedure,
+			connect.WithSchema(repositoryDeployKeyServiceMethods.ByName("ListRepositoryDeployKeys")),
+			connect.WithClientOptions(opts...),
+		),
+		addRepositoryDeployKey: connect.NewClient[v1.AddRepositoryDeployKeyRequest, v1.AddRepositoryDeployKeyResponse](
+			httpClient,
+			baseURL+RepositoryDeployKeyServiceAddRepositoryDeployKeyProcedure,
+			connect.WithSchema(repositoryDeployKeyServiceMethods.ByName("AddRepositoryDeployKey")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteRepositoryDeployKey: connect.NewClient[v1.DeleteRepositoryDeployKeyRequest, v1.DeleteRepositoryDeployKeyResponse](
+			httpClient,
+			baseURL+RepositoryDeployKeyServiceDeleteRepositoryDeployKeyProcedure,
+			connect.WithSchema(repositoryDeployKeyServiceMethods.ByName("DeleteRepositoryDeployKey")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// repositoryDeployKeyServiceClient implements RepositoryDeployKeyServiceClient.
+type repositoryDeployKeyServiceClient struct {
+	listRepositoryDeployKeys  *connect.Client[v1.ListRepositoryDeployKeysRequest, v1.ListRepositoryDeployKeysResponse]
+	addRepositoryDeployKey    *connect.Client[v1.AddRepositoryDeployKeyRequest, v1.AddRepositoryDeployKeyResponse]
+	deleteRepositoryDeployKey *connect.Client[v1.DeleteRepositoryDeployKeyRequest, v1.DeleteRepositoryDeployKeyResponse]
+}
+
+// ListRepositoryDeployKeys calls golf.v1.RepositoryDeployKeyService.ListRepositoryDeployKeys.
+func (c *repositoryDeployKeyServiceClient) ListRepositoryDeployKeys(ctx context.Context, req *connect.Request[v1.ListRepositoryDeployKeysRequest]) (*connect.Response[v1.ListRepositoryDeployKeysResponse], error) {
+	return c.listRepositoryDeployKeys.CallUnary(ctx, req)
+}
+
+// AddRepositoryDeployKey calls golf.v1.RepositoryDeployKeyService.AddRepositoryDeployKey.
+func (c *repositoryDeployKeyServiceClient) AddRepositoryDeployKey(ctx context.Context, req *connect.Request[v1.AddRepositoryDeployKeyRequest]) (*connect.Response[v1.AddRepositoryDeployKeyResponse], error) {
+	return c.addRepositoryDeployKey.CallUnary(ctx, req)
+}
+
+// DeleteRepositoryDeployKey calls golf.v1.RepositoryDeployKeyService.DeleteRepositoryDeployKey.
+func (c *repositoryDeployKeyServiceClient) DeleteRepositoryDeployKey(ctx context.Context, req *connect.Request[v1.DeleteRepositoryDeployKeyRequest]) (*connect.Response[v1.DeleteRepositoryDeployKeyResponse], error) {
+	return c.deleteRepositoryDeployKey.CallUnary(ctx, req)
+}
+
+// RepositoryDeployKeyServiceHandler is an implementation of the golf.v1.RepositoryDeployKeyService
+// service.
+type RepositoryDeployKeyServiceHandler interface {
+	ListRepositoryDeployKeys(context.Context, *connect.Request[v1.ListRepositoryDeployKeysRequest]) (*connect.Response[v1.ListRepositoryDeployKeysResponse], error)
+	AddRepositoryDeployKey(context.Context, *connect.Request[v1.AddRepositoryDeployKeyRequest]) (*connect.Response[v1.AddRepositoryDeployKeyResponse], error)
+	DeleteRepositoryDeployKey(context.Context, *connect.Request[v1.DeleteRepositoryDeployKeyRequest]) (*connect.Response[v1.DeleteRepositoryDeployKeyResponse], error)
+}
+
+// NewRepositoryDeployKeyServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRepositoryDeployKeyServiceHandler(svc RepositoryDeployKeyServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	repositoryDeployKeyServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryDeployKeyService").Methods()
+	repositoryDeployKeyServiceListRepositoryDeployKeysHandler := connect.NewUnaryHandler(
+		RepositoryDeployKeyServiceListRepositoryDeployKeysProcedure,
+		svc.ListRepositoryDeployKeys,
+		connect.WithSchema(repositoryDeployKeyServiceMethods.ByName("ListRepositoryDeployKeys")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryDeployKeyServiceAddRepositoryDeployKeyHandler := connect.NewUnaryHandler(
+		RepositoryDeployKeyServiceAddRepositoryDeployKeyProcedure,
+		svc.AddRepositoryDeployKey,
+		connect.WithSchema(repositoryDeployKeyServiceMethods.ByName("AddRepositoryDeployKey")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryDeployKeyServiceDeleteRepositoryDeployKeyHandler := connect.NewUnaryHandler(
+		RepositoryDeployKeyServiceDeleteRepositoryDeployKeyProcedure,
+		svc.DeleteRepositoryDeployKey,
+		connect.WithSchema(repositoryDeployKeyServiceMethods.ByName("DeleteRepositoryDeployKey")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RepositoryDeployKeyService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RepositoryDeployKeyServiceListRepositoryDeployKeysProcedure:
+			repositoryDeployKeyServiceListRepositoryDeployKeysHandler.ServeHTTP(w, r)
+		case RepositoryDeployKeyServiceAddRepositoryDeployKeyProcedure:
+			repositoryDeployKeyServiceAddRepositoryDeployKeyHandler.ServeHTTP(w, r)
+		case RepositoryDeployKeyServiceDeleteRepositoryDeployKeyProcedure:
+			repositoryDeployKeyServiceDeleteRepositoryDeployKeyHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRepositoryDeployKeyServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRepositoryDeployKeyServiceHandler struct{}
+
+func (UnimplementedRepositoryDeployKeyServiceHandler) ListRepositoryDeployKeys(context.Context, *connect.Request[v1.ListRepositoryDeployKeysRequest]) (*connect.Response[v1.ListRepositoryDeployKeysResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryDeployKeyService.ListRepositoryDeployKeys is not implemented"))
+}
+
+func (UnimplementedRepositoryDeployKeyServiceHandler) AddRepositoryDeployKey(context.Context, *connect.Request[v1.AddRepositoryDeployKeyRequest]) (*connect.Response[v1.AddRepositoryDeployKeyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryDeployKeyService.AddRepositoryDeployKey is not implemented"))
+}
+
+func (UnimplementedRepositoryDeployKeyServiceHandler) DeleteRepositoryDeployKey(context.Context, *connect.Request[v1.DeleteRepositoryDeployKeyRequest]) (*connect.Response[v1.DeleteRepositoryDeployKeyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryDeployKeyService.DeleteRepositoryDeployKey is not implemented"))
 }

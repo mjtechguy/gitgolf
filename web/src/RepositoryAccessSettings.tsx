@@ -1,3 +1,4 @@
+import { RepositoryDeployKeys } from './RepositoryDeployKeys';
 import { RepositorySettingsLayout } from './AccountSettings';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from '@tanstack/react-form';
@@ -115,6 +116,6 @@ export function RepositoryAccessSettings({ userId, owner, name, signingOut }: { 
         </div> : null}
         {canManage ? <><DataTable label="Repository collaborators" data={collaborators} columns={columns} getRowId={(collaborator) => collaborator.user!.id} emptyMessage="No direct collaborators in the loaded inventory." /><div className="list-footer"><span>{collaborators.length} loaded collaborators</span><More hasMore={Boolean(collaboratorsQuery.hasNextPage)} loading={collaboratorsQuery.isFetching || write.isPending} label="collaborators" load={() => void collaboratorsQuery.fetchNextPage()} /></div></> : <p className="panel-footnote">Collaborator inventory requires qualified administration of a personal repository. Your native permission is shown above; organization/team grants and exceptional native authority are outside this editor.</p>}<p className="panel-footnote">Owner/self changes, organization grant administration and constrained Golf roles are not exposed here. Revoking a direct grant does not erase independent permissions or cancel accepted requests. No durable mutation journal or automatic write retry is provided.</p>
       </> : null}
-    </section>{confirmation && !error && !loading && canManage ? <RemoveCollaborator intent={confirmation} pending={write.isPending} onClose={() => { if (!write.isPending) setConfirmation(null); }} onConfirm={() => dispatch(confirmation)} /> : null}
+    </section>{access && canManage ? <RepositoryDeployKeys userId={userId} owner={owner} name={name} access={access} signingOut={signingOut} /> : null}{confirmation && !error && !loading && canManage ? <RemoveCollaborator intent={confirmation} pending={write.isPending} onClose={() => { if (!write.isPending) setConfirmation(null); }} onConfirm={() => dispatch(confirmation)} /> : null}
   </section></RepositorySettingsLayout>;
 }

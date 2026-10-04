@@ -2232,3 +2232,66 @@ message ListAgentTaskEventsResponse {
  repeated AgentTaskEvent events = 7;
  string next_sequence = 8;
 }
+
+// Repository-scoped native SSH deploy-key associations. Managed browser sessions
+// only; personal repository administration is checked before and after reads.
+service RepositoryDeployKeyService {
+  rpc ListRepositoryDeployKeys(ListRepositoryDeployKeysRequest) returns (ListRepositoryDeployKeysResponse);
+  rpc AddRepositoryDeployKey(AddRepositoryDeployKeyRequest) returns (AddRepositoryDeployKeyResponse);
+  rpc DeleteRepositoryDeployKey(DeleteRepositoryDeployKeyRequest) returns (DeleteRepositoryDeployKeyResponse);
+}
+message RepositoryDeployKey {
+  string id = 1;
+  string public_key_id = 2;
+  string title = 3;
+  string public_key = 4;
+  string fingerprint = 5;
+  string created_at = 6;
+  bool read_only = 7;
+  string revision = 8;
+}
+message ListRepositoryDeployKeysRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string expected_revision = 4;
+  PageRequest page = 5;
+}
+message ListRepositoryDeployKeysResponse {
+  repeated RepositoryDeployKey keys = 1;
+  PageResponse page = 2;
+  string repository_id = 3;
+  string owner_id = 4;
+  string access_revision = 5;
+}
+message AddRepositoryDeployKeyRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string expected_revision = 4;
+  string title = 5;
+  string public_key = 6;
+  // Presence required. This applies to this repository association only.
+  optional bool read_only = 7;
+}
+message AddRepositoryDeployKeyResponse {
+  RepositoryDeployKey key = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string access_revision = 4;
+}
+message DeleteRepositoryDeployKeyRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string expected_revision = 4;
+  // Association ID, never the shared public-key ID.
+  string key_id = 5;
+  string expected_key_revision = 6;
+}
+message DeleteRepositoryDeployKeyResponse {
+  string key_id = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string access_revision = 4;
+}
