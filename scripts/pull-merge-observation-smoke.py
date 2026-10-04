@@ -31,6 +31,30 @@ ID = re.compile(r'[1-9][0-9]{0,18}')
 PROJECT = re.compile(r'golf-(?:mergeobs|rules49|access48)-[a-f0-9]{10}')
 STRATEGIES = {'allow_merge_commits':'allowMergeCommits','allow_rebase':'allowRebase','allow_rebase_explicit':'allowRebaseExplicit','allow_squash_merge':'allowSquashMerge','allow_fast_forward_only_merge':'allowFastForwardOnlyMerge','allow_manual_merge':'allowManualMerge','autodetect_manual_merge':'autodetectManualMerge','allow_merge_update':'allowMergeUpdate','allow_rebase_update':'allowRebaseUpdate','default_delete_branch_after_merge':'defaultDeleteBranchAfterMerge','default_allow_maintainer_edit':'defaultAllowMaintainerEdit'}
 
+CONNECT_CODES = frozenset(('canceled','unknown','invalid_argument','deadline_exceeded','not_found','already_exists','permission_denied','resource_exhausted','failed_precondition','aborted','out_of_range','unimplemented','internal','unavailable','data_loss','unauthenticated'))
+RPC_PROCEDURES = frozenset((SERVICE,'RepositoryService/GetPullRequest','SessionService/LoginWithPassword','SessionService/Logout','SessionService/RevokeOtherSessions','ApiCredentialService/CreateApiCredential','ApiCredentialService/RevokeApiCredential'))
+
+class HTTPContractFailure(Exception):
+    def __init__(self, diagnostic):
+        super().__init__('HTTP contract failure; private response withheld')
+        self.diagnostic = diagnostic
+
+
+def http_diagnostic(method, url, status, expected, raw, category='unexpected_status'):
+    path=urllib.parse.urlsplit(url).path
+    procedure=path.removeprefix('/rpc/golf.v1.')
+    if procedure not in RPC_PROCEDURES:
+        procedure='native_api' if path.startswith('/api/v1/') else 'readiness' if path=='/readyz' else 'unclassified'
+    code='unavailable_code'
+    if path.startswith('/rpc/') and len(raw)<=2<<20:
+        try:
+            decoded=json.loads(raw)
+            candidate=decoded.get('code') if isinstance(decoded,dict) else None
+            if isinstance(candidate,str) and candidate in CONNECT_CODES:code=candidate
+        except (ValueError,TypeError):pass
+    return {'procedure':procedure,'method':method if method in ('GET','POST','PATCH','PUT','DELETE','HEAD') else 'unclassified','status':status if isinstance(status,int) and 100<=status<=599 else 0,'expectedStatus':expected,'code':code,'category':category}
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args):
         return None
@@ -56,8 +80,9 @@ def request(opener, method, url, payload, headers, expected):
         response = error
     with response:
         raw = response.read((2<<20)+1)
-        assert len(raw)<=2<<20 and response.status==expected
-        if '/rpc/' in url: assert response.headers.get('Cache-Control')=='no-store'
+        if len(raw)>2<<20:raise HTTPContractFailure(http_diagnostic(method,url,response.status,expected,b'', 'response_too_large'))
+        if response.status!=expected:raise HTTPContractFailure(http_diagnostic(method,url,response.status,expected,raw))
+        if '/rpc/' in url and response.headers.get('Cache-Control')!='no-store':raise HTTPContractFailure(http_diagnostic(method,url,response.status,expected,raw,'no_store_missing'))
         return json.loads(raw) if raw else None
 
 
@@ -196,6 +221,23 @@ def self_check():
     try:receipt({'observation':denied},selected,branch,raw,3,source,None)
     except AssertionError:pass
     else:raise AssertionError('Denied source identity leaked')
+    url='http://127.0.0.1:8080/rpc/golf.v1.'+SERVICE
+    secret='PRIVATE_FIXTURE_TOKEN'
+    diagnostic=http_diagnostic('POST',url,400,200,json.dumps({'code':'failed_precondition','message':secret,'details':[secret]}).encode())
+    assert diagnostic=={'procedure':SERVICE,'method':'POST','status':400,'expectedStatus':200,'code':'failed_precondition','category':'unexpected_status'} and secret not in json.dumps(diagnostic)
+    for raw in (json.dumps({'code':secret}).encode(), b'invalid JSON '+secret.encode(), b'[]',json.dumps({'code':{'private':secret}}).encode()):
+        assert http_diagnostic('POST',url,503,200,raw)['code']=='unavailable_code'
+    assert http_diagnostic('DELETE','http://localhost:8080/api/v1/repos/'+secret+'/private',404,204,b'')['procedure']=='native_api'
+    class Response:
+        status=400;headers={'Cache-Control':'no-store'}
+        def __enter__(self):return self
+        def __exit__(self,*unused):pass
+        def read(self,size):return json.dumps({'code':'failed_precondition','message':secret}).encode()
+    class Opener:
+        def open(self,*unused,**ignored):return Response()
+    try:request(Opener(),'POST',url,{}, {},200)
+    except HTTPContractFailure as error:assert error.diagnostic==diagnostic and secret not in str(error)
+    else:raise AssertionError('Unexpected HTTP status did not fail')
     syntax=subprocess.run(['node','--input-type=module','--check'],input=BROWSER,text=True,capture_output=True,timeout=10)
     assert syntax.returncode==0
     print('PASS: pure URL/namespace, closed native API vocabulary, exact observation/tamper/privacy and browser syntax checks; no runtime')
@@ -296,6 +338,7 @@ def main():
             v=receipt(inspect(actor,actor_intent),actor_intent,native_branch,raw_repo,fork['id'],source_key,source_head)
             assert v['currentTargetWriter'] is (actor is not reader) and v['targetProtection']=='PULL_MERGE_TARGET_PROTECTION_UNPROTECTED'
             facts.append({'actor':actor['name'],'protection':v['targetProtection'],'writer':v['currentTargetWriter'],'nativeCallerCanMerge':v['nativeCallerCanMerge'],'H':head,'B':base})
+        manifest['facts']=facts;persist()
         stage='private source separately denied'
         api(author,'DELETE',source_path+'/collaborators/'+reader['name'],status=204)
         api(reader,'GET',source_path,status=404)
@@ -305,7 +348,8 @@ def main():
         stage='native protected branch readback'
         rule=api(owner,'POST',path+'/branch_protections',{'rule_name':repo['default_branch'],'enable_push':False,'enable_force_push':False,'enable_merge_whitelist':True,'merge_whitelist_usernames':[owner['name']],'block_admin_merge_override':True},201)
         assert rule['rule_name']==repo['default_branch'] and rule['enable_merge_whitelist'] is True
-        for actor in (owner,writer,reader):
+        for role,actor in (('owner',owner),('writer',writer),('reader',reader)):
+            stage='native protected branch readback '+role
             actor_intent=selected(actor,target,number);v=receipt(inspect(actor,actor_intent),actor_intent,api(actor,'GET',path+'/branches/'+urllib.parse.quote(repo['default_branch'],safe='')),api(actor,'GET',path),fork['id'],source_key,source_head)
             assert v['targetProtection']=='PULL_MERGE_TARGET_PROTECTION_PROTECTED'
             facts.append({'actor':actor['name'],'protection':v['targetProtection'],'writer':v['currentTargetWriter'],'nativeCallerCanMerge':v['nativeCallerCanMerge'],'H':head,'B':base})
@@ -349,7 +393,9 @@ def main():
         manifest.update(status='checks_passed_cleanup_pending',facts=facts,selection=body,sourceRepositoryId=str(fork['id']),sourceRepository=source_key,nativeSourceAdvancedTo=next_head,initialFanout='none unless --browser actually passed')
         persist()
     except Exception as error:
-        failure={'stage':stage,'type':type(error).__name__,'frames':[]};trace=error.__traceback__
+        failure={'stage':stage,'type':type(error).__name__,'frames':[]}
+        if isinstance(error,HTTPContractFailure):failure['http']=error.diagnostic
+        trace=error.__traceback__
         while trace:
             failure['frames'].append({'file':Path(trace.tb_frame.f_code.co_filename).name,'line':trace.tb_lineno});trace=trace.tb_next
         manifest.update(status='failed',failure=failure);persist()
