@@ -96,6 +96,8 @@ const (
 	RepositoryInvitationServiceName = "golf.v1.RepositoryInvitationService"
 	// RepositoryRulesServiceName is the fully-qualified name of the RepositoryRulesService service.
 	RepositoryRulesServiceName = "golf.v1.RepositoryRulesService"
+	// RunnerControlServiceName is the fully-qualified name of the RunnerControlService service.
+	RunnerControlServiceName = "golf.v1.RunnerControlService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -601,6 +603,15 @@ const (
 	// RepositoryRulesServiceGetRepositoryRulesProcedure is the fully-qualified name of the
 	// RepositoryRulesService's GetRepositoryRules RPC.
 	RepositoryRulesServiceGetRepositoryRulesProcedure = "/golf.v1.RepositoryRulesService/GetRepositoryRules"
+	// RunnerControlServiceGetInstanceRunnersProcedure is the fully-qualified name of the
+	// RunnerControlService's GetInstanceRunners RPC.
+	RunnerControlServiceGetInstanceRunnersProcedure = "/golf.v1.RunnerControlService/GetInstanceRunners"
+	// RunnerControlServiceUpdateRunnerControlProcedure is the fully-qualified name of the
+	// RunnerControlService's UpdateRunnerControl RPC.
+	RunnerControlServiceUpdateRunnerControlProcedure = "/golf.v1.RunnerControlService/UpdateRunnerControl"
+	// RunnerControlServiceGetRepositoryRunnersProcedure is the fully-qualified name of the
+	// RunnerControlService's GetRepositoryRunners RPC.
+	RunnerControlServiceGetRepositoryRunnersProcedure = "/golf.v1.RunnerControlService/GetRepositoryRunners"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -6385,4 +6396,126 @@ type UnimplementedRepositoryRulesServiceHandler struct{}
 
 func (UnimplementedRepositoryRulesServiceHandler) GetRepositoryRules(context.Context, *connect.Request[v1.GetRepositoryRulesRequest]) (*connect.Response[v1.GetRepositoryRulesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryRulesService.GetRepositoryRules is not implemented"))
+}
+
+// RunnerControlServiceClient is a client for the golf.v1.RunnerControlService service.
+type RunnerControlServiceClient interface {
+	GetInstanceRunners(context.Context, *connect.Request[v1.GetInstanceRunnersRequest]) (*connect.Response[v1.GetInstanceRunnersResponse], error)
+	UpdateRunnerControl(context.Context, *connect.Request[v1.UpdateRunnerControlRequest]) (*connect.Response[v1.UpdateRunnerControlResponse], error)
+	GetRepositoryRunners(context.Context, *connect.Request[v1.GetRepositoryRunnersRequest]) (*connect.Response[v1.GetRepositoryRunnersResponse], error)
+}
+
+// NewRunnerControlServiceClient constructs a client for the golf.v1.RunnerControlService service.
+// By default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped
+// responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRunnerControlServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RunnerControlServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	runnerControlServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RunnerControlService").Methods()
+	return &runnerControlServiceClient{
+		getInstanceRunners: connect.NewClient[v1.GetInstanceRunnersRequest, v1.GetInstanceRunnersResponse](
+			httpClient,
+			baseURL+RunnerControlServiceGetInstanceRunnersProcedure,
+			connect.WithSchema(runnerControlServiceMethods.ByName("GetInstanceRunners")),
+			connect.WithClientOptions(opts...),
+		),
+		updateRunnerControl: connect.NewClient[v1.UpdateRunnerControlRequest, v1.UpdateRunnerControlResponse](
+			httpClient,
+			baseURL+RunnerControlServiceUpdateRunnerControlProcedure,
+			connect.WithSchema(runnerControlServiceMethods.ByName("UpdateRunnerControl")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryRunners: connect.NewClient[v1.GetRepositoryRunnersRequest, v1.GetRepositoryRunnersResponse](
+			httpClient,
+			baseURL+RunnerControlServiceGetRepositoryRunnersProcedure,
+			connect.WithSchema(runnerControlServiceMethods.ByName("GetRepositoryRunners")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// runnerControlServiceClient implements RunnerControlServiceClient.
+type runnerControlServiceClient struct {
+	getInstanceRunners   *connect.Client[v1.GetInstanceRunnersRequest, v1.GetInstanceRunnersResponse]
+	updateRunnerControl  *connect.Client[v1.UpdateRunnerControlRequest, v1.UpdateRunnerControlResponse]
+	getRepositoryRunners *connect.Client[v1.GetRepositoryRunnersRequest, v1.GetRepositoryRunnersResponse]
+}
+
+// GetInstanceRunners calls golf.v1.RunnerControlService.GetInstanceRunners.
+func (c *runnerControlServiceClient) GetInstanceRunners(ctx context.Context, req *connect.Request[v1.GetInstanceRunnersRequest]) (*connect.Response[v1.GetInstanceRunnersResponse], error) {
+	return c.getInstanceRunners.CallUnary(ctx, req)
+}
+
+// UpdateRunnerControl calls golf.v1.RunnerControlService.UpdateRunnerControl.
+func (c *runnerControlServiceClient) UpdateRunnerControl(ctx context.Context, req *connect.Request[v1.UpdateRunnerControlRequest]) (*connect.Response[v1.UpdateRunnerControlResponse], error) {
+	return c.updateRunnerControl.CallUnary(ctx, req)
+}
+
+// GetRepositoryRunners calls golf.v1.RunnerControlService.GetRepositoryRunners.
+func (c *runnerControlServiceClient) GetRepositoryRunners(ctx context.Context, req *connect.Request[v1.GetRepositoryRunnersRequest]) (*connect.Response[v1.GetRepositoryRunnersResponse], error) {
+	return c.getRepositoryRunners.CallUnary(ctx, req)
+}
+
+// RunnerControlServiceHandler is an implementation of the golf.v1.RunnerControlService service.
+type RunnerControlServiceHandler interface {
+	GetInstanceRunners(context.Context, *connect.Request[v1.GetInstanceRunnersRequest]) (*connect.Response[v1.GetInstanceRunnersResponse], error)
+	UpdateRunnerControl(context.Context, *connect.Request[v1.UpdateRunnerControlRequest]) (*connect.Response[v1.UpdateRunnerControlResponse], error)
+	GetRepositoryRunners(context.Context, *connect.Request[v1.GetRepositoryRunnersRequest]) (*connect.Response[v1.GetRepositoryRunnersResponse], error)
+}
+
+// NewRunnerControlServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRunnerControlServiceHandler(svc RunnerControlServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	runnerControlServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RunnerControlService").Methods()
+	runnerControlServiceGetInstanceRunnersHandler := connect.NewUnaryHandler(
+		RunnerControlServiceGetInstanceRunnersProcedure,
+		svc.GetInstanceRunners,
+		connect.WithSchema(runnerControlServiceMethods.ByName("GetInstanceRunners")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runnerControlServiceUpdateRunnerControlHandler := connect.NewUnaryHandler(
+		RunnerControlServiceUpdateRunnerControlProcedure,
+		svc.UpdateRunnerControl,
+		connect.WithSchema(runnerControlServiceMethods.ByName("UpdateRunnerControl")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runnerControlServiceGetRepositoryRunnersHandler := connect.NewUnaryHandler(
+		RunnerControlServiceGetRepositoryRunnersProcedure,
+		svc.GetRepositoryRunners,
+		connect.WithSchema(runnerControlServiceMethods.ByName("GetRepositoryRunners")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RunnerControlService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RunnerControlServiceGetInstanceRunnersProcedure:
+			runnerControlServiceGetInstanceRunnersHandler.ServeHTTP(w, r)
+		case RunnerControlServiceUpdateRunnerControlProcedure:
+			runnerControlServiceUpdateRunnerControlHandler.ServeHTTP(w, r)
+		case RunnerControlServiceGetRepositoryRunnersProcedure:
+			runnerControlServiceGetRepositoryRunnersHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRunnerControlServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRunnerControlServiceHandler struct{}
+
+func (UnimplementedRunnerControlServiceHandler) GetInstanceRunners(context.Context, *connect.Request[v1.GetInstanceRunnersRequest]) (*connect.Response[v1.GetInstanceRunnersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RunnerControlService.GetInstanceRunners is not implemented"))
+}
+
+func (UnimplementedRunnerControlServiceHandler) UpdateRunnerControl(context.Context, *connect.Request[v1.UpdateRunnerControlRequest]) (*connect.Response[v1.UpdateRunnerControlResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RunnerControlService.UpdateRunnerControl is not implemented"))
+}
+
+func (UnimplementedRunnerControlServiceHandler) GetRepositoryRunners(context.Context, *connect.Request[v1.GetRepositoryRunnersRequest]) (*connect.Response[v1.GetRepositoryRunnersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RunnerControlService.GetRepositoryRunners is not implemented"))
 }

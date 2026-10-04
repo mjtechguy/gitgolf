@@ -272,6 +272,8 @@ func TestRunnerControlCredentialDeclinesDelegation(t *testing.T) {
 
 func TestRunnerControlRepositoryBindingPoliciesPostgres(t *testing.T) {
 	f := newWorkflowRunFixture(t)
+	// The shared repository read guard requires the native canonical link.
+	f.row.HTMLURL = "https://forge.invalid/alice/example"
 	f.enable(t)
 	if _, e := ManageLocalAccount(t.Context(), f.server.db, f.server.keyring, f.server.config.GiteaURL, "create", LocalAccountInput{Username: "alice", Password: localTestPassword, ForgeToken: "run-fixture"}); e != nil {
 		t.Fatal(e)

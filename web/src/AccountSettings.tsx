@@ -5,7 +5,7 @@ import { ExecutionPolicyPanel } from './ExecutionPolicyPanel';
 import { ExecutionScope } from './gen/golf/v1/golf_pb';
 import { lazy, Suspense, useMemo, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
-import { MailPlus, Webhook, History, KeyRound, ShieldCheck, UserRound } from 'lucide-react';
+import { Server, MailPlus, Webhook, History, KeyRound, ShieldCheck, UserRound } from 'lucide-react';
 import type { User } from './gen/golf/v1/golf_pb';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { useQuery } from '@tanstack/react-query';
@@ -31,6 +31,7 @@ export function RepositorySettingsLayout({ children, owner, name }: { children: 
   return <div className="account-layout"><nav className="account-navigation" aria-label="Repository settings"><span className="eyebrow">REPOSITORY SETTINGS</span>
     <Link to="/$owner/$name/settings" params={{ owner, name }} activeOptions={{ exact: true }}><UserRound size={18} />General</Link>
     <Link to="/$owner/$name/settings/access" params={{ owner, name }} activeOptions={{ exact: true }}><ShieldCheck size={18} />Access</Link>
+    <Link to="/$owner/$name/settings/runners" params={{ owner, name }} activeOptions={{ exact:true }}><Server size={18}/>Runners</Link>
     <Link to="/$owner/$name/settings/rules" params={{ owner, name }} activeOptions={{ exact:true }}><ShieldCheck size={18}/>Rules and merge policy</Link>
     <Link to="/$owner/$name/settings/secrets" params={{ owner, name }} activeOptions={{ exact:true }}><KeyRound size={18}/>Secrets and variables</Link>
     <Link to="/$owner/$name/settings/webhooks" params={{ owner, name }} activeOptions={{exact:true}}><Webhook size={18}/>Webhooks</Link>
@@ -48,7 +49,7 @@ export function AccountSettings({ user, signingOut }: { user: User; signingOut: 
 }
 
 export type SettingsScope = 'personal' | 'organization' | 'repository' | 'instance';
-type SettingEntry = { id: string; section: string; state: 'Ready' | 'Partial' | 'Read only' | 'Planned'; detail: string; task: string; to?: '/account/agents' | '/account/security' | '/account/sessions' | '/account/ssh-keys' | '/account/api-credentials' | '/audit' | '/' | '/organizations' | '/status' | '/admin/execution' | '/admin/organizations' | '/admin/settings/notifications' | '/admin/settings/infrastructure' | '/admin/settings' | '/admin/agents'; hash?: string };
+type SettingEntry = { id: string; section: string; state: 'Ready' | 'Partial' | 'Read only' | 'Planned'; detail: string; task: string; to?: '/account/agents' | '/account/security' | '/account/sessions' | '/account/ssh-keys' | '/account/api-credentials' | '/audit' | '/' | '/organizations' | '/status' | '/admin/execution' | '/admin/organizations' | '/admin/settings/runners' | '/admin/settings/notifications' | '/admin/settings/infrastructure' | '/admin/settings' | '/admin/agents'; hash?: string };
 const inventory: Record<SettingsScope, SettingEntry[]> = {
   personal: [
     { id: 'profile', section: 'Profile and email', state: 'Partial', detail: 'Edit public profile fields above. Golf sign-in email changes have a separate security page; username changes, mailbox verification and recovery remain planned.', task: 'P1.3 / G1' },
@@ -80,7 +81,7 @@ const inventory: Record<SettingsScope, SettingEntry[]> = {
     { id: 'access', section: 'Collaborators and deploy keys', state: 'Partial', detail: 'Personal repository owners and direct admins can manage existing accounts’ read/write/admin grants and read-only or read-write deploy keys. Owner, self and exceptional owner-level grants are locked. Organization owners can attach/detach existing eligible teams on organization repositories; protected native teams stay locked. Existing-account invitations use a private acceptance inbox; organization direct-grant controls and the complete Access qualification remain required.', task: 'P1.5 / P1.8' },
     { id: 'rules', section: 'Rulesets, reviews and merge policy', state: 'Partial', detail: 'Inspect current native branch/tag protection and allowed merge configuration. Rule editing, inherited policies, trusted checks and merge enforcement remain required.', task: 'P0.8 / P2.3 / G5' },
     { id: 'ci', section: 'CI engines and workflow controls', state: 'Partial', detail: 'Manual and signed-push shell workflows have qualified isolated execution and policy ceilings. The opt-in pinned Linux Actions profile qualifies dependency/matrix/local-composite graphs with exact run/job/step logs. Full Actions/GitLab compatibility, additional triggers, artifacts and cache remain required.', task: 'P4 / G3' },
-    { id: 'runners', section: 'Runners and resource limits', state: 'Planned', detail: 'Choose approved groups and resources only after pools exist and organization ceilings can be enforced.', task: 'P4 / G3' },
+    { id: 'runners', section: 'Runners and resource limits', state: 'Partial', detail: 'Inspect enrolled workers and workflow eligibility. Instance administrators can drain, resume or revoke existing worker identities. Named pools, placement, capacity and inherited resource ceilings remain required.', task: 'P4 / G3' },
     { id: 'secrets', section: 'Secrets, variables and OIDC', state: 'Partial', detail: 'Repository secrets and variables have metadata inventories, versioned editors and exact-source approval for the maintained Actions environment consumer. TLS runner qualification, organization/environment inheritance, additional consumers and OIDC remain required.', task: 'G3 / G5' },
     { id: 'deployments', section: 'Environments, previews and production', state: 'Planned', detail: 'Reviewers, branch restrictions, protected temporary links, exact artifact promotion and rollback need real CD and destination authority.', task: 'P6 / G5' },
     { id: 'agents', section: 'Agents, MCP and models', state: 'Partial', detail: 'Scoped connections, models, coding tasks and PR-review assignments have controls in Workflows; results and bounded private Codex conversation records are in Actions. Interactive follow-ups, other harness journals and complete tool/network policies remain required.', task: 'P5 / G4' },
@@ -88,6 +89,7 @@ const inventory: Record<SettingsScope, SettingEntry[]> = {
     { id: 'danger', section: 'Archive, transfer and deletion', state: 'Partial', detail: 'Current owners can request archive/unarchive with Golf password confirmation and inspect durable operation receipts below. Active or uncertain work blocks dispatch. Native scheduling/ingress, transfer, deletion and recovery remain required.', task: 'P1.5 / P2.3' },
   ],
   instance: [
+    { id: 'runners', section: 'Enrolled runners', state: 'Partial', detail: 'Inspect enrolled worker presence and active leases; drain, resume or permanently revoke a worker after current-password confirmation. Pool configuration and runtime capacity remain required.', task: 'P4 / G3', to: '/admin/settings/runners' },
     { id: 'agents', section: 'Coding-agent accounts and access', state: 'Partial', detail: 'Create named Codex connections, authenticate and re-authenticate accounts, and grant selected enrolled Golf users access. Authentication and access configuration do not enable agent execution.', task: 'P5 / G4', to: '/admin/agents' },
     { id: 'enrollment', section: 'Enrollment, identity and SSO', state: 'Partial', detail: 'Enrolled local accounts have a dedicated administration inventory. Instance administrators can enroll existing Git identities and reset, enable or disable ordinary local accounts after password confirmation. Self-service password and login-email changes have a security page; external OIDC, MFA and native account provisioning remain planned.', task: 'P1.3', to: '/admin/settings' },
     { id: 'health', section: 'System health and capabilities', state: 'Ready', detail: 'Inspect currently qualified capability states. Readiness reports dependencies; it is not an infrastructure configuration editor.', task: 'P1.1 / P1.2', to: '/status' },
@@ -105,7 +107,7 @@ function settingsColumns(repository?: { owner: string; name: string }): DataTabl
   { accessorKey: 'state', header: 'Availability', cell: ({ row }) => <span className="visibility">{row.original.state}</span> },
   { accessorKey: 'detail', header: 'Details', cell: ({ row }) => <>{row.original.detail}<small><a href="https://github.com/ghost-hardened-open-source/golf-git/blob/main/GOLF_IMPLEMENTATION_PLAN.md" target="_blank" rel="noreferrer">Plan tasks: {row.original.task}</a></small></> },
   { id: 'actions', header: 'Action', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => {
-    const route = repository && ({ rules: '/$owner/$name/settings/rules', secrets: '/$owner/$name/settings/secrets', access: '/$owner/$name/settings/access', ci: '/$owner/$name/settings/workflows', agents: '/$owner/$name/settings/workflows', events: '/$owner/$name/settings/webhooks' } as const)[row.original.id as 'rules' | 'secrets' | 'access' | 'ci' | 'agents' | 'events'];
+    const route = repository && ({ runners: '/$owner/$name/settings/runners', rules: '/$owner/$name/settings/rules', secrets: '/$owner/$name/settings/secrets', access: '/$owner/$name/settings/access', ci: '/$owner/$name/settings/workflows', agents: '/$owner/$name/settings/workflows', events: '/$owner/$name/settings/webhooks' } as const)[row.original.id as 'runners' | 'rules' | 'secrets' | 'access' | 'ci' | 'agents' | 'events'];
     return route && repository ? <Link className="text-button" to={route} params={repository} aria-label={`Open ${row.original.section}`}>Open</Link> : row.original.to ? <Link className="text-button" to={row.original.to} hash={row.original.hash}>Open</Link> : <span className="muted">{row.original.state === 'Planned' ? 'Not configurable yet' : row.original.state === 'Partial' ? 'See available scope controls' : 'No browser editor'}</span>;
   } },
 ]; }

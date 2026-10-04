@@ -93,3 +93,30 @@ func TestRepositoryRulesManagedBrowserBoundary(t *testing.T) {
 		t.Fatalf("Rules allowed delegated API access: %d", response.Code)
 	}
 }
+
+func TestRunnerControlManagedBrowserBoundary(t *testing.T) {
+	s, err := New(testConfig("http://forge.invalid"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, method := range []string{"GetInstanceRunners", "UpdateRunnerControl", "GetRepositoryRunners"} {
+		path := "/golf.v1.RunnerControlService/" + method
+		for _, origin := range []string{s.config.PublicURL, "https://other.invalid"} {
+			req := httptest.NewRequest(http.MethodPost, "/rpc"+path, strings.NewReader("malformed"))
+			req.Header.Set("Origin", origin)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			s.ServeHTTP(w, req)
+			want := http.StatusUnauthorized
+			if origin != s.config.PublicURL {
+				want = http.StatusForbidden
+			}
+			if w.Code != want || w.Header().Get("Cache-Control") != "no-store" {
+				t.Fatalf("%s boundary: status=%d cache=%q", method, w.Code, w.Header().Get("Cache-Control"))
+			}
+		}
+		if response := apiRequest(s, apiTokenPrefix+strings.Repeat("A", 43), path, "malformed"); response.Code != http.StatusForbidden || response.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("%s allowed delegated API access: %d", method, response.Code)
+		}
+	}
+}

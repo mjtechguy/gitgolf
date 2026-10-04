@@ -1013,6 +1013,24 @@ type GolfReviewerRun struct {
 	LegacyEffectBlock bool
 }
 
+type GolfRunnerControl struct {
+	ForgeURL  string
+	RunnerID  string
+	State     string
+	Version   int64
+	UpdatedAt time.Time
+}
+
+type GolfRunnerControlAudit struct {
+	ForgeURL      string
+	RunnerID      string
+	Version       int64
+	ActorUserID   int64
+	PreviousState string
+	State         string
+	CreatedAt     time.Time
+}
+
 type GolfRunnerPresence struct {
 	ForgeURL string
 	RunnerID string

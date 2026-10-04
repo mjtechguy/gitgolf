@@ -2021,6 +2021,58 @@ func (RepositoryInvitationDecision) EnumDescriptor() ([]byte, []int) {
 	return file_golf_v1_golf_proto_rawDescGZIP(), []int{36}
 }
 
+type RunnerControlState int32
+
+const (
+	RunnerControlState_RUNNER_CONTROL_STATE_UNSPECIFIED RunnerControlState = 0
+	RunnerControlState_RUNNER_CONTROL_STATE_ACTIVE      RunnerControlState = 1
+	RunnerControlState_RUNNER_CONTROL_STATE_DRAINING    RunnerControlState = 2
+	RunnerControlState_RUNNER_CONTROL_STATE_REVOKED     RunnerControlState = 3
+)
+
+// Enum value maps for RunnerControlState.
+var (
+	RunnerControlState_name = map[int32]string{
+		0: "RUNNER_CONTROL_STATE_UNSPECIFIED",
+		1: "RUNNER_CONTROL_STATE_ACTIVE",
+		2: "RUNNER_CONTROL_STATE_DRAINING",
+		3: "RUNNER_CONTROL_STATE_REVOKED",
+	}
+	RunnerControlState_value = map[string]int32{
+		"RUNNER_CONTROL_STATE_UNSPECIFIED": 0,
+		"RUNNER_CONTROL_STATE_ACTIVE":      1,
+		"RUNNER_CONTROL_STATE_DRAINING":    2,
+		"RUNNER_CONTROL_STATE_REVOKED":     3,
+	}
+)
+
+func (x RunnerControlState) Enum() *RunnerControlState {
+	p := new(RunnerControlState)
+	*p = x
+	return p
+}
+
+func (x RunnerControlState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RunnerControlState) Descriptor() protoreflect.EnumDescriptor {
+	return file_golf_v1_golf_proto_enumTypes[37].Descriptor()
+}
+
+func (RunnerControlState) Type() protoreflect.EnumType {
+	return &file_golf_v1_golf_proto_enumTypes[37]
+}
+
+func (x RunnerControlState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RunnerControlState.Descriptor instead.
+func (RunnerControlState) EnumDescriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{37}
+}
+
 type ApiCredential struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Opaque decimal Golf handle. Never a secret or digest.
@@ -33083,6 +33135,442 @@ func (x *RepositoryMergeConfiguration) GetDefaultUpdateStyle() string {
 	return ""
 }
 
+type EnrolledRunner struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	WorkerId         string                 `protobuf:"bytes,1,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	State            RunnerControlState     `protobuf:"varint,2,opt,name=state,proto3,enum=golf.v1.RunnerControlState" json:"state,omitempty"`
+	Version          string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
+	LastSeen         *string                `protobuf:"bytes,4,opt,name=last_seen,json=lastSeen,proto3,oneof" json:"last_seen,omitempty"`
+	RecentConnection bool                   `protobuf:"varint,5,opt,name=recent_connection,json=recentConnection,proto3" json:"recent_connection,omitempty"`
+	HasActiveAttempt bool                   `protobuf:"varint,6,opt,name=has_active_attempt,json=hasActiveAttempt,proto3" json:"has_active_attempt,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *EnrolledRunner) Reset() {
+	*x = EnrolledRunner{}
+	mi := &file_golf_v1_golf_proto_msgTypes[434]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnrolledRunner) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnrolledRunner) ProtoMessage() {}
+
+func (x *EnrolledRunner) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_golf_proto_msgTypes[434]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnrolledRunner.ProtoReflect.Descriptor instead.
+func (*EnrolledRunner) Descriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{434}
+}
+
+func (x *EnrolledRunner) GetWorkerId() string {
+	if x != nil {
+		return x.WorkerId
+	}
+	return ""
+}
+
+func (x *EnrolledRunner) GetState() RunnerControlState {
+	if x != nil {
+		return x.State
+	}
+	return RunnerControlState_RUNNER_CONTROL_STATE_UNSPECIFIED
+}
+
+func (x *EnrolledRunner) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *EnrolledRunner) GetLastSeen() string {
+	if x != nil && x.LastSeen != nil {
+		return *x.LastSeen
+	}
+	return ""
+}
+
+func (x *EnrolledRunner) GetRecentConnection() bool {
+	if x != nil {
+		return x.RecentConnection
+	}
+	return false
+}
+
+func (x *EnrolledRunner) GetHasActiveAttempt() bool {
+	if x != nil {
+		return x.HasActiveAttempt
+	}
+	return false
+}
+
+type GetInstanceRunnersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetInstanceRunnersRequest) Reset() {
+	*x = GetInstanceRunnersRequest{}
+	mi := &file_golf_v1_golf_proto_msgTypes[435]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetInstanceRunnersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetInstanceRunnersRequest) ProtoMessage() {}
+
+func (x *GetInstanceRunnersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_golf_proto_msgTypes[435]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetInstanceRunnersRequest.ProtoReflect.Descriptor instead.
+func (*GetInstanceRunnersRequest) Descriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{435}
+}
+
+type GetInstanceRunnersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Runners       []*EnrolledRunner      `protobuf:"bytes,1,rep,name=runners,proto3" json:"runners,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetInstanceRunnersResponse) Reset() {
+	*x = GetInstanceRunnersResponse{}
+	mi := &file_golf_v1_golf_proto_msgTypes[436]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetInstanceRunnersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetInstanceRunnersResponse) ProtoMessage() {}
+
+func (x *GetInstanceRunnersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_golf_proto_msgTypes[436]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetInstanceRunnersResponse.ProtoReflect.Descriptor instead.
+func (*GetInstanceRunnersResponse) Descriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{436}
+}
+
+func (x *GetInstanceRunnersResponse) GetRunners() []*EnrolledRunner {
+	if x != nil {
+		return x.Runners
+	}
+	return nil
+}
+
+type UpdateRunnerControlRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	WorkerId        string                 `protobuf:"bytes,1,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	ExpectedVersion string                 `protobuf:"bytes,2,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
+	State           RunnerControlState     `protobuf:"varint,3,opt,name=state,proto3,enum=golf.v1.RunnerControlState" json:"state,omitempty"`
+	CurrentPassword string                 `protobuf:"bytes,4,opt,name=current_password,json=currentPassword,proto3" json:"current_password,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *UpdateRunnerControlRequest) Reset() {
+	*x = UpdateRunnerControlRequest{}
+	mi := &file_golf_v1_golf_proto_msgTypes[437]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateRunnerControlRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateRunnerControlRequest) ProtoMessage() {}
+
+func (x *UpdateRunnerControlRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_golf_proto_msgTypes[437]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateRunnerControlRequest.ProtoReflect.Descriptor instead.
+func (*UpdateRunnerControlRequest) Descriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{437}
+}
+
+func (x *UpdateRunnerControlRequest) GetWorkerId() string {
+	if x != nil {
+		return x.WorkerId
+	}
+	return ""
+}
+
+func (x *UpdateRunnerControlRequest) GetExpectedVersion() string {
+	if x != nil {
+		return x.ExpectedVersion
+	}
+	return ""
+}
+
+func (x *UpdateRunnerControlRequest) GetState() RunnerControlState {
+	if x != nil {
+		return x.State
+	}
+	return RunnerControlState_RUNNER_CONTROL_STATE_UNSPECIFIED
+}
+
+func (x *UpdateRunnerControlRequest) GetCurrentPassword() string {
+	if x != nil {
+		return x.CurrentPassword
+	}
+	return ""
+}
+
+type UpdateRunnerControlResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Runner        *EnrolledRunner        `protobuf:"bytes,1,opt,name=runner,proto3" json:"runner,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateRunnerControlResponse) Reset() {
+	*x = UpdateRunnerControlResponse{}
+	mi := &file_golf_v1_golf_proto_msgTypes[438]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateRunnerControlResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateRunnerControlResponse) ProtoMessage() {}
+
+func (x *UpdateRunnerControlResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_golf_proto_msgTypes[438]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateRunnerControlResponse.ProtoReflect.Descriptor instead.
+func (*UpdateRunnerControlResponse) Descriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{438}
+}
+
+func (x *UpdateRunnerControlResponse) GetRunner() *EnrolledRunner {
+	if x != nil {
+		return x.Runner
+	}
+	return nil
+}
+
+type GetRepositoryRunnersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Repository    *RepositoryKey         `protobuf:"bytes,1,opt,name=repository,proto3" json:"repository,omitempty"`
+	RepositoryId  string                 `protobuf:"bytes,2,opt,name=repository_id,json=repositoryId,proto3" json:"repository_id,omitempty"`
+	OwnerId       string                 `protobuf:"bytes,3,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`
+	WorkflowPath  string                 `protobuf:"bytes,4,opt,name=workflow_path,json=workflowPath,proto3" json:"workflow_path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRepositoryRunnersRequest) Reset() {
+	*x = GetRepositoryRunnersRequest{}
+	mi := &file_golf_v1_golf_proto_msgTypes[439]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRepositoryRunnersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRepositoryRunnersRequest) ProtoMessage() {}
+
+func (x *GetRepositoryRunnersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_golf_proto_msgTypes[439]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRepositoryRunnersRequest.ProtoReflect.Descriptor instead.
+func (*GetRepositoryRunnersRequest) Descriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{439}
+}
+
+func (x *GetRepositoryRunnersRequest) GetRepository() *RepositoryKey {
+	if x != nil {
+		return x.Repository
+	}
+	return nil
+}
+
+func (x *GetRepositoryRunnersRequest) GetRepositoryId() string {
+	if x != nil {
+		return x.RepositoryId
+	}
+	return ""
+}
+
+func (x *GetRepositoryRunnersRequest) GetOwnerId() string {
+	if x != nil {
+		return x.OwnerId
+	}
+	return ""
+}
+
+func (x *GetRepositoryRunnersRequest) GetWorkflowPath() string {
+	if x != nil {
+		return x.WorkflowPath
+	}
+	return ""
+}
+
+type GetRepositoryRunnersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Repository    *RepositoryKey         `protobuf:"bytes,1,opt,name=repository,proto3" json:"repository,omitempty"`
+	RepositoryId  string                 `protobuf:"bytes,2,opt,name=repository_id,json=repositoryId,proto3" json:"repository_id,omitempty"`
+	OwnerId       string                 `protobuf:"bytes,3,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`
+	WorkflowPath  string                 `protobuf:"bytes,4,opt,name=workflow_path,json=workflowPath,proto3" json:"workflow_path,omitempty"`
+	ManualAllowed bool                   `protobuf:"varint,5,opt,name=manual_allowed,json=manualAllowed,proto3" json:"manual_allowed,omitempty"`
+	PushAllowed   bool                   `protobuf:"varint,6,opt,name=push_allowed,json=pushAllowed,proto3" json:"push_allowed,omitempty"`
+	Runners       []*EnrolledRunner      `protobuf:"bytes,7,rep,name=runners,proto3" json:"runners,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRepositoryRunnersResponse) Reset() {
+	*x = GetRepositoryRunnersResponse{}
+	mi := &file_golf_v1_golf_proto_msgTypes[440]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRepositoryRunnersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRepositoryRunnersResponse) ProtoMessage() {}
+
+func (x *GetRepositoryRunnersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_golf_proto_msgTypes[440]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRepositoryRunnersResponse.ProtoReflect.Descriptor instead.
+func (*GetRepositoryRunnersResponse) Descriptor() ([]byte, []int) {
+	return file_golf_v1_golf_proto_rawDescGZIP(), []int{440}
+}
+
+func (x *GetRepositoryRunnersResponse) GetRepository() *RepositoryKey {
+	if x != nil {
+		return x.Repository
+	}
+	return nil
+}
+
+func (x *GetRepositoryRunnersResponse) GetRepositoryId() string {
+	if x != nil {
+		return x.RepositoryId
+	}
+	return ""
+}
+
+func (x *GetRepositoryRunnersResponse) GetOwnerId() string {
+	if x != nil {
+		return x.OwnerId
+	}
+	return ""
+}
+
+func (x *GetRepositoryRunnersResponse) GetWorkflowPath() string {
+	if x != nil {
+		return x.WorkflowPath
+	}
+	return ""
+}
+
+func (x *GetRepositoryRunnersResponse) GetManualAllowed() bool {
+	if x != nil {
+		return x.ManualAllowed
+	}
+	return false
+}
+
+func (x *GetRepositoryRunnersResponse) GetPushAllowed() bool {
+	if x != nil {
+		return x.PushAllowed
+	}
+	return false
+}
+
+func (x *GetRepositoryRunnersResponse) GetRunners() []*EnrolledRunner {
+	if x != nil {
+		return x.Runners
+	}
+	return nil
+}
+
 var File_golf_v1_golf_proto protoreflect.FileDescriptor
 
 const file_golf_v1_golf_proto_rawDesc = "" +
@@ -35971,7 +36459,43 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	" \x01(\bR\x1ddefaultDeleteBranchAfterMerge\x12A\n" +
 	"\x1ddefault_allow_maintainer_edit\x18\v \x01(\bR\x1adefaultAllowMaintainerEdit\x12.\n" +
 	"\x13default_merge_style\x18\f \x01(\tR\x11defaultMergeStyle\x120\n" +
-	"\x14default_update_style\x18\r \x01(\tR\x12defaultUpdateStyle*\xb2\x01\n" +
+	"\x14default_update_style\x18\r \x01(\tR\x12defaultUpdateStyle\"\x85\x02\n" +
+	"\x0eEnrolledRunner\x12\x1b\n" +
+	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x121\n" +
+	"\x05state\x18\x02 \x01(\x0e2\x1b.golf.v1.RunnerControlStateR\x05state\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\tR\aversion\x12 \n" +
+	"\tlast_seen\x18\x04 \x01(\tH\x00R\blastSeen\x88\x01\x01\x12+\n" +
+	"\x11recent_connection\x18\x05 \x01(\bR\x10recentConnection\x12,\n" +
+	"\x12has_active_attempt\x18\x06 \x01(\bR\x10hasActiveAttemptB\f\n" +
+	"\n" +
+	"_last_seen\"\x1b\n" +
+	"\x19GetInstanceRunnersRequest\"O\n" +
+	"\x1aGetInstanceRunnersResponse\x121\n" +
+	"\arunners\x18\x01 \x03(\v2\x17.golf.v1.EnrolledRunnerR\arunners\"\xc2\x01\n" +
+	"\x1aUpdateRunnerControlRequest\x12\x1b\n" +
+	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x12)\n" +
+	"\x10expected_version\x18\x02 \x01(\tR\x0fexpectedVersion\x121\n" +
+	"\x05state\x18\x03 \x01(\x0e2\x1b.golf.v1.RunnerControlStateR\x05state\x12)\n" +
+	"\x10current_password\x18\x04 \x01(\tR\x0fcurrentPassword\"N\n" +
+	"\x1bUpdateRunnerControlResponse\x12/\n" +
+	"\x06runner\x18\x01 \x01(\v2\x17.golf.v1.EnrolledRunnerR\x06runner\"\xba\x01\n" +
+	"\x1bGetRepositoryRunnersRequest\x126\n" +
+	"\n" +
+	"repository\x18\x01 \x01(\v2\x16.golf.v1.RepositoryKeyR\n" +
+	"repository\x12#\n" +
+	"\rrepository_id\x18\x02 \x01(\tR\frepositoryId\x12\x19\n" +
+	"\bowner_id\x18\x03 \x01(\tR\aownerId\x12#\n" +
+	"\rworkflow_path\x18\x04 \x01(\tR\fworkflowPath\"\xb8\x02\n" +
+	"\x1cGetRepositoryRunnersResponse\x126\n" +
+	"\n" +
+	"repository\x18\x01 \x01(\v2\x16.golf.v1.RepositoryKeyR\n" +
+	"repository\x12#\n" +
+	"\rrepository_id\x18\x02 \x01(\tR\frepositoryId\x12\x19\n" +
+	"\bowner_id\x18\x03 \x01(\tR\aownerId\x12#\n" +
+	"\rworkflow_path\x18\x04 \x01(\tR\fworkflowPath\x12%\n" +
+	"\x0emanual_allowed\x18\x05 \x01(\bR\rmanualAllowed\x12!\n" +
+	"\fpush_allowed\x18\x06 \x01(\bR\vpushAllowed\x121\n" +
+	"\arunners\x18\a \x03(\v2\x17.golf.v1.EnrolledRunnerR\arunners*\xb2\x01\n" +
 	"\x15RepositoryFeatureMode\x12'\n" +
 	"#REPOSITORY_FEATURE_MODE_UNSPECIFIED\x10\x00\x12$\n" +
 	" REPOSITORY_FEATURE_MODE_DISABLED\x10\x01\x12$\n" +
@@ -36182,7 +36706,12 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x1cRepositoryInvitationDecision\x12.\n" +
 	"*REPOSITORY_INVITATION_DECISION_UNSPECIFIED\x10\x00\x12)\n" +
 	"%REPOSITORY_INVITATION_DECISION_ACCEPT\x10\x01\x12)\n" +
-	"%REPOSITORY_INVITATION_DECISION_REJECT\x10\x022\x96\x06\n" +
+	"%REPOSITORY_INVITATION_DECISION_REJECT\x10\x02*\xa0\x01\n" +
+	"\x12RunnerControlState\x12$\n" +
+	" RUNNER_CONTROL_STATE_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bRUNNER_CONTROL_STATE_ACTIVE\x10\x01\x12!\n" +
+	"\x1dRUNNER_CONTROL_STATE_DRAINING\x10\x02\x12 \n" +
+	"\x1cRUNNER_CONTROL_STATE_REVOKED\x10\x032\x96\x06\n" +
 	"\x0eSessionService\x12o\n" +
 	"\x18GetAuthenticationOptions\x12(.golf.v1.GetAuthenticationOptionsRequest\x1a).golf.v1.GetAuthenticationOptionsResponse\x12T\n" +
 	"\x0fBeginGiteaOAuth\x12\x1f.golf.v1.BeginGiteaOAuthRequest\x1a .golf.v1.BeginGiteaOAuthResponse\x12Z\n" +
@@ -36383,7 +36912,11 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x1aRevokeRepositoryInvitation\x12*.golf.v1.RevokeRepositoryInvitationRequest\x1a+.golf.v1.RevokeRepositoryInvitationResponse\x12\x87\x01\n" +
 	" GetRepositoryInvitationOperation\x120.golf.v1.GetRepositoryInvitationOperationRequest\x1a1.golf.v1.GetRepositoryInvitationOperationResponse2w\n" +
 	"\x16RepositoryRulesService\x12]\n" +
-	"\x12GetRepositoryRules\x12\".golf.v1.GetRepositoryRulesRequest\x1a#.golf.v1.GetRepositoryRulesResponseB2Z0github.com/mjtechguy/golf-git/gen/golf/v1;golfv1b\x06proto3"
+	"\x12GetRepositoryRules\x12\".golf.v1.GetRepositoryRulesRequest\x1a#.golf.v1.GetRepositoryRulesResponse2\xbc\x02\n" +
+	"\x14RunnerControlService\x12]\n" +
+	"\x12GetInstanceRunners\x12\".golf.v1.GetInstanceRunnersRequest\x1a#.golf.v1.GetInstanceRunnersResponse\x12`\n" +
+	"\x13UpdateRunnerControl\x12#.golf.v1.UpdateRunnerControlRequest\x1a$.golf.v1.UpdateRunnerControlResponse\x12c\n" +
+	"\x14GetRepositoryRunners\x12$.golf.v1.GetRepositoryRunnersRequest\x1a%.golf.v1.GetRepositoryRunnersResponseB2Z0github.com/mjtechguy/golf-git/gen/golf/v1;golfv1b\x06proto3"
 
 var (
 	file_golf_v1_golf_proto_rawDescOnce sync.Once
@@ -36397,8 +36930,8 @@ func file_golf_v1_golf_proto_rawDescGZIP() []byte {
 	return file_golf_v1_golf_proto_rawDescData
 }
 
-var file_golf_v1_golf_proto_enumTypes = make([]protoimpl.EnumInfo, 37)
-var file_golf_v1_golf_proto_msgTypes = make([]protoimpl.MessageInfo, 435)
+var file_golf_v1_golf_proto_enumTypes = make([]protoimpl.EnumInfo, 38)
+var file_golf_v1_golf_proto_msgTypes = make([]protoimpl.MessageInfo, 442)
 var file_golf_v1_golf_proto_goTypes = []any{
 	(RepositoryFeatureMode)(0),                           // 0: golf.v1.RepositoryFeatureMode
 	(RepositoryCreationState)(0),                         // 1: golf.v1.RepositoryCreationState
@@ -36437,1268 +36970,1289 @@ var file_golf_v1_golf_proto_goTypes = []any{
 	(RepositoryExecutionValueKind)(0),                    // 34: golf.v1.RepositoryExecutionValueKind
 	(WorkflowOutputState)(0),                             // 35: golf.v1.WorkflowOutputState
 	(RepositoryInvitationDecision)(0),                    // 36: golf.v1.RepositoryInvitationDecision
-	(*ApiCredential)(nil),                                // 37: golf.v1.ApiCredential
-	(*CreateApiCredentialRequest)(nil),                   // 38: golf.v1.CreateApiCredentialRequest
-	(*CreateApiCredentialResponse)(nil),                  // 39: golf.v1.CreateApiCredentialResponse
-	(*ListApiCredentialsRequest)(nil),                    // 40: golf.v1.ListApiCredentialsRequest
-	(*ListApiCredentialsResponse)(nil),                   // 41: golf.v1.ListApiCredentialsResponse
-	(*RevokeApiCredentialRequest)(nil),                   // 42: golf.v1.RevokeApiCredentialRequest
-	(*RevokeApiCredentialResponse)(nil),                  // 43: golf.v1.RevokeApiCredentialResponse
-	(*SSHKey)(nil),                                       // 44: golf.v1.SSHKey
-	(*ListSSHKeysRequest)(nil),                           // 45: golf.v1.ListSSHKeysRequest
-	(*ListSSHKeysResponse)(nil),                          // 46: golf.v1.ListSSHKeysResponse
-	(*AddSSHKeyRequest)(nil),                             // 47: golf.v1.AddSSHKeyRequest
-	(*AddSSHKeyResponse)(nil),                            // 48: golf.v1.AddSSHKeyResponse
-	(*DeleteSSHKeyRequest)(nil),                          // 49: golf.v1.DeleteSSHKeyRequest
-	(*DeleteSSHKeyResponse)(nil),                         // 50: golf.v1.DeleteSSHKeyResponse
-	(*RepositoryExternalTracker)(nil),                    // 51: golf.v1.RepositoryExternalTracker
-	(*RepositoryExternalWiki)(nil),                       // 52: golf.v1.RepositoryExternalWiki
-	(*RepositorySettings)(nil),                           // 53: golf.v1.RepositorySettings
-	(*GetRepositorySettingsRequest)(nil),                 // 54: golf.v1.GetRepositorySettingsRequest
-	(*GetRepositorySettingsResponse)(nil),                // 55: golf.v1.GetRepositorySettingsResponse
-	(*UpdateRepositorySettingsRequest)(nil),              // 56: golf.v1.UpdateRepositorySettingsRequest
-	(*UpdateRepositorySettingsResponse)(nil),             // 57: golf.v1.UpdateRepositorySettingsResponse
-	(*UpdateRepositoryTopicsRequest)(nil),                // 58: golf.v1.UpdateRepositoryTopicsRequest
-	(*UpdateRepositoryTopicsResponse)(nil),               // 59: golf.v1.UpdateRepositoryTopicsResponse
-	(*User)(nil),                                         // 60: golf.v1.User
-	(*Repository)(nil),                                   // 61: golf.v1.Repository
-	(*RepositoryKey)(nil),                                // 62: golf.v1.RepositoryKey
-	(*PageRequest)(nil),                                  // 63: golf.v1.PageRequest
-	(*PageResponse)(nil),                                 // 64: golf.v1.PageResponse
-	(*LoginWithPasswordRequest)(nil),                     // 65: golf.v1.LoginWithPasswordRequest
-	(*LoginWithPasswordResponse)(nil),                    // 66: golf.v1.LoginWithPasswordResponse
-	(*LoginWithGiteaTokenRequest)(nil),                   // 67: golf.v1.LoginWithGiteaTokenRequest
-	(*LoginWithGiteaTokenResponse)(nil),                  // 68: golf.v1.LoginWithGiteaTokenResponse
-	(*GetSessionRequest)(nil),                            // 69: golf.v1.GetSessionRequest
-	(*GetSessionResponse)(nil),                           // 70: golf.v1.GetSessionResponse
-	(*SessionInfo)(nil),                                  // 71: golf.v1.SessionInfo
-	(*ListSessionsRequest)(nil),                          // 72: golf.v1.ListSessionsRequest
-	(*ListSessionsResponse)(nil),                         // 73: golf.v1.ListSessionsResponse
-	(*RevokeSessionRequest)(nil),                         // 74: golf.v1.RevokeSessionRequest
-	(*RevokeSessionResponse)(nil),                        // 75: golf.v1.RevokeSessionResponse
-	(*RevokeOtherSessionsRequest)(nil),                   // 76: golf.v1.RevokeOtherSessionsRequest
-	(*RevokeOtherSessionsResponse)(nil),                  // 77: golf.v1.RevokeOtherSessionsResponse
-	(*LogoutRequest)(nil),                                // 78: golf.v1.LogoutRequest
-	(*LogoutResponse)(nil),                               // 79: golf.v1.LogoutResponse
-	(*ListRepositoriesRequest)(nil),                      // 80: golf.v1.ListRepositoriesRequest
-	(*ListRepositoriesResponse)(nil),                     // 81: golf.v1.ListRepositoriesResponse
-	(*CreateRepositoryRequest)(nil),                      // 82: golf.v1.CreateRepositoryRequest
-	(*CreateRepositoryResponse)(nil),                     // 83: golf.v1.CreateRepositoryResponse
-	(*RepositoryCreation)(nil),                           // 84: golf.v1.RepositoryCreation
-	(*GetRepositoryCreationRequest)(nil),                 // 85: golf.v1.GetRepositoryCreationRequest
-	(*GetRepositoryCreationResponse)(nil),                // 86: golf.v1.GetRepositoryCreationResponse
-	(*GetRepositoryRequest)(nil),                         // 87: golf.v1.GetRepositoryRequest
-	(*GetRepositoryResponse)(nil),                        // 88: golf.v1.GetRepositoryResponse
-	(*Branch)(nil),                                       // 89: golf.v1.Branch
-	(*ListBranchesRequest)(nil),                          // 90: golf.v1.ListBranchesRequest
-	(*ListBranchesResponse)(nil),                         // 91: golf.v1.ListBranchesResponse
-	(*Tag)(nil),                                          // 92: golf.v1.Tag
-	(*ListTagsRequest)(nil),                              // 93: golf.v1.ListTagsRequest
-	(*ListTagsResponse)(nil),                             // 94: golf.v1.ListTagsResponse
-	(*Commit)(nil),                                       // 95: golf.v1.Commit
-	(*ListCommitsRequest)(nil),                           // 96: golf.v1.ListCommitsRequest
-	(*ListCommitsResponse)(nil),                          // 97: golf.v1.ListCommitsResponse
-	(*GetCommitDiffRequest)(nil),                         // 98: golf.v1.GetCommitDiffRequest
-	(*GetCommitDiffResponse)(nil),                        // 99: golf.v1.GetCommitDiffResponse
-	(*GetPullRequestDiffRequest)(nil),                    // 100: golf.v1.GetPullRequestDiffRequest
-	(*GetPullRequestDiffResponse)(nil),                   // 101: golf.v1.GetPullRequestDiffResponse
-	(*GetRepositoryImageRequest)(nil),                    // 102: golf.v1.GetRepositoryImageRequest
-	(*GetRepositoryImageResponse)(nil),                   // 103: golf.v1.GetRepositoryImageResponse
-	(*SourceEntry)(nil),                                  // 104: golf.v1.SourceEntry
-	(*SourceFile)(nil),                                   // 105: golf.v1.SourceFile
-	(*RepositorySourceSelector)(nil),                     // 106: golf.v1.RepositorySourceSelector
-	(*RepositorySourceSelection)(nil),                    // 107: golf.v1.RepositorySourceSelection
-	(*ResolveRepositorySourceRequest)(nil),               // 108: golf.v1.ResolveRepositorySourceRequest
-	(*RepositorySourceCandidate)(nil),                    // 109: golf.v1.RepositorySourceCandidate
-	(*ResolveRepositorySourceResponse)(nil),              // 110: golf.v1.ResolveRepositorySourceResponse
-	(*GetContentsRequest)(nil),                           // 111: golf.v1.GetContentsRequest
-	(*GetContentsResponse)(nil),                          // 112: golf.v1.GetContentsResponse
-	(*Issue)(nil),                                        // 113: golf.v1.Issue
-	(*ListIssuesRequest)(nil),                            // 114: golf.v1.ListIssuesRequest
-	(*ListIssuesResponse)(nil),                           // 115: golf.v1.ListIssuesResponse
-	(*GetIssueRequest)(nil),                              // 116: golf.v1.GetIssueRequest
-	(*GetIssueResponse)(nil),                             // 117: golf.v1.GetIssueResponse
-	(*IssueComment)(nil),                                 // 118: golf.v1.IssueComment
-	(*ListIssueCommentsRequest)(nil),                     // 119: golf.v1.ListIssueCommentsRequest
-	(*ListIssueCommentsResponse)(nil),                    // 120: golf.v1.ListIssueCommentsResponse
-	(*IssueMutation)(nil),                                // 121: golf.v1.IssueMutation
-	(*CreateIssueRequest)(nil),                           // 122: golf.v1.CreateIssueRequest
-	(*CreateIssueResponse)(nil),                          // 123: golf.v1.CreateIssueResponse
-	(*CreateIssueCommentRequest)(nil),                    // 124: golf.v1.CreateIssueCommentRequest
-	(*CreateIssueCommentResponse)(nil),                   // 125: golf.v1.CreateIssueCommentResponse
-	(*UpdateIssueRequest)(nil),                           // 126: golf.v1.UpdateIssueRequest
-	(*UpdateIssueResponse)(nil),                          // 127: golf.v1.UpdateIssueResponse
-	(*GetIssueMutationRequest)(nil),                      // 128: golf.v1.GetIssueMutationRequest
-	(*GetIssueMutationResponse)(nil),                     // 129: golf.v1.GetIssueMutationResponse
-	(*PullRequestRef)(nil),                               // 130: golf.v1.PullRequestRef
-	(*PullRequest)(nil),                                  // 131: golf.v1.PullRequest
-	(*ListPullRequestsRequest)(nil),                      // 132: golf.v1.ListPullRequestsRequest
-	(*ListPullRequestsResponse)(nil),                     // 133: golf.v1.ListPullRequestsResponse
-	(*GetPullRequestRequest)(nil),                        // 134: golf.v1.GetPullRequestRequest
-	(*GetPullRequestResponse)(nil),                       // 135: golf.v1.GetPullRequestResponse
-	(*PullRequestReview)(nil),                            // 136: golf.v1.PullRequestReview
-	(*CreatePullRequestReviewRequest)(nil),               // 137: golf.v1.CreatePullRequestReviewRequest
-	(*PullRequestReviewMutation)(nil),                    // 138: golf.v1.PullRequestReviewMutation
-	(*CreatePullRequestReviewResponse)(nil),              // 139: golf.v1.CreatePullRequestReviewResponse
-	(*GetPullRequestReviewMutationRequest)(nil),          // 140: golf.v1.GetPullRequestReviewMutationRequest
-	(*GetPullRequestReviewMutationResponse)(nil),         // 141: golf.v1.GetPullRequestReviewMutationResponse
-	(*ListPullRequestReviewsRequest)(nil),                // 142: golf.v1.ListPullRequestReviewsRequest
-	(*ListPullRequestReviewsResponse)(nil),               // 143: golf.v1.ListPullRequestReviewsResponse
-	(*PullRequestReviewComment)(nil),                     // 144: golf.v1.PullRequestReviewComment
-	(*GetPullRequestReviewCommentsRequest)(nil),          // 145: golf.v1.GetPullRequestReviewCommentsRequest
-	(*GetPullRequestReviewCommentsResponse)(nil),         // 146: golf.v1.GetPullRequestReviewCommentsResponse
-	(*Capability)(nil),                                   // 147: golf.v1.Capability
-	(*ListCapabilitiesRequest)(nil),                      // 148: golf.v1.ListCapabilitiesRequest
-	(*ListCapabilitiesResponse)(nil),                     // 149: golf.v1.ListCapabilitiesResponse
-	(*GetAuthenticationOptionsRequest)(nil),              // 150: golf.v1.GetAuthenticationOptionsRequest
-	(*GetAuthenticationOptionsResponse)(nil),             // 151: golf.v1.GetAuthenticationOptionsResponse
-	(*BeginGiteaOAuthRequest)(nil),                       // 152: golf.v1.BeginGiteaOAuthRequest
-	(*BeginGiteaOAuthResponse)(nil),                      // 153: golf.v1.BeginGiteaOAuthResponse
-	(*Organization)(nil),                                 // 154: golf.v1.Organization
-	(*OrganizationTeam)(nil),                             // 155: golf.v1.OrganizationTeam
-	(*ListOrganizationsRequest)(nil),                     // 156: golf.v1.ListOrganizationsRequest
-	(*ListOrganizationsResponse)(nil),                    // 157: golf.v1.ListOrganizationsResponse
-	(*GetOrganizationRequest)(nil),                       // 158: golf.v1.GetOrganizationRequest
-	(*GetOrganizationResponse)(nil),                      // 159: golf.v1.GetOrganizationResponse
-	(*ListTeamsRequest)(nil),                             // 160: golf.v1.ListTeamsRequest
-	(*ListTeamsResponse)(nil),                            // 161: golf.v1.ListTeamsResponse
-	(*GetTeamRequest)(nil),                               // 162: golf.v1.GetTeamRequest
-	(*GetTeamResponse)(nil),                              // 163: golf.v1.GetTeamResponse
-	(*ListTeamMembersRequest)(nil),                       // 164: golf.v1.ListTeamMembersRequest
-	(*ListTeamMembersResponse)(nil),                      // 165: golf.v1.ListTeamMembersResponse
-	(*ListTeamRepositoriesRequest)(nil),                  // 166: golf.v1.ListTeamRepositoriesRequest
-	(*ListTeamRepositoriesResponse)(nil),                 // 167: golf.v1.ListTeamRepositoriesResponse
-	(*AuditEvent)(nil),                                   // 168: golf.v1.AuditEvent
-	(*ListAuditEventsRequest)(nil),                       // 169: golf.v1.ListAuditEventsRequest
-	(*ListAuditEventsResponse)(nil),                      // 170: golf.v1.ListAuditEventsResponse
-	(*GetTeamAdministrationRequest)(nil),                 // 171: golf.v1.GetTeamAdministrationRequest
-	(*GetTeamAdministrationResponse)(nil),                // 172: golf.v1.GetTeamAdministrationResponse
-	(*ResolveTeamMemberRequest)(nil),                     // 173: golf.v1.ResolveTeamMemberRequest
-	(*ResolveTeamMemberResponse)(nil),                    // 174: golf.v1.ResolveTeamMemberResponse
-	(*AddTeamMemberRequest)(nil),                         // 175: golf.v1.AddTeamMemberRequest
-	(*AddTeamMemberResponse)(nil),                        // 176: golf.v1.AddTeamMemberResponse
-	(*RemoveTeamMemberRequest)(nil),                      // 177: golf.v1.RemoveTeamMemberRequest
-	(*RemoveTeamMemberResponse)(nil),                     // 178: golf.v1.RemoveTeamMemberResponse
-	(*LocalAccountInfo)(nil),                             // 179: golf.v1.LocalAccountInfo
-	(*ListLocalAccountsRequest)(nil),                     // 180: golf.v1.ListLocalAccountsRequest
-	(*ListLocalAccountsResponse)(nil),                    // 181: golf.v1.ListLocalAccountsResponse
-	(*RepositoryAccess)(nil),                             // 182: golf.v1.RepositoryAccess
-	(*RepositoryCollaborator)(nil),                       // 183: golf.v1.RepositoryCollaborator
-	(*GetRepositoryAccessRequest)(nil),                   // 184: golf.v1.GetRepositoryAccessRequest
-	(*GetRepositoryAccessResponse)(nil),                  // 185: golf.v1.GetRepositoryAccessResponse
-	(*ListRepositoryCollaboratorsRequest)(nil),           // 186: golf.v1.ListRepositoryCollaboratorsRequest
-	(*ListRepositoryCollaboratorsResponse)(nil),          // 187: golf.v1.ListRepositoryCollaboratorsResponse
-	(*ResolveRepositoryCollaboratorRequest)(nil),         // 188: golf.v1.ResolveRepositoryCollaboratorRequest
-	(*ResolveRepositoryCollaboratorResponse)(nil),        // 189: golf.v1.ResolveRepositoryCollaboratorResponse
-	(*SetRepositoryCollaboratorRequest)(nil),             // 190: golf.v1.SetRepositoryCollaboratorRequest
-	(*SetRepositoryCollaboratorResponse)(nil),            // 191: golf.v1.SetRepositoryCollaboratorResponse
-	(*RemoveRepositoryCollaboratorRequest)(nil),          // 192: golf.v1.RemoveRepositoryCollaboratorRequest
-	(*RemoveRepositoryCollaboratorResponse)(nil),         // 193: golf.v1.RemoveRepositoryCollaboratorResponse
-	(*WorkflowDiagnostic)(nil),                           // 194: golf.v1.WorkflowDiagnostic
-	(*WorkflowJobSummary)(nil),                           // 195: golf.v1.WorkflowJobSummary
-	(*WorkflowConfiguration)(nil),                        // 196: golf.v1.WorkflowConfiguration
-	(*InspectWorkflowsRequest)(nil),                      // 197: golf.v1.InspectWorkflowsRequest
-	(*InspectWorkflowsResponse)(nil),                     // 198: golf.v1.InspectWorkflowsResponse
-	(*DisableLocalAccountRequest)(nil),                   // 199: golf.v1.DisableLocalAccountRequest
-	(*DisableLocalAccountResponse)(nil),                  // 200: golf.v1.DisableLocalAccountResponse
-	(*ExecutionPolicy)(nil),                              // 201: golf.v1.ExecutionPolicy
-	(*GetExecutionPolicyRequest)(nil),                    // 202: golf.v1.GetExecutionPolicyRequest
-	(*GetExecutionPolicyResponse)(nil),                   // 203: golf.v1.GetExecutionPolicyResponse
-	(*UpdateExecutionPolicyRequest)(nil),                 // 204: golf.v1.UpdateExecutionPolicyRequest
-	(*UpdateExecutionPolicyResponse)(nil),                // 205: golf.v1.UpdateExecutionPolicyResponse
-	(*WorkflowRun)(nil),                                  // 206: golf.v1.WorkflowRun
-	(*WorkflowStepProgress)(nil),                         // 207: golf.v1.WorkflowStepProgress
-	(*WorkflowJobProgress)(nil),                          // 208: golf.v1.WorkflowJobProgress
-	(*DispatchWorkflowRequest)(nil),                      // 209: golf.v1.DispatchWorkflowRequest
-	(*DispatchWorkflowResponse)(nil),                     // 210: golf.v1.DispatchWorkflowResponse
-	(*GetWorkflowRunRequest)(nil),                        // 211: golf.v1.GetWorkflowRunRequest
-	(*GetWorkflowRunResponse)(nil),                       // 212: golf.v1.GetWorkflowRunResponse
-	(*ListWorkflowRunsRequest)(nil),                      // 213: golf.v1.ListWorkflowRunsRequest
-	(*ListWorkflowRunsResponse)(nil),                     // 214: golf.v1.ListWorkflowRunsResponse
-	(*CancelWorkflowRunRequest)(nil),                     // 215: golf.v1.CancelWorkflowRunRequest
-	(*CancelWorkflowRunResponse)(nil),                    // 216: golf.v1.CancelWorkflowRunResponse
-	(*WorkflowRunLog)(nil),                               // 217: golf.v1.WorkflowRunLog
-	(*GetWorkflowRunLogsRequest)(nil),                    // 218: golf.v1.GetWorkflowRunLogsRequest
-	(*GetWorkflowRunLogsResponse)(nil),                   // 219: golf.v1.GetWorkflowRunLogsResponse
-	(*OrganizationCreationPolicy)(nil),                   // 220: golf.v1.OrganizationCreationPolicy
-	(*GetOrganizationCreationPolicyRequest)(nil),         // 221: golf.v1.GetOrganizationCreationPolicyRequest
-	(*GetOrganizationCreationPolicyResponse)(nil),        // 222: golf.v1.GetOrganizationCreationPolicyResponse
-	(*UpdateOrganizationCreationPolicyRequest)(nil),      // 223: golf.v1.UpdateOrganizationCreationPolicyRequest
-	(*UpdateOrganizationCreationPolicyResponse)(nil),     // 224: golf.v1.UpdateOrganizationCreationPolicyResponse
-	(*CreateOrganizationRequest)(nil),                    // 225: golf.v1.CreateOrganizationRequest
-	(*CreateOrganizationResponse)(nil),                   // 226: golf.v1.CreateOrganizationResponse
-	(*InfrastructureConnection)(nil),                     // 227: golf.v1.InfrastructureConnection
-	(*InfrastructureConnectionCredential)(nil),           // 228: golf.v1.InfrastructureConnectionCredential
-	(*ListInfrastructureConnectionsRequest)(nil),         // 229: golf.v1.ListInfrastructureConnectionsRequest
-	(*ListInfrastructureConnectionsResponse)(nil),        // 230: golf.v1.ListInfrastructureConnectionsResponse
-	(*SaveInfrastructureConnectionRequest)(nil),          // 231: golf.v1.SaveInfrastructureConnectionRequest
-	(*SaveInfrastructureConnectionResponse)(nil),         // 232: golf.v1.SaveInfrastructureConnectionResponse
-	(*TestInfrastructureConnectionRequest)(nil),          // 233: golf.v1.TestInfrastructureConnectionRequest
-	(*TestInfrastructureConnectionResponse)(nil),         // 234: golf.v1.TestInfrastructureConnectionResponse
-	(*ActivateInfrastructureConnectionRequest)(nil),      // 235: golf.v1.ActivateInfrastructureConnectionRequest
-	(*ActivateInfrastructureConnectionResponse)(nil),     // 236: golf.v1.ActivateInfrastructureConnectionResponse
-	(*Profile)(nil),                                      // 237: golf.v1.Profile
-	(*GetProfileRequest)(nil),                            // 238: golf.v1.GetProfileRequest
-	(*GetProfileResponse)(nil),                           // 239: golf.v1.GetProfileResponse
-	(*UpdateProfileRequest)(nil),                         // 240: golf.v1.UpdateProfileRequest
-	(*UpdateProfileResponse)(nil),                        // 241: golf.v1.UpdateProfileResponse
-	(*AutomationGrant)(nil),                              // 242: golf.v1.AutomationGrant
-	(*ListAutomationGrantsRequest)(nil),                  // 243: golf.v1.ListAutomationGrantsRequest
-	(*ListAutomationGrantsResponse)(nil),                 // 244: golf.v1.ListAutomationGrantsResponse
-	(*CreateAutomationGrantRequest)(nil),                 // 245: golf.v1.CreateAutomationGrantRequest
-	(*CreateAutomationGrantResponse)(nil),                // 246: golf.v1.CreateAutomationGrantResponse
-	(*RevokeAutomationGrantRequest)(nil),                 // 247: golf.v1.RevokeAutomationGrantRequest
-	(*RevokeAutomationGrantResponse)(nil),                // 248: golf.v1.RevokeAutomationGrantResponse
-	(*AccountSecurity)(nil),                              // 249: golf.v1.AccountSecurity
-	(*GetAccountSecurityRequest)(nil),                    // 250: golf.v1.GetAccountSecurityRequest
-	(*GetAccountSecurityResponse)(nil),                   // 251: golf.v1.GetAccountSecurityResponse
-	(*ChangeOwnPasswordRequest)(nil),                     // 252: golf.v1.ChangeOwnPasswordRequest
-	(*ChangeOwnLoginEmailRequest)(nil),                   // 253: golf.v1.ChangeOwnLoginEmailRequest
-	(*ChangeOwnPasswordResponse)(nil),                    // 254: golf.v1.ChangeOwnPasswordResponse
-	(*ChangeOwnLoginEmailResponse)(nil),                  // 255: golf.v1.ChangeOwnLoginEmailResponse
-	(*EnrollRegularLocalAccountRequest)(nil),             // 256: golf.v1.EnrollRegularLocalAccountRequest
-	(*EnrollRegularLocalAccountResponse)(nil),            // 257: golf.v1.EnrollRegularLocalAccountResponse
-	(*ResetRegularLocalPasswordRequest)(nil),             // 258: golf.v1.ResetRegularLocalPasswordRequest
-	(*ResetRegularLocalPasswordResponse)(nil),            // 259: golf.v1.ResetRegularLocalPasswordResponse
-	(*EnableRegularLocalAccountRequest)(nil),             // 260: golf.v1.EnableRegularLocalAccountRequest
-	(*EnableRegularLocalAccountResponse)(nil),            // 261: golf.v1.EnableRegularLocalAccountResponse
-	(*CodexConnection)(nil),                              // 262: golf.v1.CodexConnection
-	(*GetCodexConnectionRequest)(nil),                    // 263: golf.v1.GetCodexConnectionRequest
-	(*GetCodexConnectionResponse)(nil),                   // 264: golf.v1.GetCodexConnectionResponse
-	(*StartCodexLoginRequest)(nil),                       // 265: golf.v1.StartCodexLoginRequest
-	(*StartCodexLoginResponse)(nil),                      // 266: golf.v1.StartCodexLoginResponse
-	(*CancelCodexLoginRequest)(nil),                      // 267: golf.v1.CancelCodexLoginRequest
-	(*CancelCodexLoginResponse)(nil),                     // 268: golf.v1.CancelCodexLoginResponse
-	(*RefreshCodexConnectionRequest)(nil),                // 269: golf.v1.RefreshCodexConnectionRequest
-	(*CodexQuotaWindow)(nil),                             // 270: golf.v1.CodexQuotaWindow
-	(*CodexQuotaBucket)(nil),                             // 271: golf.v1.CodexQuotaBucket
-	(*CodexUsage)(nil),                                   // 272: golf.v1.CodexUsage
-	(*RefreshCodexConnectionResponse)(nil),               // 273: golf.v1.RefreshCodexConnectionResponse
-	(*DisconnectCodexConnectionRequest)(nil),             // 274: golf.v1.DisconnectCodexConnectionRequest
-	(*DisconnectCodexConnectionResponse)(nil),            // 275: golf.v1.DisconnectCodexConnectionResponse
-	(*ListCodexConnectionsRequest)(nil),                  // 276: golf.v1.ListCodexConnectionsRequest
-	(*ListCodexConnectionsResponse)(nil),                 // 277: golf.v1.ListCodexConnectionsResponse
-	(*CreateCodexConnectionRequest)(nil),                 // 278: golf.v1.CreateCodexConnectionRequest
-	(*CreateCodexConnectionResponse)(nil),                // 279: golf.v1.CreateCodexConnectionResponse
-	(*SetCodexConnectionAccessRequest)(nil),              // 280: golf.v1.SetCodexConnectionAccessRequest
-	(*SetCodexConnectionAccessResponse)(nil),             // 281: golf.v1.SetCodexConnectionAccessResponse
-	(*CompleteAgentLoginRequest)(nil),                    // 282: golf.v1.CompleteAgentLoginRequest
-	(*CompleteAgentLoginResponse)(nil),                   // 283: golf.v1.CompleteAgentLoginResponse
-	(*AgentUsageConfig)(nil),                             // 284: golf.v1.AgentUsageConfig
-	(*AgentUsageSettings)(nil),                           // 285: golf.v1.AgentUsageSettings
-	(*GetAgentUsageRequest)(nil),                         // 286: golf.v1.GetAgentUsageRequest
-	(*GetAgentUsageResponse)(nil),                        // 287: golf.v1.GetAgentUsageResponse
-	(*SaveAgentUsageRequest)(nil),                        // 288: golf.v1.SaveAgentUsageRequest
-	(*SaveAgentUsageResponse)(nil),                       // 289: golf.v1.SaveAgentUsageResponse
-	(*AgentModel)(nil),                                   // 290: golf.v1.AgentModel
-	(*ListAgentModelsRequest)(nil),                       // 291: golf.v1.ListAgentModelsRequest
-	(*ListAgentModelsResponse)(nil),                      // 292: golf.v1.ListAgentModelsResponse
-	(*AgentTaskSelection)(nil),                           // 293: golf.v1.AgentTaskSelection
-	(*PreviewAgentTaskRequest)(nil),                      // 294: golf.v1.PreviewAgentTaskRequest
-	(*PreviewAgentTaskResponse)(nil),                     // 295: golf.v1.PreviewAgentTaskResponse
-	(*AgentTask)(nil),                                    // 296: golf.v1.AgentTask
-	(*CreateAgentTaskRequest)(nil),                       // 297: golf.v1.CreateAgentTaskRequest
-	(*ListAgentTasksRequest)(nil),                        // 298: golf.v1.ListAgentTasksRequest
-	(*ListAgentTasksResponse)(nil),                       // 299: golf.v1.ListAgentTasksResponse
-	(*GetAgentTaskRequest)(nil),                          // 300: golf.v1.GetAgentTaskRequest
-	(*CancelAgentTaskRequest)(nil),                       // 301: golf.v1.CancelAgentTaskRequest
-	(*CreateAgentTaskResponse)(nil),                      // 302: golf.v1.CreateAgentTaskResponse
-	(*GetAgentTaskResponse)(nil),                         // 303: golf.v1.GetAgentTaskResponse
-	(*CancelAgentTaskResponse)(nil),                      // 304: golf.v1.CancelAgentTaskResponse
-	(*Reviewer)(nil),                                     // 305: golf.v1.Reviewer
-	(*GetReviewerRequest)(nil),                           // 306: golf.v1.GetReviewerRequest
-	(*GetReviewerResponse)(nil),                          // 307: golf.v1.GetReviewerResponse
-	(*SaveReviewerRequest)(nil),                          // 308: golf.v1.SaveReviewerRequest
-	(*SaveReviewerResponse)(nil),                         // 309: golf.v1.SaveReviewerResponse
-	(*ReviewerRun)(nil),                                  // 310: golf.v1.ReviewerRun
-	(*ListReviewerRunsRequest)(nil),                      // 311: golf.v1.ListReviewerRunsRequest
-	(*ListReviewerRunsResponse)(nil),                     // 312: golf.v1.ListReviewerRunsResponse
-	(*RequestReviewRequest)(nil),                         // 313: golf.v1.RequestReviewRequest
-	(*RequestReviewResponse)(nil),                        // 314: golf.v1.RequestReviewResponse
-	(*GetPullRequestDiscussionRequest)(nil),              // 315: golf.v1.GetPullRequestDiscussionRequest
-	(*GetPullRequestDiscussionResponse)(nil),             // 316: golf.v1.GetPullRequestDiscussionResponse
-	(*WatchRepositoryRequest)(nil),                       // 317: golf.v1.WatchRepositoryRequest
-	(*WatchRepositoryResponse)(nil),                      // 318: golf.v1.WatchRepositoryResponse
-	(*PullRequestSelection)(nil),                         // 319: golf.v1.PullRequestSelection
-	(*ListPullRequestCommitsRequest)(nil),                // 320: golf.v1.ListPullRequestCommitsRequest
-	(*ListPullRequestCommitsResponse)(nil),               // 321: golf.v1.ListPullRequestCommitsResponse
-	(*ReportedCheck)(nil),                                // 322: golf.v1.ReportedCheck
-	(*ListPullRequestChecksRequest)(nil),                 // 323: golf.v1.ListPullRequestChecksRequest
-	(*ListPullRequestChecksResponse)(nil),                // 324: golf.v1.ListPullRequestChecksResponse
-	(*CreatePullRequestRequest)(nil),                     // 325: golf.v1.CreatePullRequestRequest
-	(*CreatePullRequestResponse)(nil),                    // 326: golf.v1.CreatePullRequestResponse
-	(*RepositoryComparisonSelection)(nil),                // 327: golf.v1.RepositoryComparisonSelection
-	(*GetRepositoryComparisonRequest)(nil),               // 328: golf.v1.GetRepositoryComparisonRequest
-	(*GetRepositoryComparisonResponse)(nil),              // 329: golf.v1.GetRepositoryComparisonResponse
-	(*UpdatePullRequestRequest)(nil),                     // 330: golf.v1.UpdatePullRequestRequest
-	(*UpdatePullRequestResponse)(nil),                    // 331: golf.v1.UpdatePullRequestResponse
-	(*PullReviewDraftTarget)(nil),                        // 332: golf.v1.PullReviewDraftTarget
-	(*PullReviewDraftCapture)(nil),                       // 333: golf.v1.PullReviewDraftCapture
-	(*PullReviewDraftComparison)(nil),                    // 334: golf.v1.PullReviewDraftComparison
-	(*PullReviewDraftCoordinate)(nil),                    // 335: golf.v1.PullReviewDraftCoordinate
-	(*PullReviewDraftEntry)(nil),                         // 336: golf.v1.PullReviewDraftEntry
-	(*PullReviewDraft)(nil),                              // 337: golf.v1.PullReviewDraft
-	(*PullReviewDraftReceipt)(nil),                       // 338: golf.v1.PullReviewDraftReceipt
-	(*GetPullRequestReviewDraftRequest)(nil),             // 339: golf.v1.GetPullRequestReviewDraftRequest
-	(*GetPullRequestReviewDraftResponse)(nil),            // 340: golf.v1.GetPullRequestReviewDraftResponse
-	(*SavePullRequestReviewDraftRequest)(nil),            // 341: golf.v1.SavePullRequestReviewDraftRequest
-	(*SavePullRequestReviewDraftResponse)(nil),           // 342: golf.v1.SavePullRequestReviewDraftResponse
-	(*DeletePullRequestReviewDraftRequest)(nil),          // 343: golf.v1.DeletePullRequestReviewDraftRequest
-	(*DeletePullRequestReviewDraftResponse)(nil),         // 344: golf.v1.DeletePullRequestReviewDraftResponse
-	(*PublishPullRequestReviewDraftRequest)(nil),         // 345: golf.v1.PublishPullRequestReviewDraftRequest
-	(*PullInlineReviewMutation)(nil),                     // 346: golf.v1.PullInlineReviewMutation
-	(*PublishPullRequestReviewDraftResponse)(nil),        // 347: golf.v1.PublishPullRequestReviewDraftResponse
-	(*GetPullRequestInlineReviewMutationRequest)(nil),    // 348: golf.v1.GetPullRequestInlineReviewMutationRequest
-	(*GetPullRequestInlineReviewMutationResponse)(nil),   // 349: golf.v1.GetPullRequestInlineReviewMutationResponse
-	(*RepositoryLanguage)(nil),                           // 350: golf.v1.RepositoryLanguage
-	(*GetRepositoryOverviewRequest)(nil),                 // 351: golf.v1.GetRepositoryOverviewRequest
-	(*GetRepositoryOverviewResponse)(nil),                // 352: golf.v1.GetRepositoryOverviewResponse
-	(*ActionRunRef)(nil),                                 // 353: golf.v1.ActionRunRef
-	(*ActionRunSummary)(nil),                             // 354: golf.v1.ActionRunSummary
-	(*ListActionRunsRequest)(nil),                        // 355: golf.v1.ListActionRunsRequest
-	(*ListActionRunsResponse)(nil),                       // 356: golf.v1.ListActionRunsResponse
-	(*GetActionRunRequest)(nil),                          // 357: golf.v1.GetActionRunRequest
-	(*GetActionRunResponse)(nil),                         // 358: golf.v1.GetActionRunResponse
-	(*AgentEventPlanStep)(nil),                           // 359: golf.v1.AgentEventPlanStep
-	(*AgentTaskEvent)(nil),                               // 360: golf.v1.AgentTaskEvent
-	(*ListAgentTaskEventsRequest)(nil),                   // 361: golf.v1.ListAgentTaskEventsRequest
-	(*ListAgentTaskEventsResponse)(nil),                  // 362: golf.v1.ListAgentTaskEventsResponse
-	(*RepositoryDeployKey)(nil),                          // 363: golf.v1.RepositoryDeployKey
-	(*ListRepositoryDeployKeysRequest)(nil),              // 364: golf.v1.ListRepositoryDeployKeysRequest
-	(*ListRepositoryDeployKeysResponse)(nil),             // 365: golf.v1.ListRepositoryDeployKeysResponse
-	(*AddRepositoryDeployKeyRequest)(nil),                // 366: golf.v1.AddRepositoryDeployKeyRequest
-	(*AddRepositoryDeployKeyResponse)(nil),               // 367: golf.v1.AddRepositoryDeployKeyResponse
-	(*DeleteRepositoryDeployKeyRequest)(nil),             // 368: golf.v1.DeleteRepositoryDeployKeyRequest
-	(*DeleteRepositoryDeployKeyResponse)(nil),            // 369: golf.v1.DeleteRepositoryDeployKeyResponse
-	(*WorkflowMatrixEntry)(nil),                          // 370: golf.v1.WorkflowMatrixEntry
-	(*WorkflowJobInstance)(nil),                          // 371: golf.v1.WorkflowJobInstance
-	(*WorkflowEngineStep)(nil),                           // 372: golf.v1.WorkflowEngineStep
-	(*RepositoryWebhookTarget)(nil),                      // 373: golf.v1.RepositoryWebhookTarget
-	(*RepositoryWebhookSubscription)(nil),                // 374: golf.v1.RepositoryWebhookSubscription
-	(*RepositoryWebhookDelivery)(nil),                    // 375: golf.v1.RepositoryWebhookDelivery
-	(*ListRepositoryWebhooksRequest)(nil),                // 376: golf.v1.ListRepositoryWebhooksRequest
-	(*ListRepositoryWebhooksResponse)(nil),               // 377: golf.v1.ListRepositoryWebhooksResponse
-	(*SaveRepositoryWebhookRequest)(nil),                 // 378: golf.v1.SaveRepositoryWebhookRequest
-	(*SaveRepositoryWebhookResponse)(nil),                // 379: golf.v1.SaveRepositoryWebhookResponse
-	(*ListRepositoryWebhookDeliveriesRequest)(nil),       // 380: golf.v1.ListRepositoryWebhookDeliveriesRequest
-	(*ListRepositoryWebhookDeliveriesResponse)(nil),      // 381: golf.v1.ListRepositoryWebhookDeliveriesResponse
-	(*TestRepositoryWebhookRequest)(nil),                 // 382: golf.v1.TestRepositoryWebhookRequest
-	(*RedeliverRepositoryWebhookRequest)(nil),            // 383: golf.v1.RedeliverRepositoryWebhookRequest
-	(*TestRepositoryWebhookResponse)(nil),                // 384: golf.v1.TestRepositoryWebhookResponse
-	(*RedeliverRepositoryWebhookResponse)(nil),           // 385: golf.v1.RedeliverRepositoryWebhookResponse
-	(*RepositoryTeamAccess)(nil),                         // 386: golf.v1.RepositoryTeamAccess
-	(*ListRepositoryTeamAccessRequest)(nil),              // 387: golf.v1.ListRepositoryTeamAccessRequest
-	(*ListRepositoryTeamAccessResponse)(nil),             // 388: golf.v1.ListRepositoryTeamAccessResponse
-	(*AttachRepositoryTeamRequest)(nil),                  // 389: golf.v1.AttachRepositoryTeamRequest
-	(*AttachRepositoryTeamResponse)(nil),                 // 390: golf.v1.AttachRepositoryTeamResponse
-	(*DetachRepositoryTeamRequest)(nil),                  // 391: golf.v1.DetachRepositoryTeamRequest
-	(*DetachRepositoryTeamResponse)(nil),                 // 392: golf.v1.DetachRepositoryTeamResponse
-	(*RepositoryLifecycle)(nil),                          // 393: golf.v1.RepositoryLifecycle
-	(*RepositoryLifecycleOperation)(nil),                 // 394: golf.v1.RepositoryLifecycleOperation
-	(*GetRepositoryLifecycleRequest)(nil),                // 395: golf.v1.GetRepositoryLifecycleRequest
-	(*GetRepositoryLifecycleResponse)(nil),               // 396: golf.v1.GetRepositoryLifecycleResponse
-	(*ChangeRepositoryArchiveStateRequest)(nil),          // 397: golf.v1.ChangeRepositoryArchiveStateRequest
-	(*ChangeRepositoryArchiveStateResponse)(nil),         // 398: golf.v1.ChangeRepositoryArchiveStateResponse
-	(*GetRepositoryLifecycleOperationRequest)(nil),       // 399: golf.v1.GetRepositoryLifecycleOperationRequest
-	(*GetRepositoryLifecycleOperationResponse)(nil),      // 400: golf.v1.GetRepositoryLifecycleOperationResponse
-	(*EmailTransport)(nil),                               // 401: golf.v1.EmailTransport
-	(*ListEmailTransportsRequest)(nil),                   // 402: golf.v1.ListEmailTransportsRequest
-	(*ListEmailTransportsResponse)(nil),                  // 403: golf.v1.ListEmailTransportsResponse
-	(*EmailConfigurationObservation)(nil),                // 404: golf.v1.EmailConfigurationObservation
-	(*EmailDeliveryEvidence)(nil),                        // 405: golf.v1.EmailDeliveryEvidence
-	(*SaveEmailTransportRequest)(nil),                    // 406: golf.v1.SaveEmailTransportRequest
-	(*SaveEmailTransportResponse)(nil),                   // 407: golf.v1.SaveEmailTransportResponse
-	(*ActivateEmailTransportRequest)(nil),                // 408: golf.v1.ActivateEmailTransportRequest
-	(*ActivateEmailTransportResponse)(nil),               // 409: golf.v1.ActivateEmailTransportResponse
-	(*OwnEmailNotificationState)(nil),                    // 410: golf.v1.OwnEmailNotificationState
-	(*GetOwnEmailNotificationsRequest)(nil),              // 411: golf.v1.GetOwnEmailNotificationsRequest
-	(*GetOwnEmailNotificationsResponse)(nil),             // 412: golf.v1.GetOwnEmailNotificationsResponse
-	(*RequestEmailVerificationRequest)(nil),              // 413: golf.v1.RequestEmailVerificationRequest
-	(*RequestEmailVerificationResponse)(nil),             // 414: golf.v1.RequestEmailVerificationResponse
-	(*ConfirmEmailVerificationRequest)(nil),              // 415: golf.v1.ConfirmEmailVerificationRequest
-	(*ConfirmEmailVerificationResponse)(nil),             // 416: golf.v1.ConfirmEmailVerificationResponse
-	(*SaveOwnEmailPreferenceRequest)(nil),                // 417: golf.v1.SaveOwnEmailPreferenceRequest
-	(*SaveOwnEmailPreferenceResponse)(nil),               // 418: golf.v1.SaveOwnEmailPreferenceResponse
-	(*RepositoryEmailTarget)(nil),                        // 419: golf.v1.RepositoryEmailTarget
-	(*RepositoryEmailSubscription)(nil),                  // 420: golf.v1.RepositoryEmailSubscription
-	(*GetRepositoryEmailSubscriptionRequest)(nil),        // 421: golf.v1.GetRepositoryEmailSubscriptionRequest
-	(*GetRepositoryEmailSubscriptionResponse)(nil),       // 422: golf.v1.GetRepositoryEmailSubscriptionResponse
-	(*SaveRepositoryEmailSubscriptionRequest)(nil),       // 423: golf.v1.SaveRepositoryEmailSubscriptionRequest
-	(*SaveRepositoryEmailSubscriptionResponse)(nil),      // 424: golf.v1.SaveRepositoryEmailSubscriptionResponse
-	(*EmailDelivery)(nil),                                // 425: golf.v1.EmailDelivery
-	(*ListOwnEmailDeliveriesRequest)(nil),                // 426: golf.v1.ListOwnEmailDeliveriesRequest
-	(*ListOwnEmailDeliveriesResponse)(nil),               // 427: golf.v1.ListOwnEmailDeliveriesResponse
-	(*RedeliverOwnEmailRequest)(nil),                     // 428: golf.v1.RedeliverOwnEmailRequest
-	(*RedeliverOwnEmailResponse)(nil),                    // 429: golf.v1.RedeliverOwnEmailResponse
-	(*RepositoryExecutionValueTarget)(nil),               // 430: golf.v1.RepositoryExecutionValueTarget
-	(*RepositoryExecutionValue)(nil),                     // 431: golf.v1.RepositoryExecutionValue
-	(*RepositoryExecutionValueReference)(nil),            // 432: golf.v1.RepositoryExecutionValueReference
-	(*RepositoryExecutionBinding)(nil),                   // 433: golf.v1.RepositoryExecutionBinding
-	(*ListRepositoryExecutionValuesRequest)(nil),         // 434: golf.v1.ListRepositoryExecutionValuesRequest
-	(*ListRepositoryExecutionValuesResponse)(nil),        // 435: golf.v1.ListRepositoryExecutionValuesResponse
-	(*SaveRepositoryExecutionValueRequest)(nil),          // 436: golf.v1.SaveRepositoryExecutionValueRequest
-	(*DeleteRepositoryExecutionValueRequest)(nil),        // 437: golf.v1.DeleteRepositoryExecutionValueRequest
-	(*GetRepositoryExecutionVariableRequest)(nil),        // 438: golf.v1.GetRepositoryExecutionVariableRequest
-	(*GetRepositoryExecutionVariableResponse)(nil),       // 439: golf.v1.GetRepositoryExecutionVariableResponse
-	(*SaveRepositoryExecutionBindingRequest)(nil),        // 440: golf.v1.SaveRepositoryExecutionBindingRequest
-	(*DeleteRepositoryExecutionBindingRequest)(nil),      // 441: golf.v1.DeleteRepositoryExecutionBindingRequest
-	(*GetRepositoryExecutionValueOperationRequest)(nil),  // 442: golf.v1.GetRepositoryExecutionValueOperationRequest
-	(*RepositoryExecutionValueMutationResponse)(nil),     // 443: golf.v1.RepositoryExecutionValueMutationResponse
-	(*SaveRepositoryExecutionValueResponse)(nil),         // 444: golf.v1.SaveRepositoryExecutionValueResponse
-	(*DeleteRepositoryExecutionValueResponse)(nil),       // 445: golf.v1.DeleteRepositoryExecutionValueResponse
-	(*SaveRepositoryExecutionBindingResponse)(nil),       // 446: golf.v1.SaveRepositoryExecutionBindingResponse
-	(*DeleteRepositoryExecutionBindingResponse)(nil),     // 447: golf.v1.DeleteRepositoryExecutionBindingResponse
-	(*GetRepositoryExecutionValueOperationResponse)(nil), // 448: golf.v1.GetRepositoryExecutionValueOperationResponse
-	(*RepositoryInvitationRecipient)(nil),                // 449: golf.v1.RepositoryInvitationRecipient
-	(*RepositoryInvitation)(nil),                         // 450: golf.v1.RepositoryInvitation
-	(*RepositoryInvitationOperation)(nil),                // 451: golf.v1.RepositoryInvitationOperation
-	(*PreviewRepositoryInvitationRecipientRequest)(nil),  // 452: golf.v1.PreviewRepositoryInvitationRecipientRequest
-	(*PreviewRepositoryInvitationRecipientResponse)(nil), // 453: golf.v1.PreviewRepositoryInvitationRecipientResponse
-	(*CreateRepositoryInvitationRequest)(nil),            // 454: golf.v1.CreateRepositoryInvitationRequest
-	(*CreateRepositoryInvitationResponse)(nil),           // 455: golf.v1.CreateRepositoryInvitationResponse
-	(*ListRepositoryInvitationsRequest)(nil),             // 456: golf.v1.ListRepositoryInvitationsRequest
-	(*ListOwnRepositoryInvitationsRequest)(nil),          // 457: golf.v1.ListOwnRepositoryInvitationsRequest
-	(*ListRepositoryInvitationsResponse)(nil),            // 458: golf.v1.ListRepositoryInvitationsResponse
-	(*RespondRepositoryInvitationRequest)(nil),           // 459: golf.v1.RespondRepositoryInvitationRequest
-	(*RevokeRepositoryInvitationRequest)(nil),            // 460: golf.v1.RevokeRepositoryInvitationRequest
-	(*GetRepositoryInvitationOperationRequest)(nil),      // 461: golf.v1.GetRepositoryInvitationOperationRequest
-	(*GetRepositoryInvitationOperationResponse)(nil),     // 462: golf.v1.GetRepositoryInvitationOperationResponse
-	(*RespondRepositoryInvitationResponse)(nil),          // 463: golf.v1.RespondRepositoryInvitationResponse
-	(*RevokeRepositoryInvitationResponse)(nil),           // 464: golf.v1.RevokeRepositoryInvitationResponse
-	(*ListOwnRepositoryInvitationsResponse)(nil),         // 465: golf.v1.ListOwnRepositoryInvitationsResponse
-	(*GetRepositoryRulesRequest)(nil),                    // 466: golf.v1.GetRepositoryRulesRequest
-	(*GetRepositoryRulesResponse)(nil),                   // 467: golf.v1.GetRepositoryRulesResponse
-	(*RepositoryBranchProtection)(nil),                   // 468: golf.v1.RepositoryBranchProtection
-	(*RepositoryTagProtection)(nil),                      // 469: golf.v1.RepositoryTagProtection
-	(*RepositoryMergeConfiguration)(nil),                 // 470: golf.v1.RepositoryMergeConfiguration
-	nil,                                                  // 471: golf.v1.OrganizationTeam.UnitPermissionsEntry
+	(RunnerControlState)(0),                              // 37: golf.v1.RunnerControlState
+	(*ApiCredential)(nil),                                // 38: golf.v1.ApiCredential
+	(*CreateApiCredentialRequest)(nil),                   // 39: golf.v1.CreateApiCredentialRequest
+	(*CreateApiCredentialResponse)(nil),                  // 40: golf.v1.CreateApiCredentialResponse
+	(*ListApiCredentialsRequest)(nil),                    // 41: golf.v1.ListApiCredentialsRequest
+	(*ListApiCredentialsResponse)(nil),                   // 42: golf.v1.ListApiCredentialsResponse
+	(*RevokeApiCredentialRequest)(nil),                   // 43: golf.v1.RevokeApiCredentialRequest
+	(*RevokeApiCredentialResponse)(nil),                  // 44: golf.v1.RevokeApiCredentialResponse
+	(*SSHKey)(nil),                                       // 45: golf.v1.SSHKey
+	(*ListSSHKeysRequest)(nil),                           // 46: golf.v1.ListSSHKeysRequest
+	(*ListSSHKeysResponse)(nil),                          // 47: golf.v1.ListSSHKeysResponse
+	(*AddSSHKeyRequest)(nil),                             // 48: golf.v1.AddSSHKeyRequest
+	(*AddSSHKeyResponse)(nil),                            // 49: golf.v1.AddSSHKeyResponse
+	(*DeleteSSHKeyRequest)(nil),                          // 50: golf.v1.DeleteSSHKeyRequest
+	(*DeleteSSHKeyResponse)(nil),                         // 51: golf.v1.DeleteSSHKeyResponse
+	(*RepositoryExternalTracker)(nil),                    // 52: golf.v1.RepositoryExternalTracker
+	(*RepositoryExternalWiki)(nil),                       // 53: golf.v1.RepositoryExternalWiki
+	(*RepositorySettings)(nil),                           // 54: golf.v1.RepositorySettings
+	(*GetRepositorySettingsRequest)(nil),                 // 55: golf.v1.GetRepositorySettingsRequest
+	(*GetRepositorySettingsResponse)(nil),                // 56: golf.v1.GetRepositorySettingsResponse
+	(*UpdateRepositorySettingsRequest)(nil),              // 57: golf.v1.UpdateRepositorySettingsRequest
+	(*UpdateRepositorySettingsResponse)(nil),             // 58: golf.v1.UpdateRepositorySettingsResponse
+	(*UpdateRepositoryTopicsRequest)(nil),                // 59: golf.v1.UpdateRepositoryTopicsRequest
+	(*UpdateRepositoryTopicsResponse)(nil),               // 60: golf.v1.UpdateRepositoryTopicsResponse
+	(*User)(nil),                                         // 61: golf.v1.User
+	(*Repository)(nil),                                   // 62: golf.v1.Repository
+	(*RepositoryKey)(nil),                                // 63: golf.v1.RepositoryKey
+	(*PageRequest)(nil),                                  // 64: golf.v1.PageRequest
+	(*PageResponse)(nil),                                 // 65: golf.v1.PageResponse
+	(*LoginWithPasswordRequest)(nil),                     // 66: golf.v1.LoginWithPasswordRequest
+	(*LoginWithPasswordResponse)(nil),                    // 67: golf.v1.LoginWithPasswordResponse
+	(*LoginWithGiteaTokenRequest)(nil),                   // 68: golf.v1.LoginWithGiteaTokenRequest
+	(*LoginWithGiteaTokenResponse)(nil),                  // 69: golf.v1.LoginWithGiteaTokenResponse
+	(*GetSessionRequest)(nil),                            // 70: golf.v1.GetSessionRequest
+	(*GetSessionResponse)(nil),                           // 71: golf.v1.GetSessionResponse
+	(*SessionInfo)(nil),                                  // 72: golf.v1.SessionInfo
+	(*ListSessionsRequest)(nil),                          // 73: golf.v1.ListSessionsRequest
+	(*ListSessionsResponse)(nil),                         // 74: golf.v1.ListSessionsResponse
+	(*RevokeSessionRequest)(nil),                         // 75: golf.v1.RevokeSessionRequest
+	(*RevokeSessionResponse)(nil),                        // 76: golf.v1.RevokeSessionResponse
+	(*RevokeOtherSessionsRequest)(nil),                   // 77: golf.v1.RevokeOtherSessionsRequest
+	(*RevokeOtherSessionsResponse)(nil),                  // 78: golf.v1.RevokeOtherSessionsResponse
+	(*LogoutRequest)(nil),                                // 79: golf.v1.LogoutRequest
+	(*LogoutResponse)(nil),                               // 80: golf.v1.LogoutResponse
+	(*ListRepositoriesRequest)(nil),                      // 81: golf.v1.ListRepositoriesRequest
+	(*ListRepositoriesResponse)(nil),                     // 82: golf.v1.ListRepositoriesResponse
+	(*CreateRepositoryRequest)(nil),                      // 83: golf.v1.CreateRepositoryRequest
+	(*CreateRepositoryResponse)(nil),                     // 84: golf.v1.CreateRepositoryResponse
+	(*RepositoryCreation)(nil),                           // 85: golf.v1.RepositoryCreation
+	(*GetRepositoryCreationRequest)(nil),                 // 86: golf.v1.GetRepositoryCreationRequest
+	(*GetRepositoryCreationResponse)(nil),                // 87: golf.v1.GetRepositoryCreationResponse
+	(*GetRepositoryRequest)(nil),                         // 88: golf.v1.GetRepositoryRequest
+	(*GetRepositoryResponse)(nil),                        // 89: golf.v1.GetRepositoryResponse
+	(*Branch)(nil),                                       // 90: golf.v1.Branch
+	(*ListBranchesRequest)(nil),                          // 91: golf.v1.ListBranchesRequest
+	(*ListBranchesResponse)(nil),                         // 92: golf.v1.ListBranchesResponse
+	(*Tag)(nil),                                          // 93: golf.v1.Tag
+	(*ListTagsRequest)(nil),                              // 94: golf.v1.ListTagsRequest
+	(*ListTagsResponse)(nil),                             // 95: golf.v1.ListTagsResponse
+	(*Commit)(nil),                                       // 96: golf.v1.Commit
+	(*ListCommitsRequest)(nil),                           // 97: golf.v1.ListCommitsRequest
+	(*ListCommitsResponse)(nil),                          // 98: golf.v1.ListCommitsResponse
+	(*GetCommitDiffRequest)(nil),                         // 99: golf.v1.GetCommitDiffRequest
+	(*GetCommitDiffResponse)(nil),                        // 100: golf.v1.GetCommitDiffResponse
+	(*GetPullRequestDiffRequest)(nil),                    // 101: golf.v1.GetPullRequestDiffRequest
+	(*GetPullRequestDiffResponse)(nil),                   // 102: golf.v1.GetPullRequestDiffResponse
+	(*GetRepositoryImageRequest)(nil),                    // 103: golf.v1.GetRepositoryImageRequest
+	(*GetRepositoryImageResponse)(nil),                   // 104: golf.v1.GetRepositoryImageResponse
+	(*SourceEntry)(nil),                                  // 105: golf.v1.SourceEntry
+	(*SourceFile)(nil),                                   // 106: golf.v1.SourceFile
+	(*RepositorySourceSelector)(nil),                     // 107: golf.v1.RepositorySourceSelector
+	(*RepositorySourceSelection)(nil),                    // 108: golf.v1.RepositorySourceSelection
+	(*ResolveRepositorySourceRequest)(nil),               // 109: golf.v1.ResolveRepositorySourceRequest
+	(*RepositorySourceCandidate)(nil),                    // 110: golf.v1.RepositorySourceCandidate
+	(*ResolveRepositorySourceResponse)(nil),              // 111: golf.v1.ResolveRepositorySourceResponse
+	(*GetContentsRequest)(nil),                           // 112: golf.v1.GetContentsRequest
+	(*GetContentsResponse)(nil),                          // 113: golf.v1.GetContentsResponse
+	(*Issue)(nil),                                        // 114: golf.v1.Issue
+	(*ListIssuesRequest)(nil),                            // 115: golf.v1.ListIssuesRequest
+	(*ListIssuesResponse)(nil),                           // 116: golf.v1.ListIssuesResponse
+	(*GetIssueRequest)(nil),                              // 117: golf.v1.GetIssueRequest
+	(*GetIssueResponse)(nil),                             // 118: golf.v1.GetIssueResponse
+	(*IssueComment)(nil),                                 // 119: golf.v1.IssueComment
+	(*ListIssueCommentsRequest)(nil),                     // 120: golf.v1.ListIssueCommentsRequest
+	(*ListIssueCommentsResponse)(nil),                    // 121: golf.v1.ListIssueCommentsResponse
+	(*IssueMutation)(nil),                                // 122: golf.v1.IssueMutation
+	(*CreateIssueRequest)(nil),                           // 123: golf.v1.CreateIssueRequest
+	(*CreateIssueResponse)(nil),                          // 124: golf.v1.CreateIssueResponse
+	(*CreateIssueCommentRequest)(nil),                    // 125: golf.v1.CreateIssueCommentRequest
+	(*CreateIssueCommentResponse)(nil),                   // 126: golf.v1.CreateIssueCommentResponse
+	(*UpdateIssueRequest)(nil),                           // 127: golf.v1.UpdateIssueRequest
+	(*UpdateIssueResponse)(nil),                          // 128: golf.v1.UpdateIssueResponse
+	(*GetIssueMutationRequest)(nil),                      // 129: golf.v1.GetIssueMutationRequest
+	(*GetIssueMutationResponse)(nil),                     // 130: golf.v1.GetIssueMutationResponse
+	(*PullRequestRef)(nil),                               // 131: golf.v1.PullRequestRef
+	(*PullRequest)(nil),                                  // 132: golf.v1.PullRequest
+	(*ListPullRequestsRequest)(nil),                      // 133: golf.v1.ListPullRequestsRequest
+	(*ListPullRequestsResponse)(nil),                     // 134: golf.v1.ListPullRequestsResponse
+	(*GetPullRequestRequest)(nil),                        // 135: golf.v1.GetPullRequestRequest
+	(*GetPullRequestResponse)(nil),                       // 136: golf.v1.GetPullRequestResponse
+	(*PullRequestReview)(nil),                            // 137: golf.v1.PullRequestReview
+	(*CreatePullRequestReviewRequest)(nil),               // 138: golf.v1.CreatePullRequestReviewRequest
+	(*PullRequestReviewMutation)(nil),                    // 139: golf.v1.PullRequestReviewMutation
+	(*CreatePullRequestReviewResponse)(nil),              // 140: golf.v1.CreatePullRequestReviewResponse
+	(*GetPullRequestReviewMutationRequest)(nil),          // 141: golf.v1.GetPullRequestReviewMutationRequest
+	(*GetPullRequestReviewMutationResponse)(nil),         // 142: golf.v1.GetPullRequestReviewMutationResponse
+	(*ListPullRequestReviewsRequest)(nil),                // 143: golf.v1.ListPullRequestReviewsRequest
+	(*ListPullRequestReviewsResponse)(nil),               // 144: golf.v1.ListPullRequestReviewsResponse
+	(*PullRequestReviewComment)(nil),                     // 145: golf.v1.PullRequestReviewComment
+	(*GetPullRequestReviewCommentsRequest)(nil),          // 146: golf.v1.GetPullRequestReviewCommentsRequest
+	(*GetPullRequestReviewCommentsResponse)(nil),         // 147: golf.v1.GetPullRequestReviewCommentsResponse
+	(*Capability)(nil),                                   // 148: golf.v1.Capability
+	(*ListCapabilitiesRequest)(nil),                      // 149: golf.v1.ListCapabilitiesRequest
+	(*ListCapabilitiesResponse)(nil),                     // 150: golf.v1.ListCapabilitiesResponse
+	(*GetAuthenticationOptionsRequest)(nil),              // 151: golf.v1.GetAuthenticationOptionsRequest
+	(*GetAuthenticationOptionsResponse)(nil),             // 152: golf.v1.GetAuthenticationOptionsResponse
+	(*BeginGiteaOAuthRequest)(nil),                       // 153: golf.v1.BeginGiteaOAuthRequest
+	(*BeginGiteaOAuthResponse)(nil),                      // 154: golf.v1.BeginGiteaOAuthResponse
+	(*Organization)(nil),                                 // 155: golf.v1.Organization
+	(*OrganizationTeam)(nil),                             // 156: golf.v1.OrganizationTeam
+	(*ListOrganizationsRequest)(nil),                     // 157: golf.v1.ListOrganizationsRequest
+	(*ListOrganizationsResponse)(nil),                    // 158: golf.v1.ListOrganizationsResponse
+	(*GetOrganizationRequest)(nil),                       // 159: golf.v1.GetOrganizationRequest
+	(*GetOrganizationResponse)(nil),                      // 160: golf.v1.GetOrganizationResponse
+	(*ListTeamsRequest)(nil),                             // 161: golf.v1.ListTeamsRequest
+	(*ListTeamsResponse)(nil),                            // 162: golf.v1.ListTeamsResponse
+	(*GetTeamRequest)(nil),                               // 163: golf.v1.GetTeamRequest
+	(*GetTeamResponse)(nil),                              // 164: golf.v1.GetTeamResponse
+	(*ListTeamMembersRequest)(nil),                       // 165: golf.v1.ListTeamMembersRequest
+	(*ListTeamMembersResponse)(nil),                      // 166: golf.v1.ListTeamMembersResponse
+	(*ListTeamRepositoriesRequest)(nil),                  // 167: golf.v1.ListTeamRepositoriesRequest
+	(*ListTeamRepositoriesResponse)(nil),                 // 168: golf.v1.ListTeamRepositoriesResponse
+	(*AuditEvent)(nil),                                   // 169: golf.v1.AuditEvent
+	(*ListAuditEventsRequest)(nil),                       // 170: golf.v1.ListAuditEventsRequest
+	(*ListAuditEventsResponse)(nil),                      // 171: golf.v1.ListAuditEventsResponse
+	(*GetTeamAdministrationRequest)(nil),                 // 172: golf.v1.GetTeamAdministrationRequest
+	(*GetTeamAdministrationResponse)(nil),                // 173: golf.v1.GetTeamAdministrationResponse
+	(*ResolveTeamMemberRequest)(nil),                     // 174: golf.v1.ResolveTeamMemberRequest
+	(*ResolveTeamMemberResponse)(nil),                    // 175: golf.v1.ResolveTeamMemberResponse
+	(*AddTeamMemberRequest)(nil),                         // 176: golf.v1.AddTeamMemberRequest
+	(*AddTeamMemberResponse)(nil),                        // 177: golf.v1.AddTeamMemberResponse
+	(*RemoveTeamMemberRequest)(nil),                      // 178: golf.v1.RemoveTeamMemberRequest
+	(*RemoveTeamMemberResponse)(nil),                     // 179: golf.v1.RemoveTeamMemberResponse
+	(*LocalAccountInfo)(nil),                             // 180: golf.v1.LocalAccountInfo
+	(*ListLocalAccountsRequest)(nil),                     // 181: golf.v1.ListLocalAccountsRequest
+	(*ListLocalAccountsResponse)(nil),                    // 182: golf.v1.ListLocalAccountsResponse
+	(*RepositoryAccess)(nil),                             // 183: golf.v1.RepositoryAccess
+	(*RepositoryCollaborator)(nil),                       // 184: golf.v1.RepositoryCollaborator
+	(*GetRepositoryAccessRequest)(nil),                   // 185: golf.v1.GetRepositoryAccessRequest
+	(*GetRepositoryAccessResponse)(nil),                  // 186: golf.v1.GetRepositoryAccessResponse
+	(*ListRepositoryCollaboratorsRequest)(nil),           // 187: golf.v1.ListRepositoryCollaboratorsRequest
+	(*ListRepositoryCollaboratorsResponse)(nil),          // 188: golf.v1.ListRepositoryCollaboratorsResponse
+	(*ResolveRepositoryCollaboratorRequest)(nil),         // 189: golf.v1.ResolveRepositoryCollaboratorRequest
+	(*ResolveRepositoryCollaboratorResponse)(nil),        // 190: golf.v1.ResolveRepositoryCollaboratorResponse
+	(*SetRepositoryCollaboratorRequest)(nil),             // 191: golf.v1.SetRepositoryCollaboratorRequest
+	(*SetRepositoryCollaboratorResponse)(nil),            // 192: golf.v1.SetRepositoryCollaboratorResponse
+	(*RemoveRepositoryCollaboratorRequest)(nil),          // 193: golf.v1.RemoveRepositoryCollaboratorRequest
+	(*RemoveRepositoryCollaboratorResponse)(nil),         // 194: golf.v1.RemoveRepositoryCollaboratorResponse
+	(*WorkflowDiagnostic)(nil),                           // 195: golf.v1.WorkflowDiagnostic
+	(*WorkflowJobSummary)(nil),                           // 196: golf.v1.WorkflowJobSummary
+	(*WorkflowConfiguration)(nil),                        // 197: golf.v1.WorkflowConfiguration
+	(*InspectWorkflowsRequest)(nil),                      // 198: golf.v1.InspectWorkflowsRequest
+	(*InspectWorkflowsResponse)(nil),                     // 199: golf.v1.InspectWorkflowsResponse
+	(*DisableLocalAccountRequest)(nil),                   // 200: golf.v1.DisableLocalAccountRequest
+	(*DisableLocalAccountResponse)(nil),                  // 201: golf.v1.DisableLocalAccountResponse
+	(*ExecutionPolicy)(nil),                              // 202: golf.v1.ExecutionPolicy
+	(*GetExecutionPolicyRequest)(nil),                    // 203: golf.v1.GetExecutionPolicyRequest
+	(*GetExecutionPolicyResponse)(nil),                   // 204: golf.v1.GetExecutionPolicyResponse
+	(*UpdateExecutionPolicyRequest)(nil),                 // 205: golf.v1.UpdateExecutionPolicyRequest
+	(*UpdateExecutionPolicyResponse)(nil),                // 206: golf.v1.UpdateExecutionPolicyResponse
+	(*WorkflowRun)(nil),                                  // 207: golf.v1.WorkflowRun
+	(*WorkflowStepProgress)(nil),                         // 208: golf.v1.WorkflowStepProgress
+	(*WorkflowJobProgress)(nil),                          // 209: golf.v1.WorkflowJobProgress
+	(*DispatchWorkflowRequest)(nil),                      // 210: golf.v1.DispatchWorkflowRequest
+	(*DispatchWorkflowResponse)(nil),                     // 211: golf.v1.DispatchWorkflowResponse
+	(*GetWorkflowRunRequest)(nil),                        // 212: golf.v1.GetWorkflowRunRequest
+	(*GetWorkflowRunResponse)(nil),                       // 213: golf.v1.GetWorkflowRunResponse
+	(*ListWorkflowRunsRequest)(nil),                      // 214: golf.v1.ListWorkflowRunsRequest
+	(*ListWorkflowRunsResponse)(nil),                     // 215: golf.v1.ListWorkflowRunsResponse
+	(*CancelWorkflowRunRequest)(nil),                     // 216: golf.v1.CancelWorkflowRunRequest
+	(*CancelWorkflowRunResponse)(nil),                    // 217: golf.v1.CancelWorkflowRunResponse
+	(*WorkflowRunLog)(nil),                               // 218: golf.v1.WorkflowRunLog
+	(*GetWorkflowRunLogsRequest)(nil),                    // 219: golf.v1.GetWorkflowRunLogsRequest
+	(*GetWorkflowRunLogsResponse)(nil),                   // 220: golf.v1.GetWorkflowRunLogsResponse
+	(*OrganizationCreationPolicy)(nil),                   // 221: golf.v1.OrganizationCreationPolicy
+	(*GetOrganizationCreationPolicyRequest)(nil),         // 222: golf.v1.GetOrganizationCreationPolicyRequest
+	(*GetOrganizationCreationPolicyResponse)(nil),        // 223: golf.v1.GetOrganizationCreationPolicyResponse
+	(*UpdateOrganizationCreationPolicyRequest)(nil),      // 224: golf.v1.UpdateOrganizationCreationPolicyRequest
+	(*UpdateOrganizationCreationPolicyResponse)(nil),     // 225: golf.v1.UpdateOrganizationCreationPolicyResponse
+	(*CreateOrganizationRequest)(nil),                    // 226: golf.v1.CreateOrganizationRequest
+	(*CreateOrganizationResponse)(nil),                   // 227: golf.v1.CreateOrganizationResponse
+	(*InfrastructureConnection)(nil),                     // 228: golf.v1.InfrastructureConnection
+	(*InfrastructureConnectionCredential)(nil),           // 229: golf.v1.InfrastructureConnectionCredential
+	(*ListInfrastructureConnectionsRequest)(nil),         // 230: golf.v1.ListInfrastructureConnectionsRequest
+	(*ListInfrastructureConnectionsResponse)(nil),        // 231: golf.v1.ListInfrastructureConnectionsResponse
+	(*SaveInfrastructureConnectionRequest)(nil),          // 232: golf.v1.SaveInfrastructureConnectionRequest
+	(*SaveInfrastructureConnectionResponse)(nil),         // 233: golf.v1.SaveInfrastructureConnectionResponse
+	(*TestInfrastructureConnectionRequest)(nil),          // 234: golf.v1.TestInfrastructureConnectionRequest
+	(*TestInfrastructureConnectionResponse)(nil),         // 235: golf.v1.TestInfrastructureConnectionResponse
+	(*ActivateInfrastructureConnectionRequest)(nil),      // 236: golf.v1.ActivateInfrastructureConnectionRequest
+	(*ActivateInfrastructureConnectionResponse)(nil),     // 237: golf.v1.ActivateInfrastructureConnectionResponse
+	(*Profile)(nil),                                      // 238: golf.v1.Profile
+	(*GetProfileRequest)(nil),                            // 239: golf.v1.GetProfileRequest
+	(*GetProfileResponse)(nil),                           // 240: golf.v1.GetProfileResponse
+	(*UpdateProfileRequest)(nil),                         // 241: golf.v1.UpdateProfileRequest
+	(*UpdateProfileResponse)(nil),                        // 242: golf.v1.UpdateProfileResponse
+	(*AutomationGrant)(nil),                              // 243: golf.v1.AutomationGrant
+	(*ListAutomationGrantsRequest)(nil),                  // 244: golf.v1.ListAutomationGrantsRequest
+	(*ListAutomationGrantsResponse)(nil),                 // 245: golf.v1.ListAutomationGrantsResponse
+	(*CreateAutomationGrantRequest)(nil),                 // 246: golf.v1.CreateAutomationGrantRequest
+	(*CreateAutomationGrantResponse)(nil),                // 247: golf.v1.CreateAutomationGrantResponse
+	(*RevokeAutomationGrantRequest)(nil),                 // 248: golf.v1.RevokeAutomationGrantRequest
+	(*RevokeAutomationGrantResponse)(nil),                // 249: golf.v1.RevokeAutomationGrantResponse
+	(*AccountSecurity)(nil),                              // 250: golf.v1.AccountSecurity
+	(*GetAccountSecurityRequest)(nil),                    // 251: golf.v1.GetAccountSecurityRequest
+	(*GetAccountSecurityResponse)(nil),                   // 252: golf.v1.GetAccountSecurityResponse
+	(*ChangeOwnPasswordRequest)(nil),                     // 253: golf.v1.ChangeOwnPasswordRequest
+	(*ChangeOwnLoginEmailRequest)(nil),                   // 254: golf.v1.ChangeOwnLoginEmailRequest
+	(*ChangeOwnPasswordResponse)(nil),                    // 255: golf.v1.ChangeOwnPasswordResponse
+	(*ChangeOwnLoginEmailResponse)(nil),                  // 256: golf.v1.ChangeOwnLoginEmailResponse
+	(*EnrollRegularLocalAccountRequest)(nil),             // 257: golf.v1.EnrollRegularLocalAccountRequest
+	(*EnrollRegularLocalAccountResponse)(nil),            // 258: golf.v1.EnrollRegularLocalAccountResponse
+	(*ResetRegularLocalPasswordRequest)(nil),             // 259: golf.v1.ResetRegularLocalPasswordRequest
+	(*ResetRegularLocalPasswordResponse)(nil),            // 260: golf.v1.ResetRegularLocalPasswordResponse
+	(*EnableRegularLocalAccountRequest)(nil),             // 261: golf.v1.EnableRegularLocalAccountRequest
+	(*EnableRegularLocalAccountResponse)(nil),            // 262: golf.v1.EnableRegularLocalAccountResponse
+	(*CodexConnection)(nil),                              // 263: golf.v1.CodexConnection
+	(*GetCodexConnectionRequest)(nil),                    // 264: golf.v1.GetCodexConnectionRequest
+	(*GetCodexConnectionResponse)(nil),                   // 265: golf.v1.GetCodexConnectionResponse
+	(*StartCodexLoginRequest)(nil),                       // 266: golf.v1.StartCodexLoginRequest
+	(*StartCodexLoginResponse)(nil),                      // 267: golf.v1.StartCodexLoginResponse
+	(*CancelCodexLoginRequest)(nil),                      // 268: golf.v1.CancelCodexLoginRequest
+	(*CancelCodexLoginResponse)(nil),                     // 269: golf.v1.CancelCodexLoginResponse
+	(*RefreshCodexConnectionRequest)(nil),                // 270: golf.v1.RefreshCodexConnectionRequest
+	(*CodexQuotaWindow)(nil),                             // 271: golf.v1.CodexQuotaWindow
+	(*CodexQuotaBucket)(nil),                             // 272: golf.v1.CodexQuotaBucket
+	(*CodexUsage)(nil),                                   // 273: golf.v1.CodexUsage
+	(*RefreshCodexConnectionResponse)(nil),               // 274: golf.v1.RefreshCodexConnectionResponse
+	(*DisconnectCodexConnectionRequest)(nil),             // 275: golf.v1.DisconnectCodexConnectionRequest
+	(*DisconnectCodexConnectionResponse)(nil),            // 276: golf.v1.DisconnectCodexConnectionResponse
+	(*ListCodexConnectionsRequest)(nil),                  // 277: golf.v1.ListCodexConnectionsRequest
+	(*ListCodexConnectionsResponse)(nil),                 // 278: golf.v1.ListCodexConnectionsResponse
+	(*CreateCodexConnectionRequest)(nil),                 // 279: golf.v1.CreateCodexConnectionRequest
+	(*CreateCodexConnectionResponse)(nil),                // 280: golf.v1.CreateCodexConnectionResponse
+	(*SetCodexConnectionAccessRequest)(nil),              // 281: golf.v1.SetCodexConnectionAccessRequest
+	(*SetCodexConnectionAccessResponse)(nil),             // 282: golf.v1.SetCodexConnectionAccessResponse
+	(*CompleteAgentLoginRequest)(nil),                    // 283: golf.v1.CompleteAgentLoginRequest
+	(*CompleteAgentLoginResponse)(nil),                   // 284: golf.v1.CompleteAgentLoginResponse
+	(*AgentUsageConfig)(nil),                             // 285: golf.v1.AgentUsageConfig
+	(*AgentUsageSettings)(nil),                           // 286: golf.v1.AgentUsageSettings
+	(*GetAgentUsageRequest)(nil),                         // 287: golf.v1.GetAgentUsageRequest
+	(*GetAgentUsageResponse)(nil),                        // 288: golf.v1.GetAgentUsageResponse
+	(*SaveAgentUsageRequest)(nil),                        // 289: golf.v1.SaveAgentUsageRequest
+	(*SaveAgentUsageResponse)(nil),                       // 290: golf.v1.SaveAgentUsageResponse
+	(*AgentModel)(nil),                                   // 291: golf.v1.AgentModel
+	(*ListAgentModelsRequest)(nil),                       // 292: golf.v1.ListAgentModelsRequest
+	(*ListAgentModelsResponse)(nil),                      // 293: golf.v1.ListAgentModelsResponse
+	(*AgentTaskSelection)(nil),                           // 294: golf.v1.AgentTaskSelection
+	(*PreviewAgentTaskRequest)(nil),                      // 295: golf.v1.PreviewAgentTaskRequest
+	(*PreviewAgentTaskResponse)(nil),                     // 296: golf.v1.PreviewAgentTaskResponse
+	(*AgentTask)(nil),                                    // 297: golf.v1.AgentTask
+	(*CreateAgentTaskRequest)(nil),                       // 298: golf.v1.CreateAgentTaskRequest
+	(*ListAgentTasksRequest)(nil),                        // 299: golf.v1.ListAgentTasksRequest
+	(*ListAgentTasksResponse)(nil),                       // 300: golf.v1.ListAgentTasksResponse
+	(*GetAgentTaskRequest)(nil),                          // 301: golf.v1.GetAgentTaskRequest
+	(*CancelAgentTaskRequest)(nil),                       // 302: golf.v1.CancelAgentTaskRequest
+	(*CreateAgentTaskResponse)(nil),                      // 303: golf.v1.CreateAgentTaskResponse
+	(*GetAgentTaskResponse)(nil),                         // 304: golf.v1.GetAgentTaskResponse
+	(*CancelAgentTaskResponse)(nil),                      // 305: golf.v1.CancelAgentTaskResponse
+	(*Reviewer)(nil),                                     // 306: golf.v1.Reviewer
+	(*GetReviewerRequest)(nil),                           // 307: golf.v1.GetReviewerRequest
+	(*GetReviewerResponse)(nil),                          // 308: golf.v1.GetReviewerResponse
+	(*SaveReviewerRequest)(nil),                          // 309: golf.v1.SaveReviewerRequest
+	(*SaveReviewerResponse)(nil),                         // 310: golf.v1.SaveReviewerResponse
+	(*ReviewerRun)(nil),                                  // 311: golf.v1.ReviewerRun
+	(*ListReviewerRunsRequest)(nil),                      // 312: golf.v1.ListReviewerRunsRequest
+	(*ListReviewerRunsResponse)(nil),                     // 313: golf.v1.ListReviewerRunsResponse
+	(*RequestReviewRequest)(nil),                         // 314: golf.v1.RequestReviewRequest
+	(*RequestReviewResponse)(nil),                        // 315: golf.v1.RequestReviewResponse
+	(*GetPullRequestDiscussionRequest)(nil),              // 316: golf.v1.GetPullRequestDiscussionRequest
+	(*GetPullRequestDiscussionResponse)(nil),             // 317: golf.v1.GetPullRequestDiscussionResponse
+	(*WatchRepositoryRequest)(nil),                       // 318: golf.v1.WatchRepositoryRequest
+	(*WatchRepositoryResponse)(nil),                      // 319: golf.v1.WatchRepositoryResponse
+	(*PullRequestSelection)(nil),                         // 320: golf.v1.PullRequestSelection
+	(*ListPullRequestCommitsRequest)(nil),                // 321: golf.v1.ListPullRequestCommitsRequest
+	(*ListPullRequestCommitsResponse)(nil),               // 322: golf.v1.ListPullRequestCommitsResponse
+	(*ReportedCheck)(nil),                                // 323: golf.v1.ReportedCheck
+	(*ListPullRequestChecksRequest)(nil),                 // 324: golf.v1.ListPullRequestChecksRequest
+	(*ListPullRequestChecksResponse)(nil),                // 325: golf.v1.ListPullRequestChecksResponse
+	(*CreatePullRequestRequest)(nil),                     // 326: golf.v1.CreatePullRequestRequest
+	(*CreatePullRequestResponse)(nil),                    // 327: golf.v1.CreatePullRequestResponse
+	(*RepositoryComparisonSelection)(nil),                // 328: golf.v1.RepositoryComparisonSelection
+	(*GetRepositoryComparisonRequest)(nil),               // 329: golf.v1.GetRepositoryComparisonRequest
+	(*GetRepositoryComparisonResponse)(nil),              // 330: golf.v1.GetRepositoryComparisonResponse
+	(*UpdatePullRequestRequest)(nil),                     // 331: golf.v1.UpdatePullRequestRequest
+	(*UpdatePullRequestResponse)(nil),                    // 332: golf.v1.UpdatePullRequestResponse
+	(*PullReviewDraftTarget)(nil),                        // 333: golf.v1.PullReviewDraftTarget
+	(*PullReviewDraftCapture)(nil),                       // 334: golf.v1.PullReviewDraftCapture
+	(*PullReviewDraftComparison)(nil),                    // 335: golf.v1.PullReviewDraftComparison
+	(*PullReviewDraftCoordinate)(nil),                    // 336: golf.v1.PullReviewDraftCoordinate
+	(*PullReviewDraftEntry)(nil),                         // 337: golf.v1.PullReviewDraftEntry
+	(*PullReviewDraft)(nil),                              // 338: golf.v1.PullReviewDraft
+	(*PullReviewDraftReceipt)(nil),                       // 339: golf.v1.PullReviewDraftReceipt
+	(*GetPullRequestReviewDraftRequest)(nil),             // 340: golf.v1.GetPullRequestReviewDraftRequest
+	(*GetPullRequestReviewDraftResponse)(nil),            // 341: golf.v1.GetPullRequestReviewDraftResponse
+	(*SavePullRequestReviewDraftRequest)(nil),            // 342: golf.v1.SavePullRequestReviewDraftRequest
+	(*SavePullRequestReviewDraftResponse)(nil),           // 343: golf.v1.SavePullRequestReviewDraftResponse
+	(*DeletePullRequestReviewDraftRequest)(nil),          // 344: golf.v1.DeletePullRequestReviewDraftRequest
+	(*DeletePullRequestReviewDraftResponse)(nil),         // 345: golf.v1.DeletePullRequestReviewDraftResponse
+	(*PublishPullRequestReviewDraftRequest)(nil),         // 346: golf.v1.PublishPullRequestReviewDraftRequest
+	(*PullInlineReviewMutation)(nil),                     // 347: golf.v1.PullInlineReviewMutation
+	(*PublishPullRequestReviewDraftResponse)(nil),        // 348: golf.v1.PublishPullRequestReviewDraftResponse
+	(*GetPullRequestInlineReviewMutationRequest)(nil),    // 349: golf.v1.GetPullRequestInlineReviewMutationRequest
+	(*GetPullRequestInlineReviewMutationResponse)(nil),   // 350: golf.v1.GetPullRequestInlineReviewMutationResponse
+	(*RepositoryLanguage)(nil),                           // 351: golf.v1.RepositoryLanguage
+	(*GetRepositoryOverviewRequest)(nil),                 // 352: golf.v1.GetRepositoryOverviewRequest
+	(*GetRepositoryOverviewResponse)(nil),                // 353: golf.v1.GetRepositoryOverviewResponse
+	(*ActionRunRef)(nil),                                 // 354: golf.v1.ActionRunRef
+	(*ActionRunSummary)(nil),                             // 355: golf.v1.ActionRunSummary
+	(*ListActionRunsRequest)(nil),                        // 356: golf.v1.ListActionRunsRequest
+	(*ListActionRunsResponse)(nil),                       // 357: golf.v1.ListActionRunsResponse
+	(*GetActionRunRequest)(nil),                          // 358: golf.v1.GetActionRunRequest
+	(*GetActionRunResponse)(nil),                         // 359: golf.v1.GetActionRunResponse
+	(*AgentEventPlanStep)(nil),                           // 360: golf.v1.AgentEventPlanStep
+	(*AgentTaskEvent)(nil),                               // 361: golf.v1.AgentTaskEvent
+	(*ListAgentTaskEventsRequest)(nil),                   // 362: golf.v1.ListAgentTaskEventsRequest
+	(*ListAgentTaskEventsResponse)(nil),                  // 363: golf.v1.ListAgentTaskEventsResponse
+	(*RepositoryDeployKey)(nil),                          // 364: golf.v1.RepositoryDeployKey
+	(*ListRepositoryDeployKeysRequest)(nil),              // 365: golf.v1.ListRepositoryDeployKeysRequest
+	(*ListRepositoryDeployKeysResponse)(nil),             // 366: golf.v1.ListRepositoryDeployKeysResponse
+	(*AddRepositoryDeployKeyRequest)(nil),                // 367: golf.v1.AddRepositoryDeployKeyRequest
+	(*AddRepositoryDeployKeyResponse)(nil),               // 368: golf.v1.AddRepositoryDeployKeyResponse
+	(*DeleteRepositoryDeployKeyRequest)(nil),             // 369: golf.v1.DeleteRepositoryDeployKeyRequest
+	(*DeleteRepositoryDeployKeyResponse)(nil),            // 370: golf.v1.DeleteRepositoryDeployKeyResponse
+	(*WorkflowMatrixEntry)(nil),                          // 371: golf.v1.WorkflowMatrixEntry
+	(*WorkflowJobInstance)(nil),                          // 372: golf.v1.WorkflowJobInstance
+	(*WorkflowEngineStep)(nil),                           // 373: golf.v1.WorkflowEngineStep
+	(*RepositoryWebhookTarget)(nil),                      // 374: golf.v1.RepositoryWebhookTarget
+	(*RepositoryWebhookSubscription)(nil),                // 375: golf.v1.RepositoryWebhookSubscription
+	(*RepositoryWebhookDelivery)(nil),                    // 376: golf.v1.RepositoryWebhookDelivery
+	(*ListRepositoryWebhooksRequest)(nil),                // 377: golf.v1.ListRepositoryWebhooksRequest
+	(*ListRepositoryWebhooksResponse)(nil),               // 378: golf.v1.ListRepositoryWebhooksResponse
+	(*SaveRepositoryWebhookRequest)(nil),                 // 379: golf.v1.SaveRepositoryWebhookRequest
+	(*SaveRepositoryWebhookResponse)(nil),                // 380: golf.v1.SaveRepositoryWebhookResponse
+	(*ListRepositoryWebhookDeliveriesRequest)(nil),       // 381: golf.v1.ListRepositoryWebhookDeliveriesRequest
+	(*ListRepositoryWebhookDeliveriesResponse)(nil),      // 382: golf.v1.ListRepositoryWebhookDeliveriesResponse
+	(*TestRepositoryWebhookRequest)(nil),                 // 383: golf.v1.TestRepositoryWebhookRequest
+	(*RedeliverRepositoryWebhookRequest)(nil),            // 384: golf.v1.RedeliverRepositoryWebhookRequest
+	(*TestRepositoryWebhookResponse)(nil),                // 385: golf.v1.TestRepositoryWebhookResponse
+	(*RedeliverRepositoryWebhookResponse)(nil),           // 386: golf.v1.RedeliverRepositoryWebhookResponse
+	(*RepositoryTeamAccess)(nil),                         // 387: golf.v1.RepositoryTeamAccess
+	(*ListRepositoryTeamAccessRequest)(nil),              // 388: golf.v1.ListRepositoryTeamAccessRequest
+	(*ListRepositoryTeamAccessResponse)(nil),             // 389: golf.v1.ListRepositoryTeamAccessResponse
+	(*AttachRepositoryTeamRequest)(nil),                  // 390: golf.v1.AttachRepositoryTeamRequest
+	(*AttachRepositoryTeamResponse)(nil),                 // 391: golf.v1.AttachRepositoryTeamResponse
+	(*DetachRepositoryTeamRequest)(nil),                  // 392: golf.v1.DetachRepositoryTeamRequest
+	(*DetachRepositoryTeamResponse)(nil),                 // 393: golf.v1.DetachRepositoryTeamResponse
+	(*RepositoryLifecycle)(nil),                          // 394: golf.v1.RepositoryLifecycle
+	(*RepositoryLifecycleOperation)(nil),                 // 395: golf.v1.RepositoryLifecycleOperation
+	(*GetRepositoryLifecycleRequest)(nil),                // 396: golf.v1.GetRepositoryLifecycleRequest
+	(*GetRepositoryLifecycleResponse)(nil),               // 397: golf.v1.GetRepositoryLifecycleResponse
+	(*ChangeRepositoryArchiveStateRequest)(nil),          // 398: golf.v1.ChangeRepositoryArchiveStateRequest
+	(*ChangeRepositoryArchiveStateResponse)(nil),         // 399: golf.v1.ChangeRepositoryArchiveStateResponse
+	(*GetRepositoryLifecycleOperationRequest)(nil),       // 400: golf.v1.GetRepositoryLifecycleOperationRequest
+	(*GetRepositoryLifecycleOperationResponse)(nil),      // 401: golf.v1.GetRepositoryLifecycleOperationResponse
+	(*EmailTransport)(nil),                               // 402: golf.v1.EmailTransport
+	(*ListEmailTransportsRequest)(nil),                   // 403: golf.v1.ListEmailTransportsRequest
+	(*ListEmailTransportsResponse)(nil),                  // 404: golf.v1.ListEmailTransportsResponse
+	(*EmailConfigurationObservation)(nil),                // 405: golf.v1.EmailConfigurationObservation
+	(*EmailDeliveryEvidence)(nil),                        // 406: golf.v1.EmailDeliveryEvidence
+	(*SaveEmailTransportRequest)(nil),                    // 407: golf.v1.SaveEmailTransportRequest
+	(*SaveEmailTransportResponse)(nil),                   // 408: golf.v1.SaveEmailTransportResponse
+	(*ActivateEmailTransportRequest)(nil),                // 409: golf.v1.ActivateEmailTransportRequest
+	(*ActivateEmailTransportResponse)(nil),               // 410: golf.v1.ActivateEmailTransportResponse
+	(*OwnEmailNotificationState)(nil),                    // 411: golf.v1.OwnEmailNotificationState
+	(*GetOwnEmailNotificationsRequest)(nil),              // 412: golf.v1.GetOwnEmailNotificationsRequest
+	(*GetOwnEmailNotificationsResponse)(nil),             // 413: golf.v1.GetOwnEmailNotificationsResponse
+	(*RequestEmailVerificationRequest)(nil),              // 414: golf.v1.RequestEmailVerificationRequest
+	(*RequestEmailVerificationResponse)(nil),             // 415: golf.v1.RequestEmailVerificationResponse
+	(*ConfirmEmailVerificationRequest)(nil),              // 416: golf.v1.ConfirmEmailVerificationRequest
+	(*ConfirmEmailVerificationResponse)(nil),             // 417: golf.v1.ConfirmEmailVerificationResponse
+	(*SaveOwnEmailPreferenceRequest)(nil),                // 418: golf.v1.SaveOwnEmailPreferenceRequest
+	(*SaveOwnEmailPreferenceResponse)(nil),               // 419: golf.v1.SaveOwnEmailPreferenceResponse
+	(*RepositoryEmailTarget)(nil),                        // 420: golf.v1.RepositoryEmailTarget
+	(*RepositoryEmailSubscription)(nil),                  // 421: golf.v1.RepositoryEmailSubscription
+	(*GetRepositoryEmailSubscriptionRequest)(nil),        // 422: golf.v1.GetRepositoryEmailSubscriptionRequest
+	(*GetRepositoryEmailSubscriptionResponse)(nil),       // 423: golf.v1.GetRepositoryEmailSubscriptionResponse
+	(*SaveRepositoryEmailSubscriptionRequest)(nil),       // 424: golf.v1.SaveRepositoryEmailSubscriptionRequest
+	(*SaveRepositoryEmailSubscriptionResponse)(nil),      // 425: golf.v1.SaveRepositoryEmailSubscriptionResponse
+	(*EmailDelivery)(nil),                                // 426: golf.v1.EmailDelivery
+	(*ListOwnEmailDeliveriesRequest)(nil),                // 427: golf.v1.ListOwnEmailDeliveriesRequest
+	(*ListOwnEmailDeliveriesResponse)(nil),               // 428: golf.v1.ListOwnEmailDeliveriesResponse
+	(*RedeliverOwnEmailRequest)(nil),                     // 429: golf.v1.RedeliverOwnEmailRequest
+	(*RedeliverOwnEmailResponse)(nil),                    // 430: golf.v1.RedeliverOwnEmailResponse
+	(*RepositoryExecutionValueTarget)(nil),               // 431: golf.v1.RepositoryExecutionValueTarget
+	(*RepositoryExecutionValue)(nil),                     // 432: golf.v1.RepositoryExecutionValue
+	(*RepositoryExecutionValueReference)(nil),            // 433: golf.v1.RepositoryExecutionValueReference
+	(*RepositoryExecutionBinding)(nil),                   // 434: golf.v1.RepositoryExecutionBinding
+	(*ListRepositoryExecutionValuesRequest)(nil),         // 435: golf.v1.ListRepositoryExecutionValuesRequest
+	(*ListRepositoryExecutionValuesResponse)(nil),        // 436: golf.v1.ListRepositoryExecutionValuesResponse
+	(*SaveRepositoryExecutionValueRequest)(nil),          // 437: golf.v1.SaveRepositoryExecutionValueRequest
+	(*DeleteRepositoryExecutionValueRequest)(nil),        // 438: golf.v1.DeleteRepositoryExecutionValueRequest
+	(*GetRepositoryExecutionVariableRequest)(nil),        // 439: golf.v1.GetRepositoryExecutionVariableRequest
+	(*GetRepositoryExecutionVariableResponse)(nil),       // 440: golf.v1.GetRepositoryExecutionVariableResponse
+	(*SaveRepositoryExecutionBindingRequest)(nil),        // 441: golf.v1.SaveRepositoryExecutionBindingRequest
+	(*DeleteRepositoryExecutionBindingRequest)(nil),      // 442: golf.v1.DeleteRepositoryExecutionBindingRequest
+	(*GetRepositoryExecutionValueOperationRequest)(nil),  // 443: golf.v1.GetRepositoryExecutionValueOperationRequest
+	(*RepositoryExecutionValueMutationResponse)(nil),     // 444: golf.v1.RepositoryExecutionValueMutationResponse
+	(*SaveRepositoryExecutionValueResponse)(nil),         // 445: golf.v1.SaveRepositoryExecutionValueResponse
+	(*DeleteRepositoryExecutionValueResponse)(nil),       // 446: golf.v1.DeleteRepositoryExecutionValueResponse
+	(*SaveRepositoryExecutionBindingResponse)(nil),       // 447: golf.v1.SaveRepositoryExecutionBindingResponse
+	(*DeleteRepositoryExecutionBindingResponse)(nil),     // 448: golf.v1.DeleteRepositoryExecutionBindingResponse
+	(*GetRepositoryExecutionValueOperationResponse)(nil), // 449: golf.v1.GetRepositoryExecutionValueOperationResponse
+	(*RepositoryInvitationRecipient)(nil),                // 450: golf.v1.RepositoryInvitationRecipient
+	(*RepositoryInvitation)(nil),                         // 451: golf.v1.RepositoryInvitation
+	(*RepositoryInvitationOperation)(nil),                // 452: golf.v1.RepositoryInvitationOperation
+	(*PreviewRepositoryInvitationRecipientRequest)(nil),  // 453: golf.v1.PreviewRepositoryInvitationRecipientRequest
+	(*PreviewRepositoryInvitationRecipientResponse)(nil), // 454: golf.v1.PreviewRepositoryInvitationRecipientResponse
+	(*CreateRepositoryInvitationRequest)(nil),            // 455: golf.v1.CreateRepositoryInvitationRequest
+	(*CreateRepositoryInvitationResponse)(nil),           // 456: golf.v1.CreateRepositoryInvitationResponse
+	(*ListRepositoryInvitationsRequest)(nil),             // 457: golf.v1.ListRepositoryInvitationsRequest
+	(*ListOwnRepositoryInvitationsRequest)(nil),          // 458: golf.v1.ListOwnRepositoryInvitationsRequest
+	(*ListRepositoryInvitationsResponse)(nil),            // 459: golf.v1.ListRepositoryInvitationsResponse
+	(*RespondRepositoryInvitationRequest)(nil),           // 460: golf.v1.RespondRepositoryInvitationRequest
+	(*RevokeRepositoryInvitationRequest)(nil),            // 461: golf.v1.RevokeRepositoryInvitationRequest
+	(*GetRepositoryInvitationOperationRequest)(nil),      // 462: golf.v1.GetRepositoryInvitationOperationRequest
+	(*GetRepositoryInvitationOperationResponse)(nil),     // 463: golf.v1.GetRepositoryInvitationOperationResponse
+	(*RespondRepositoryInvitationResponse)(nil),          // 464: golf.v1.RespondRepositoryInvitationResponse
+	(*RevokeRepositoryInvitationResponse)(nil),           // 465: golf.v1.RevokeRepositoryInvitationResponse
+	(*ListOwnRepositoryInvitationsResponse)(nil),         // 466: golf.v1.ListOwnRepositoryInvitationsResponse
+	(*GetRepositoryRulesRequest)(nil),                    // 467: golf.v1.GetRepositoryRulesRequest
+	(*GetRepositoryRulesResponse)(nil),                   // 468: golf.v1.GetRepositoryRulesResponse
+	(*RepositoryBranchProtection)(nil),                   // 469: golf.v1.RepositoryBranchProtection
+	(*RepositoryTagProtection)(nil),                      // 470: golf.v1.RepositoryTagProtection
+	(*RepositoryMergeConfiguration)(nil),                 // 471: golf.v1.RepositoryMergeConfiguration
+	(*EnrolledRunner)(nil),                               // 472: golf.v1.EnrolledRunner
+	(*GetInstanceRunnersRequest)(nil),                    // 473: golf.v1.GetInstanceRunnersRequest
+	(*GetInstanceRunnersResponse)(nil),                   // 474: golf.v1.GetInstanceRunnersResponse
+	(*UpdateRunnerControlRequest)(nil),                   // 475: golf.v1.UpdateRunnerControlRequest
+	(*UpdateRunnerControlResponse)(nil),                  // 476: golf.v1.UpdateRunnerControlResponse
+	(*GetRepositoryRunnersRequest)(nil),                  // 477: golf.v1.GetRepositoryRunnersRequest
+	(*GetRepositoryRunnersResponse)(nil),                 // 478: golf.v1.GetRepositoryRunnersResponse
+	nil,                                                  // 479: golf.v1.OrganizationTeam.UnitPermissionsEntry
 }
 var file_golf_v1_golf_proto_depIdxs = []int32{
-	37,  // 0: golf.v1.CreateApiCredentialResponse.credential:type_name -> golf.v1.ApiCredential
-	63,  // 1: golf.v1.ListApiCredentialsRequest.page:type_name -> golf.v1.PageRequest
-	37,  // 2: golf.v1.ListApiCredentialsResponse.credentials:type_name -> golf.v1.ApiCredential
-	64,  // 3: golf.v1.ListApiCredentialsResponse.page:type_name -> golf.v1.PageResponse
-	37,  // 4: golf.v1.RevokeApiCredentialResponse.credential:type_name -> golf.v1.ApiCredential
-	63,  // 5: golf.v1.ListSSHKeysRequest.page:type_name -> golf.v1.PageRequest
-	44,  // 6: golf.v1.ListSSHKeysResponse.keys:type_name -> golf.v1.SSHKey
-	64,  // 7: golf.v1.ListSSHKeysResponse.page:type_name -> golf.v1.PageResponse
-	44,  // 8: golf.v1.AddSSHKeyResponse.key:type_name -> golf.v1.SSHKey
+	38,  // 0: golf.v1.CreateApiCredentialResponse.credential:type_name -> golf.v1.ApiCredential
+	64,  // 1: golf.v1.ListApiCredentialsRequest.page:type_name -> golf.v1.PageRequest
+	38,  // 2: golf.v1.ListApiCredentialsResponse.credentials:type_name -> golf.v1.ApiCredential
+	65,  // 3: golf.v1.ListApiCredentialsResponse.page:type_name -> golf.v1.PageResponse
+	38,  // 4: golf.v1.RevokeApiCredentialResponse.credential:type_name -> golf.v1.ApiCredential
+	64,  // 5: golf.v1.ListSSHKeysRequest.page:type_name -> golf.v1.PageRequest
+	45,  // 6: golf.v1.ListSSHKeysResponse.keys:type_name -> golf.v1.SSHKey
+	65,  // 7: golf.v1.ListSSHKeysResponse.page:type_name -> golf.v1.PageResponse
+	45,  // 8: golf.v1.AddSSHKeyResponse.key:type_name -> golf.v1.SSHKey
 	0,   // 9: golf.v1.RepositorySettings.issues_mode:type_name -> golf.v1.RepositoryFeatureMode
 	0,   // 10: golf.v1.RepositorySettings.wiki_mode:type_name -> golf.v1.RepositoryFeatureMode
-	51,  // 11: golf.v1.RepositorySettings.external_tracker:type_name -> golf.v1.RepositoryExternalTracker
-	52,  // 12: golf.v1.RepositorySettings.external_wiki:type_name -> golf.v1.RepositoryExternalWiki
-	62,  // 13: golf.v1.GetRepositorySettingsRequest.repository:type_name -> golf.v1.RepositoryKey
-	53,  // 14: golf.v1.GetRepositorySettingsResponse.settings:type_name -> golf.v1.RepositorySettings
-	62,  // 15: golf.v1.UpdateRepositorySettingsRequest.repository:type_name -> golf.v1.RepositoryKey
+	52,  // 11: golf.v1.RepositorySettings.external_tracker:type_name -> golf.v1.RepositoryExternalTracker
+	53,  // 12: golf.v1.RepositorySettings.external_wiki:type_name -> golf.v1.RepositoryExternalWiki
+	63,  // 13: golf.v1.GetRepositorySettingsRequest.repository:type_name -> golf.v1.RepositoryKey
+	54,  // 14: golf.v1.GetRepositorySettingsResponse.settings:type_name -> golf.v1.RepositorySettings
+	63,  // 15: golf.v1.UpdateRepositorySettingsRequest.repository:type_name -> golf.v1.RepositoryKey
 	0,   // 16: golf.v1.UpdateRepositorySettingsRequest.issues_mode:type_name -> golf.v1.RepositoryFeatureMode
 	0,   // 17: golf.v1.UpdateRepositorySettingsRequest.wiki_mode:type_name -> golf.v1.RepositoryFeatureMode
-	51,  // 18: golf.v1.UpdateRepositorySettingsRequest.external_tracker:type_name -> golf.v1.RepositoryExternalTracker
-	52,  // 19: golf.v1.UpdateRepositorySettingsRequest.external_wiki:type_name -> golf.v1.RepositoryExternalWiki
-	53,  // 20: golf.v1.UpdateRepositorySettingsResponse.settings:type_name -> golf.v1.RepositorySettings
-	62,  // 21: golf.v1.UpdateRepositoryTopicsRequest.repository:type_name -> golf.v1.RepositoryKey
-	53,  // 22: golf.v1.UpdateRepositoryTopicsResponse.settings:type_name -> golf.v1.RepositorySettings
-	60,  // 23: golf.v1.LoginWithPasswordResponse.user:type_name -> golf.v1.User
-	60,  // 24: golf.v1.LoginWithGiteaTokenResponse.user:type_name -> golf.v1.User
-	60,  // 25: golf.v1.GetSessionResponse.user:type_name -> golf.v1.User
-	63,  // 26: golf.v1.ListSessionsRequest.page:type_name -> golf.v1.PageRequest
-	71,  // 27: golf.v1.ListSessionsResponse.sessions:type_name -> golf.v1.SessionInfo
-	64,  // 28: golf.v1.ListSessionsResponse.page:type_name -> golf.v1.PageResponse
-	63,  // 29: golf.v1.ListRepositoriesRequest.page:type_name -> golf.v1.PageRequest
-	61,  // 30: golf.v1.ListRepositoriesResponse.repositories:type_name -> golf.v1.Repository
-	64,  // 31: golf.v1.ListRepositoriesResponse.page:type_name -> golf.v1.PageResponse
-	61,  // 32: golf.v1.CreateRepositoryResponse.repository:type_name -> golf.v1.Repository
-	84,  // 33: golf.v1.CreateRepositoryResponse.creation:type_name -> golf.v1.RepositoryCreation
+	52,  // 18: golf.v1.UpdateRepositorySettingsRequest.external_tracker:type_name -> golf.v1.RepositoryExternalTracker
+	53,  // 19: golf.v1.UpdateRepositorySettingsRequest.external_wiki:type_name -> golf.v1.RepositoryExternalWiki
+	54,  // 20: golf.v1.UpdateRepositorySettingsResponse.settings:type_name -> golf.v1.RepositorySettings
+	63,  // 21: golf.v1.UpdateRepositoryTopicsRequest.repository:type_name -> golf.v1.RepositoryKey
+	54,  // 22: golf.v1.UpdateRepositoryTopicsResponse.settings:type_name -> golf.v1.RepositorySettings
+	61,  // 23: golf.v1.LoginWithPasswordResponse.user:type_name -> golf.v1.User
+	61,  // 24: golf.v1.LoginWithGiteaTokenResponse.user:type_name -> golf.v1.User
+	61,  // 25: golf.v1.GetSessionResponse.user:type_name -> golf.v1.User
+	64,  // 26: golf.v1.ListSessionsRequest.page:type_name -> golf.v1.PageRequest
+	72,  // 27: golf.v1.ListSessionsResponse.sessions:type_name -> golf.v1.SessionInfo
+	65,  // 28: golf.v1.ListSessionsResponse.page:type_name -> golf.v1.PageResponse
+	64,  // 29: golf.v1.ListRepositoriesRequest.page:type_name -> golf.v1.PageRequest
+	62,  // 30: golf.v1.ListRepositoriesResponse.repositories:type_name -> golf.v1.Repository
+	65,  // 31: golf.v1.ListRepositoriesResponse.page:type_name -> golf.v1.PageResponse
+	62,  // 32: golf.v1.CreateRepositoryResponse.repository:type_name -> golf.v1.Repository
+	85,  // 33: golf.v1.CreateRepositoryResponse.creation:type_name -> golf.v1.RepositoryCreation
 	1,   // 34: golf.v1.RepositoryCreation.state:type_name -> golf.v1.RepositoryCreationState
-	84,  // 35: golf.v1.GetRepositoryCreationResponse.creation:type_name -> golf.v1.RepositoryCreation
-	61,  // 36: golf.v1.GetRepositoryCreationResponse.repository:type_name -> golf.v1.Repository
-	62,  // 37: golf.v1.GetRepositoryRequest.repository:type_name -> golf.v1.RepositoryKey
-	61,  // 38: golf.v1.GetRepositoryResponse.repository:type_name -> golf.v1.Repository
-	62,  // 39: golf.v1.ListBranchesRequest.repository:type_name -> golf.v1.RepositoryKey
-	63,  // 40: golf.v1.ListBranchesRequest.page:type_name -> golf.v1.PageRequest
-	89,  // 41: golf.v1.ListBranchesResponse.branches:type_name -> golf.v1.Branch
-	64,  // 42: golf.v1.ListBranchesResponse.page:type_name -> golf.v1.PageResponse
-	62,  // 43: golf.v1.ListTagsRequest.repository:type_name -> golf.v1.RepositoryKey
-	63,  // 44: golf.v1.ListTagsRequest.page:type_name -> golf.v1.PageRequest
-	92,  // 45: golf.v1.ListTagsResponse.tags:type_name -> golf.v1.Tag
-	64,  // 46: golf.v1.ListTagsResponse.page:type_name -> golf.v1.PageResponse
-	62,  // 47: golf.v1.ListCommitsRequest.repository:type_name -> golf.v1.RepositoryKey
-	63,  // 48: golf.v1.ListCommitsRequest.page:type_name -> golf.v1.PageRequest
-	95,  // 49: golf.v1.ListCommitsResponse.commits:type_name -> golf.v1.Commit
-	64,  // 50: golf.v1.ListCommitsResponse.page:type_name -> golf.v1.PageResponse
-	62,  // 51: golf.v1.GetCommitDiffRequest.repository:type_name -> golf.v1.RepositoryKey
-	95,  // 52: golf.v1.GetCommitDiffResponse.commit:type_name -> golf.v1.Commit
+	85,  // 35: golf.v1.GetRepositoryCreationResponse.creation:type_name -> golf.v1.RepositoryCreation
+	62,  // 36: golf.v1.GetRepositoryCreationResponse.repository:type_name -> golf.v1.Repository
+	63,  // 37: golf.v1.GetRepositoryRequest.repository:type_name -> golf.v1.RepositoryKey
+	62,  // 38: golf.v1.GetRepositoryResponse.repository:type_name -> golf.v1.Repository
+	63,  // 39: golf.v1.ListBranchesRequest.repository:type_name -> golf.v1.RepositoryKey
+	64,  // 40: golf.v1.ListBranchesRequest.page:type_name -> golf.v1.PageRequest
+	90,  // 41: golf.v1.ListBranchesResponse.branches:type_name -> golf.v1.Branch
+	65,  // 42: golf.v1.ListBranchesResponse.page:type_name -> golf.v1.PageResponse
+	63,  // 43: golf.v1.ListTagsRequest.repository:type_name -> golf.v1.RepositoryKey
+	64,  // 44: golf.v1.ListTagsRequest.page:type_name -> golf.v1.PageRequest
+	93,  // 45: golf.v1.ListTagsResponse.tags:type_name -> golf.v1.Tag
+	65,  // 46: golf.v1.ListTagsResponse.page:type_name -> golf.v1.PageResponse
+	63,  // 47: golf.v1.ListCommitsRequest.repository:type_name -> golf.v1.RepositoryKey
+	64,  // 48: golf.v1.ListCommitsRequest.page:type_name -> golf.v1.PageRequest
+	96,  // 49: golf.v1.ListCommitsResponse.commits:type_name -> golf.v1.Commit
+	65,  // 50: golf.v1.ListCommitsResponse.page:type_name -> golf.v1.PageResponse
+	63,  // 51: golf.v1.GetCommitDiffRequest.repository:type_name -> golf.v1.RepositoryKey
+	96,  // 52: golf.v1.GetCommitDiffResponse.commit:type_name -> golf.v1.Commit
 	2,   // 53: golf.v1.GetCommitDiffResponse.base:type_name -> golf.v1.CommitDiffBase
-	62,  // 54: golf.v1.GetPullRequestDiffRequest.repository:type_name -> golf.v1.RepositoryKey
-	62,  // 55: golf.v1.GetRepositoryImageRequest.repository:type_name -> golf.v1.RepositoryKey
+	63,  // 54: golf.v1.GetPullRequestDiffRequest.repository:type_name -> golf.v1.RepositoryKey
+	63,  // 55: golf.v1.GetRepositoryImageRequest.repository:type_name -> golf.v1.RepositoryKey
 	3,   // 56: golf.v1.SourceEntry.type:type_name -> golf.v1.SourceEntryType
-	95,  // 57: golf.v1.SourceEntry.latest_change:type_name -> golf.v1.Commit
-	104, // 58: golf.v1.SourceFile.entry:type_name -> golf.v1.SourceEntry
+	96,  // 57: golf.v1.SourceEntry.latest_change:type_name -> golf.v1.Commit
+	105, // 58: golf.v1.SourceFile.entry:type_name -> golf.v1.SourceEntry
 	4,   // 59: golf.v1.RepositorySourceSelector.kind:type_name -> golf.v1.RepositorySourceRefKind
 	4,   // 60: golf.v1.RepositorySourceSelection.kind:type_name -> golf.v1.RepositorySourceRefKind
-	62,  // 61: golf.v1.ResolveRepositorySourceRequest.repository:type_name -> golf.v1.RepositoryKey
-	106, // 62: golf.v1.ResolveRepositorySourceRequest.selector:type_name -> golf.v1.RepositorySourceSelector
-	107, // 63: golf.v1.RepositorySourceCandidate.selection:type_name -> golf.v1.RepositorySourceSelection
-	62,  // 64: golf.v1.ResolveRepositorySourceResponse.repository:type_name -> golf.v1.RepositoryKey
-	107, // 65: golf.v1.ResolveRepositorySourceResponse.selection:type_name -> golf.v1.RepositorySourceSelection
+	63,  // 61: golf.v1.ResolveRepositorySourceRequest.repository:type_name -> golf.v1.RepositoryKey
+	107, // 62: golf.v1.ResolveRepositorySourceRequest.selector:type_name -> golf.v1.RepositorySourceSelector
+	108, // 63: golf.v1.RepositorySourceCandidate.selection:type_name -> golf.v1.RepositorySourceSelection
+	63,  // 64: golf.v1.ResolveRepositorySourceResponse.repository:type_name -> golf.v1.RepositoryKey
+	108, // 65: golf.v1.ResolveRepositorySourceResponse.selection:type_name -> golf.v1.RepositorySourceSelection
 	5,   // 66: golf.v1.ResolveRepositorySourceResponse.resolution:type_name -> golf.v1.RepositorySourceResolution
-	109, // 67: golf.v1.ResolveRepositorySourceResponse.candidates:type_name -> golf.v1.RepositorySourceCandidate
-	62,  // 68: golf.v1.GetContentsRequest.repository:type_name -> golf.v1.RepositoryKey
+	110, // 67: golf.v1.ResolveRepositorySourceResponse.candidates:type_name -> golf.v1.RepositorySourceCandidate
+	63,  // 68: golf.v1.GetContentsRequest.repository:type_name -> golf.v1.RepositoryKey
 	3,   // 69: golf.v1.GetContentsResponse.kind:type_name -> golf.v1.SourceEntryType
-	104, // 70: golf.v1.GetContentsResponse.entries:type_name -> golf.v1.SourceEntry
-	105, // 71: golf.v1.GetContentsResponse.file:type_name -> golf.v1.SourceFile
+	105, // 70: golf.v1.GetContentsResponse.entries:type_name -> golf.v1.SourceEntry
+	106, // 71: golf.v1.GetContentsResponse.file:type_name -> golf.v1.SourceFile
 	6,   // 72: golf.v1.Issue.state:type_name -> golf.v1.IssueState
-	60,  // 73: golf.v1.Issue.user:type_name -> golf.v1.User
-	62,  // 74: golf.v1.ListIssuesRequest.repository:type_name -> golf.v1.RepositoryKey
+	61,  // 73: golf.v1.Issue.user:type_name -> golf.v1.User
+	63,  // 74: golf.v1.ListIssuesRequest.repository:type_name -> golf.v1.RepositoryKey
 	6,   // 75: golf.v1.ListIssuesRequest.state:type_name -> golf.v1.IssueState
-	63,  // 76: golf.v1.ListIssuesRequest.page:type_name -> golf.v1.PageRequest
-	113, // 77: golf.v1.ListIssuesResponse.issues:type_name -> golf.v1.Issue
-	64,  // 78: golf.v1.ListIssuesResponse.page:type_name -> golf.v1.PageResponse
-	62,  // 79: golf.v1.GetIssueRequest.repository:type_name -> golf.v1.RepositoryKey
-	113, // 80: golf.v1.GetIssueResponse.issue:type_name -> golf.v1.Issue
-	60,  // 81: golf.v1.IssueComment.user:type_name -> golf.v1.User
-	62,  // 82: golf.v1.ListIssueCommentsRequest.repository:type_name -> golf.v1.RepositoryKey
-	63,  // 83: golf.v1.ListIssueCommentsRequest.page:type_name -> golf.v1.PageRequest
-	118, // 84: golf.v1.ListIssueCommentsResponse.comments:type_name -> golf.v1.IssueComment
-	64,  // 85: golf.v1.ListIssueCommentsResponse.page:type_name -> golf.v1.PageResponse
+	64,  // 76: golf.v1.ListIssuesRequest.page:type_name -> golf.v1.PageRequest
+	114, // 77: golf.v1.ListIssuesResponse.issues:type_name -> golf.v1.Issue
+	65,  // 78: golf.v1.ListIssuesResponse.page:type_name -> golf.v1.PageResponse
+	63,  // 79: golf.v1.GetIssueRequest.repository:type_name -> golf.v1.RepositoryKey
+	114, // 80: golf.v1.GetIssueResponse.issue:type_name -> golf.v1.Issue
+	61,  // 81: golf.v1.IssueComment.user:type_name -> golf.v1.User
+	63,  // 82: golf.v1.ListIssueCommentsRequest.repository:type_name -> golf.v1.RepositoryKey
+	64,  // 83: golf.v1.ListIssueCommentsRequest.page:type_name -> golf.v1.PageRequest
+	119, // 84: golf.v1.ListIssueCommentsResponse.comments:type_name -> golf.v1.IssueComment
+	65,  // 85: golf.v1.ListIssueCommentsResponse.page:type_name -> golf.v1.PageResponse
 	7,   // 86: golf.v1.IssueMutation.kind:type_name -> golf.v1.IssueMutationKind
 	8,   // 87: golf.v1.IssueMutation.state:type_name -> golf.v1.IssueMutationState
-	62,  // 88: golf.v1.IssueMutation.repository:type_name -> golf.v1.RepositoryKey
-	62,  // 89: golf.v1.CreateIssueRequest.repository:type_name -> golf.v1.RepositoryKey
-	121, // 90: golf.v1.CreateIssueResponse.mutation:type_name -> golf.v1.IssueMutation
-	113, // 91: golf.v1.CreateIssueResponse.issue:type_name -> golf.v1.Issue
-	62,  // 92: golf.v1.CreateIssueCommentRequest.repository:type_name -> golf.v1.RepositoryKey
-	121, // 93: golf.v1.CreateIssueCommentResponse.mutation:type_name -> golf.v1.IssueMutation
-	118, // 94: golf.v1.CreateIssueCommentResponse.comment:type_name -> golf.v1.IssueComment
-	62,  // 95: golf.v1.UpdateIssueRequest.repository:type_name -> golf.v1.RepositoryKey
+	63,  // 88: golf.v1.IssueMutation.repository:type_name -> golf.v1.RepositoryKey
+	63,  // 89: golf.v1.CreateIssueRequest.repository:type_name -> golf.v1.RepositoryKey
+	122, // 90: golf.v1.CreateIssueResponse.mutation:type_name -> golf.v1.IssueMutation
+	114, // 91: golf.v1.CreateIssueResponse.issue:type_name -> golf.v1.Issue
+	63,  // 92: golf.v1.CreateIssueCommentRequest.repository:type_name -> golf.v1.RepositoryKey
+	122, // 93: golf.v1.CreateIssueCommentResponse.mutation:type_name -> golf.v1.IssueMutation
+	119, // 94: golf.v1.CreateIssueCommentResponse.comment:type_name -> golf.v1.IssueComment
+	63,  // 95: golf.v1.UpdateIssueRequest.repository:type_name -> golf.v1.RepositoryKey
 	6,   // 96: golf.v1.UpdateIssueRequest.state:type_name -> golf.v1.IssueState
-	121, // 97: golf.v1.UpdateIssueResponse.mutation:type_name -> golf.v1.IssueMutation
-	113, // 98: golf.v1.UpdateIssueResponse.issue:type_name -> golf.v1.Issue
-	121, // 99: golf.v1.GetIssueMutationResponse.mutation:type_name -> golf.v1.IssueMutation
-	113, // 100: golf.v1.GetIssueMutationResponse.issue:type_name -> golf.v1.Issue
-	118, // 101: golf.v1.GetIssueMutationResponse.comment:type_name -> golf.v1.IssueComment
-	131, // 102: golf.v1.GetIssueMutationResponse.pull_request:type_name -> golf.v1.PullRequest
+	122, // 97: golf.v1.UpdateIssueResponse.mutation:type_name -> golf.v1.IssueMutation
+	114, // 98: golf.v1.UpdateIssueResponse.issue:type_name -> golf.v1.Issue
+	122, // 99: golf.v1.GetIssueMutationResponse.mutation:type_name -> golf.v1.IssueMutation
+	114, // 100: golf.v1.GetIssueMutationResponse.issue:type_name -> golf.v1.Issue
+	119, // 101: golf.v1.GetIssueMutationResponse.comment:type_name -> golf.v1.IssueComment
+	132, // 102: golf.v1.GetIssueMutationResponse.pull_request:type_name -> golf.v1.PullRequest
 	6,   // 103: golf.v1.PullRequest.state:type_name -> golf.v1.IssueState
-	60,  // 104: golf.v1.PullRequest.user:type_name -> golf.v1.User
-	130, // 105: golf.v1.PullRequest.head:type_name -> golf.v1.PullRequestRef
-	130, // 106: golf.v1.PullRequest.base:type_name -> golf.v1.PullRequestRef
-	62,  // 107: golf.v1.ListPullRequestsRequest.repository:type_name -> golf.v1.RepositoryKey
+	61,  // 104: golf.v1.PullRequest.user:type_name -> golf.v1.User
+	131, // 105: golf.v1.PullRequest.head:type_name -> golf.v1.PullRequestRef
+	131, // 106: golf.v1.PullRequest.base:type_name -> golf.v1.PullRequestRef
+	63,  // 107: golf.v1.ListPullRequestsRequest.repository:type_name -> golf.v1.RepositoryKey
 	6,   // 108: golf.v1.ListPullRequestsRequest.state:type_name -> golf.v1.IssueState
-	63,  // 109: golf.v1.ListPullRequestsRequest.page:type_name -> golf.v1.PageRequest
-	131, // 110: golf.v1.ListPullRequestsResponse.pull_requests:type_name -> golf.v1.PullRequest
-	64,  // 111: golf.v1.ListPullRequestsResponse.page:type_name -> golf.v1.PageResponse
-	62,  // 112: golf.v1.GetPullRequestRequest.repository:type_name -> golf.v1.RepositoryKey
-	131, // 113: golf.v1.GetPullRequestResponse.pull_request:type_name -> golf.v1.PullRequest
-	60,  // 114: golf.v1.PullRequestReview.user:type_name -> golf.v1.User
+	64,  // 109: golf.v1.ListPullRequestsRequest.page:type_name -> golf.v1.PageRequest
+	132, // 110: golf.v1.ListPullRequestsResponse.pull_requests:type_name -> golf.v1.PullRequest
+	65,  // 111: golf.v1.ListPullRequestsResponse.page:type_name -> golf.v1.PageResponse
+	63,  // 112: golf.v1.GetPullRequestRequest.repository:type_name -> golf.v1.RepositoryKey
+	132, // 113: golf.v1.GetPullRequestResponse.pull_request:type_name -> golf.v1.PullRequest
+	61,  // 114: golf.v1.PullRequestReview.user:type_name -> golf.v1.User
 	9,   // 115: golf.v1.PullRequestReview.state:type_name -> golf.v1.PullRequestReviewState
-	62,  // 116: golf.v1.CreatePullRequestReviewRequest.repository:type_name -> golf.v1.RepositoryKey
+	63,  // 116: golf.v1.CreatePullRequestReviewRequest.repository:type_name -> golf.v1.RepositoryKey
 	9,   // 117: golf.v1.CreatePullRequestReviewRequest.state:type_name -> golf.v1.PullRequestReviewState
 	8,   // 118: golf.v1.PullRequestReviewMutation.state:type_name -> golf.v1.IssueMutationState
-	62,  // 119: golf.v1.PullRequestReviewMutation.repository:type_name -> golf.v1.RepositoryKey
+	63,  // 119: golf.v1.PullRequestReviewMutation.repository:type_name -> golf.v1.RepositoryKey
 	9,   // 120: golf.v1.PullRequestReviewMutation.review_state:type_name -> golf.v1.PullRequestReviewState
-	138, // 121: golf.v1.CreatePullRequestReviewResponse.mutation:type_name -> golf.v1.PullRequestReviewMutation
-	136, // 122: golf.v1.CreatePullRequestReviewResponse.review:type_name -> golf.v1.PullRequestReview
-	138, // 123: golf.v1.GetPullRequestReviewMutationResponse.mutation:type_name -> golf.v1.PullRequestReviewMutation
-	136, // 124: golf.v1.GetPullRequestReviewMutationResponse.review:type_name -> golf.v1.PullRequestReview
-	62,  // 125: golf.v1.ListPullRequestReviewsRequest.repository:type_name -> golf.v1.RepositoryKey
-	63,  // 126: golf.v1.ListPullRequestReviewsRequest.page:type_name -> golf.v1.PageRequest
-	136, // 127: golf.v1.ListPullRequestReviewsResponse.reviews:type_name -> golf.v1.PullRequestReview
-	64,  // 128: golf.v1.ListPullRequestReviewsResponse.page:type_name -> golf.v1.PageResponse
-	60,  // 129: golf.v1.PullRequestReviewComment.user:type_name -> golf.v1.User
-	60,  // 130: golf.v1.PullRequestReviewComment.resolver:type_name -> golf.v1.User
-	62,  // 131: golf.v1.GetPullRequestReviewCommentsRequest.repository:type_name -> golf.v1.RepositoryKey
-	136, // 132: golf.v1.GetPullRequestReviewCommentsResponse.review:type_name -> golf.v1.PullRequestReview
-	144, // 133: golf.v1.GetPullRequestReviewCommentsResponse.comments:type_name -> golf.v1.PullRequestReviewComment
+	139, // 121: golf.v1.CreatePullRequestReviewResponse.mutation:type_name -> golf.v1.PullRequestReviewMutation
+	137, // 122: golf.v1.CreatePullRequestReviewResponse.review:type_name -> golf.v1.PullRequestReview
+	139, // 123: golf.v1.GetPullRequestReviewMutationResponse.mutation:type_name -> golf.v1.PullRequestReviewMutation
+	137, // 124: golf.v1.GetPullRequestReviewMutationResponse.review:type_name -> golf.v1.PullRequestReview
+	63,  // 125: golf.v1.ListPullRequestReviewsRequest.repository:type_name -> golf.v1.RepositoryKey
+	64,  // 126: golf.v1.ListPullRequestReviewsRequest.page:type_name -> golf.v1.PageRequest
+	137, // 127: golf.v1.ListPullRequestReviewsResponse.reviews:type_name -> golf.v1.PullRequestReview
+	65,  // 128: golf.v1.ListPullRequestReviewsResponse.page:type_name -> golf.v1.PageResponse
+	61,  // 129: golf.v1.PullRequestReviewComment.user:type_name -> golf.v1.User
+	61,  // 130: golf.v1.PullRequestReviewComment.resolver:type_name -> golf.v1.User
+	63,  // 131: golf.v1.GetPullRequestReviewCommentsRequest.repository:type_name -> golf.v1.RepositoryKey
+	137, // 132: golf.v1.GetPullRequestReviewCommentsResponse.review:type_name -> golf.v1.PullRequestReview
+	145, // 133: golf.v1.GetPullRequestReviewCommentsResponse.comments:type_name -> golf.v1.PullRequestReviewComment
 	10,  // 134: golf.v1.Capability.state:type_name -> golf.v1.CapabilityState
-	147, // 135: golf.v1.ListCapabilitiesResponse.capabilities:type_name -> golf.v1.Capability
+	148, // 135: golf.v1.ListCapabilitiesResponse.capabilities:type_name -> golf.v1.Capability
 	11,  // 136: golf.v1.Organization.visibility:type_name -> golf.v1.OrganizationVisibility
 	13,  // 137: golf.v1.OrganizationTeam.permission:type_name -> golf.v1.TeamPermission
-	471, // 138: golf.v1.OrganizationTeam.unit_permissions:type_name -> golf.v1.OrganizationTeam.UnitPermissionsEntry
+	479, // 138: golf.v1.OrganizationTeam.unit_permissions:type_name -> golf.v1.OrganizationTeam.UnitPermissionsEntry
 	12,  // 139: golf.v1.OrganizationTeam.visibility:type_name -> golf.v1.TeamVisibility
-	63,  // 140: golf.v1.ListOrganizationsRequest.page:type_name -> golf.v1.PageRequest
-	154, // 141: golf.v1.ListOrganizationsResponse.organizations:type_name -> golf.v1.Organization
-	64,  // 142: golf.v1.ListOrganizationsResponse.page:type_name -> golf.v1.PageResponse
-	154, // 143: golf.v1.GetOrganizationResponse.organization:type_name -> golf.v1.Organization
-	63,  // 144: golf.v1.ListTeamsRequest.page:type_name -> golf.v1.PageRequest
-	155, // 145: golf.v1.ListTeamsResponse.teams:type_name -> golf.v1.OrganizationTeam
-	64,  // 146: golf.v1.ListTeamsResponse.page:type_name -> golf.v1.PageResponse
-	155, // 147: golf.v1.GetTeamResponse.team:type_name -> golf.v1.OrganizationTeam
-	63,  // 148: golf.v1.ListTeamMembersRequest.page:type_name -> golf.v1.PageRequest
-	60,  // 149: golf.v1.ListTeamMembersResponse.members:type_name -> golf.v1.User
-	64,  // 150: golf.v1.ListTeamMembersResponse.page:type_name -> golf.v1.PageResponse
-	63,  // 151: golf.v1.ListTeamRepositoriesRequest.page:type_name -> golf.v1.PageRequest
-	61,  // 152: golf.v1.ListTeamRepositoriesResponse.repositories:type_name -> golf.v1.Repository
-	64,  // 153: golf.v1.ListTeamRepositoriesResponse.page:type_name -> golf.v1.PageResponse
+	64,  // 140: golf.v1.ListOrganizationsRequest.page:type_name -> golf.v1.PageRequest
+	155, // 141: golf.v1.ListOrganizationsResponse.organizations:type_name -> golf.v1.Organization
+	65,  // 142: golf.v1.ListOrganizationsResponse.page:type_name -> golf.v1.PageResponse
+	155, // 143: golf.v1.GetOrganizationResponse.organization:type_name -> golf.v1.Organization
+	64,  // 144: golf.v1.ListTeamsRequest.page:type_name -> golf.v1.PageRequest
+	156, // 145: golf.v1.ListTeamsResponse.teams:type_name -> golf.v1.OrganizationTeam
+	65,  // 146: golf.v1.ListTeamsResponse.page:type_name -> golf.v1.PageResponse
+	156, // 147: golf.v1.GetTeamResponse.team:type_name -> golf.v1.OrganizationTeam
+	64,  // 148: golf.v1.ListTeamMembersRequest.page:type_name -> golf.v1.PageRequest
+	61,  // 149: golf.v1.ListTeamMembersResponse.members:type_name -> golf.v1.User
+	65,  // 150: golf.v1.ListTeamMembersResponse.page:type_name -> golf.v1.PageResponse
+	64,  // 151: golf.v1.ListTeamRepositoriesRequest.page:type_name -> golf.v1.PageRequest
+	62,  // 152: golf.v1.ListTeamRepositoriesResponse.repositories:type_name -> golf.v1.Repository
+	65,  // 153: golf.v1.ListTeamRepositoriesResponse.page:type_name -> golf.v1.PageResponse
 	14,  // 154: golf.v1.AuditEvent.action:type_name -> golf.v1.AuditAction
-	168, // 155: golf.v1.ListAuditEventsResponse.events:type_name -> golf.v1.AuditEvent
-	155, // 156: golf.v1.GetTeamAdministrationResponse.team:type_name -> golf.v1.OrganizationTeam
-	60,  // 157: golf.v1.ResolveTeamMemberResponse.user:type_name -> golf.v1.User
-	60,  // 158: golf.v1.AddTeamMemberResponse.user:type_name -> golf.v1.User
-	60,  // 159: golf.v1.RemoveTeamMemberResponse.user:type_name -> golf.v1.User
-	63,  // 160: golf.v1.ListLocalAccountsRequest.page:type_name -> golf.v1.PageRequest
-	179, // 161: golf.v1.ListLocalAccountsResponse.accounts:type_name -> golf.v1.LocalAccountInfo
-	64,  // 162: golf.v1.ListLocalAccountsResponse.page:type_name -> golf.v1.PageResponse
-	60,  // 163: golf.v1.RepositoryAccess.owner:type_name -> golf.v1.User
-	60,  // 164: golf.v1.RepositoryCollaborator.user:type_name -> golf.v1.User
-	62,  // 165: golf.v1.GetRepositoryAccessRequest.repository:type_name -> golf.v1.RepositoryKey
-	182, // 166: golf.v1.GetRepositoryAccessResponse.access:type_name -> golf.v1.RepositoryAccess
-	62,  // 167: golf.v1.ListRepositoryCollaboratorsRequest.repository:type_name -> golf.v1.RepositoryKey
-	63,  // 168: golf.v1.ListRepositoryCollaboratorsRequest.page:type_name -> golf.v1.PageRequest
-	183, // 169: golf.v1.ListRepositoryCollaboratorsResponse.collaborators:type_name -> golf.v1.RepositoryCollaborator
-	64,  // 170: golf.v1.ListRepositoryCollaboratorsResponse.page:type_name -> golf.v1.PageResponse
-	62,  // 171: golf.v1.ResolveRepositoryCollaboratorRequest.repository:type_name -> golf.v1.RepositoryKey
-	183, // 172: golf.v1.ResolveRepositoryCollaboratorResponse.collaborator:type_name -> golf.v1.RepositoryCollaborator
-	62,  // 173: golf.v1.SetRepositoryCollaboratorRequest.repository:type_name -> golf.v1.RepositoryKey
-	183, // 174: golf.v1.SetRepositoryCollaboratorResponse.collaborator:type_name -> golf.v1.RepositoryCollaborator
-	62,  // 175: golf.v1.RemoveRepositoryCollaboratorRequest.repository:type_name -> golf.v1.RepositoryKey
-	183, // 176: golf.v1.RemoveRepositoryCollaboratorResponse.collaborator:type_name -> golf.v1.RepositoryCollaborator
+	169, // 155: golf.v1.ListAuditEventsResponse.events:type_name -> golf.v1.AuditEvent
+	156, // 156: golf.v1.GetTeamAdministrationResponse.team:type_name -> golf.v1.OrganizationTeam
+	61,  // 157: golf.v1.ResolveTeamMemberResponse.user:type_name -> golf.v1.User
+	61,  // 158: golf.v1.AddTeamMemberResponse.user:type_name -> golf.v1.User
+	61,  // 159: golf.v1.RemoveTeamMemberResponse.user:type_name -> golf.v1.User
+	64,  // 160: golf.v1.ListLocalAccountsRequest.page:type_name -> golf.v1.PageRequest
+	180, // 161: golf.v1.ListLocalAccountsResponse.accounts:type_name -> golf.v1.LocalAccountInfo
+	65,  // 162: golf.v1.ListLocalAccountsResponse.page:type_name -> golf.v1.PageResponse
+	61,  // 163: golf.v1.RepositoryAccess.owner:type_name -> golf.v1.User
+	61,  // 164: golf.v1.RepositoryCollaborator.user:type_name -> golf.v1.User
+	63,  // 165: golf.v1.GetRepositoryAccessRequest.repository:type_name -> golf.v1.RepositoryKey
+	183, // 166: golf.v1.GetRepositoryAccessResponse.access:type_name -> golf.v1.RepositoryAccess
+	63,  // 167: golf.v1.ListRepositoryCollaboratorsRequest.repository:type_name -> golf.v1.RepositoryKey
+	64,  // 168: golf.v1.ListRepositoryCollaboratorsRequest.page:type_name -> golf.v1.PageRequest
+	184, // 169: golf.v1.ListRepositoryCollaboratorsResponse.collaborators:type_name -> golf.v1.RepositoryCollaborator
+	65,  // 170: golf.v1.ListRepositoryCollaboratorsResponse.page:type_name -> golf.v1.PageResponse
+	63,  // 171: golf.v1.ResolveRepositoryCollaboratorRequest.repository:type_name -> golf.v1.RepositoryKey
+	184, // 172: golf.v1.ResolveRepositoryCollaboratorResponse.collaborator:type_name -> golf.v1.RepositoryCollaborator
+	63,  // 173: golf.v1.SetRepositoryCollaboratorRequest.repository:type_name -> golf.v1.RepositoryKey
+	184, // 174: golf.v1.SetRepositoryCollaboratorResponse.collaborator:type_name -> golf.v1.RepositoryCollaborator
+	63,  // 175: golf.v1.RemoveRepositoryCollaboratorRequest.repository:type_name -> golf.v1.RepositoryKey
+	184, // 176: golf.v1.RemoveRepositoryCollaboratorResponse.collaborator:type_name -> golf.v1.RepositoryCollaborator
 	15,  // 177: golf.v1.WorkflowConfiguration.format:type_name -> golf.v1.WorkflowFormat
 	16,  // 178: golf.v1.WorkflowConfiguration.state:type_name -> golf.v1.WorkflowInspectionState
-	195, // 179: golf.v1.WorkflowConfiguration.jobs:type_name -> golf.v1.WorkflowJobSummary
-	194, // 180: golf.v1.WorkflowConfiguration.diagnostics:type_name -> golf.v1.WorkflowDiagnostic
-	62,  // 181: golf.v1.InspectWorkflowsRequest.repository:type_name -> golf.v1.RepositoryKey
-	196, // 182: golf.v1.InspectWorkflowsResponse.configurations:type_name -> golf.v1.WorkflowConfiguration
-	194, // 183: golf.v1.InspectWorkflowsResponse.diagnostics:type_name -> golf.v1.WorkflowDiagnostic
-	179, // 184: golf.v1.DisableLocalAccountResponse.account:type_name -> golf.v1.LocalAccountInfo
+	196, // 179: golf.v1.WorkflowConfiguration.jobs:type_name -> golf.v1.WorkflowJobSummary
+	195, // 180: golf.v1.WorkflowConfiguration.diagnostics:type_name -> golf.v1.WorkflowDiagnostic
+	63,  // 181: golf.v1.InspectWorkflowsRequest.repository:type_name -> golf.v1.RepositoryKey
+	197, // 182: golf.v1.InspectWorkflowsResponse.configurations:type_name -> golf.v1.WorkflowConfiguration
+	195, // 183: golf.v1.InspectWorkflowsResponse.diagnostics:type_name -> golf.v1.WorkflowDiagnostic
+	180, // 184: golf.v1.DisableLocalAccountResponse.account:type_name -> golf.v1.LocalAccountInfo
 	17,  // 185: golf.v1.ExecutionPolicy.scope:type_name -> golf.v1.ExecutionScope
 	18,  // 186: golf.v1.ExecutionPolicy.mode:type_name -> golf.v1.ExecutionMode
 	17,  // 187: golf.v1.GetExecutionPolicyRequest.scope:type_name -> golf.v1.ExecutionScope
-	62,  // 188: golf.v1.GetExecutionPolicyRequest.repository:type_name -> golf.v1.RepositoryKey
-	201, // 189: golf.v1.GetExecutionPolicyResponse.policy:type_name -> golf.v1.ExecutionPolicy
+	63,  // 188: golf.v1.GetExecutionPolicyRequest.repository:type_name -> golf.v1.RepositoryKey
+	202, // 189: golf.v1.GetExecutionPolicyResponse.policy:type_name -> golf.v1.ExecutionPolicy
 	17,  // 190: golf.v1.UpdateExecutionPolicyRequest.scope:type_name -> golf.v1.ExecutionScope
-	62,  // 191: golf.v1.UpdateExecutionPolicyRequest.repository:type_name -> golf.v1.RepositoryKey
+	63,  // 191: golf.v1.UpdateExecutionPolicyRequest.repository:type_name -> golf.v1.RepositoryKey
 	18,  // 192: golf.v1.UpdateExecutionPolicyRequest.mode:type_name -> golf.v1.ExecutionMode
-	201, // 193: golf.v1.UpdateExecutionPolicyResponse.policy:type_name -> golf.v1.ExecutionPolicy
+	202, // 193: golf.v1.UpdateExecutionPolicyResponse.policy:type_name -> golf.v1.ExecutionPolicy
 	15,  // 194: golf.v1.WorkflowRun.format:type_name -> golf.v1.WorkflowFormat
 	19,  // 195: golf.v1.WorkflowRun.state:type_name -> golf.v1.WorkflowRunState
 	20,  // 196: golf.v1.WorkflowRun.origin:type_name -> golf.v1.WorkflowRunOrigin
-	208, // 197: golf.v1.WorkflowRun.progress:type_name -> golf.v1.WorkflowJobProgress
-	371, // 198: golf.v1.WorkflowRun.jobs:type_name -> golf.v1.WorkflowJobInstance
+	209, // 197: golf.v1.WorkflowRun.progress:type_name -> golf.v1.WorkflowJobProgress
+	372, // 198: golf.v1.WorkflowRun.jobs:type_name -> golf.v1.WorkflowJobInstance
 	35,  // 199: golf.v1.WorkflowRun.output_state:type_name -> golf.v1.WorkflowOutputState
 	21,  // 200: golf.v1.WorkflowStepProgress.state:type_name -> golf.v1.WorkflowStepState
-	207, // 201: golf.v1.WorkflowJobProgress.steps:type_name -> golf.v1.WorkflowStepProgress
-	62,  // 202: golf.v1.DispatchWorkflowRequest.repository:type_name -> golf.v1.RepositoryKey
-	206, // 203: golf.v1.DispatchWorkflowResponse.run:type_name -> golf.v1.WorkflowRun
-	206, // 204: golf.v1.GetWorkflowRunResponse.run:type_name -> golf.v1.WorkflowRun
-	62,  // 205: golf.v1.ListWorkflowRunsRequest.repository:type_name -> golf.v1.RepositoryKey
-	63,  // 206: golf.v1.ListWorkflowRunsRequest.page:type_name -> golf.v1.PageRequest
-	206, // 207: golf.v1.ListWorkflowRunsResponse.runs:type_name -> golf.v1.WorkflowRun
-	64,  // 208: golf.v1.ListWorkflowRunsResponse.page:type_name -> golf.v1.PageResponse
-	206, // 209: golf.v1.CancelWorkflowRunResponse.run:type_name -> golf.v1.WorkflowRun
-	217, // 210: golf.v1.GetWorkflowRunLogsResponse.logs:type_name -> golf.v1.WorkflowRunLog
+	208, // 201: golf.v1.WorkflowJobProgress.steps:type_name -> golf.v1.WorkflowStepProgress
+	63,  // 202: golf.v1.DispatchWorkflowRequest.repository:type_name -> golf.v1.RepositoryKey
+	207, // 203: golf.v1.DispatchWorkflowResponse.run:type_name -> golf.v1.WorkflowRun
+	207, // 204: golf.v1.GetWorkflowRunResponse.run:type_name -> golf.v1.WorkflowRun
+	63,  // 205: golf.v1.ListWorkflowRunsRequest.repository:type_name -> golf.v1.RepositoryKey
+	64,  // 206: golf.v1.ListWorkflowRunsRequest.page:type_name -> golf.v1.PageRequest
+	207, // 207: golf.v1.ListWorkflowRunsResponse.runs:type_name -> golf.v1.WorkflowRun
+	65,  // 208: golf.v1.ListWorkflowRunsResponse.page:type_name -> golf.v1.PageResponse
+	207, // 209: golf.v1.CancelWorkflowRunResponse.run:type_name -> golf.v1.WorkflowRun
+	218, // 210: golf.v1.GetWorkflowRunLogsResponse.logs:type_name -> golf.v1.WorkflowRunLog
 	35,  // 211: golf.v1.GetWorkflowRunLogsResponse.output_state:type_name -> golf.v1.WorkflowOutputState
 	22,  // 212: golf.v1.OrganizationCreationPolicy.mode:type_name -> golf.v1.OrganizationCreationMode
-	220, // 213: golf.v1.GetOrganizationCreationPolicyResponse.policy:type_name -> golf.v1.OrganizationCreationPolicy
+	221, // 213: golf.v1.GetOrganizationCreationPolicyResponse.policy:type_name -> golf.v1.OrganizationCreationPolicy
 	22,  // 214: golf.v1.UpdateOrganizationCreationPolicyRequest.mode:type_name -> golf.v1.OrganizationCreationMode
-	220, // 215: golf.v1.UpdateOrganizationCreationPolicyResponse.policy:type_name -> golf.v1.OrganizationCreationPolicy
-	154, // 216: golf.v1.CreateOrganizationResponse.organization:type_name -> golf.v1.Organization
-	63,  // 217: golf.v1.ListInfrastructureConnectionsRequest.page:type_name -> golf.v1.PageRequest
-	227, // 218: golf.v1.ListInfrastructureConnectionsResponse.connections:type_name -> golf.v1.InfrastructureConnection
-	64,  // 219: golf.v1.ListInfrastructureConnectionsResponse.page:type_name -> golf.v1.PageResponse
-	227, // 220: golf.v1.ListInfrastructureConnectionsResponse.deployment_defaults:type_name -> golf.v1.InfrastructureConnection
-	227, // 221: golf.v1.ListInfrastructureConnectionsResponse.active_connection:type_name -> golf.v1.InfrastructureConnection
-	227, // 222: golf.v1.SaveInfrastructureConnectionRequest.connection:type_name -> golf.v1.InfrastructureConnection
-	228, // 223: golf.v1.SaveInfrastructureConnectionRequest.credential:type_name -> golf.v1.InfrastructureConnectionCredential
-	227, // 224: golf.v1.SaveInfrastructureConnectionResponse.connection:type_name -> golf.v1.InfrastructureConnection
-	227, // 225: golf.v1.ActivateInfrastructureConnectionResponse.connection:type_name -> golf.v1.InfrastructureConnection
-	237, // 226: golf.v1.GetProfileResponse.profile:type_name -> golf.v1.Profile
-	237, // 227: golf.v1.UpdateProfileResponse.profile:type_name -> golf.v1.Profile
-	62,  // 228: golf.v1.ListAutomationGrantsRequest.repository:type_name -> golf.v1.RepositoryKey
-	242, // 229: golf.v1.ListAutomationGrantsResponse.grants:type_name -> golf.v1.AutomationGrant
-	62,  // 230: golf.v1.CreateAutomationGrantRequest.repository:type_name -> golf.v1.RepositoryKey
-	242, // 231: golf.v1.CreateAutomationGrantResponse.grant:type_name -> golf.v1.AutomationGrant
-	62,  // 232: golf.v1.RevokeAutomationGrantRequest.repository:type_name -> golf.v1.RepositoryKey
-	242, // 233: golf.v1.RevokeAutomationGrantResponse.grant:type_name -> golf.v1.AutomationGrant
-	249, // 234: golf.v1.GetAccountSecurityResponse.security:type_name -> golf.v1.AccountSecurity
-	179, // 235: golf.v1.EnrollRegularLocalAccountResponse.account:type_name -> golf.v1.LocalAccountInfo
-	179, // 236: golf.v1.ResetRegularLocalPasswordResponse.account:type_name -> golf.v1.LocalAccountInfo
-	179, // 237: golf.v1.EnableRegularLocalAccountResponse.account:type_name -> golf.v1.LocalAccountInfo
+	221, // 215: golf.v1.UpdateOrganizationCreationPolicyResponse.policy:type_name -> golf.v1.OrganizationCreationPolicy
+	155, // 216: golf.v1.CreateOrganizationResponse.organization:type_name -> golf.v1.Organization
+	64,  // 217: golf.v1.ListInfrastructureConnectionsRequest.page:type_name -> golf.v1.PageRequest
+	228, // 218: golf.v1.ListInfrastructureConnectionsResponse.connections:type_name -> golf.v1.InfrastructureConnection
+	65,  // 219: golf.v1.ListInfrastructureConnectionsResponse.page:type_name -> golf.v1.PageResponse
+	228, // 220: golf.v1.ListInfrastructureConnectionsResponse.deployment_defaults:type_name -> golf.v1.InfrastructureConnection
+	228, // 221: golf.v1.ListInfrastructureConnectionsResponse.active_connection:type_name -> golf.v1.InfrastructureConnection
+	228, // 222: golf.v1.SaveInfrastructureConnectionRequest.connection:type_name -> golf.v1.InfrastructureConnection
+	229, // 223: golf.v1.SaveInfrastructureConnectionRequest.credential:type_name -> golf.v1.InfrastructureConnectionCredential
+	228, // 224: golf.v1.SaveInfrastructureConnectionResponse.connection:type_name -> golf.v1.InfrastructureConnection
+	228, // 225: golf.v1.ActivateInfrastructureConnectionResponse.connection:type_name -> golf.v1.InfrastructureConnection
+	238, // 226: golf.v1.GetProfileResponse.profile:type_name -> golf.v1.Profile
+	238, // 227: golf.v1.UpdateProfileResponse.profile:type_name -> golf.v1.Profile
+	63,  // 228: golf.v1.ListAutomationGrantsRequest.repository:type_name -> golf.v1.RepositoryKey
+	243, // 229: golf.v1.ListAutomationGrantsResponse.grants:type_name -> golf.v1.AutomationGrant
+	63,  // 230: golf.v1.CreateAutomationGrantRequest.repository:type_name -> golf.v1.RepositoryKey
+	243, // 231: golf.v1.CreateAutomationGrantResponse.grant:type_name -> golf.v1.AutomationGrant
+	63,  // 232: golf.v1.RevokeAutomationGrantRequest.repository:type_name -> golf.v1.RepositoryKey
+	243, // 233: golf.v1.RevokeAutomationGrantResponse.grant:type_name -> golf.v1.AutomationGrant
+	250, // 234: golf.v1.GetAccountSecurityResponse.security:type_name -> golf.v1.AccountSecurity
+	180, // 235: golf.v1.EnrollRegularLocalAccountResponse.account:type_name -> golf.v1.LocalAccountInfo
+	180, // 236: golf.v1.ResetRegularLocalPasswordResponse.account:type_name -> golf.v1.LocalAccountInfo
+	180, // 237: golf.v1.EnableRegularLocalAccountResponse.account:type_name -> golf.v1.LocalAccountInfo
 	23,  // 238: golf.v1.CodexConnection.state:type_name -> golf.v1.CodexConnectionState
 	24,  // 239: golf.v1.CodexConnection.auth_method:type_name -> golf.v1.CodexLoginMethod
 	25,  // 240: golf.v1.CodexConnection.scope:type_name -> golf.v1.CodexConnectionScope
-	262, // 241: golf.v1.GetCodexConnectionResponse.connection:type_name -> golf.v1.CodexConnection
+	263, // 241: golf.v1.GetCodexConnectionResponse.connection:type_name -> golf.v1.CodexConnection
 	24,  // 242: golf.v1.StartCodexLoginRequest.method:type_name -> golf.v1.CodexLoginMethod
-	262, // 243: golf.v1.StartCodexLoginResponse.connection:type_name -> golf.v1.CodexConnection
-	262, // 244: golf.v1.CancelCodexLoginResponse.connection:type_name -> golf.v1.CodexConnection
-	270, // 245: golf.v1.CodexQuotaBucket.primary:type_name -> golf.v1.CodexQuotaWindow
-	270, // 246: golf.v1.CodexQuotaBucket.secondary:type_name -> golf.v1.CodexQuotaWindow
-	271, // 247: golf.v1.CodexUsage.buckets:type_name -> golf.v1.CodexQuotaBucket
-	262, // 248: golf.v1.RefreshCodexConnectionResponse.connection:type_name -> golf.v1.CodexConnection
-	272, // 249: golf.v1.RefreshCodexConnectionResponse.usage:type_name -> golf.v1.CodexUsage
-	262, // 250: golf.v1.DisconnectCodexConnectionResponse.connection:type_name -> golf.v1.CodexConnection
-	262, // 251: golf.v1.ListCodexConnectionsResponse.connections:type_name -> golf.v1.CodexConnection
-	262, // 252: golf.v1.CreateCodexConnectionResponse.connection:type_name -> golf.v1.CodexConnection
-	262, // 253: golf.v1.SetCodexConnectionAccessResponse.connection:type_name -> golf.v1.CodexConnection
-	262, // 254: golf.v1.CompleteAgentLoginResponse.connection:type_name -> golf.v1.CodexConnection
+	263, // 243: golf.v1.StartCodexLoginResponse.connection:type_name -> golf.v1.CodexConnection
+	263, // 244: golf.v1.CancelCodexLoginResponse.connection:type_name -> golf.v1.CodexConnection
+	271, // 245: golf.v1.CodexQuotaBucket.primary:type_name -> golf.v1.CodexQuotaWindow
+	271, // 246: golf.v1.CodexQuotaBucket.secondary:type_name -> golf.v1.CodexQuotaWindow
+	272, // 247: golf.v1.CodexUsage.buckets:type_name -> golf.v1.CodexQuotaBucket
+	263, // 248: golf.v1.RefreshCodexConnectionResponse.connection:type_name -> golf.v1.CodexConnection
+	273, // 249: golf.v1.RefreshCodexConnectionResponse.usage:type_name -> golf.v1.CodexUsage
+	263, // 250: golf.v1.DisconnectCodexConnectionResponse.connection:type_name -> golf.v1.CodexConnection
+	263, // 251: golf.v1.ListCodexConnectionsResponse.connections:type_name -> golf.v1.CodexConnection
+	263, // 252: golf.v1.CreateCodexConnectionResponse.connection:type_name -> golf.v1.CodexConnection
+	263, // 253: golf.v1.SetCodexConnectionAccessResponse.connection:type_name -> golf.v1.CodexConnection
+	263, // 254: golf.v1.CompleteAgentLoginResponse.connection:type_name -> golf.v1.CodexConnection
 	26,  // 255: golf.v1.AgentUsageSettings.scope:type_name -> golf.v1.AgentUsageScope
-	284, // 256: golf.v1.AgentUsageSettings.config:type_name -> golf.v1.AgentUsageConfig
-	284, // 257: golf.v1.AgentUsageSettings.effective:type_name -> golf.v1.AgentUsageConfig
+	285, // 256: golf.v1.AgentUsageSettings.config:type_name -> golf.v1.AgentUsageConfig
+	285, // 257: golf.v1.AgentUsageSettings.effective:type_name -> golf.v1.AgentUsageConfig
 	26,  // 258: golf.v1.GetAgentUsageRequest.scope:type_name -> golf.v1.AgentUsageScope
-	62,  // 259: golf.v1.GetAgentUsageRequest.repository:type_name -> golf.v1.RepositoryKey
-	285, // 260: golf.v1.GetAgentUsageResponse.settings:type_name -> golf.v1.AgentUsageSettings
+	63,  // 259: golf.v1.GetAgentUsageRequest.repository:type_name -> golf.v1.RepositoryKey
+	286, // 260: golf.v1.GetAgentUsageResponse.settings:type_name -> golf.v1.AgentUsageSettings
 	26,  // 261: golf.v1.SaveAgentUsageRequest.scope:type_name -> golf.v1.AgentUsageScope
-	62,  // 262: golf.v1.SaveAgentUsageRequest.repository:type_name -> golf.v1.RepositoryKey
-	284, // 263: golf.v1.SaveAgentUsageRequest.config:type_name -> golf.v1.AgentUsageConfig
-	285, // 264: golf.v1.SaveAgentUsageResponse.settings:type_name -> golf.v1.AgentUsageSettings
-	290, // 265: golf.v1.ListAgentModelsResponse.models:type_name -> golf.v1.AgentModel
+	63,  // 262: golf.v1.SaveAgentUsageRequest.repository:type_name -> golf.v1.RepositoryKey
+	285, // 263: golf.v1.SaveAgentUsageRequest.config:type_name -> golf.v1.AgentUsageConfig
+	286, // 264: golf.v1.SaveAgentUsageResponse.settings:type_name -> golf.v1.AgentUsageSettings
+	291, // 265: golf.v1.ListAgentModelsResponse.models:type_name -> golf.v1.AgentModel
 	26,  // 266: golf.v1.PreviewAgentTaskRequest.scope:type_name -> golf.v1.AgentUsageScope
-	62,  // 267: golf.v1.PreviewAgentTaskRequest.repository:type_name -> golf.v1.RepositoryKey
-	293, // 268: golf.v1.PreviewAgentTaskRequest.selection:type_name -> golf.v1.AgentTaskSelection
-	285, // 269: golf.v1.PreviewAgentTaskResponse.settings:type_name -> golf.v1.AgentUsageSettings
-	62,  // 270: golf.v1.AgentTask.repository:type_name -> golf.v1.RepositoryKey
-	62,  // 271: golf.v1.CreateAgentTaskRequest.repository:type_name -> golf.v1.RepositoryKey
-	293, // 272: golf.v1.CreateAgentTaskRequest.selection:type_name -> golf.v1.AgentTaskSelection
-	62,  // 273: golf.v1.ListAgentTasksRequest.repository:type_name -> golf.v1.RepositoryKey
-	296, // 274: golf.v1.ListAgentTasksResponse.tasks:type_name -> golf.v1.AgentTask
-	296, // 275: golf.v1.CreateAgentTaskResponse.task:type_name -> golf.v1.AgentTask
-	296, // 276: golf.v1.GetAgentTaskResponse.task:type_name -> golf.v1.AgentTask
-	296, // 277: golf.v1.CancelAgentTaskResponse.task:type_name -> golf.v1.AgentTask
-	62,  // 278: golf.v1.Reviewer.repository:type_name -> golf.v1.RepositoryKey
-	62,  // 279: golf.v1.GetReviewerRequest.repository:type_name -> golf.v1.RepositoryKey
-	305, // 280: golf.v1.GetReviewerResponse.reviewer:type_name -> golf.v1.Reviewer
-	305, // 281: golf.v1.SaveReviewerRequest.reviewer:type_name -> golf.v1.Reviewer
-	305, // 282: golf.v1.SaveReviewerResponse.reviewer:type_name -> golf.v1.Reviewer
-	62,  // 283: golf.v1.ListReviewerRunsRequest.repository:type_name -> golf.v1.RepositoryKey
-	310, // 284: golf.v1.ListReviewerRunsResponse.runs:type_name -> golf.v1.ReviewerRun
-	62,  // 285: golf.v1.RequestReviewRequest.repository:type_name -> golf.v1.RepositoryKey
-	310, // 286: golf.v1.RequestReviewResponse.run:type_name -> golf.v1.ReviewerRun
-	62,  // 287: golf.v1.GetPullRequestDiscussionRequest.repository:type_name -> golf.v1.RepositoryKey
-	113, // 288: golf.v1.GetPullRequestDiscussionResponse.issue:type_name -> golf.v1.Issue
-	62,  // 289: golf.v1.WatchRepositoryRequest.repository:type_name -> golf.v1.RepositoryKey
-	62,  // 290: golf.v1.PullRequestSelection.repository:type_name -> golf.v1.RepositoryKey
-	319, // 291: golf.v1.ListPullRequestCommitsRequest.selection:type_name -> golf.v1.PullRequestSelection
-	63,  // 292: golf.v1.ListPullRequestCommitsRequest.page:type_name -> golf.v1.PageRequest
-	319, // 293: golf.v1.ListPullRequestCommitsResponse.selection:type_name -> golf.v1.PullRequestSelection
-	95,  // 294: golf.v1.ListPullRequestCommitsResponse.commits:type_name -> golf.v1.Commit
-	64,  // 295: golf.v1.ListPullRequestCommitsResponse.page:type_name -> golf.v1.PageResponse
+	63,  // 267: golf.v1.PreviewAgentTaskRequest.repository:type_name -> golf.v1.RepositoryKey
+	294, // 268: golf.v1.PreviewAgentTaskRequest.selection:type_name -> golf.v1.AgentTaskSelection
+	286, // 269: golf.v1.PreviewAgentTaskResponse.settings:type_name -> golf.v1.AgentUsageSettings
+	63,  // 270: golf.v1.AgentTask.repository:type_name -> golf.v1.RepositoryKey
+	63,  // 271: golf.v1.CreateAgentTaskRequest.repository:type_name -> golf.v1.RepositoryKey
+	294, // 272: golf.v1.CreateAgentTaskRequest.selection:type_name -> golf.v1.AgentTaskSelection
+	63,  // 273: golf.v1.ListAgentTasksRequest.repository:type_name -> golf.v1.RepositoryKey
+	297, // 274: golf.v1.ListAgentTasksResponse.tasks:type_name -> golf.v1.AgentTask
+	297, // 275: golf.v1.CreateAgentTaskResponse.task:type_name -> golf.v1.AgentTask
+	297, // 276: golf.v1.GetAgentTaskResponse.task:type_name -> golf.v1.AgentTask
+	297, // 277: golf.v1.CancelAgentTaskResponse.task:type_name -> golf.v1.AgentTask
+	63,  // 278: golf.v1.Reviewer.repository:type_name -> golf.v1.RepositoryKey
+	63,  // 279: golf.v1.GetReviewerRequest.repository:type_name -> golf.v1.RepositoryKey
+	306, // 280: golf.v1.GetReviewerResponse.reviewer:type_name -> golf.v1.Reviewer
+	306, // 281: golf.v1.SaveReviewerRequest.reviewer:type_name -> golf.v1.Reviewer
+	306, // 282: golf.v1.SaveReviewerResponse.reviewer:type_name -> golf.v1.Reviewer
+	63,  // 283: golf.v1.ListReviewerRunsRequest.repository:type_name -> golf.v1.RepositoryKey
+	311, // 284: golf.v1.ListReviewerRunsResponse.runs:type_name -> golf.v1.ReviewerRun
+	63,  // 285: golf.v1.RequestReviewRequest.repository:type_name -> golf.v1.RepositoryKey
+	311, // 286: golf.v1.RequestReviewResponse.run:type_name -> golf.v1.ReviewerRun
+	63,  // 287: golf.v1.GetPullRequestDiscussionRequest.repository:type_name -> golf.v1.RepositoryKey
+	114, // 288: golf.v1.GetPullRequestDiscussionResponse.issue:type_name -> golf.v1.Issue
+	63,  // 289: golf.v1.WatchRepositoryRequest.repository:type_name -> golf.v1.RepositoryKey
+	63,  // 290: golf.v1.PullRequestSelection.repository:type_name -> golf.v1.RepositoryKey
+	320, // 291: golf.v1.ListPullRequestCommitsRequest.selection:type_name -> golf.v1.PullRequestSelection
+	64,  // 292: golf.v1.ListPullRequestCommitsRequest.page:type_name -> golf.v1.PageRequest
+	320, // 293: golf.v1.ListPullRequestCommitsResponse.selection:type_name -> golf.v1.PullRequestSelection
+	96,  // 294: golf.v1.ListPullRequestCommitsResponse.commits:type_name -> golf.v1.Commit
+	65,  // 295: golf.v1.ListPullRequestCommitsResponse.page:type_name -> golf.v1.PageResponse
 	27,  // 296: golf.v1.ReportedCheck.state:type_name -> golf.v1.ReportedCheckState
-	60,  // 297: golf.v1.ReportedCheck.creator:type_name -> golf.v1.User
-	319, // 298: golf.v1.ListPullRequestChecksRequest.selection:type_name -> golf.v1.PullRequestSelection
-	63,  // 299: golf.v1.ListPullRequestChecksRequest.page:type_name -> golf.v1.PageRequest
-	319, // 300: golf.v1.ListPullRequestChecksResponse.selection:type_name -> golf.v1.PullRequestSelection
-	322, // 301: golf.v1.ListPullRequestChecksResponse.checks:type_name -> golf.v1.ReportedCheck
-	64,  // 302: golf.v1.ListPullRequestChecksResponse.page:type_name -> golf.v1.PageResponse
-	62,  // 303: golf.v1.CreatePullRequestRequest.repository:type_name -> golf.v1.RepositoryKey
-	62,  // 304: golf.v1.CreatePullRequestRequest.source_repository:type_name -> golf.v1.RepositoryKey
-	121, // 305: golf.v1.CreatePullRequestResponse.mutation:type_name -> golf.v1.IssueMutation
-	131, // 306: golf.v1.CreatePullRequestResponse.pull_request:type_name -> golf.v1.PullRequest
-	62,  // 307: golf.v1.RepositoryComparisonSelection.repository:type_name -> golf.v1.RepositoryKey
-	62,  // 308: golf.v1.RepositoryComparisonSelection.source_repository:type_name -> golf.v1.RepositoryKey
-	327, // 309: golf.v1.GetRepositoryComparisonRequest.selection:type_name -> golf.v1.RepositoryComparisonSelection
-	327, // 310: golf.v1.GetRepositoryComparisonResponse.selection:type_name -> golf.v1.RepositoryComparisonSelection
-	95,  // 311: golf.v1.GetRepositoryComparisonResponse.commits:type_name -> golf.v1.Commit
-	62,  // 312: golf.v1.UpdatePullRequestRequest.repository:type_name -> golf.v1.RepositoryKey
+	61,  // 297: golf.v1.ReportedCheck.creator:type_name -> golf.v1.User
+	320, // 298: golf.v1.ListPullRequestChecksRequest.selection:type_name -> golf.v1.PullRequestSelection
+	64,  // 299: golf.v1.ListPullRequestChecksRequest.page:type_name -> golf.v1.PageRequest
+	320, // 300: golf.v1.ListPullRequestChecksResponse.selection:type_name -> golf.v1.PullRequestSelection
+	323, // 301: golf.v1.ListPullRequestChecksResponse.checks:type_name -> golf.v1.ReportedCheck
+	65,  // 302: golf.v1.ListPullRequestChecksResponse.page:type_name -> golf.v1.PageResponse
+	63,  // 303: golf.v1.CreatePullRequestRequest.repository:type_name -> golf.v1.RepositoryKey
+	63,  // 304: golf.v1.CreatePullRequestRequest.source_repository:type_name -> golf.v1.RepositoryKey
+	122, // 305: golf.v1.CreatePullRequestResponse.mutation:type_name -> golf.v1.IssueMutation
+	132, // 306: golf.v1.CreatePullRequestResponse.pull_request:type_name -> golf.v1.PullRequest
+	63,  // 307: golf.v1.RepositoryComparisonSelection.repository:type_name -> golf.v1.RepositoryKey
+	63,  // 308: golf.v1.RepositoryComparisonSelection.source_repository:type_name -> golf.v1.RepositoryKey
+	328, // 309: golf.v1.GetRepositoryComparisonRequest.selection:type_name -> golf.v1.RepositoryComparisonSelection
+	328, // 310: golf.v1.GetRepositoryComparisonResponse.selection:type_name -> golf.v1.RepositoryComparisonSelection
+	96,  // 311: golf.v1.GetRepositoryComparisonResponse.commits:type_name -> golf.v1.Commit
+	63,  // 312: golf.v1.UpdatePullRequestRequest.repository:type_name -> golf.v1.RepositoryKey
 	6,   // 313: golf.v1.UpdatePullRequestRequest.state:type_name -> golf.v1.IssueState
-	121, // 314: golf.v1.UpdatePullRequestResponse.mutation:type_name -> golf.v1.IssueMutation
-	131, // 315: golf.v1.UpdatePullRequestResponse.pull_request:type_name -> golf.v1.PullRequest
-	62,  // 316: golf.v1.PullReviewDraftTarget.repository:type_name -> golf.v1.RepositoryKey
-	319, // 317: golf.v1.PullReviewDraftCapture.selection:type_name -> golf.v1.PullRequestSelection
-	333, // 318: golf.v1.PullReviewDraftComparison.capture:type_name -> golf.v1.PullReviewDraftCapture
+	122, // 314: golf.v1.UpdatePullRequestResponse.mutation:type_name -> golf.v1.IssueMutation
+	132, // 315: golf.v1.UpdatePullRequestResponse.pull_request:type_name -> golf.v1.PullRequest
+	63,  // 316: golf.v1.PullReviewDraftTarget.repository:type_name -> golf.v1.RepositoryKey
+	320, // 317: golf.v1.PullReviewDraftCapture.selection:type_name -> golf.v1.PullRequestSelection
+	334, // 318: golf.v1.PullReviewDraftComparison.capture:type_name -> golf.v1.PullReviewDraftCapture
 	28,  // 319: golf.v1.PullReviewDraftCoordinate.side:type_name -> golf.v1.PullReviewDraftSide
-	335, // 320: golf.v1.PullReviewDraftEntry.coordinate:type_name -> golf.v1.PullReviewDraftCoordinate
-	332, // 321: golf.v1.PullReviewDraft.target:type_name -> golf.v1.PullReviewDraftTarget
-	334, // 322: golf.v1.PullReviewDraft.comparison:type_name -> golf.v1.PullReviewDraftComparison
-	336, // 323: golf.v1.PullReviewDraft.entries:type_name -> golf.v1.PullReviewDraftEntry
-	332, // 324: golf.v1.PullReviewDraftReceipt.target:type_name -> golf.v1.PullReviewDraftTarget
+	336, // 320: golf.v1.PullReviewDraftEntry.coordinate:type_name -> golf.v1.PullReviewDraftCoordinate
+	333, // 321: golf.v1.PullReviewDraft.target:type_name -> golf.v1.PullReviewDraftTarget
+	335, // 322: golf.v1.PullReviewDraft.comparison:type_name -> golf.v1.PullReviewDraftComparison
+	337, // 323: golf.v1.PullReviewDraft.entries:type_name -> golf.v1.PullReviewDraftEntry
+	333, // 324: golf.v1.PullReviewDraftReceipt.target:type_name -> golf.v1.PullReviewDraftTarget
 	29,  // 325: golf.v1.PullReviewDraftReceipt.kind:type_name -> golf.v1.PullReviewDraftOperationKind
-	332, // 326: golf.v1.GetPullRequestReviewDraftRequest.target:type_name -> golf.v1.PullReviewDraftTarget
-	337, // 327: golf.v1.GetPullRequestReviewDraftResponse.draft:type_name -> golf.v1.PullReviewDraft
-	338, // 328: golf.v1.GetPullRequestReviewDraftResponse.receipt:type_name -> golf.v1.PullReviewDraftReceipt
-	332, // 329: golf.v1.SavePullRequestReviewDraftRequest.target:type_name -> golf.v1.PullReviewDraftTarget
-	333, // 330: golf.v1.SavePullRequestReviewDraftRequest.capture:type_name -> golf.v1.PullReviewDraftCapture
-	336, // 331: golf.v1.SavePullRequestReviewDraftRequest.entries:type_name -> golf.v1.PullReviewDraftEntry
-	338, // 332: golf.v1.SavePullRequestReviewDraftResponse.receipt:type_name -> golf.v1.PullReviewDraftReceipt
-	337, // 333: golf.v1.SavePullRequestReviewDraftResponse.draft:type_name -> golf.v1.PullReviewDraft
-	332, // 334: golf.v1.DeletePullRequestReviewDraftRequest.target:type_name -> golf.v1.PullReviewDraftTarget
-	338, // 335: golf.v1.DeletePullRequestReviewDraftResponse.receipt:type_name -> golf.v1.PullReviewDraftReceipt
-	332, // 336: golf.v1.PublishPullRequestReviewDraftRequest.target:type_name -> golf.v1.PullReviewDraftTarget
+	333, // 326: golf.v1.GetPullRequestReviewDraftRequest.target:type_name -> golf.v1.PullReviewDraftTarget
+	338, // 327: golf.v1.GetPullRequestReviewDraftResponse.draft:type_name -> golf.v1.PullReviewDraft
+	339, // 328: golf.v1.GetPullRequestReviewDraftResponse.receipt:type_name -> golf.v1.PullReviewDraftReceipt
+	333, // 329: golf.v1.SavePullRequestReviewDraftRequest.target:type_name -> golf.v1.PullReviewDraftTarget
+	334, // 330: golf.v1.SavePullRequestReviewDraftRequest.capture:type_name -> golf.v1.PullReviewDraftCapture
+	337, // 331: golf.v1.SavePullRequestReviewDraftRequest.entries:type_name -> golf.v1.PullReviewDraftEntry
+	339, // 332: golf.v1.SavePullRequestReviewDraftResponse.receipt:type_name -> golf.v1.PullReviewDraftReceipt
+	338, // 333: golf.v1.SavePullRequestReviewDraftResponse.draft:type_name -> golf.v1.PullReviewDraft
+	333, // 334: golf.v1.DeletePullRequestReviewDraftRequest.target:type_name -> golf.v1.PullReviewDraftTarget
+	339, // 335: golf.v1.DeletePullRequestReviewDraftResponse.receipt:type_name -> golf.v1.PullReviewDraftReceipt
+	333, // 336: golf.v1.PublishPullRequestReviewDraftRequest.target:type_name -> golf.v1.PullReviewDraftTarget
 	9,   // 337: golf.v1.PublishPullRequestReviewDraftRequest.decision:type_name -> golf.v1.PullRequestReviewState
-	332, // 338: golf.v1.PullInlineReviewMutation.target:type_name -> golf.v1.PullReviewDraftTarget
+	333, // 338: golf.v1.PullInlineReviewMutation.target:type_name -> golf.v1.PullReviewDraftTarget
 	9,   // 339: golf.v1.PullInlineReviewMutation.decision:type_name -> golf.v1.PullRequestReviewState
 	30,  // 340: golf.v1.PullInlineReviewMutation.phase:type_name -> golf.v1.PullInlineReviewPhase
-	346, // 341: golf.v1.PublishPullRequestReviewDraftResponse.mutation:type_name -> golf.v1.PullInlineReviewMutation
-	332, // 342: golf.v1.GetPullRequestInlineReviewMutationRequest.target:type_name -> golf.v1.PullReviewDraftTarget
-	346, // 343: golf.v1.GetPullRequestInlineReviewMutationResponse.mutation:type_name -> golf.v1.PullInlineReviewMutation
-	62,  // 344: golf.v1.GetRepositoryOverviewRequest.repository:type_name -> golf.v1.RepositoryKey
-	62,  // 345: golf.v1.GetRepositoryOverviewResponse.repository:type_name -> golf.v1.RepositoryKey
-	350, // 346: golf.v1.GetRepositoryOverviewResponse.languages:type_name -> golf.v1.RepositoryLanguage
+	347, // 341: golf.v1.PublishPullRequestReviewDraftResponse.mutation:type_name -> golf.v1.PullInlineReviewMutation
+	333, // 342: golf.v1.GetPullRequestInlineReviewMutationRequest.target:type_name -> golf.v1.PullReviewDraftTarget
+	347, // 343: golf.v1.GetPullRequestInlineReviewMutationResponse.mutation:type_name -> golf.v1.PullInlineReviewMutation
+	63,  // 344: golf.v1.GetRepositoryOverviewRequest.repository:type_name -> golf.v1.RepositoryKey
+	63,  // 345: golf.v1.GetRepositoryOverviewResponse.repository:type_name -> golf.v1.RepositoryKey
+	351, // 346: golf.v1.GetRepositoryOverviewResponse.languages:type_name -> golf.v1.RepositoryLanguage
 	31,  // 347: golf.v1.GetRepositoryOverviewResponse.languages_state:type_name -> golf.v1.RepositoryOverviewSectionState
 	31,  // 348: golf.v1.GetRepositoryOverviewResponse.licenses_state:type_name -> golf.v1.RepositoryOverviewSectionState
 	32,  // 349: golf.v1.ActionRunRef.kind:type_name -> golf.v1.ActionRunKind
-	353, // 350: golf.v1.ActionRunSummary.ref:type_name -> golf.v1.ActionRunRef
-	353, // 351: golf.v1.ActionRunSummary.child_task:type_name -> golf.v1.ActionRunRef
-	62,  // 352: golf.v1.ListActionRunsRequest.repository:type_name -> golf.v1.RepositoryKey
+	354, // 350: golf.v1.ActionRunSummary.ref:type_name -> golf.v1.ActionRunRef
+	354, // 351: golf.v1.ActionRunSummary.child_task:type_name -> golf.v1.ActionRunRef
+	63,  // 352: golf.v1.ListActionRunsRequest.repository:type_name -> golf.v1.RepositoryKey
 	32,  // 353: golf.v1.ListActionRunsRequest.kind_filter:type_name -> golf.v1.ActionRunKind
-	354, // 354: golf.v1.ListActionRunsResponse.runs:type_name -> golf.v1.ActionRunSummary
-	62,  // 355: golf.v1.GetActionRunRequest.repository:type_name -> golf.v1.RepositoryKey
-	353, // 356: golf.v1.GetActionRunRequest.ref:type_name -> golf.v1.ActionRunRef
-	354, // 357: golf.v1.GetActionRunResponse.summary:type_name -> golf.v1.ActionRunSummary
-	206, // 358: golf.v1.GetActionRunResponse.workflow:type_name -> golf.v1.WorkflowRun
-	296, // 359: golf.v1.GetActionRunResponse.task:type_name -> golf.v1.AgentTask
-	310, // 360: golf.v1.GetActionRunResponse.review:type_name -> golf.v1.ReviewerRun
+	355, // 354: golf.v1.ListActionRunsResponse.runs:type_name -> golf.v1.ActionRunSummary
+	63,  // 355: golf.v1.GetActionRunRequest.repository:type_name -> golf.v1.RepositoryKey
+	354, // 356: golf.v1.GetActionRunRequest.ref:type_name -> golf.v1.ActionRunRef
+	355, // 357: golf.v1.GetActionRunResponse.summary:type_name -> golf.v1.ActionRunSummary
+	207, // 358: golf.v1.GetActionRunResponse.workflow:type_name -> golf.v1.WorkflowRun
+	297, // 359: golf.v1.GetActionRunResponse.task:type_name -> golf.v1.AgentTask
+	311, // 360: golf.v1.GetActionRunResponse.review:type_name -> golf.v1.ReviewerRun
 	33,  // 361: golf.v1.AgentTaskEvent.body_state:type_name -> golf.v1.AgentEventBodyState
-	359, // 362: golf.v1.AgentTaskEvent.plan:type_name -> golf.v1.AgentEventPlanStep
-	62,  // 363: golf.v1.ListAgentTaskEventsRequest.repository:type_name -> golf.v1.RepositoryKey
+	360, // 362: golf.v1.AgentTaskEvent.plan:type_name -> golf.v1.AgentEventPlanStep
+	63,  // 363: golf.v1.ListAgentTaskEventsRequest.repository:type_name -> golf.v1.RepositoryKey
 	33,  // 364: golf.v1.ListAgentTaskEventsResponse.body_state:type_name -> golf.v1.AgentEventBodyState
-	360, // 365: golf.v1.ListAgentTaskEventsResponse.events:type_name -> golf.v1.AgentTaskEvent
-	62,  // 366: golf.v1.ListRepositoryDeployKeysRequest.repository:type_name -> golf.v1.RepositoryKey
-	63,  // 367: golf.v1.ListRepositoryDeployKeysRequest.page:type_name -> golf.v1.PageRequest
-	363, // 368: golf.v1.ListRepositoryDeployKeysResponse.keys:type_name -> golf.v1.RepositoryDeployKey
-	64,  // 369: golf.v1.ListRepositoryDeployKeysResponse.page:type_name -> golf.v1.PageResponse
-	62,  // 370: golf.v1.AddRepositoryDeployKeyRequest.repository:type_name -> golf.v1.RepositoryKey
-	363, // 371: golf.v1.AddRepositoryDeployKeyResponse.key:type_name -> golf.v1.RepositoryDeployKey
-	62,  // 372: golf.v1.DeleteRepositoryDeployKeyRequest.repository:type_name -> golf.v1.RepositoryKey
-	370, // 373: golf.v1.WorkflowJobInstance.matrix:type_name -> golf.v1.WorkflowMatrixEntry
+	361, // 365: golf.v1.ListAgentTaskEventsResponse.events:type_name -> golf.v1.AgentTaskEvent
+	63,  // 366: golf.v1.ListRepositoryDeployKeysRequest.repository:type_name -> golf.v1.RepositoryKey
+	64,  // 367: golf.v1.ListRepositoryDeployKeysRequest.page:type_name -> golf.v1.PageRequest
+	364, // 368: golf.v1.ListRepositoryDeployKeysResponse.keys:type_name -> golf.v1.RepositoryDeployKey
+	65,  // 369: golf.v1.ListRepositoryDeployKeysResponse.page:type_name -> golf.v1.PageResponse
+	63,  // 370: golf.v1.AddRepositoryDeployKeyRequest.repository:type_name -> golf.v1.RepositoryKey
+	364, // 371: golf.v1.AddRepositoryDeployKeyResponse.key:type_name -> golf.v1.RepositoryDeployKey
+	63,  // 372: golf.v1.DeleteRepositoryDeployKeyRequest.repository:type_name -> golf.v1.RepositoryKey
+	371, // 373: golf.v1.WorkflowJobInstance.matrix:type_name -> golf.v1.WorkflowMatrixEntry
 	21,  // 374: golf.v1.WorkflowJobInstance.state:type_name -> golf.v1.WorkflowStepState
-	372, // 375: golf.v1.WorkflowJobInstance.steps:type_name -> golf.v1.WorkflowEngineStep
+	373, // 375: golf.v1.WorkflowJobInstance.steps:type_name -> golf.v1.WorkflowEngineStep
 	21,  // 376: golf.v1.WorkflowEngineStep.state:type_name -> golf.v1.WorkflowStepState
-	62,  // 377: golf.v1.RepositoryWebhookTarget.repository:type_name -> golf.v1.RepositoryKey
-	373, // 378: golf.v1.ListRepositoryWebhooksRequest.target:type_name -> golf.v1.RepositoryWebhookTarget
-	63,  // 379: golf.v1.ListRepositoryWebhooksRequest.page:type_name -> golf.v1.PageRequest
-	373, // 380: golf.v1.ListRepositoryWebhooksResponse.target:type_name -> golf.v1.RepositoryWebhookTarget
-	374, // 381: golf.v1.ListRepositoryWebhooksResponse.subscriptions:type_name -> golf.v1.RepositoryWebhookSubscription
-	64,  // 382: golf.v1.ListRepositoryWebhooksResponse.page:type_name -> golf.v1.PageResponse
-	373, // 383: golf.v1.SaveRepositoryWebhookRequest.target:type_name -> golf.v1.RepositoryWebhookTarget
-	373, // 384: golf.v1.SaveRepositoryWebhookResponse.target:type_name -> golf.v1.RepositoryWebhookTarget
-	374, // 385: golf.v1.SaveRepositoryWebhookResponse.subscription:type_name -> golf.v1.RepositoryWebhookSubscription
-	373, // 386: golf.v1.ListRepositoryWebhookDeliveriesRequest.target:type_name -> golf.v1.RepositoryWebhookTarget
-	63,  // 387: golf.v1.ListRepositoryWebhookDeliveriesRequest.page:type_name -> golf.v1.PageRequest
-	373, // 388: golf.v1.ListRepositoryWebhookDeliveriesResponse.target:type_name -> golf.v1.RepositoryWebhookTarget
-	375, // 389: golf.v1.ListRepositoryWebhookDeliveriesResponse.deliveries:type_name -> golf.v1.RepositoryWebhookDelivery
-	64,  // 390: golf.v1.ListRepositoryWebhookDeliveriesResponse.page:type_name -> golf.v1.PageResponse
-	373, // 391: golf.v1.TestRepositoryWebhookRequest.target:type_name -> golf.v1.RepositoryWebhookTarget
-	373, // 392: golf.v1.RedeliverRepositoryWebhookRequest.target:type_name -> golf.v1.RepositoryWebhookTarget
-	373, // 393: golf.v1.TestRepositoryWebhookResponse.target:type_name -> golf.v1.RepositoryWebhookTarget
-	375, // 394: golf.v1.TestRepositoryWebhookResponse.delivery:type_name -> golf.v1.RepositoryWebhookDelivery
-	373, // 395: golf.v1.RedeliverRepositoryWebhookResponse.target:type_name -> golf.v1.RepositoryWebhookTarget
-	375, // 396: golf.v1.RedeliverRepositoryWebhookResponse.delivery:type_name -> golf.v1.RepositoryWebhookDelivery
-	155, // 397: golf.v1.RepositoryTeamAccess.team:type_name -> golf.v1.OrganizationTeam
-	62,  // 398: golf.v1.ListRepositoryTeamAccessRequest.repository:type_name -> golf.v1.RepositoryKey
-	63,  // 399: golf.v1.ListRepositoryTeamAccessRequest.page:type_name -> golf.v1.PageRequest
-	386, // 400: golf.v1.ListRepositoryTeamAccessResponse.teams:type_name -> golf.v1.RepositoryTeamAccess
-	64,  // 401: golf.v1.ListRepositoryTeamAccessResponse.page:type_name -> golf.v1.PageResponse
-	62,  // 402: golf.v1.AttachRepositoryTeamRequest.repository:type_name -> golf.v1.RepositoryKey
-	386, // 403: golf.v1.AttachRepositoryTeamResponse.team:type_name -> golf.v1.RepositoryTeamAccess
-	62,  // 404: golf.v1.DetachRepositoryTeamRequest.repository:type_name -> golf.v1.RepositoryKey
-	386, // 405: golf.v1.DetachRepositoryTeamResponse.team:type_name -> golf.v1.RepositoryTeamAccess
-	62,  // 406: golf.v1.RepositoryLifecycle.repository:type_name -> golf.v1.RepositoryKey
-	62,  // 407: golf.v1.RepositoryLifecycleOperation.repository:type_name -> golf.v1.RepositoryKey
-	62,  // 408: golf.v1.GetRepositoryLifecycleRequest.repository:type_name -> golf.v1.RepositoryKey
-	393, // 409: golf.v1.GetRepositoryLifecycleResponse.lifecycle:type_name -> golf.v1.RepositoryLifecycle
-	62,  // 410: golf.v1.ChangeRepositoryArchiveStateRequest.repository:type_name -> golf.v1.RepositoryKey
-	393, // 411: golf.v1.ChangeRepositoryArchiveStateResponse.lifecycle:type_name -> golf.v1.RepositoryLifecycle
-	394, // 412: golf.v1.ChangeRepositoryArchiveStateResponse.operation:type_name -> golf.v1.RepositoryLifecycleOperation
-	62,  // 413: golf.v1.GetRepositoryLifecycleOperationRequest.repository:type_name -> golf.v1.RepositoryKey
-	394, // 414: golf.v1.GetRepositoryLifecycleOperationResponse.operation:type_name -> golf.v1.RepositoryLifecycleOperation
-	401, // 415: golf.v1.ListEmailTransportsResponse.transports:type_name -> golf.v1.EmailTransport
-	404, // 416: golf.v1.ListEmailTransportsResponse.observation:type_name -> golf.v1.EmailConfigurationObservation
-	405, // 417: golf.v1.EmailConfigurationObservation.latest_delivery:type_name -> golf.v1.EmailDeliveryEvidence
-	401, // 418: golf.v1.SaveEmailTransportResponse.transport:type_name -> golf.v1.EmailTransport
-	401, // 419: golf.v1.ActivateEmailTransportResponse.transport:type_name -> golf.v1.EmailTransport
-	410, // 420: golf.v1.GetOwnEmailNotificationsResponse.state:type_name -> golf.v1.OwnEmailNotificationState
-	410, // 421: golf.v1.RequestEmailVerificationResponse.state:type_name -> golf.v1.OwnEmailNotificationState
-	410, // 422: golf.v1.ConfirmEmailVerificationResponse.state:type_name -> golf.v1.OwnEmailNotificationState
-	410, // 423: golf.v1.SaveOwnEmailPreferenceResponse.state:type_name -> golf.v1.OwnEmailNotificationState
-	62,  // 424: golf.v1.RepositoryEmailTarget.repository:type_name -> golf.v1.RepositoryKey
-	419, // 425: golf.v1.GetRepositoryEmailSubscriptionRequest.target:type_name -> golf.v1.RepositoryEmailTarget
-	419, // 426: golf.v1.GetRepositoryEmailSubscriptionResponse.target:type_name -> golf.v1.RepositoryEmailTarget
-	420, // 427: golf.v1.GetRepositoryEmailSubscriptionResponse.subscription:type_name -> golf.v1.RepositoryEmailSubscription
-	410, // 428: golf.v1.GetRepositoryEmailSubscriptionResponse.state:type_name -> golf.v1.OwnEmailNotificationState
-	419, // 429: golf.v1.SaveRepositoryEmailSubscriptionRequest.target:type_name -> golf.v1.RepositoryEmailTarget
-	419, // 430: golf.v1.SaveRepositoryEmailSubscriptionResponse.target:type_name -> golf.v1.RepositoryEmailTarget
-	420, // 431: golf.v1.SaveRepositoryEmailSubscriptionResponse.subscription:type_name -> golf.v1.RepositoryEmailSubscription
-	63,  // 432: golf.v1.ListOwnEmailDeliveriesRequest.page:type_name -> golf.v1.PageRequest
-	419, // 433: golf.v1.ListOwnEmailDeliveriesRequest.target:type_name -> golf.v1.RepositoryEmailTarget
-	425, // 434: golf.v1.ListOwnEmailDeliveriesResponse.deliveries:type_name -> golf.v1.EmailDelivery
-	64,  // 435: golf.v1.ListOwnEmailDeliveriesResponse.page:type_name -> golf.v1.PageResponse
-	419, // 436: golf.v1.ListOwnEmailDeliveriesResponse.target:type_name -> golf.v1.RepositoryEmailTarget
-	425, // 437: golf.v1.RedeliverOwnEmailResponse.delivery:type_name -> golf.v1.EmailDelivery
-	62,  // 438: golf.v1.RepositoryExecutionValueTarget.repository:type_name -> golf.v1.RepositoryKey
+	63,  // 377: golf.v1.RepositoryWebhookTarget.repository:type_name -> golf.v1.RepositoryKey
+	374, // 378: golf.v1.ListRepositoryWebhooksRequest.target:type_name -> golf.v1.RepositoryWebhookTarget
+	64,  // 379: golf.v1.ListRepositoryWebhooksRequest.page:type_name -> golf.v1.PageRequest
+	374, // 380: golf.v1.ListRepositoryWebhooksResponse.target:type_name -> golf.v1.RepositoryWebhookTarget
+	375, // 381: golf.v1.ListRepositoryWebhooksResponse.subscriptions:type_name -> golf.v1.RepositoryWebhookSubscription
+	65,  // 382: golf.v1.ListRepositoryWebhooksResponse.page:type_name -> golf.v1.PageResponse
+	374, // 383: golf.v1.SaveRepositoryWebhookRequest.target:type_name -> golf.v1.RepositoryWebhookTarget
+	374, // 384: golf.v1.SaveRepositoryWebhookResponse.target:type_name -> golf.v1.RepositoryWebhookTarget
+	375, // 385: golf.v1.SaveRepositoryWebhookResponse.subscription:type_name -> golf.v1.RepositoryWebhookSubscription
+	374, // 386: golf.v1.ListRepositoryWebhookDeliveriesRequest.target:type_name -> golf.v1.RepositoryWebhookTarget
+	64,  // 387: golf.v1.ListRepositoryWebhookDeliveriesRequest.page:type_name -> golf.v1.PageRequest
+	374, // 388: golf.v1.ListRepositoryWebhookDeliveriesResponse.target:type_name -> golf.v1.RepositoryWebhookTarget
+	376, // 389: golf.v1.ListRepositoryWebhookDeliveriesResponse.deliveries:type_name -> golf.v1.RepositoryWebhookDelivery
+	65,  // 390: golf.v1.ListRepositoryWebhookDeliveriesResponse.page:type_name -> golf.v1.PageResponse
+	374, // 391: golf.v1.TestRepositoryWebhookRequest.target:type_name -> golf.v1.RepositoryWebhookTarget
+	374, // 392: golf.v1.RedeliverRepositoryWebhookRequest.target:type_name -> golf.v1.RepositoryWebhookTarget
+	374, // 393: golf.v1.TestRepositoryWebhookResponse.target:type_name -> golf.v1.RepositoryWebhookTarget
+	376, // 394: golf.v1.TestRepositoryWebhookResponse.delivery:type_name -> golf.v1.RepositoryWebhookDelivery
+	374, // 395: golf.v1.RedeliverRepositoryWebhookResponse.target:type_name -> golf.v1.RepositoryWebhookTarget
+	376, // 396: golf.v1.RedeliverRepositoryWebhookResponse.delivery:type_name -> golf.v1.RepositoryWebhookDelivery
+	156, // 397: golf.v1.RepositoryTeamAccess.team:type_name -> golf.v1.OrganizationTeam
+	63,  // 398: golf.v1.ListRepositoryTeamAccessRequest.repository:type_name -> golf.v1.RepositoryKey
+	64,  // 399: golf.v1.ListRepositoryTeamAccessRequest.page:type_name -> golf.v1.PageRequest
+	387, // 400: golf.v1.ListRepositoryTeamAccessResponse.teams:type_name -> golf.v1.RepositoryTeamAccess
+	65,  // 401: golf.v1.ListRepositoryTeamAccessResponse.page:type_name -> golf.v1.PageResponse
+	63,  // 402: golf.v1.AttachRepositoryTeamRequest.repository:type_name -> golf.v1.RepositoryKey
+	387, // 403: golf.v1.AttachRepositoryTeamResponse.team:type_name -> golf.v1.RepositoryTeamAccess
+	63,  // 404: golf.v1.DetachRepositoryTeamRequest.repository:type_name -> golf.v1.RepositoryKey
+	387, // 405: golf.v1.DetachRepositoryTeamResponse.team:type_name -> golf.v1.RepositoryTeamAccess
+	63,  // 406: golf.v1.RepositoryLifecycle.repository:type_name -> golf.v1.RepositoryKey
+	63,  // 407: golf.v1.RepositoryLifecycleOperation.repository:type_name -> golf.v1.RepositoryKey
+	63,  // 408: golf.v1.GetRepositoryLifecycleRequest.repository:type_name -> golf.v1.RepositoryKey
+	394, // 409: golf.v1.GetRepositoryLifecycleResponse.lifecycle:type_name -> golf.v1.RepositoryLifecycle
+	63,  // 410: golf.v1.ChangeRepositoryArchiveStateRequest.repository:type_name -> golf.v1.RepositoryKey
+	394, // 411: golf.v1.ChangeRepositoryArchiveStateResponse.lifecycle:type_name -> golf.v1.RepositoryLifecycle
+	395, // 412: golf.v1.ChangeRepositoryArchiveStateResponse.operation:type_name -> golf.v1.RepositoryLifecycleOperation
+	63,  // 413: golf.v1.GetRepositoryLifecycleOperationRequest.repository:type_name -> golf.v1.RepositoryKey
+	395, // 414: golf.v1.GetRepositoryLifecycleOperationResponse.operation:type_name -> golf.v1.RepositoryLifecycleOperation
+	402, // 415: golf.v1.ListEmailTransportsResponse.transports:type_name -> golf.v1.EmailTransport
+	405, // 416: golf.v1.ListEmailTransportsResponse.observation:type_name -> golf.v1.EmailConfigurationObservation
+	406, // 417: golf.v1.EmailConfigurationObservation.latest_delivery:type_name -> golf.v1.EmailDeliveryEvidence
+	402, // 418: golf.v1.SaveEmailTransportResponse.transport:type_name -> golf.v1.EmailTransport
+	402, // 419: golf.v1.ActivateEmailTransportResponse.transport:type_name -> golf.v1.EmailTransport
+	411, // 420: golf.v1.GetOwnEmailNotificationsResponse.state:type_name -> golf.v1.OwnEmailNotificationState
+	411, // 421: golf.v1.RequestEmailVerificationResponse.state:type_name -> golf.v1.OwnEmailNotificationState
+	411, // 422: golf.v1.ConfirmEmailVerificationResponse.state:type_name -> golf.v1.OwnEmailNotificationState
+	411, // 423: golf.v1.SaveOwnEmailPreferenceResponse.state:type_name -> golf.v1.OwnEmailNotificationState
+	63,  // 424: golf.v1.RepositoryEmailTarget.repository:type_name -> golf.v1.RepositoryKey
+	420, // 425: golf.v1.GetRepositoryEmailSubscriptionRequest.target:type_name -> golf.v1.RepositoryEmailTarget
+	420, // 426: golf.v1.GetRepositoryEmailSubscriptionResponse.target:type_name -> golf.v1.RepositoryEmailTarget
+	421, // 427: golf.v1.GetRepositoryEmailSubscriptionResponse.subscription:type_name -> golf.v1.RepositoryEmailSubscription
+	411, // 428: golf.v1.GetRepositoryEmailSubscriptionResponse.state:type_name -> golf.v1.OwnEmailNotificationState
+	420, // 429: golf.v1.SaveRepositoryEmailSubscriptionRequest.target:type_name -> golf.v1.RepositoryEmailTarget
+	420, // 430: golf.v1.SaveRepositoryEmailSubscriptionResponse.target:type_name -> golf.v1.RepositoryEmailTarget
+	421, // 431: golf.v1.SaveRepositoryEmailSubscriptionResponse.subscription:type_name -> golf.v1.RepositoryEmailSubscription
+	64,  // 432: golf.v1.ListOwnEmailDeliveriesRequest.page:type_name -> golf.v1.PageRequest
+	420, // 433: golf.v1.ListOwnEmailDeliveriesRequest.target:type_name -> golf.v1.RepositoryEmailTarget
+	426, // 434: golf.v1.ListOwnEmailDeliveriesResponse.deliveries:type_name -> golf.v1.EmailDelivery
+	65,  // 435: golf.v1.ListOwnEmailDeliveriesResponse.page:type_name -> golf.v1.PageResponse
+	420, // 436: golf.v1.ListOwnEmailDeliveriesResponse.target:type_name -> golf.v1.RepositoryEmailTarget
+	426, // 437: golf.v1.RedeliverOwnEmailResponse.delivery:type_name -> golf.v1.EmailDelivery
+	63,  // 438: golf.v1.RepositoryExecutionValueTarget.repository:type_name -> golf.v1.RepositoryKey
 	34,  // 439: golf.v1.RepositoryExecutionValue.kind:type_name -> golf.v1.RepositoryExecutionValueKind
 	20,  // 440: golf.v1.RepositoryExecutionBinding.event:type_name -> golf.v1.WorkflowRunOrigin
-	432, // 441: golf.v1.RepositoryExecutionBinding.values:type_name -> golf.v1.RepositoryExecutionValueReference
-	430, // 442: golf.v1.ListRepositoryExecutionValuesRequest.target:type_name -> golf.v1.RepositoryExecutionValueTarget
-	430, // 443: golf.v1.ListRepositoryExecutionValuesResponse.target:type_name -> golf.v1.RepositoryExecutionValueTarget
-	431, // 444: golf.v1.ListRepositoryExecutionValuesResponse.values:type_name -> golf.v1.RepositoryExecutionValue
-	433, // 445: golf.v1.ListRepositoryExecutionValuesResponse.bindings:type_name -> golf.v1.RepositoryExecutionBinding
-	430, // 446: golf.v1.SaveRepositoryExecutionValueRequest.target:type_name -> golf.v1.RepositoryExecutionValueTarget
+	433, // 441: golf.v1.RepositoryExecutionBinding.values:type_name -> golf.v1.RepositoryExecutionValueReference
+	431, // 442: golf.v1.ListRepositoryExecutionValuesRequest.target:type_name -> golf.v1.RepositoryExecutionValueTarget
+	431, // 443: golf.v1.ListRepositoryExecutionValuesResponse.target:type_name -> golf.v1.RepositoryExecutionValueTarget
+	432, // 444: golf.v1.ListRepositoryExecutionValuesResponse.values:type_name -> golf.v1.RepositoryExecutionValue
+	434, // 445: golf.v1.ListRepositoryExecutionValuesResponse.bindings:type_name -> golf.v1.RepositoryExecutionBinding
+	431, // 446: golf.v1.SaveRepositoryExecutionValueRequest.target:type_name -> golf.v1.RepositoryExecutionValueTarget
 	34,  // 447: golf.v1.SaveRepositoryExecutionValueRequest.kind:type_name -> golf.v1.RepositoryExecutionValueKind
-	430, // 448: golf.v1.DeleteRepositoryExecutionValueRequest.target:type_name -> golf.v1.RepositoryExecutionValueTarget
-	430, // 449: golf.v1.GetRepositoryExecutionVariableRequest.target:type_name -> golf.v1.RepositoryExecutionValueTarget
-	430, // 450: golf.v1.GetRepositoryExecutionVariableResponse.target:type_name -> golf.v1.RepositoryExecutionValueTarget
-	431, // 451: golf.v1.GetRepositoryExecutionVariableResponse.variable:type_name -> golf.v1.RepositoryExecutionValue
-	430, // 452: golf.v1.SaveRepositoryExecutionBindingRequest.target:type_name -> golf.v1.RepositoryExecutionValueTarget
+	431, // 448: golf.v1.DeleteRepositoryExecutionValueRequest.target:type_name -> golf.v1.RepositoryExecutionValueTarget
+	431, // 449: golf.v1.GetRepositoryExecutionVariableRequest.target:type_name -> golf.v1.RepositoryExecutionValueTarget
+	431, // 450: golf.v1.GetRepositoryExecutionVariableResponse.target:type_name -> golf.v1.RepositoryExecutionValueTarget
+	432, // 451: golf.v1.GetRepositoryExecutionVariableResponse.variable:type_name -> golf.v1.RepositoryExecutionValue
+	431, // 452: golf.v1.SaveRepositoryExecutionBindingRequest.target:type_name -> golf.v1.RepositoryExecutionValueTarget
 	20,  // 453: golf.v1.SaveRepositoryExecutionBindingRequest.event:type_name -> golf.v1.WorkflowRunOrigin
-	432, // 454: golf.v1.SaveRepositoryExecutionBindingRequest.values:type_name -> golf.v1.RepositoryExecutionValueReference
-	430, // 455: golf.v1.DeleteRepositoryExecutionBindingRequest.target:type_name -> golf.v1.RepositoryExecutionValueTarget
-	430, // 456: golf.v1.GetRepositoryExecutionValueOperationRequest.target:type_name -> golf.v1.RepositoryExecutionValueTarget
-	430, // 457: golf.v1.RepositoryExecutionValueMutationResponse.target:type_name -> golf.v1.RepositoryExecutionValueTarget
-	443, // 458: golf.v1.SaveRepositoryExecutionValueResponse.operation:type_name -> golf.v1.RepositoryExecutionValueMutationResponse
-	443, // 459: golf.v1.DeleteRepositoryExecutionValueResponse.operation:type_name -> golf.v1.RepositoryExecutionValueMutationResponse
-	443, // 460: golf.v1.SaveRepositoryExecutionBindingResponse.operation:type_name -> golf.v1.RepositoryExecutionValueMutationResponse
-	443, // 461: golf.v1.DeleteRepositoryExecutionBindingResponse.operation:type_name -> golf.v1.RepositoryExecutionValueMutationResponse
-	443, // 462: golf.v1.GetRepositoryExecutionValueOperationResponse.operation:type_name -> golf.v1.RepositoryExecutionValueMutationResponse
-	60,  // 463: golf.v1.RepositoryInvitationRecipient.user:type_name -> golf.v1.User
-	62,  // 464: golf.v1.RepositoryInvitation.repository:type_name -> golf.v1.RepositoryKey
-	60,  // 465: golf.v1.RepositoryInvitation.issuer:type_name -> golf.v1.User
-	60,  // 466: golf.v1.RepositoryInvitation.recipient:type_name -> golf.v1.User
-	62,  // 467: golf.v1.PreviewRepositoryInvitationRecipientRequest.repository:type_name -> golf.v1.RepositoryKey
-	449, // 468: golf.v1.PreviewRepositoryInvitationRecipientResponse.recipient:type_name -> golf.v1.RepositoryInvitationRecipient
-	62,  // 469: golf.v1.CreateRepositoryInvitationRequest.repository:type_name -> golf.v1.RepositoryKey
-	450, // 470: golf.v1.CreateRepositoryInvitationResponse.invitation:type_name -> golf.v1.RepositoryInvitation
-	451, // 471: golf.v1.CreateRepositoryInvitationResponse.operation:type_name -> golf.v1.RepositoryInvitationOperation
-	62,  // 472: golf.v1.ListRepositoryInvitationsRequest.repository:type_name -> golf.v1.RepositoryKey
-	63,  // 473: golf.v1.ListRepositoryInvitationsRequest.page:type_name -> golf.v1.PageRequest
-	63,  // 474: golf.v1.ListOwnRepositoryInvitationsRequest.page:type_name -> golf.v1.PageRequest
-	450, // 475: golf.v1.ListRepositoryInvitationsResponse.invitations:type_name -> golf.v1.RepositoryInvitation
-	64,  // 476: golf.v1.ListRepositoryInvitationsResponse.page:type_name -> golf.v1.PageResponse
+	433, // 454: golf.v1.SaveRepositoryExecutionBindingRequest.values:type_name -> golf.v1.RepositoryExecutionValueReference
+	431, // 455: golf.v1.DeleteRepositoryExecutionBindingRequest.target:type_name -> golf.v1.RepositoryExecutionValueTarget
+	431, // 456: golf.v1.GetRepositoryExecutionValueOperationRequest.target:type_name -> golf.v1.RepositoryExecutionValueTarget
+	431, // 457: golf.v1.RepositoryExecutionValueMutationResponse.target:type_name -> golf.v1.RepositoryExecutionValueTarget
+	444, // 458: golf.v1.SaveRepositoryExecutionValueResponse.operation:type_name -> golf.v1.RepositoryExecutionValueMutationResponse
+	444, // 459: golf.v1.DeleteRepositoryExecutionValueResponse.operation:type_name -> golf.v1.RepositoryExecutionValueMutationResponse
+	444, // 460: golf.v1.SaveRepositoryExecutionBindingResponse.operation:type_name -> golf.v1.RepositoryExecutionValueMutationResponse
+	444, // 461: golf.v1.DeleteRepositoryExecutionBindingResponse.operation:type_name -> golf.v1.RepositoryExecutionValueMutationResponse
+	444, // 462: golf.v1.GetRepositoryExecutionValueOperationResponse.operation:type_name -> golf.v1.RepositoryExecutionValueMutationResponse
+	61,  // 463: golf.v1.RepositoryInvitationRecipient.user:type_name -> golf.v1.User
+	63,  // 464: golf.v1.RepositoryInvitation.repository:type_name -> golf.v1.RepositoryKey
+	61,  // 465: golf.v1.RepositoryInvitation.issuer:type_name -> golf.v1.User
+	61,  // 466: golf.v1.RepositoryInvitation.recipient:type_name -> golf.v1.User
+	63,  // 467: golf.v1.PreviewRepositoryInvitationRecipientRequest.repository:type_name -> golf.v1.RepositoryKey
+	450, // 468: golf.v1.PreviewRepositoryInvitationRecipientResponse.recipient:type_name -> golf.v1.RepositoryInvitationRecipient
+	63,  // 469: golf.v1.CreateRepositoryInvitationRequest.repository:type_name -> golf.v1.RepositoryKey
+	451, // 470: golf.v1.CreateRepositoryInvitationResponse.invitation:type_name -> golf.v1.RepositoryInvitation
+	452, // 471: golf.v1.CreateRepositoryInvitationResponse.operation:type_name -> golf.v1.RepositoryInvitationOperation
+	63,  // 472: golf.v1.ListRepositoryInvitationsRequest.repository:type_name -> golf.v1.RepositoryKey
+	64,  // 473: golf.v1.ListRepositoryInvitationsRequest.page:type_name -> golf.v1.PageRequest
+	64,  // 474: golf.v1.ListOwnRepositoryInvitationsRequest.page:type_name -> golf.v1.PageRequest
+	451, // 475: golf.v1.ListRepositoryInvitationsResponse.invitations:type_name -> golf.v1.RepositoryInvitation
+	65,  // 476: golf.v1.ListRepositoryInvitationsResponse.page:type_name -> golf.v1.PageResponse
 	36,  // 477: golf.v1.RespondRepositoryInvitationRequest.decision:type_name -> golf.v1.RepositoryInvitationDecision
-	62,  // 478: golf.v1.RevokeRepositoryInvitationRequest.repository:type_name -> golf.v1.RepositoryKey
-	451, // 479: golf.v1.GetRepositoryInvitationOperationResponse.operation:type_name -> golf.v1.RepositoryInvitationOperation
-	450, // 480: golf.v1.RespondRepositoryInvitationResponse.invitation:type_name -> golf.v1.RepositoryInvitation
-	451, // 481: golf.v1.RespondRepositoryInvitationResponse.operation:type_name -> golf.v1.RepositoryInvitationOperation
-	450, // 482: golf.v1.RevokeRepositoryInvitationResponse.invitation:type_name -> golf.v1.RepositoryInvitation
-	450, // 483: golf.v1.ListOwnRepositoryInvitationsResponse.invitations:type_name -> golf.v1.RepositoryInvitation
-	64,  // 484: golf.v1.ListOwnRepositoryInvitationsResponse.page:type_name -> golf.v1.PageResponse
-	62,  // 485: golf.v1.GetRepositoryRulesRequest.repository:type_name -> golf.v1.RepositoryKey
-	468, // 486: golf.v1.GetRepositoryRulesResponse.branch_protections:type_name -> golf.v1.RepositoryBranchProtection
-	469, // 487: golf.v1.GetRepositoryRulesResponse.tag_protections:type_name -> golf.v1.RepositoryTagProtection
-	470, // 488: golf.v1.GetRepositoryRulesResponse.merge_configuration:type_name -> golf.v1.RepositoryMergeConfiguration
-	13,  // 489: golf.v1.OrganizationTeam.UnitPermissionsEntry.value:type_name -> golf.v1.TeamPermission
-	150, // 490: golf.v1.SessionService.GetAuthenticationOptions:input_type -> golf.v1.GetAuthenticationOptionsRequest
-	152, // 491: golf.v1.SessionService.BeginGiteaOAuth:input_type -> golf.v1.BeginGiteaOAuthRequest
-	65,  // 492: golf.v1.SessionService.LoginWithPassword:input_type -> golf.v1.LoginWithPasswordRequest
-	67,  // 493: golf.v1.SessionService.LoginWithGiteaToken:input_type -> golf.v1.LoginWithGiteaTokenRequest
-	69,  // 494: golf.v1.SessionService.GetSession:input_type -> golf.v1.GetSessionRequest
-	72,  // 495: golf.v1.SessionService.ListSessions:input_type -> golf.v1.ListSessionsRequest
-	74,  // 496: golf.v1.SessionService.RevokeSession:input_type -> golf.v1.RevokeSessionRequest
-	76,  // 497: golf.v1.SessionService.RevokeOtherSessions:input_type -> golf.v1.RevokeOtherSessionsRequest
-	78,  // 498: golf.v1.SessionService.Logout:input_type -> golf.v1.LogoutRequest
-	38,  // 499: golf.v1.ApiCredentialService.CreateApiCredential:input_type -> golf.v1.CreateApiCredentialRequest
-	40,  // 500: golf.v1.ApiCredentialService.ListApiCredentials:input_type -> golf.v1.ListApiCredentialsRequest
-	42,  // 501: golf.v1.ApiCredentialService.RevokeApiCredential:input_type -> golf.v1.RevokeApiCredentialRequest
-	45,  // 502: golf.v1.GitAccessService.ListSSHKeys:input_type -> golf.v1.ListSSHKeysRequest
-	47,  // 503: golf.v1.GitAccessService.AddSSHKey:input_type -> golf.v1.AddSSHKeyRequest
-	49,  // 504: golf.v1.GitAccessService.DeleteSSHKey:input_type -> golf.v1.DeleteSSHKeyRequest
-	54,  // 505: golf.v1.RepositorySettingsService.GetRepositorySettings:input_type -> golf.v1.GetRepositorySettingsRequest
-	56,  // 506: golf.v1.RepositorySettingsService.UpdateRepositorySettings:input_type -> golf.v1.UpdateRepositorySettingsRequest
-	58,  // 507: golf.v1.RepositorySettingsService.UpdateRepositoryTopics:input_type -> golf.v1.UpdateRepositoryTopicsRequest
-	80,  // 508: golf.v1.RepositoryService.ListRepositories:input_type -> golf.v1.ListRepositoriesRequest
-	82,  // 509: golf.v1.RepositoryService.CreateRepository:input_type -> golf.v1.CreateRepositoryRequest
-	85,  // 510: golf.v1.RepositoryService.GetRepositoryCreation:input_type -> golf.v1.GetRepositoryCreationRequest
-	87,  // 511: golf.v1.RepositoryService.GetRepository:input_type -> golf.v1.GetRepositoryRequest
-	351, // 512: golf.v1.RepositoryService.GetRepositoryOverview:input_type -> golf.v1.GetRepositoryOverviewRequest
-	90,  // 513: golf.v1.RepositoryService.ListBranches:input_type -> golf.v1.ListBranchesRequest
-	93,  // 514: golf.v1.RepositoryService.ListTags:input_type -> golf.v1.ListTagsRequest
-	96,  // 515: golf.v1.RepositoryService.ListCommits:input_type -> golf.v1.ListCommitsRequest
-	98,  // 516: golf.v1.RepositoryService.GetCommitDiff:input_type -> golf.v1.GetCommitDiffRequest
-	320, // 517: golf.v1.RepositoryService.ListPullRequestCommits:input_type -> golf.v1.ListPullRequestCommitsRequest
-	323, // 518: golf.v1.RepositoryService.ListPullRequestChecks:input_type -> golf.v1.ListPullRequestChecksRequest
-	100, // 519: golf.v1.RepositoryService.GetPullRequestDiff:input_type -> golf.v1.GetPullRequestDiffRequest
-	328, // 520: golf.v1.RepositoryService.GetRepositoryComparison:input_type -> golf.v1.GetRepositoryComparisonRequest
-	102, // 521: golf.v1.RepositoryService.GetRepositoryImage:input_type -> golf.v1.GetRepositoryImageRequest
-	108, // 522: golf.v1.RepositoryService.ResolveRepositorySource:input_type -> golf.v1.ResolveRepositorySourceRequest
-	111, // 523: golf.v1.RepositoryService.GetContents:input_type -> golf.v1.GetContentsRequest
-	114, // 524: golf.v1.RepositoryService.ListIssues:input_type -> golf.v1.ListIssuesRequest
-	315, // 525: golf.v1.RepositoryService.GetPullRequestDiscussion:input_type -> golf.v1.GetPullRequestDiscussionRequest
-	116, // 526: golf.v1.RepositoryService.GetIssue:input_type -> golf.v1.GetIssueRequest
-	119, // 527: golf.v1.RepositoryService.ListIssueComments:input_type -> golf.v1.ListIssueCommentsRequest
-	122, // 528: golf.v1.RepositoryService.CreateIssue:input_type -> golf.v1.CreateIssueRequest
-	124, // 529: golf.v1.RepositoryService.CreateIssueComment:input_type -> golf.v1.CreateIssueCommentRequest
-	126, // 530: golf.v1.RepositoryService.UpdateIssue:input_type -> golf.v1.UpdateIssueRequest
-	325, // 531: golf.v1.RepositoryService.CreatePullRequest:input_type -> golf.v1.CreatePullRequestRequest
-	330, // 532: golf.v1.RepositoryService.UpdatePullRequest:input_type -> golf.v1.UpdatePullRequestRequest
-	128, // 533: golf.v1.RepositoryService.GetIssueMutation:input_type -> golf.v1.GetIssueMutationRequest
-	132, // 534: golf.v1.RepositoryService.ListPullRequests:input_type -> golf.v1.ListPullRequestsRequest
-	134, // 535: golf.v1.RepositoryService.GetPullRequest:input_type -> golf.v1.GetPullRequestRequest
-	142, // 536: golf.v1.RepositoryService.ListPullRequestReviews:input_type -> golf.v1.ListPullRequestReviewsRequest
-	145, // 537: golf.v1.RepositoryService.GetPullRequestReviewComments:input_type -> golf.v1.GetPullRequestReviewCommentsRequest
-	339, // 538: golf.v1.RepositoryService.GetPullRequestReviewDraft:input_type -> golf.v1.GetPullRequestReviewDraftRequest
-	341, // 539: golf.v1.RepositoryService.SavePullRequestReviewDraft:input_type -> golf.v1.SavePullRequestReviewDraftRequest
-	343, // 540: golf.v1.RepositoryService.DeletePullRequestReviewDraft:input_type -> golf.v1.DeletePullRequestReviewDraftRequest
-	345, // 541: golf.v1.RepositoryService.PublishPullRequestReviewDraft:input_type -> golf.v1.PublishPullRequestReviewDraftRequest
-	348, // 542: golf.v1.RepositoryService.GetPullRequestInlineReviewMutation:input_type -> golf.v1.GetPullRequestInlineReviewMutationRequest
-	137, // 543: golf.v1.RepositoryService.CreatePullRequestReview:input_type -> golf.v1.CreatePullRequestReviewRequest
-	140, // 544: golf.v1.RepositoryService.GetPullRequestReviewMutation:input_type -> golf.v1.GetPullRequestReviewMutationRequest
-	156, // 545: golf.v1.OrganizationService.ListOrganizations:input_type -> golf.v1.ListOrganizationsRequest
-	158, // 546: golf.v1.OrganizationService.GetOrganization:input_type -> golf.v1.GetOrganizationRequest
-	160, // 547: golf.v1.OrganizationService.ListTeams:input_type -> golf.v1.ListTeamsRequest
-	162, // 548: golf.v1.OrganizationService.GetTeam:input_type -> golf.v1.GetTeamRequest
-	164, // 549: golf.v1.OrganizationService.ListTeamMembers:input_type -> golf.v1.ListTeamMembersRequest
-	166, // 550: golf.v1.OrganizationService.ListTeamRepositories:input_type -> golf.v1.ListTeamRepositoriesRequest
-	171, // 551: golf.v1.OrganizationAdminService.GetTeamAdministration:input_type -> golf.v1.GetTeamAdministrationRequest
-	173, // 552: golf.v1.OrganizationAdminService.ResolveTeamMember:input_type -> golf.v1.ResolveTeamMemberRequest
-	175, // 553: golf.v1.OrganizationAdminService.AddTeamMember:input_type -> golf.v1.AddTeamMemberRequest
-	177, // 554: golf.v1.OrganizationAdminService.RemoveTeamMember:input_type -> golf.v1.RemoveTeamMemberRequest
-	256, // 555: golf.v1.InstanceAdminService.EnrollRegularLocalAccount:input_type -> golf.v1.EnrollRegularLocalAccountRequest
-	258, // 556: golf.v1.InstanceAdminService.ResetRegularLocalPassword:input_type -> golf.v1.ResetRegularLocalPasswordRequest
-	260, // 557: golf.v1.InstanceAdminService.EnableRegularLocalAccount:input_type -> golf.v1.EnableRegularLocalAccountRequest
-	199, // 558: golf.v1.InstanceAdminService.DisableLocalAccount:input_type -> golf.v1.DisableLocalAccountRequest
-	180, // 559: golf.v1.InstanceAdminService.ListLocalAccounts:input_type -> golf.v1.ListLocalAccountsRequest
-	169, // 560: golf.v1.AuditService.ListAuditEvents:input_type -> golf.v1.ListAuditEventsRequest
-	148, // 561: golf.v1.CapabilityService.ListCapabilities:input_type -> golf.v1.ListCapabilitiesRequest
-	184, // 562: golf.v1.RepositoryAccessService.GetRepositoryAccess:input_type -> golf.v1.GetRepositoryAccessRequest
-	186, // 563: golf.v1.RepositoryAccessService.ListRepositoryCollaborators:input_type -> golf.v1.ListRepositoryCollaboratorsRequest
-	188, // 564: golf.v1.RepositoryAccessService.ResolveRepositoryCollaborator:input_type -> golf.v1.ResolveRepositoryCollaboratorRequest
-	190, // 565: golf.v1.RepositoryAccessService.SetRepositoryCollaborator:input_type -> golf.v1.SetRepositoryCollaboratorRequest
-	192, // 566: golf.v1.RepositoryAccessService.RemoveRepositoryCollaborator:input_type -> golf.v1.RemoveRepositoryCollaboratorRequest
-	197, // 567: golf.v1.WorkflowService.InspectWorkflows:input_type -> golf.v1.InspectWorkflowsRequest
-	202, // 568: golf.v1.ExecutionPolicyService.GetExecutionPolicy:input_type -> golf.v1.GetExecutionPolicyRequest
-	204, // 569: golf.v1.ExecutionPolicyService.UpdateExecutionPolicy:input_type -> golf.v1.UpdateExecutionPolicyRequest
-	209, // 570: golf.v1.WorkflowRunService.DispatchWorkflow:input_type -> golf.v1.DispatchWorkflowRequest
-	211, // 571: golf.v1.WorkflowRunService.GetWorkflowRun:input_type -> golf.v1.GetWorkflowRunRequest
-	213, // 572: golf.v1.WorkflowRunService.ListWorkflowRuns:input_type -> golf.v1.ListWorkflowRunsRequest
-	215, // 573: golf.v1.WorkflowRunService.CancelWorkflowRun:input_type -> golf.v1.CancelWorkflowRunRequest
-	218, // 574: golf.v1.WorkflowRunService.GetWorkflowRunLogs:input_type -> golf.v1.GetWorkflowRunLogsRequest
-	221, // 575: golf.v1.OrganizationCreationService.GetOrganizationCreationPolicy:input_type -> golf.v1.GetOrganizationCreationPolicyRequest
-	223, // 576: golf.v1.OrganizationCreationService.UpdateOrganizationCreationPolicy:input_type -> golf.v1.UpdateOrganizationCreationPolicyRequest
-	225, // 577: golf.v1.OrganizationCreationService.CreateOrganization:input_type -> golf.v1.CreateOrganizationRequest
-	229, // 578: golf.v1.InfrastructureConnectionService.ListInfrastructureConnections:input_type -> golf.v1.ListInfrastructureConnectionsRequest
-	231, // 579: golf.v1.InfrastructureConnectionService.SaveInfrastructureConnection:input_type -> golf.v1.SaveInfrastructureConnectionRequest
-	233, // 580: golf.v1.InfrastructureConnectionService.TestInfrastructureConnection:input_type -> golf.v1.TestInfrastructureConnectionRequest
-	235, // 581: golf.v1.InfrastructureConnectionService.ActivateInfrastructureConnection:input_type -> golf.v1.ActivateInfrastructureConnectionRequest
-	238, // 582: golf.v1.ProfileService.GetProfile:input_type -> golf.v1.GetProfileRequest
-	240, // 583: golf.v1.ProfileService.UpdateProfile:input_type -> golf.v1.UpdateProfileRequest
-	250, // 584: golf.v1.AccountSecurityService.GetAccountSecurity:input_type -> golf.v1.GetAccountSecurityRequest
-	252, // 585: golf.v1.AccountSecurityService.ChangeOwnPassword:input_type -> golf.v1.ChangeOwnPasswordRequest
-	253, // 586: golf.v1.AccountSecurityService.ChangeOwnLoginEmail:input_type -> golf.v1.ChangeOwnLoginEmailRequest
-	243, // 587: golf.v1.AutomationGrantService.ListAutomationGrants:input_type -> golf.v1.ListAutomationGrantsRequest
-	245, // 588: golf.v1.AutomationGrantService.CreateAutomationGrant:input_type -> golf.v1.CreateAutomationGrantRequest
-	247, // 589: golf.v1.AutomationGrantService.RevokeAutomationGrant:input_type -> golf.v1.RevokeAutomationGrantRequest
-	276, // 590: golf.v1.CodexAccountService.ListCodexConnections:input_type -> golf.v1.ListCodexConnectionsRequest
-	278, // 591: golf.v1.CodexAccountService.CreateCodexConnection:input_type -> golf.v1.CreateCodexConnectionRequest
-	280, // 592: golf.v1.CodexAccountService.SetCodexConnectionAccess:input_type -> golf.v1.SetCodexConnectionAccessRequest
-	263, // 593: golf.v1.CodexAccountService.GetCodexConnection:input_type -> golf.v1.GetCodexConnectionRequest
-	265, // 594: golf.v1.CodexAccountService.StartCodexLogin:input_type -> golf.v1.StartCodexLoginRequest
-	282, // 595: golf.v1.CodexAccountService.CompleteAgentLogin:input_type -> golf.v1.CompleteAgentLoginRequest
-	267, // 596: golf.v1.CodexAccountService.CancelCodexLogin:input_type -> golf.v1.CancelCodexLoginRequest
-	269, // 597: golf.v1.CodexAccountService.RefreshCodexConnection:input_type -> golf.v1.RefreshCodexConnectionRequest
-	274, // 598: golf.v1.CodexAccountService.DisconnectCodexConnection:input_type -> golf.v1.DisconnectCodexConnectionRequest
-	286, // 599: golf.v1.AgentUsageService.GetAgentUsage:input_type -> golf.v1.GetAgentUsageRequest
-	288, // 600: golf.v1.AgentUsageService.SaveAgentUsage:input_type -> golf.v1.SaveAgentUsageRequest
-	291, // 601: golf.v1.AgentUsageService.ListAgentModels:input_type -> golf.v1.ListAgentModelsRequest
-	294, // 602: golf.v1.AgentUsageService.PreviewAgentTask:input_type -> golf.v1.PreviewAgentTaskRequest
-	297, // 603: golf.v1.AgentTaskService.CreateAgentTask:input_type -> golf.v1.CreateAgentTaskRequest
-	298, // 604: golf.v1.AgentTaskService.ListAgentTasks:input_type -> golf.v1.ListAgentTasksRequest
-	300, // 605: golf.v1.AgentTaskService.GetAgentTask:input_type -> golf.v1.GetAgentTaskRequest
-	301, // 606: golf.v1.AgentTaskService.CancelAgentTask:input_type -> golf.v1.CancelAgentTaskRequest
-	361, // 607: golf.v1.AgentTaskService.ListAgentTaskEvents:input_type -> golf.v1.ListAgentTaskEventsRequest
-	306, // 608: golf.v1.ReviewerService.GetReviewer:input_type -> golf.v1.GetReviewerRequest
-	308, // 609: golf.v1.ReviewerService.SaveReviewer:input_type -> golf.v1.SaveReviewerRequest
-	311, // 610: golf.v1.ReviewerService.ListReviewerRuns:input_type -> golf.v1.ListReviewerRunsRequest
-	313, // 611: golf.v1.ReviewerService.RequestReview:input_type -> golf.v1.RequestReviewRequest
-	317, // 612: golf.v1.RepositoryActivityService.WatchRepository:input_type -> golf.v1.WatchRepositoryRequest
-	355, // 613: golf.v1.ActionRunService.ListActionRuns:input_type -> golf.v1.ListActionRunsRequest
-	357, // 614: golf.v1.ActionRunService.GetActionRun:input_type -> golf.v1.GetActionRunRequest
-	364, // 615: golf.v1.RepositoryDeployKeyService.ListRepositoryDeployKeys:input_type -> golf.v1.ListRepositoryDeployKeysRequest
-	366, // 616: golf.v1.RepositoryDeployKeyService.AddRepositoryDeployKey:input_type -> golf.v1.AddRepositoryDeployKeyRequest
-	368, // 617: golf.v1.RepositoryDeployKeyService.DeleteRepositoryDeployKey:input_type -> golf.v1.DeleteRepositoryDeployKeyRequest
-	376, // 618: golf.v1.RepositoryWebhookService.ListRepositoryWebhooks:input_type -> golf.v1.ListRepositoryWebhooksRequest
-	378, // 619: golf.v1.RepositoryWebhookService.SaveRepositoryWebhook:input_type -> golf.v1.SaveRepositoryWebhookRequest
-	380, // 620: golf.v1.RepositoryWebhookService.ListRepositoryWebhookDeliveries:input_type -> golf.v1.ListRepositoryWebhookDeliveriesRequest
-	382, // 621: golf.v1.RepositoryWebhookService.TestRepositoryWebhook:input_type -> golf.v1.TestRepositoryWebhookRequest
-	383, // 622: golf.v1.RepositoryWebhookService.RedeliverRepositoryWebhook:input_type -> golf.v1.RedeliverRepositoryWebhookRequest
-	387, // 623: golf.v1.RepositoryTeamAccessService.ListRepositoryTeamAccess:input_type -> golf.v1.ListRepositoryTeamAccessRequest
-	389, // 624: golf.v1.RepositoryTeamAccessService.AttachRepositoryTeam:input_type -> golf.v1.AttachRepositoryTeamRequest
-	391, // 625: golf.v1.RepositoryTeamAccessService.DetachRepositoryTeam:input_type -> golf.v1.DetachRepositoryTeamRequest
-	395, // 626: golf.v1.RepositoryLifecycleService.GetRepositoryLifecycle:input_type -> golf.v1.GetRepositoryLifecycleRequest
-	397, // 627: golf.v1.RepositoryLifecycleService.ChangeRepositoryArchiveState:input_type -> golf.v1.ChangeRepositoryArchiveStateRequest
-	399, // 628: golf.v1.RepositoryLifecycleService.GetRepositoryLifecycleOperation:input_type -> golf.v1.GetRepositoryLifecycleOperationRequest
-	402, // 629: golf.v1.EmailNotificationService.ListEmailTransports:input_type -> golf.v1.ListEmailTransportsRequest
-	406, // 630: golf.v1.EmailNotificationService.SaveEmailTransport:input_type -> golf.v1.SaveEmailTransportRequest
-	408, // 631: golf.v1.EmailNotificationService.ActivateEmailTransport:input_type -> golf.v1.ActivateEmailTransportRequest
-	411, // 632: golf.v1.EmailNotificationService.GetOwnEmailNotifications:input_type -> golf.v1.GetOwnEmailNotificationsRequest
-	413, // 633: golf.v1.EmailNotificationService.RequestEmailVerification:input_type -> golf.v1.RequestEmailVerificationRequest
-	415, // 634: golf.v1.EmailNotificationService.ConfirmEmailVerification:input_type -> golf.v1.ConfirmEmailVerificationRequest
-	417, // 635: golf.v1.EmailNotificationService.SaveOwnEmailPreference:input_type -> golf.v1.SaveOwnEmailPreferenceRequest
-	421, // 636: golf.v1.EmailNotificationService.GetRepositoryEmailSubscription:input_type -> golf.v1.GetRepositoryEmailSubscriptionRequest
-	423, // 637: golf.v1.EmailNotificationService.SaveRepositoryEmailSubscription:input_type -> golf.v1.SaveRepositoryEmailSubscriptionRequest
-	426, // 638: golf.v1.EmailNotificationService.ListOwnEmailDeliveries:input_type -> golf.v1.ListOwnEmailDeliveriesRequest
-	428, // 639: golf.v1.EmailNotificationService.RedeliverOwnEmail:input_type -> golf.v1.RedeliverOwnEmailRequest
-	434, // 640: golf.v1.RepositoryExecutionValueService.ListRepositoryExecutionValues:input_type -> golf.v1.ListRepositoryExecutionValuesRequest
-	436, // 641: golf.v1.RepositoryExecutionValueService.SaveRepositoryExecutionValue:input_type -> golf.v1.SaveRepositoryExecutionValueRequest
-	437, // 642: golf.v1.RepositoryExecutionValueService.DeleteRepositoryExecutionValue:input_type -> golf.v1.DeleteRepositoryExecutionValueRequest
-	438, // 643: golf.v1.RepositoryExecutionValueService.GetRepositoryExecutionVariable:input_type -> golf.v1.GetRepositoryExecutionVariableRequest
-	440, // 644: golf.v1.RepositoryExecutionValueService.SaveRepositoryExecutionBinding:input_type -> golf.v1.SaveRepositoryExecutionBindingRequest
-	441, // 645: golf.v1.RepositoryExecutionValueService.DeleteRepositoryExecutionBinding:input_type -> golf.v1.DeleteRepositoryExecutionBindingRequest
-	442, // 646: golf.v1.RepositoryExecutionValueService.GetRepositoryExecutionValueOperation:input_type -> golf.v1.GetRepositoryExecutionValueOperationRequest
-	452, // 647: golf.v1.RepositoryInvitationService.PreviewRepositoryInvitationRecipient:input_type -> golf.v1.PreviewRepositoryInvitationRecipientRequest
-	454, // 648: golf.v1.RepositoryInvitationService.CreateRepositoryInvitation:input_type -> golf.v1.CreateRepositoryInvitationRequest
-	456, // 649: golf.v1.RepositoryInvitationService.ListRepositoryInvitations:input_type -> golf.v1.ListRepositoryInvitationsRequest
-	457, // 650: golf.v1.RepositoryInvitationService.ListOwnRepositoryInvitations:input_type -> golf.v1.ListOwnRepositoryInvitationsRequest
-	459, // 651: golf.v1.RepositoryInvitationService.RespondRepositoryInvitation:input_type -> golf.v1.RespondRepositoryInvitationRequest
-	460, // 652: golf.v1.RepositoryInvitationService.RevokeRepositoryInvitation:input_type -> golf.v1.RevokeRepositoryInvitationRequest
-	461, // 653: golf.v1.RepositoryInvitationService.GetRepositoryInvitationOperation:input_type -> golf.v1.GetRepositoryInvitationOperationRequest
-	466, // 654: golf.v1.RepositoryRulesService.GetRepositoryRules:input_type -> golf.v1.GetRepositoryRulesRequest
-	151, // 655: golf.v1.SessionService.GetAuthenticationOptions:output_type -> golf.v1.GetAuthenticationOptionsResponse
-	153, // 656: golf.v1.SessionService.BeginGiteaOAuth:output_type -> golf.v1.BeginGiteaOAuthResponse
-	66,  // 657: golf.v1.SessionService.LoginWithPassword:output_type -> golf.v1.LoginWithPasswordResponse
-	68,  // 658: golf.v1.SessionService.LoginWithGiteaToken:output_type -> golf.v1.LoginWithGiteaTokenResponse
-	70,  // 659: golf.v1.SessionService.GetSession:output_type -> golf.v1.GetSessionResponse
-	73,  // 660: golf.v1.SessionService.ListSessions:output_type -> golf.v1.ListSessionsResponse
-	75,  // 661: golf.v1.SessionService.RevokeSession:output_type -> golf.v1.RevokeSessionResponse
-	77,  // 662: golf.v1.SessionService.RevokeOtherSessions:output_type -> golf.v1.RevokeOtherSessionsResponse
-	79,  // 663: golf.v1.SessionService.Logout:output_type -> golf.v1.LogoutResponse
-	39,  // 664: golf.v1.ApiCredentialService.CreateApiCredential:output_type -> golf.v1.CreateApiCredentialResponse
-	41,  // 665: golf.v1.ApiCredentialService.ListApiCredentials:output_type -> golf.v1.ListApiCredentialsResponse
-	43,  // 666: golf.v1.ApiCredentialService.RevokeApiCredential:output_type -> golf.v1.RevokeApiCredentialResponse
-	46,  // 667: golf.v1.GitAccessService.ListSSHKeys:output_type -> golf.v1.ListSSHKeysResponse
-	48,  // 668: golf.v1.GitAccessService.AddSSHKey:output_type -> golf.v1.AddSSHKeyResponse
-	50,  // 669: golf.v1.GitAccessService.DeleteSSHKey:output_type -> golf.v1.DeleteSSHKeyResponse
-	55,  // 670: golf.v1.RepositorySettingsService.GetRepositorySettings:output_type -> golf.v1.GetRepositorySettingsResponse
-	57,  // 671: golf.v1.RepositorySettingsService.UpdateRepositorySettings:output_type -> golf.v1.UpdateRepositorySettingsResponse
-	59,  // 672: golf.v1.RepositorySettingsService.UpdateRepositoryTopics:output_type -> golf.v1.UpdateRepositoryTopicsResponse
-	81,  // 673: golf.v1.RepositoryService.ListRepositories:output_type -> golf.v1.ListRepositoriesResponse
-	83,  // 674: golf.v1.RepositoryService.CreateRepository:output_type -> golf.v1.CreateRepositoryResponse
-	86,  // 675: golf.v1.RepositoryService.GetRepositoryCreation:output_type -> golf.v1.GetRepositoryCreationResponse
-	88,  // 676: golf.v1.RepositoryService.GetRepository:output_type -> golf.v1.GetRepositoryResponse
-	352, // 677: golf.v1.RepositoryService.GetRepositoryOverview:output_type -> golf.v1.GetRepositoryOverviewResponse
-	91,  // 678: golf.v1.RepositoryService.ListBranches:output_type -> golf.v1.ListBranchesResponse
-	94,  // 679: golf.v1.RepositoryService.ListTags:output_type -> golf.v1.ListTagsResponse
-	97,  // 680: golf.v1.RepositoryService.ListCommits:output_type -> golf.v1.ListCommitsResponse
-	99,  // 681: golf.v1.RepositoryService.GetCommitDiff:output_type -> golf.v1.GetCommitDiffResponse
-	321, // 682: golf.v1.RepositoryService.ListPullRequestCommits:output_type -> golf.v1.ListPullRequestCommitsResponse
-	324, // 683: golf.v1.RepositoryService.ListPullRequestChecks:output_type -> golf.v1.ListPullRequestChecksResponse
-	101, // 684: golf.v1.RepositoryService.GetPullRequestDiff:output_type -> golf.v1.GetPullRequestDiffResponse
-	329, // 685: golf.v1.RepositoryService.GetRepositoryComparison:output_type -> golf.v1.GetRepositoryComparisonResponse
-	103, // 686: golf.v1.RepositoryService.GetRepositoryImage:output_type -> golf.v1.GetRepositoryImageResponse
-	110, // 687: golf.v1.RepositoryService.ResolveRepositorySource:output_type -> golf.v1.ResolveRepositorySourceResponse
-	112, // 688: golf.v1.RepositoryService.GetContents:output_type -> golf.v1.GetContentsResponse
-	115, // 689: golf.v1.RepositoryService.ListIssues:output_type -> golf.v1.ListIssuesResponse
-	316, // 690: golf.v1.RepositoryService.GetPullRequestDiscussion:output_type -> golf.v1.GetPullRequestDiscussionResponse
-	117, // 691: golf.v1.RepositoryService.GetIssue:output_type -> golf.v1.GetIssueResponse
-	120, // 692: golf.v1.RepositoryService.ListIssueComments:output_type -> golf.v1.ListIssueCommentsResponse
-	123, // 693: golf.v1.RepositoryService.CreateIssue:output_type -> golf.v1.CreateIssueResponse
-	125, // 694: golf.v1.RepositoryService.CreateIssueComment:output_type -> golf.v1.CreateIssueCommentResponse
-	127, // 695: golf.v1.RepositoryService.UpdateIssue:output_type -> golf.v1.UpdateIssueResponse
-	326, // 696: golf.v1.RepositoryService.CreatePullRequest:output_type -> golf.v1.CreatePullRequestResponse
-	331, // 697: golf.v1.RepositoryService.UpdatePullRequest:output_type -> golf.v1.UpdatePullRequestResponse
-	129, // 698: golf.v1.RepositoryService.GetIssueMutation:output_type -> golf.v1.GetIssueMutationResponse
-	133, // 699: golf.v1.RepositoryService.ListPullRequests:output_type -> golf.v1.ListPullRequestsResponse
-	135, // 700: golf.v1.RepositoryService.GetPullRequest:output_type -> golf.v1.GetPullRequestResponse
-	143, // 701: golf.v1.RepositoryService.ListPullRequestReviews:output_type -> golf.v1.ListPullRequestReviewsResponse
-	146, // 702: golf.v1.RepositoryService.GetPullRequestReviewComments:output_type -> golf.v1.GetPullRequestReviewCommentsResponse
-	340, // 703: golf.v1.RepositoryService.GetPullRequestReviewDraft:output_type -> golf.v1.GetPullRequestReviewDraftResponse
-	342, // 704: golf.v1.RepositoryService.SavePullRequestReviewDraft:output_type -> golf.v1.SavePullRequestReviewDraftResponse
-	344, // 705: golf.v1.RepositoryService.DeletePullRequestReviewDraft:output_type -> golf.v1.DeletePullRequestReviewDraftResponse
-	347, // 706: golf.v1.RepositoryService.PublishPullRequestReviewDraft:output_type -> golf.v1.PublishPullRequestReviewDraftResponse
-	349, // 707: golf.v1.RepositoryService.GetPullRequestInlineReviewMutation:output_type -> golf.v1.GetPullRequestInlineReviewMutationResponse
-	139, // 708: golf.v1.RepositoryService.CreatePullRequestReview:output_type -> golf.v1.CreatePullRequestReviewResponse
-	141, // 709: golf.v1.RepositoryService.GetPullRequestReviewMutation:output_type -> golf.v1.GetPullRequestReviewMutationResponse
-	157, // 710: golf.v1.OrganizationService.ListOrganizations:output_type -> golf.v1.ListOrganizationsResponse
-	159, // 711: golf.v1.OrganizationService.GetOrganization:output_type -> golf.v1.GetOrganizationResponse
-	161, // 712: golf.v1.OrganizationService.ListTeams:output_type -> golf.v1.ListTeamsResponse
-	163, // 713: golf.v1.OrganizationService.GetTeam:output_type -> golf.v1.GetTeamResponse
-	165, // 714: golf.v1.OrganizationService.ListTeamMembers:output_type -> golf.v1.ListTeamMembersResponse
-	167, // 715: golf.v1.OrganizationService.ListTeamRepositories:output_type -> golf.v1.ListTeamRepositoriesResponse
-	172, // 716: golf.v1.OrganizationAdminService.GetTeamAdministration:output_type -> golf.v1.GetTeamAdministrationResponse
-	174, // 717: golf.v1.OrganizationAdminService.ResolveTeamMember:output_type -> golf.v1.ResolveTeamMemberResponse
-	176, // 718: golf.v1.OrganizationAdminService.AddTeamMember:output_type -> golf.v1.AddTeamMemberResponse
-	178, // 719: golf.v1.OrganizationAdminService.RemoveTeamMember:output_type -> golf.v1.RemoveTeamMemberResponse
-	257, // 720: golf.v1.InstanceAdminService.EnrollRegularLocalAccount:output_type -> golf.v1.EnrollRegularLocalAccountResponse
-	259, // 721: golf.v1.InstanceAdminService.ResetRegularLocalPassword:output_type -> golf.v1.ResetRegularLocalPasswordResponse
-	261, // 722: golf.v1.InstanceAdminService.EnableRegularLocalAccount:output_type -> golf.v1.EnableRegularLocalAccountResponse
-	200, // 723: golf.v1.InstanceAdminService.DisableLocalAccount:output_type -> golf.v1.DisableLocalAccountResponse
-	181, // 724: golf.v1.InstanceAdminService.ListLocalAccounts:output_type -> golf.v1.ListLocalAccountsResponse
-	170, // 725: golf.v1.AuditService.ListAuditEvents:output_type -> golf.v1.ListAuditEventsResponse
-	149, // 726: golf.v1.CapabilityService.ListCapabilities:output_type -> golf.v1.ListCapabilitiesResponse
-	185, // 727: golf.v1.RepositoryAccessService.GetRepositoryAccess:output_type -> golf.v1.GetRepositoryAccessResponse
-	187, // 728: golf.v1.RepositoryAccessService.ListRepositoryCollaborators:output_type -> golf.v1.ListRepositoryCollaboratorsResponse
-	189, // 729: golf.v1.RepositoryAccessService.ResolveRepositoryCollaborator:output_type -> golf.v1.ResolveRepositoryCollaboratorResponse
-	191, // 730: golf.v1.RepositoryAccessService.SetRepositoryCollaborator:output_type -> golf.v1.SetRepositoryCollaboratorResponse
-	193, // 731: golf.v1.RepositoryAccessService.RemoveRepositoryCollaborator:output_type -> golf.v1.RemoveRepositoryCollaboratorResponse
-	198, // 732: golf.v1.WorkflowService.InspectWorkflows:output_type -> golf.v1.InspectWorkflowsResponse
-	203, // 733: golf.v1.ExecutionPolicyService.GetExecutionPolicy:output_type -> golf.v1.GetExecutionPolicyResponse
-	205, // 734: golf.v1.ExecutionPolicyService.UpdateExecutionPolicy:output_type -> golf.v1.UpdateExecutionPolicyResponse
-	210, // 735: golf.v1.WorkflowRunService.DispatchWorkflow:output_type -> golf.v1.DispatchWorkflowResponse
-	212, // 736: golf.v1.WorkflowRunService.GetWorkflowRun:output_type -> golf.v1.GetWorkflowRunResponse
-	214, // 737: golf.v1.WorkflowRunService.ListWorkflowRuns:output_type -> golf.v1.ListWorkflowRunsResponse
-	216, // 738: golf.v1.WorkflowRunService.CancelWorkflowRun:output_type -> golf.v1.CancelWorkflowRunResponse
-	219, // 739: golf.v1.WorkflowRunService.GetWorkflowRunLogs:output_type -> golf.v1.GetWorkflowRunLogsResponse
-	222, // 740: golf.v1.OrganizationCreationService.GetOrganizationCreationPolicy:output_type -> golf.v1.GetOrganizationCreationPolicyResponse
-	224, // 741: golf.v1.OrganizationCreationService.UpdateOrganizationCreationPolicy:output_type -> golf.v1.UpdateOrganizationCreationPolicyResponse
-	226, // 742: golf.v1.OrganizationCreationService.CreateOrganization:output_type -> golf.v1.CreateOrganizationResponse
-	230, // 743: golf.v1.InfrastructureConnectionService.ListInfrastructureConnections:output_type -> golf.v1.ListInfrastructureConnectionsResponse
-	232, // 744: golf.v1.InfrastructureConnectionService.SaveInfrastructureConnection:output_type -> golf.v1.SaveInfrastructureConnectionResponse
-	234, // 745: golf.v1.InfrastructureConnectionService.TestInfrastructureConnection:output_type -> golf.v1.TestInfrastructureConnectionResponse
-	236, // 746: golf.v1.InfrastructureConnectionService.ActivateInfrastructureConnection:output_type -> golf.v1.ActivateInfrastructureConnectionResponse
-	239, // 747: golf.v1.ProfileService.GetProfile:output_type -> golf.v1.GetProfileResponse
-	241, // 748: golf.v1.ProfileService.UpdateProfile:output_type -> golf.v1.UpdateProfileResponse
-	251, // 749: golf.v1.AccountSecurityService.GetAccountSecurity:output_type -> golf.v1.GetAccountSecurityResponse
-	254, // 750: golf.v1.AccountSecurityService.ChangeOwnPassword:output_type -> golf.v1.ChangeOwnPasswordResponse
-	255, // 751: golf.v1.AccountSecurityService.ChangeOwnLoginEmail:output_type -> golf.v1.ChangeOwnLoginEmailResponse
-	244, // 752: golf.v1.AutomationGrantService.ListAutomationGrants:output_type -> golf.v1.ListAutomationGrantsResponse
-	246, // 753: golf.v1.AutomationGrantService.CreateAutomationGrant:output_type -> golf.v1.CreateAutomationGrantResponse
-	248, // 754: golf.v1.AutomationGrantService.RevokeAutomationGrant:output_type -> golf.v1.RevokeAutomationGrantResponse
-	277, // 755: golf.v1.CodexAccountService.ListCodexConnections:output_type -> golf.v1.ListCodexConnectionsResponse
-	279, // 756: golf.v1.CodexAccountService.CreateCodexConnection:output_type -> golf.v1.CreateCodexConnectionResponse
-	281, // 757: golf.v1.CodexAccountService.SetCodexConnectionAccess:output_type -> golf.v1.SetCodexConnectionAccessResponse
-	264, // 758: golf.v1.CodexAccountService.GetCodexConnection:output_type -> golf.v1.GetCodexConnectionResponse
-	266, // 759: golf.v1.CodexAccountService.StartCodexLogin:output_type -> golf.v1.StartCodexLoginResponse
-	283, // 760: golf.v1.CodexAccountService.CompleteAgentLogin:output_type -> golf.v1.CompleteAgentLoginResponse
-	268, // 761: golf.v1.CodexAccountService.CancelCodexLogin:output_type -> golf.v1.CancelCodexLoginResponse
-	273, // 762: golf.v1.CodexAccountService.RefreshCodexConnection:output_type -> golf.v1.RefreshCodexConnectionResponse
-	275, // 763: golf.v1.CodexAccountService.DisconnectCodexConnection:output_type -> golf.v1.DisconnectCodexConnectionResponse
-	287, // 764: golf.v1.AgentUsageService.GetAgentUsage:output_type -> golf.v1.GetAgentUsageResponse
-	289, // 765: golf.v1.AgentUsageService.SaveAgentUsage:output_type -> golf.v1.SaveAgentUsageResponse
-	292, // 766: golf.v1.AgentUsageService.ListAgentModels:output_type -> golf.v1.ListAgentModelsResponse
-	295, // 767: golf.v1.AgentUsageService.PreviewAgentTask:output_type -> golf.v1.PreviewAgentTaskResponse
-	302, // 768: golf.v1.AgentTaskService.CreateAgentTask:output_type -> golf.v1.CreateAgentTaskResponse
-	299, // 769: golf.v1.AgentTaskService.ListAgentTasks:output_type -> golf.v1.ListAgentTasksResponse
-	303, // 770: golf.v1.AgentTaskService.GetAgentTask:output_type -> golf.v1.GetAgentTaskResponse
-	304, // 771: golf.v1.AgentTaskService.CancelAgentTask:output_type -> golf.v1.CancelAgentTaskResponse
-	362, // 772: golf.v1.AgentTaskService.ListAgentTaskEvents:output_type -> golf.v1.ListAgentTaskEventsResponse
-	307, // 773: golf.v1.ReviewerService.GetReviewer:output_type -> golf.v1.GetReviewerResponse
-	309, // 774: golf.v1.ReviewerService.SaveReviewer:output_type -> golf.v1.SaveReviewerResponse
-	312, // 775: golf.v1.ReviewerService.ListReviewerRuns:output_type -> golf.v1.ListReviewerRunsResponse
-	314, // 776: golf.v1.ReviewerService.RequestReview:output_type -> golf.v1.RequestReviewResponse
-	318, // 777: golf.v1.RepositoryActivityService.WatchRepository:output_type -> golf.v1.WatchRepositoryResponse
-	356, // 778: golf.v1.ActionRunService.ListActionRuns:output_type -> golf.v1.ListActionRunsResponse
-	358, // 779: golf.v1.ActionRunService.GetActionRun:output_type -> golf.v1.GetActionRunResponse
-	365, // 780: golf.v1.RepositoryDeployKeyService.ListRepositoryDeployKeys:output_type -> golf.v1.ListRepositoryDeployKeysResponse
-	367, // 781: golf.v1.RepositoryDeployKeyService.AddRepositoryDeployKey:output_type -> golf.v1.AddRepositoryDeployKeyResponse
-	369, // 782: golf.v1.RepositoryDeployKeyService.DeleteRepositoryDeployKey:output_type -> golf.v1.DeleteRepositoryDeployKeyResponse
-	377, // 783: golf.v1.RepositoryWebhookService.ListRepositoryWebhooks:output_type -> golf.v1.ListRepositoryWebhooksResponse
-	379, // 784: golf.v1.RepositoryWebhookService.SaveRepositoryWebhook:output_type -> golf.v1.SaveRepositoryWebhookResponse
-	381, // 785: golf.v1.RepositoryWebhookService.ListRepositoryWebhookDeliveries:output_type -> golf.v1.ListRepositoryWebhookDeliveriesResponse
-	384, // 786: golf.v1.RepositoryWebhookService.TestRepositoryWebhook:output_type -> golf.v1.TestRepositoryWebhookResponse
-	385, // 787: golf.v1.RepositoryWebhookService.RedeliverRepositoryWebhook:output_type -> golf.v1.RedeliverRepositoryWebhookResponse
-	388, // 788: golf.v1.RepositoryTeamAccessService.ListRepositoryTeamAccess:output_type -> golf.v1.ListRepositoryTeamAccessResponse
-	390, // 789: golf.v1.RepositoryTeamAccessService.AttachRepositoryTeam:output_type -> golf.v1.AttachRepositoryTeamResponse
-	392, // 790: golf.v1.RepositoryTeamAccessService.DetachRepositoryTeam:output_type -> golf.v1.DetachRepositoryTeamResponse
-	396, // 791: golf.v1.RepositoryLifecycleService.GetRepositoryLifecycle:output_type -> golf.v1.GetRepositoryLifecycleResponse
-	398, // 792: golf.v1.RepositoryLifecycleService.ChangeRepositoryArchiveState:output_type -> golf.v1.ChangeRepositoryArchiveStateResponse
-	400, // 793: golf.v1.RepositoryLifecycleService.GetRepositoryLifecycleOperation:output_type -> golf.v1.GetRepositoryLifecycleOperationResponse
-	403, // 794: golf.v1.EmailNotificationService.ListEmailTransports:output_type -> golf.v1.ListEmailTransportsResponse
-	407, // 795: golf.v1.EmailNotificationService.SaveEmailTransport:output_type -> golf.v1.SaveEmailTransportResponse
-	409, // 796: golf.v1.EmailNotificationService.ActivateEmailTransport:output_type -> golf.v1.ActivateEmailTransportResponse
-	412, // 797: golf.v1.EmailNotificationService.GetOwnEmailNotifications:output_type -> golf.v1.GetOwnEmailNotificationsResponse
-	414, // 798: golf.v1.EmailNotificationService.RequestEmailVerification:output_type -> golf.v1.RequestEmailVerificationResponse
-	416, // 799: golf.v1.EmailNotificationService.ConfirmEmailVerification:output_type -> golf.v1.ConfirmEmailVerificationResponse
-	418, // 800: golf.v1.EmailNotificationService.SaveOwnEmailPreference:output_type -> golf.v1.SaveOwnEmailPreferenceResponse
-	422, // 801: golf.v1.EmailNotificationService.GetRepositoryEmailSubscription:output_type -> golf.v1.GetRepositoryEmailSubscriptionResponse
-	424, // 802: golf.v1.EmailNotificationService.SaveRepositoryEmailSubscription:output_type -> golf.v1.SaveRepositoryEmailSubscriptionResponse
-	427, // 803: golf.v1.EmailNotificationService.ListOwnEmailDeliveries:output_type -> golf.v1.ListOwnEmailDeliveriesResponse
-	429, // 804: golf.v1.EmailNotificationService.RedeliverOwnEmail:output_type -> golf.v1.RedeliverOwnEmailResponse
-	435, // 805: golf.v1.RepositoryExecutionValueService.ListRepositoryExecutionValues:output_type -> golf.v1.ListRepositoryExecutionValuesResponse
-	444, // 806: golf.v1.RepositoryExecutionValueService.SaveRepositoryExecutionValue:output_type -> golf.v1.SaveRepositoryExecutionValueResponse
-	445, // 807: golf.v1.RepositoryExecutionValueService.DeleteRepositoryExecutionValue:output_type -> golf.v1.DeleteRepositoryExecutionValueResponse
-	439, // 808: golf.v1.RepositoryExecutionValueService.GetRepositoryExecutionVariable:output_type -> golf.v1.GetRepositoryExecutionVariableResponse
-	446, // 809: golf.v1.RepositoryExecutionValueService.SaveRepositoryExecutionBinding:output_type -> golf.v1.SaveRepositoryExecutionBindingResponse
-	447, // 810: golf.v1.RepositoryExecutionValueService.DeleteRepositoryExecutionBinding:output_type -> golf.v1.DeleteRepositoryExecutionBindingResponse
-	448, // 811: golf.v1.RepositoryExecutionValueService.GetRepositoryExecutionValueOperation:output_type -> golf.v1.GetRepositoryExecutionValueOperationResponse
-	453, // 812: golf.v1.RepositoryInvitationService.PreviewRepositoryInvitationRecipient:output_type -> golf.v1.PreviewRepositoryInvitationRecipientResponse
-	455, // 813: golf.v1.RepositoryInvitationService.CreateRepositoryInvitation:output_type -> golf.v1.CreateRepositoryInvitationResponse
-	458, // 814: golf.v1.RepositoryInvitationService.ListRepositoryInvitations:output_type -> golf.v1.ListRepositoryInvitationsResponse
-	465, // 815: golf.v1.RepositoryInvitationService.ListOwnRepositoryInvitations:output_type -> golf.v1.ListOwnRepositoryInvitationsResponse
-	463, // 816: golf.v1.RepositoryInvitationService.RespondRepositoryInvitation:output_type -> golf.v1.RespondRepositoryInvitationResponse
-	464, // 817: golf.v1.RepositoryInvitationService.RevokeRepositoryInvitation:output_type -> golf.v1.RevokeRepositoryInvitationResponse
-	462, // 818: golf.v1.RepositoryInvitationService.GetRepositoryInvitationOperation:output_type -> golf.v1.GetRepositoryInvitationOperationResponse
-	467, // 819: golf.v1.RepositoryRulesService.GetRepositoryRules:output_type -> golf.v1.GetRepositoryRulesResponse
-	655, // [655:820] is the sub-list for method output_type
-	490, // [490:655] is the sub-list for method input_type
-	490, // [490:490] is the sub-list for extension type_name
-	490, // [490:490] is the sub-list for extension extendee
-	0,   // [0:490] is the sub-list for field type_name
+	63,  // 478: golf.v1.RevokeRepositoryInvitationRequest.repository:type_name -> golf.v1.RepositoryKey
+	452, // 479: golf.v1.GetRepositoryInvitationOperationResponse.operation:type_name -> golf.v1.RepositoryInvitationOperation
+	451, // 480: golf.v1.RespondRepositoryInvitationResponse.invitation:type_name -> golf.v1.RepositoryInvitation
+	452, // 481: golf.v1.RespondRepositoryInvitationResponse.operation:type_name -> golf.v1.RepositoryInvitationOperation
+	451, // 482: golf.v1.RevokeRepositoryInvitationResponse.invitation:type_name -> golf.v1.RepositoryInvitation
+	451, // 483: golf.v1.ListOwnRepositoryInvitationsResponse.invitations:type_name -> golf.v1.RepositoryInvitation
+	65,  // 484: golf.v1.ListOwnRepositoryInvitationsResponse.page:type_name -> golf.v1.PageResponse
+	63,  // 485: golf.v1.GetRepositoryRulesRequest.repository:type_name -> golf.v1.RepositoryKey
+	469, // 486: golf.v1.GetRepositoryRulesResponse.branch_protections:type_name -> golf.v1.RepositoryBranchProtection
+	470, // 487: golf.v1.GetRepositoryRulesResponse.tag_protections:type_name -> golf.v1.RepositoryTagProtection
+	471, // 488: golf.v1.GetRepositoryRulesResponse.merge_configuration:type_name -> golf.v1.RepositoryMergeConfiguration
+	37,  // 489: golf.v1.EnrolledRunner.state:type_name -> golf.v1.RunnerControlState
+	472, // 490: golf.v1.GetInstanceRunnersResponse.runners:type_name -> golf.v1.EnrolledRunner
+	37,  // 491: golf.v1.UpdateRunnerControlRequest.state:type_name -> golf.v1.RunnerControlState
+	472, // 492: golf.v1.UpdateRunnerControlResponse.runner:type_name -> golf.v1.EnrolledRunner
+	63,  // 493: golf.v1.GetRepositoryRunnersRequest.repository:type_name -> golf.v1.RepositoryKey
+	63,  // 494: golf.v1.GetRepositoryRunnersResponse.repository:type_name -> golf.v1.RepositoryKey
+	472, // 495: golf.v1.GetRepositoryRunnersResponse.runners:type_name -> golf.v1.EnrolledRunner
+	13,  // 496: golf.v1.OrganizationTeam.UnitPermissionsEntry.value:type_name -> golf.v1.TeamPermission
+	151, // 497: golf.v1.SessionService.GetAuthenticationOptions:input_type -> golf.v1.GetAuthenticationOptionsRequest
+	153, // 498: golf.v1.SessionService.BeginGiteaOAuth:input_type -> golf.v1.BeginGiteaOAuthRequest
+	66,  // 499: golf.v1.SessionService.LoginWithPassword:input_type -> golf.v1.LoginWithPasswordRequest
+	68,  // 500: golf.v1.SessionService.LoginWithGiteaToken:input_type -> golf.v1.LoginWithGiteaTokenRequest
+	70,  // 501: golf.v1.SessionService.GetSession:input_type -> golf.v1.GetSessionRequest
+	73,  // 502: golf.v1.SessionService.ListSessions:input_type -> golf.v1.ListSessionsRequest
+	75,  // 503: golf.v1.SessionService.RevokeSession:input_type -> golf.v1.RevokeSessionRequest
+	77,  // 504: golf.v1.SessionService.RevokeOtherSessions:input_type -> golf.v1.RevokeOtherSessionsRequest
+	79,  // 505: golf.v1.SessionService.Logout:input_type -> golf.v1.LogoutRequest
+	39,  // 506: golf.v1.ApiCredentialService.CreateApiCredential:input_type -> golf.v1.CreateApiCredentialRequest
+	41,  // 507: golf.v1.ApiCredentialService.ListApiCredentials:input_type -> golf.v1.ListApiCredentialsRequest
+	43,  // 508: golf.v1.ApiCredentialService.RevokeApiCredential:input_type -> golf.v1.RevokeApiCredentialRequest
+	46,  // 509: golf.v1.GitAccessService.ListSSHKeys:input_type -> golf.v1.ListSSHKeysRequest
+	48,  // 510: golf.v1.GitAccessService.AddSSHKey:input_type -> golf.v1.AddSSHKeyRequest
+	50,  // 511: golf.v1.GitAccessService.DeleteSSHKey:input_type -> golf.v1.DeleteSSHKeyRequest
+	55,  // 512: golf.v1.RepositorySettingsService.GetRepositorySettings:input_type -> golf.v1.GetRepositorySettingsRequest
+	57,  // 513: golf.v1.RepositorySettingsService.UpdateRepositorySettings:input_type -> golf.v1.UpdateRepositorySettingsRequest
+	59,  // 514: golf.v1.RepositorySettingsService.UpdateRepositoryTopics:input_type -> golf.v1.UpdateRepositoryTopicsRequest
+	81,  // 515: golf.v1.RepositoryService.ListRepositories:input_type -> golf.v1.ListRepositoriesRequest
+	83,  // 516: golf.v1.RepositoryService.CreateRepository:input_type -> golf.v1.CreateRepositoryRequest
+	86,  // 517: golf.v1.RepositoryService.GetRepositoryCreation:input_type -> golf.v1.GetRepositoryCreationRequest
+	88,  // 518: golf.v1.RepositoryService.GetRepository:input_type -> golf.v1.GetRepositoryRequest
+	352, // 519: golf.v1.RepositoryService.GetRepositoryOverview:input_type -> golf.v1.GetRepositoryOverviewRequest
+	91,  // 520: golf.v1.RepositoryService.ListBranches:input_type -> golf.v1.ListBranchesRequest
+	94,  // 521: golf.v1.RepositoryService.ListTags:input_type -> golf.v1.ListTagsRequest
+	97,  // 522: golf.v1.RepositoryService.ListCommits:input_type -> golf.v1.ListCommitsRequest
+	99,  // 523: golf.v1.RepositoryService.GetCommitDiff:input_type -> golf.v1.GetCommitDiffRequest
+	321, // 524: golf.v1.RepositoryService.ListPullRequestCommits:input_type -> golf.v1.ListPullRequestCommitsRequest
+	324, // 525: golf.v1.RepositoryService.ListPullRequestChecks:input_type -> golf.v1.ListPullRequestChecksRequest
+	101, // 526: golf.v1.RepositoryService.GetPullRequestDiff:input_type -> golf.v1.GetPullRequestDiffRequest
+	329, // 527: golf.v1.RepositoryService.GetRepositoryComparison:input_type -> golf.v1.GetRepositoryComparisonRequest
+	103, // 528: golf.v1.RepositoryService.GetRepositoryImage:input_type -> golf.v1.GetRepositoryImageRequest
+	109, // 529: golf.v1.RepositoryService.ResolveRepositorySource:input_type -> golf.v1.ResolveRepositorySourceRequest
+	112, // 530: golf.v1.RepositoryService.GetContents:input_type -> golf.v1.GetContentsRequest
+	115, // 531: golf.v1.RepositoryService.ListIssues:input_type -> golf.v1.ListIssuesRequest
+	316, // 532: golf.v1.RepositoryService.GetPullRequestDiscussion:input_type -> golf.v1.GetPullRequestDiscussionRequest
+	117, // 533: golf.v1.RepositoryService.GetIssue:input_type -> golf.v1.GetIssueRequest
+	120, // 534: golf.v1.RepositoryService.ListIssueComments:input_type -> golf.v1.ListIssueCommentsRequest
+	123, // 535: golf.v1.RepositoryService.CreateIssue:input_type -> golf.v1.CreateIssueRequest
+	125, // 536: golf.v1.RepositoryService.CreateIssueComment:input_type -> golf.v1.CreateIssueCommentRequest
+	127, // 537: golf.v1.RepositoryService.UpdateIssue:input_type -> golf.v1.UpdateIssueRequest
+	326, // 538: golf.v1.RepositoryService.CreatePullRequest:input_type -> golf.v1.CreatePullRequestRequest
+	331, // 539: golf.v1.RepositoryService.UpdatePullRequest:input_type -> golf.v1.UpdatePullRequestRequest
+	129, // 540: golf.v1.RepositoryService.GetIssueMutation:input_type -> golf.v1.GetIssueMutationRequest
+	133, // 541: golf.v1.RepositoryService.ListPullRequests:input_type -> golf.v1.ListPullRequestsRequest
+	135, // 542: golf.v1.RepositoryService.GetPullRequest:input_type -> golf.v1.GetPullRequestRequest
+	143, // 543: golf.v1.RepositoryService.ListPullRequestReviews:input_type -> golf.v1.ListPullRequestReviewsRequest
+	146, // 544: golf.v1.RepositoryService.GetPullRequestReviewComments:input_type -> golf.v1.GetPullRequestReviewCommentsRequest
+	340, // 545: golf.v1.RepositoryService.GetPullRequestReviewDraft:input_type -> golf.v1.GetPullRequestReviewDraftRequest
+	342, // 546: golf.v1.RepositoryService.SavePullRequestReviewDraft:input_type -> golf.v1.SavePullRequestReviewDraftRequest
+	344, // 547: golf.v1.RepositoryService.DeletePullRequestReviewDraft:input_type -> golf.v1.DeletePullRequestReviewDraftRequest
+	346, // 548: golf.v1.RepositoryService.PublishPullRequestReviewDraft:input_type -> golf.v1.PublishPullRequestReviewDraftRequest
+	349, // 549: golf.v1.RepositoryService.GetPullRequestInlineReviewMutation:input_type -> golf.v1.GetPullRequestInlineReviewMutationRequest
+	138, // 550: golf.v1.RepositoryService.CreatePullRequestReview:input_type -> golf.v1.CreatePullRequestReviewRequest
+	141, // 551: golf.v1.RepositoryService.GetPullRequestReviewMutation:input_type -> golf.v1.GetPullRequestReviewMutationRequest
+	157, // 552: golf.v1.OrganizationService.ListOrganizations:input_type -> golf.v1.ListOrganizationsRequest
+	159, // 553: golf.v1.OrganizationService.GetOrganization:input_type -> golf.v1.GetOrganizationRequest
+	161, // 554: golf.v1.OrganizationService.ListTeams:input_type -> golf.v1.ListTeamsRequest
+	163, // 555: golf.v1.OrganizationService.GetTeam:input_type -> golf.v1.GetTeamRequest
+	165, // 556: golf.v1.OrganizationService.ListTeamMembers:input_type -> golf.v1.ListTeamMembersRequest
+	167, // 557: golf.v1.OrganizationService.ListTeamRepositories:input_type -> golf.v1.ListTeamRepositoriesRequest
+	172, // 558: golf.v1.OrganizationAdminService.GetTeamAdministration:input_type -> golf.v1.GetTeamAdministrationRequest
+	174, // 559: golf.v1.OrganizationAdminService.ResolveTeamMember:input_type -> golf.v1.ResolveTeamMemberRequest
+	176, // 560: golf.v1.OrganizationAdminService.AddTeamMember:input_type -> golf.v1.AddTeamMemberRequest
+	178, // 561: golf.v1.OrganizationAdminService.RemoveTeamMember:input_type -> golf.v1.RemoveTeamMemberRequest
+	257, // 562: golf.v1.InstanceAdminService.EnrollRegularLocalAccount:input_type -> golf.v1.EnrollRegularLocalAccountRequest
+	259, // 563: golf.v1.InstanceAdminService.ResetRegularLocalPassword:input_type -> golf.v1.ResetRegularLocalPasswordRequest
+	261, // 564: golf.v1.InstanceAdminService.EnableRegularLocalAccount:input_type -> golf.v1.EnableRegularLocalAccountRequest
+	200, // 565: golf.v1.InstanceAdminService.DisableLocalAccount:input_type -> golf.v1.DisableLocalAccountRequest
+	181, // 566: golf.v1.InstanceAdminService.ListLocalAccounts:input_type -> golf.v1.ListLocalAccountsRequest
+	170, // 567: golf.v1.AuditService.ListAuditEvents:input_type -> golf.v1.ListAuditEventsRequest
+	149, // 568: golf.v1.CapabilityService.ListCapabilities:input_type -> golf.v1.ListCapabilitiesRequest
+	185, // 569: golf.v1.RepositoryAccessService.GetRepositoryAccess:input_type -> golf.v1.GetRepositoryAccessRequest
+	187, // 570: golf.v1.RepositoryAccessService.ListRepositoryCollaborators:input_type -> golf.v1.ListRepositoryCollaboratorsRequest
+	189, // 571: golf.v1.RepositoryAccessService.ResolveRepositoryCollaborator:input_type -> golf.v1.ResolveRepositoryCollaboratorRequest
+	191, // 572: golf.v1.RepositoryAccessService.SetRepositoryCollaborator:input_type -> golf.v1.SetRepositoryCollaboratorRequest
+	193, // 573: golf.v1.RepositoryAccessService.RemoveRepositoryCollaborator:input_type -> golf.v1.RemoveRepositoryCollaboratorRequest
+	198, // 574: golf.v1.WorkflowService.InspectWorkflows:input_type -> golf.v1.InspectWorkflowsRequest
+	203, // 575: golf.v1.ExecutionPolicyService.GetExecutionPolicy:input_type -> golf.v1.GetExecutionPolicyRequest
+	205, // 576: golf.v1.ExecutionPolicyService.UpdateExecutionPolicy:input_type -> golf.v1.UpdateExecutionPolicyRequest
+	210, // 577: golf.v1.WorkflowRunService.DispatchWorkflow:input_type -> golf.v1.DispatchWorkflowRequest
+	212, // 578: golf.v1.WorkflowRunService.GetWorkflowRun:input_type -> golf.v1.GetWorkflowRunRequest
+	214, // 579: golf.v1.WorkflowRunService.ListWorkflowRuns:input_type -> golf.v1.ListWorkflowRunsRequest
+	216, // 580: golf.v1.WorkflowRunService.CancelWorkflowRun:input_type -> golf.v1.CancelWorkflowRunRequest
+	219, // 581: golf.v1.WorkflowRunService.GetWorkflowRunLogs:input_type -> golf.v1.GetWorkflowRunLogsRequest
+	222, // 582: golf.v1.OrganizationCreationService.GetOrganizationCreationPolicy:input_type -> golf.v1.GetOrganizationCreationPolicyRequest
+	224, // 583: golf.v1.OrganizationCreationService.UpdateOrganizationCreationPolicy:input_type -> golf.v1.UpdateOrganizationCreationPolicyRequest
+	226, // 584: golf.v1.OrganizationCreationService.CreateOrganization:input_type -> golf.v1.CreateOrganizationRequest
+	230, // 585: golf.v1.InfrastructureConnectionService.ListInfrastructureConnections:input_type -> golf.v1.ListInfrastructureConnectionsRequest
+	232, // 586: golf.v1.InfrastructureConnectionService.SaveInfrastructureConnection:input_type -> golf.v1.SaveInfrastructureConnectionRequest
+	234, // 587: golf.v1.InfrastructureConnectionService.TestInfrastructureConnection:input_type -> golf.v1.TestInfrastructureConnectionRequest
+	236, // 588: golf.v1.InfrastructureConnectionService.ActivateInfrastructureConnection:input_type -> golf.v1.ActivateInfrastructureConnectionRequest
+	239, // 589: golf.v1.ProfileService.GetProfile:input_type -> golf.v1.GetProfileRequest
+	241, // 590: golf.v1.ProfileService.UpdateProfile:input_type -> golf.v1.UpdateProfileRequest
+	251, // 591: golf.v1.AccountSecurityService.GetAccountSecurity:input_type -> golf.v1.GetAccountSecurityRequest
+	253, // 592: golf.v1.AccountSecurityService.ChangeOwnPassword:input_type -> golf.v1.ChangeOwnPasswordRequest
+	254, // 593: golf.v1.AccountSecurityService.ChangeOwnLoginEmail:input_type -> golf.v1.ChangeOwnLoginEmailRequest
+	244, // 594: golf.v1.AutomationGrantService.ListAutomationGrants:input_type -> golf.v1.ListAutomationGrantsRequest
+	246, // 595: golf.v1.AutomationGrantService.CreateAutomationGrant:input_type -> golf.v1.CreateAutomationGrantRequest
+	248, // 596: golf.v1.AutomationGrantService.RevokeAutomationGrant:input_type -> golf.v1.RevokeAutomationGrantRequest
+	277, // 597: golf.v1.CodexAccountService.ListCodexConnections:input_type -> golf.v1.ListCodexConnectionsRequest
+	279, // 598: golf.v1.CodexAccountService.CreateCodexConnection:input_type -> golf.v1.CreateCodexConnectionRequest
+	281, // 599: golf.v1.CodexAccountService.SetCodexConnectionAccess:input_type -> golf.v1.SetCodexConnectionAccessRequest
+	264, // 600: golf.v1.CodexAccountService.GetCodexConnection:input_type -> golf.v1.GetCodexConnectionRequest
+	266, // 601: golf.v1.CodexAccountService.StartCodexLogin:input_type -> golf.v1.StartCodexLoginRequest
+	283, // 602: golf.v1.CodexAccountService.CompleteAgentLogin:input_type -> golf.v1.CompleteAgentLoginRequest
+	268, // 603: golf.v1.CodexAccountService.CancelCodexLogin:input_type -> golf.v1.CancelCodexLoginRequest
+	270, // 604: golf.v1.CodexAccountService.RefreshCodexConnection:input_type -> golf.v1.RefreshCodexConnectionRequest
+	275, // 605: golf.v1.CodexAccountService.DisconnectCodexConnection:input_type -> golf.v1.DisconnectCodexConnectionRequest
+	287, // 606: golf.v1.AgentUsageService.GetAgentUsage:input_type -> golf.v1.GetAgentUsageRequest
+	289, // 607: golf.v1.AgentUsageService.SaveAgentUsage:input_type -> golf.v1.SaveAgentUsageRequest
+	292, // 608: golf.v1.AgentUsageService.ListAgentModels:input_type -> golf.v1.ListAgentModelsRequest
+	295, // 609: golf.v1.AgentUsageService.PreviewAgentTask:input_type -> golf.v1.PreviewAgentTaskRequest
+	298, // 610: golf.v1.AgentTaskService.CreateAgentTask:input_type -> golf.v1.CreateAgentTaskRequest
+	299, // 611: golf.v1.AgentTaskService.ListAgentTasks:input_type -> golf.v1.ListAgentTasksRequest
+	301, // 612: golf.v1.AgentTaskService.GetAgentTask:input_type -> golf.v1.GetAgentTaskRequest
+	302, // 613: golf.v1.AgentTaskService.CancelAgentTask:input_type -> golf.v1.CancelAgentTaskRequest
+	362, // 614: golf.v1.AgentTaskService.ListAgentTaskEvents:input_type -> golf.v1.ListAgentTaskEventsRequest
+	307, // 615: golf.v1.ReviewerService.GetReviewer:input_type -> golf.v1.GetReviewerRequest
+	309, // 616: golf.v1.ReviewerService.SaveReviewer:input_type -> golf.v1.SaveReviewerRequest
+	312, // 617: golf.v1.ReviewerService.ListReviewerRuns:input_type -> golf.v1.ListReviewerRunsRequest
+	314, // 618: golf.v1.ReviewerService.RequestReview:input_type -> golf.v1.RequestReviewRequest
+	318, // 619: golf.v1.RepositoryActivityService.WatchRepository:input_type -> golf.v1.WatchRepositoryRequest
+	356, // 620: golf.v1.ActionRunService.ListActionRuns:input_type -> golf.v1.ListActionRunsRequest
+	358, // 621: golf.v1.ActionRunService.GetActionRun:input_type -> golf.v1.GetActionRunRequest
+	365, // 622: golf.v1.RepositoryDeployKeyService.ListRepositoryDeployKeys:input_type -> golf.v1.ListRepositoryDeployKeysRequest
+	367, // 623: golf.v1.RepositoryDeployKeyService.AddRepositoryDeployKey:input_type -> golf.v1.AddRepositoryDeployKeyRequest
+	369, // 624: golf.v1.RepositoryDeployKeyService.DeleteRepositoryDeployKey:input_type -> golf.v1.DeleteRepositoryDeployKeyRequest
+	377, // 625: golf.v1.RepositoryWebhookService.ListRepositoryWebhooks:input_type -> golf.v1.ListRepositoryWebhooksRequest
+	379, // 626: golf.v1.RepositoryWebhookService.SaveRepositoryWebhook:input_type -> golf.v1.SaveRepositoryWebhookRequest
+	381, // 627: golf.v1.RepositoryWebhookService.ListRepositoryWebhookDeliveries:input_type -> golf.v1.ListRepositoryWebhookDeliveriesRequest
+	383, // 628: golf.v1.RepositoryWebhookService.TestRepositoryWebhook:input_type -> golf.v1.TestRepositoryWebhookRequest
+	384, // 629: golf.v1.RepositoryWebhookService.RedeliverRepositoryWebhook:input_type -> golf.v1.RedeliverRepositoryWebhookRequest
+	388, // 630: golf.v1.RepositoryTeamAccessService.ListRepositoryTeamAccess:input_type -> golf.v1.ListRepositoryTeamAccessRequest
+	390, // 631: golf.v1.RepositoryTeamAccessService.AttachRepositoryTeam:input_type -> golf.v1.AttachRepositoryTeamRequest
+	392, // 632: golf.v1.RepositoryTeamAccessService.DetachRepositoryTeam:input_type -> golf.v1.DetachRepositoryTeamRequest
+	396, // 633: golf.v1.RepositoryLifecycleService.GetRepositoryLifecycle:input_type -> golf.v1.GetRepositoryLifecycleRequest
+	398, // 634: golf.v1.RepositoryLifecycleService.ChangeRepositoryArchiveState:input_type -> golf.v1.ChangeRepositoryArchiveStateRequest
+	400, // 635: golf.v1.RepositoryLifecycleService.GetRepositoryLifecycleOperation:input_type -> golf.v1.GetRepositoryLifecycleOperationRequest
+	403, // 636: golf.v1.EmailNotificationService.ListEmailTransports:input_type -> golf.v1.ListEmailTransportsRequest
+	407, // 637: golf.v1.EmailNotificationService.SaveEmailTransport:input_type -> golf.v1.SaveEmailTransportRequest
+	409, // 638: golf.v1.EmailNotificationService.ActivateEmailTransport:input_type -> golf.v1.ActivateEmailTransportRequest
+	412, // 639: golf.v1.EmailNotificationService.GetOwnEmailNotifications:input_type -> golf.v1.GetOwnEmailNotificationsRequest
+	414, // 640: golf.v1.EmailNotificationService.RequestEmailVerification:input_type -> golf.v1.RequestEmailVerificationRequest
+	416, // 641: golf.v1.EmailNotificationService.ConfirmEmailVerification:input_type -> golf.v1.ConfirmEmailVerificationRequest
+	418, // 642: golf.v1.EmailNotificationService.SaveOwnEmailPreference:input_type -> golf.v1.SaveOwnEmailPreferenceRequest
+	422, // 643: golf.v1.EmailNotificationService.GetRepositoryEmailSubscription:input_type -> golf.v1.GetRepositoryEmailSubscriptionRequest
+	424, // 644: golf.v1.EmailNotificationService.SaveRepositoryEmailSubscription:input_type -> golf.v1.SaveRepositoryEmailSubscriptionRequest
+	427, // 645: golf.v1.EmailNotificationService.ListOwnEmailDeliveries:input_type -> golf.v1.ListOwnEmailDeliveriesRequest
+	429, // 646: golf.v1.EmailNotificationService.RedeliverOwnEmail:input_type -> golf.v1.RedeliverOwnEmailRequest
+	435, // 647: golf.v1.RepositoryExecutionValueService.ListRepositoryExecutionValues:input_type -> golf.v1.ListRepositoryExecutionValuesRequest
+	437, // 648: golf.v1.RepositoryExecutionValueService.SaveRepositoryExecutionValue:input_type -> golf.v1.SaveRepositoryExecutionValueRequest
+	438, // 649: golf.v1.RepositoryExecutionValueService.DeleteRepositoryExecutionValue:input_type -> golf.v1.DeleteRepositoryExecutionValueRequest
+	439, // 650: golf.v1.RepositoryExecutionValueService.GetRepositoryExecutionVariable:input_type -> golf.v1.GetRepositoryExecutionVariableRequest
+	441, // 651: golf.v1.RepositoryExecutionValueService.SaveRepositoryExecutionBinding:input_type -> golf.v1.SaveRepositoryExecutionBindingRequest
+	442, // 652: golf.v1.RepositoryExecutionValueService.DeleteRepositoryExecutionBinding:input_type -> golf.v1.DeleteRepositoryExecutionBindingRequest
+	443, // 653: golf.v1.RepositoryExecutionValueService.GetRepositoryExecutionValueOperation:input_type -> golf.v1.GetRepositoryExecutionValueOperationRequest
+	453, // 654: golf.v1.RepositoryInvitationService.PreviewRepositoryInvitationRecipient:input_type -> golf.v1.PreviewRepositoryInvitationRecipientRequest
+	455, // 655: golf.v1.RepositoryInvitationService.CreateRepositoryInvitation:input_type -> golf.v1.CreateRepositoryInvitationRequest
+	457, // 656: golf.v1.RepositoryInvitationService.ListRepositoryInvitations:input_type -> golf.v1.ListRepositoryInvitationsRequest
+	458, // 657: golf.v1.RepositoryInvitationService.ListOwnRepositoryInvitations:input_type -> golf.v1.ListOwnRepositoryInvitationsRequest
+	460, // 658: golf.v1.RepositoryInvitationService.RespondRepositoryInvitation:input_type -> golf.v1.RespondRepositoryInvitationRequest
+	461, // 659: golf.v1.RepositoryInvitationService.RevokeRepositoryInvitation:input_type -> golf.v1.RevokeRepositoryInvitationRequest
+	462, // 660: golf.v1.RepositoryInvitationService.GetRepositoryInvitationOperation:input_type -> golf.v1.GetRepositoryInvitationOperationRequest
+	467, // 661: golf.v1.RepositoryRulesService.GetRepositoryRules:input_type -> golf.v1.GetRepositoryRulesRequest
+	473, // 662: golf.v1.RunnerControlService.GetInstanceRunners:input_type -> golf.v1.GetInstanceRunnersRequest
+	475, // 663: golf.v1.RunnerControlService.UpdateRunnerControl:input_type -> golf.v1.UpdateRunnerControlRequest
+	477, // 664: golf.v1.RunnerControlService.GetRepositoryRunners:input_type -> golf.v1.GetRepositoryRunnersRequest
+	152, // 665: golf.v1.SessionService.GetAuthenticationOptions:output_type -> golf.v1.GetAuthenticationOptionsResponse
+	154, // 666: golf.v1.SessionService.BeginGiteaOAuth:output_type -> golf.v1.BeginGiteaOAuthResponse
+	67,  // 667: golf.v1.SessionService.LoginWithPassword:output_type -> golf.v1.LoginWithPasswordResponse
+	69,  // 668: golf.v1.SessionService.LoginWithGiteaToken:output_type -> golf.v1.LoginWithGiteaTokenResponse
+	71,  // 669: golf.v1.SessionService.GetSession:output_type -> golf.v1.GetSessionResponse
+	74,  // 670: golf.v1.SessionService.ListSessions:output_type -> golf.v1.ListSessionsResponse
+	76,  // 671: golf.v1.SessionService.RevokeSession:output_type -> golf.v1.RevokeSessionResponse
+	78,  // 672: golf.v1.SessionService.RevokeOtherSessions:output_type -> golf.v1.RevokeOtherSessionsResponse
+	80,  // 673: golf.v1.SessionService.Logout:output_type -> golf.v1.LogoutResponse
+	40,  // 674: golf.v1.ApiCredentialService.CreateApiCredential:output_type -> golf.v1.CreateApiCredentialResponse
+	42,  // 675: golf.v1.ApiCredentialService.ListApiCredentials:output_type -> golf.v1.ListApiCredentialsResponse
+	44,  // 676: golf.v1.ApiCredentialService.RevokeApiCredential:output_type -> golf.v1.RevokeApiCredentialResponse
+	47,  // 677: golf.v1.GitAccessService.ListSSHKeys:output_type -> golf.v1.ListSSHKeysResponse
+	49,  // 678: golf.v1.GitAccessService.AddSSHKey:output_type -> golf.v1.AddSSHKeyResponse
+	51,  // 679: golf.v1.GitAccessService.DeleteSSHKey:output_type -> golf.v1.DeleteSSHKeyResponse
+	56,  // 680: golf.v1.RepositorySettingsService.GetRepositorySettings:output_type -> golf.v1.GetRepositorySettingsResponse
+	58,  // 681: golf.v1.RepositorySettingsService.UpdateRepositorySettings:output_type -> golf.v1.UpdateRepositorySettingsResponse
+	60,  // 682: golf.v1.RepositorySettingsService.UpdateRepositoryTopics:output_type -> golf.v1.UpdateRepositoryTopicsResponse
+	82,  // 683: golf.v1.RepositoryService.ListRepositories:output_type -> golf.v1.ListRepositoriesResponse
+	84,  // 684: golf.v1.RepositoryService.CreateRepository:output_type -> golf.v1.CreateRepositoryResponse
+	87,  // 685: golf.v1.RepositoryService.GetRepositoryCreation:output_type -> golf.v1.GetRepositoryCreationResponse
+	89,  // 686: golf.v1.RepositoryService.GetRepository:output_type -> golf.v1.GetRepositoryResponse
+	353, // 687: golf.v1.RepositoryService.GetRepositoryOverview:output_type -> golf.v1.GetRepositoryOverviewResponse
+	92,  // 688: golf.v1.RepositoryService.ListBranches:output_type -> golf.v1.ListBranchesResponse
+	95,  // 689: golf.v1.RepositoryService.ListTags:output_type -> golf.v1.ListTagsResponse
+	98,  // 690: golf.v1.RepositoryService.ListCommits:output_type -> golf.v1.ListCommitsResponse
+	100, // 691: golf.v1.RepositoryService.GetCommitDiff:output_type -> golf.v1.GetCommitDiffResponse
+	322, // 692: golf.v1.RepositoryService.ListPullRequestCommits:output_type -> golf.v1.ListPullRequestCommitsResponse
+	325, // 693: golf.v1.RepositoryService.ListPullRequestChecks:output_type -> golf.v1.ListPullRequestChecksResponse
+	102, // 694: golf.v1.RepositoryService.GetPullRequestDiff:output_type -> golf.v1.GetPullRequestDiffResponse
+	330, // 695: golf.v1.RepositoryService.GetRepositoryComparison:output_type -> golf.v1.GetRepositoryComparisonResponse
+	104, // 696: golf.v1.RepositoryService.GetRepositoryImage:output_type -> golf.v1.GetRepositoryImageResponse
+	111, // 697: golf.v1.RepositoryService.ResolveRepositorySource:output_type -> golf.v1.ResolveRepositorySourceResponse
+	113, // 698: golf.v1.RepositoryService.GetContents:output_type -> golf.v1.GetContentsResponse
+	116, // 699: golf.v1.RepositoryService.ListIssues:output_type -> golf.v1.ListIssuesResponse
+	317, // 700: golf.v1.RepositoryService.GetPullRequestDiscussion:output_type -> golf.v1.GetPullRequestDiscussionResponse
+	118, // 701: golf.v1.RepositoryService.GetIssue:output_type -> golf.v1.GetIssueResponse
+	121, // 702: golf.v1.RepositoryService.ListIssueComments:output_type -> golf.v1.ListIssueCommentsResponse
+	124, // 703: golf.v1.RepositoryService.CreateIssue:output_type -> golf.v1.CreateIssueResponse
+	126, // 704: golf.v1.RepositoryService.CreateIssueComment:output_type -> golf.v1.CreateIssueCommentResponse
+	128, // 705: golf.v1.RepositoryService.UpdateIssue:output_type -> golf.v1.UpdateIssueResponse
+	327, // 706: golf.v1.RepositoryService.CreatePullRequest:output_type -> golf.v1.CreatePullRequestResponse
+	332, // 707: golf.v1.RepositoryService.UpdatePullRequest:output_type -> golf.v1.UpdatePullRequestResponse
+	130, // 708: golf.v1.RepositoryService.GetIssueMutation:output_type -> golf.v1.GetIssueMutationResponse
+	134, // 709: golf.v1.RepositoryService.ListPullRequests:output_type -> golf.v1.ListPullRequestsResponse
+	136, // 710: golf.v1.RepositoryService.GetPullRequest:output_type -> golf.v1.GetPullRequestResponse
+	144, // 711: golf.v1.RepositoryService.ListPullRequestReviews:output_type -> golf.v1.ListPullRequestReviewsResponse
+	147, // 712: golf.v1.RepositoryService.GetPullRequestReviewComments:output_type -> golf.v1.GetPullRequestReviewCommentsResponse
+	341, // 713: golf.v1.RepositoryService.GetPullRequestReviewDraft:output_type -> golf.v1.GetPullRequestReviewDraftResponse
+	343, // 714: golf.v1.RepositoryService.SavePullRequestReviewDraft:output_type -> golf.v1.SavePullRequestReviewDraftResponse
+	345, // 715: golf.v1.RepositoryService.DeletePullRequestReviewDraft:output_type -> golf.v1.DeletePullRequestReviewDraftResponse
+	348, // 716: golf.v1.RepositoryService.PublishPullRequestReviewDraft:output_type -> golf.v1.PublishPullRequestReviewDraftResponse
+	350, // 717: golf.v1.RepositoryService.GetPullRequestInlineReviewMutation:output_type -> golf.v1.GetPullRequestInlineReviewMutationResponse
+	140, // 718: golf.v1.RepositoryService.CreatePullRequestReview:output_type -> golf.v1.CreatePullRequestReviewResponse
+	142, // 719: golf.v1.RepositoryService.GetPullRequestReviewMutation:output_type -> golf.v1.GetPullRequestReviewMutationResponse
+	158, // 720: golf.v1.OrganizationService.ListOrganizations:output_type -> golf.v1.ListOrganizationsResponse
+	160, // 721: golf.v1.OrganizationService.GetOrganization:output_type -> golf.v1.GetOrganizationResponse
+	162, // 722: golf.v1.OrganizationService.ListTeams:output_type -> golf.v1.ListTeamsResponse
+	164, // 723: golf.v1.OrganizationService.GetTeam:output_type -> golf.v1.GetTeamResponse
+	166, // 724: golf.v1.OrganizationService.ListTeamMembers:output_type -> golf.v1.ListTeamMembersResponse
+	168, // 725: golf.v1.OrganizationService.ListTeamRepositories:output_type -> golf.v1.ListTeamRepositoriesResponse
+	173, // 726: golf.v1.OrganizationAdminService.GetTeamAdministration:output_type -> golf.v1.GetTeamAdministrationResponse
+	175, // 727: golf.v1.OrganizationAdminService.ResolveTeamMember:output_type -> golf.v1.ResolveTeamMemberResponse
+	177, // 728: golf.v1.OrganizationAdminService.AddTeamMember:output_type -> golf.v1.AddTeamMemberResponse
+	179, // 729: golf.v1.OrganizationAdminService.RemoveTeamMember:output_type -> golf.v1.RemoveTeamMemberResponse
+	258, // 730: golf.v1.InstanceAdminService.EnrollRegularLocalAccount:output_type -> golf.v1.EnrollRegularLocalAccountResponse
+	260, // 731: golf.v1.InstanceAdminService.ResetRegularLocalPassword:output_type -> golf.v1.ResetRegularLocalPasswordResponse
+	262, // 732: golf.v1.InstanceAdminService.EnableRegularLocalAccount:output_type -> golf.v1.EnableRegularLocalAccountResponse
+	201, // 733: golf.v1.InstanceAdminService.DisableLocalAccount:output_type -> golf.v1.DisableLocalAccountResponse
+	182, // 734: golf.v1.InstanceAdminService.ListLocalAccounts:output_type -> golf.v1.ListLocalAccountsResponse
+	171, // 735: golf.v1.AuditService.ListAuditEvents:output_type -> golf.v1.ListAuditEventsResponse
+	150, // 736: golf.v1.CapabilityService.ListCapabilities:output_type -> golf.v1.ListCapabilitiesResponse
+	186, // 737: golf.v1.RepositoryAccessService.GetRepositoryAccess:output_type -> golf.v1.GetRepositoryAccessResponse
+	188, // 738: golf.v1.RepositoryAccessService.ListRepositoryCollaborators:output_type -> golf.v1.ListRepositoryCollaboratorsResponse
+	190, // 739: golf.v1.RepositoryAccessService.ResolveRepositoryCollaborator:output_type -> golf.v1.ResolveRepositoryCollaboratorResponse
+	192, // 740: golf.v1.RepositoryAccessService.SetRepositoryCollaborator:output_type -> golf.v1.SetRepositoryCollaboratorResponse
+	194, // 741: golf.v1.RepositoryAccessService.RemoveRepositoryCollaborator:output_type -> golf.v1.RemoveRepositoryCollaboratorResponse
+	199, // 742: golf.v1.WorkflowService.InspectWorkflows:output_type -> golf.v1.InspectWorkflowsResponse
+	204, // 743: golf.v1.ExecutionPolicyService.GetExecutionPolicy:output_type -> golf.v1.GetExecutionPolicyResponse
+	206, // 744: golf.v1.ExecutionPolicyService.UpdateExecutionPolicy:output_type -> golf.v1.UpdateExecutionPolicyResponse
+	211, // 745: golf.v1.WorkflowRunService.DispatchWorkflow:output_type -> golf.v1.DispatchWorkflowResponse
+	213, // 746: golf.v1.WorkflowRunService.GetWorkflowRun:output_type -> golf.v1.GetWorkflowRunResponse
+	215, // 747: golf.v1.WorkflowRunService.ListWorkflowRuns:output_type -> golf.v1.ListWorkflowRunsResponse
+	217, // 748: golf.v1.WorkflowRunService.CancelWorkflowRun:output_type -> golf.v1.CancelWorkflowRunResponse
+	220, // 749: golf.v1.WorkflowRunService.GetWorkflowRunLogs:output_type -> golf.v1.GetWorkflowRunLogsResponse
+	223, // 750: golf.v1.OrganizationCreationService.GetOrganizationCreationPolicy:output_type -> golf.v1.GetOrganizationCreationPolicyResponse
+	225, // 751: golf.v1.OrganizationCreationService.UpdateOrganizationCreationPolicy:output_type -> golf.v1.UpdateOrganizationCreationPolicyResponse
+	227, // 752: golf.v1.OrganizationCreationService.CreateOrganization:output_type -> golf.v1.CreateOrganizationResponse
+	231, // 753: golf.v1.InfrastructureConnectionService.ListInfrastructureConnections:output_type -> golf.v1.ListInfrastructureConnectionsResponse
+	233, // 754: golf.v1.InfrastructureConnectionService.SaveInfrastructureConnection:output_type -> golf.v1.SaveInfrastructureConnectionResponse
+	235, // 755: golf.v1.InfrastructureConnectionService.TestInfrastructureConnection:output_type -> golf.v1.TestInfrastructureConnectionResponse
+	237, // 756: golf.v1.InfrastructureConnectionService.ActivateInfrastructureConnection:output_type -> golf.v1.ActivateInfrastructureConnectionResponse
+	240, // 757: golf.v1.ProfileService.GetProfile:output_type -> golf.v1.GetProfileResponse
+	242, // 758: golf.v1.ProfileService.UpdateProfile:output_type -> golf.v1.UpdateProfileResponse
+	252, // 759: golf.v1.AccountSecurityService.GetAccountSecurity:output_type -> golf.v1.GetAccountSecurityResponse
+	255, // 760: golf.v1.AccountSecurityService.ChangeOwnPassword:output_type -> golf.v1.ChangeOwnPasswordResponse
+	256, // 761: golf.v1.AccountSecurityService.ChangeOwnLoginEmail:output_type -> golf.v1.ChangeOwnLoginEmailResponse
+	245, // 762: golf.v1.AutomationGrantService.ListAutomationGrants:output_type -> golf.v1.ListAutomationGrantsResponse
+	247, // 763: golf.v1.AutomationGrantService.CreateAutomationGrant:output_type -> golf.v1.CreateAutomationGrantResponse
+	249, // 764: golf.v1.AutomationGrantService.RevokeAutomationGrant:output_type -> golf.v1.RevokeAutomationGrantResponse
+	278, // 765: golf.v1.CodexAccountService.ListCodexConnections:output_type -> golf.v1.ListCodexConnectionsResponse
+	280, // 766: golf.v1.CodexAccountService.CreateCodexConnection:output_type -> golf.v1.CreateCodexConnectionResponse
+	282, // 767: golf.v1.CodexAccountService.SetCodexConnectionAccess:output_type -> golf.v1.SetCodexConnectionAccessResponse
+	265, // 768: golf.v1.CodexAccountService.GetCodexConnection:output_type -> golf.v1.GetCodexConnectionResponse
+	267, // 769: golf.v1.CodexAccountService.StartCodexLogin:output_type -> golf.v1.StartCodexLoginResponse
+	284, // 770: golf.v1.CodexAccountService.CompleteAgentLogin:output_type -> golf.v1.CompleteAgentLoginResponse
+	269, // 771: golf.v1.CodexAccountService.CancelCodexLogin:output_type -> golf.v1.CancelCodexLoginResponse
+	274, // 772: golf.v1.CodexAccountService.RefreshCodexConnection:output_type -> golf.v1.RefreshCodexConnectionResponse
+	276, // 773: golf.v1.CodexAccountService.DisconnectCodexConnection:output_type -> golf.v1.DisconnectCodexConnectionResponse
+	288, // 774: golf.v1.AgentUsageService.GetAgentUsage:output_type -> golf.v1.GetAgentUsageResponse
+	290, // 775: golf.v1.AgentUsageService.SaveAgentUsage:output_type -> golf.v1.SaveAgentUsageResponse
+	293, // 776: golf.v1.AgentUsageService.ListAgentModels:output_type -> golf.v1.ListAgentModelsResponse
+	296, // 777: golf.v1.AgentUsageService.PreviewAgentTask:output_type -> golf.v1.PreviewAgentTaskResponse
+	303, // 778: golf.v1.AgentTaskService.CreateAgentTask:output_type -> golf.v1.CreateAgentTaskResponse
+	300, // 779: golf.v1.AgentTaskService.ListAgentTasks:output_type -> golf.v1.ListAgentTasksResponse
+	304, // 780: golf.v1.AgentTaskService.GetAgentTask:output_type -> golf.v1.GetAgentTaskResponse
+	305, // 781: golf.v1.AgentTaskService.CancelAgentTask:output_type -> golf.v1.CancelAgentTaskResponse
+	363, // 782: golf.v1.AgentTaskService.ListAgentTaskEvents:output_type -> golf.v1.ListAgentTaskEventsResponse
+	308, // 783: golf.v1.ReviewerService.GetReviewer:output_type -> golf.v1.GetReviewerResponse
+	310, // 784: golf.v1.ReviewerService.SaveReviewer:output_type -> golf.v1.SaveReviewerResponse
+	313, // 785: golf.v1.ReviewerService.ListReviewerRuns:output_type -> golf.v1.ListReviewerRunsResponse
+	315, // 786: golf.v1.ReviewerService.RequestReview:output_type -> golf.v1.RequestReviewResponse
+	319, // 787: golf.v1.RepositoryActivityService.WatchRepository:output_type -> golf.v1.WatchRepositoryResponse
+	357, // 788: golf.v1.ActionRunService.ListActionRuns:output_type -> golf.v1.ListActionRunsResponse
+	359, // 789: golf.v1.ActionRunService.GetActionRun:output_type -> golf.v1.GetActionRunResponse
+	366, // 790: golf.v1.RepositoryDeployKeyService.ListRepositoryDeployKeys:output_type -> golf.v1.ListRepositoryDeployKeysResponse
+	368, // 791: golf.v1.RepositoryDeployKeyService.AddRepositoryDeployKey:output_type -> golf.v1.AddRepositoryDeployKeyResponse
+	370, // 792: golf.v1.RepositoryDeployKeyService.DeleteRepositoryDeployKey:output_type -> golf.v1.DeleteRepositoryDeployKeyResponse
+	378, // 793: golf.v1.RepositoryWebhookService.ListRepositoryWebhooks:output_type -> golf.v1.ListRepositoryWebhooksResponse
+	380, // 794: golf.v1.RepositoryWebhookService.SaveRepositoryWebhook:output_type -> golf.v1.SaveRepositoryWebhookResponse
+	382, // 795: golf.v1.RepositoryWebhookService.ListRepositoryWebhookDeliveries:output_type -> golf.v1.ListRepositoryWebhookDeliveriesResponse
+	385, // 796: golf.v1.RepositoryWebhookService.TestRepositoryWebhook:output_type -> golf.v1.TestRepositoryWebhookResponse
+	386, // 797: golf.v1.RepositoryWebhookService.RedeliverRepositoryWebhook:output_type -> golf.v1.RedeliverRepositoryWebhookResponse
+	389, // 798: golf.v1.RepositoryTeamAccessService.ListRepositoryTeamAccess:output_type -> golf.v1.ListRepositoryTeamAccessResponse
+	391, // 799: golf.v1.RepositoryTeamAccessService.AttachRepositoryTeam:output_type -> golf.v1.AttachRepositoryTeamResponse
+	393, // 800: golf.v1.RepositoryTeamAccessService.DetachRepositoryTeam:output_type -> golf.v1.DetachRepositoryTeamResponse
+	397, // 801: golf.v1.RepositoryLifecycleService.GetRepositoryLifecycle:output_type -> golf.v1.GetRepositoryLifecycleResponse
+	399, // 802: golf.v1.RepositoryLifecycleService.ChangeRepositoryArchiveState:output_type -> golf.v1.ChangeRepositoryArchiveStateResponse
+	401, // 803: golf.v1.RepositoryLifecycleService.GetRepositoryLifecycleOperation:output_type -> golf.v1.GetRepositoryLifecycleOperationResponse
+	404, // 804: golf.v1.EmailNotificationService.ListEmailTransports:output_type -> golf.v1.ListEmailTransportsResponse
+	408, // 805: golf.v1.EmailNotificationService.SaveEmailTransport:output_type -> golf.v1.SaveEmailTransportResponse
+	410, // 806: golf.v1.EmailNotificationService.ActivateEmailTransport:output_type -> golf.v1.ActivateEmailTransportResponse
+	413, // 807: golf.v1.EmailNotificationService.GetOwnEmailNotifications:output_type -> golf.v1.GetOwnEmailNotificationsResponse
+	415, // 808: golf.v1.EmailNotificationService.RequestEmailVerification:output_type -> golf.v1.RequestEmailVerificationResponse
+	417, // 809: golf.v1.EmailNotificationService.ConfirmEmailVerification:output_type -> golf.v1.ConfirmEmailVerificationResponse
+	419, // 810: golf.v1.EmailNotificationService.SaveOwnEmailPreference:output_type -> golf.v1.SaveOwnEmailPreferenceResponse
+	423, // 811: golf.v1.EmailNotificationService.GetRepositoryEmailSubscription:output_type -> golf.v1.GetRepositoryEmailSubscriptionResponse
+	425, // 812: golf.v1.EmailNotificationService.SaveRepositoryEmailSubscription:output_type -> golf.v1.SaveRepositoryEmailSubscriptionResponse
+	428, // 813: golf.v1.EmailNotificationService.ListOwnEmailDeliveries:output_type -> golf.v1.ListOwnEmailDeliveriesResponse
+	430, // 814: golf.v1.EmailNotificationService.RedeliverOwnEmail:output_type -> golf.v1.RedeliverOwnEmailResponse
+	436, // 815: golf.v1.RepositoryExecutionValueService.ListRepositoryExecutionValues:output_type -> golf.v1.ListRepositoryExecutionValuesResponse
+	445, // 816: golf.v1.RepositoryExecutionValueService.SaveRepositoryExecutionValue:output_type -> golf.v1.SaveRepositoryExecutionValueResponse
+	446, // 817: golf.v1.RepositoryExecutionValueService.DeleteRepositoryExecutionValue:output_type -> golf.v1.DeleteRepositoryExecutionValueResponse
+	440, // 818: golf.v1.RepositoryExecutionValueService.GetRepositoryExecutionVariable:output_type -> golf.v1.GetRepositoryExecutionVariableResponse
+	447, // 819: golf.v1.RepositoryExecutionValueService.SaveRepositoryExecutionBinding:output_type -> golf.v1.SaveRepositoryExecutionBindingResponse
+	448, // 820: golf.v1.RepositoryExecutionValueService.DeleteRepositoryExecutionBinding:output_type -> golf.v1.DeleteRepositoryExecutionBindingResponse
+	449, // 821: golf.v1.RepositoryExecutionValueService.GetRepositoryExecutionValueOperation:output_type -> golf.v1.GetRepositoryExecutionValueOperationResponse
+	454, // 822: golf.v1.RepositoryInvitationService.PreviewRepositoryInvitationRecipient:output_type -> golf.v1.PreviewRepositoryInvitationRecipientResponse
+	456, // 823: golf.v1.RepositoryInvitationService.CreateRepositoryInvitation:output_type -> golf.v1.CreateRepositoryInvitationResponse
+	459, // 824: golf.v1.RepositoryInvitationService.ListRepositoryInvitations:output_type -> golf.v1.ListRepositoryInvitationsResponse
+	466, // 825: golf.v1.RepositoryInvitationService.ListOwnRepositoryInvitations:output_type -> golf.v1.ListOwnRepositoryInvitationsResponse
+	464, // 826: golf.v1.RepositoryInvitationService.RespondRepositoryInvitation:output_type -> golf.v1.RespondRepositoryInvitationResponse
+	465, // 827: golf.v1.RepositoryInvitationService.RevokeRepositoryInvitation:output_type -> golf.v1.RevokeRepositoryInvitationResponse
+	463, // 828: golf.v1.RepositoryInvitationService.GetRepositoryInvitationOperation:output_type -> golf.v1.GetRepositoryInvitationOperationResponse
+	468, // 829: golf.v1.RepositoryRulesService.GetRepositoryRules:output_type -> golf.v1.GetRepositoryRulesResponse
+	474, // 830: golf.v1.RunnerControlService.GetInstanceRunners:output_type -> golf.v1.GetInstanceRunnersResponse
+	476, // 831: golf.v1.RunnerControlService.UpdateRunnerControl:output_type -> golf.v1.UpdateRunnerControlResponse
+	478, // 832: golf.v1.RunnerControlService.GetRepositoryRunners:output_type -> golf.v1.GetRepositoryRunnersResponse
+	665, // [665:833] is the sub-list for method output_type
+	497, // [497:665] is the sub-list for method input_type
+	497, // [497:497] is the sub-list for extension type_name
+	497, // [497:497] is the sub-list for extension extendee
+	0,   // [0:497] is the sub-list for field type_name
 }
 
 func init() { file_golf_v1_golf_proto_init() }
@@ -37742,15 +38296,16 @@ func file_golf_v1_golf_proto_init() {
 	file_golf_v1_golf_proto_msgTypes[334].OneofWrappers = []any{}
 	file_golf_v1_golf_proto_msgTypes[335].OneofWrappers = []any{}
 	file_golf_v1_golf_proto_msgTypes[360].OneofWrappers = []any{}
+	file_golf_v1_golf_proto_msgTypes[434].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_golf_v1_golf_proto_rawDesc), len(file_golf_v1_golf_proto_rawDesc)),
-			NumEnums:      37,
-			NumMessages:   435,
+			NumEnums:      38,
+			NumMessages:   442,
 			NumExtensions: 0,
-			NumServices:   33,
+			NumServices:   34,
 		},
 		GoTypes:           file_golf_v1_golf_proto_goTypes,
 		DependencyIndexes: file_golf_v1_golf_proto_depIdxs,
