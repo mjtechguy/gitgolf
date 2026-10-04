@@ -128,8 +128,51 @@ def verify_proxy_runtime(run, command, proxy, binary, binary_sha, image, source)
     return receipt
 
 
+def checked_startup_proxy(value, project):
+    value = native_proxy.checked_snapshot(value, project)
+    assert value['lost'] == 0 and value['armed'] is None and value['counts'] == [], 'Startup baseline must have no mutation dispatch or loss arm'
+    failures = [row for row in value['observations'] if row.get('failure')]
+    assert len(failures) == value['failures'], 'All startup failures must remain accounted in the bounded observation window'
+    assert all(row['method'] == 'GET' and row['failure'] in {'preheaders_timeout','preheaders_cancelled','preheaders_disconnected','preheaders_transport'} and 'status' not in row and 'bytes' not in row for row in failures), 'Only pre-header startup reads may be distinguished from qualification failures'
+    assert any(row['method'] == 'GET' and row.get('status') == 200 and not row.get('failure') for row in value['observations']), 'Positive native read readiness observation required'
+    return value
+
+
+def checked_proxy_progress(value, baseline, project):
+    checked_startup_proxy(baseline, project)
+    value = native_proxy.checked_snapshot(value, project)
+    assert value['failures'] == baseline['failures'] and value['forwardRequestCount'] >= baseline['forwardRequestCount'], 'Post-readiness transport failure or reset is not startup noise'
+    return value
+
+
+def startup_proxy_source_check():
+    project = 'golf-rules49-0123456789'
+    baseline = {'project':project,'nativeDestination':native_proxy.NATIVE_DESTINATION,'counts':[],
+                'observations':[{'method':'GET','category':'authority','status':200,'elapsedMs':1}],
+                'forwardRequestCount':1,'lost':0,'failures':0,'armed':None}
+    checked_startup_proxy(baseline, project)
+    startup = {**baseline,'forwardRequestCount':3,'failures':2,'observations':[
+        {'method':'GET','category':'authority','elapsedMs':1,'failure':'preheaders_disconnected'},
+        {'method':'GET','category':'authority','elapsedMs':2,'failure':'preheaders_transport'}, *baseline['observations']]}
+    checked_startup_proxy(startup, project)
+    checked_proxy_progress({**startup,'forwardRequestCount':4,'lost':1}, startup, project)
+    for bad in ({**startup,'failures':3}, {**baseline,'lost':1}, {**baseline,'armed':{'method':'POST','path':'/api/v1/repos/'+project+'-owner/rules/branch_protections','status':201,'ruleName':'unknown/*'}},
+                {**baseline,'counts':[{'method':'PATCH','path':'/api/v1/repos/'+project+'-owner/rules','count':1}]},
+                {**startup,'observations':[{**startup['observations'][0],'failure':'response_transport'},*startup['observations'][1:]]},
+                {**startup,'observations':[{**startup['observations'][0],'method':'POST'},*startup['observations'][1:]]}):
+        try:checked_startup_proxy(bad,project)
+        except AssertionError:pass
+        else:raise AssertionError('Unaccounted/private/mutation startup failure accepted')
+    for first in (baseline,startup):
+        for bad in ({**first,'failures':first['failures']+1}, {**first,'forwardRequestCount':0}):
+            try:checked_proxy_progress(bad,first,project)
+            except AssertionError:pass
+            else:raise AssertionError('Post-readiness failure/reset suppressed')
+
+
 def proxy_source_check():
     native_proxy.self_check()
+    startup_proxy_source_check()
     with tempfile.TemporaryDirectory(prefix='golf-proxy-pure-') as temporary:
         binary = Path(temporary)/'proxy'
         header = bytearray(64); header[:6] = b'\x7fELF\x02\x01'; header[18:20] = (183).to_bytes(2, 'little')
@@ -356,6 +399,7 @@ def main():
                     except Exception:diagnostic['containerProxyVersionMatches']=False
                 record(startupObservation=diagnostic);proxy_state(proxy,'startupProxyState')
                 raise
+            proxy_baseline=checked_startup_proxy(proxy.snapshot(),project);record(preQualificationProxyState=proxy_baseline,proxyStartupFailureCount=proxy_baseline['failures'],proxyFailureScope='Verified pre-header GET startup failures only; every post-readiness failure remains disqualifying')
             before=runtime();proxy_before=verify_proxy_runtime(run,command,proxy,binary,binary_sha,image,source);record(runtime=before)
             stage('ordinary actors and managed local sessions; no native site administrator bypass')
             for role in ('owner','recipient','directadmin','outsider','golfadmin','teamadmin'):
@@ -411,7 +455,7 @@ def main():
             if args.ui:
                 stage('actual requested-role forms and original successful receipt inspection;12 captures')
                 ui_repo=create_repo(owner,'browser');config={'stackRoot':str(ROOT),'golf':smoke.GOLF,'gitea':smoke.GITEA,'repository':ui_repo['name'],'repositoryId':ui_repo['id'],'ownerId':ui_repo['ownerId'],'issuerEmail':owner['email'],'issuerPassword':owner['password'],'recipientId':recipient['id'],'recipientUsername':recipient['name'],'ownerToken':owner['token'],'screenshots':str(common.OUTPUT),'runtime':before};result=subprocess.run(['node',str(Path(__file__).with_name('repository-access-intents-browser.mjs'))],cwd=ROOT,env=environment,input=json.dumps(config).encode(),capture_output=True,timeout=360);assert len(result.stdout)<=65536 and len(result.stderr)<=65536;path=common.OUTPUT/'browser-manifest.json';assert path.is_file(),'Browser safe staged manifest missing';b=json.loads(path.read_text());record(browser=b['status'],captures=b.get('captures',[]),browserFailedStage=b.get('failedStage'));assert result.returncode==0 and b['status']=='browser_checks_passed_parent_native_cleanup_pending' and len(b['captures'])==12 and b['runtime']==before,'Browser predicate failed; safe manifest retained';print(result.stdout.decode().strip(),flush=True)
-            assert runtime()==before and verify_proxy_runtime(run,command,proxy,binary,binary_sha,image,source)==proxy_before and proxy.failures==0 and proxy.armed is None;record(nativeChecks='passed',runtimeUnchanged=True,proxyMutationCount=sum(proxy.counts.values()));passed=True
+            assert runtime()==before and verify_proxy_runtime(run,command,proxy,binary,binary_sha,image,source)==proxy_before and checked_proxy_progress(proxy.snapshot(),proxy_baseline,project) and proxy.armed is None;record(nativeChecks='passed',runtimeUnchanged=True,proxyMutationCount=sum(proxy.counts.values()));passed=True
         finally:
             if not passed:
                 proxy_state(proxy,'failedProxyState');initial=sys.exc_info()[1];frames=traceback.extract_tb(initial.__traceback__) if initial else [];record(failedStage=common.STAGE,failedProcedure=PROOF.get('lastProcedure'),originalFailureType=type(initial).__name__ if initial else 'Unfinished',originalFailureLine=frames[-1].lineno if frames else None)

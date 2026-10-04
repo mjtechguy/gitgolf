@@ -181,8 +181,51 @@ def verify_proxy_runtime(run, command, proxy, binary, binary_sha, image, source)
     return receipt
 
 
+def checked_startup_proxy(value, project):
+    value = native_proxy.checked_snapshot(value, project)
+    assert value['lost'] == 0 and value['armed'] is None and value['counts'] == [], 'Startup baseline must have no mutation dispatch or loss arm'
+    failures = [row for row in value['observations'] if row.get('failure')]
+    assert len(failures) == value['failures'], 'All startup failures must remain accounted in the bounded observation window'
+    assert all(row['method'] == 'GET' and row['failure'] in {'preheaders_timeout','preheaders_cancelled','preheaders_disconnected','preheaders_transport'} and 'status' not in row and 'bytes' not in row for row in failures), 'Only pre-header startup reads may be distinguished from qualification failures'
+    assert any(row['method'] == 'GET' and row.get('status') == 200 and not row.get('failure') for row in value['observations']), 'Positive native read readiness observation required'
+    return value
+
+
+def checked_proxy_progress(value, baseline, project):
+    checked_startup_proxy(baseline, project)
+    value = native_proxy.checked_snapshot(value, project)
+    assert value['failures'] == baseline['failures'] and value['forwardRequestCount'] >= baseline['forwardRequestCount'], 'Post-readiness transport failure or reset is not startup noise'
+    return value
+
+
+def startup_proxy_source_check():
+    project = 'golf-rules49-0123456789'
+    baseline = {'project':project,'nativeDestination':native_proxy.NATIVE_DESTINATION,'counts':[],
+                'observations':[{'method':'GET','category':'authority','status':200,'elapsedMs':1}],
+                'forwardRequestCount':1,'lost':0,'failures':0,'armed':None}
+    checked_startup_proxy(baseline, project)
+    startup = {**baseline,'forwardRequestCount':3,'failures':2,'observations':[
+        {'method':'GET','category':'authority','elapsedMs':1,'failure':'preheaders_disconnected'},
+        {'method':'GET','category':'authority','elapsedMs':2,'failure':'preheaders_transport'}, *baseline['observations']]}
+    checked_startup_proxy(startup, project)
+    checked_proxy_progress({**startup,'forwardRequestCount':4,'lost':1}, startup, project)
+    for bad in ({**startup,'failures':3}, {**baseline,'lost':1}, {**baseline,'armed':{'method':'POST','path':'/api/v1/repos/'+project+'-owner/rules/branch_protections','status':201,'ruleName':'unknown/*'}},
+                {**baseline,'counts':[{'method':'PATCH','path':'/api/v1/repos/'+project+'-owner/rules','count':1}]},
+                {**startup,'observations':[{**startup['observations'][0],'failure':'response_transport'},*startup['observations'][1:]]},
+                {**startup,'observations':[{**startup['observations'][0],'method':'POST'},*startup['observations'][1:]]}):
+        try:checked_startup_proxy(bad,project)
+        except AssertionError:pass
+        else:raise AssertionError('Unaccounted/private/mutation startup failure accepted')
+    for first in (baseline,startup):
+        for bad in ({**first,'failures':first['failures']+1}, {**first,'forwardRequestCount':0}):
+            try:checked_proxy_progress(bad,first,project)
+            except AssertionError:pass
+            else:raise AssertionError('Post-readiness failure/reset suppressed')
+
+
 def proxy_source_check():
     native_proxy.self_check()
+    startup_proxy_source_check()
     with tempfile.TemporaryDirectory(prefix='golf-proxy-pure-') as temporary:
         binary = Path(temporary)/'proxy'
         header = bytearray(64); header[:6] = b'\x7fELF\x02\x01'; header[18:20] = (183).to_bytes(2, 'little')
@@ -407,7 +450,7 @@ def main():
             m={'allowMergeCommits':True,'allowRebaseExplicit':True,'allowSquashMerge':True,'autodetectManualMerge':True,'allowMergeUpdate':True,'defaultMergeStyle':'squash','defaultUpdateStyle':'merge','defaultDeleteBranchAfterMerge':True}
             last=intent(actor,repository,'EDIT_MERGE',desiredMerge=m);change(actor,last);return last
         try:
-            stage('fresh base stack only'); started = True; record(cleanup='pending'); command('up','-d','--no-build','--pull','never',timeout=180); proxy.ready(); proxy_before=verify_proxy_runtime(run,command,proxy,binary,binary_sha,image,revision); smoke.ready(); before = runtime(); record(runtime=before)
+            stage('fresh base stack only'); started = True; record(cleanup='pending'); command('up','-d','--no-build','--pull','never',timeout=180); proxy.ready(); proxy_before=verify_proxy_runtime(run,command,proxy,binary,binary_sha,image,revision); smoke.ready(); proxy_baseline=checked_startup_proxy(proxy.snapshot(),project);record(preQualificationProxyState=proxy_baseline,proxyStartupFailureCount=proxy_baseline['failures'],proxyFailureScope='Verified pre-header GET startup failures only; every post-readiness failure remains disqualifying'); before = runtime(); record(runtime=before)
             stage('ordinary native actors and managed sessions')
             for role in ('owner','direct','memberdirect','team','reader','global','outsider'):
                 actor = {'role':role,'name':project+'-'+role,'created':False,'session':smoke.client(),'loggedIn':False}; actors[role] = actor
@@ -515,7 +558,7 @@ def main():
             rpc(owner['session'],'ApiCredentialService/RevokeApiCredential',{'credentialId':credential['credential']['id']});bearers.clear()
             rpc(owner['session'],'SessionService/Logout');owner['loggedIn']=False
             for procedure,payload in ((SERVICE,renamed_target),(MUTATE,boundary),(STATUS,status_target)):rpc(owner['session'],procedure,payload,expected=401)
-            record(allProcedureBoundaryDenials='passed',proxyFailures=proxy.failures);assert proxy.failures==0
+            record(allProcedureBoundaryDenials='passed',proxyFailures=proxy.failures);checked_proxy_progress(proxy.snapshot(),proxy_baseline,project)
             assert runtime() == before and verify_proxy_runtime(run,command,proxy,binary,binary_sha,image,revision)==proxy_before; record(nativeChecks='passed',runtimeUnchanged=True); passed = True
         except Exception as error:
             frames = traceback.extract_tb(error.__traceback__)
