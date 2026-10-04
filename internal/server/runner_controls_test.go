@@ -63,6 +63,10 @@ func TestRunnerControlAdminCASRestartPostgres(t *testing.T) {
 		if _, err := f.s.GetInstanceRunners(ctx, req); connect.CodeOf(err) != connect.CodePermissionDenied {
 			t.Fatal("foreign admin", err)
 		}
+		update, updateContext := runnerControlRequest(f.s, session, &golfv1.UpdateRunnerControlRequest{WorkerId: "worker", ExpectedVersion: "0", State: golfv1.RunnerControlState_RUNNER_CONTROL_STATE_DRAINING, CurrentPassword: localTestPassword})
+		if response, err := f.s.UpdateRunnerControl(updateContext, update); response != nil || connect.CodeOf(err) != connect.CodePermissionDenied {
+			t.Fatal("foreign control must preserve permission denial", err)
+		}
 	}
 	list, ctx := runnerControlRequest(f.s, admin, &golfv1.GetInstanceRunnersRequest{})
 	r, err := f.s.GetInstanceRunners(ctx, list)

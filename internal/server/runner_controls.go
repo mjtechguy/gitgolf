@@ -149,7 +149,7 @@ func (s *Server) UpdateRunnerControl(ctx context.Context, req *connect.Request[g
 	}
 	initial, err := s.confirmInfrastructureAdmin(ctx, value, token, m.CurrentPassword)
 	if err != nil {
-		return nil, rpcError(err)
+		return nil, infrastructureRPCError(err)
 	}
 	var result *golfv1.EnrolledRunner
 	err = s.infrastructureAdminTransaction(ctx, value, initial, func(tx *sql.Tx) error {
@@ -200,7 +200,7 @@ func (s *Server) UpdateRunnerControl(ctx context.Context, req *connect.Request[g
 		return nil, connect.NewError(connect.CodeAborted, errRunnerControlConflict)
 	}
 	if err != nil {
-		return nil, rpcError(err)
+		return nil, infrastructureRPCError(err)
 	}
 	return connect.NewResponse(&golfv1.UpdateRunnerControlResponse{Runner: result}), nil
 }
