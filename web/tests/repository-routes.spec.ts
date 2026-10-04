@@ -6,7 +6,7 @@ import {
   InspectWorkflowsResponseSchema, GetRepositoryResponseSchema, GetContentsRequestSchema, GetContentsResponseSchema,
   ListBranchesResponseSchema, ListCommitsRequestSchema, ListCommitsResponseSchema, SourceEntryType,
 } from '../src/gen/golf/v1/golf_pb';
-import { disabledAgentUsage, disabledAgentTasks, reject, request, respond } from './rpc';
+import { resolveSourceFixture, disabledAgentUsage, disabledAgentTasks, reject, request, respond } from './rpc';
 
 const snapshot = 'a'.repeat(40), other = 'b'.repeat(40);
 const user = { id: '17', login: 'alex', fullName: 'Alex' };
@@ -33,9 +33,10 @@ async function fixture(page: Page) {
     if (method === 'ListAgentTasks') return disabledAgentTasks(route);
     if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository });
     if (method === 'ListBranches') return respond(route, ListBranchesResponseSchema, { branches: [{ name: 'main', commitId: snapshot }] });
+    if (method === 'ResolveRepositorySource') return resolveSourceFixture(route, repository.id, { owner: 'alex', name: 'demo' }, 'main', { main: snapshot });
     if (method === 'GetContents') {
       const input = request(route, GetContentsRequestSchema), file = input.path === 'src/index.ts'; state.refs.push(input.ref);
-      return respond(route, GetContentsResponseSchema, { commitId: snapshot, path: input.path, kind: file ? SourceEntryType.FILE : SourceEntryType.DIRECTORY,
+      return respond(route, GetContentsResponseSchema, { repositoryId: repository.id, commitId: snapshot, path: input.path, kind: file ? SourceEntryType.FILE : SourceEntryType.DIRECTORY,
         ...(file ? { file: { entry: { name: 'index.ts', path: input.path, sha: snapshot, type: SourceEntryType.FILE, size: 8n }, content: 'one\ntwo\n' } } : {}) });
     }
     if (method === 'ListCommits') {
@@ -58,12 +59,13 @@ for (const [tail, heading, method] of settingsPages) test(`legacy ${tail} normal
   await page.goto(`/repositories/alex/demo/${tail}#route-fragment`);
   await expect(page).toHaveURL(new RegExp(`/alex/demo/${tail}#route-fragment$`));
   await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
-  const reads = state.methods.filter(value => value === method).length; expect(reads).toBeGreaterThan(0);
+  await expect.poll(() => state.methods.filter(value => value === method).length).toBeGreaterThan(0);
+  const reads = state.methods.filter(value => value === method).length;
   expect(state.authorityURLs.every(url => new URL(url).pathname === `/alex/demo/${tail}`)).toBe(true);
   expect(state.methods).not.toContain('GetRepository');
   await page.reload();
   await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
-  expect(state.methods.filter(value => value === method).length).toBeGreaterThan(reads);
+  await expect.poll(() => state.methods.filter(value => value === method).length).toBeGreaterThan(reads);
   expect(state.methods.some(value => /^(Update|Set|Create|Delete|Dispatch|Save|Activate|Remove)/.test(value))).toBe(false);
 });
 

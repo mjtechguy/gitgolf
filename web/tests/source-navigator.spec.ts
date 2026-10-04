@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { GetAuthenticationOptionsResponseSchema, GetContentsRequestSchema, GetContentsResponseSchema, GetRepositoryResponseSchema, GetSessionResponseSchema, ListBranchesResponseSchema, ListCapabilitiesResponseSchema, SourceEntryType } from '../src/gen/golf/v1/golf_pb';
-import { reject, request, respond } from './rpc';
+import { resolveSourceFixture, reject, request, respond } from './rpc';
 
 const commit = 'a'.repeat(40);
 async function backend(page: Page) {
@@ -13,6 +13,7 @@ async function backend(page: Page) {
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
     if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository: { id: state.repositoryId, name: 'demo', fullName: 'alex/demo', defaultBranch: 'main', private: true } });
     if (method === 'ListBranches') return respond(route, ListBranchesResponseSchema, { branches: [{ name: 'main', commitId: commit }] });
+    if (method === 'ResolveRepositorySource') return resolveSourceFixture(route, state.repositoryId, { owner: 'alex', name: 'demo' }, 'main', { main: commit });
     if (method === 'GetContents') {
       const input = request(route, GetContentsRequestSchema);
       state.reads.push({ path: input.path, ref: input.ref });
@@ -24,7 +25,7 @@ async function backend(page: Page) {
         { name: state.rootFile, path: state.rootFile, type: SourceEntryType.FILE, sha: commit },
       ] : input.path === 'src' ? [{ name: '<literal> & file.ts', path: 'src/<literal> & file.ts', type: SourceEntryType.FILE, sha: commit }] : [{ name: 'UNLOADED_SECRET.ts', path: 'untouched/UNLOADED_SECRET.ts', type: SourceEntryType.FILE, sha: commit }];
       if (!input.path && state.malformedEntry) entries.push({ name: '..', path: '../outside', type: SourceEntryType.FILE, sha: commit });
-      return respond(route, GetContentsResponseSchema, { commitId: !input.path && state.wrongCommit ? 'b'.repeat(40) : commit, path: input.path, kind: directory ? SourceEntryType.DIRECTORY : SourceEntryType.FILE,
+      return respond(route, GetContentsResponseSchema, { repositoryId: state.repositoryId, commitId: !input.path && state.wrongCommit ? 'b'.repeat(40) : commit, path: input.path, kind: directory ? SourceEntryType.DIRECTORY : SourceEntryType.FILE,
         entries: directory ? entries : [], file: directory ? undefined : { entry: { name: input.path.split('/').at(-1), path: input.path, type: SourceEntryType.FILE, sha: commit, size: 20n }, content: 'export const demo = 1;' } });
     }
     return reject(route, 'not_found', 'Fixture procedure is unavailable.');
@@ -96,10 +97,10 @@ test('deep traversal stops at32 levels and offers ordinary pinned directory navi
   await page.route('**/rpc/golf.v1.RepositoryService/GetContents', route => {
     const input = request(route, GetContentsRequestSchema);
     reads.push(input.path);
-    if (input.path === filePath) return respond(route, GetContentsResponseSchema, { commitId: commit, path: filePath, kind: SourceEntryType.FILE, file: { entry: { name: 'deep.ts', path: filePath, type: SourceEntryType.FILE, sha: commit, size: 1n }, content: 'x' } });
+    if (input.path === filePath) return respond(route, GetContentsResponseSchema, { repositoryId: '123', commitId: commit, path: filePath, kind: SourceEntryType.FILE, file: { entry: { name: 'deep.ts', path: filePath, type: SourceEntryType.FILE, sha: commit, size: 1n }, content: 'x' } });
     const level = input.path ? input.path.split('/').length : 0;
     const next = directories[level];
-    return respond(route, GetContentsResponseSchema, { commitId: commit, path: input.path, kind: SourceEntryType.DIRECTORY, entries: [{ name: next, path: [...directories.slice(0, level), next].join('/'), type: SourceEntryType.DIRECTORY, sha: commit }] });
+    return respond(route, GetContentsResponseSchema, { repositoryId: '123', commitId: commit, path: input.path, kind: SourceEntryType.DIRECTORY, entries: [{ name: next, path: [...directories.slice(0, level), next].join('/'), type: SourceEntryType.DIRECTORY, sha: commit }] });
   });
   await page.goto(`/alex/demo/blob/${commit}/${filePath}`);
   const nextPath = directories.slice(0, 33).join('/');

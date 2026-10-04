@@ -7,7 +7,7 @@ import {
   ListBranchesResponseSchema, ListCapabilitiesResponseSchema, ListCommitsRequestSchema, ListCommitsResponseSchema,
   ListRepositoriesResponseSchema, LoginWithGiteaTokenResponseSchema, LogoutResponseSchema, RepositorySchema, SourceEntryType, UserSchema,
 } from '../src/gen/golf/v1/golf_pb';
-import { reject, request, respond } from './rpc';
+import { resolveSourceFixture, reject, request, respond } from './rpc';
 
 const head = 'a'.repeat(40), parent = 'b'.repeat(40), root = 'c'.repeat(40), merge = 'd'.repeat(40), otherParent = 'e'.repeat(40), sha256 = '1'.repeat(64);
 const raw = 'diff --git a/世界.txt b/世界.txt\nindex 1111111..2222222 100644\n--- a/世界.txt\n+++ b/世界.txt\n@@ -1 +1,3 @@\n-old\n+PRIVATE_DIFF\n+<img src=x onerror="window.executed=true">\n+[unsafe](javascript:alert(1))\nBinary files a/logo.bin and b/logo.bin differ\n';
@@ -35,9 +35,10 @@ async function backend(page: Page) {
       state.historyRefs.push(request(route, ListCommitsRequestSchema).ref);
       return respond(route, ListCommitsResponseSchema, { commits: [{ sha: head, message, authorName: 'Alex', authoredAt: '2026-10-01T12:00:00Z' }] });
     }
+    if (method === 'ResolveRepositorySource') return resolveSourceFixture(route, repository.id, { owner: 'alex', name: 'design-system' }, 'main', { main: head });
     if (method === 'GetContents') {
       const input = request(route, GetContentsRequestSchema); state.sourceRefs.push(input.ref);
-      return respond(route, GetContentsResponseSchema, { commitId: input.ref, kind: SourceEntryType.DIRECTORY, entries: [] });
+      return respond(route, GetContentsResponseSchema, { repositoryId: repository.id, commitId: input.ref, kind: SourceEntryType.DIRECTORY, entries: [] });
     }
     if (method === 'GetCommitDiff') {
       const input = request(route, GetCommitDiffRequestSchema);

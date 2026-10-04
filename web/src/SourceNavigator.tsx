@@ -3,7 +3,7 @@ import { useQueries } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { ChevronDown, ChevronRight, File, Folder, FolderOpen, GitCommitHorizontal, Link2, ListTree } from 'lucide-react';
-import { repositoryClient } from './api';
+import { readExactSource, sourcePath } from './sourceReads';
 import { SourceEntryType } from './gen/golf/v1/golf_pb';
 import type { SourceEntry } from './gen/golf/v1/golf_pb';
 import { isCommitID, repositoryOptions } from './navigation';
@@ -12,7 +12,7 @@ import { Loading, PanelError, privateQuery } from './RepositoryUI';
 
 const maxFolders = 64;
 const maxDepth = 32;
-const validPath = (path: string) => path.length <= 4096 && !/[\\\u0000-\u001f\u007f]/.test(path) && path.split('/').every(part => part !== '' && part !== '.' && part !== '..');
+const validPath = (path: string) => path !== '' && sourcePath(path);
 function ancestors(path: string) {
   const parts = path.split('/');
   return validPath(path) ? parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join('/')).slice(0, maxDepth) : [];
@@ -45,13 +45,8 @@ function Folders({ location, commitId, repositoryId, userId }: Props) {
   const queries = useQueries({ queries: paths.map(path => ({ ...privateQuery,
     queryKey: ['repository', userId, location.owner, location.name, 'source-navigator', repositoryId, commitId, path],
     queryFn: async ({ signal }: { signal: AbortSignal }) => {
-      const response = await repositoryClient.getContents({ repository: { owner: location.owner, name: location.name }, ref: commitId, path }, { signal });
+      const response = await readExactSource({ owner: location.owner, name: location.name }, repositoryId, commitId, path, signal);
       if (response.commitId !== commitId || response.path !== path || response.kind !== SourceEntryType.DIRECTORY || response.entries.length > 1000) throw new ConnectError('The returned folder does not match this source snapshot.', Code.FailedPrecondition);
-      const seen = new Set<string>();
-      for (const entry of response.entries) {
-        if (!validPath(entry.path) || entry.path !== (path ? `${path}/` : '') + entry.name || entry.name.includes('/') || seen.has(entry.path) || ![SourceEntryType.DIRECTORY, SourceEntryType.FILE, SourceEntryType.SYMLINK, SourceEntryType.SUBMODULE].includes(entry.type)) throw new ConnectError('The returned folder contains invalid entry metadata.', Code.FailedPrecondition);
-        seen.add(entry.path);
-      }
       return response;
     },
   })) });

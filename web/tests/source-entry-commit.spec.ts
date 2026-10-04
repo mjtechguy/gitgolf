@@ -6,7 +6,7 @@ import {
   GetSessionResponseSchema, ListBranchesResponseSchema, ListCapabilitiesResponseSchema, ListCommitsRequestSchema,
   ListCommitsResponseSchema, ListRepositoriesResponseSchema, LogoutResponseSchema, RepositorySchema, SourceEntryType, UserSchema,
 } from '../src/gen/golf/v1/golf_pb';
-import { reject, request, respond } from './rpc';
+import { resolveSourceFixture, reject, request, respond } from './rpc';
 
 const ref = 'a'.repeat(40), latest = 'b'.repeat(40), repositoryId = '9007199254740993';
 type Invalid = 'path' | 'ref' | 'repository' | 'sha' | 'empty' | 'multiple' | 'date' | 'denied';
@@ -26,9 +26,10 @@ async function fixture(page: Page, count = 1) {
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
     if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository });
     if (method === 'ListBranches') return respond(route, ListBranchesResponseSchema, { branches: [{ name: 'main', commitId: ref }] });
+    if (method === 'ResolveRepositorySource') return resolveSourceFixture(route, repositoryId, { owner: 'alex', name: 'entry-history' }, 'main', { main: ref });
     if (method === 'GetContents') {
       const input = request(route, GetContentsRequestSchema);
-      return respond(route, GetContentsResponseSchema, { commitId: ref, path: input.path, kind: SourceEntryType.DIRECTORY, entries });
+      return respond(route, GetContentsResponseSchema, { repositoryId: repositoryId, commitId: ref, path: input.path, kind: SourceEntryType.DIRECTORY, entries });
     }
     if (method === 'ListCommits') {
       const input = request(route, ListCommitsRequestSchema);
@@ -134,7 +135,7 @@ for (const theme of ['dark', 'light']) for (const width of [320, 390, 1280, 1920
   test(`repository work surface stays centered and bounds long filenames at ${width}px ${theme}`, async ({ page }) => {
     await fixture(page);
     const path = 'a-very-long-literal-filename-' + 'detail-'.repeat(27) + '.ts';
-    await page.route('**/rpc/golf.v1.RepositoryService/GetContents', async route => respond(route, GetContentsResponseSchema, {
+    await page.route('**/rpc/golf.v1.RepositoryService/GetContents', async route => respond(route, GetContentsResponseSchema, { repositoryId: repositoryId,
       commitId: ref, path: '', kind: SourceEntryType.DIRECTORY,
       entries: [{ name: path, path, type: SourceEntryType.FILE, sha: ref, size: 10n }],
     }));

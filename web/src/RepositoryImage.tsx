@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import DOMPurify from 'dompurify';
 import { repositoryClient } from './api';
+import { sourceRepositoryID, validateSourceImage } from './sourceReads';
 import { privateQuery } from './RepositoryUI';
-export type DocumentContext={owner:string;name:string;ref:string;path:string;userId?:string};
+export type DocumentContext={repositoryId:string;owner:string;name:string;ref:string;path:string;userId?:string};
 function dataURL(bytes:Uint8Array,type:string){let text='';for(const value of bytes)text+=String.fromCharCode(value);return `data:${type};base64,${btoa(text)}`;}
 export function imageDataURL(bytes:Uint8Array,type:string):string {
  if(bytes.length>256*1024)throw new Error('Image exceeds preview limits.');
@@ -29,9 +30,9 @@ export function imageDataURL(bytes:Uint8Array,type:string):string {
 }
 export function RepositoryImage({src,alt,height,width,context}:{src?:string;alt?:string;height?:number|string;width?:number|string;context?:DocumentContext}){
  const allowed=(value:string)=>{if(!/^https?:/i.test(value))return !/^[a-z][a-z\d+.-]*:/i.test(value);try{const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password&&!url.port&&['raw.githubusercontent.com','img.shields.io','avatars.githubusercontent.com','user-images.githubusercontent.com','github.githubassets.com','badgen.net','expressjs.com','sindresorhus.com','api.securityscorecards.dev'].includes(url.host);}catch{return false;}};
- const supported=!!context&&!!src&&allowed(src)&&/^[a-f\d]{40}(?:[a-f\d]{24})?$/.test(context.ref)&&!/^\s*(?:javascript|data|blob):|^\/\//i.test(src);
- const query=useQuery({...privateQuery,queryKey:['repository',context?.userId,context?.owner,context?.name,'image',context?.ref,context?.path,src],enabled:supported,queryFn:async({signal})=>{
-  const response=await repositoryClient.getRepositoryImage({repository:{owner:context!.owner,name:context!.name},commitId:context!.ref,documentPath:context!.path,imageUrl:src!},{signal,timeoutMs:10000});return imageDataURL(response.content,response.mediaType);
+ const supported=!!context&&sourceRepositoryID(context.repositoryId)&&!!src&&allowed(src)&&/^[a-f\d]{40}(?:[a-f\d]{24})?$/.test(context.ref)&&!/^\s*(?:javascript|data|blob):|^\/\//i.test(src);
+ const query=useQuery({...privateQuery,queryKey:['repository',context?.userId,context?.owner,context?.name,'image',context?.repositoryId,context?.ref,context?.path,src],enabled:supported,queryFn:async({signal})=>{
+  const response=await repositoryClient.getRepositoryImage({repository:{owner:context!.owner,name:context!.name},repositoryId:context!.repositoryId,commitId:context!.ref,documentPath:context!.path,imageUrl:src!},{signal,timeoutMs:10000});signal.throwIfAborted();validateSourceImage(response,context!.repositoryId,context!.ref,context!.path,src!);return imageDataURL(response.content,response.mediaType);
  }});
  const dimension=(value:unknown)=>/^\d{1,4}$/.test(String(value))&&Number(value)>0&&Number(value)<=4096?Number(value):undefined;
  if(!supported||query.isError)return <span className="markdown-image-placeholder" title={query.isError?'Image could not be loaded safely':undefined}>{alt||'Image'} (image preview unavailable)</span>;

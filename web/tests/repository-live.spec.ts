@@ -1,6 +1,6 @@
 import {expect,test,type Page,type Route} from '@playwright/test';
 import {create,toJson} from '@bufbuild/protobuf';
-import {respond,reject,request} from './rpc';
+import {resolveSourceFixture,respond,reject,request} from './rpc';
 import {GetPullRequestResponseSchema,ListPullRequestCommitsRequestSchema,ListPullRequestCommitsResponseSchema,ListPullRequestChecksRequestSchema,ListPullRequestChecksResponseSchema,ReportedCheckState} from '../src/gen/golf/v1/golf_pb';
 import {GetSessionResponseSchema,GetRepositoryResponseSchema,ListRepositoriesResponseSchema,ListCapabilitiesResponseSchema,GetContentsResponseSchema,ListBranchesResponseSchema,ListIssuesResponseSchema,GetIssueResponseSchema,ListIssueCommentsResponseSchema,WatchRepositoryResponseSchema,IssueState,SourceEntryType} from '../src/gen/golf/v1/golf_pb';
 
@@ -25,7 +25,8 @@ async function fixture(page:Page){
   if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{repositories:[repository]});
   if(method==='GetRepository'){state.metadataReads++;return respond(route,GetRepositoryResponseSchema,{repository:{...repository,issuesEnabled:state.issuesEnabled}});}
-  if(method==='GetContents'){state.sources++;return respond(route,GetContentsResponseSchema,{kind:SourceEntryType.DIRECTORY,commitId:head,entries:[{name:'src',path:'src',type:SourceEntryType.DIRECTORY}]});}
+  if(method==='ResolveRepositorySource')return resolveSourceFixture(route,'11',{owner:'alex',name:'demo'},'main',{main:head});
+  if(method==='GetContents'){state.sources++;return respond(route,GetContentsResponseSchema,{repositoryId:'11',kind:SourceEntryType.DIRECTORY,commitId:head,entries:[{name:'src',path:'src',sha:head,type:SourceEntryType.DIRECTORY}]});}
   if(method==='ListBranches')return respond(route,ListBranchesResponseSchema,{branches:[{name:'main',commitId:head}]});
   if(method==='GetPullRequest'){state.pullReads++;return respond(route,GetPullRequestResponseSchema,{pullRequest:{id:'4',number:1,title:'Live contribution',state:IssueState.OPEN,user,base:{repositoryId:'11',ref:'main',commitId:'b'.repeat(40)},head:{repositoryId:'11',ref:'feature',commitId:state.pullHead}}});}
   if(method==='ListPullRequestCommits'){state.commitReads++;const input=request(route,ListPullRequestCommitsRequestSchema);return respond(route,ListPullRequestCommitsResponseSchema,{selection:input.selection,commits:[{sha:input.selection!.headCommitId,message:'Pinned private commit',authorName:'Alex',authoredAt:'2026-10-03T00:00:00Z'}]});}

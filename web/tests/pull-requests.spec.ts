@@ -13,7 +13,7 @@ import {
   LoginWithGiteaTokenResponseSchema, LogoutResponseSchema, PullRequestReviewSchema, PullRequestReviewState, PullRequestSchema, PullRequestRefSchema,
   RepositorySchema, SourceEntryType, UserSchema,
 } from '../src/gen/golf/v1/golf_pb';
-import { reject, request, respond } from './rpc';
+import { resolveSourceFixture, reject, request, respond } from './rpc';
 
 const base = 'a'.repeat(40);
 const head = 'b'.repeat(40);
@@ -50,7 +50,8 @@ async function backend(page: Page) {
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, { capabilities: [] });
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
     if (method === 'GetRepository') return state.metadataStatus === 200 ? respond(route, GetRepositoryResponseSchema, { repository: { ...repository, empty: state.empty } }) : error(state.metadataStatus, 'Repository not found or inaccessible.');
-    if (method === 'GetContents') return respond(route, GetContentsResponseSchema, { kind: SourceEntryType.DIRECTORY, commitId: base, entries: [] });
+    if (method === 'ResolveRepositorySource') return resolveSourceFixture(route, repository.id, { owner: 'alex', name: 'design-system' }, 'main', { main: base });
+    if (method === 'GetContents') return respond(route, GetContentsResponseSchema, { repositoryId: repository.id, kind: SourceEntryType.DIRECTORY, commitId: base, entries: [] });
     if (method === 'ListPullRequests') {
       const input = request(route, ListPullRequestsRequestSchema);
       expect(input.repository).toMatchObject({ owner: 'alex', name: 'design-system' });

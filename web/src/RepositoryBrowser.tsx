@@ -1,3 +1,4 @@
+import { readSourceSnapshot } from './sourceReads';
 import { RepositoryCommitSummary } from './RepositoryCommitSummary';
 import { RepositoryRefs } from './RepositoryRefs';
 import { SourceEntryCommit } from './SourceEntryCommit';
@@ -56,9 +57,9 @@ function EntryIcon({ type }: { type: SourceEntry['type'] }) {
 function SourcePanel({ repositoryKey, queryKey, location, defaultBranch,repositoryId }: { repositoryId:string; repositoryKey: Pick<RepositoryKey, 'owner' | 'name'>; queryKey: readonly unknown[]; location: RepositoryLocation; defaultBranch: string }) {
   const navigate = useNavigate();
   const router = useRouter();
-  const ref = location.ref || defaultBranch;
-  const query = useQuery({ ...privateQuery, queryKey: [...queryKey, 'source', ref, location.path],
-    queryFn: ({ signal }) => repositoryClient.getContents({ repository: repositoryKey, ref, path: location.path }, { signal }) });
+  const ref = location.ref;
+  const query = useQuery({ ...privateQuery, queryKey: [...queryKey, 'source', repositoryId, ref, location.path, location.branch, location.tag],
+    queryFn: ({ signal }) => readSourceSnapshot(repositoryKey, repositoryId, ref, location.path, signal, location.tag === ref ? 'tag' : location.branch === ref && ref ? 'branch' : undefined) });
   const source = query.isSuccess && !query.isFetching ? query.data : undefined;
   useEffect(() => {
     if (!source) return;
@@ -81,10 +82,10 @@ function SourcePanel({ repositoryKey, queryKey, location, defaultBranch,reposito
     {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : !source ? <Loading label="Reading source…" /> : source.kind === SourceEntryType.DIRECTORY ? <>
       {source.entries?.length ? <ul className="source-tree source-tree-with-commits">{[...source.entries].sort((a,b)=>Number(b.type===SourceEntryType.DIRECTORY)-Number(a.type===SourceEntryType.DIRECTORY)||a.name.localeCompare(b.name)).map((entry) => <li key={entry.path}><Link title={entry.path} {...repositoryOptions(location, { ref: source.commitId, path: entry.path },entry.type!==SourceEntryType.DIRECTORY?'file':undefined)}><EntryIcon type={entry.type} /><span className="source-name">{entry.name}</span><span className="entry-type sr-only">{entryTypeLabel(entry.type)}</span>{entry.type !== SourceEntryType.DIRECTORY ? <Size value={entry.size} className="sr-only" /> : <span className="sr-only" /> }<ChevronRight size={14} /></Link><SourceEntryCommit userId={String(queryKey[1]||'')} repositoryId={repositoryId} commitId={source.commitId} path={entry.path} location={location}/></li>)}</ul> : <div className="empty-state"><Folder size={25} /><h3>This directory is empty.</h3></div>}
       <p className="panel-footnote">{source.entries?.length || 0} entries · Read-only snapshot at <code>{shortSHA(source.commitId)}</code></p>
-      <RepositoryReadme owner={repositoryKey.owner} name={repositoryKey.name} refId={source.commitId} path={location.path} entries={source.entries} userId={String(queryKey[1]||'')}/>
+      <RepositoryReadme repositoryId={repositoryId} owner={repositoryKey.owner} name={repositoryKey.name} refId={source.commitId} path={location.path} entries={source.entries} userId={String(queryKey[1]||'')}/>
     </> : source.file?.entry ? <>
       <div className="file-meta"><span><EntryIcon type={source.file.entry.type} />{entryTypeLabel(source.file.entry.type).toLowerCase()}</span><Size value={source.file.entry.size} /><span>Object <code title={source.file.entry.sha}>{shortSHA(source.file.entry.sha)}</code></span></div>
-      {source.file.entry.type === SourceEntryType.FILE && source.file.content !== undefined && !source.file.previewReason && source.file.entry.size <= 256n * 1024n ? isMarkdownPath(source.file.entry.name) ? <FileContent key={source.file.entry.sha} text={source.file.content} path={source.file.entry.path} context={{owner:repositoryKey.owner,name:repositoryKey.name,ref:source.commitId,path:source.file.entry.path,userId:String(queryKey[1])}}/> : <CodePreview text={source.file.content} path={source.file.entry.name} label={`Plain text preview of ${source.file.entry.name}`}/> : <div className="preview-unavailable"><File size={26} /><h3>Preview unavailable</h3><p>{source.file.previewReason || 'This file is outside the supported plain-text preview limits.'}</p><p className="muted">Previews support UTF-8 text up to 256 KiB. Binary, large, LFS, symlink and submodule content is not opened.</p></div>}
+      {source.file.entry.type === SourceEntryType.FILE && source.file.content !== undefined && !source.file.previewReason && source.file.entry.size <= 256n * 1024n ? isMarkdownPath(source.file.entry.name) ? <FileContent key={source.file.entry.sha} text={source.file.content} path={source.file.entry.path} context={{repositoryId,owner:repositoryKey.owner,name:repositoryKey.name,ref:source.commitId,path:source.file.entry.path,userId:String(queryKey[1])}}/> : <CodePreview text={source.file.content} path={source.file.entry.name} label={`Plain text preview of ${source.file.entry.name}`}/> : <div className="preview-unavailable"><File size={26} /><h3>Preview unavailable</h3><p>{source.file.previewReason || 'This file is outside the supported plain-text preview limits.'}</p><p className="muted">Previews support UTF-8 text up to 256 KiB. Binary, large, LFS, symlink and submodule content is not opened.</p></div>}
       <p className="panel-footnote">Rendered Markdown or highlighted source · Read-only snapshot at <code>{shortSHA(source.commitId)}</code></p>
     </> : <p className="error" role="alert">The source response did not contain file metadata.</p>}
   </section></div>;

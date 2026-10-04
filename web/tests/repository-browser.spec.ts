@@ -2,13 +2,13 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import {
-  GetAuthenticationOptionsResponseSchema, GetRepositoryImageResponseSchema, GetContentsRequestSchema, GetContentsResponseSchema, GetIssueRequestSchema, GetIssueResponseSchema, GetRepositoryResponseSchema,
+  ResolveRepositorySourceRequestSchema, RepositorySourceRefKind, GetAuthenticationOptionsResponseSchema, GetRepositoryImageRequestSchema, GetRepositoryImageResponseSchema, GetContentsRequestSchema, GetContentsResponseSchema, GetIssueRequestSchema, GetIssueResponseSchema, GetRepositoryResponseSchema,
   GetSessionResponseSchema, IssueSchema, IssueState, ListBranchesRequestSchema, ListBranchesResponseSchema, ListCapabilitiesResponseSchema,
   ListCommitsRequestSchema, ListCommitsResponseSchema, ListTagsRequestSchema, ListTagsResponseSchema, ListIssueCommentsResponseSchema, ListIssuesRequestSchema, ListIssuesResponseSchema, ListRepositoriesResponseSchema,
   LoginWithGiteaTokenResponseSchema, LogoutResponseSchema, RepositorySchema, SourceEntrySchema, SourceEntryType, UserSchema,
 } from '../src/gen/golf/v1/golf_pb';
 import type { GetContentsRequest } from '../src/gen/golf/v1/golf_pb';
-import { reject, request, respond } from './rpc';
+import { resolveSourceFixture, reject, request, respond } from './rpc';
 
 const head = 'a'.repeat(40);
 const feature = 'b'.repeat(40);
@@ -28,7 +28,7 @@ const entries = [
 ];
 
 async function backend(page: Page) {
-  const state = { readme: '# PRIVATE README\n<script>window.executed=true</script>\n<a href="javascript:alert(1)">Untrusted</a>\n', featureHead: feature, signedIn: true, empty: false, metadataStatus: 200, sourceStatus: 200, sourceText:'export const PRIVATE_SOURCE = true;\n',historyBinding:true, historyStatus:200,historyRequests:[] as ReturnType<typeof request<typeof ListCommitsRequestSchema>>[], issueStatus: 200, issuesEnabled: undefined as boolean | undefined, pullRequestsEnabled: undefined as boolean | undefined, sourceWait: undefined as Promise<void> | undefined, methods: [] as string[], sourceRequests: [] as GetContentsRequest[] };
+  const state = { readme: '# PRIVATE README\n<script>window.executed=true</script>\n<a href="javascript:alert(1)">Untrusted</a>\n', featureHead: feature, signedIn: true, empty: false, metadataStatus: 200, sourceStatus: 200, sourceText:'export const PRIVATE_SOURCE = true;\n',historyBinding:true, historyStatus:200,historyRequests:[] as ReturnType<typeof request<typeof ListCommitsRequestSchema>>[], issueStatus: 200, issuesEnabled: undefined as boolean | undefined, pullRequestsEnabled: undefined as boolean | undefined, sourceWait: undefined as Promise<void> | undefined, methods: [] as string[], sourceRequests: [] as GetContentsRequest[], resolverRequests: [] as ReturnType<typeof request<typeof ResolveRepositorySourceRequestSchema>>[] };
   await page.route('**/rpc/**', async (route) => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1)!;
     state.methods.push(method);
@@ -44,7 +44,8 @@ async function backend(page: Page) {
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
     if (method === 'GetRepository') return state.metadataStatus === 200 ? respond(route, GetRepositoryResponseSchema, { repository: { ...repository, empty: state.empty, issuesEnabled: state.issuesEnabled, pullRequestsEnabled: state.pullRequestsEnabled } }) : error(state.metadataStatus, 'Repository not found or inaccessible.');
     if (method === 'ListBranches') return respond(route, ListBranchesResponseSchema, request(route, ListBranchesRequestSchema).page?.page === 2 ? { branches: [{ name: 'feature/UI', commitId: feature }] } : { branches: [{ name: 'main', commitId: head, protected: true }], page: { nextPage: 2 } });
-    if(method==='GetRepositoryImage') return respond(route,GetRepositoryImageResponseSchema,{mediaType:'image/svg+xml',content:new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 30"><path fill="green" d="M0 0h100v30H0z"/><script>window.executed=true</script><image href="https://tracker.invalid/pixel"/></svg>')});
+    if(method==='GetRepositoryImage') { const image=request(route,GetRepositoryImageRequestSchema);return respond(route,GetRepositoryImageResponseSchema,{repositoryId:repository.id,commitId:image.commitId,documentPath:image.documentPath,imageUrl:image.imageUrl,mediaType:'image/svg+xml',content:new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 30"><path fill="green" d="M0 0h100v30H0z"/><script>window.executed=true</script><image href="https://tracker.invalid/pixel"/></svg>')});}
+    if (method === 'ResolveRepositorySource') { state.resolverRequests.push(request(route, ResolveRepositorySourceRequestSchema)); return resolveSourceFixture(route, repository.id, { owner: 'alex', name: 'design-system' }, 'main', { main: head, 'feature/UI': state.featureHead, '1234': head }); }
     if (method === 'GetContents') {
       const input = request(route, GetContentsRequestSchema);
       state.sourceRequests.push(input);
@@ -52,13 +53,13 @@ async function backend(page: Page) {
       if (state.sourceStatus !== 200) return error(state.sourceStatus, state.sourceStatus === 403 ? 'Token does not have permission to read source.' : state.sourceStatus === 404 ? 'Source not found or inaccessible.' : 'Directory exceeds the supported response limit.');
       const commitId = input.ref === 'feature/UI' ? state.featureHead : /^[a-f]{40}$/.test(input.ref) ? input.ref : head;
       const sourcePath = input.path;
-      if (!sourcePath) return respond(route, GetContentsResponseSchema, { commitId, kind: SourceEntryType.DIRECTORY, entries });
-      if (sourcePath === 'src') return respond(route, GetContentsResponseSchema, { commitId, path: sourcePath, kind: SourceEntryType.DIRECTORY, entries: [{ name: 'index.ts', path: 'src/index.ts', type: SourceEntryType.FILE, sha: head, size: 40n }] });
-      if (sourcePath === 'src/index.ts') return respond(route, GetContentsResponseSchema, { commitId, path: sourcePath, kind: SourceEntryType.FILE, file: { entry: { name: 'index.ts', path: sourcePath, type: SourceEntryType.FILE, sha: head, size: 40n }, content: state.sourceText } });
+      if (!sourcePath) return respond(route, GetContentsResponseSchema, { repositoryId: repository.id, commitId, kind: SourceEntryType.DIRECTORY, entries });
+      if (sourcePath === 'src') return respond(route, GetContentsResponseSchema, { repositoryId: repository.id, commitId, path: sourcePath, kind: SourceEntryType.DIRECTORY, entries: [{ name: 'index.ts', path: 'src/index.ts', type: SourceEntryType.FILE, sha: head, size: 40n }] });
+      if (sourcePath === 'src/index.ts') return respond(route, GetContentsResponseSchema, { repositoryId: repository.id, commitId, path: sourcePath, kind: SourceEntryType.FILE, file: { entry: { name: 'index.ts', path: sourcePath, type: SourceEntryType.FILE, sha: head, size: 40n }, content: state.sourceText } });
       const entry = entries.find((item) => item.path === sourcePath);
       if (!entry) return error(404, 'Source not found or inaccessible.');
       const reasons: Record<string, string> = { 'binary.png': 'Binary content cannot be previewed.', 'large.txt': 'File exceeds the 256 KiB preview limit.', 'pointer.lfs': 'Git LFS content is not fetched.', link: 'Symlink targets are not followed.', module: 'Submodule repositories are not followed.', 'huge.bin': 'File exceeds the 256 KiB preview limit.' };
-      return respond(route, GetContentsResponseSchema, { commitId, path: sourcePath, kind: entry.type, file: { entry, content: sourcePath === 'README.md' ? state.readme : sourcePath === 'empty.txt' ? '' : undefined, previewReason: reasons[sourcePath] } });
+      return respond(route, GetContentsResponseSchema, { repositoryId: repository.id, commitId, path: sourcePath, kind: entry.type, file: { entry, content: sourcePath === 'README.md' ? state.readme : sourcePath === 'empty.txt' ? '' : undefined, previewReason: reasons[sourcePath] } });
     }
     if (method === 'ListCommits') {
       const input = request(route, ListCommitsRequestSchema);
@@ -110,7 +111,7 @@ test('repository navigation pins snapshots, paginates branches, supports slash r
   await expect(page.getByRole('link', { name: 'README.md File 128 B', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Latest branch head' }).click();
   await expect(page).toHaveURL(new RegExp(`tree/${feature}\\?branch=feature%2FUI`));
-  expect(state.sourceRequests.some((input) => input.ref === 'feature/UI')).toBe(true);
+  expect(state.sourceRequests.every((input) => /^[a-f0-9]{40}$/.test(input.ref) && input.repositoryId === repository.id)).toBe(true);
   state.featureHead = older;
   await page.locator('.branch-picker > summary').click();
   await page.getByRole('link', { name: `feature/UI Listed at ${feature.slice(0, 12)}` }).click();
@@ -309,7 +310,9 @@ test('protobuf preserves empty previews and uint64 sizes while typed routes pres
   const state = await backend(page);
   await page.goto('/repositories/alex/design-system?ref=1234&branch=1234&path=empty.txt');
   await expect(page.getByLabel('Plain text preview of empty.txt')).toHaveText('(Empty text file)');
-  expect(state.sourceRequests[0]?.ref).toBe('1234');
+  expect(state.sourceRequests[0]?.ref).toBe(head);
+  expect(state.sourceRequests[0]?.repositoryId).toBe(repository.id);
+  expect(state.resolverRequests[0]?.selector).toMatchObject({ kind: RepositorySourceRefKind.BRANCH, name: '1234' });
   await expect(page.locator('.branch-picker > summary')).toContainText('1234');
   await page.goto(`/repositories/alex/design-system?ref=${head}&path=huge.bin`);
   await expect(page.getByRole('heading', { name: 'Preview unavailable' })).toBeVisible();
