@@ -143,3 +143,38 @@ func TestCapabilityReadinessWithPostgres(t *testing.T) {
 		t.Fatal("unavailable DB reported ready", err)
 	}
 }
+
+func TestWebCacheSeparatesHashedAssetsFromDocumentsAndRPC(t *testing.T) {
+	config := testConfig("http://gitea.invalid")
+	config.WebDir = t.TempDir()
+	if err := os.Mkdir(filepath.Join(config.WebDir, "assets"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"index.html", "assets/app-A1b2c3d4.js", "assets/fonts-A1b2c3d4.woff2", "assets/app.js"} {
+		if err := os.WriteFile(filepath.Join(config.WebDir, name), []byte("STATIC-BUILD"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s, err := New(config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		path, cache string
+		status      int
+	}{
+		{"/assets/app-A1b2c3d4.js", "public, max-age=31536000, immutable", 200},
+		{"/assets/fonts-A1b2c3d4.woff2", "public, max-age=31536000, immutable", 200},
+		{"/assets/app.js", "no-cache", 200}, {"/index.html", "no-cache", 301},
+		{"/owner/private/tree/commit", "no-cache", 200}, {"/assets/missing-A1b2c3d4.js", "no-cache", 200},
+		{"/rpc/unknown", "no-store", 400}, {"/api/private", "no-store", 404},
+	} {
+		request := httptest.NewRequest(http.MethodGet, tc.path, nil)
+		request.Header.Set("Accept", "text/html")
+		response := httptest.NewRecorder()
+		s.ServeHTTP(response, request)
+		if response.Code != tc.status || response.Header().Get("Cache-Control") != tc.cache {
+			t.Errorf("%s: status=%d cache=%q", tc.path, response.Code, response.Header().Get("Cache-Control"))
+		}
+	}
+}

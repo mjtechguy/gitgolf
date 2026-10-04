@@ -21,6 +21,8 @@ import (
 	"github.com/mjtechguy/golf-git/internal/telemetry"
 )
 
+var immutableWebAsset = regexp.MustCompile(`^assets/[^/]+-[A-Za-z0-9_-]{8}\.(js|css|woff2?)$`)
+
 type Config struct {
 	AgentImage, ReviewImage, ReviewPublisherToken              string
 	ClaudeBinary, OpenCodeBinary, CodexBinary                  string
@@ -139,6 +141,7 @@ func New(config Config, db *sql.DB) (*Server, error) {
 			files := root.FS()
 			fileServer := http.FileServerFS(files)
 			r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Cache-Control", "no-cache")
 				if strings.Contains(r.URL.Path, "..") {
 					http.NotFound(w, r)
 					return
@@ -151,6 +154,9 @@ func New(config Config, db *sql.DB) (*Server, error) {
 					info, statErr := f.Stat()
 					f.Close()
 					if statErr == nil && !info.IsDir() {
+						if immutableWebAsset.MatchString(name) {
+							w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+						}
 						fileServer.ServeHTTP(w, r)
 						return
 					}
