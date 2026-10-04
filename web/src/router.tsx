@@ -56,6 +56,18 @@ const canonicalRepositorySettingsRoute = createRoute({
   beforeLoad: ({ params }) => validateRepositoryIdentity(params.owner, params.name),
   component: RepositorySettingsPage,
 });
+// The original native identity survives repository absence. Do not resolve this
+// route through repository metadata or adopt a replacement at the same address.
+const canonicalRepositoryDeletionRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/$owner/$name/settings/deletion',
+  beforeLoad: ({ params }) => validateRepositoryIdentity(params.owner, params.name),
+  validateSearch: (search: Record<string, unknown>): { repositoryId: string } => {
+    const id = search.repositoryId;
+    if (typeof id !== 'string' || !/^[1-9][0-9]{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) throw notFound();
+    return { repositoryId: id };
+  },
+  component: () => { const { owner, name } = canonicalRepositoryDeletionRoute.useParams(); const { repositoryId } = canonicalRepositoryDeletionRoute.useSearch(); return <App location={{ kind: 'repository-deletion', owner, name, repositoryId }} />; },
+});
 const canonicalRepositoryAccessSettingsRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/$owner/$name/settings/access',
   beforeLoad: ({ params }) => validateRepositoryIdentity(params.owner, params.name),
@@ -253,13 +265,13 @@ function OrganizationPage() {
 
 // Router owns navigation only. Private server data stays in the cancellable Query cache.
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([homeRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWebhooksRoute, canonicalRepositorySecretsRoute, canonicalRepositoryRulesRoute, canonicalRepositoryGitRoute, canonicalRepositoryRunnersRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceNotificationsRoute, instanceRunnersRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationSecretsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountInvitationsRoute, accountSecurityRoute, accountAgentsRoute, sessionsRoute]),
+  routeTree: rootRoute.addChildren([homeRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryDeletionRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWebhooksRoute, canonicalRepositorySecretsRoute, canonicalRepositoryRulesRoute, canonicalRepositoryGitRoute, canonicalRepositoryRunnersRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceNotificationsRoute, instanceRunnersRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationSecretsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountInvitationsRoute, accountSecurityRoute, accountAgentsRoute, sessionsRoute]),
   defaultPreload: false,
   // Refs and paths are opaque strings, including names such as "1234" or "true".
   parseSearch: (search) => {
     try { for (const part of search.replace(/^\?/, '').split('&')) for(const value of part.split('=')) decodeURIComponent(value.replace(/\+/g,' ')); } catch { return {refKind:'invalid'}; }
     const query=new URLSearchParams(search);
-    if (['refKind','refName','ref','path','branch','tag','runKind','actionKind','workflowPath','run','step','jobInstanceId','stepId'].some(key=>query.getAll(key).length>1)) return {refKind:'invalid'};
+    if (['refKind','refName','ref','path','branch','tag','runKind','actionKind','workflowPath','run','step','jobInstanceId','stepId','repositoryId'].some(key=>query.getAll(key).length>1)) return {refKind:'invalid'};
     return Object.fromEntries(query);
   },
   stringifySearch: (search) => {

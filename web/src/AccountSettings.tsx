@@ -31,7 +31,7 @@ export function OrganizationSettingsLayout({ children, organization }: { childre
   return <div className="account-layout"><nav className="account-navigation" aria-label="Organization settings"><span className="eyebrow">ORGANIZATION SETTINGS</span>
     <Link to="/organizations/$organization/settings" params={{ organization }} activeOptions={{ exact: true }}><UserRound size={18} />General</Link>
     <Link to="/organizations/$organization/settings/secrets" params={{ organization }} activeOptions={{ exact: true }}><KeyRound size={18} />Secrets and variables</Link>
-    <Link to="/organizations/$organization" params={{ organization }}><ShieldCheck size={18} />Members and teams</Link>
+    <Link to="/organizations/$organization" params={{ organization }} activeOptions={{ exact: true }}><ShieldCheck size={18} />Members and teams</Link>
   </nav><div className="account-content">{children}</div></div>;
 }
 
