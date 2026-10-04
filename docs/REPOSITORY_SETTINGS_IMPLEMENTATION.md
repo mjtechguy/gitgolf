@@ -40,5 +40,6 @@ These dependencies permit disjoint work in parallel; they do not relax the final
 
 - [General settings](REPOSITORY_SETTINGS_CONTRACT.md), [collaborator access](REPOSITORY_ACCESS_CONTRACT.md), [Git authentication](GIT_ACCESS_CONTRACT.md).
 - [Actions compatibility implementation](ACTIONS_COMPATIBILITY_IMPLEMENTATION.md), [run metadata and conversations](ACTIONS_RUN_METADATA_AND_PROGRESS.md), [repository live events](REPOSITORY_ACTIVITY_CONTRACT.md).
+- [Unprotected merge implementation packet](UNPROTECTED_MERGE_IMPLEMENTATION_PACKET.md): exact observation workspace, native strategy receipts and the protection-transition dispatch gate; proposal only, no merge operation is implemented by this packet.
 - [Protected-write investigation](GITEA_PROTECTED_WRITE_QUALIFICATION.md), [publisher fault qualification](GITEA_PUBLISHER_QUALIFICATION.md), [managed mutation boundary](GITEA_MUTATION_BOUNDARY_INVENTORY.md), [proposed protection ADR](decisions/0004-protected-integration-enforcement.md).
 - [Implementation evidence and remaining requirements](IMPLEMENTATION_STATUS.md), [complete implementation plan](../GOLF_IMPLEMENTATION_PLAN.md).
