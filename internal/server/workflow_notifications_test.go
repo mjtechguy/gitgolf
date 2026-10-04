@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"io"
+	"mime"
+	"mime/quotedprintable"
+	netmail "net/mail"
 	"strings"
 	"sync"
 	"testing"
@@ -250,8 +254,12 @@ func TestWorkflowNotificationsConsentPreservationAndRenderingPostgres(t *testing
 		t.Fatal(e)
 	}
 	mail, e := f.s.prepareEmail(t.Context(), leased, actor, profile, secret)
-	if e != nil || !strings.Contains(mail.Body, "Outcome unconfirmed (lost)") || !strings.Contains(mail.Body, "/actions/runs/"+run) || strings.Contains(mail.Body, "source-sensitive-sentinel") {
-		t.Fatal("journal email was not rendered safely", e)
+	if e != nil {
+		t.Fatal("journal email preparation failed", e)
+	}
+	decoded := decodedWorkflowMail(t, mail.Body)
+	if !strings.Contains(decoded, "Outcome unconfirmed (lost)") || !strings.Contains(decoded, f.s.config.PublicURL+"/alice/example/actions/runs/"+run) || strings.Contains(decoded, "source-sensitive-sentinel") {
+		t.Fatal("decoded journal email was not rendered safely")
 	}
 	if _, e = f.db.Exec(`UPDATE golf_workflow_runs SET state='failed',reason='private-new-error' WHERE id=$1`, run); e != nil {
 		t.Fatal(e)
@@ -336,5 +344,39 @@ func TestWorkflowNotificationsFanoutFailureAndConcurrentTerminalPostgres(t *test
 	f.s.attemptWebhook(t.Context(), d)
 	if f.received.Load() != 0 {
 		t.Fatal("revoked repository delivered terminal payload")
+	}
+}
+
+// Assert recipient-visible text after standard MIME decoding; long exact links
+// are legitimately soft-wrapped by the existing quoted-printable transport.
+func decodedWorkflowMail(t *testing.T, raw string) string {
+	t.Helper()
+	message, e := netmail.ReadMessage(strings.NewReader(raw))
+	if e != nil {
+		t.Fatal("invalid generated MIME", e)
+	}
+	contentType, params, e := mime.ParseMediaType(message.Header.Get("Content-Type"))
+	if e != nil || contentType != "text/plain" || params["charset"] != "UTF-8" || message.Header.Get("Content-Transfer-Encoding") != "quoted-printable" {
+		t.Fatal("unexpected generated MIME encoding", e)
+	}
+	decoded, e := io.ReadAll(io.LimitReader(quotedprintable.NewReader(message.Body), 16385))
+	if e != nil || len(decoded) > 16384 {
+		t.Fatal("invalid or oversized decoded MIME", e)
+	}
+	return string(decoded)
+}
+
+func TestWorkflowNotificationQuotedPrintableExactLink(t *testing.T) {
+	link := "https://golf.fixture.test/owned/notification-workflows/actions/runs/" + uuid.NewString()
+	text := "Golf workflow outcome: Outcome unconfirmed (lost)\n" + link + "\n"
+	raw, e := emailMessage("sender@example.test", "recipient@example.test", uuid.NewString(), "Golf workflow outcome", text)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if strings.Contains(raw, link) {
+		t.Fatal("fixture did not exercise a MIME-soft-wrapped exact link")
+	}
+	if decoded := decodedWorkflowMail(t, raw); decoded != strings.ReplaceAll(text, "\n", "\r\n")+"\r\n" {
+		t.Fatal("MIME decoding changed exact recipient text")
 	}
 }
