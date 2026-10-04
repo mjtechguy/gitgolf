@@ -5,13 +5,16 @@ Requires exact cached images/binary hashes, native transport proxy, and an
 operator-seeded fresh DinD. Never builds/pulls or uses retained policy/accounts.
 One actual v2 run, discarded response body + original-key inspection/restart,
 exact source and encrypted-row metadata, literal/default/number/composite logs.
-No secrets injection, input-declaring push, full Actions parity or browser proof.
+Optional --execution-values proves exact typed repository secret/variable
+approval and real worker injection; input-declaring push and full Actions parity
+remain outside this bounded proof.
 The --self-check path performs no subprocess/network/resource operation.
 """
 import argparse
 import ast
 import base64
 import copy
+from datetime import datetime, timedelta, timezone
 import hashlib
 import http.client
 import importlib.util
@@ -53,9 +56,18 @@ STAGE = 'arguments'
 REPORT_FAILURE = None
 
 
-def source_files():
+def source_files(execution_values=False):
     fixture = ROOT/'engines/act/testdata'
-    return {PATH:(fixture/'manual-inputs-proof.yml').read_bytes(), 'actions/manual-inputs-proof/action.yml':(fixture/'actions/manual-inputs-proof/action.yml').read_bytes()}
+    files = {PATH:(fixture/'manual-inputs-proof.yml').read_bytes(), 'actions/manual-inputs-proof/action.yml':(fixture/'actions/manual-inputs-proof/action.yml').read_bytes()}
+    if execution_values:
+        files[PATH] += b'''      - id: approvedenv
+        run: |
+          test -n "$BUILD_CREDENTIAL"
+          test "$BUILD_REGION" = "owned-region"
+          printf '%s\\n' "$BUILD_CREDENTIAL"
+          echo typed-approved-environment-verified
+'''
+    return files
 
 
 def stage(value):
@@ -102,6 +114,9 @@ def self_check():
         for target in getattr(node,'targets',[]):
             assert not any(isinstance(value,ast.Name) and value.id in {'execute','command'} for value in ast.walk(target))
     files = source_files(); assert len(files)==2 and b'if:' in files[PATH] and b'INPUT_VALUE' in files['actions/manual-inputs-proof/action.yml']
+    approved=source_files(True)
+    assert approved[PATH].startswith(files[PATH]) and approved['actions/manual-inputs-proof/action.yml']==files['actions/manual-inputs-proof/action.yml']
+    assert b'test -n "$BUILD_CREDENTIAL"' in approved[PATH] and b'typed-approved-environment-verified' in approved[PATH]
     assert b'should-not-exist' in files[PATH] and b'should-not-exist' in files['actions/manual-inputs-proof/action.yml']
     for data in files.values():
         assert b'${dollar}{{ inputs.flag }}' in data and b'${dollar}(touch /tmp/should-not-exist)' in data
@@ -137,6 +152,7 @@ def main():
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--seed-wait-seconds',type=int,default=300)
     parser.add_argument('--ui',action='store_true',help='Also qualify read-only actual typed editor and exact recorded run/job/step pages')
+    parser.add_argument('--execution-values',action='store_true',help='Approve and execute exact typed inputs with repository secret/variable versions (schema060+)')
     args=parser.parse_args();stack=args.stack_root.resolve();output=args.output.resolve()
     assert 1<=args.seed_wait_seconds<=600 and not output.exists()
     assert re.fullmatch('[a-f0-9]{40}',args.source_revision)
@@ -159,6 +175,9 @@ def main():
         if 'originalFailure' not in manifest:
             record(originalFailure={'type':type(error).__name__,'stage':STAGE,'frames':[{'file':Path(v.filename).name if Path(v.filename).name in {Path(__file__).name,'observability-smoke.py','repository-rule-mutations-smoke.py','native_qualification_proxy.py','smoke.py'} else 'dependency','line':v.lineno} for v in traceback.extract_tb(error.__traceback__)[-6:]]})
     REPORT_FAILURE=failure
+    synthetic_secret = secrets.token_urlsafe(32) if args.execution_values else None
+    if synthetic_secret:
+        forbidden.append(synthetic_secret)
     record(stage=STAGE)
     def snapshot():
         ids=execute('docker','ps','-aq','--no-trunc').splitlines();assert len(ids)<=500
@@ -267,7 +286,7 @@ def main():
             owner=actors['owner'];native=smoke.provider(owner['token'],'POST','user/repos',{'name':'typed-inputs','private':True,'auto_init':True},expected=201)
             repository={'owner':owner['name'],'name':native['name']};base='repos/'+native['full_name'];smoke.wait_for_push(owner['token'],native['full_name'])
             smoke.provider(owner['token'],'PUT',base+'/collaborators/'+actors['reader']['name'],{'permission':'read'},expected=204)
-            files=source_files()
+            files=source_files(args.execution_values)
             for path,data in files.items():smoke.provider(owner['token'],'POST',base+'/contents/'+path,{'content':base64.b64encode(data).decode(),'message':'Controlled typed input fixture'},expected=201)
             head=smoke.provider(owner['token'],'GET',base+'/branches/'+native['default_branch'])['commit']['id'];assert re.fullmatch('[a-f0-9]{40}',head)
             blob=hashlib.sha1(b'blob '+str(len(files[PATH])).encode()+b'\0'+files[PATH]).hexdigest();target={'repository':repository,'repositoryId':str(native['id']),'ownerId':str(native['owner']['id'])}
@@ -282,6 +301,29 @@ def main():
             assert prepared['nativeActorId']==owner['id']
             reordered=rpc('owner','WorkflowRunService/PrepareWorkflowDispatch',prepare|{'inputs':list(reversed(inputs))});assert reordered['submittedSha256']==prepared['submittedSha256'] and reordered['effectiveSha256']==prepared['effectiveSha256']
             explicit=rpc('owner','WorkflowRunService/PrepareWorkflowDispatch',prepare|{'inputs':inputs+[{'name':'flag','booleanValue':False},{'name':'count','numberValue':'2.500'}]});assert explicit['effectiveSha256']==prepared['effectiveSha256'] and explicit['submittedSha256']!=prepared['submittedSha256']
+            binding = None
+            if args.execution_values:
+                stage('exact typed source approval with immutable encrypted secret and variable versions')
+                def inventory():
+                    access=rpc('owner','RepositoryAccessService/GetRepositoryAccess',{'repository':repository})['access']
+                    t=target|{'accessRevision':access['revision']}
+                    return rpc('owner','RepositoryExecutionValueService/ListRepositoryExecutionValues',{'target':t})
+                refs=[]
+                for kind,name,value in [('SECRET','BUILD_CREDENTIAL',synthetic_secret),('VARIABLE','BUILD_REGION','owned-region')]:
+                    current=inventory(); item=str(uuid.uuid4())
+                    request={'target':current['target'],'id':item,'expectedVersion':'0','expectedBrokerRevision':current['brokerRevision'],'operationId':str(uuid.uuid4()),'name':name,'kind':'REPOSITORY_EXECUTION_VALUE_KIND_'+kind,'value':value}
+                    accepted=rpc('owner','RepositoryExecutionValueService/SaveRepositoryExecutionValue',request)['operation']
+                    assert accepted['itemId']==item and accepted['acceptedVersion']=='1'
+                    refs.append({'id':item,'version':'1'})
+                current=inventory()
+                request={'target':current['target'],'id':str(uuid.uuid4()),'expectedVersion':'0','expectedBrokerRevision':current['brokerRevision'],'operationId':str(uuid.uuid4()),'workflowPath':PATH,'commitId':head,'event':'WORKFLOW_RUN_ORIGIN_MANUAL','expiresAt':(datetime.now(timezone.utc)+timedelta(minutes=20)).isoformat().replace('+00:00','Z'),'values':refs,'inputs':inputs}|{k:prepared[k] for k in ('inputContract','workflowBlobId','schemaSha256','submittedSha256','effectiveSha256')}
+                accepted=rpc('owner','RepositoryExecutionValueService/SaveRepositoryExecutionBinding',request)['operation']
+                assert accepted['itemId']==request['id'] and accepted['acceptedVersion']=='1'
+                replay=rpc('owner','RepositoryExecutionValueService/SaveRepositoryExecutionBinding',request)['operation'];assert replay.get('replayed') and replay['itemId']==request['id']
+                binding=next(v for v in inventory()['bindings'] if v['id']==request['id'])
+                assert binding['engineCatalog']==CATALOG and binding['values']==refs
+                for field in ('inputContract','schemaSha256','submittedSha256','effectiveSha256'):assert binding[field]==prepared[field]
+                record(typedExecutionApproval={'id':binding['id'],'version':binding['version'],'engineCatalog':CATALOG,'immutableValues':len(refs),'originalReplay':True,'identities':{k:binding[k] for k in ('inputContract','schemaSha256','submittedSha256','effectiveSha256')}})
             key_id=str(uuid.uuid4());dispatch={k:prepared[k] for k in ('repository','repositoryId','ownerId','workflowPath','workflowBlobId','schemaSha256','submittedSha256','effectiveSha256','inputContract')}|{'ref':head,'inputs':inputs,'idempotencyKey':key_id}
             assert counts()=={'runs':0,'inputs':0}
             for change in ({'schemaSha256':'f'*64},{'workflowBlobId':'f'*40},{'inputs':[{'name':'text','booleanValue':True}]},{'inputs':inputs+[inputs[0]]}):rpc('owner','WorkflowRunService/DispatchWorkflow',dispatch|change|{'idempotencyKey':str(uuid.uuid4())},expected=400,code='failed_precondition' if 'schemaSha256' in change or 'workflowBlobId' in change else 'invalid_argument')
@@ -303,7 +345,7 @@ def main():
                 request=urllib.request.Request(url+'/internal/ci/poll',data=json.dumps({'catalogs':[catalog],'capabilities':caps}).encode(),headers={'Content-Type':'application/json','Golf-Runner-ID':'local-docker','Authorization':'Bearer '+worker_key})
                 opener=urllib.request.build_opener(urllib.request.HTTPSHandler(context=ctx)) if ctx else urllib.request.build_opener()
                 with opener.open(request,timeout=20) as reply:assert reply.status==204 and not reply.read(4096)
-            caps=['golf.runner.job-limits.v1',CONTRACT]
+            caps=['golf.runner.job-limits.v1',CONTRACT]+(['golf.repository-env.v1'] if args.execution_values else [])
             machine(smoke.GOLF,CATALOG,caps);machine(secure,act.CATALOG,caps,context);machine(secure,CATALOG,['golf.runner.job-limits.v1'],context)
             assert rpc('owner','WorkflowRunService/GetWorkflowRun',{'runId':run['id']})['run']['state']=='WORKFLOW_RUN_STATE_QUEUED'
             record(original={'key':key_id,'runId':run['id'],'repositoryId':target['repositoryId'],'ownerId':target['ownerId'],'actorId':owner['id'],'commitId':head,'blobId':blob,'sourceSha256':run['sourceSha256'],'schemaSha256':prepared['schemaSha256'],'submittedSha256':prepared['submittedSha256'],'effectiveSha256':prepared['effectiveSha256']},oneAdmission=True,restartOriginalInspection=True,oldAndHTTPWorkerDenied=True)
@@ -315,11 +357,18 @@ def main():
                 return observed if observed['state'] not in ('WORKFLOW_RUN_STATE_QUEUED','WORKFLOW_RUN_STATE_RUNNING') else None
             observed=helpers.until(terminal,timeout=240);assert observed['state']=='WORKFLOW_RUN_STATE_SUCCEEDED' and observed['engineCatalog']==CATALOG and observed['engineCommit']==act.ENGINE
             original_receipt(rpc('owner','WorkflowRunService/GetWorkflowDispatch',original),prepared,key_id)
+            if binding:
+                assert observed['executionBindingId']==binding['id'] and observed['executionBindingVersion']==binding['version'] and observed['outputState']=='WORKFLOW_OUTPUT_STATE_REDACTED'
             assert observed['id']==run['id'] and observed['commitId']==head and observed['workflowBlobId']==blob and observed['sourceSha256']==run['sourceSha256'] and re.fullmatch('[a-f0-9]{32}',observed['attemptId'])
             jobs=observed['jobs'];assert len(jobs)==1 and jobs[0]['jobId']=='inputs' and jobs[0]['state']=='WORKFLOW_STEP_STATE_SUCCEEDED' and jobs[0]['eventsRecorded'] is True
-            steps={v['id']:v['state'] for v in jobs[0]['steps']};assert steps=={'literal':'WORKFLOW_STEP_STATE_SUCCEEDED','falseflag':'WORKFLOW_STEP_STATE_SKIPPED','numbertruth':'WORKFLOW_STEP_STATE_SUCCEEDED','composite':'WORKFLOW_STEP_STATE_SUCCEEDED'}
+            steps={v['id']:v['state'] for v in jobs[0]['steps']};expected_steps={'literal':'WORKFLOW_STEP_STATE_SUCCEEDED','falseflag':'WORKFLOW_STEP_STATE_SKIPPED','numbertruth':'WORKFLOW_STEP_STATE_SUCCEEDED','composite':'WORKFLOW_STEP_STATE_SUCCEEDED'}
+            if binding:expected_steps['approvedenv']='WORKFLOW_STEP_STATE_SUCCEEDED'
+            assert steps==expected_steps
             evidence=[];log=act.read_logs(lambda method,payload:rpc('owner',method,payload),observed,evidence=evidence)
             for marker in ('typed-literal-values-verified','typed-number-truth-verified','typed-composite-nonrecursive-verified'):assert marker in log
+            if binding:
+                assert synthetic_secret not in log and 'typed-approved-environment-verified' in log
+                record(typedExecutionConsumer={'secretDelivered':True,'variableDelivered':True,'secretNotInReadableLogs':True,'outputState':observed['outputState'],'bindingId':binding['id'],'bindingVersion':binding['version']},limitations=['One real typed manual workflow with exact approved repository values; broader Actions/GitLab compatibility, input-declaring push, agents/CD and recovery remain separate.','Lost response body after accepted headers, not arbitrary transport-loss proof.'])
             assert not observed.get('logsTruncated',False)
             composite=act.read_logs(lambda method,payload:rpc('owner',method,payload),observed,jobs[0]['instanceId'],'composite',evidence)
             assert 'typed-composite-nonrecursive-verified' in composite and 'typed-literal-values-verified' not in composite

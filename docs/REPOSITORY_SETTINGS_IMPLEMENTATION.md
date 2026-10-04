@@ -4,6 +4,12 @@ The requested completion condition is that every repository Settings section is 
 
 ## Readiness and presentation
 
+### Local Compose delivery first
+
+The current implementation priority is the fully local Docker Compose installation. Its acceptance uses real local Git, PostgreSQL, RustFS, Docker runners, optional coding-agent machines, SMTP and HTTP destinations. Kubernetes and Cloudflare qualification are separate deployment gates; their absence must not block a working local capability. A portable installation never needs a Cloudflare account.
+
+For each completed slice, record its supported operation and local consumer separately from the complete section's remaining requirements. Local scope does not remove missing functionality: protected merge execution, broader Actions/GitLab conformance, environment promotion, production rollback and lifecycle controls still require their actual consumers. A working unprotected native merge is useful local progress even while protected Rules remains Partial. Avoid making ordinary supported operations wait for stronger protected-publication contracts that they do not claim.
+
 Separate three facts: implemented capability, the viewer's administration permission, and this installation/repository's configuration. A supported but disabled feature remains configurable; an absent required worker, grant or destination explains the configuration needed. Neither a disabled feature nor permission denial should masquerade as an unimplemented feature. Report provider outages and uncertain observations independently.
 
 Replace hard-coded coverage declarations with service-backed observations as consumers ship. Resolve immutable repository and owner IDs, current native authority and inherited Golf policies. Recheck after waits and before saves. An instance administrator does not automatically own a repository or its private agent transcripts. Show effective policy and its source, current values/inventories, explicit Add/Edit actions, named connections and active bindings. Use shared TanStack forms/tables and global styles; sustained administration lives on full pages. Short confirmations may use dialogs. Live invalidations refresh reads without discarding unsaved edits; revoked authority clears private content.
