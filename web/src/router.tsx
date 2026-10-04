@@ -1,6 +1,6 @@
 import { createRootRoute, createRoute, createRouter, notFound, redirect, Outlet, stripSearchParams } from '@tanstack/react-router';
 import { App } from './App';
-import { defaultRepositorySearch, isCommitID, isRunID } from './navigation';
+import { defaultRepositorySearch, isCommitID, isRunID, isWorkflowJobInstanceID, isWorkflowStepID } from './navigation';
 import { sourcePath, sourceRef } from './sourceReads';
 import type { RepositorySearch } from './navigation';
 
@@ -125,6 +125,8 @@ const validateRepositorySearch = (search: Record<string, unknown>): RepositorySe
       commit: search.commit === undefined ? undefined : typeof search.commit === 'string' ? search.commit : '',
       runKind:search.runKind as RepositorySearch['runKind'],actionKind:search.actionKind as RepositorySearch['actionKind'],workflowPath:search.workflowPath as string|undefined,
       run: search.run === undefined ? undefined : typeof search.run === 'string' ? search.run : '',
+      jobInstanceId:search.jobInstanceId===undefined?undefined:typeof search.jobInstanceId==='string'?search.jobInstanceId:'',
+      stepId:search.stepId===undefined?undefined:typeof search.stepId==='string'?search.stepId:'',
       step: search.step === undefined ? undefined : typeof search.step === 'number' ? search.step : typeof search.step === 'string' && /^(0|[1-9][0-9]*)$/.test(search.step) ? Number(search.step) : NaN,
     };
   };
@@ -134,6 +136,7 @@ function validateRepositorySelectors(search: RepositorySearch) {
   if (search.commit !== undefined && !isCommitID(search.commit)) throw notFound();
   if (search.run !== undefined && !isRunID(search.run)) throw notFound();
   if (search.runKind&&search.runKind!=='workflow'&&search.step!==undefined)throw notFound();
+  if(search.jobInstanceId!==undefined&&!isWorkflowJobInstanceID(search.jobInstanceId)||search.stepId!==undefined&&(!isWorkflowStepID(search.stepId)||search.jobInstanceId===undefined)||search.jobInstanceId!==undefined&&search.step!==undefined||search.runKind&&search.runKind!=='workflow'&&(search.jobInstanceId!==undefined||search.stepId!==undefined))throw notFound();
   if (search.step !== undefined && (!Number.isInteger(search.step) || search.step < 0 || search.step > 49)) throw notFound();
 }
 const repositoryRoute = createRoute({
@@ -143,7 +146,7 @@ const repositoryRoute = createRoute({
   beforeLoad: ({ params, search }) => {
     validateRepositoryIdentity(params.owner, params.name);
     validateRepositorySelectors(search);
-    if(search.runKind&&!search.run)throw notFound();
+    if(search.runKind&&!search.run||search.jobInstanceId!==undefined&&(search.view!=='actions'||!search.run))throw notFound();
   },
   search: { middlewares: [stripSearchParams(defaultRepositorySearch)] },
   component: RepositoryPage,
@@ -155,6 +158,7 @@ function canonicalLocation(owner:string,name:string,tail:string,search:Repositor
   validateRepositoryIdentity(owner, name);
   validateRepositorySelectors(search);
   const location={...search,owner,name,kind:'repository' as const};
+  if(search.jobInstanceId!==undefined&&!(tail?tail.startsWith('actions/runs/'):search.view==='actions'&&search.run))throw notFound();
   if(!tail) return location;
   const parts=tail.split('/');
   const item=parts[1]||'';
@@ -246,7 +250,7 @@ export const router = createRouter({
   parseSearch: (search) => {
     try { for (const part of search.replace(/^\?/, '').split('&')) for(const value of part.split('=')) decodeURIComponent(value.replace(/\+/g,' ')); } catch { return {refKind:'invalid'}; }
     const query=new URLSearchParams(search);
-    if (['refKind','refName','ref','path','branch','tag','runKind','actionKind','workflowPath','run','step'].some(key=>query.getAll(key).length>1)) return {refKind:'invalid'};
+    if (['refKind','refName','ref','path','branch','tag','runKind','actionKind','workflowPath','run','step','jobInstanceId','stepId'].some(key=>query.getAll(key).length>1)) return {refKind:'invalid'};
     return Object.fromEntries(query);
   },
   stringifySearch: (search) => {

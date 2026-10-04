@@ -1,13 +1,15 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { ArrowLeft, ArrowDownToLine, CheckCircle2, CircleDashed, CircleSlash, Clock3, Download, GitCommitHorizontal, LoaderCircle, RefreshCw, Search, XCircle } from 'lucide-react';
+import { forgetPrivateQueries } from './queryClient';
 import { workflowRunClient, errorMessage } from './api';
-import { WorkflowRunOrigin, WorkflowRunState, WorkflowStepState, type WorkflowStepProgress, type WorkflowRun } from './gen/golf/v1/golf_pb';
+import { WorkflowRunOrigin, WorkflowRunState, WorkflowStepState, type WorkflowStepProgress, type WorkflowRun, type WorkflowJobInstance } from './gen/golf/v1/golf_pb';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { DateLabel, Loading, More, PanelError, privateQuery } from './RepositoryUI';
-import { repositoryOptions } from './navigation';
+import { isCommitID, isWorkflowJobInstanceID, isWorkflowStepID, repositoryOptions } from './navigation';
+import { sourcePath, sourceRepositoryID } from './sourceReads';
 
 function useWideWorkflowLayout() {
  const [wide,setWide]=useState(()=>window.matchMedia('(min-width:701px)').matches);
@@ -46,16 +48,41 @@ function elapsed(run:WorkflowRun) {
  return Number.isFinite(seconds)&&seconds>=0?`${Math.floor(seconds/60)}m ${seconds%60}s`:'Unavailable';
 }
 function stepLabel(state:WorkflowStepState){return WorkflowStepState[state]?.toLowerCase()||'unknown';}
-function stepDuration(step:WorkflowStepProgress){
+function stepDuration(step:Pick<WorkflowStepProgress,'state'|'startedAt'|'finishedAt'>){
  if(!step.startedAt)return stepLabel(step.state);
- if(!step.finishedAt)return step.state===WorkflowStepState.INTERRUPTED?'Interrupted':'In progress';
+ if(!step.finishedAt)return step.state===WorkflowStepState.INTERRUPTED?'Interrupted':step.state===WorkflowStepState.RUNNING?'In progress':'Duration not recorded';
  const seconds=Math.floor((Date.parse(step.finishedAt)-Date.parse(step.startedAt))/1000);
  return Number.isFinite(seconds)&&seconds>=0?`${seconds}s`:'Duration unavailable';
 }
-function StepState({step}:{step:WorkflowStepProgress}){
+function StepState({step}:{step:Pick<WorkflowStepProgress,'state'>}){
  const Icon=step.state===WorkflowStepState.SUCCEEDED?CheckCircle2:step.state===WorkflowStepState.FAILED?XCircle:step.state===WorkflowStepState.RUNNING?LoaderCircle:step.state===WorkflowStepState.SKIPPED||step.state===WorkflowStepState.INTERRUPTED?CircleSlash:CircleDashed;
  return <span className={`run-state run-state-${stepLabel(step.state)}`} title={stepLabel(step.state)}><Icon size={16} aria-label={stepLabel(step.state)} className={step.state===WorkflowStepState.RUNNING?'spin':undefined}/></span>;
 }
+
+const actionsCatalog='golf.workflow.act.v0.2.89.linux.v1';
+const actionsEngineCommit='4f411281417e88660bea1c1a1749aa71ae0bd60f';
+const graphFailure=():never=>{throw new ConnectError('The recorded job graph does not match this run and source receipt.',Code.FailedPrecondition)};
+const graphText=(value:string,max=255)=>Boolean(value)&&new TextEncoder().encode(value).length<=max&&!/[\p{Cc}\uD800-\uDFFF]/u.test(value);
+const graphDate=(value:string|undefined)=>value===undefined||Boolean(value)&&Number.isFinite(Date.parse(value));
+function validateJobGraph(run:WorkflowRun){
+ if(!run.engineCatalog||run.engineCatalog==='golf.workflow.shell.v1'){if(run.jobs.length||run.engineCommit)graphFailure();return run;}
+ if(run.engineCatalog!==actionsCatalog||run.engineCommit!==actionsEngineCommit||!sourceRepositoryID(run.ownerId)||!sourceRepositoryID(run.version)||!isCommitID(run.commitId)||!isCommitID(run.workflowBlobId)||run.workflowBlobId.length!==run.commitId.length||!sourcePath(run.workflowPath)||!run.workflowPath||!/^[a-f0-9]{64}$/.test(run.sourceSha256)||run.attemptId&&!isWorkflowJobInstanceID(run.attemptId)||run.state===WorkflowRunState.RUNNING&&!run.attemptId||run.progress||run.jobs.length<1||run.jobs.length>12)graphFailure();
+ const ids=new Set<string>(),jobIds=new Set(run.jobs.map(job=>job.jobId));let stepCount=0;
+ for(const job of run.jobs){
+  if(!isWorkflowJobInstanceID(job.instanceId)||ids.has(job.instanceId)||!/^[A-Za-z_][A-Za-z0-9_-]{0,254}$/.test(job.jobId)||!graphText(job.name)||!graphDate(job.startedAt)||!graphDate(job.finishedAt)||job.startedAt&&job.finishedAt&&Date.parse(job.finishedAt)<Date.parse(job.startedAt)||!Number.isInteger(job.state)||job.state<WorkflowStepState.PENDING||job.state>WorkflowStepState.UNRECORDED||job.matrix.length>8||job.needs.length>8||job.steps.length<1||job.steps.length>32||!/^[A-Za-z0-9][A-Za-z0-9._:/-]*@sha256:[a-f0-9]{64}$/.test(job.imageDigest))graphFailure();
+  ids.add(job.instanceId);const matrixNames=new Set<string>(),stepIds=new Set<string>();
+  for(const entry of job.matrix){if(!/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(entry.name)||matrixNames.has(entry.name)||new TextEncoder().encode(entry.valueJson).length>1024)graphFailure();matrixNames.add(entry.name);try{const value:unknown=JSON.parse(entry.valueJson);if(value!==null&&typeof value!=='string'&&typeof value!=='number'&&typeof value!=='boolean'||typeof value==='number'&&!Number.isFinite(value))graphFailure()}catch{graphFailure()}}
+  const needs=new Set<string>();for(const need of job.needs){if(!jobIds.has(need)||need===job.jobId||needs.has(need))graphFailure();needs.add(need);}
+  for(const step of job.steps){if(!isWorkflowStepID(step.id)||stepIds.has(step.id)||!graphText(step.name)||!graphDate(step.startedAt)||!graphDate(step.finishedAt)||step.startedAt&&step.finishedAt&&Date.parse(step.finishedAt)<Date.parse(step.startedAt)||!Number.isInteger(step.state)||step.state<WorkflowStepState.PENDING||step.state>WorkflowStepState.UNRECORDED)graphFailure();stepIds.add(step.id);stepCount++;}
+ }
+ if(stepCount>128)graphFailure();return run;
+}
+function matrixLabel(job:WorkflowJobInstance){return job.matrix.map(entry=>{const value=JSON.parse(entry.valueJson) as unknown;return `${entry.name}: ${typeof value==='string'?value:entry.valueJson}`}).join(', ');}
+function graphOptions(owner:string,name:string,runId:string,jobInstanceId?:string,stepId?:string){return repositoryOptions({owner,name},{view:'actions',run:runId,step:undefined,jobInstanceId,stepId});}
+function JobGraphNavigation({run,owner,name,selectedJobInstanceId,selectedStepId}:{run:WorkflowRun;owner:string;name:string;selectedJobInstanceId?:string;selectedStepId?:string}){
+ return <><h3>Jobs</h3><Link className="automation-step-link" aria-current={!selectedJobInstanceId?'page':undefined} {...graphOptions(owner,name,run.id)}>All run output</Link><ol>{run.jobs.map(job=><li key={job.instanceId}><Link className="automation-step-link" aria-current={selectedJobInstanceId===job.instanceId&&!selectedStepId?'page':undefined} title={`${job.jobId} · ${job.instanceId}`} {...graphOptions(owner,name,run.id,job.instanceId)}><StepState step={job}/><span>{job.name}<small>{matrixLabel(job)||job.jobId} · {stepDuration(job)}</small></span></Link>{selectedJobInstanceId===job.instanceId?<><small className="muted">{job.needs.length?`Needs: ${job.needs.join(', ')}`:'No dependencies'}</small><ol>{job.steps.map(step=><li key={step.id}><Link className="automation-step-link" aria-current={selectedStepId===step.id?'page':undefined} {...graphOptions(owner,name,run.id,job.instanceId,step.id)}><StepState step={step}/><span>{step.name}<small>{stepDuration(step)}</small></span></Link></li>)}</ol></>:null}</li>)}</ol></>;
+}
+
 function LogHighlight({text,search}:{text:string;search:string}) {
  if(!search)return text;
  // Bound DOM work without dropping log text; browser Find can reach further matches.
@@ -66,17 +93,20 @@ function LogHighlight({text,search}:{text:string;search:string}) {
  }
  parts.push(text.slice(cursor));return parts;
 }
-function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex}:{userId:string;owner:string;name:string;runId:string;truncated:boolean;enabled:boolean;stepIndex?:number}) {
+function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex,run,jobInstanceId,stepId,onAuthorityDenied}:{userId:string;owner:string;name:string;runId:string;truncated:boolean;enabled:boolean;stepIndex?:number;run:WorkflowRun;jobInstanceId?:string;stepId?:string;onAuthorityDenied:(error:ConnectError,observed:WorkflowRun)=>void}) {
  const [search,setSearch]=useState('');const searchId=useId();
  const wide=useWideWorkflowLayout(),[searchOpen,setSearchOpen]=useState(false);const end=useRef<HTMLSpanElement>(null);
- const query=useInfiniteQuery({...privateQuery,queryKey:['workflow-run-logs',userId,owner,name,runId,stepIndex??'all'],enabled,initialPageParam:0n,
+ const query=useInfiniteQuery({...privateQuery,queryKey:['workflow-run-logs',userId,owner,name,runId,run.repositoryId,run.attemptId,run.commitId,jobInstanceId??'all',stepId??'all',stepIndex??'all'],enabled,initialPageParam:0n,
   queryFn:async({signal,pageParam})=>{
-   const page=await workflowRunClient.getWorkflowRunLogs({runId,afterSequence:pageParam,stepIndex},{signal,timeoutMs:12_000});
+   const page=await workflowRunClient.getWorkflowRunLogs({runId,afterSequence:pageParam,stepIndex,jobInstanceId,stepId},{signal,timeoutMs:12_000});
+   signal.throwIfAborted();
+   if(run.engineCatalog===actionsCatalog&&(page.runId!==run.id||page.attemptId!==run.attemptId||page.repositoryId!==run.repositoryId||page.sourceCommitId!==run.commitId||page.jobInstanceId!==(jobInstanceId??'')||page.stepId!==(stepId??'')))throw new ConnectError('The log receipt does not match the selected run, attempt, source and job/step.',Code.FailedPrecondition);
    let sequence=pageParam;
    for(const chunk of page.logs){if(chunk.sequence<=sequence||chunk.sequence>9223372036854775807n)throw new ConnectError('The log page has an invalid sequence. Refresh before continuing.',Code.Internal);sequence=chunk.sequence;}
    if(page.logs.length>16||page.hasMore&&!page.logs.length)throw new ConnectError('The log page cannot be continued safely.',Code.Internal);
    return page;
   },getNextPageParam:page=>page.hasMore?page.logs.at(-1)?.sequence:undefined});
+ useEffect(()=>{if(query.error instanceof ConnectError&&[Code.Unauthenticated,Code.PermissionDenied,Code.NotFound].includes(query.error.code))onAuthorityDenied(query.error,run);},[query.error,onAuthorityDenied,run]);
  const loading=query.isPending||query.isFetching&&!query.isFetchingNextPage;
  const text=query.data?.pages.flatMap(page=>page.logs).map(chunk=>chunk.text).join('')||'';
  const denied=Boolean(query.error)||!enabled;
@@ -84,7 +114,7 @@ function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex}:{
  function download(){
   if(denied||loading||!text)return;
   const url=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));
-  const link=document.createElement('a');link.href=url;link.download=`golf-run-${runId}${stepIndex!==undefined?'-step-'+(stepIndex+1):''}${query.hasNextPage?'-loaded':''}.log`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  const link=document.createElement('a');link.href=url;link.download=`golf-run-${runId}${jobInstanceId?'-job-'+jobInstanceId:''}${stepId?'-step-'+stepId:stepIndex!==undefined?'-step-'+(stepIndex+1):''}${query.hasNextPage?'-loaded':''}.log`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
  }
  return <section className="browser-panel workflow-log-panel" aria-labelledby="workflow-log-title">
   <div className="browser-panel-heading"><h2 id="workflow-log-title">Run log</h2><div className="row-actions"><button className="icon-button workflow-log-search-toggle" aria-label="Search loaded run log" title="Search loaded run log" aria-expanded={searchOpen} aria-controls={searchId+'-controls'} disabled={denied} onClick={()=>setSearchOpen(value=>!value)}><Search size={16}/></button><button className="icon-button manual-refresh" aria-label="Refresh run log" title="Refresh run log" disabled={query.isFetching||!enabled} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button><button className="icon-button" aria-label="Download loaded log" title="Download loaded log" disabled={denied||loading||!text} onClick={download}><Download size={16}/></button><button className="icon-button" aria-label="Go to end of loaded log" title="Go to end of loaded log" disabled={denied||loading||!text} onClick={()=>end.current?.scrollIntoView({block:'end'})}><ArrowDownToLine size={16}/></button></div></div>
@@ -97,16 +127,35 @@ function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex}:{
  </section>;
 }
 
-export function WorkflowRunPage({userId,owner,name,repositoryId,runId,signingOut,selectedStep}:{userId:string;owner:string;name:string;repositoryId:string;runId:string;signingOut:boolean;selectedStep?:number}) {
+export function WorkflowRunPage({userId,owner,name,repositoryId,runId,signingOut,selectedStep,selectedJobInstanceId,selectedStepId}:{userId:string;owner:string;name:string;repositoryId:string;runId:string;signingOut:boolean;selectedStep?:number;selectedJobInstanceId?:string;selectedStepId?:string}) {
+ const client=useQueryClient();
  const [notice,setNotice]=useState('');const [pending,setPending]=useState(false);
  const desktop=useWideWorkflowLayout();
  const [mobileJobsOpen,setMobileJobsOpen]=useState(false);
  const controller=useRef<AbortController|null>(null);const alive=useRef(true);
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;controller.current?.abort();};},[]);
  useEffect(()=>{if(signingOut){controller.current?.abort();setNotice('');}},[signingOut]);
- const query=useQuery({...privateQuery,queryKey:['workflow-run',userId,owner,name,runId],enabled:!signingOut,
-  queryFn:async({signal})=>{const response=await workflowRunClient.getWorkflowRun({runId},{signal,timeoutMs:12_000});if(!response.run||response.run.id!==runId||response.run.repositoryId!==repositoryId)throw new ConnectError('This run does not belong to the selected repository.',Code.NotFound);return response.run;}});
+ const query=useQuery({...privateQuery,queryKey:['workflow-run',userId,owner,name,runId,repositoryId],enabled:!signingOut,
+  queryFn:async({signal})=>{const response=await workflowRunClient.getWorkflowRun({runId},{signal,timeoutMs:12_000});signal.throwIfAborted();if(!response.run||response.run.id!==runId||response.run.repositoryId!==repositoryId)throw new ConnectError('This run does not belong to the selected repository.',Code.NotFound);return validateJobGraph(response.run);}});
  const run=query.isSuccess&&!query.error&&!signingOut?query.data:undefined;
+ const denyLogAuthority=useCallback(async(error:ConnectError,observed:WorkflowRun)=>{
+  const key=['workflow-run',userId,owner,name,runId,repositoryId];
+  const current=()=>client.getQueryData<WorkflowRun>(key);
+  const matches=()=>alive.current&&!signingOut&&client.getQueryData<{id:string}>(['session'])?.id===userId&&current()?.id===observed.id&&current()?.repositoryId===observed.repositoryId&&observed.repositoryId===repositoryId&&current()?.attemptId===observed.attemptId&&current()?.commitId===observed.commitId;
+  if(!matches())return;
+  if(error.code===Code.Unauthenticated){client.setQueryData(['session'],null);forgetPrivateQueries(client);return;}
+  // A log read has the same current repository/session fence as this run.
+  // Clear only this exact observation; no retry or inference of revocation.
+  const scopedLogs=(q:{queryKey:readonly unknown[]})=>{const k=q.queryKey;return k[0]==='workflow-run-logs'&&k[1]===userId&&k[2]===owner&&k[3]===name&&k[4]===runId&&k[5]===repositoryId&&k[6]===observed.attemptId&&k[7]===observed.commitId;};
+  await Promise.all([client.cancelQueries({queryKey:key,exact:true}),client.cancelQueries({predicate:scopedLogs})]);
+  if(!matches())return;
+  client.removeQueries({predicate:scopedLogs});
+  client.getQueryCache().find({queryKey:key,exact:true})?.setState({data:undefined,error,status:'error',fetchStatus:'idle'});
+ },[client,userId,owner,name,runId,repositoryId,signingOut]);
+ const engineRun=run?.engineCatalog===actionsCatalog;
+ const job=run?.jobs.find(job=>job.instanceId===selectedJobInstanceId),engineStep=job?.steps.find(step=>step.id===selectedStepId);
+ const badSelection=Boolean(run&&(selectedJobInstanceId&&(!engineRun||!job)||selectedStepId&&!engineStep||engineRun&&selectedStep!==undefined));
+ const selectedRecorded=selectedJobInstanceId?selectedStepId?Boolean(engineStep?.startedAt):Boolean(job?.startedAt):selectedStep!==undefined?Boolean(run?.progress?.steps.find(step=>step.index===selectedStep)?.startedAt):true;
  async function cancel(){
   if(!run||!run.canCancel||pending||signingOut||query.isFetching)return;
   const observed=run;const request=new AbortController();controller.current=request;setPending(true);setNotice('');
@@ -122,16 +171,18 @@ export function WorkflowRunPage({userId,owner,name,repositoryId,runId,signingOut
   {query.error?<PanelError error={query.error} retry={()=>void query.refetch()}/>:!run?<Loading label="Loading selected run…"/>:null}
   {run?<><div hidden={query.isFetching} className="page-stack">
    <header className="discussion-summary workflow-run-summary"><div><h2>{run.workflowPath}</h2><p><RunState state={run.state}/><span>{run.origin===WorkflowRunOrigin.PUSH?'Push':run.origin===WorkflowRunOrigin.MANUAL?'Manual':'Unknown trigger'}{run.eventRef?` · ${run.eventRef}`:''}</span><span><Clock3 size={14}/>{elapsed(run)}</span></p></div><div className="row-actions"><button className="icon-button manual-refresh" aria-label="Refresh selected run" title="Refresh selected run" disabled={pending||query.isFetching||signingOut} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button>{run.canCancel?<button className="button secondary" disabled={pending||signingOut||query.isFetching} onClick={()=>void cancel()}>Cancel run</button>:null}</div></header>
-   <section className="browser-panel workflow-run-metadata" aria-label="Run summary"><dl><div><dt>Commit</dt><dd><Link {...repositoryOptions({owner,name},{view:'commits',commit:run.commitId})}><GitCommitHorizontal size={14}/><code title={run.commitId}>{run.commitId.slice(0,12)}</code></Link></dd></div><div><dt>Created</dt><dd><DateLabel value={run.createdAt}/></dd></div></dl><details><summary>Execution receipt</summary><dl><div><dt>Worker</dt><dd>{run.runnerId||'Awaiting assignment'}</dd></div><div><dt>Exit code</dt><dd>{run.exitCode??'Not reported'}</dd></div><div><dt>Run</dt><dd><code>{run.id}</code></dd></div><div><dt>Workflow source</dt><dd><Link {...repositoryOptions({owner,name},{ref:run.commitId,path:run.workflowPath},'file')}>{run.workflowPath}</Link></dd></div><div><dt>Workflow blob</dt><dd><code>{run.workflowBlobId}</code></dd></div><div><dt>Source archive</dt><dd><code>{run.sourceSha256}</code></dd></div>{run.origin===WorkflowRunOrigin.PUSH?<><div><dt>Event</dt><dd>{run.repositoryEventId}</dd></div><div><dt>Automation grant</dt><dd><code>{run.automationGrantId}</code></dd></div></>:null}</dl></details></section>
+   <section className="browser-panel workflow-run-metadata" aria-label="Run summary"><dl><div><dt>Commit</dt><dd><Link {...repositoryOptions({owner,name},{view:'commits',commit:run.commitId})}><GitCommitHorizontal size={14}/><code title={run.commitId}>{run.commitId.slice(0,12)}</code></Link></dd></div><div><dt>Created</dt><dd><DateLabel value={run.createdAt}/></dd></div></dl><details><summary>Execution receipt</summary><dl><div><dt>Worker</dt><dd>{run.runnerId||'Awaiting assignment'}</dd></div><div><dt>Exit code</dt><dd>{run.exitCode??'Not reported'}</dd></div><div><dt>Attempt</dt><dd><code>{run.attemptId||'Not recorded'}</code></dd></div>{run.engineCatalog?<><div><dt>Engine catalog</dt><dd><code>{run.engineCatalog}</code></dd></div>{run.engineCommit?<div><dt>Engine source</dt><dd><code>{run.engineCommit}</code></dd></div>:null}</>:null}{job?<><div><dt>Job instance</dt><dd><code>{job.instanceId}</code></dd></div><div><dt>Source job</dt><dd><code>{job.jobId}</code></dd></div>{job.matrix.length?<div><dt>Matrix</dt><dd>{matrixLabel(job)}</dd></div>:null}<div><dt>Needs</dt><dd>{job.needs.join(', ')||'No dependencies'}</dd></div><div><dt>Job image</dt><dd><code>{job.imageDigest}</code></dd></div>{job.startedAt?<div><dt>Job started</dt><dd><DateLabel value={job.startedAt}/></dd></div>:null}{job.finishedAt?<div><dt>Job finished</dt><dd><DateLabel value={job.finishedAt}/></dd></div>:null}{engineStep?<><div><dt>Step</dt><dd><code>{engineStep.id}</code></dd></div>{engineStep.startedAt?<div><dt>Step started</dt><dd><DateLabel value={engineStep.startedAt}/></dd></div>:null}{engineStep.finishedAt?<div><dt>Step finished</dt><dd><DateLabel value={engineStep.finishedAt}/></dd></div>:null}</>:null}</>:null}<div><dt>Run</dt><dd><code>{run.id}</code></dd></div><div><dt>Workflow source</dt><dd><Link {...repositoryOptions({owner,name},{ref:run.commitId,path:run.workflowPath},'file')}>{run.workflowPath}</Link></dd></div><div><dt>Workflow blob</dt><dd><code>{run.workflowBlobId}</code></dd></div><div><dt>Source archive</dt><dd><code>{run.sourceSha256}</code></dd></div>{run.origin===WorkflowRunOrigin.PUSH?<><div><dt>Event</dt><dd>{run.repositoryEventId}</dd></div><div><dt>Automation grant</dt><dd><code>{run.automationGrantId}</code></dd></div></>:null}</dl></details></section>
    {run.reason?<p className="panel-footnote">{run.reason}</p>:null}
-   <div className="automation-run-layout"><aside className="automation-job-navigation" aria-label="Jobs and steps"><details className="workflow-jobs-disclosure" open={desktop||mobileJobsOpen} onToggle={event=>{if(!desktop)setMobileJobsOpen(event.currentTarget.open)}}><summary>Jobs · {run.progress?.name||run.progress?.jobId||'Job'}{selectedStep!==undefined?` · ${run.progress?.steps.find(step=>step.index===selectedStep)?.name||'Selected step'}`:' · All run output'}</summary><div className="workflow-jobs-content">
-    <h3>Jobs</h3><strong>{run.progress?.name||run.progress?.jobId||'Job'}</strong>{run.progress?.stage?<span className="muted">{run.progress.stage}</span>:null}
+   <div className="automation-run-layout"><aside className="automation-job-navigation" aria-label="Jobs and steps"><details className="workflow-jobs-disclosure" open={desktop||mobileJobsOpen} onToggle={event=>{if(!desktop)setMobileJobsOpen(event.currentTarget.open)}}><summary>Jobs · {engineRun?job?`${job.name}${job.matrix.length?' · '+matrixLabel(job):''}`:`${run.jobs.length} recorded instances`:run.progress?.name||run.progress?.jobId||'Job'}{selectedStepId?` · ${engineStep?.name||'Selected step'}`:selectedStep!==undefined?` · ${run.progress?.steps.find(step=>step.index===selectedStep)?.name||'Selected step'}`:' · All run output'}</summary><div className="workflow-jobs-content">
+    {engineRun?<JobGraphNavigation run={run} owner={owner} name={name} selectedJobInstanceId={selectedJobInstanceId} selectedStepId={selectedStepId}/>:<><h3>Jobs</h3><strong>{run.progress?.name||run.progress?.jobId||'Job'}</strong>{run.progress?.stage?<span className="muted">{run.progress.stage}</span>:null}
     <Link className="automation-step-link" aria-current={selectedStep===undefined?'page':undefined} {...repositoryOptions({owner,name},{view:'actions',run:runId,step:undefined})}>All run output</Link>
     {run.progress?.steps.length?<ol>{run.progress.steps.map(step=><li key={step.index}>{step.startedAt?<Link className="automation-step-link" aria-current={selectedStep===step.index?'page':undefined} {...repositoryOptions({owner,name},{view:'actions',run:runId,step:step.index})}><StepState step={step}/><span>{step.name}<small>{stepDuration(step)}</small></span></Link>:<div className="automation-step-link"><StepState step={step}/><span>{step.name}<small>{stepLabel(step.state)}</small></span></div>}</li>)}</ol>:<p className="field-help">Step events were not recorded for this run.</p>}
     {run.progress&&!run.progress.eventsRecorded&&run.state!==WorkflowRunState.QUEUED&&run.state!==WorkflowRunState.RUNNING?<p className="field-help">This run has no recorded step outcomes. Its overall result does not establish individual step results.</p>:null}
+   </>}
    </div></details></aside><div className="automation-run-output">
-    {selectedStep!==undefined?<h3>{run.progress?.steps.find(step=>step.index===selectedStep)?.name||'Selected step'}</h3>:null}
-    {selectedStep!==undefined&&!run.progress?.steps.find(step=>step.index===selectedStep)?.startedAt?<p className="panel-footnote" role="status">The selected step has no recorded output. Choose all run output or a step that started.</p>:<WorkflowRunLogs key={selectedStep??'all'} userId={userId} owner={owner} name={name} runId={runId} stepIndex={selectedStep} truncated={run.logsTruncated} enabled={!query.isFetching&&!signingOut}/>}
+    {selectedStepId||selectedJobInstanceId?<h3>{engineStep?.name||job?.name||'Selected job'}</h3>:selectedStep!==undefined?<h3>{run.progress?.steps.find(step=>step.index===selectedStep)?.name||'Selected step'}</h3>:null}
+    {badSelection?<PanelError error={new ConnectError('The selected job or step does not belong to this recorded run.',Code.NotFound)} retry={()=>void query.refetch()}/>:!selectedRecorded?<p className="panel-footnote" role="status">{selectedJobInstanceId?'The selected job or step has no recorded start or output. Choose all run output or a job/step that started.':'The selected step has no recorded output. Choose all run output or a step that started.'}</p>:<WorkflowRunLogs onAuthorityDenied={denyLogAuthority} key={`${run.attemptId}-${selectedJobInstanceId||'all'}-${selectedStepId||'all'}-${selectedStep??'all'}`} run={run} userId={userId} owner={owner} name={name} runId={runId} stepIndex={selectedStep} jobInstanceId={selectedJobInstanceId} stepId={selectedStepId} truncated={run.logsTruncated} enabled={!query.isFetching&&!signingOut}/>}
+    {engineRun&&!selectedJobInstanceId&&run.jobs.some(job=>!job.eventsRecorded)?<p className="panel-footnote">Job outcomes without recorded events are shown as pending or unrecorded. The overall run result does not establish missing job or step outcomes.</p>:null}
    </div></div>
   </div>{query.isFetching?<Loading label="Checking run access…"/>:null}</>:null}
   {notice&&!signingOut?<p role="status" className="panel-footnote">{notice}</p>:null}

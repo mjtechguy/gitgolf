@@ -17,6 +17,8 @@ export type RepositorySearch = {
   actionKind?: 'workflow' | 'coding-task' | 'review';
   workflowPath?: string;
   step?: number;
+  jobInstanceId?: string;
+  stepId?: string;
   base?: string;
   head?: string;
   sourceOwner?: string;
@@ -28,6 +30,8 @@ export type RepositoryLocation = RepositorySearch & { kind: 'repository'; owner:
 export type OrganizationLocation = { kind: 'organizations'; organization?: string; team?: string };
 export type Location = RepositoryLocation | OrganizationLocation | { kind: 'repository-settings' | 'repository-access-settings' | 'repository-workflows'; owner: string; name: string } | { kind: 'organization-team-settings'; organization: string; teamId: string } | { kind: 'organization-settings'; organization: string } | { kind: 'instance-settings'; view?: 'overview' | 'accounts' | 'execution' | 'organizations' | 'infrastructure' | 'agents' } | { kind: 'status' } | { kind: 'audit' } | { kind: 'api-credentials' } | { kind: 'ssh-keys' } | { kind: 'account-agents' } | { kind: 'account-security' } | { kind: 'settings' } | { kind: 'sessions' } | { kind: 'home'; oauthFailed?: boolean } | { kind: 'missing' };
 export const isRunID = (value: string) => /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value);
+export const isWorkflowJobInstanceID = (value:string) => /^[a-f0-9]{32}$/.test(value);
+export const isWorkflowStepID = (value:string) => /^(?:[A-Za-z_][A-Za-z0-9_-]{0,63}|0|[1-9][0-9]{0,2})$/.test(value);
 export const isCommitID = (value: string) => /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value);
 
 export function organizationOptions({ organization, team }: { organization: string; team?: string }) {
@@ -37,6 +41,7 @@ export function organizationOptions({ organization, team }: { organization: stri
 export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | 'name'> & Partial<RepositorySearch>, changes: Partial<RepositorySearch> = {}, sourceKind?:'file') {
   const next = { ...defaultRepositorySearch, ...location, ...changes };
   if (changes.ref !== undefined && changes.ref !== location.ref && changes.refKind === undefined) { next.refKind = undefined; next.refName = undefined; }
+  if(changes.run!==undefined&&changes.run!==location.run&&changes.jobInstanceId===undefined){next.jobInstanceId=undefined;next.stepId=undefined;if(changes.step===undefined)next.step=undefined;}
   if(next.view === 'commits') { next.refKind=undefined; next.refName=undefined; }
   const search: RepositorySearch = {
     view: next.view, ref: next.ref, path: next.view === 'source' ? next.path : '', branch: next.branch, tag: next.tag,
@@ -49,7 +54,9 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
     run: next.view === 'actions' ? next.run : undefined,
     runKind: next.view==='actions'&&next.run?next.runKind:undefined,
     actionKind:next.view==='actions'?next.actionKind:undefined,workflowPath:next.view==='actions'?next.workflowPath:undefined,
-    step: next.view === 'actions' && next.run ? next.step : undefined,
+    step: next.view === 'actions' && next.run && !next.jobInstanceId ? next.step : undefined,
+    jobInstanceId: next.view==='actions'&&next.run&&(!next.runKind||next.runKind==='workflow')?next.jobInstanceId:undefined,
+    stepId: next.view==='actions'&&next.run&&next.jobInstanceId&&(!next.runKind||next.runKind==='workflow')?next.stepId:undefined,
     base:next.view==='compare'?next.base:undefined,head:next.view==='compare'?next.head:undefined,
     sourceOwner:next.view==='compare'?next.sourceOwner:undefined,sourceName:next.view==='compare'?next.sourceName:undefined,
     historyPath:next.view==='commits'&&!next.commit?next.historyPath:undefined,
