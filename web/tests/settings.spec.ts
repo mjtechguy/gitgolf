@@ -57,6 +57,8 @@ test('repository general editor cancels drafts and sends exact IDs/revision with
   const state = await backend(page);
   await page.goto('/repositories/alex/demo/settings');
   await expect(page.getByText('Original description', { exact: true })).toBeVisible();
+  await expect(page.locator('tr[data-row-id="general"]').getByText('Ready', { exact: true })).toBeVisible();
+  await expect(page.locator('tr[data-row-id="rules"]').getByText('Planned', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Description', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Edit general settings', exact: true }).click();
   await expect(page.getByLabel('Description', { exact: true })).toBeFocused();
@@ -117,6 +119,8 @@ test('lost settings response blocks retry until current values are inspected and
   await page.getByRole('button', { name: 'Refresh repository settings', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Repository settings access denied.');
   await expect(page.getByText('Applied without receipt', { exact: true })).toHaveCount(0);
+  await expect(page.locator('tr[data-row-id="general"]').getByText('Ready', { exact: true })).toHaveCount(0);
+  await expect(page.locator('tr[data-row-id="general"]').getByText('Partial', { exact: true })).toBeVisible();
 });
 
 test('read-only repository users get no edit action and non-admin instance settings deny access', async ({ page }) => {
@@ -124,6 +128,7 @@ test('read-only repository users get no edit action and non-admin instance setti
   await page.goto('/repositories/alex/demo/settings');
   await expect(page.getByText('Original description', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Edit general settings', exact: true })).toHaveCount(0);
+  await expect(page.locator('tr[data-row-id="general"]').getByText('Ready', { exact: true })).toBeVisible();
   await page.goto('/admin/settings');
   await expect(page.getByRole('heading', { name: 'Instance settings', exact: true })).toHaveCount(0);
   await expect(page.getByRole('table', { name: 'Instance settings', exact: true })).toHaveCount(0);
@@ -178,5 +183,5 @@ test('private dirty form is hidden and inert during revalidation then restored w
 });
 
 test('authority downgrade clears the editor without claiming unsupported configuration',async({page})=>{
- const state=await backend(page);await page.goto('/alex/demo/settings');await page.getByRole('button',{name:'Edit topics',exact:true}).click();await page.getByRole('textbox',{name:'Topics',exact:true}).fill('private-draft');state.settings.canEdit=false;await page.getByRole('button',{name:'Refresh repository settings',exact:true}).click();await expect(page.getByRole('textbox',{name:'Topics',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Edit topics',exact:true})).toHaveCount(0);await expect(page.getByText('View only',{exact:true})).toBeVisible();await expect(page.getByText(/General metadata and mode editors are implemented/)).toBeVisible();expect(state.writes).toHaveLength(0);
+ const state=await backend(page);await page.goto('/alex/demo/settings');await page.getByRole('button',{name:'Edit topics',exact:true}).click();await page.getByRole('textbox',{name:'Topics',exact:true}).fill('private-draft');state.settings.canEdit=false;await page.getByRole('button',{name:'Refresh repository settings',exact:true}).click();await expect(page.getByRole('textbox',{name:'Topics',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Edit topics',exact:true})).toHaveCount(0);await expect(page.getByText('View only',{exact:true})).toBeVisible();await expect(page.getByText(/Website, topics, default branch and tracker\/wiki configuration editors are qualified/)).toBeVisible();expect(state.writes).toHaveLength(0);
 });
