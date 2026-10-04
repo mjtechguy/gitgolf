@@ -342,7 +342,7 @@ def main():
             require(runtime()==initial_runtime and topology()==PROOF['topology'],'final_runtime_topology')
             record(renameReplacement='passed',runtimeUnchanged=True);passed=True
         except Exception as original:
-            record(failedStage=STAGE,originalFailureClass=type(original).__name__,originalValidationFailureCategory=PROOF.get('validationFailureCategory'))
+            record(failedStage=STAGE,originalFailureClass=type(original).__name__,originalValidationFailureCategory=PROOF.get('validationFailureCategory'),originalLastRpcCall=PROOF.get('lastRpcCall'),originalLastNativeCall=PROOF.get('lastNativeCall'))
             if isinstance(original,ssl.SSLCertVerificationError):record(tlsVerificationCode=original.verify_code)
             raise
         finally:

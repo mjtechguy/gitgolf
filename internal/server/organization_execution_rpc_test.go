@@ -16,6 +16,16 @@ func TestOrganizationExecutionRPCValueTransportBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	assertExecutionValueTransportBounds(t, s, s.rpcHandler(), "")
+}
+
+func TestOrganizationExecutionOuterTransportBoundsPostgres(t *testing.T) {
+	f := newOrganizationExecutionFixture(t)
+	assertExecutionValueTransportBounds(t, f.s, f.s, f.cookie)
+}
+
+func assertExecutionValueTransportBounds(t *testing.T, s *Server, handler http.Handler, cookie string) {
+	t.Helper()
 	for _, procedure := range []string{golfv1connect.OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure} {
 		for _, size := range []int{8192, 40000} {
 			// Quotes double under JSON encoding. The supported domain's 8-KiB
@@ -34,12 +44,19 @@ func TestOrganizationExecutionRPCValueTransportBounds(t *testing.T) {
 			if size == 8192 && (len(body) <= 16<<10 || len(body) >= 64<<10) {
 				t.Fatal("fixture does not exercise escaped transport bound")
 			}
-			r := httptest.NewRequest(http.MethodPost, procedure, bytes.NewReader(body))
+			path := procedure
+			if cookie != "" {
+				path = "/rpc" + procedure
+			}
+			r := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
+			if cookie != "" {
+				r.Header.Set("Cookie", cookie)
+			}
 			r.Header.Set("Content-Type", "application/json")
 			r.Header.Set("Connect-Protocol-Version", "1")
 			r.Header.Set("Origin", s.config.PublicURL)
 			w := httptest.NewRecorder()
-			s.rpcHandler().ServeHTTP(w, r)
+			handler.ServeHTTP(w, r)
 			var response struct {
 				Code string `json:"code"`
 			}
