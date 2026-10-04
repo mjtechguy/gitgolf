@@ -7,6 +7,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -44,17 +46,18 @@ type coordinator struct {
 	actions         *runner.ActionsExecutor
 }
 type assignment struct {
-	RunID         string             `json:"runId"`
-	AttemptID     string             `json:"attemptId"`
-	AttemptToken  string             `json:"attemptToken"`
-	JobID         string             `json:"jobId"`
-	ImageDigest   string             `json:"imageDigest"`
-	CommitID      string             `json:"commitId"`
-	SourceSHA256  string             `json:"sourceSha256"`
-	EngineCatalog string             `json:"engineCatalog"`
-	ActionsPlan   *runner.ActionPlan `json:"actionsPlan"`
-	EventJSON     []byte             `json:"eventJson"`
-	Steps         []struct {
+	RunID                string                       `json:"runId"`
+	AttemptID            string                       `json:"attemptId"`
+	AttemptToken         string                       `json:"attemptToken"`
+	JobID                string                       `json:"jobId"`
+	ImageDigest          string                       `json:"imageDigest"`
+	CommitID             string                       `json:"commitId"`
+	SourceSHA256         string                       `json:"sourceSha256"`
+	EngineCatalog        string                       `json:"engineCatalog"`
+	ActionsPlan          *runner.ActionPlan           `json:"actionsPlan"`
+	EventJSON            []byte                       `json:"eventJson"`
+	ExecutionEnvironment *runner.ExecutionEnvironment `json:"executionEnvironment,omitempty"`
+	Steps                []struct {
 		Name  string
 		Run   string
 		Shell string
@@ -140,8 +143,8 @@ func (c *coordinator) poll(ctx context.Context) (*assignment, error) {
 	if response.StatusCode != http.StatusOK {
 		return nil, errTransport
 	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, 256<<10+1))
-	if err != nil || len(data) > 256<<10 {
+	data, err := io.ReadAll(io.LimitReader(response.Body, 768<<10+1))
+	if err != nil || len(data) > 768<<10 {
 		return nil, errTransport
 	}
 	var a assignment
@@ -368,6 +371,10 @@ func run(ctx context.Context) error {
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
+	transport.TLSClientConfig, err = runnerTLSConfig(origin, os.Getenv("GOLF_RUNNER_TLS_CA_FILE"))
+	if err != nil {
+		return err
+	}
 	defer transport.CloseIdleConnections()
 	c := &coordinator{origin: origin, id: id, key: key, client: &http.Client{Transport: transport, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 	if binary := os.Getenv("GOLF_RUNNER_ACTIONS_ENGINE_BINARY"); binary != "" {
@@ -432,11 +439,19 @@ func (c *coordinator) pollCapabilities() any {
 	if c.actions == nil {
 		return struct{}{}
 	}
-	return struct {
-		Catalogs []string `json:"catalogs"`
-	}{[]string{runner.ActionsCatalog}}
+	out := struct {
+		Catalogs     []string `json:"catalogs"`
+		Capabilities []string `json:"capabilities,omitempty"`
+	}{Catalogs: []string{runner.ActionsCatalog}}
+	if strings.HasPrefix(c.origin, "https://") {
+		out.Capabilities = []string{runner.ExecutionValuesCapability}
+	}
+	return out
 }
 func (c *coordinator) validAssignment(a assignment) bool {
+	if a.ExecutionEnvironment != nil && (!strings.HasPrefix(c.origin, "https://") || a.ExecutionEnvironment.Validate() != nil || a.EngineCatalog != runner.ActionsCatalog) {
+		return false
+	}
 	if a.EngineCatalog == "" {
 		return a.ActionsPlan == nil && len(a.Steps) >= 1 && len(a.Steps) <= 50
 	}
@@ -467,7 +482,7 @@ func (c *coordinator) executeActions(ctx context.Context, a assignment, source s
 	if json.Unmarshal([]byte(os.Getenv("GOLF_RUNNER_ACTIONS_PLATFORMS")), &images) != nil || len(images) == 0 {
 		return runner.Result{}, errTransport
 	}
-	input := runner.ActionExecutionInput{Input: runner.ActionPlanInput{Catalog: runner.ActionsCatalog, WorkflowPath: a.ActionsPlan.WorkflowPath, WorkflowBlobID: a.ActionsPlan.WorkflowBlobID, Archive: archive, Event: a.ActionsPlan.Event, Ref: a.ActionsPlan.Ref, Images: images}, Plan: *a.ActionsPlan, EventJSON: a.EventJSON, CommitID: a.CommitID, TimeoutSeconds: a.TimeoutSeconds}
+	input := runner.ActionExecutionInput{Input: runner.ActionPlanInput{Catalog: runner.ActionsCatalog, WorkflowPath: a.ActionsPlan.WorkflowPath, WorkflowBlobID: a.ActionsPlan.WorkflowBlobID, Archive: archive, Event: a.ActionsPlan.Event, Ref: a.ActionsPlan.Ref, Images: images}, Plan: *a.ActionsPlan, EventJSON: a.EventJSON, CommitID: a.CommitID, TimeoutSeconds: a.TimeoutSeconds, ExecutionEnvironment: a.ExecutionEnvironment}
 	return c.actions.Execute(ctx, a.AttemptID, input, func(ctx context.Context, frame runner.ActionFrame) error {
 		if frame.Kind == "log" {
 			forward.jobInstanceID, forward.stepID = frame.InstanceID, frame.StepID
@@ -481,4 +496,38 @@ func (c *coordinator) executeActions(ctx context.Context, a assignment, source s
 			State         string `json:"state"`
 		}{frame.EventSequence, frame.InstanceID, frame.StepID, frame.Kind, frame.State})
 	})
+}
+
+// HTTPS identity is verified by net/http using system roots plus an optional
+// operator-mounted public CA. No forwarded assertion or insecure verification.
+func runnerTLSConfig(origin, caFile string) (*tls.Config, error) {
+	config := &tls.Config{MinVersion: tls.VersionTLS13}
+	if caFile == "" {
+		return config, nil
+	}
+	if !strings.HasPrefix(origin, "https://") || !filepath.IsAbs(caFile) || filepath.Clean(caFile) != caFile {
+		return nil, errTransport
+	}
+	file, e := os.Open(caFile)
+	if e != nil {
+		return nil, errTransport
+	}
+	defer file.Close()
+	stat, e := file.Stat()
+	if e != nil || !stat.Mode().IsRegular() || stat.Size() < 1 || stat.Size() > 64<<10 {
+		return nil, errTransport
+	}
+	data, e := io.ReadAll(io.LimitReader(file, 64<<10+1))
+	if e != nil || len(data) > 64<<10 {
+		return nil, errTransport
+	}
+	roots, e := x509.SystemCertPool()
+	if e != nil {
+		return nil, errTransport
+	}
+	if !roots.AppendCertsFromPEM(data) {
+		return nil, errTransport
+	}
+	config.RootCAs = roots
+	return config, nil
 }

@@ -1331,6 +1331,9 @@ message WorkflowRun {
  string engine_catalog = 25;
  repeated WorkflowJobInstance jobs = 26;
  string engine_commit = 27;
+ WorkflowOutputState output_state = 28;
+ string execution_binding_id = 29;
+ string execution_binding_version = 30;
 }
 enum WorkflowStepState {
  WORKFLOW_STEP_STATE_UNSPECIFIED = 0;
@@ -1377,6 +1380,7 @@ message GetWorkflowRunLogsResponse {
   string step_id = 7;
   string repository_id = 8;
   string source_commit_id = 9;
+  WorkflowOutputState output_state = 10;
 }
 
 // Golf API ceiling; independently exposed native APIs remain separate.
@@ -2723,3 +2727,142 @@ message RedeliverOwnEmailResponse {
  EmailDelivery delivery = 1;
  string user_id = 2;
 }
+// Browser-only repository execution broker. This profile approves exact source
+// and immutable versions; it does not grant CI authority, OIDC or fork access.
+service RepositoryExecutionValueService {
+ rpc ListRepositoryExecutionValues(ListRepositoryExecutionValuesRequest) returns (ListRepositoryExecutionValuesResponse);
+ rpc SaveRepositoryExecutionValue(SaveRepositoryExecutionValueRequest) returns (SaveRepositoryExecutionValueResponse);
+ rpc DeleteRepositoryExecutionValue(DeleteRepositoryExecutionValueRequest) returns (DeleteRepositoryExecutionValueResponse);
+ rpc GetRepositoryExecutionVariable(GetRepositoryExecutionVariableRequest) returns (GetRepositoryExecutionVariableResponse);
+ rpc SaveRepositoryExecutionBinding(SaveRepositoryExecutionBindingRequest) returns (SaveRepositoryExecutionBindingResponse);
+ rpc DeleteRepositoryExecutionBinding(DeleteRepositoryExecutionBindingRequest) returns (DeleteRepositoryExecutionBindingResponse);
+ rpc GetRepositoryExecutionValueOperation(GetRepositoryExecutionValueOperationRequest) returns (GetRepositoryExecutionValueOperationResponse);
+}
+enum RepositoryExecutionValueKind {
+ REPOSITORY_EXECUTION_VALUE_KIND_UNSPECIFIED = 0;
+ REPOSITORY_EXECUTION_VALUE_KIND_SECRET = 1;
+ REPOSITORY_EXECUTION_VALUE_KIND_VARIABLE = 2;
+}
+message RepositoryExecutionValueTarget {
+ RepositoryKey repository = 1;
+ string repository_id = 2;
+ string owner_id = 3;
+ string access_revision = 4;
+}
+message RepositoryExecutionValue {
+ string id = 1;
+ string name = 2;
+ RepositoryExecutionValueKind kind = 3;
+ string version = 4;
+ bool deleted = 5;
+ string created_at = 6;
+ string updated_at = 7;
+}
+message RepositoryExecutionValueReference { string id = 1; string version = 2; }
+message RepositoryExecutionBinding {
+ string id = 1;
+ string version = 2;
+ string workflow_path = 3;
+ string commit_id = 4;
+ string workflow_blob_id = 5;
+ string source_sha256 = 6;
+ string engine_catalog = 7;
+ WorkflowRunOrigin event = 8;
+ string event_ref = 9;
+ repeated RepositoryExecutionValueReference values = 10;
+ bool deleted = 11;
+ string expires_at = 12;
+ string created_at = 13;
+ string updated_at = 14;
+ // Session-backed approval is independently fenced at each release. A stored
+ // observation is not ongoing authority or background execution consent.
+ string approval_state = 15;
+}
+message ListRepositoryExecutionValuesRequest { RepositoryExecutionValueTarget target = 1; }
+message ListRepositoryExecutionValuesResponse {
+ RepositoryExecutionValueTarget target = 1;
+ string broker_revision = 2;
+ repeated RepositoryExecutionValue values = 3;
+ repeated RepositoryExecutionBinding bindings = 4;
+ string consumer_profile = 5;
+ uint32 maximum_values = 6;
+ uint32 maximum_bindings = 7;
+}
+message SaveRepositoryExecutionValueRequest {
+ RepositoryExecutionValueTarget target = 1;
+ string id = 2;
+ string expected_version = 3;
+ string expected_broker_revision = 4;
+ string operation_id = 5;
+ string name = 6;
+ RepositoryExecutionValueKind kind = 7;
+ // Never returned for SECRET. Do not persist requests in browser storage.
+ string value = 8;
+}
+message DeleteRepositoryExecutionValueRequest {
+ RepositoryExecutionValueTarget target = 1;
+ string id = 2;
+ string expected_version = 3;
+ string expected_broker_revision = 4;
+ string operation_id = 5;
+}
+message GetRepositoryExecutionVariableRequest {
+ RepositoryExecutionValueTarget target = 1;
+ string id = 2;
+ string version = 3;
+}
+message GetRepositoryExecutionVariableResponse {
+ RepositoryExecutionValueTarget target = 1;
+ RepositoryExecutionValue variable = 2;
+ string value = 3;
+}
+message SaveRepositoryExecutionBindingRequest {
+ RepositoryExecutionValueTarget target = 1;
+ string id = 2;
+ string expected_version = 3;
+ string expected_broker_revision = 4;
+ string operation_id = 5;
+ string workflow_path = 6;
+ string commit_id = 7;
+ WorkflowRunOrigin event = 8;
+ string event_ref = 9;
+ repeated RepositoryExecutionValueReference values = 10;
+ string expires_at = 11;
+}
+message DeleteRepositoryExecutionBindingRequest {
+ RepositoryExecutionValueTarget target = 1;
+ string id = 2;
+ string expected_version = 3;
+ string expected_broker_revision = 4;
+ string operation_id = 5;
+}
+message GetRepositoryExecutionValueOperationRequest {
+ RepositoryExecutionValueTarget target = 1;
+ string operation_id = 2;
+}
+message RepositoryExecutionValueMutationResponse {
+ RepositoryExecutionValueTarget target = 1;
+ string operation_id = 2;
+ string action = 3;
+ string item_id = 4;
+ string accepted_version = 5;
+ string accepted_broker_revision = 6;
+ bool replayed = 7;
+ string committed_at = 8;
+}
+enum WorkflowOutputState {
+ WORKFLOW_OUTPUT_STATE_UNSPECIFIED = 0;
+ WORKFLOW_OUTPUT_STATE_ORDINARY = 1;
+ WORKFLOW_OUTPUT_STATE_WITHHELD = 2;
+ WORKFLOW_OUTPUT_STATE_REDACTED = 3;
+}
+
+message SaveRepositoryExecutionValueResponse { RepositoryExecutionValueMutationResponse operation = 1; }
+
+message DeleteRepositoryExecutionValueResponse { RepositoryExecutionValueMutationResponse operation = 1; }
+
+message SaveRepositoryExecutionBindingResponse { RepositoryExecutionValueMutationResponse operation = 1; }
+
+message DeleteRepositoryExecutionBindingResponse { RepositoryExecutionValueMutationResponse operation = 1; }
+
+message GetRepositoryExecutionValueOperationResponse { RepositoryExecutionValueMutationResponse operation = 1; }

@@ -62,7 +62,7 @@ func classifyExecution(stage string, err error) error {
 func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe func(protocol.ActionFrame) error) (err error) {
 	phase := "engine_input_validation"
 	defer func() { err = classifyExecution(phase, err) }()
-	if os.Getenv("DOCKER_HOST") != "unix:///var/run/docker.sock" || os.Getenv("GOLF_OWNED_ACTIONS_DAEMON") != "1" || (input.Input.Event != "workflow_dispatch" && input.Input.Event != "push") || input.TimeoutSeconds < 1 || input.TimeoutSeconds > 900 || !fullObjectPattern.MatchString(input.CommitID) || len(input.EventJSON) > 16<<10 {
+	if input.ExecutionEnvironment.Validate() != nil || os.Getenv("DOCKER_HOST") != "unix:///var/run/docker.sock" || os.Getenv("GOLF_OWNED_ACTIONS_DAEMON") != "1" || (input.Input.Event != "workflow_dispatch" && input.Input.Event != "push") || input.TimeoutSeconds < 1 || input.TimeoutSeconds > 900 || !fullObjectPattern.MatchString(input.CommitID) || len(input.EventJSON) > 16<<10 {
 		return ErrExecution
 	}
 	phase = "engine_environment_validation"
@@ -201,6 +201,9 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 	logrus.SetOutput(io.Discard)
 	logrus.SetLevel(logrus.DebugLevel)
 	config := &act.Config{Actor: "unavailable", Workdir: workspace, EventName: input.Input.Event, EventPath: "/golf/event.json", Env: map[string]string{"SHA_REF": input.CommitID, "GITHUB_REF": input.Input.Ref, "GITHUB_RUN_ID": "unavailable", "GITHUB_RUN_NUMBER": "unavailable", "GITHUB_SERVER_URL": "urn:golf:platform-context-unavailable", "GITHUB_API_URL": "urn:golf:github-rest-unavailable", "GITHUB_GRAPHQL_URL": "urn:golf:github-graphql-unavailable"}, Platforms: resolved, GitHubInstance: "golf.invalid", ContainerDaemonSocket: "-", ContainerNetworkMode: "none", BindWorkdir: false, ActionOfflineMode: true, ForcePull: false, Privileged: false, AutoRemove: true, ConcurrentJobs: 2, ContainerCapDrop: []string{"ALL"}, ContainerOptions: options}
+	if err = applyRepositoryEnvironment(config, input.ExecutionEnvironment); err != nil {
+		return err
+	}
 	logger := logrus.New()
 	logger.SetOutput(io.Discard)
 	ctx = act.WithJobLoggerFactory(common.WithLogger(ctx, logger.WithField("engine", true)), observer)
@@ -674,6 +677,27 @@ func protectActionAncestors(ctx context.Context, directory string, protected []s
 		if root.Lchown(name, 0, 0) != nil || root.Chmod(name, 0777|os.ModeSticky) != nil {
 			return ErrExecution
 		}
+	}
+	return nil
+}
+
+// Validation precedes any mutation of the native job environment. Repository
+// values never become the helper/controller environment or planning input.
+func applyRepositoryEnvironment(config *act.Config, env *protocol.ExecutionEnvironment) error {
+	if env.Validate() != nil || config == nil {
+		return protocol.ErrExecutionValues
+	}
+	if env == nil {
+		return nil
+	}
+	if config.Env == nil {
+		config.Env = map[string]string{}
+	}
+	for name, value := range env.Variables {
+		config.Env[name] = value
+	}
+	for name, value := range env.Secrets {
+		config.Env[name] = value
 	}
 	return nil
 }

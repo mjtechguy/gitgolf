@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"crypto/tls"
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
@@ -221,10 +222,23 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Catalogs []string `json:"catalogs"`
+		Catalogs     []string `json:"catalogs"`
+		Capabilities []string `json:"capabilities"`
 	}
 	if !runnerDecode(w, r, &input, 512) {
 		return
+	}
+	secureBroker := false
+	if len(input.Capabilities) > 1 {
+		runnerFail(w, 400)
+		return
+	}
+	for _, capability := range input.Capabilities {
+		if capability != runner.ExecutionValuesCapability {
+			runnerFail(w, 400)
+			return
+		}
+		secureBroker = r.TLS != nil && r.TLS.Version >= tls.VersionTLS13
 	}
 	catalogs := []string{workflowExecutionCatalog}
 	if len(input.Catalogs) > 2 {
@@ -256,7 +270,7 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		runnerFail(w, 503)
 		return
 	}
-	run, err := scanWorkflowRun(s.db.QueryRowContext(ctx, `SELECT `+workflowRunColumns+` FROM golf_workflow_runs WHERE forge_url=$1 AND state='queued' AND engine_catalog=ANY($2) ORDER BY created_at,id LIMIT 1`, s.config.GiteaURL, catalogs))
+	run, err := scanWorkflowRun(s.db.QueryRowContext(ctx, `SELECT `+workflowRunColumns+` FROM golf_workflow_runs WHERE forge_url=$1 AND state='queued' AND engine_catalog=ANY($2) AND ($3 OR NOT EXISTS(SELECT 1 FROM golf_workflow_execution_bindings WHERE run_id=golf_workflow_runs.id)) ORDER BY created_at,id LIMIT 1`, s.config.GiteaURL, catalogs, secureBroker))
 	if errors.Is(err, sql.ErrNoRows) {
 		w.WriteHeader(204)
 		return
@@ -274,16 +288,44 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	approval, err := storedExecutionRunBinding(ctx, s.db, run)
+	if err == nil {
+		err = s.executionApprovalAuthority(ctx, run, approval)
+	}
+	if err != nil {
+		if errors.Is(err, errExecutionApproval) || isRunnerAuthorityDenied(err) || errors.Is(err, errUnauthenticated) {
+			s.rejectQueuedRun(ctx, run.ID, "Execution source approval is no longer authorized.")
+			w.WriteHeader(204)
+		} else {
+			runnerFail(w, 503)
+		}
+		return
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		runnerFail(w, 503)
 		return
 	}
 	defer tx.Rollback()
+	if err = lockExecutionApprovalUsers(ctx, tx, run, approval); err != nil {
+		runnerFail(w, 503)
+		return
+	}
 	if err = s.runnerPolicyFence(ctx, tx, run); err != nil {
 		tx.Rollback()
 		if errors.Is(err, errExecutionPolicyConflict) || errors.Is(err, errUnauthenticated) {
 			s.rejectQueuedRun(ctx, run.ID, "Execution policy or dispatch authority changed.")
+			w.WriteHeader(204)
+		} else {
+			runnerFail(w, 503)
+		}
+		return
+	}
+	environment, err := s.executionBrokerFence(ctx, tx, run, approval)
+	if err != nil {
+		tx.Rollback()
+		if errors.Is(err, errExecutionApproval) {
+			s.rejectQueuedRun(ctx, run.ID, "Execution source approval or value versions changed.")
 			w.WriteHeader(204)
 		} else {
 			runnerFail(w, 503)
@@ -335,9 +377,21 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		runnerFail(w, 503)
 		return
 	}
+	if environment != nil {
+		if err = s.executionApprovalAuthority(ctx, run, approval); err != nil {
+			s.cancelRunnerAttempt(ctx, run.ID, "Execution source approval was revoked.")
+			runnerFail(w, 403)
+			return
+		}
+	}
 	if plan.Actions != nil {
 		eventJSON, _ := json.Marshal(map[string]any{"ref": plan.Actions.Ref, "after": run.CommitID, "repository": map[string]any{"id": run.RepositoryID, "name": run.RepositoryName, "full_name": run.RepositoryOwner + "/" + run.RepositoryName, "owner": map[string]any{"id": run.OwnerID, "login": run.RepositoryOwner}}})
-		respond(w, 200, map[string]any{"runId": run.ID, "attemptId": attempt, "attemptToken": token, "imageDigest": plan.ImageDigest, "commitId": run.CommitID, "sourceSha256": run.SourceSHA256, "timeoutSeconds": 900, "leaseSeconds": runnerLeaseSeconds, "engineCatalog": runner.ActionsCatalog, "actionsPlan": plan.Actions, "eventJson": eventJSON})
+		assignment := map[string]any{"runId": run.ID, "attemptId": attempt, "attemptToken": token, "imageDigest": plan.ImageDigest, "commitId": run.CommitID, "sourceSha256": run.SourceSHA256, "timeoutSeconds": 900, "leaseSeconds": runnerLeaseSeconds, "engineCatalog": runner.ActionsCatalog, "actionsPlan": plan.Actions, "eventJson": eventJSON}
+		if environment != nil {
+			assignment["executionEnvironment"] = environment
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		respond(w, 200, assignment)
 		return
 	}
 	respond(w, 200, map[string]any{"runId": run.ID, "attemptId": attempt, "attemptToken": token, "imageDigest": plan.ImageDigest, "commitId": run.CommitID, "sourceSha256": run.SourceSHA256, "steps": plan.Steps, "jobId": plan.JobID, "timeoutSeconds": 900, "leaseSeconds": runnerLeaseSeconds})
@@ -379,6 +433,22 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	approval, err := storedExecutionRunBinding(ctx, s.db, run)
+	if err != nil {
+		runnerFail(w, 403)
+		return
+	}
+	if approval != nil {
+		if r.TLS == nil || r.TLS.Version < tls.VersionTLS13 {
+			runnerFail(w, 403)
+			return
+		}
+		if err = s.executionApprovalAuthority(ctx, run, approval); err != nil {
+			s.cancelRunnerAttempt(ctx, run.ID, "Execution source approval was revoked.")
+			runnerFail(w, 403)
+			return
+		}
+	}
 	var input struct {
 		Sequence            int64  `json:"sequence"`
 		EngineConclusion    string `json:"engineConclusion"`
@@ -395,7 +465,7 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		LogsTruncated       bool   `json:"logsTruncated"`
 	}
 	action := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
-	if action != "source" && !runnerDecode(w, r, &input, 32<<10) {
+	if action != "source" && !runnerDecode(w, r, &input, 128<<10) {
 		return
 	}
 	if action == "source" {
@@ -420,6 +490,10 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
+	if err = lockExecutionApprovalUsers(ctx, tx, run, approval); err != nil {
+		runnerFail(w, 503)
+		return
+	}
 	if err = s.runnerPolicyFence(ctx, tx, run); err != nil {
 		tx.Rollback()
 		if errors.Is(err, errExecutionPolicyConflict) || errors.Is(err, errUnauthenticated) {
@@ -428,6 +502,13 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		} else {
 			runnerFail(w, 503)
 		}
+		return
+	}
+	environment, err := s.executionBrokerFence(ctx, tx, run, approval)
+	if err != nil {
+		tx.Rollback()
+		s.cancelRunnerAttempt(ctx, run.ID, "Execution source approval or value versions changed.")
+		runnerFail(w, 403)
 		return
 	}
 	var state string
@@ -465,6 +546,14 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		if input.Sequence <= 0 || len(input.Text) == 0 || len(input.Text) > 16<<10 || !runnerLogText(input.Text) {
 			runnerFail(w, 400)
 			return
+		}
+		if environment != nil {
+			err = s.appendQuarantinedOutput(ctx, tx, run, attempt, input.Sequence, input.Text, input.JobInstanceID, input.StepID)
+			if errors.Is(err, errWorkflowRunConflict) {
+				runnerFail(w, 409)
+				return
+			}
+			break
 		}
 		var seq, used int64
 		if err = tx.QueryRowContext(ctx, `SELECT log_sequence,log_bytes FROM golf_workflow_runs WHERE id=$1`, run.ID).Scan(&seq, &used); err != nil {
@@ -580,6 +669,12 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		if input.LogsTruncated {
 			state = "failed"
 			reason = "Log limit exceeded."
+		}
+		if environment != nil && !input.TimedOut && !input.Cancelled && !input.InfrastructureError && !input.LogsTruncated {
+			if err = s.releaseQuarantinedOutput(ctx, tx, run, attempt, environment); err != nil {
+				runnerFail(w, 503)
+				return
+			}
 		}
 		_, err = tx.ExecContext(ctx, `UPDATE golf_workflow_runs SET state=$2,reason=$3,exit_code=$4,logs_truncated=$5,finished_at=clock_timestamp(),version=version+1,lease_token_hash=NULL WHERE id=$1`, run.ID, state, reason, workflowFinishExit(input.ExitCode, finishCatalog), input.LogsTruncated)
 	default:

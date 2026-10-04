@@ -3,7 +3,8 @@ package runner
 import "strings"
 
 // These versioned messages contain source and operator-approved public runtime
-// identities, never Golf/native credentials. The act dependency stays in the
+// identities. Only the execute envelope may carry explicitly brokered repository
+// values; it never carries Golf/native controller credentials. The act dependency stays in the
 // separately built engine module.
 const ActionsCatalog = "golf.workflow.act.v0.2.89.linux.v1"
 const ActionsEngineCommit = "4f411281417e88660bea1c1a1749aa71ae0bd60f"
@@ -53,12 +54,13 @@ type ActionPlan struct {
 	LocalActions   []ActionDependency `json:"localActions"`
 }
 type ActionExecutionInput struct {
-	Input          ActionPlanInput   `json:"input"`
-	Plan           ActionPlan        `json:"plan"`
-	EventJSON      []byte            `json:"eventJson"`
-	CommitID       string            `json:"commitId"`
-	TimeoutSeconds int               `json:"timeoutSeconds"`
-	ResolvedImages map[string]string `json:"resolvedImages"`
+	Input                ActionPlanInput       `json:"input"`
+	Plan                 ActionPlan            `json:"plan"`
+	EventJSON            []byte                `json:"eventJson"`
+	CommitID             string                `json:"commitId"`
+	TimeoutSeconds       int                   `json:"timeoutSeconds"`
+	ResolvedImages       map[string]string     `json:"resolvedImages"`
+	ExecutionEnvironment *ExecutionEnvironment `json:"executionEnvironment,omitempty"`
 }
 
 // Source stdout always has Kind=log and can never set observation fields.

@@ -88,6 +88,9 @@ const (
 	RepositoryLifecycleServiceName = "golf.v1.RepositoryLifecycleService"
 	// EmailNotificationServiceName is the fully-qualified name of the EmailNotificationService service.
 	EmailNotificationServiceName = "golf.v1.EmailNotificationService"
+	// RepositoryExecutionValueServiceName is the fully-qualified name of the
+	// RepositoryExecutionValueService service.
+	RepositoryExecutionValueServiceName = "golf.v1.RepositoryExecutionValueService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -547,6 +550,28 @@ const (
 	// EmailNotificationServiceRedeliverOwnEmailProcedure is the fully-qualified name of the
 	// EmailNotificationService's RedeliverOwnEmail RPC.
 	EmailNotificationServiceRedeliverOwnEmailProcedure = "/golf.v1.EmailNotificationService/RedeliverOwnEmail"
+	// RepositoryExecutionValueServiceListRepositoryExecutionValuesProcedure is the fully-qualified name
+	// of the RepositoryExecutionValueService's ListRepositoryExecutionValues RPC.
+	RepositoryExecutionValueServiceListRepositoryExecutionValuesProcedure = "/golf.v1.RepositoryExecutionValueService/ListRepositoryExecutionValues"
+	// RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure is the fully-qualified name
+	// of the RepositoryExecutionValueService's SaveRepositoryExecutionValue RPC.
+	RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure = "/golf.v1.RepositoryExecutionValueService/SaveRepositoryExecutionValue"
+	// RepositoryExecutionValueServiceDeleteRepositoryExecutionValueProcedure is the fully-qualified
+	// name of the RepositoryExecutionValueService's DeleteRepositoryExecutionValue RPC.
+	RepositoryExecutionValueServiceDeleteRepositoryExecutionValueProcedure = "/golf.v1.RepositoryExecutionValueService/DeleteRepositoryExecutionValue"
+	// RepositoryExecutionValueServiceGetRepositoryExecutionVariableProcedure is the fully-qualified
+	// name of the RepositoryExecutionValueService's GetRepositoryExecutionVariable RPC.
+	RepositoryExecutionValueServiceGetRepositoryExecutionVariableProcedure = "/golf.v1.RepositoryExecutionValueService/GetRepositoryExecutionVariable"
+	// RepositoryExecutionValueServiceSaveRepositoryExecutionBindingProcedure is the fully-qualified
+	// name of the RepositoryExecutionValueService's SaveRepositoryExecutionBinding RPC.
+	RepositoryExecutionValueServiceSaveRepositoryExecutionBindingProcedure = "/golf.v1.RepositoryExecutionValueService/SaveRepositoryExecutionBinding"
+	// RepositoryExecutionValueServiceDeleteRepositoryExecutionBindingProcedure is the fully-qualified
+	// name of the RepositoryExecutionValueService's DeleteRepositoryExecutionBinding RPC.
+	RepositoryExecutionValueServiceDeleteRepositoryExecutionBindingProcedure = "/golf.v1.RepositoryExecutionValueService/DeleteRepositoryExecutionBinding"
+	// RepositoryExecutionValueServiceGetRepositoryExecutionValueOperationProcedure is the
+	// fully-qualified name of the RepositoryExecutionValueService's
+	// GetRepositoryExecutionValueOperation RPC.
+	RepositoryExecutionValueServiceGetRepositoryExecutionValueOperationProcedure = "/golf.v1.RepositoryExecutionValueService/GetRepositoryExecutionValueOperation"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -5794,4 +5819,239 @@ func (UnimplementedEmailNotificationServiceHandler) ListOwnEmailDeliveries(conte
 
 func (UnimplementedEmailNotificationServiceHandler) RedeliverOwnEmail(context.Context, *connect.Request[v1.RedeliverOwnEmailRequest]) (*connect.Response[v1.RedeliverOwnEmailResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.EmailNotificationService.RedeliverOwnEmail is not implemented"))
+}
+
+// RepositoryExecutionValueServiceClient is a client for the golf.v1.RepositoryExecutionValueService
+// service.
+type RepositoryExecutionValueServiceClient interface {
+	ListRepositoryExecutionValues(context.Context, *connect.Request[v1.ListRepositoryExecutionValuesRequest]) (*connect.Response[v1.ListRepositoryExecutionValuesResponse], error)
+	SaveRepositoryExecutionValue(context.Context, *connect.Request[v1.SaveRepositoryExecutionValueRequest]) (*connect.Response[v1.SaveRepositoryExecutionValueResponse], error)
+	DeleteRepositoryExecutionValue(context.Context, *connect.Request[v1.DeleteRepositoryExecutionValueRequest]) (*connect.Response[v1.DeleteRepositoryExecutionValueResponse], error)
+	GetRepositoryExecutionVariable(context.Context, *connect.Request[v1.GetRepositoryExecutionVariableRequest]) (*connect.Response[v1.GetRepositoryExecutionVariableResponse], error)
+	SaveRepositoryExecutionBinding(context.Context, *connect.Request[v1.SaveRepositoryExecutionBindingRequest]) (*connect.Response[v1.SaveRepositoryExecutionBindingResponse], error)
+	DeleteRepositoryExecutionBinding(context.Context, *connect.Request[v1.DeleteRepositoryExecutionBindingRequest]) (*connect.Response[v1.DeleteRepositoryExecutionBindingResponse], error)
+	GetRepositoryExecutionValueOperation(context.Context, *connect.Request[v1.GetRepositoryExecutionValueOperationRequest]) (*connect.Response[v1.GetRepositoryExecutionValueOperationResponse], error)
+}
+
+// NewRepositoryExecutionValueServiceClient constructs a client for the
+// golf.v1.RepositoryExecutionValueService service. By default, it uses the Connect protocol with
+// the binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use
+// the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRepositoryExecutionValueServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepositoryExecutionValueServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	repositoryExecutionValueServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryExecutionValueService").Methods()
+	return &repositoryExecutionValueServiceClient{
+		listRepositoryExecutionValues: connect.NewClient[v1.ListRepositoryExecutionValuesRequest, v1.ListRepositoryExecutionValuesResponse](
+			httpClient,
+			baseURL+RepositoryExecutionValueServiceListRepositoryExecutionValuesProcedure,
+			connect.WithSchema(repositoryExecutionValueServiceMethods.ByName("ListRepositoryExecutionValues")),
+			connect.WithClientOptions(opts...),
+		),
+		saveRepositoryExecutionValue: connect.NewClient[v1.SaveRepositoryExecutionValueRequest, v1.SaveRepositoryExecutionValueResponse](
+			httpClient,
+			baseURL+RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure,
+			connect.WithSchema(repositoryExecutionValueServiceMethods.ByName("SaveRepositoryExecutionValue")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteRepositoryExecutionValue: connect.NewClient[v1.DeleteRepositoryExecutionValueRequest, v1.DeleteRepositoryExecutionValueResponse](
+			httpClient,
+			baseURL+RepositoryExecutionValueServiceDeleteRepositoryExecutionValueProcedure,
+			connect.WithSchema(repositoryExecutionValueServiceMethods.ByName("DeleteRepositoryExecutionValue")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryExecutionVariable: connect.NewClient[v1.GetRepositoryExecutionVariableRequest, v1.GetRepositoryExecutionVariableResponse](
+			httpClient,
+			baseURL+RepositoryExecutionValueServiceGetRepositoryExecutionVariableProcedure,
+			connect.WithSchema(repositoryExecutionValueServiceMethods.ByName("GetRepositoryExecutionVariable")),
+			connect.WithClientOptions(opts...),
+		),
+		saveRepositoryExecutionBinding: connect.NewClient[v1.SaveRepositoryExecutionBindingRequest, v1.SaveRepositoryExecutionBindingResponse](
+			httpClient,
+			baseURL+RepositoryExecutionValueServiceSaveRepositoryExecutionBindingProcedure,
+			connect.WithSchema(repositoryExecutionValueServiceMethods.ByName("SaveRepositoryExecutionBinding")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteRepositoryExecutionBinding: connect.NewClient[v1.DeleteRepositoryExecutionBindingRequest, v1.DeleteRepositoryExecutionBindingResponse](
+			httpClient,
+			baseURL+RepositoryExecutionValueServiceDeleteRepositoryExecutionBindingProcedure,
+			connect.WithSchema(repositoryExecutionValueServiceMethods.ByName("DeleteRepositoryExecutionBinding")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryExecutionValueOperation: connect.NewClient[v1.GetRepositoryExecutionValueOperationRequest, v1.GetRepositoryExecutionValueOperationResponse](
+			httpClient,
+			baseURL+RepositoryExecutionValueServiceGetRepositoryExecutionValueOperationProcedure,
+			connect.WithSchema(repositoryExecutionValueServiceMethods.ByName("GetRepositoryExecutionValueOperation")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// repositoryExecutionValueServiceClient implements RepositoryExecutionValueServiceClient.
+type repositoryExecutionValueServiceClient struct {
+	listRepositoryExecutionValues        *connect.Client[v1.ListRepositoryExecutionValuesRequest, v1.ListRepositoryExecutionValuesResponse]
+	saveRepositoryExecutionValue         *connect.Client[v1.SaveRepositoryExecutionValueRequest, v1.SaveRepositoryExecutionValueResponse]
+	deleteRepositoryExecutionValue       *connect.Client[v1.DeleteRepositoryExecutionValueRequest, v1.DeleteRepositoryExecutionValueResponse]
+	getRepositoryExecutionVariable       *connect.Client[v1.GetRepositoryExecutionVariableRequest, v1.GetRepositoryExecutionVariableResponse]
+	saveRepositoryExecutionBinding       *connect.Client[v1.SaveRepositoryExecutionBindingRequest, v1.SaveRepositoryExecutionBindingResponse]
+	deleteRepositoryExecutionBinding     *connect.Client[v1.DeleteRepositoryExecutionBindingRequest, v1.DeleteRepositoryExecutionBindingResponse]
+	getRepositoryExecutionValueOperation *connect.Client[v1.GetRepositoryExecutionValueOperationRequest, v1.GetRepositoryExecutionValueOperationResponse]
+}
+
+// ListRepositoryExecutionValues calls
+// golf.v1.RepositoryExecutionValueService.ListRepositoryExecutionValues.
+func (c *repositoryExecutionValueServiceClient) ListRepositoryExecutionValues(ctx context.Context, req *connect.Request[v1.ListRepositoryExecutionValuesRequest]) (*connect.Response[v1.ListRepositoryExecutionValuesResponse], error) {
+	return c.listRepositoryExecutionValues.CallUnary(ctx, req)
+}
+
+// SaveRepositoryExecutionValue calls
+// golf.v1.RepositoryExecutionValueService.SaveRepositoryExecutionValue.
+func (c *repositoryExecutionValueServiceClient) SaveRepositoryExecutionValue(ctx context.Context, req *connect.Request[v1.SaveRepositoryExecutionValueRequest]) (*connect.Response[v1.SaveRepositoryExecutionValueResponse], error) {
+	return c.saveRepositoryExecutionValue.CallUnary(ctx, req)
+}
+
+// DeleteRepositoryExecutionValue calls
+// golf.v1.RepositoryExecutionValueService.DeleteRepositoryExecutionValue.
+func (c *repositoryExecutionValueServiceClient) DeleteRepositoryExecutionValue(ctx context.Context, req *connect.Request[v1.DeleteRepositoryExecutionValueRequest]) (*connect.Response[v1.DeleteRepositoryExecutionValueResponse], error) {
+	return c.deleteRepositoryExecutionValue.CallUnary(ctx, req)
+}
+
+// GetRepositoryExecutionVariable calls
+// golf.v1.RepositoryExecutionValueService.GetRepositoryExecutionVariable.
+func (c *repositoryExecutionValueServiceClient) GetRepositoryExecutionVariable(ctx context.Context, req *connect.Request[v1.GetRepositoryExecutionVariableRequest]) (*connect.Response[v1.GetRepositoryExecutionVariableResponse], error) {
+	return c.getRepositoryExecutionVariable.CallUnary(ctx, req)
+}
+
+// SaveRepositoryExecutionBinding calls
+// golf.v1.RepositoryExecutionValueService.SaveRepositoryExecutionBinding.
+func (c *repositoryExecutionValueServiceClient) SaveRepositoryExecutionBinding(ctx context.Context, req *connect.Request[v1.SaveRepositoryExecutionBindingRequest]) (*connect.Response[v1.SaveRepositoryExecutionBindingResponse], error) {
+	return c.saveRepositoryExecutionBinding.CallUnary(ctx, req)
+}
+
+// DeleteRepositoryExecutionBinding calls
+// golf.v1.RepositoryExecutionValueService.DeleteRepositoryExecutionBinding.
+func (c *repositoryExecutionValueServiceClient) DeleteRepositoryExecutionBinding(ctx context.Context, req *connect.Request[v1.DeleteRepositoryExecutionBindingRequest]) (*connect.Response[v1.DeleteRepositoryExecutionBindingResponse], error) {
+	return c.deleteRepositoryExecutionBinding.CallUnary(ctx, req)
+}
+
+// GetRepositoryExecutionValueOperation calls
+// golf.v1.RepositoryExecutionValueService.GetRepositoryExecutionValueOperation.
+func (c *repositoryExecutionValueServiceClient) GetRepositoryExecutionValueOperation(ctx context.Context, req *connect.Request[v1.GetRepositoryExecutionValueOperationRequest]) (*connect.Response[v1.GetRepositoryExecutionValueOperationResponse], error) {
+	return c.getRepositoryExecutionValueOperation.CallUnary(ctx, req)
+}
+
+// RepositoryExecutionValueServiceHandler is an implementation of the
+// golf.v1.RepositoryExecutionValueService service.
+type RepositoryExecutionValueServiceHandler interface {
+	ListRepositoryExecutionValues(context.Context, *connect.Request[v1.ListRepositoryExecutionValuesRequest]) (*connect.Response[v1.ListRepositoryExecutionValuesResponse], error)
+	SaveRepositoryExecutionValue(context.Context, *connect.Request[v1.SaveRepositoryExecutionValueRequest]) (*connect.Response[v1.SaveRepositoryExecutionValueResponse], error)
+	DeleteRepositoryExecutionValue(context.Context, *connect.Request[v1.DeleteRepositoryExecutionValueRequest]) (*connect.Response[v1.DeleteRepositoryExecutionValueResponse], error)
+	GetRepositoryExecutionVariable(context.Context, *connect.Request[v1.GetRepositoryExecutionVariableRequest]) (*connect.Response[v1.GetRepositoryExecutionVariableResponse], error)
+	SaveRepositoryExecutionBinding(context.Context, *connect.Request[v1.SaveRepositoryExecutionBindingRequest]) (*connect.Response[v1.SaveRepositoryExecutionBindingResponse], error)
+	DeleteRepositoryExecutionBinding(context.Context, *connect.Request[v1.DeleteRepositoryExecutionBindingRequest]) (*connect.Response[v1.DeleteRepositoryExecutionBindingResponse], error)
+	GetRepositoryExecutionValueOperation(context.Context, *connect.Request[v1.GetRepositoryExecutionValueOperationRequest]) (*connect.Response[v1.GetRepositoryExecutionValueOperationResponse], error)
+}
+
+// NewRepositoryExecutionValueServiceHandler builds an HTTP handler from the service implementation.
+// It returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRepositoryExecutionValueServiceHandler(svc RepositoryExecutionValueServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	repositoryExecutionValueServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryExecutionValueService").Methods()
+	repositoryExecutionValueServiceListRepositoryExecutionValuesHandler := connect.NewUnaryHandler(
+		RepositoryExecutionValueServiceListRepositoryExecutionValuesProcedure,
+		svc.ListRepositoryExecutionValues,
+		connect.WithSchema(repositoryExecutionValueServiceMethods.ByName("ListRepositoryExecutionValues")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryExecutionValueServiceSaveRepositoryExecutionValueHandler := connect.NewUnaryHandler(
+		RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure,
+		svc.SaveRepositoryExecutionValue,
+		connect.WithSchema(repositoryExecutionValueServiceMethods.ByName("SaveRepositoryExecutionValue")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryExecutionValueServiceDeleteRepositoryExecutionValueHandler := connect.NewUnaryHandler(
+		RepositoryExecutionValueServiceDeleteRepositoryExecutionValueProcedure,
+		svc.DeleteRepositoryExecutionValue,
+		connect.WithSchema(repositoryExecutionValueServiceMethods.ByName("DeleteRepositoryExecutionValue")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryExecutionValueServiceGetRepositoryExecutionVariableHandler := connect.NewUnaryHandler(
+		RepositoryExecutionValueServiceGetRepositoryExecutionVariableProcedure,
+		svc.GetRepositoryExecutionVariable,
+		connect.WithSchema(repositoryExecutionValueServiceMethods.ByName("GetRepositoryExecutionVariable")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryExecutionValueServiceSaveRepositoryExecutionBindingHandler := connect.NewUnaryHandler(
+		RepositoryExecutionValueServiceSaveRepositoryExecutionBindingProcedure,
+		svc.SaveRepositoryExecutionBinding,
+		connect.WithSchema(repositoryExecutionValueServiceMethods.ByName("SaveRepositoryExecutionBinding")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryExecutionValueServiceDeleteRepositoryExecutionBindingHandler := connect.NewUnaryHandler(
+		RepositoryExecutionValueServiceDeleteRepositoryExecutionBindingProcedure,
+		svc.DeleteRepositoryExecutionBinding,
+		connect.WithSchema(repositoryExecutionValueServiceMethods.ByName("DeleteRepositoryExecutionBinding")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryExecutionValueServiceGetRepositoryExecutionValueOperationHandler := connect.NewUnaryHandler(
+		RepositoryExecutionValueServiceGetRepositoryExecutionValueOperationProcedure,
+		svc.GetRepositoryExecutionValueOperation,
+		connect.WithSchema(repositoryExecutionValueServiceMethods.ByName("GetRepositoryExecutionValueOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RepositoryExecutionValueService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RepositoryExecutionValueServiceListRepositoryExecutionValuesProcedure:
+			repositoryExecutionValueServiceListRepositoryExecutionValuesHandler.ServeHTTP(w, r)
+		case RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure:
+			repositoryExecutionValueServiceSaveRepositoryExecutionValueHandler.ServeHTTP(w, r)
+		case RepositoryExecutionValueServiceDeleteRepositoryExecutionValueProcedure:
+			repositoryExecutionValueServiceDeleteRepositoryExecutionValueHandler.ServeHTTP(w, r)
+		case RepositoryExecutionValueServiceGetRepositoryExecutionVariableProcedure:
+			repositoryExecutionValueServiceGetRepositoryExecutionVariableHandler.ServeHTTP(w, r)
+		case RepositoryExecutionValueServiceSaveRepositoryExecutionBindingProcedure:
+			repositoryExecutionValueServiceSaveRepositoryExecutionBindingHandler.ServeHTTP(w, r)
+		case RepositoryExecutionValueServiceDeleteRepositoryExecutionBindingProcedure:
+			repositoryExecutionValueServiceDeleteRepositoryExecutionBindingHandler.ServeHTTP(w, r)
+		case RepositoryExecutionValueServiceGetRepositoryExecutionValueOperationProcedure:
+			repositoryExecutionValueServiceGetRepositoryExecutionValueOperationHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRepositoryExecutionValueServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRepositoryExecutionValueServiceHandler struct{}
+
+func (UnimplementedRepositoryExecutionValueServiceHandler) ListRepositoryExecutionValues(context.Context, *connect.Request[v1.ListRepositoryExecutionValuesRequest]) (*connect.Response[v1.ListRepositoryExecutionValuesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryExecutionValueService.ListRepositoryExecutionValues is not implemented"))
+}
+
+func (UnimplementedRepositoryExecutionValueServiceHandler) SaveRepositoryExecutionValue(context.Context, *connect.Request[v1.SaveRepositoryExecutionValueRequest]) (*connect.Response[v1.SaveRepositoryExecutionValueResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryExecutionValueService.SaveRepositoryExecutionValue is not implemented"))
+}
+
+func (UnimplementedRepositoryExecutionValueServiceHandler) DeleteRepositoryExecutionValue(context.Context, *connect.Request[v1.DeleteRepositoryExecutionValueRequest]) (*connect.Response[v1.DeleteRepositoryExecutionValueResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryExecutionValueService.DeleteRepositoryExecutionValue is not implemented"))
+}
+
+func (UnimplementedRepositoryExecutionValueServiceHandler) GetRepositoryExecutionVariable(context.Context, *connect.Request[v1.GetRepositoryExecutionVariableRequest]) (*connect.Response[v1.GetRepositoryExecutionVariableResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryExecutionValueService.GetRepositoryExecutionVariable is not implemented"))
+}
+
+func (UnimplementedRepositoryExecutionValueServiceHandler) SaveRepositoryExecutionBinding(context.Context, *connect.Request[v1.SaveRepositoryExecutionBindingRequest]) (*connect.Response[v1.SaveRepositoryExecutionBindingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryExecutionValueService.SaveRepositoryExecutionBinding is not implemented"))
+}
+
+func (UnimplementedRepositoryExecutionValueServiceHandler) DeleteRepositoryExecutionBinding(context.Context, *connect.Request[v1.DeleteRepositoryExecutionBindingRequest]) (*connect.Response[v1.DeleteRepositoryExecutionBindingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryExecutionValueService.DeleteRepositoryExecutionBinding is not implemented"))
+}
+
+func (UnimplementedRepositoryExecutionValueServiceHandler) GetRepositoryExecutionValueOperation(context.Context, *connect.Request[v1.GetRepositoryExecutionValueOperationRequest]) (*connect.Response[v1.GetRepositoryExecutionValueOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryExecutionValueService.GetRepositoryExecutionValueOperation is not implemented"))
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mjtechguy/golf-git/internal/runner"
 )
 
 var errPushQueueCapacity = errors.New("repository push queue capacity reached")
@@ -219,6 +220,18 @@ func (s *Server) preparePushMaterialization(ctx context.Context, m pushMateriali
 		return err
 	}
 	plan.ImageDigest = image
+	run.CommitID = commit
+	run.BlobID = blob
+	run.WorkflowPath = m.Path
+	run.SourceSHA256 = sourceArchiveHash(source)
+	run.EngineCatalog = workflowExecutionCatalog
+	if plan.Actions != nil {
+		run.EngineCatalog = runner.ActionsCatalog
+	}
+	approval, err := s.executionApprovalForSource(ctx, run)
+	if err != nil {
+		return err
+	}
 	binding, err := s.storeWorkflowSource(ctx, source)
 	if err != nil {
 		return err
@@ -235,6 +248,9 @@ func (s *Server) preparePushMaterialization(ctx context.Context, m pushMateriali
 		return errStorageUnavailable
 	}
 	defer tx.Rollback()
+	if err = lockExecutionApprovalUsers(ctx, tx, run, approval); err != nil {
+		return err
+	}
 	if err = s.lockAutomationRunAuthority(ctx, tx, run); err != nil {
 		return err
 	}
@@ -277,6 +293,9 @@ func (s *Server) preparePushMaterialization(ctx context.Context, m pushMateriali
 	_, err = tx.ExecContext(ctx, `INSERT INTO golf_workflow_runs(id,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,commit_id,workflow_path,blob_id,format,plan,source_archive,source_sha256,policy_epochs,idempotency_key,input_hash,source_storage,source_key,source_fingerprint,source_profile_id,source_profile_version,origin,automation_grant_id,automation_grant_revision,automation_grant_epoch,automation_credential_version,repository_event_id,event_ref) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,'push',$24,$25,$26,$27,$28,$29)`, run.ID, g.ForgeURL, g.RepositoryID, g.OwnerID, g.RepositoryOwner, g.RepositoryName, g.OrganizationOwned, g.SponsorUserID, commit, m.Path, blob, int32(plan.Format), planJSON, binding.Archive, hex.EncodeToString(sum[:]), epochs, m.ID, intent[:], binding.Storage, binding.Key, binding.Fingerprint, binding.ProfileID, binding.ProfileVersion, m.GrantID, m.Revision, m.Epoch, m.CredentialVersion, m.EventID, event.Ref)
 	if err != nil {
 		return errStorageUnavailable
+	}
+	if err = s.attachExecutionBinding(ctx, tx, run, approval); err != nil {
+		return err
 	}
 	_, err = tx.ExecContext(ctx, `UPDATE golf_push_materializations SET state='admitted',native_activity_id=$2,run_id=$3,lease_id=NULL,lease_expires_at=NULL,updated_at=clock_timestamp() WHERE id=$1`, m.ID, activityID, run.ID)
 	if err != nil {

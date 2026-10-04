@@ -255,6 +255,8 @@ type GolfCryptoEvent struct {
 	ReviewContentsCount            int64
 	ConversationContentsCount      int64
 	WebhookCredentialsCount        int64
+	ExecutionValuesCount           int64
+	QuarantinedOutputsCount        int64
 	NotificationContentsCount      int64
 }
 
@@ -383,6 +385,35 @@ type GolfEncryptionPolicy struct {
 	ActiveKeyID string
 }
 
+type GolfExecutionBinding struct {
+	ID           uuid.UUID
+	ForgeURL     string
+	RepositoryID int64
+	OwnerID      int64
+	Version      int64
+	Deleted      bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+type GolfExecutionBindingVersion struct {
+	ID                  uuid.UUID
+	Version             int64
+	WorkflowPath        string
+	CommitID            string
+	BlobID              string
+	SourceSha256        string
+	EngineCatalog       string
+	Event               string
+	EventRef            string
+	ValueRefs           json.RawMessage
+	ApproverUserID      int64
+	ApproverNativeID    int64
+	ApprovalSessionHash []byte
+	ExpiresAt           time.Time
+	CreatedAt           time.Time
+}
+
 type GolfExecutionPolicy struct {
 	ForgeURL              string
 	Scope                 string
@@ -429,6 +460,51 @@ type GolfExecutionPolicyWorkflow struct {
 	Scope        string
 	ScopeID      string
 	WorkflowPath string
+}
+
+type GolfExecutionValue struct {
+	ID           uuid.UUID
+	ForgeURL     string
+	RepositoryID int64
+	OwnerID      int64
+	Name         string
+	Kind         string
+	Version      int64
+	Deleted      bool
+	ValueBytes   int32
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+type GolfExecutionValueBroker struct {
+	ForgeURL     string
+	RepositoryID int64
+	OwnerID      int64
+	Revision     int64
+}
+
+type GolfExecutionValueOperation struct {
+	ForgeURL               string
+	RepositoryID           int64
+	OwnerID                int64
+	UserID                 int64
+	OperationID            uuid.UUID
+	Action                 string
+	ItemID                 uuid.UUID
+	AcceptedVersion        int64
+	AcceptedBrokerRevision int64
+	RequestMetadata        json.RawMessage
+	CreatedAt              time.Time
+}
+
+type GolfExecutionValueVersion struct {
+	ID               uuid.UUID
+	Version          int64
+	ValueBytes       int32
+	EncryptedContent []byte
+	ContentBinding   []byte
+	CredentialKeyID  string
+	CreatedAt        time.Time
 }
 
 type GolfInfrastructureActivationEvent struct {
@@ -981,6 +1057,14 @@ type GolfWebhookSubscription struct {
 	UpdatedAt          time.Time
 }
 
+type GolfWorkflowExecutionBinding struct {
+	RunID          uuid.UUID
+	BindingID      uuid.UUID
+	BindingVersion int64
+	OutputState    string
+	CreatedAt      time.Time
+}
+
 type GolfWorkflowGraphEvent struct {
 	RunID      uuid.UUID
 	AttemptID  string
@@ -1001,6 +1085,22 @@ type GolfWorkflowJobInventory struct {
 	Matrix      json.RawMessage
 	Needs       json.RawMessage
 	Steps       json.RawMessage
+}
+
+type GolfWorkflowQuarantinedOutput struct {
+	RunID            uuid.UUID
+	AttemptID        string
+	Sequence         int64
+	ForgeURL         string
+	RepositoryID     int64
+	OwnerID          int64
+	JobInstanceID    string
+	StepID           string
+	RawBytes         int32
+	EncryptedContent []byte
+	ContentBinding   []byte
+	CredentialKeyID  string
+	CreatedAt        time.Time
 }
 
 type GolfWorkflowRun struct {

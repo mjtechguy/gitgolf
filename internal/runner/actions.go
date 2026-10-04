@@ -121,7 +121,7 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 			err = &actionsStageError{phase, err}
 		}
 	}()
-	if !attemptPattern.MatchString(attempt) || input.Plan.Catalog != ActionsCatalog || input.Plan.ArchiveSHA256 == "" || input.TimeoutSeconds < 1 || input.TimeoutSeconds > 900 || onFrame == nil {
+	if input.ExecutionEnvironment.Validate() != nil || !attemptPattern.MatchString(attempt) || input.Plan.Catalog != ActionsCatalog || input.Plan.ArchiveSHA256 == "" || input.TimeoutSeconds < 1 || input.TimeoutSeconds > 900 || onFrame == nil {
 		return result, ErrInvalidJob
 	}
 	archiveSHA := sha256.Sum256(input.Input.Archive)

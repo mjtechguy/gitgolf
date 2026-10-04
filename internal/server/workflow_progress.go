@@ -106,6 +106,10 @@ func (s *Server) workflowRunDetail(ctx context.Context, id string) (workflowRunR
 	if err != nil {
 		return run, nil, errStorageUnavailable
 	}
+	run.OutputState, run.ExecutionBindingID, run.ExecutionBindingVersion, err = observeExecutionOutput(ctx, tx, run.ID)
+	if err != nil {
+		return run, nil, err
+	}
 	if run.EngineCatalog == runner.ActionsCatalog {
 		run.ActionJobs, err = actionGraphDetail(ctx, tx, run)
 		if err != nil {

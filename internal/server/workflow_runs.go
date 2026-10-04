@@ -67,6 +67,8 @@ type workflowRunRecord struct {
 	CancelRequested, LogsTruncated                                                                bool
 	SourceSHA256                                                                                  string
 	LogBytes, LogSequence                                                                         int64
+	OutputState                                                                                   golfv1.WorkflowOutputState
+	ExecutionBindingID, ExecutionBindingVersion                                                   string
 }
 
 const workflowRunColumns = `id::text,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,user_id,session_hash,commit_id,workflow_path,blob_id,format,policy_epochs,idempotency_key::text,input_hash,state,version,created_at,started_at,finished_at,exit_code,reason,runner_id,attempt_id,lease_token_hash,lease_expires_at,cancel_requested,logs_truncated,source_sha256,log_bytes,log_sequence,source_storage,source_key,source_fingerprint,source_profile_id::text,source_profile_version,origin,automation_grant_id::text,automation_grant_revision,automation_grant_epoch,automation_credential_version,repository_event_id,event_ref,engine_catalog`
@@ -92,10 +94,14 @@ func (s *Server) loadWorkflowRun(ctx context.Context, id string) (workflowRunRec
 	if err != nil {
 		return r, errStorageUnavailable
 	}
-	return r, nil
+	r.OutputState, r.ExecutionBindingID, r.ExecutionBindingVersion, err = observeExecutionOutput(ctx, s.db, r.ID)
+	return r, err
 }
 func wireWorkflowRun(r workflowRunRecord, canCancel bool) *golfv1.WorkflowRun {
 	w := &golfv1.WorkflowRun{Id: r.ID, RepositoryId: strconv.FormatInt(r.RepositoryID, 10), OwnerId: strconv.FormatInt(r.OwnerID, 10), CommitId: r.CommitID, WorkflowPath: r.WorkflowPath, WorkflowBlobId: r.BlobID, Format: golfv1.WorkflowFormat(r.Format), State: golfv1.WorkflowRunState(golfv1.WorkflowRunState_value["WORKFLOW_RUN_STATE_"+strings.ToUpper(r.State)]), Version: strconv.FormatInt(r.Version, 10), CreatedAt: r.CreatedAt.Format(time.RFC3339Nano), Reason: r.Reason, RunnerId: r.RunnerID, SourceSha256: r.SourceSHA256, LogsTruncated: r.LogsTruncated, CanCancel: canCancel && (r.State == "queued" || r.State == "running")}
+	w.OutputState = r.OutputState
+	w.ExecutionBindingId = r.ExecutionBindingID
+	w.ExecutionBindingVersion = r.ExecutionBindingVersion
 	w.EngineCatalog = r.EngineCatalog
 	if w.EngineCatalog == "" {
 		w.EngineCatalog = workflowExecutionCatalog
@@ -170,7 +176,7 @@ func (s *Server) withWorkflowRepository(ctx context.Context, session string, cre
 }
 
 // Lock order matches session lifecycle: Golf user, source session, policy, run.
-func (s *Server) workflowTransaction(ctx context.Context, session string, nativeID int64, operation func(*sql.Tx, database.LockManagedSessionRow, []byte) error) error {
+func (s *Server) workflowTransaction(ctx context.Context, session string, nativeID int64, operation func(*sql.Tx, database.LockManagedSessionRow, []byte) error, additionalUsers ...int64) error {
 	hash, err := s.authSessionHash(ctx, session, nil)
 	if err != nil {
 		return err
@@ -184,6 +190,19 @@ func (s *Server) workflowTransaction(ctx context.Context, session string, native
 	}
 	defer tx.Rollback()
 	q := database.New(s.db).WithTx(tx)
+	if len(additionalUsers) > 0 {
+		rows, e := tx.QueryContext(ctx, `SELECT id FROM golf_users WHERE forge_url=$1 AND (id=ANY($2::bigint[]) OR id IN (SELECT user_id FROM golf_sessions WHERE token_hash=$3)) ORDER BY id FOR UPDATE`, s.config.GiteaURL, additionalUsers, hash)
+		if e != nil {
+			return errStorageUnavailable
+		}
+		for rows.Next() {
+		}
+		e = rows.Err()
+		rows.Close()
+		if e != nil {
+			return errStorageUnavailable
+		}
+	}
 	identity, err := q.LockSessionUser(ctx, database.LockSessionUserParams{CallerTokenHash: hash, ForgeURL: s.config.GiteaURL})
 	if errors.Is(err, sql.ErrNoRows) {
 		return errUnauthenticated
@@ -574,6 +593,18 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 			return errStorageUnavailable
 		}
 		sum := sha256.Sum256(source)
+		admissionRun := workflowRunRecord{ID: id, ForgeURL: s.config.GiteaURL, RepositoryID: repoID, OwnerID: ownerID, RepositoryOwner: key.Owner, RepositoryName: key.Name, Origin: "manual", EventRef: m.Ref, CommitID: commit, BlobID: blob, WorkflowPath: m.WorkflowPath, SourceSHA256: hex.EncodeToString(sum[:]), EngineCatalog: workflowExecutionCatalog}
+		if plan.Actions != nil {
+			admissionRun.EngineCatalog = runner.ActionsCatalog
+		}
+		approval, e := s.executionApprovalForSource(ctx, admissionRun)
+		if e != nil {
+			return e
+		}
+		var approvalUsers []int64
+		if approval != nil {
+			approvalUsers = []int64{approval.approverUser}
+		}
 		return s.workflowTransaction(ctx, s.cookieValue(req.Header()), user.ID, func(tx *sql.Tx, actor database.LockManagedSessionRow, hash []byte) error {
 			admission, e := s.readEffectiveExecutionPolicy(ctx, tx, repoID, ownerID, access.OrganizationOwned, m.WorkflowPath)
 			if e != nil {
@@ -597,9 +628,20 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 			if !bytes.Equal(result.InputHash, inputHash) {
 				return errWorkflowRunConflict
 			}
-			return nil
-		})
+			if result.ID == id {
+				admissionRun.UserID = actor.UserID
+				if e = s.attachExecutionBinding(ctx, tx, admissionRun, approval); e != nil {
+					return e
+				}
+			}
+			result.OutputState, result.ExecutionBindingID, result.ExecutionBindingVersion, e = observeExecutionOutput(ctx, tx, result.ID)
+			return e
+		}, approvalUsers...)
 	})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	result.OutputState, result.ExecutionBindingID, result.ExecutionBindingVersion, err = observeExecutionOutput(ctx, s.db, result.ID)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -676,6 +718,11 @@ func (s *Server) listWorkflowRuns(ctx context.Context, req *connect.Request[golf
 			result.Page.NextPage = page + 1
 		}
 		for _, r := range records {
+			var e error
+			r.OutputState, r.ExecutionBindingID, r.ExecutionBindingVersion, e = observeExecutionOutput(ctx, s.db, r.ID)
+			if e != nil {
+				return e
+			}
 			result.Runs = append(result.Runs, wireWorkflowRun(r, workflowWritable(a)))
 		}
 		return nil
@@ -711,6 +758,10 @@ func (s *Server) CancelWorkflowRun(ctx context.Context, req *connect.Request[gol
 			return nil
 		})
 	})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	record.OutputState, record.ExecutionBindingID, record.ExecutionBindingVersion, err = observeExecutionOutput(ctx, s.db, record.ID)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -755,6 +806,14 @@ func (s *Server) GetWorkflowRunLogs(ctx context.Context, req *connect.Request[go
 				after = start
 			}
 			through = end
+		}
+		var observationError error
+		result.OutputState, _, _, observationError = observeExecutionOutput(ctx, tx, record.ID)
+		if observationError != nil {
+			return observationError
+		}
+		if result.OutputState == golfv1.WorkflowOutputState_WORKFLOW_OUTPUT_STATE_WITHHELD {
+			return tx.Commit()
 		}
 		rows, e := tx.QueryContext(ctx, `SELECT sequence,text FROM golf_workflow_run_logs WHERE run_id=$1 AND sequence>$2 AND ($3::bigint IS NULL OR sequence<=$3) AND ($4='' OR job_instance_id=$4) AND ($5='' OR engine_step_id=$5) ORDER BY sequence LIMIT 17`, record.ID, after, through, req.Msg.JobInstanceId, req.Msg.StepId)
 		if e != nil {
