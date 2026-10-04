@@ -9,6 +9,7 @@ memory, never in evidence files. All fixtures are removed on terminal cleanup.
 import argparse
 import ast
 import base64
+import datetime
 import hashlib
 import importlib.util
 import ipaddress
@@ -166,6 +167,59 @@ def receiver_receipt(row):
     return row
 
 
+def observed_time(value):
+    assert isinstance(value,str) and value.endswith('Z')
+    return datetime.datetime.fromisoformat(value[:-1]+'+00:00')
+
+
+def configuration_observation(response,transport_id=None,version='0',generation='0',workers=None,latest=None):
+    """Validate operational metadata, never infer SMTP/inbox health from locks."""
+    assert response['activationGeneration']==generation and positive(generation,True)
+    rows=response['transports'];assert isinstance(rows,list) and len(rows)<=64
+    active=[r for r in rows if r.get('active',False)]
+    o=response['observation'];assert set(o)<=set(('observedAt','configured','transportId','transportVersion','activationGeneration','connectedWorkers','recentlyActiveWorkers','lastWorkerActivity','latestDelivery'))
+    at=observed_time(o['observedAt']);assert o['activationGeneration']==generation and o['transportVersion']==version
+    configured=transport_id is not None
+    assert o.get('configured',False)==configured
+    if configured:
+        assert positive(version) and positive(generation) and str(uuid.UUID(transport_id))==transport_id
+        assert len(active)==1 and active[0]['id']==transport_id and active[0]['version']==version and o['transportId']==transport_id
+    else:assert not active and not o.get('transportId') and 'latestDelivery' not in o
+    connected,recent=o.get('connectedWorkers',0),o.get('recentlyActiveWorkers',0)
+    assert type(connected) is int and type(recent) is int and 0<=recent<=connected<=2
+    if workers is not None:assert connected==workers
+    activity=o.get('lastWorkerActivity')
+    if activity:
+        tick=observed_time(activity);assert connected>0 and tick<=at
+        if recent:assert tick>at-datetime.timedelta(seconds=30)
+    else:assert connected==0
+    d=o.get('latestDelivery')
+    if d:
+        assert set(d)<=set(('createdAt','completedAt','state','attempts','smtpStatus','relayAccepted','possibleDuplicate'))
+        created=observed_time(d['createdAt']);assert created<=at
+        assert d['state'] in ('queued','sending','retrying','accepted','failed','cancelled','suppressed')
+        attempts,status=d.get('attempts',0),d.get('smtpStatus',0)
+        assert type(attempts) is int and type(status) is int and 0<=attempts<=6 and 0<=status<=599
+        assert type(d.get('relayAccepted',False)) is bool and type(d.get('possibleDuplicate',False)) is bool
+        terminal=d['state'] in ('accepted','failed','cancelled','suppressed')
+        assert terminal==bool(d.get('completedAt'))
+        if terminal:assert created<=observed_time(d['completedAt'])<=at
+        assert d.get('relayAccepted',False)==(d['state']=='accepted' and status==250)
+        if d['state']=='accepted':assert attempts>0 and d.get('relayAccepted')
+    if latest is not None:
+        assert d
+        for name,default in (('createdAt',''),('completedAt',''),('state',''),('attempts',0),('smtpStatus',0),('possibleDuplicate',False)):
+            assert d.get(name,default)==latest.get(name,default)
+    return o
+
+
+def public_observation(o,label,connections):
+    """The new observation evidence has no delivery/account/mailbox identifiers."""
+    assert type(connections) is int and connections>=0
+    d=o.get('latestDelivery')
+    return {'stage':label,'observedAt':o['observedAt'],'configured':o.get('configured',False),'activeIdentityBindingVerified':True,'transportVersion':o['transportVersion'],'activationGeneration':o['activationGeneration'],'connectedWorkers':o.get('connectedWorkers',0),'recentlyActiveWorkers':o.get('recentlyActiveWorkers',0),'lastWorkerActivity':o.get('lastWorkerActivity'), 'latestCreatedDelivery':None if not d else {k:d.get(k,False if k in ('relayAccepted','possibleDuplicate') else 0 if k in ('attempts','smtpStatus') else '') for k in ('createdAt','completedAt','state','attempts','smtpStatus','relayAccepted','possibleDuplicate')},'receiverSMTPConnections':connections,'connectionActivityIsNotHealth':True,'relayAcceptanceIsNotInboxDelivery':True}
+
+
 def checked_rpc(session,method,body=None,expected=200,headers=None,code=None):
     assert re.fullmatch(r'[A-Za-z]+Service/[A-Za-z]+',method)
     request=urllib.request.Request(smoke.GOLF+'/rpc/golf.v1.'+method,data=json.dumps(body or {}).encode(),method='POST',headers={'Origin':smoke.GOLF,'Content-Type':'application/json','Connect-Protocol-Version':'1',**(headers or {})})
@@ -200,7 +254,16 @@ def self_check():
     assert ACCOUNT_PATH=='/account/settings' and ADMIN_PATH=='/admin/settings/notifications'
     assert 'CA:TRUE' in CA_CONFIG and 'CA:FALSE' in SERVER_EXTENSIONS
     assert 'ISSUE_MUTATION_STATE_SUCCEEDED = 2;' in source and 'ISSUE_MUTATION_STATE_COMPLETE' not in source
-    print('PASS: pure SMTP receiver AST, immutable receipt counterexamples, wire inventory, route and no-code/body persistence checks; no Docker/HTTP/SMTP/native operations',flush=True)
+    assert re.search(r'EmailConfigurationObservation\s+observation\s*=\s*3;',source)
+    oid=str(uuid.uuid4());o={'observedAt':'2026-10-04T12:00:00Z','configured':True,'transportId':oid,'transportVersion':'1','activationGeneration':'1','latestDelivery':{'createdAt':'2026-10-04T11:59:00Z','state':'queued'}};inventory={'transports':[{'id':oid,'version':'1','active':True}],'activationGeneration':'1','observation':o}
+    configuration_observation(inventory,oid,'1','1',0,{'createdAt':'2026-10-04T11:59:00Z','state':'queued'})
+    for altered in ({**o,'transportId':str(uuid.uuid4())},{**o,'activationGeneration':'2'},{**o,'connectedWorkers':1},{**o,'recentlyActiveWorkers':1},{**o,'latestDelivery':{**o['latestDelivery'],'relayAccepted':True}},{**o,'latestDelivery':{**o['latestDelivery'],'id':str(uuid.uuid4())}}):
+        try:configuration_observation({**inventory,'observation':altered},oid,'1','1',0)
+        except AssertionError:pass
+        else:raise AssertionError('Unbound/private/false email observation accepted')
+    closed=public_observation(o,'queued while stopped',0)
+    assert 'transportId' not in closed and 'id' not in closed['latestCreatedDelivery'] and closed['connectionActivityIsNotHealth'] and closed['relayAcceptanceIsNotInboxDelivery']
+    print('PASS: pure SMTP receiver AST, immutable receipt counterexamples, wire inventory,045 active binding/worker/latest-created counterexamples, route and no-code/body persistence checks; no Docker/HTTP/SMTP/native operations',flush=True)
 
 
 def main():
@@ -351,6 +414,21 @@ networks:
                 row=json.loads(run('docker','inspect',cid))[0];assert row['Image']==images['golf']
                 result[service]={'containerId':cid,'imageReference':row['Config']['Image'],'ociImageId':row['Image'],'composeConfigHash':row['Config']['Labels']['com.docker.compose.config-hash']}
             return result
+        observations=[];active_version='1';active_generation='1'
+        def observe(label,workers=None,latest=None,running_recent=False):
+            response=call('operator','ListEmailTransports')
+            o=configuration_observation(response,transport_id,active_version,active_generation,workers,latest)
+            if running_recent:assert o.get('recentlyActiveWorkers',0)>0
+            connections=control('/receipts')['connections']
+            closed=public_observation(o,label,connections);observations.append(closed)
+            record(emailConfigurationObservations=observations,workerActivityIsNotHealth=True)
+            return o
+        def wait_workers(label,count,latest=None):
+            def read():
+                response=call('operator','ListEmailTransports');o=configuration_observation(response,transport_id,active_version,active_generation,latest=latest)
+                return o if o.get('connectedWorkers',0)==count and (count==0 or o.get('recentlyActiveWorkers',0)>0) else None
+            until(read,seconds=30)
+            return observe(label,count,latest,running_recent=count>0)
         def own(role):
             state=call(role,'GetOwnEmailNotifications')['state'];assert state['loginEmail']==actors[role]['email'] and state['nativeUserId']==actors[role]['id'] and all(positive(state[k]) for k in ('userId','nativeUserId','localAccountId','credentialVersion')) and positive(state['contactVersion'],True) and positive(state['preferenceVersion'],True);return state
         def history(role,selected=None):
@@ -388,20 +466,21 @@ networks:
             transport_id=str(uuid.uuid4());body={'id':transport_id,'expectedVersion':'0','name':'Owned TLS SMTP','host':'receiver.golf.test','port':465,'tlsMode':'implicit','sender':'sender@example.invalid','currentPassword':actors['operator']['password']}
             call('reader','SaveEmailTransport',body,403);saved=call('operator','SaveEmailTransport',body)['transport'];assert saved['id']==transport_id and saved['version']=='1' and not saved.get('active') and saved['hasCredential']
             activated=call('operator','ActivateEmailTransport',{'id':transport_id,'version':'1','expectedActivationGeneration':'0','currentPassword':actors['operator']['password']});assert activated['transport']['active'] and activated['activationGeneration']=='1'
-            inventory=call('operator','ListEmailTransports');assert len(inventory['transports'])==1 and not any(k in inventory['transports'][0] for k in ('sender','username','password'))
+            inventory=call('operator','ListEmailTransports');configuration_observation(inventory,transport_id,'1','1',0);observe('configured worker initially stopped',0);assert len(inventory['transports'])==1 and not any(k in inventory['transports'][0] for k in ('sender','username','password'))
             call('reader','GetRepositoryEmailSubscription',{'target':{**target,'repositoryId':'9223372036854775807'}},404);call('outsider','GetRepositoryEmailSubscription',{'target':target},404);call('reader','GetOwnEmailNotifications',expected=403,headers={'Origin':'https://other.invalid'})
             delegation=rpc('reader','ApiCredentialService/CreateApiCredential',{'label':'SMTP no delegation','lifetimeSeconds':600});bearers.append(('reader',delegation['credential']['id']));checked_rpc(smoke.client(),SERVICE+'GetOwnEmailNotifications',expected=403,headers={'Authorization':'Bearer '+delegation['token']});rpc('reader','ApiCredentialService/RevokeApiCredential',{'credentialId':delegation['credential']['id']});bearers.clear()
             stage('one-time own mailbox verification; queued metadata before real worker')
             state=own('reader');operation=str(uuid.uuid4());verification=call('reader','RequestEmailVerification',{'operationId':operation,'expectedContactVersion':state['contactVersion']});assert verification['challengeId']==operation and verification['deliveryId']==operation and verification['acceptedContactVersion']=='1' and not records()
             assert call('reader','RequestEmailVerification',{'operationId':operation,'expectedContactVersion':state['contactVersion']})['deliveryId']==operation
-            command('create','--no-build','--pull','never','email-worker');baseline=runtime();record(runtimeBefore=baseline);command('start','email-worker');accepted=terminal('reader',operation);assert accepted['state']=='accepted' and accepted['smtpStatus']==250 and accepted['attempts']==1
+            queued_verification=next(v for v in history('reader') if v['id']==operation);assert queued_verification['state']=='queued';observe('latest created verification queued while stopped',0,queued_verification)
+            command('create','--no-build','--pull','never','email-worker');baseline=runtime();record(runtimeBefore=baseline);command('start','email-worker');accepted=terminal('reader',operation);assert accepted['state']=='accepted' and accepted['smtpStatus']==250 and accepted['attempts']==1;wait_workers('running worker and independent verification SMTP250',1,accepted)
             code=control('/code/'+operation)['code'];assert re.fullmatch(r'[0-9]{8}',code);wrong='00000000' if code!='00000000' else '11111111';call('reader','ConfirmEmailVerification',{'challengeId':operation,'expectedContactVersion':'1','code':wrong},400);confirmed=call('reader','ConfirmEmailVerification',{'challengeId':operation,'expectedContactVersion':'1','code':code})['state'];del code,wrong;assert confirmed['verified'] and not confirmed.get('enabled')
             call('reader','ConfirmEmailVerification',{'challengeId':operation,'expectedContactVersion':'1','code':'00000000'},400)
             call('reader','SaveOwnEmailPreference',{'expectedContactVersion':'1','expectedPreferenceVersion':confirmed['preferenceVersion'],'enabled':True,'authorizeBackground':True});sub=subscribe('reader',target)
             stage('actual committed activity and approved logout delivery; private body excluded')
-            command('stop','email-worker');activity();queued=pending('reader');before=len(records());rpc('reader','SessionService/Logout');command('start','email-worker')
-            until(lambda:len(records())==before+1);checked_rpc(actors['reader']['session'],SERVICE+'GetOwnEmailNotifications',expected=401);rpc('reader','SessionService/LoginWithPassword',{'username':actors['reader']['email'],'password':actors['reader']['password']});first=terminal('reader',queued['id'],target);assert first['state']=='accepted' and first['smtpStatus']==250
-            stable=len(records());command('restart','golf','email-worker');smoke.ready();assert history('reader',target)[0]['id']==first['id'];time.sleep(2);assert len(records())==stable
+            command('stop','email-worker');wait_workers('stopped worker retains prior accepted evidence',0,accepted);activity();queued=pending('reader');assert observed_time(queued['createdAt'])>observed_time(accepted['createdAt']);observe('newest created activity queued supersedes older accepted message',0,queued);before=len(records());rpc('reader','SessionService/Logout');command('start','email-worker')
+            until(lambda:len(records())==before+1);checked_rpc(actors['reader']['session'],SERVICE+'GetOwnEmailNotifications',expected=401);rpc('reader','SessionService/LoginWithPassword',{'username':actors['reader']['email'],'password':actors['reader']['password']});first=terminal('reader',queued['id'],target);assert first['state']=='accepted' and first['smtpStatus']==250;wait_workers('restarted worker and newest activity SMTP250',1,first)
+            stable=len(records());smtp_connections=control('/receipts')['connections'];command('restart','golf','email-worker');smoke.ready();assert history('reader',target)[0]['id']==first['id'];wait_workers('core and worker restart preserves latest-created accepted receipt',1,first);time.sleep(2);assert len(records())==stable and control('/receipts')['connections']==smtp_connections
             for mode in ('retry_once','drop_once'):
                 stage('actual SMTP '+mode+' preserves frozen Message-ID/body')
                 command('stop','email-worker');activity();queued=pending('reader');control('/mode',{'id':queued['id'],'mode':mode});command('start','email-worker');done=terminal('reader',queued['id'],target);copies=[v for v in records() if v['deliveryId']==queued['id']];assert done['state']=='accepted' and done['attempts']==2 and len(copies)==2 and copies[0]['bodySha256']==copies[1]['bodySha256'];assert done.get('possibleDuplicate',False)==(mode=='drop_once')
@@ -430,13 +509,24 @@ networks:
             intent={'deliveryId':fresh['id'],'expectedContactVersion':own('reader')['contactVersion'],'operationId':str(uuid.uuid4())};current_redelivery=call('reader','RedeliverOwnEmail',intent)['delivery'];assert terminal('reader',current_redelivery['id'],target)['state']=='accepted'
             if args.ui:
                 stage('actual account/repository/administrator browser views and privacy')
-                config={'golf':smoke.GOLF,'native':smoke.GITEA,'control':control_url,'controlKey':control_key,'repository':native['full_name'],'target':target,'ownerToken':actors['owner']['token'],'operator':{k:actors['operator'][k] for k in ('email','password')},'fixtures':{theme:{k:actors['ui'+theme][k] for k in ('email','password','name','id')} for theme in ('dark','light')},'output':str(OUTPUT),'runtime':baseline,'paths':{'account':ACCOUNT_PATH,'repository':REPOSITORY_PATH.format(**repository),'admin':ADMIN_PATH}}
+                config={'golf':smoke.GOLF,'native':smoke.GITEA,'control':control_url,'controlKey':control_key,'repository':native['full_name'],'target':target,'ownerToken':actors['owner']['token'],'operator':{k:actors['operator'][k] for k in ('email','password')},'fixtures':{theme:{k:actors['ui'+theme][k] for k in ('email','password','name','id')} for theme in ('dark','light')},'output':str(OUTPUT),'runtime':baseline,'emailObservationTarget':{'id':transport_id,'version':'1','generation':'1'},'paths':{'account':ACCOUNT_PATH,'repository':REPOSITORY_PATH.format(**repository),'admin':ADMIN_PATH}}
                 result=subprocess.run(['node',str(ROOT/'scripts/email-notifications-browser.mjs')],cwd=ROOT,env=env,input=json.dumps(config).encode(),capture_output=True,timeout=420);assert len(result.stdout)<=65536 and len(result.stderr)<=65536;browser=json.loads((OUTPUT/'browser-manifest.json').read_text());record(browser=browser);assert result.returncode==0 and browser['status']=='passed_cleanup_pending' and len(browser['captures'])==12
             stage('current native access removal cancels queued mail with zero receiver bytes')
             command('stop','email-worker');activity();queued=pending('reader');smoke.provider(actors['owner']['token'],'DELETE',route+'/collaborators/'+actors['reader']['name'],expected=204);before=control('/receipts');command('start','email-worker');until(lambda:scalar("SELECT count(*) FROM golf_email_deliveries WHERE id='"+queued['id']+"' AND state='cancelled'")==1);time.sleep(2);after=control('/receipts');assert after==before
             call('reader','GetRepositoryEmailSubscription',{'target':target},404);call('reader','ListOwnEmailDeliveries',{'target':target},404);call('reader','RedeliverOwnEmail',intent,403)
             stage('local credential disable cancels pending verified subscription without SMTP')
             command('stop','email-worker');smoke.provider(actors['owner']['token'],'PUT',route+'/collaborators/'+actors['reader']['name'],{'permission':'read'},204);current=call('reader','GetRepositoryEmailSubscription',{'target':target})['subscription'];sub=subscribe('reader',target,previous=current);activity();queued=pending('reader');disabled=json.loads(command('exec','-T','golf','golf','local-account','disable',payload={'username':actors['reader']['name']}));assert disabled['result']['disabled'];checked_rpc(actors['reader']['session'],SERVICE+'GetOwnEmailNotifications',expected=401);before=control('/receipts');command('start','email-worker');until(lambda:scalar("SELECT count(*) FROM golf_email_deliveries WHERE id='"+queued['id']+"' AND state='cancelled'")==1);time.sleep(2);assert control('/receipts')==before
+            wait_workers('running worker after cancelled deliveries',1)
+            stage('new active saved version/generation cannot inherit old delivery evidence')
+            command('stop','email-worker');wait_workers('worker stopped before transport version change',0)
+            edited=call('operator','SaveEmailTransport',{'id':transport_id,'expectedVersion':'1','name':'Owned TLS SMTP','host':'receiver.golf.test','port':465,'tlsMode':'implicit','retainCredential':True,'currentPassword':actors['operator']['password']})['transport'];assert edited['version']=='2' and not edited.get('active')
+            observe('saved inactive version does not change current active binding',0)
+            changed=call('operator','ActivateEmailTransport',{'id':transport_id,'version':'2','expectedActivationGeneration':'1','currentPassword':actors['operator']['password']});assert changed['transport']['id']==transport_id and changed['transport']['version']=='2' and changed['transport']['active'] and changed['activationGeneration']=='2';active_version=active_generation='2'
+            reset=observe('active version2 generation2 has no inherited latest-delivery evidence',0);assert 'latestDelivery' not in reset
+            owner_state=own('owner');new_operation=str(uuid.uuid4());new_verification=call('owner','RequestEmailVerification',{'operationId':new_operation,'expectedContactVersion':owner_state['contactVersion']});assert new_verification['deliveryId']==new_operation
+            queued_new=next(v for v in history('owner') if v['id']==new_operation);assert queued_new['state']=='queued' and queued_new['transportId']==transport_id and queued_new['transportVersion']=='2';observe('new active generation latest-created queued verification',0,queued_new)
+            before_connections=control('/receipts')['connections'];command('start','email-worker');accepted_new=terminal('owner',new_operation);assert accepted_new['state']=='accepted' and accepted_new['smtpStatus']==250 and accepted_new['attempts']==1;wait_workers('new active generation actual SMTP250 and separate worker connection',1,accepted_new);assert control('/receipts')['connections']==before_connections+1
+            record(currentGenerationResetVerified=True,newActiveGenerationRelayAcceptanceVerified=True)
             assert runtime()==baseline;record(runtimeAfter=runtime(),receiverReceipts=records(),mailCodesAndBodiesPersisted=False,verifiedOwnMailbox=True,logoutConsentContinued=True,restartNoResend=True,temporaryRetry=True,uncertainDataAckDuplicate=True,currentNativeRevocationNoReceiverBytes=True,localDisableNoReceiverBytes=True,privateActivityBodyExcluded=True,sqlAckLoss='source_fixture_only',cloudflare='not_exercised',inboxDelivery='not_claimed');passed=True
         except Exception as error:
             original=error;frames=traceback.extract_tb(error.__traceback__);record(originalFailureType=type(error).__name__,originalFailureLine=frames[-1].lineno,originalFailureStage=STAGE)

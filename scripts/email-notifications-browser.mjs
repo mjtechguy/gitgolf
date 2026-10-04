@@ -8,6 +8,26 @@ const contexts=[], captures=[], procedures={}, privateCodes=[];
 const proof={status:'running',captures,codeOrBodyPersisted:false};
 const check=value=>{if(!value)throw Error('assertion');};
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+function validObservation(response){
+ const expected=config.emailObservationTarget,o=response.observation;check(expected&&o&&response.activationGeneration===expected.generation&&o.configured&&o.transportId===expected.id&&o.transportVersion===expected.version&&o.activationGeneration===expected.generation);
+ check(Object.keys(o).every(k=>['observedAt','configured','transportId','transportVersion','activationGeneration','connectedWorkers','recentlyActiveWorkers','lastWorkerActivity','latestDelivery'].includes(k)));
+ const active=response.transports.filter(t=>t.active);check(active.length===1&&active[0].id===expected.id&&active[0].version===expected.version);
+ const at=Date.parse(o.observedAt),connected=o.connectedWorkers||0,recent=o.recentlyActiveWorkers||0;check(Number.isFinite(at)&&Number.isInteger(connected)&&Number.isInteger(recent)&&0<=recent&&recent<=connected&&connected<=2);
+ check(connected===1&&recent===1&&o.lastWorkerActivity&&Date.parse(o.lastWorkerActivity)<=at&&Date.parse(o.lastWorkerActivity)>at-30000);
+ const d=o.latestDelivery;check(d&&Object.keys(d).every(k=>['createdAt','completedAt','state','attempts','smtpStatus','relayAccepted','possibleDuplicate'].includes(k))&&d.state==='accepted'&&d.relayAccepted===true&&d.smtpStatus===250&&Number.isInteger(d.attempts)&&d.attempts>=1&&d.attempts<=6&&Number.isFinite(Date.parse(d.createdAt))&&Date.parse(d.createdAt)<=Date.parse(d.completedAt)&&Date.parse(d.completedAt)<=at);
+ return o;
+}
+async function assertObservation(page,response,theme,width,delivery,receiver){
+ const o=validObservation(response),d=o.latestDelivery;check(d.createdAt===delivery.createdAt&&d.completedAt===delivery.completedAt&&d.attempts===delivery.attempts&&d.smtpStatus===delivery.smtpStatus&&Boolean(d.possibleDuplicate)===Boolean(delivery.possibleDuplicate));
+ const receipt=receiver.receipts.find(r=>r.deliveryId===delivery.id&&r.smtpReply===250);check(receipt?.verification&&receipt.privateBodyExcluded&&receipt.recipientMatchesEnvelope&&receipt.senderMatchesEnvelope&&Number.isInteger(receiver.connections)&&receiver.connections>0);
+ const table=page.getByRole('table',{name:'Email delivery observations',exact:true});await table.waitFor();check(await table.locator('tbody tr').count()===4);
+ await table.locator('tr[data-row-id="configuration"]').getByText('Active saved transport · version '+o.transportVersion,{exact:true}).waitFor();
+ await table.locator('tr[data-row-id="worker"]').getByText(o.connectedWorkers+' connected · '+o.recentlyActiveWorkers+' recently active',{exact:true}).waitFor();
+ const latest='SMTP accepted · '+d.attempts+' attempts'+(d.possibleDuplicate?' · possible duplicate':'');await table.locator('tr[data-row-id="latest"]').getByText(latest,{exact:true}).waitFor();
+ await table.locator('tr[data-row-id="observed"]').getByText(o.observedAt,{exact:true}).waitFor();
+ await page.getByText('Worker connection activity uses a 30-second window. Latest message means the most recently created message for this active configuration; SMTP acceptance does not prove inbox delivery.',{exact:true}).waitFor();
+ (proof.emailConfigurationObservations||=[]).push({theme,width,configured:true,activeIdentityBindingVerified:true,transportVersion:o.transportVersion,activationGeneration:o.activationGeneration,connectedWorkers:o.connectedWorkers,recentlyActiveWorkers:o.recentlyActiveWorkers,observedAt:o.observedAt,latestCreatedAt:d.createdAt,latestCompletedAt:d.completedAt,latestState:d.state,attempts:d.attempts,smtpStatus:d.smtpStatus,relayAccepted:true,independentReceiverReceiptMatched:true,receiverSMTPConnections:receiver.connections,workerActivityIsNotHealth:true,inboxDelivery:'not_claimed'});
+}
 async function persist(){if(config)await writeFile(join(config.output,'browser-manifest.json'),JSON.stringify(proof,null,2)+'\n',{mode:0o600});}
 async function setTheme(page,theme){const button=page.getByRole('button',{name:`Switch to ${theme} theme`,exact:true});if(await button.count())await button.click();
   await page.locator('html').waitFor();
@@ -30,7 +50,13 @@ async function capture(page,theme,width,kind){check(await page.locator('html').g
   await persist();}
 function track(page){page.on('pageerror',()=>{proof.pageErrors=(proof.pageErrors||0)+1;});page.on('request',request=>{if(request.url().includes('/rpc/golf.v1.EmailNotificationService/')){const method=request.url().split('/').at(-1);procedures[method]=(procedures[method]||0)+1;}});}
 const writes=()=>Object.entries(procedures).filter(([name])=>/^(Save|Activate|Request|Confirm|Redeliver)/.test(name)).reduce((sum,[,count])=>sum+count,0);
-try{
+if(process.argv.includes('--self-check')){
+ config={emailObservationTarget:{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',version:'1',generation:'1'}};
+ const response={activationGeneration:'1',transports:[{id:config.emailObservationTarget.id,version:'1',active:true}],observation:{observedAt:'2026-10-04T12:00:00Z',configured:true,transportId:config.emailObservationTarget.id,transportVersion:'1',activationGeneration:'1',connectedWorkers:1,recentlyActiveWorkers:1,lastWorkerActivity:'2026-10-04T11:59:59Z',latestDelivery:{createdAt:'2026-10-04T11:58:00Z',completedAt:'2026-10-04T11:58:01Z',state:'accepted',attempts:1,smtpStatus:250,relayAccepted:true}}};
+ validObservation(response);
+ for(const altered of [{...response.observation,transportId:'foreign'},{...response.observation,activationGeneration:'2'},{...response.observation,connectedWorkers:0},{...response.observation,latestDelivery:{...response.observation.latestDelivery,id:'private'}},{...response.observation,latestDelivery:{...response.observation.latestDelivery,relayAccepted:false}}]){let refused=false;try{validObservation({...response,observation:altered});}catch{refused=true;}check(refused);}
+ console.log('PASS: pure045 browser observation identity/metadata/SMTP250 counterexamples; no browser/runtime operations');
+}else try{
  let input='';for await(const chunk of process.stdin){input+=chunk;
   check(input.length<=1<<20);}config=JSON.parse(input);
   input='';
@@ -96,6 +122,9 @@ try{
   check(writes()===written);
   await setTheme(page,theme);
   check(await page.getByRole('form',{name:'Repository email subscription editor',exact:true}).count()===0);
+  const historyResponse=await context.request.post(config.golf+'/rpc/golf.v1.EmailNotificationService/ListOwnEmailDeliveries',{headers:{Origin:config.golf,'Content-Type':'application/json','Connect-Protocol-Version':'1'},data:{page:{limit:100}}});check(historyResponse.status()===200);
+  const ownDeliveries=(await historyResponse.json()).deliveries;const ownVerification=ownDeliveries.find(d=>d.id===verification.deliveryId);check(ownVerification?.state==='accepted'&&ownVerification.smtpStatus===250&&ownVerification.attempts===1);
+  const receiverResponse=await fetch(config.control+'/receipts',{headers:{Authorization:'Bearer '+config.controlKey},signal:AbortSignal.timeout(5000),cache:'no-store'});check(receiverResponse.status===200);const receiver=await receiverResponse.json();
   const administrator=await browser.newContext({viewport:{width:1440,height:1000}});
   contexts.push(administrator);
   await login(administrator,config.operator);
@@ -118,10 +147,13 @@ try{
   await capture(page,theme,width,'repository');
   check(writes()===written);
    await adminPage.setViewportSize({width,height:1000});
+  const inventoryResponse=adminPage.waitForResponse(r=>r.url().endsWith('EmailNotificationService/ListEmailTransports')&&r.status()===200);
   await adminPage.goto(config.golf+config.paths.admin);
+  const transportInventory=await (await inventoryResponse).json();
   const transports=adminPage.getByRole('table',{name:'SMTP transports',exact:true});
   await transports.getByText('Owned TLS SMTP',{exact:true}).waitFor();
   await setTheme(adminPage,theme);
+  await assertObservation(adminPage,transportInventory,theme,width,ownVerification,receiver);
   check(await adminPage.getByRole('form',{name:'SMTP transport editor',exact:true}).count()===0);
   await adminPage.getByRole('button',{name:'Edit SMTP Owned TLS SMTP version 1',exact:true}).click();
   const smtp=adminPage.getByRole('form',{name:'SMTP transport editor',exact:true});
@@ -146,7 +178,7 @@ try{
   check(writes()===written);proof['nativeReadRevocation_'+theme]=true;
   await persist();
  }
- check(captures.length===12&&!proof.pageErrors);
+ check(captures.length===12&&!proof.pageErrors&&proof.emailConfigurationObservations?.length===4);
   proof.status='passed_cleanup_pending';
   proof.reloadNoDispatch=true;
   proof.currentUserVerification=true;
@@ -154,7 +186,7 @@ try{
   proof.currentReadMemberSubscription=true;
   proof.procedureCounts=procedures;
   await persist();
-  console.log('PASS: actual verification/consent/subscription/reload/native-revocation and twelve theme/width/view captures; codes withheld');
+  console.log('PASS: actual verification/consent/subscription/reload/native-revocation and045 independently bound worker/latest-created SMTP observations in twelve captures; codes withheld');
 }catch(error){proof.status='failed';
   proof.failedStage=stage;
   proof.failureType=error.name==='TimeoutError'?'TimeoutError':'assertion/error';
