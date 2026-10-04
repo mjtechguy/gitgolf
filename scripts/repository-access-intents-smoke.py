@@ -3,28 +3,25 @@
 
 Requires an exact cached revision-labelled --image and NEW --output. No builds,
 pulls, retained policy changes, CI, inference, external destination or SQL writes.
-An owned loopback proxy forwards unchanged native requests to one fresh instance;
-one exact collaborator PUT loses its response only AFTER a real native204.
-Docker Desktop host.docker.internal must reach host loopback: this prerequisite
-is checked by fresh core readiness, never widened to 0.0.0.0. --ui adds12 actual
+An owned adapter inside the fresh Compose network forwards unchanged native
+requests; one exact collaborator PUT loses its response only AFTER a real native204.
+Requires --proxy-binary (precompiled Linux ARM64); only nonce-authenticated control
+is published on loopback. No host bridge is used for native forwarding. --ui adds12 actual
 inventory/requested-role/original-receipt captures. --self-check is pure.
 """
 import argparse
 import base64
 import datetime
-import http.client
-import http.server
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import secrets
-import socket
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 import traceback
 import urllib.error
@@ -32,6 +29,7 @@ import urllib.request
 import uuid
 sys.dont_write_bytecode=True
 import smoke
+import native_qualification_proxy as native_proxy
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('access48_invitation_helpers',ROOT/'scripts/repository-invitations-smoke.py')
 inv=importlib.util.module_from_spec(spec);spec.loader.exec_module(inv)
@@ -76,70 +74,111 @@ def checked_rpc(session, procedure, payload=None, expected=200, headers=None, co
         return result
 
 
-class NativeProxy:
-    """No logs/bodies retained; fixed owned native destination, no redirects."""
-    def __init__(self,destination,port,project):
-        from urllib.parse import urlsplit
-        parsed=urlsplit(destination)
-        assert parsed.scheme=='http' and parsed.hostname=='127.0.0.1' and parsed.port and parsed.path==''
-        assert re.fullmatch(r'golf-access48-[a-f0-9]{10}',project)
-        self.project=project;self.destination=parsed;self.lock=threading.Lock();self.counts={};self.armed=None;self.lost=0;self.failures=0
-        owner=self
-        class Handler(http.server.BaseHTTPRequestHandler):
-            protocol_version='HTTP/1.1'
-            def log_message(self,*args):pass
-            def forward(self):
-                connection=None
-                try:
-                    assert self.path.startswith('/api/v1/') and len(self.path)<=4096
-                    if self.command!='GET':
-                        assert self.command in {'PUT','DELETE'} and re.fullmatch(r'/api/v1/repos/'+re.escape(owner.project)+r'-(?:owner|org)/[A-Za-z0-9_-]+/collaborators/'+re.escape(owner.project)+r'-(?:recipient|directadmin|outsider|golfadmin|teamadmin)',self.path), 'Unexpected native mutation refused'
-                    assert self.headers.get('Transfer-Encoding') is None
-                    length=int(self.headers.get('Content-Length','0'));assert 0<=length<=1<<20
-                    payload=self.rfile.read(length);assert len(payload)==length
-                    headers={k:v for k,v in self.headers.items() if k.lower() not in {'host','connection','proxy-connection','transfer-encoding','content-length','expect'}}
-                    headers['Content-Length']=str(length);headers['Connection']='close'
-                    connection=http.client.HTTPConnection(owner.destination.hostname,owner.destination.port,timeout=15)
-                    connection.request(self.command,self.path,body=payload,headers=headers);response=connection.getresponse();body=response.read((2<<20)+1);assert len(body)<=2<<20
-                    drop=owner.observe(self.command,self.path,response.status,body)
-                    if drop:
-                        self.close_connection=True
-                        try:self.connection.shutdown(socket.SHUT_RDWR)
-                        except OSError:pass
-                        return
-                    self.send_response(response.status)
-                    for k,v in response.getheaders():
-                        if k.lower() not in {'connection','transfer-encoding','content-length','server','date'}:self.send_header(k,v)
-                    self.send_header('Content-Length',str(len(body)));self.send_header('Connection','close');self.end_headers();self.wfile.write(body);self.close_connection=True
-                except Exception:
-                    with owner.lock:owner.failures+=1
-                    self.close_connection=True
-                    try:self.send_error(502,'Owned fixture forwarding unavailable')
-                    except OSError:pass
-                finally:
-                    if connection:connection.close()
-            do_GET=do_POST=do_PUT=do_PATCH=do_DELETE=forward
-        self.server=http.server.ThreadingHTTPServer(('127.0.0.1',port),Handler);self.server.daemon_threads=True
-        self.thread=threading.Thread(target=self.server.serve_forever,daemon=True)
-    def observe(self,method,path,status,body):
-        with self.lock:
-            if re.fullmatch(r'/api/v1/repos/[^/?]+/[^/?]+/collaborators/[^/?]+',path) and method in {'PUT','DELETE'}:
-                identity=(method,path);self.counts[identity]=self.counts.get(identity,0)+1
-            drop=self.armed==(method,path)
-            if drop:
-                assert status==204 and not body
-                self.armed=None;self.lost+=1
-            return drop
-    def start(self):self.thread.start()
-    def __enter__(self):self.start();return self
-    def __exit__(self,*args):self.close()
-    def close(self):self.server.shutdown();self.server.server_close();self.thread.join(timeout=5);assert not self.thread.is_alive()
-    def arm(self,path):
-        assert re.fullmatch(r'/api/v1/repos/[^/?]+/[^/?]+/collaborators/[^/?]+',path)
-        with self.lock:assert self.armed is None and self.lost==0;self.armed=('PUT',path)
-    def count(self,repository,recipient):
-        path='/api/v1/repos/'+repository['name']+'/collaborators/'+recipient['name']
-        with self.lock:return sum(self.counts.get((m,path),0) for m in ('PUT','DELETE'))
+def file_sha256(path, bound):
+    assert path.is_file() and not path.is_symlink() and 0 < path.stat().st_size <= bound, 'Owned bounded source/binary required'
+    digest = hashlib.sha256()
+    with path.open('rb') as file:
+        for chunk in iter(lambda: file.read(65536), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def proxy_binary_receipt(path):
+    path = path.absolute()
+    assert path.stat().st_uid == os.getuid() and path.stat().st_mode & 0o111, 'Owned executable proxy binary required'
+    digest = file_sha256(path, 64 << 20)
+    with path.open('rb') as file:
+        header = file.read(64)
+    assert len(header) == 64 and header[:6] == b'\x7fELF\x02\x01' and int.from_bytes(header[18:20], 'little') == 183, 'Compiled Linux ARM64 proxy required; no build occurs here'
+    return path, digest
+
+
+def proxy_state(proxy, label):
+    # Control failure must not overwrite the original native/RPC predicate.
+    try:
+        value = proxy.snapshot()
+        failures = [row for row in value['observations'] if row.get('failure')]
+        record(**{label: value}, forwardRequestCount=value['forwardRequestCount'], forwardObservations=value['observations'], proxyFailures=value['failures'], forwardFailure=failures[-1] if failures else None)
+        return value
+    except Exception as error:
+        record(**{label+'Unavailable': True, label+'FailureType': type(error).__name__})
+        return None
+
+
+def verify_proxy_runtime(run, command, proxy, binary, binary_sha, image, source):
+    identifier = command('ps', '-q', native_proxy.SERVICE_NAME)
+    assert re.fullmatch(r'[a-f0-9]{12,64}', identifier), 'Exact owned proxy container required'
+    value = json.loads(run('docker', 'inspect', '--format', '{"image":{{json .Image}},"reference":{{json .Config.Image}},"revision":{{json (index .Config.Labels "org.opencontainers.image.revision")}},"mounts":{{json .Mounts}},"ports":{{json .HostConfig.PortBindings}},"entrypoint":{{json .Config.Entrypoint}},"readOnly":{{json .HostConfig.ReadonlyRootfs}},"composeProject":{{json (index .Config.Labels "com.docker.compose.project")}},"composeService":{{json (index .Config.Labels "com.docker.compose.service")}}}', identifier))
+    destination = '/usr/local/bin/native-qualification-proxy'
+    assert value['image'] == image and value['reference'] == image and value['revision'] == source and value['readOnly'] is True, 'Proxy cached-image receipt mismatch'
+    assert value['composeProject'] == proxy.project and value['composeService'] == native_proxy.SERVICE_NAME and value['entrypoint'] == [destination], 'Proxy exact process/project mismatch'
+    mounts = value['mounts']
+    assert isinstance(mounts, list) and len(mounts) == 1 and mounts[0]['Type'] == 'bind' and mounts[0]['Source'] == str(binary) and mounts[0]['Destination'] == destination and mounts[0]['RW'] is False, 'Proxy read-only exact binary mount mismatch'
+    published = {name: bindings for name, bindings in value['ports'].items() if bindings}
+    assert published == {'8082/tcp': [{'HostIp': '127.0.0.1', 'HostPort': str(proxy.port)}]}, 'Only loopback control may be published; forwarding stays internal'
+    checksum = command('exec', '-T', native_proxy.SERVICE_NAME, '/bin/busybox', 'sha256sum', destination)
+    assert checksum.split() == [binary_sha, destination] and file_sha256(binary, 64 << 20) == binary_sha, 'Mounted/source binary hash mismatch'
+    receipt = {'image': image, 'sourceRevision': source, 'binarySha256': binary_sha,
+               'adapterGoSha256': file_sha256(ROOT/'scripts/native-qualification-proxy.go', 1 << 20),
+               'adapterModuleSha256': file_sha256(Path(native_proxy.__file__), 1 << 20),
+               'helperSha256': file_sha256(Path(__file__), 1 << 20),
+               'readOnlyBinaryMount': True, 'controlLoopbackOnly': True, 'forwardInternalOnly': True,
+               'nativeDestination': native_proxy.NATIVE_DESTINATION}
+    record(proxyRuntime=receipt)
+    return receipt
+
+
+def proxy_source_check():
+    native_proxy.self_check()
+    with tempfile.TemporaryDirectory(prefix='golf-proxy-pure-') as temporary:
+        binary = Path(temporary)/'proxy'
+        header = bytearray(64); header[:6] = b'\x7fELF\x02\x01'; header[18:20] = (183).to_bytes(2, 'little')
+        binary.write_bytes(header); binary.chmod(0o700)
+        selected, digest = proxy_binary_receipt(binary)
+        proxy = native_proxy.NativeProxy(39001, 'golf-rules49-0123456789')
+        service = proxy.compose_service('sha256:'+'a'*64, selected)
+        assert service['image'] == 'sha256:'+'a'*64 and service['pull_policy'] == 'never'
+        assert service['ports'] == ['127.0.0.1:39001:8082'] and service['expose'] == ['8081']
+        assert service['environment']['NATIVE_QUALIFICATION_NONCE'] == '${NATIVE_QUALIFICATION_NONCE:?}' and proxy._nonce not in json.dumps(service)
+        assert service['volumes'] == [str(selected)+':/usr/local/bin/native-qualification-proxy:ro'] and len(digest) == 64
+        # Pure inspector response validation; no Docker/native method is called.
+        destination = '/usr/local/bin/native-qualification-proxy'
+        image = 'sha256:'+'a'*64; revision = 'b'*40
+        observed = {'image':image,'reference':image,'revision':revision,'readOnly':True,
+                    'composeProject':proxy.project,'composeService':native_proxy.SERVICE_NAME,'entrypoint':[destination],
+                    'mounts':[{'Type':'bind','Source':str(selected),'Destination':destination,'RW':False}],
+                    'ports':{'8082/tcp':[{'HostIp':'127.0.0.1','HostPort':str(proxy.port)}]}}
+        def command(*arguments):
+            if arguments == ('ps','-q',native_proxy.SERVICE_NAME):return 'c'*64
+            assert arguments == ('exec','-T',native_proxy.SERVICE_NAME,'/bin/busybox','sha256sum',destination)
+            return digest+'  '+destination
+        def run(*arguments):
+            assert arguments[:2] == ('docker','inspect') and arguments[-1] == 'c'*64
+            return json.dumps(observed)
+        prior = dict(PROOF)
+        try:
+            receipt = verify_proxy_runtime(run,command,proxy,selected,digest,image,revision)
+            assert receipt['binarySha256'] == digest and receipt['sourceRevision'] == revision and proxy._nonce not in json.dumps(receipt)
+            for field, value in (('image','sha256:'+'d'*64),('reference','mutable-tag'),('readOnly',False),('composeProject','foreign'),
+                                 ('mounts',[{'Type':'bind','Source':str(selected),'Destination':destination,'RW':True}]),
+                                 ('ports',{'8081/tcp':[{'HostIp':'0.0.0.0','HostPort':'8081'}]})):
+                previous = observed[field]; observed[field] = value
+                try: verify_proxy_runtime(run,command,proxy,selected,digest,image,revision)
+                except AssertionError:pass
+                else:raise AssertionError('Foreign/unbounded proxy runtime binding accepted')
+                finally:observed[field] = previous
+            try:verify_proxy_runtime(run,command,proxy,selected,'e'*64,image,revision)
+            except AssertionError:pass
+            else:raise AssertionError('Unmatched mounted binary hash accepted')
+        finally:PROOF.clear();PROOF.update(prior)
+        header[18:20] = (62).to_bytes(2, 'little'); binary.write_bytes(header)
+        try: proxy_binary_receipt(binary)
+        except AssertionError: pass
+        else: raise AssertionError('Foreign architecture proxy accepted')
+    launcher = Path(__file__).read_text()
+    assert '--proxy-binary' in launcher and 'http://'+'host.docker.internal:' not in launcher and 'Threading'+'HTTPServer' not in launcher
+    assert 'http://native-qualification-proxy:8081' in launcher and "proxy.close()" in launcher and "proxy.ready()" in launcher
+
 
 def access_operation(row,original,actor,phase):
     assert row['idempotencyKey']==original['idempotencyKey'] and row['repository']==original['repository']
@@ -172,28 +211,16 @@ def self_check():
     try:access_operation({**row,'phase':'DISPATCH_UNKNOWN'},original,actor,'DISPATCH_UNKNOWN')
     except AssertionError:pass
     else:raise AssertionError('Unknown adopted fresh observation')
-    launcher=Path(__file__).read_text()
-    assert "ThreadingHTTPServer(('127.0.0.1',port)" in launcher and "assert status==204 and not body" in launcher and "--pull','never'" in launcher
-    proxy=object.__new__(NativeProxy);proxy.lock=threading.Lock();proxy.counts={};proxy.lost=0;proxy.armed=None
-    path='/api/v1/repos/owner/fixture/collaborators/recipient';proxy.arm(path)
-    assert not proxy.observe('PUT',path+'-other',204,b'') and proxy.lost==0 and proxy.armed==('PUT',path)
-    assert not proxy.observe('GET',path,204,b'') and proxy.lost==0
-    assert proxy.observe('PUT',path,204,b'') and proxy.lost==1 and proxy.armed is None
-    assert not proxy.observe('PUT',path,204,b'') and proxy.counts[('PUT',path)]==2
-    proxy.lost=0;proxy.arm(path)
-    for status,body in ((200,b''),(204,b'PRIVATE_SENTINEL')):
-        try:proxy.observe('PUT',path,status,body)
-        except AssertionError:pass
-        else:raise AssertionError('Non204 or nonempty native receipt was manufactured as loss proof')
-    assert proxy.lost==0 and proxy.armed==('PUT',path)
+    proxy_source_check()
     print('PASS: pure048 wire, exact actor/target/intent/phase receipts, inherited permission and unknown non-adoption; no runtime resources')
 
 def main():
     global ROOT
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--self-check',action='store_true');parser.add_argument('--image');parser.add_argument('--output',type=Path);parser.add_argument('--ui',action='store_true');parser.add_argument('--stack-root',type=Path,default=ROOT);args=parser.parse_args()
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--self-check',action='store_true');parser.add_argument('--image');parser.add_argument('--proxy-binary',type=Path);parser.add_argument('--output',type=Path);parser.add_argument('--ui',action='store_true');parser.add_argument('--stack-root',type=Path,default=ROOT);args=parser.parse_args()
     if args.self_check:self_check();return
     ROOT=args.stack_root.resolve()
-    if not args.image or not args.output:parser.error('--image and a new --output are required')
+    if not args.image or not args.output or not args.proxy_binary:parser.error('--image, --proxy-binary and a new --output are required')
+    binary,binary_sha=proxy_binary_receipt(args.proxy_binary)
     args.output.mkdir(parents=True,exist_ok=False,mode=0o700);args.output.chmod(0o700);common.OUTPUT=args.output.resolve();record(status='running',browser='pending' if args.ui else 'not_requested')
     if args.ui:assert (ROOT/'web/node_modules/playwright/index.mjs').is_file(),'Require existing local browser dependency; no installation'
     spec=importlib.util.spec_from_file_location('invitation_stack_helpers',ROOT/'scripts/observability-smoke.py');helpers=importlib.util.module_from_spec(spec);spec.loader.exec_module(helpers)
@@ -209,8 +236,8 @@ def main():
     space=run('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/bin/df',image,'-Pk','/')
     assert int(space.splitlines()[-1].split()[3])>=2*1024*1024,'Require 2 GiB free VM disk before fresh fixture'
     project='golf-access48-'+secrets.token_hex(5);ports=helpers.free_ports(3);previous=smoke.GOLF,smoke.GITEA;smoke.GOLF,smoke.GITEA='http://127.0.0.1:'+str(ports[0]),'http://127.0.0.1:'+str(ports[1]);actors={};repositories={};organizations={};bearers=[];started=False;passed=False
-    record(project=project,selectedImage=image,sourceRevision=source,cleanup='not_created',proxy='owned_loopback_fixed_destination')
-    with NativeProxy(smoke.GITEA,ports[2],project) as proxy, tempfile.TemporaryDirectory(prefix=project+'-') as temporary:
+    record(project=project,selectedImage=image,sourceRevision=source,cleanup='not_created',proxy='owned_inside_compose_fixed_native_destination')
+    with native_proxy.NativeProxy(ports[2],project) as proxy, tempfile.TemporaryDirectory(prefix=project+'-') as temporary:
         directory=Path(temporary);directory.chmod(0o700);values={k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD')};values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),GOLF_PUBLIC_URL=smoke.GOLF,GOLF_PUSH_CI_ENABLED='false')
         env_file,override=directory/'core.env',directory/'proof.yaml';helpers.private_write(env_file,''.join(k+'='+v+'\n' for k,v in values.items()));helpers.private_write(override,f'''services:
   golf:
@@ -218,13 +245,16 @@ def main():
     pull_policy: never
     ports: !override ["127.0.0.1:{ports[0]}:8080"]
     environment:
-      GITEA_URL: http://host.docker.internal:{ports[2]}
+      GITEA_URL: http://native-qualification-proxy:8081
   gitea:
     environment:
       GITEA__server__ROOT_URL: {smoke.GITEA}/
     ports: !override ["127.0.0.1:{ports[1]}:3000"]
 ''')
-        compose=['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(ROOT/'compose.yaml'),'-f',str(override)]
+        environment.update(proxy.environment())
+        proxy_override=directory/'proxy.json'
+        helpers.private_write(proxy_override,json.dumps({'services':{native_proxy.SERVICE_NAME:proxy.compose_service(image,binary),'golf':{'depends_on':{native_proxy.SERVICE_NAME:{'condition':'service_started'}}}}}))
+        compose=['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(ROOT/'compose.yaml'),'-f',str(override),'-f',str(proxy_override)]
         def command(*arguments,**kwargs):return run(*compose,*arguments,**kwargs)
         def admin(*arguments):return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*arguments)
         def operator(action,payload):
@@ -250,7 +280,7 @@ def main():
         def own(recipient,identifier,hidden=False):
             r=call(recipient,'ListOwnRepositoryInvitations',{'page':{'page':1,'limit':20}});assert r.get('page',{}).get('nextPage',0)==0;rows=r.get('invitations',[]);assert len(rows)<=20 and len({x['id'] for x in rows})==len(rows);return invitation(next(x for x in rows if x['id']==identifier),recipient,hidden=hidden)
         def resolve(repository,actor,recipient):
-            t=target(repository,actor);c=checked_rpc(actor['session'],ACCESS+'ResolveRepositoryCollaborator',{**t,'userLogin':recipient['name']})['collaborator'];assert c['user']['id']==recipient['id'] and c['user']['login']==recipient['name'] and revision(c['revision']);return t,c
+            t=target(repository,actor);c=checked_rpc(actor['session'],ACCESS+'ResolveRepositoryCollaborator',{**t,'userLogin':recipient['name']})['collaborator'];assert c['user']['id']==recipient['id'] and c['user']['login']==recipient['name'] and revision(c['revision']);assert not c.get('actualOrganizationOwner',False) or c['permission']=='owner';return t,c
         def intent(repository,actor,recipient,permission=None):
             t,c=resolve(repository,actor,recipient);p={**t,'userLogin':recipient['name'],'userId':recipient['id'],'expectedCollaboratorRevision':c['revision'],'idempotencyKey':key()}
             if permission:p['permission']=permission
@@ -275,8 +305,8 @@ def main():
                 remove,_=intent(repository,actor,recipient);removed,current=mutate(repository,actor,recipient,remove);generations.append(int(removed['generation']));assert not current.get('isDirect',False);member(repository,recipient,False)
             assert generations==sorted(set(generations));return generations
         try:
-            stage('fresh cached048 core and owned loopback forwarding prerequisite');started=True;record(cleanup='pending');command('up','-d','--no-build','--pull','never',timeout=180)
-            try:smoke.ready()
+            stage('fresh cached048 core and owned internal-network forwarding prerequisite');started=True;record(cleanup='pending');command('up','-d','--no-build','--pull','never',timeout=180)
+            try:proxy.ready();verify_proxy_runtime(run,command,proxy,binary,binary_sha,image,source);smoke.ready()
             except RuntimeError:
                 # Public closed dependency states only; no logs/env/token/body dump.
                 diagnostic={}
@@ -320,13 +350,13 @@ def main():
                             else:
                                 matching=[v for v in templates if len(v.split('%',1)[0])>=12 and runtime_error.startswith(v.split('%',1)[0])]
                                 diagnostic['closedSourceErrorTemplate']=sorted(matching)[0] if matching else 'unmatched_private_error_withheld'
-                    observation=subprocess.run(['docker','exec',container,'/bin/wget','-q','-T','3','-O','-','http://host.docker.internal:'+str(ports[2])+'/api/v1/version'],cwd=ROOT,env=environment,capture_output=True,timeout=10)
+                    observation=subprocess.run(['docker','exec',container,'/bin/wget','-q','-T','3','-O','-','http://native-qualification-proxy:8081/api/v1/version'],cwd=ROOT,env=environment,capture_output=True,timeout=10)
                     diagnostic['containerProxyReadExit']=observation.returncode
                     try:diagnostic['containerProxyVersionMatches']=len(observation.stdout)<=4096 and json.loads(observation.stdout).get('version')=='1.27.3'
                     except Exception:diagnostic['containerProxyVersionMatches']=False
-                record(startupObservation=diagnostic,proxyRequests=sum(proxy.counts.values()),proxyFailures=proxy.failures)
+                record(startupObservation=diagnostic);proxy_state(proxy,'startupProxyState')
                 raise
-            before=runtime();record(runtime=before)
+            before=runtime();proxy_before=verify_proxy_runtime(run,command,proxy,binary,binary_sha,image,source);record(runtime=before)
             stage('ordinary actors and managed local sessions; no native site administrator bypass')
             for role in ('owner','recipient','directadmin','outsider','golfadmin','teamadmin'):
                 actor={'role':role,'name':project+'-'+role,'created':False,'loggedIn':False};actors[role]=actor;admin('create','--username',actor['name'],'--email',actor['name']+'@example.invalid','--random-password','--must-change-password=false');actor['created']=True;actor['token']=admin('generate-access-token','--username',actor['name'],'--token-name',project,'--scopes','write:user,write:organization,write:repository','--raw');u=smoke.provider(actor['token'],'GET','user');assert not u['is_admin'];actor.update(id=str(u['id']),email=actor['name']+'@golf.invalid',password='Access48 fixture '+secrets.token_urlsafe(24));operator('create',{'username':actor['name'],'email':actor['email'],'password':actor['password'],'forge_token':actor['token'],'is_instance_admin':role=='golfadmin'});login(actor)
@@ -341,7 +371,7 @@ def main():
             smoke.provider(owner['token'],'PUT','repos/'+orgrepo['name']+'/collaborators/'+direct['name'],{'permission':'admin'},204)
             stage('organization owner/member-direct admin roles below inherited admin; removal preserves team access')
             grant_cycle(orgrepo,owner,recipient,('read','write','admin'));grant_cycle(orgrepo,direct,recipient,('read',));assert member(orgrepo,recipient,False) is None
-            effective=smoke.provider(owner['token'],'GET','repos/'+orgrepo['name']+'/collaborators/'+recipient['name']+'/permission');assert str(effective['user']['id'])==recipient['id'] and effective['permission']=='admin'
+            effective=smoke.provider(owner['token'],'GET','repos/'+orgrepo['name']+'/collaborators/'+recipient['name']+'/permission');assert str(effective['user']['id'])==recipient['id'] and effective['permission']=='owner'
             stage('existing-account invitations explicitly request each role; same-key status/replay sends no duplicate')
             invitation_receipts=[]
             for repository,issuer in ((personal,owner),(orgrepo,owner),(personal,direct),(orgrepo,direct)):
@@ -351,7 +381,7 @@ def main():
                     p,_=intent(repository,issuer,recipient);mutate(repository,issuer,recipient,p);member(repository,recipient,False)
             record(requestedInvitations=invitation_receipts)
             stage('shared retained generation rejects original direct preview and pending invitation after masked add/remove ABA')
-            pending,_=create(orgrepo,owner,recipient,'write');old,c=intent(orgrepo,owner,recipient,'read');assert not c.get('isDirect',False) and c['permission']=='admin';grant_cycle(orgrepo,direct,recipient,('read',));_,now=resolve(orgrepo,owner,recipient);assert now['permission']==c['permission'] and not now.get('isDirect',False) and now['revision']!=c['revision'];count=proxy.count(orgrepo,recipient)
+            pending,_=create(orgrepo,owner,recipient,'write');old,c=intent(orgrepo,owner,recipient,'read');assert not c.get('isDirect',False) and c['permission']=='owner' and c.get('actualOrganizationOwner') is False;grant_cycle(orgrepo,direct,recipient,('read',));_,now=resolve(orgrepo,owner,recipient);assert now['permission']==c['permission'] and not now.get('isDirect',False) and now['revision']!=c['revision'];count=proxy.count(orgrepo,recipient)
             checked_rpc(owner['session'],ACCESS+'SetRepositoryCollaborator',old,expected=400,code='failed_precondition');assert proxy.count(orgrepo,recipient)==count
             result,original=respond(recipient,pending);operation(result['operation'],original,'REJECTED');assert inspect_invitation(recipient,original,'REJECTED')==result['operation'] and proxy.count(orgrepo,recipient)==count;member(orgrepo,recipient,False)
             stage('role-loss, wrong immutable IDs, owner/self, Origin and bearer boundaries do not mutate')
@@ -381,10 +411,10 @@ def main():
             if args.ui:
                 stage('actual requested-role forms and original successful receipt inspection;12 captures')
                 ui_repo=create_repo(owner,'browser');config={'stackRoot':str(ROOT),'golf':smoke.GOLF,'gitea':smoke.GITEA,'repository':ui_repo['name'],'repositoryId':ui_repo['id'],'ownerId':ui_repo['ownerId'],'issuerEmail':owner['email'],'issuerPassword':owner['password'],'recipientId':recipient['id'],'recipientUsername':recipient['name'],'ownerToken':owner['token'],'screenshots':str(common.OUTPUT),'runtime':before};result=subprocess.run(['node',str(Path(__file__).with_name('repository-access-intents-browser.mjs'))],cwd=ROOT,env=environment,input=json.dumps(config).encode(),capture_output=True,timeout=360);assert len(result.stdout)<=65536 and len(result.stderr)<=65536;path=common.OUTPUT/'browser-manifest.json';assert path.is_file(),'Browser safe staged manifest missing';b=json.loads(path.read_text());record(browser=b['status'],captures=b.get('captures',[]),browserFailedStage=b.get('failedStage'));assert result.returncode==0 and b['status']=='browser_checks_passed_parent_native_cleanup_pending' and len(b['captures'])==12 and b['runtime']==before,'Browser predicate failed; safe manifest retained';print(result.stdout.decode().strip(),flush=True)
-            assert runtime()==before and proxy.failures==0 and proxy.armed is None;record(nativeChecks='passed',runtimeUnchanged=True,proxyMutationCount=sum(proxy.counts.values()));passed=True
+            assert runtime()==before and verify_proxy_runtime(run,command,proxy,binary,binary_sha,image,source)==proxy_before and proxy.failures==0 and proxy.armed is None;record(nativeChecks='passed',runtimeUnchanged=True,proxyMutationCount=sum(proxy.counts.values()));passed=True
         finally:
             if not passed:
-                initial=sys.exc_info()[1];frames=traceback.extract_tb(initial.__traceback__) if initial else [];record(failedStage=common.STAGE,failedProcedure=PROOF.get('lastProcedure'),originalFailureType=type(initial).__name__ if initial else 'Unfinished',originalFailureLine=frames[-1].lineno if frames else None)
+                proxy_state(proxy,'failedProxyState');initial=sys.exc_info()[1];frames=traceback.extract_tb(initial.__traceback__) if initial else [];record(failedStage=common.STAGE,failedProcedure=PROOF.get('lastProcedure'),originalFailureType=type(initial).__name__ if initial else 'Unfinished',originalFailureLine=frames[-1].lineno if frames else None)
             print('CHECK: exact owned fixture cleanup',flush=True);failures=[]
             for actor,identifier in bearers:
                 try:checked_rpc(actor['session'],'ApiCredentialService/RevokeApiCredential',{'credentialId':identifier})
@@ -421,6 +451,11 @@ def main():
                 if actor.get('created'):
                     try:admin('delete','--username',actor['name'],'--purge')
                     except Exception:failures.append('native purge')
+            # Close while the owned network/control port still exists.
+            try:
+                proxy.close();record(finalProxyState=proxy.snapshot(),proxyCleanup='passed')
+            except Exception as error:
+                proxy_state(proxy,'cleanupProxyState');record(proxyCleanup='failed',proxyCleanupFailureType=type(error).__name__);failures.append('owned proxy control')
             try:
                 if started:
                     command('down','--volumes','--remove-orphans',timeout=180)
