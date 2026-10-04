@@ -465,7 +465,7 @@ func agentProtocol(ctx context.Context, in io.Writer, output io.Reader, j AgentJ
 					} `json:"total"`
 				} `json:"tokenUsage"`
 			}
-			if json.Unmarshal(m.Params, &p) != nil || p.ThreadID != thread || (p.TurnID != "" && p.TurnID != turn) || !started || p.TokenUsage.Total.TotalTokens == nil || *p.TokenUsage.Total.TotalTokens < 0 {
+			if json.Unmarshal(m.Params, &p) != nil || p.ThreadID != thread || ((j.Observe != nil || p.TurnID != "") && p.TurnID != turn) || !started || p.TokenUsage.Total.TotalTokens == nil || *p.TokenUsage.Total.TotalTokens < 0 {
 				return out, ErrInfrastructure
 			}
 			nativeTotal := *p.TokenUsage.Total.TotalTokens

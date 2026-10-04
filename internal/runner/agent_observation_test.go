@@ -34,7 +34,7 @@ func TestAgentObservationBoundedNativeProjection(t *testing.T) {
 {"method":"item/agentMessage/delta","params":{"threadId":"thread","turnId":"turn","itemId":"a","delta":"PRIVATE"}}
 {"id":55,"method":"item/commandExecution/requestApproval","params":{"threadId":"thread","turnId":"turn","itemId":"cmd","command":"PRIVATE","reason":"PRIVATE"}}
 ` + observationItem("item/completed", "cmd", "commandExecution", "declined", "") + `{"method":"turn/plan/updated","params":{"threadId":"thread","turnId":"turn","explanation":"PRIVATE","plan":[{"step":"Inspect repository","status":"completed"}]}}
-{"method":"thread/tokenUsage/updated","params":{"threadId":"thread","tokenUsage":{"total":{"totalTokens":0}}}}
+{"method":"thread/tokenUsage/updated","params":{"threadId":"thread","turnId":"turn","tokenUsage":{"total":{"totalTokens":0}}}}
 ` + observationItem("item/started", "a", "agentMessage", "", "") + `{"method":"item/completed","params":{"threadId":"thread","turnId":"turn","item":{"id":"a","type":"agentMessage","phase":"commentary","text":"Checked source"}}}
 ` + observationItem("item/started", "b", "agentMessage", "", "") + `{"method":"item/completed","params":{"threadId":"thread","turnId":"turn","item":{"id":"b","type":"agentMessage","phase":"final_answer","text":"Proposed change"}}}
 ` + observationEnd
@@ -97,7 +97,7 @@ func TestAgentObservationRejectsUnboundMalformedLifecycle(t *testing.T) {
 func TestAgentObservationUsagePresenceAndBounds(t *testing.T) {
 	for name, usage := range map[string]string{"negative": "-1", "overflow": "9223372036854775808", "null": "null", "text": "\"1\""} {
 		t.Run(name, func(t *testing.T) {
-			stream := observationStart + `{"method":"thread/tokenUsage/updated","params":{"threadId":"thread","tokenUsage":{"total":{"totalTokens":` + usage + `}}}}` + "\n" + observationEnd
+			stream := observationStart + `{"method":"thread/tokenUsage/updated","params":{"threadId":"thread","turnId":"turn","tokenUsage":{"total":{"totalTokens":` + usage + `}}}}` + "\n" + observationEnd
 			_, e, _ := observedProtocol(t, stream, func(context.Context, AgentObservation) error { return nil })
 			if e == nil {
 				t.Fatal("invalid usage accepted")
@@ -137,7 +137,7 @@ func TestAgentObservationCallbackRefusalStopsProtocol(t *testing.T) {
 	}
 }
 func TestAgentObservationProjectionCaps(t *testing.T) {
-	usage := `{"method":"thread/tokenUsage/updated","params":{"threadId":"thread","tokenUsage":{"total":{"totalTokens":0}}}}` + "\n"
+	usage := `{"method":"thread/tokenUsage/updated","params":{"threadId":"thread","turnId":"turn","tokenUsage":{"total":{"totalTokens":0}}}}` + "\n"
 	for name, body := range map[string]string{
 		"event count":        strings.Repeat(usage, 511),
 		"message bytes":      observationItem("item/started", "a", "agentMessage", "", "") + observationItem("item/completed", "a", "agentMessage", "", strings.Repeat("a", 65537)),
@@ -194,7 +194,7 @@ func TestAgentObservationProtocolOrderAndMissingUsage(t *testing.T) {
 		"thread before initialize": strings.TrimPrefix(observationStart, "{\"id\":1,\"result\":{}}\n") + observationEnd,
 		"duplicate initialize":     strings.Replace(observationStart, "{\"id\":1,\"result\":{}}\n", strings.Repeat("{\"id\":1,\"result\":{}}\n", 2), 1) + observationEnd,
 		"duplicate thread":         strings.Replace(observationStart, "{\"id\":2,\"result\":{\"thread\":{\"id\":\"thread\"}}}\n", strings.Repeat("{\"id\":2,\"result\":{\"thread\":{\"id\":\"thread\"}}}\n", 2), 1) + observationEnd,
-		"missing usage":            observationStart + `{"method":"thread/tokenUsage/updated","params":{"threadId":"thread","tokenUsage":{"total":{}}}}` + "\n" + observationEnd,
+		"missing usage":            observationStart + `{"method":"thread/tokenUsage/updated","params":{"threadId":"thread","turnId":"turn","tokenUsage":{"total":{}}}}` + "\n" + observationEnd,
 		"malformed json":           observationStart + "{\n" + observationEnd,
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -207,7 +207,7 @@ func TestAgentObservationProtocolOrderAndMissingUsage(t *testing.T) {
 }
 
 func TestAgentObservationCannotChangeBudgetEvidence(t *testing.T) {
-	r, e, in := observedProtocol(t, observationStart+`{"method":"thread/tokenUsage/updated","params":{"threadId":"thread","tokenUsage":{"total":{"totalTokens":1001}}}}`+"\n"+observationEnd, func(_ context.Context, v AgentObservation) error {
+	r, e, in := observedProtocol(t, observationStart+`{"method":"thread/tokenUsage/updated","params":{"threadId":"thread","turnId":"turn","tokenUsage":{"total":{"totalTokens":1001}}}}`+"\n"+observationEnd, func(_ context.Context, v AgentObservation) error {
 		if v.TotalTokens != nil {
 			*v.TotalTokens = 0
 		}
@@ -215,5 +215,32 @@ func TestAgentObservationCannotChangeBudgetEvidence(t *testing.T) {
 	})
 	if e != nil || r.Tokens != 1001 || r.State != "budget_exceeded" || !strings.Contains(in, "turn/interrupt") {
 		t.Fatal("consumer changed native budget evidence")
+	}
+}
+
+func TestAgentObservationPinnedUsageTurnBindingAndNullPhase(t *testing.T) {
+	usage := `{"method":"thread/tokenUsage/updated","params":{"threadId":"thread","turnId":"turn","tokenUsage":{"total":{"totalTokens":0}}}}` + "\n"
+	for name, notification := range map[string]string{"absent": strings.Replace(usage, `"turnId":"turn",`, "", 1), "foreign": strings.Replace(usage, `"turnId":"turn"`, `"turnId":"foreign"`, 1)} {
+		t.Run(name, func(t *testing.T) {
+			_, e, _ := observedProtocol(t, observationStart+notification+observationEnd, func(context.Context, AgentObservation) error { return nil })
+			if e == nil {
+				t.Fatal("observer accepted unbound usage")
+			}
+		})
+	}
+	// Existing result-only callers retain their earlier usage projection.
+	var input bytes.Buffer
+	r, e := agentProtocol(context.Background(), &input, strings.NewReader(observationStart+strings.Replace(usage, `"turnId":"turn",`, "", 1)+observationEnd), AgentJob{TokenBudget: 1000})
+	if e != nil || r.State != "succeeded" {
+		t.Fatal("nil observer usage compatibility changed")
+	}
+	var got []AgentObservation
+	completed := strings.Replace(observationItem("item/completed", "message", "agentMessage", "", "legacy reply"), `"text":"legacy reply"`, `"phase":null,"text":"legacy reply"`, 1)
+	r, e, _ = observedProtocol(t, observationStart+usage+observationItem("item/started", "message", "agentMessage", "", "")+completed+observationEnd, func(_ context.Context, v AgentObservation) error { got = append(got, v); return nil })
+	if e != nil || r.State != "succeeded" || r.Summary != "legacy reply" {
+		t.Fatal("pinned null phase compatibility failed")
+	}
+	if len(got) != 5 || got[2].Kind != "usage_updated" || got[2].TotalTokens == nil || *got[2].TotalTokens != 0 || got[3].Kind != "assistant_message" || got[3].Phase != "" {
+		t.Fatal("unknown phase or reportedzero fabricated")
 	}
 }
