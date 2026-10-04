@@ -369,6 +369,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .account-dropdown button { display:flex; align-items:center; gap:10px; width:100%; min-height:44px; padding:10px; text-align:left; border:0; background:transparent; color:var(--text); }
 .account-dropdown button:hover { background:var(--hover); color:var(--accent); }
 .settings-profile { margin:24px 0; }
+.credential-form-content > .settings-profile { margin:0; }
 .settings-profile>div { display:grid; grid-template-columns:minmax(140px,180px) minmax(0,1fr); gap:12px; padding:12px 0; border-bottom:1px solid var(--line); }
 .settings-profile dt { color:var(--muted); }
 .settings-profile dd { margin:0; min-width:0; overflow-wrap:anywhere; }
@@ -417,7 +418,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .data-table td .credential-actions > * { flex-shrink:0; }
 .data-table-sort { display:inline-flex; gap:6px; align-items:center; padding:3px 0; background:none; border:0; color:inherit; font:inherit; cursor:pointer; }
 .data-table-sort:hover { color:var(--text); }
-.data-table-empty { color:var(--muted); padding:22px 15px !important; }
+.data-table-empty { color:var(--muted); padding:12px 15px !important; }
 .data-table-pagination { display:flex; align-items:center; flex-wrap:wrap; gap:12px 18px; padding:12px 15px; border-top:1px solid var(--line); font-size:.875rem; }
 .data-table-pagination label { display:flex; align-items:center; gap:8px; color:var(--muted); }
 .data-table-page-size { width:auto; min-height:40px; padding:6px 28px 6px 10px; font-size:.875rem; }
@@ -495,7 +496,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .quota-window strong { font-variant-numeric:tabular-nums; }
 @media(max-width:720px) { :root { --section-gap:20px; --panel-padding:16px; } }
 
-.data-table-panel > .data-table-scope { padding:12px 16px; }
+.data-table-panel > .data-table-scope { margin:0; padding:8px 16px; }
 
 /* Shared compact inventory actions and read-only item details. */
 .row-actions { display:flex; align-items:center; gap:4px; flex-wrap:nowrap; }

@@ -1,12 +1,15 @@
 import { expect, test, type Page } from '@playwright/test';
-import { GetRepositoryRulesRequestSchema, GetRepositoryRulesResponseSchema, type GetRepositoryRulesResponse } from '../src/gen/golf/v1/golf_pb';
+import { GetSessionResponseSchema, GetRepositoryAccessResponseSchema, GetRepositoryRulesRequestSchema, GetRepositoryRulesResponseSchema, type GetRepositoryRulesResponse } from '../src/gen/golf/v1/golf_pb';
 import { create, clone } from '@bufbuild/protobuf';
 import { reject, request, respond } from './rpc';
 const timestamp = '2026-10-04T00:00:00Z';
 const initial = create(GetRepositoryRulesResponseSchema, { repositoryId: '9007199254740993', ownerId: '42', accessRevision: 'a'.repeat(64), rulesRevision: 'b'.repeat(64), branchProtections: [{ ruleName: 'release/**', priority: '-2', requiredApprovals: '9007199254740993', statusCheckContexts: ['test / matrix-a'], enableStatusCheck: true, requireSignedCommits: true, blockAdminMergeOverride: true, pushUsernames: ['alice'], protectedFilePatterns: '.github/workflows/**', createdAt: timestamp, updatedAt: timestamp }, { ruleName: 'main', priority: '10', requiredApprovals: '1', enablePush: true, createdAt: timestamp, updatedAt: timestamp }], tagProtections: [{ id: '9007199254740994', namePattern: 'v*', allowedUsernames: ['alice'], createdAt: timestamp, updatedAt: timestamp }], mergeConfiguration: { allowMergeCommits: true, allowSquashMerge: true, defaultMergeStyle: 'squash', defaultUpdateStyle: 'merge' } });
-async function backend(page: Page) {
+async function backend(page: Page, main = false, deniedAccess = false) {
  const state = { response: initial, denied: false, calls: 0, barrier: undefined as Promise<void> | undefined, reads: [] as unknown[] };
  await page.route('**/rpc/**', async route => {
+  const method = route.request().url().split('/').at(-1);
+  if(main && method === 'GetSession') return respond(route, GetSessionResponseSchema, {user:{id:'42',login:'alice'}});
+  if(main && method === 'GetRepositoryAccess') { if(deniedAccess) return reject(route,'permission_denied','Current repository access is unavailable.'); return respond(route,GetRepositoryAccessResponseSchema,{access:{repositoryId:initial.repositoryId,ownerId:initial.ownerId,owner:{id:'42',login:'alice'},revision:initial.accessRevision,currentPermission:'owner',canManage:false}}); }
   expect(route.request().url()).toContain('/golf.v1.RepositoryRulesService/GetRepositoryRules'); const input = request(route, GetRepositoryRulesRequestSchema); state.reads.push(input); state.calls++;
   expect(input.repository).toMatchObject({ owner: 'alice', name: 'example' }); expect(input.repositoryId).toBe('9007199254740993'); expect(input.ownerId).toBe('42'); expect(input.expectedRevision).toBe('a'.repeat(64));
   if (state.barrier) await state.barrier;
@@ -44,3 +47,20 @@ for (const theme of ['light', 'dark']) for (const width of [390, 1440]) test(`${
  test('account switch cannot release a held previous account observation', async ({ page }) => {
   const state = await backend(page); await open(page); let release!: () => void; state.barrier = new Promise<void>(r => { release = r; }); await page.getByRole('button', { name: 'Refresh repository rules' }).click(); await expect.poll(() => state.calls).toBe(2); state.denied = true; await page.getByRole('button', { name: 'Fixture switch account' }).click(); release(); await expect(page.getByRole('alert')).toHaveText('Current rules authority is unavailable.'); await expect(page.getByRole('table')).toHaveCount(0);
  });
+
+// The full route must use the shared contextual shell/client and allow readable
+// archived/mirror observations even when current write controls are unavailable.
+test('product rules route uses verified identity and one contextual settings navigation', async ({ page }) => {
+ const state = await backend(page, true); await page.goto('/alice/example/settings/rules');
+ await expect(page.getByRole('heading', { name: 'Rules and merge policy', exact: true })).toBeVisible();
+ await expect(page.getByRole('navigation', { name: 'Repository settings', exact: true })).toHaveCount(1);
+ await expect(page.getByRole('table', { name: 'Branch protection rules', exact: true })).toBeVisible();
+ await expect(page.getByRole('navigation', { name: 'Repository settings', exact: true }).getByRole('link', { name: 'Rules and merge policy', exact: true })).toHaveAttribute('aria-current', 'page');
+ // Main uses React development StrictMode: the aborted mount is followed by its remount read.
+ expect(state.calls).toBe(2); await expect(page.getByRole('form')).toHaveCount(0);
+});
+test('product rules route refuses private inventory when parent access is denied', async ({ page }) => {
+ const state = await backend(page, true, true); await page.goto('/alice/example/settings/rules');
+ await expect(page.getByRole('alert')).toContainText('Current repository access is unavailable.');
+ await expect(page.getByRole('table')).toHaveCount(0); expect(state.calls).toBe(0);
+});
