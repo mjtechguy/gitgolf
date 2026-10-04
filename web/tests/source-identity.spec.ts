@@ -201,3 +201,40 @@ test('sign-out fences a delayed resolver and reopening under another account per
   await expect(page.getByRole('img', { name: 'Private badge' })).toBeVisible();
   expect(state.reads.every(input => input.repositoryId === repositoryId && input.ref === head)).toBe(true);
 });
+
+
+for (const ref of ['release', shaName]) test(`conflicting explicit namespaces for ${ref} are refused before resolver and source calls`, async ({ page }) => {
+  const state = await fixture(page);
+  await page.goto(`/repositories/alex/identity?ref=${ref}&branch=${ref}&tag=${ref}&path=src/file.ts`);
+  await expect(alert(page)).toContainText('both branch and tag namespaces');
+  expect(state.resolverReads).toHaveLength(0); expect(state.reads).toHaveLength(0); expect(state.images).toHaveLength(0);
+  await expect(page.getByLabel('Plain text preview of file.ts')).toHaveCount(0);
+  await expect(page.getByRole('navigation', { name: 'Repository files', exact: true })).toHaveCount(0);
+});
+
+test('immutable SHA keeps nonmatching branch and tag contextual labels without named resolution', async ({ page }) => {
+  const state = await fixture(page);
+  await page.goto(`/alex/identity/blob/${head}/src/file.ts?branch=main&tag=release`);
+  await expect(page.getByLabel('Plain text preview of file.ts')).toContainText('PRIVATE');
+  expect(state.resolverReads).toHaveLength(0);
+  expect(state.reads.every(input => input.repositoryId === repositoryId && input.ref === head)).toBe(true);
+});
+
+test('a late resolver cannot restore private content over a conflicting selection', async ({ page }) => {
+  const state = await fixture(page);
+  await page.goto(`/alex/identity/blob/${head}/src/file.ts?branch=main`);
+  await expect(page.getByLabel('Plain text preview of file.ts')).toContainText('PRIVATE');
+  state.holdResolver = true; await page.getByRole('button', { name: 'Latest branch head', exact: true }).click();
+  await expect.poll(() => state.held.length).toBeGreaterThan(0);
+  await page.evaluate(() => {
+    history.pushState({}, '', '/repositories/alex/identity?ref=release&branch=release&tag=release&path=src/file.ts');
+    dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await expect(alert(page)).toContainText('both branch and tag namespaces');
+  const resolverCount = state.resolverReads.length, sourceCount = state.reads.length;
+  state.holdResolver = false; state.held.splice(0).forEach(resolve => resolve());
+  await expect(page.getByLabel('Plain text preview of file.ts')).toHaveCount(0);
+  await expect(page.getByRole('navigation', { name: 'Repository files', exact: true })).toHaveCount(0);
+  expect(state.resolverReads).toHaveLength(resolverCount); expect(state.reads).toHaveLength(sourceCount);
+  await expect(page).toHaveURL(/ref=release&branch=release&tag=release/);
+});

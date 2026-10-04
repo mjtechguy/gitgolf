@@ -59,7 +59,10 @@ function SourcePanel({ repositoryKey, queryKey, location, defaultBranch,reposito
   const router = useRouter();
   const ref = location.ref;
   const query = useQuery({ ...privateQuery, queryKey: [...queryKey, 'source', repositoryId, ref, location.path, location.branch, location.tag],
-    queryFn: ({ signal }) => readSourceSnapshot(repositoryKey, repositoryId, ref, location.path, signal, location.tag === ref ? 'tag' : location.branch === ref && ref ? 'branch' : undefined) });
+    queryFn: ({ signal }) => {
+      if (ref && location.branch === ref && location.tag === ref) throw new ConnectError('This source selection names both branch and tag namespaces. Choose one explicit ref type.', Code.FailedPrecondition);
+      return readSourceSnapshot(repositoryKey, repositoryId, ref, location.path, signal, location.tag === ref ? 'tag' : location.branch === ref && ref ? 'branch' : undefined);
+    } });
   const source = query.isSuccess && !query.isFetching ? query.data : undefined;
   useEffect(() => {
     if (!source) return;
