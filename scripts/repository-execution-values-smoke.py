@@ -24,6 +24,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 import urllib.error
 import urllib.request
 import uuid
@@ -439,6 +440,10 @@ def main():
             manifest['runtimeAfterRotation'] = after; manifest['keyRotation'] = {'bothExecutionFamiliesRotated':True,'legacyRetirementEligible':True,'restartedWithoutLegacyKey':True,'notificationFamilyCountedOnly':True}
             manifest['authorityFences'] = ['value-version-change','native-admin-loss','approval-session-logout','binding-removal']
             passed = True
+        except Exception as error:
+            frames = traceback.extract_tb(error.__traceback__)
+            manifest['originalFailure'] = {'type':type(error).__name__,'stage':STAGE,'line':frames[-1].lineno}
+            raise
         finally:
             for actor in actors.values():
                 if actor.get('session') is not None:
@@ -459,7 +464,8 @@ def main():
             smoke.GOLF, smoke.GITEA = old_urls
             manifest.update(passed=passed,complete=passed and not cleanup,cleanupPassed=not cleanup,lastStage=STAGE)
             helpers.private_write(output/'manifest.json',safe_manifest(manifest,forbidden))
-            assert not cleanup, 'Owned cleanup failed; diagnostics withheld'
+            if 'originalFailure' not in manifest:
+                assert not cleanup, 'Owned cleanup failed; diagnostics withheld'
             print('Cleanup: managed sessions revoked/accounts disabled, native actors purged, fresh project and volumes removed.',flush=True)
     assert passed
     print('PASS: real TLS repository environment, quarantine/redaction, authority/version fences and retained-key lifecycle; broader Secrets/OIDC remains Partial.')
