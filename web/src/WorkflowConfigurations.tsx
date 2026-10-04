@@ -7,8 +7,11 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Bot, FileCode2, GitPullRequest, ListFilter, RefreshCw, Settings2, Workflow } from 'lucide-react';
-import { repositoryClient, workflowClient, workflowRunClient, errorMessage } from './api';
+import { repositoryClient, repositoryAccessClient, workflowClient, workflowRunClient, errorMessage } from './api';
 import { sourceRepositoryID } from './sourceReads';
+import { isCommitID, isRunID } from './navigation';
+import type { WorkflowRun } from './gen/golf/v1/golf_pb';
+import { WorkflowRunOrigin, WorkflowRunState } from './gen/golf/v1/golf_pb';
 import { RepositorySettingsLayout } from './AccountSettings';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { Loading, PanelError, privateQuery } from './RepositoryUI';
@@ -17,6 +20,25 @@ import { ActionRuns } from './ActionRuns';
 import { AutomationGrantPanel } from './AutomationGrantPanel';
 import { ExecutionPolicyPanel } from './ExecutionPolicyPanel';
 import { ExecutionScope, WorkflowFormat, WorkflowInspectionState, type WorkflowConfiguration, type WorkflowDiagnostic } from './gen/golf/v1/golf_pb';
+
+// Original request metadata only; no credential, script or response body persists.
+type DispatchIntent = { actorId:string; key:string; owner:string; name:string; repositoryId:string; ownerId:string; commitId:string; workflowPath:string; workflowBlobId:string };
+const dispatchPrefix = 'golf.workflow-dispatch.v1:';
+const dispatchStorageKey = (actor:string,repo:string) => `${dispatchPrefix}${location.origin}:${actor}:${repo}`;
+const workflowPath = (value:string) => /^(?:\.github\/workflows\/[^/]+\.ya?ml|\.gitlab-ci\.yml)$/.test(value) && new TextEncoder().encode(value).length<=4096 && !/[\\\p{Cc}\uD800-\uDFFF]/u.test(value);
+function validDispatchIntent(value:unknown, actor:string,repo:string):value is DispatchIntent {
+ if(!value||typeof value!=='object'||Array.isArray(value))return false;
+ const v=value as Record<string,unknown>;
+ return Object.keys(v).length===9 && v.actorId===actor && v.repositoryId===repo && sourceRepositoryID(actor) && sourceRepositoryID(repo) && typeof v.key==='string' && isRunID(v.key) && typeof v.ownerId==='string' && sourceRepositoryID(v.ownerId) && typeof v.owner==='string' && typeof v.name==='string' && [v.owner,v.name].every(part=>part.length>0&&part.length<=255&&!/[\/\\\p{Cc}\uD800-\uDFFF]/u.test(part)) && typeof v.commitId==='string' && isCommitID(v.commitId) && typeof v.workflowBlobId==='string' && isCommitID(v.workflowBlobId) && v.workflowBlobId.length===v.commitId.length && typeof v.workflowPath==='string' && workflowPath(v.workflowPath);
+}
+// Exported for the enclosing account/logout boundary; importing the editor is not required by the component itself.
+export function clearOtherWorkflowDispatchIntents(actor?:string) {
+ try { const keep=actor?`${dispatchPrefix}${location.origin}:${actor}:`:'';for(const key of Object.keys(sessionStorage))if(key.startsWith(dispatchPrefix)&&(!keep||!key.startsWith(keep)))sessionStorage.removeItem(key); } catch { /* Unreadable storage blocks new dispatch below. */ }
+}
+function verifiedDispatchRun(run:WorkflowRun|undefined,intent:DispatchIntent,inspection=false):WorkflowRun {
+ if(!run||!isRunID(run.id)||run.repositoryId!==intent.repositoryId||run.ownerId!==intent.ownerId||run.commitId!==intent.commitId||run.workflowPath!==intent.workflowPath||run.workflowBlobId!==intent.workflowBlobId||run.origin!==WorkflowRunOrigin.MANUAL||run.eventRef!==intent.commitId||!/^([1-9][0-9]{0,18})$/.test(run.version)||BigInt(run.version)>9223372036854775807n||!/^\d{4}-\d\d-\d\dT/.test(run.createdAt)||!Number.isFinite(Date.parse(run.createdAt))||!/^([a-f0-9]{64})$/.test(run.sourceSha256)||run.state<WorkflowRunState.QUEUED||run.state>WorkflowRunState.LOST||(inspection&&run.canCancel))throw new ConnectError('The original dispatch receipt could not be verified.',Code.Internal);
+ return run;
+}
 
 function format(value: WorkflowFormat) {
   return value === WorkflowFormat.GITHUB_ACTIONS ? 'GitHub Actions' : value === WorkflowFormat.GITLAB_CI ? 'GitLab CI' : 'Unknown format';
@@ -34,15 +56,19 @@ function Diagnostics({ diagnostics }: { diagnostics: WorkflowDiagnostic[] }) {
 export function WorkflowConfigurations({ userId, owner, name, signingOut, repositoryId = '', workView = false, location: suppliedLocation }: { repositoryId?:string; workView?:boolean;location?:RepositoryLocation; userId: string; owner: string; name: string; signingOut: boolean }) {
   const navigate = useNavigate();
   const [dispatching, setDispatching] = useState(false);
+  const busy = useRef(false);
+  const generation=useRef(0);
+  const activeScope=useRef('');
+  const available=useRef(false);
+  const [original,setOriginal]=useState<{scope:string;intent?:DispatchIntent;blocked:boolean;denied?:boolean;run?:WorkflowRun}>({scope:'',blocked:true});
   const [tasksOpen, setTasksOpen] = useState(false);
   const location:RepositoryLocation=suppliedLocation||{...defaultRepositorySearch,kind:'repository',owner,name,view:'actions'};
   const scope = JSON.stringify([userId,owner,name]);
   const [notice, setNotice] = useState('');
-  const [uncertain, setUncertain] = useState(false);
   const controller = useRef<AbortController | null>(null);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; controller.current?.abort(); }; }, []);
-  useEffect(() => { if (signingOut) { controller.current?.abort(); setNotice(''); } }, [signingOut]);
+  useEffect(() => { clearOtherWorkflowDispatchIntents(signingOut?undefined:userId);if(signingOut){controller.current?.abort();setNotice('');setOriginal({scope:'',blocked:true});} }, [userId,signingOut]);
   const metadata = useQuery({ ...privateQuery, queryKey: ['workflow-repository-identity', userId, owner, name], enabled: !signingOut && !repositoryId,
     queryFn: async ({signal}) => {
       const response = await repositoryClient.getRepository({repository:{owner,name}}, {signal,timeoutMs:8000}); signal.throwIfAborted();
@@ -57,27 +83,74 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
   const query = useQuery({ ...privateQuery, queryKey: ['workflow-configurations', userId, owner, name, effectiveRepositoryId], enabled: identityReady,
     queryFn: async ({ signal }) => { const response=await workflowClient.inspectWorkflows({ repository: { owner, name }, repositoryId:effectiveRepositoryId }, { signal, timeoutMs: 25_000 });signal.throwIfAborted();if(response.repositoryId!==effectiveRepositoryId)throw new ConnectError('Workflow inspection does not match the selected repository.',Code.FailedPrecondition);return response; },
   });
-  const inspectionError = identityError || query.error;
-  const refreshInspection = () => { if(identityReady)void query.refetch();else if(!repositoryId)void metadata.refetch(); };
-  const result = identityReady && query.isSuccess && !query.isFetching && !query.error && !signingOut ? query.data : undefined;
+  const inspection = identityReady && query.isSuccess && !query.isFetching && !query.error && !signingOut ? query.data : undefined;
+  const accessQuery=useQuery({...privateQuery,queryKey:['workflow-dispatch-access',userId,owner,name,effectiveRepositoryId],enabled:identityReady,queryFn:async({signal})=>{
+   const response=await repositoryAccessClient.getRepositoryAccess({repository:{owner,name}},{signal,timeoutMs:8000});signal.throwIfAborted();const access=response.access;
+   if(!access||access.repositoryId!==effectiveRepositoryId||!sourceRepositoryID(access.ownerId)||!['read','write','admin','owner'].includes(access.currentPermission))throw new ConnectError('Repository authority could not be verified for workflow dispatch.',Code.FailedPrecondition);
+   return access;
+  }});
+  const access=accessQuery.isSuccess&&!accessQuery.isFetching&&!accessQuery.error&&!signingOut?accessQuery.data:undefined;
+  const storageScope=sourceRepositoryID(userId)&&sourceRepositoryID(effectiveRepositoryId)?dispatchStorageKey(userId,effectiveRepositoryId):'';
+  const scopeDenied=original.scope===storageScope&&original.denied;
+  const inspectionError = identityError || query.error || accessQuery.error || (scopeDenied?new ConnectError('Current workflow authority is unavailable. Refresh to inspect the original dispatch.',Code.PermissionDenied):undefined);
+  const refreshInspection = () => { setOriginal(prior=>({...prior,denied:false}));if(identityReady){void accessQuery.refetch();void query.refetch();}else if(!repositoryId)void metadata.refetch(); };
+  const result=access&&!scopeDenied?inspection:undefined;
   const commit = result?.commitId ?? '';
+  const guardScope=JSON.stringify([userId,owner,name,effectiveRepositoryId,signingOut]);
+  if(activeScope.current!==guardScope){activeScope.current=guardScope;generation.current++;controller.current?.abort();busy.current=false;}
+  available.current=Boolean(result&&access&&['write','admin','owner'].includes(access.currentPermission));
+  const stored=original.scope===storageScope?original:undefined;
+  const intent=stored?.intent;
+  const unresolved=Boolean(intent&&!stored?.run);
+  const originalMatches=Boolean(!intent||(intent.owner===owner&&intent.name===name&&access?.ownerId===intent.ownerId));
+  useEffect(()=>{
+   controller.current?.abort();busy.current=false;setDispatching(false);setNotice('');
+   if(!storageScope||signingOut){setOriginal({scope:storageScope,blocked:true});return;}
+   try{const encoded=sessionStorage.getItem(storageScope);const value:unknown=encoded===null?undefined:JSON.parse(encoded);
+    if(value!==undefined&&!validDispatchIntent(value,userId,effectiveRepositoryId))throw new Error('Original metadata unavailable');
+    setOriginal({scope:storageScope,intent:value as DispatchIntent|undefined,blocked:false});
+   }catch{setOriginal({scope:storageScope,blocked:true});}
+  },[storageScope,guardScope,userId,effectiveRepositoryId,signingOut]);
+  useEffect(()=>{if(!result){controller.current?.abort();}if(inspectionError){setNotice('');setOriginal(prior=>({...prior,run:undefined}));}},[Boolean(result),Boolean(inspectionError)]);
   const policyObserved = (item:WorkflowConfiguration) => Boolean(result && /^[a-f0-9]{64}$/.test(result.policyRevision) && typeof item.manualPolicyAllowed==='boolean' && typeof item.pushPolicyAllowed==='boolean');
   const policyLabel = (item:WorkflowConfiguration, kind:'manual'|'push') => !policyObserved(item)?'Unknown':(kind==='manual'?item.manualPolicyAllowed:item.pushPolicyAllowed)?'Ceilings allow':'Ceilings deny';
   const selectedPath = location.actionKind==='workflow' ? location.workflowPath : undefined;
   const manualEligible = (item:WorkflowConfiguration) => item.state===WorkflowInspectionState.VALIDATED_SUBSET && (item.format===WorkflowFormat.GITLAB_CI || item.events.includes('workflow_dispatch'));
-  const canDispatch = (item:WorkflowConfiguration) => Boolean(commit && manualEligible(item) && policyObserved(item) && item.manualPolicyAllowed===true && result?.executionAvailable && !dispatching && !uncertain && !signingOut);
+  const canDispatch = (item:WorkflowConfiguration) => Boolean(isCommitID(commit) && manualEligible(item) && policyObserved(item) && item.manualPolicyAllowed===true && result?.executionAvailable && available.current && stored && !stored.blocked && originalMatches && !unresolved && !dispatching && !signingOut);
   const selectedConfiguration = selectedPath ? result?.configurations.find(item=>item.path===selectedPath) : undefined;
-  const dispatchNotice = notice && result && !signingOut ? <p role="status" className="panel-footnote">{notice}{uncertain ? <button className="text-button" onClick={() => { setUncertain(false); setNotice(''); }}>I inspected runs; allow a new dispatch</button> : null}</p> : null;
+  const dispatchNotice = result && available.current && stored && (stored.blocked||intent||notice) && !signingOut ? <div className="panel-footnote page-stack">
+   {stored.blocked?<p role="alert">Original dispatch metadata is unavailable. New dispatches are blocked; no request was retried.</p>:null}
+   {intent?<div className="page-stack"><p>Original workflow <code>{intent.workflowPath}</code> · Snapshot <code title={intent.commitId}>{intent.commitId.slice(0,12)}</code></p>
+    {stored.run?<p role="status">Run {stored.run.id} recorded. <Link {...repositoryOptions({owner:intent.owner,name:intent.name,view:'actions',run:stored.run.id,runKind:'workflow'})}>View recorded run</Link>. This is a historical receipt; current eligibility is checked for each new dispatch.</p>:<p role="status">{notice||'Original dispatch outcome has not been inspected.'} This request remains inspection-only. No automatic retry or replacement dispatch is available.</p>}
+    <button type="button" className="button secondary" disabled={dispatching||stored.blocked||busy.current||!originalMatches} onClick={()=>void inspectDispatch()}><RefreshCw size={15}/>Inspect original dispatch</button>
+   </div>:notice?<p role="status">{notice}</p>:null}
+  </div>:null;
+  const accepted=(stamp:number,request:AbortController)=>alive.current&&stamp===generation.current&&!request.signal.aborted&&available.current;
   async function dispatch(path: string) {
     const item=result?.configurations.find(item=>item.path===path);
-    if (!item || !canDispatch(item)) return;
-    const request = new AbortController(); controller.current = request; setDispatching(true); setNotice('');
-    try { const receipt = await workflowRunClient.dispatchWorkflow({ repository: { owner, name }, ref: commit, workflowPath: path, idempotencyKey: crypto.randomUUID() }, { signal: request.signal, timeoutMs: 25_000 });
-      if (!alive.current || request.signal.aborted) return;
-      if (!receipt.run || receipt.run.commitId !== commit || receipt.run.workflowPath !== path) throw new Error('Dispatch receipt could not be verified.');
-      setNotice(`Run ${receipt.run.id} recorded. Refresh runs to inspect its state.`);
-    } catch (error) { if (alive.current && !request.signal.aborted) { setUncertain(true); setNotice(`${errorMessage(error instanceof Error ? error : new Error('Dispatch could not be confirmed.'))} Inspect workflow runs before a new dispatch. No automatic retry was made.`); } }
-    finally { if (controller.current === request) controller.current = null; if (alive.current) setDispatching(false); }
+    if (activeScope.current!==guardScope || !item || !canDispatch(item)||busy.current||!access||!isCommitID(item.blobId)) return;
+    const frozen:DispatchIntent={actorId:userId,key:crypto.randomUUID(),owner,name,repositoryId:effectiveRepositoryId,ownerId:access.ownerId,commitId:commit,workflowPath:path,workflowBlobId:item.blobId};
+    if(!validDispatchIntent(frozen,userId,effectiveRepositoryId))return;
+    try{const encoded=JSON.stringify(frozen);sessionStorage.setItem(storageScope,encoded);if(sessionStorage.getItem(storageScope)!==encoded)throw new Error('Storage verification failed');}
+    catch{setOriginal({scope:storageScope,blocked:true});setNotice('Original dispatch metadata could not be retained. No dispatch was made.');return;}
+    setOriginal({scope:storageScope,intent:frozen,blocked:false});
+    const request = new AbortController(),stamp=generation.current; controller.current = request;busy.current=true;setDispatching(true);setNotice('');
+    try { const receipt = await workflowRunClient.dispatchWorkflow({ repository: { owner, name }, ref: frozen.commitId, workflowPath: frozen.workflowPath, idempotencyKey: frozen.key }, { signal: request.signal, timeoutMs: 25_000 });
+      if (!accepted(stamp,request)) return;
+      const run=verifiedDispatchRun(receipt.run,frozen);setOriginal({scope:storageScope,intent:frozen,blocked:false,run});
+    } catch (error) { if (accepted(stamp,request)) {if(error instanceof ConnectError&&[Code.Unauthenticated,Code.PermissionDenied,Code.NotFound].includes(error.code))setOriginal(prior=>({...prior,run:undefined,denied:true}));else setNotice(`${errorMessage(error instanceof Error ? error : new Error('Dispatch could not be confirmed.'))} Inspect the original dispatch.`);} }
+    finally { if (controller.current === request) {controller.current = null;busy.current=false;if(alive.current&&stamp===generation.current)setDispatching(false);} }
+  }
+  async function inspectDispatch(){
+   if(activeScope.current!==guardScope||!originalMatches||!intent||!available.current||busy.current||stored?.blocked||signingOut)return;
+   const frozen=intent,request=new AbortController(),stamp=generation.current;controller.current=request;busy.current=true;setDispatching(true);setNotice('');setOriginal(prior=>({...prior,run:undefined}));
+   try{
+    const receipt=await workflowRunClient.getWorkflowDispatch({repository:{owner:frozen.owner,name:frozen.name},repositoryId:frozen.repositoryId,ownerId:frozen.ownerId,commitId:frozen.commitId,workflowPath:frozen.workflowPath,idempotencyKey:frozen.key},{signal:request.signal,timeoutMs:15000});
+    if(!accepted(stamp,request))return;
+    if(receipt.repository?.owner!==frozen.owner||receipt.repository?.name!==frozen.name||receipt.repositoryId!==frozen.repositoryId||receipt.ownerId!==frozen.ownerId||receipt.nativeActorId!==frozen.actorId||receipt.idempotencyKey!==frozen.key)throw new ConnectError('The original dispatch receipt could not be verified.',Code.Internal);
+    const run=verifiedDispatchRun(receipt.run,frozen,true);setOriginal({scope:storageScope,intent:frozen,blocked:false,run});
+   }catch(error){if(accepted(stamp,request)){if(error instanceof ConnectError&&[Code.Unauthenticated,Code.PermissionDenied].includes(error.code))setOriginal(prior=>({...prior,run:undefined,denied:true}));else setNotice(error instanceof ConnectError&&error.code===Code.NotFound?'No original receipt is available. Absence does not establish that dispatch had no effect.':errorMessage(error instanceof Error?error:new Error('Original outcome could not be inspected.')));}}
+   finally{if(controller.current===request){controller.current=null;busy.current=false;if(alive.current&&stamp===generation.current)setDispatching(false);}}
   }
   const columns = useMemo<DataTableColumn<WorkflowConfiguration>[]>(() => [
     { id: 'configuration', accessorFn: item => `${item.path} ${item.name}`, header: 'Configuration', cell: ({ row }) => <>
@@ -99,7 +172,7 @@ export function WorkflowConfigurations({ userId, owner, name, signingOut, reposi
       </li>)}</ul> : <p>No job summary is available for this configuration.</p>}
       {row.original.diagnostics.length ? <Diagnostics diagnostics={row.original.diagnostics} /> : <p>The bounded static inspection found no unsupported fields. Static inspection does not execute jobs.</p>}
     </details> },
-  ], [owner, name, commit, dispatching, uncertain, signingOut, result]);
+  ], [owner, name, commit, dispatching, stored, unresolved, originalMatches, signingOut, result]);
 
   const configurationPanel = <section className="browser-panel credential-list-panel" aria-labelledby="workflow-inventory-title">
         <div className="browser-panel-heading"><h2 id="workflow-inventory-title">Configuration files</h2><button className="button secondary" disabled={query.isFetching || metadata.isFetching || signingOut} onClick={refreshInspection}><RefreshCw size={15} />Refresh workflow inspection</button></div>
