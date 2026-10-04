@@ -142,3 +142,50 @@ jobs:
 		t.Fatal("completion inventory incomplete")
 	}
 }
+
+func TestNativeMissingReceiptsRemainUnconfirmedWithClosedClassification(t *testing.T) {
+	for _, tc := range []struct {
+		name, stage, native string
+		started, finished   bool
+	}{
+		{"missing_result", "engine_native_result_missing", "", true, false},
+		{"missing_setup", "engine_native_setup_missing", "success", false, false},
+		{"duplicate_result", "engine_native_result_conflict", "success", true, true},
+		{"skip_after_start", "engine_native_result_conflict", "skipped", true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			o := testObserver(t, func(protocol.ActionFrame) error { t.Fatal("incomplete native receipts emitted completion"); return nil })
+			job := o.plan.Jobs[0]
+			o.nativeResults = map[string]string{job.InstanceID: tc.native}
+			o.started[job.InstanceID] = tc.started
+			o.finished[job.InstanceID] = tc.finished
+			state, err := o.completeInstance(job, nil, nil)
+			if state != "" || !errors.Is(err, ErrExecution) || ExecutionFailureStage(err) != tc.stage {
+				t.Fatal("incomplete receipt gained authority", ExecutionFailureStage(err))
+			}
+		})
+	}
+}
+
+func TestNativeExecutorInitAndParallelFailurePreserveSafeBoundary(t *testing.T) {
+	rc := &act.RunContext{Run: &model.Run{JobID: "check", Workflow: &model.Workflow{Jobs: map[string]*model.Job{"check": {Uses: "private-invalid-native-path"}}}}}
+	err := nativeInstanceExecutor(t.Context(), rc)
+	if ExecutionFailureStage(err) != "engine_native_executor_init" || !errors.Is(err, ErrExecution) || strings.Contains(err.Error(), "private") {
+		t.Fatal("native initialization refusal lost safety/boundary")
+	}
+	admitted, native, _, err := admit(testInput(t, "on: workflow_dispatch\njobs:\n  check:\n    runs-on: linux\n    steps: [{run: 'true'}]\n", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := testObserver(t, func(protocol.ActionFrame) error { t.Fatal("failed init emitted receipt"); return nil })
+	o.plan = admitted
+	o.started = map[string]bool{}
+	o.nativeResults = map[string]string{}
+	ctx := act.WithJobLoggerFactory(o.ctx, o)
+	err = executeNativePlan(ctx, native, &act.Config{Workdir: t.TempDir()}, "{}", o, func(context.Context, *act.RunContext) error {
+		return classifyExecution("engine_native_executor_init", errors.New("private native failure"))
+	})
+	if ExecutionFailureStage(err) != "engine_native_executor_init" || strings.Contains(err.Error(), "private") || !errors.Is(err, ErrExecution) {
+		t.Fatal("parallel wrapper flattened closed native boundary", ExecutionFailureStage(err))
+	}
+}

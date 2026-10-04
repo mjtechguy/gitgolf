@@ -57,7 +57,9 @@ func ActionsEngineFailureDiagnostic(stage string) string {
 		"engine_event_write", "engine_native_execution", "engine_observation", "engine_graph_completion",
 		"engine_inner_cleanup", "engine_completion_ack", "engine_job_inventory", "engine_job_receipt",
 		"engine_job_shape", "engine_job_environment", "engine_job_mounts", "engine_job_source_transfer",
-		"engine_job_volume_ownership", "engine_job_action_ancestors", "engine_job_source_readback":
+		"engine_job_volume_ownership", "engine_job_action_ancestors", "engine_job_source_readback",
+		"engine_native_executor_init", "engine_native_executor_return", "engine_native_result_missing",
+		"engine_native_setup_missing", "engine_native_result_conflict":
 		return "GOLF_ACTIONS_FAILURE_STAGE=" + stage + "\n"
 	default:
 		return ""

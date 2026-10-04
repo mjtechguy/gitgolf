@@ -216,6 +216,9 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 	}
 	for _, job := range plan.Jobs {
 		if !observer.finished[job.InstanceID] {
+			if executionErr != nil {
+				return executionErr
+			}
 			return ErrExecution
 		}
 	}
@@ -359,8 +362,20 @@ func (o *engineObserver) Fire(entry *logrus.Entry) error {
 		o.nativeResults[job.InstanceID] = state
 		return nil
 	}
+	// Pinned act job_executor.go emits only setup/cleanup under `stepid`;
+	// ordinary step/composite logs use `stepID`. Admit the exact setup sentinel,
+	// never arbitrary lower-case step IDs or conflicting metadata. Raw source
+	// output was handled above and cannot enter this trusted branch.
+	setup := len(ids) == 1 && ids[0] == "--setup-job"
+	if lower, ok := entry.Data["stepid"].([]string); ok && len(lower) == 1 && lower[0] == "--setup-job" {
+		if _, ambiguous := entry.Data["stepID"]; ambiguous {
+			o.fail()
+			return nil
+		}
+		setup = true
+	}
 	result, present := entry.Data["stepResult"]
-	if len(ids) == 1 && ids[0] == "--setup-job" && present && result == model.StepStatusSuccess {
+	if setup && present && result == model.StepStatusSuccess {
 		if o.started[job.InstanceID] {
 			o.fail()
 			return nil

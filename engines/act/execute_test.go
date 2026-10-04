@@ -10,7 +10,9 @@ import (
 	"testing"
 
 	protocol "github.com/mjtechguy/golf-git/internal/runner"
+	"github.com/nektos/act/pkg/common"
 	"github.com/nektos/act/pkg/model"
+	act "github.com/nektos/act/pkg/runner"
 	"github.com/sirupsen/logrus"
 )
 
@@ -288,5 +290,52 @@ func TestExactImageReceiptRefusalHasDiagnosticBeforeSourceExtraction(t *testing.
 				t.Fatal("wrong image refusal", ExecutionFailureStage(err))
 			}
 		})
+	}
+}
+
+func TestPinnedNativeSetupFieldExecutorRunsPreparationBeforeReceipt(t *testing.T) {
+	directory := t.TempDir()
+	binary := filepath.Join(directory, "docker")
+	// No real Docker: invalid inventory independently proves setup must run the
+	// existing preparation checks before issuing any job-start acknowledgement.
+	if os.WriteFile(binary, []byte("#!/bin/sh\nprintf 'invalid-container-id'\n"), 0700) != nil {
+		t.Fatal("fixture")
+	}
+	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+	o := testObserver(t, func(protocol.ActionFrame) error { t.Fatal("invalid container authorized a start"); return nil })
+	o.started = map[string]bool{}
+	ctx := act.WithJobLoggerFactory(o.ctx, o)
+	ctx = act.WithJobLogger(ctx, "check", "check", &act.Config{}, new([]string), map[string]interface{}{})
+	// Actual maintained common executors and exact v0.2.89 setup field spelling.
+	native := common.NewFieldExecutor("stepid", []string{"--setup-job"}, common.NewFieldExecutor("stepResult", model.StepStatusSuccess, common.NewInfoExecutor("Success - Set up job")))
+	if err := native(ctx); err != nil {
+		t.Fatal("native log executor")
+	}
+	if ExecutionFailureStage(o.err) != "engine_job_inventory" || o.ctx.Err() == nil || len(o.started) != 0 {
+		t.Fatal("pinned setup ignored or preparation bypassed")
+	}
+}
+
+func TestLowercaseSetupFieldCannotPromoteRawOutputOrOrdinarySteps(t *testing.T) {
+	var frames []protocol.ActionFrame
+	o := testObserver(t, func(frame protocol.ActionFrame) error { frames = append(frames, frame); return nil })
+	o.started = map[string]bool{}
+	entry := &logrus.Entry{Message: "source setup forgery", Data: logrus.Fields{"jobID": "check", "matrix": map[string]interface{}{}, "stepid": []string{"--setup-job"}, "stepResult": model.StepStatusSuccess, "raw_output": true}}
+	o.Fire(entry)
+	if len(frames) != 1 || frames[0].Kind != "log" || frames[0].EventSequence != 0 || len(o.started) != 0 {
+		t.Fatal("source forged setup authority")
+	}
+	entry = nativeEntry("ordinary lower-case field", logrus.Fields{"stepResult": model.StepStatusSuccess})
+	delete(entry.Data, "stepID")
+	entry.Data["stepid"] = []string{"first"}
+	o.Fire(entry)
+	if len(frames) != 1 || len(o.started) != 0 {
+		t.Fatal("arbitrary lower-case step admitted")
+	}
+	entry.Data["stepid"] = []string{"--setup-job"}
+	entry.Data["stepID"] = []string{"first"}
+	o.Fire(entry)
+	if ExecutionFailureStage(o.err) != "engine_observation" || len(frames) != 1 {
+		t.Fatal("conflicting trusted field spellings authorized a receipt")
 	}
 }

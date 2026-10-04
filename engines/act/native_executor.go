@@ -21,9 +21,9 @@ import (
 func nativeInstanceExecutor(ctx context.Context, rc *act.RunContext) error {
 	executor, err := rc.Executor()
 	if err != nil {
-		return err
+		return classifyExecution("engine_native_executor_init", err)
 	}
-	return executor(ctx)
+	return classifyExecution("engine_native_executor_return", executor(ctx))
 }
 
 // Native Plan stages and GetMatrixes remain the planning authority. Serial
@@ -81,7 +81,7 @@ func executeNativePlan(ctx context.Context, plan *model.Plan, config *act.Config
 			})
 		}
 		if err := common.NewParallelExecutor(2, jobs...)(ctx); err != nil {
-			return ErrExecution
+			return classifyExecution("engine_native_execution", err)
 		}
 	}
 	if failed.Load() {
@@ -94,8 +94,20 @@ func (o *engineObserver) completeInstance(job protocol.ActionJob, executionErr, 
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	native := o.nativeResults[job.InstanceID]
-	if o.err != nil || o.ctx.Err() != nil || native == "" || o.finished[job.InstanceID] {
-		return "", ErrExecution
+	if o.err != nil {
+		return "", o.err
+	}
+	if o.ctx.Err() != nil {
+		return "", classifyExecution("engine_native_execution", ErrExecution)
+	}
+	if native == "" {
+		if executionErr != nil {
+			return "", classifyExecution("engine_native_result_missing", executionErr)
+		}
+		return "", classifyExecution("engine_native_result_missing", ErrExecution)
+	}
+	if o.finished[job.InstanceID] {
+		return "", classifyExecution("engine_native_result_conflict", ErrExecution)
 	}
 	state := "success"
 	if executionErr != nil || jobErr != nil {
@@ -103,11 +115,11 @@ func (o *engineObserver) completeInstance(job protocol.ActionJob, executionErr, 
 	}
 	if native == "skipped" {
 		if state == "failure" || o.started[job.InstanceID] {
-			return "", ErrExecution
+			return "", classifyExecution("engine_native_result_conflict", ErrExecution)
 		}
 		state = "skipped"
 	} else if !o.started[job.InstanceID] {
-		return "", ErrExecution
+		return "", classifyExecution("engine_native_setup_missing", ErrExecution)
 	}
 	if o.emit(protocol.ActionFrame{Kind: "job_finished", InstanceID: job.InstanceID, State: state}) != nil {
 		return "", ErrExecution
