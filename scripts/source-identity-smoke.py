@@ -119,7 +119,7 @@ def main():
 
         svg = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40"><rect width="80" height="40" fill="#b8f36a"/></svg>'
         write('logo.svg', svg)
-        path, text = 'docs/source ü.txt', 'Source identity fixture\nExact immutable Unicode content\n'
+        path, text = 'docs/source % #? ü.txt', 'Source identity fixture\nExact immutable Unicode content\n'
         write(path, text)
         original = '# Exact source identity\n\n![Fixture logo](./logo.svg)\n'
         readme = smoke.provider(owner['token'], 'GET', route + '/contents/README.md')
