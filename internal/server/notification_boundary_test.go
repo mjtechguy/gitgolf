@@ -41,3 +41,30 @@ func TestEmailOperatorPolicyFailsBeforeDatabaseUse(t *testing.T) {
 		t.Fatal("invalid SMTP operator policy was accepted or disclosed")
 	}
 }
+
+func TestRepositoryExecutionValueManagedBrowserBoundary(t *testing.T) {
+	s, err := New(testConfig("http://forge.invalid"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, method := range []string{"ListRepositoryExecutionValues", "SaveRepositoryExecutionValue", "DeleteRepositoryExecutionValue", "GetRepositoryExecutionVariable", "SaveRepositoryExecutionBinding", "DeleteRepositoryExecutionBinding", "GetRepositoryExecutionValueOperation"} {
+		path := "/golf.v1.RepositoryExecutionValueService/" + method
+		for _, origin := range []string{s.config.PublicURL, "https://other.invalid"} {
+			req := httptest.NewRequest(http.MethodPost, "/rpc"+path, strings.NewReader("malformed"))
+			req.Header.Set("Origin", origin)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			s.ServeHTTP(w, req)
+			want := http.StatusUnauthorized
+			if origin != s.config.PublicURL {
+				want = http.StatusForbidden
+			}
+			if w.Code != want || w.Header().Get("Cache-Control") != "no-store" {
+				t.Fatalf("%s boundary: status=%d cache=%q", method, w.Code, w.Header().Get("Cache-Control"))
+			}
+		}
+		if response := apiRequest(s, apiTokenPrefix+strings.Repeat("A", 43), path, "malformed"); response.Code != http.StatusForbidden || response.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("%s allowed delegated API access: %d", method, response.Code)
+		}
+	}
+}

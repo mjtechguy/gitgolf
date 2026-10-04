@@ -1,4 +1,4 @@
-import { ResolveRepositorySourceRequestSchema, ResolveRepositorySourceResponseSchema, RepositorySourceResolution, RepositorySourceRefKind, ListAgentTasksResponseSchema, GetAgentUsageRequestSchema, GetAgentUsageResponseSchema } from '../src/gen/golf/v1/golf_pb';
+import { GetOwnEmailNotificationsResponseSchema,GetRepositoryEmailSubscriptionResponseSchema,ListOwnEmailDeliveriesResponseSchema, ResolveRepositorySourceRequestSchema, ResolveRepositorySourceResponseSchema, RepositorySourceResolution, RepositorySourceRefKind, ListAgentTasksResponseSchema, GetAgentUsageRequestSchema, GetAgentUsageResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import { create, fromJson, toJson } from '@bufbuild/protobuf';
 import type { DescMessage, MessageInitShape } from '@bufbuild/protobuf';
 import type { Route } from '@playwright/test';
@@ -41,3 +41,14 @@ export function resolveSourceFixture(route: Route, repositoryId: string, reposit
   if (!commitId) return reject(route, 'not_found', 'Exact fixture ref not found.');
   return respond(route, ResolveRepositorySourceResponseSchema, { repositoryId, repository, resolution: RepositorySourceResolution.RESOLVED, path: input.path, selection: { kind, name, commitId, tagObjectId:kind===RepositorySourceRefKind.TAG?tagObjects[name]||commitId:undefined } });
 }
+
+
+// Existing account/settings fixtures explicitly observe an unconfigured mail
+// consumer. These are browser-fixture receipts, never product capability mocks.
+export function unconfiguredOwnEmail(route: Route,nativeUserId:string) {
+ return respond(route,GetOwnEmailNotificationsResponseSchema,{state:{userId:nativeUserId,nativeUserId,localAccountId:'1',credentialVersion:'1',loginEmail:'',contactVersion:'0',preferenceVersion:'0',verified:false,enabled:false,transportActive:false}});
+}
+export function unconfiguredRepositoryEmail(route: Route,nativeUserId:string,target:{repository:{owner:string;name:string};repositoryId:string;ownerId:string}) {
+ return respond(route,GetRepositoryEmailSubscriptionResponseSchema,{target,state:{userId:nativeUserId,nativeUserId,localAccountId:'1',credentialVersion:'1',loginEmail:'',contactVersion:'0',preferenceVersion:'0',verified:false,enabled:false,transportActive:false}});
+}
+export function emptyOwnEmailHistory(route: Route,nativeUserId:string,target?:{repository:{owner:string;name:string};repositoryId:string;ownerId:string}) {return respond(route,ListOwnEmailDeliveriesResponseSchema,{userId:nativeUserId,target,page:{nextPage:0}});}

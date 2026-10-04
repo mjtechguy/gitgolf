@@ -44,6 +44,10 @@ func rpcError(err error) error {
 	var input inputError
 	var upstream forgeError
 	switch {
+	case errors.Is(err, errExecutionValueConflict):
+		code, message = connect.CodeAborted, "Execution values or source approval changed. Inspect the original operation before another explicit change."
+	case errors.Is(err, errExecutionApproval):
+		code, message = connect.CodeFailedPrecondition, "Execution source approval is unavailable for this exact workflow and current authority."
 	case errors.Is(err, errLifecycleBlocked):
 		code, message = connect.CodeFailedPrecondition, "Repository lifecycle blocks this action. Inspect the current operation; do not retry an unknown effect."
 	case errors.Is(err, errWebhookDestination):

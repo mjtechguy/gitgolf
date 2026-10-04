@@ -5,10 +5,10 @@ import { Code, ConnectError } from '@connectrpc/connect';
 import { ArrowLeft, ArrowDownToLine, CheckCircle2, CircleDashed, CircleSlash, Clock3, Download, GitCommitHorizontal, LoaderCircle, RefreshCw, Search, XCircle } from 'lucide-react';
 import { forgetPrivateQueries } from './queryClient';
 import { workflowRunClient, errorMessage } from './api';
-import { WorkflowRunOrigin, WorkflowRunState, WorkflowStepState, type WorkflowStepProgress, type WorkflowRun, type WorkflowJobInstance } from './gen/golf/v1/golf_pb';
+import { WorkflowOutputState, WorkflowRunOrigin, WorkflowRunState, WorkflowStepState, type WorkflowStepProgress, type WorkflowRun, type WorkflowJobInstance } from './gen/golf/v1/golf_pb';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { DateLabel, Loading, More, PanelError, privateQuery } from './RepositoryUI';
-import { isCommitID, isWorkflowJobInstanceID, isWorkflowStepID, repositoryOptions } from './navigation';
+import { isRunID, isCommitID, isWorkflowJobInstanceID, isWorkflowStepID, repositoryOptions } from './navigation';
 import { sourcePath, sourceRepositoryID } from './sourceReads';
 
 function useWideWorkflowLayout() {
@@ -65,6 +65,9 @@ const graphFailure=():never=>{throw new ConnectError('The recorded job graph doe
 const graphText=(value:string,max=255)=>Boolean(value)&&new TextEncoder().encode(value).length<=max&&!/[\p{Cc}\uD800-\uDFFF]/u.test(value);
 const graphDate=(value:string|undefined)=>value===undefined||Boolean(value)&&Number.isFinite(Date.parse(value));
 function validateJobGraph(run:WorkflowRun){
+ const state=run.outputState;
+ if(state===WorkflowOutputState.WITHHELD||state===WorkflowOutputState.REDACTED){if(run.engineCatalog!==actionsCatalog||!isRunID(run.executionBindingId)||!sourceRepositoryID(run.executionBindingVersion)||state===WorkflowOutputState.REDACTED&&![WorkflowRunState.SUCCEEDED,WorkflowRunState.FAILED].includes(run.state))graphFailure();}
+ else if(![WorkflowOutputState.UNSPECIFIED,WorkflowOutputState.ORDINARY].includes(state)||run.executionBindingId||run.executionBindingVersion)graphFailure();
  if(!run.engineCatalog||run.engineCatalog==='golf.workflow.shell.v1'){if(run.jobs.length||run.engineCommit)graphFailure();return run;}
  if(run.engineCatalog!==actionsCatalog||run.engineCommit!==actionsEngineCommit||!sourceRepositoryID(run.ownerId)||!sourceRepositoryID(run.version)||!isCommitID(run.commitId)||!isCommitID(run.workflowBlobId)||run.workflowBlobId.length!==run.commitId.length||!sourcePath(run.workflowPath)||!run.workflowPath||!/^[a-f0-9]{64}$/.test(run.sourceSha256)||run.attemptId&&!isWorkflowJobInstanceID(run.attemptId)||run.state===WorkflowRunState.RUNNING&&!run.attemptId||run.progress||run.jobs.length<1||run.jobs.length>12)graphFailure();
  const ids=new Set<string>(),jobIds=new Set(run.jobs.map(job=>job.jobId));let stepCount=0;
@@ -96,11 +99,13 @@ function LogHighlight({text,search}:{text:string;search:string}) {
 function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex,run,jobInstanceId,stepId,onAuthorityDenied}:{userId:string;owner:string;name:string;runId:string;truncated:boolean;enabled:boolean;stepIndex?:number;run:WorkflowRun;jobInstanceId?:string;stepId?:string;onAuthorityDenied:(error:ConnectError,observed:WorkflowRun)=>void}) {
  const [search,setSearch]=useState('');const searchId=useId();
  const wide=useWideWorkflowLayout(),[searchOpen,setSearchOpen]=useState(false);const end=useRef<HTMLSpanElement>(null);
- const query=useInfiniteQuery({...privateQuery,queryKey:['workflow-run-logs',userId,owner,name,runId,run.repositoryId,run.attemptId,run.commitId,jobInstanceId??'all',stepId??'all',stepIndex??'all'],enabled,initialPageParam:0n,
+ const query=useInfiniteQuery({...privateQuery,queryKey:['workflow-run-logs',userId,owner,name,runId,run.repositoryId,run.attemptId,run.commitId,jobInstanceId??'all',stepId??'all',stepIndex??'all',run.outputState],enabled,initialPageParam:0n,
   queryFn:async({signal,pageParam})=>{
    const page=await workflowRunClient.getWorkflowRunLogs({runId,afterSequence:pageParam,stepIndex,jobInstanceId,stepId},{signal,timeoutMs:12_000});
    signal.throwIfAborted();
    if(run.engineCatalog===actionsCatalog&&(page.runId!==run.id||page.attemptId!==run.attemptId||page.repositoryId!==run.repositoryId||page.sourceCommitId!==run.commitId||page.jobInstanceId!==(jobInstanceId??'')||page.stepId!==(stepId??'')))throw new ConnectError('The log receipt does not match the selected run, attempt, source and job/step.',Code.FailedPrecondition);
+   if(page.outputState!==run.outputState&&!(run.outputState===WorkflowOutputState.UNSPECIFIED&&page.outputState===WorkflowOutputState.ORDINARY))throw new ConnectError('The log publication receipt changed. Refresh the run before continuing.',Code.FailedPrecondition);
+   if(page.outputState===WorkflowOutputState.WITHHELD&&(page.logs.length||page.hasMore))throw new ConnectError('Withheld execution output cannot contain readable chunks.',Code.FailedPrecondition);
    let sequence=pageParam;
    for(const chunk of page.logs){if(chunk.sequence<=sequence||chunk.sequence>9223372036854775807n)throw new ConnectError('The log page has an invalid sequence. Refresh before continuing.',Code.Internal);sequence=chunk.sequence;}
    if(page.logs.length>16||page.hasMore&&!page.logs.length)throw new ConnectError('The log page cannot be continued safely.',Code.Internal);
@@ -108,6 +113,7 @@ function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex,ru
   },getNextPageParam:page=>page.hasMore?page.logs.at(-1)?.sequence:undefined});
  useEffect(()=>{if(query.error instanceof ConnectError&&[Code.Unauthenticated,Code.PermissionDenied,Code.NotFound].includes(query.error.code))onAuthorityDenied(query.error,run);},[query.error,onAuthorityDenied,run]);
  const loading=query.isPending||query.isFetching&&!query.isFetchingNextPage;
+ const withheld=run.outputState===WorkflowOutputState.WITHHELD;
  const text=query.data?.pages.flatMap(page=>page.logs).map(chunk=>chunk.text).join('')||'';
  const denied=Boolean(query.error)||!enabled;
  const matches=search?text.toLowerCase().split(search.toLowerCase()).length-1:0;
@@ -120,7 +126,9 @@ function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex,ru
   <div className="browser-panel-heading"><h2 id="workflow-log-title">Run log</h2><div className="row-actions"><button className="icon-button workflow-log-search-toggle" aria-label="Search loaded run log" title="Search loaded run log" aria-expanded={searchOpen} aria-controls={searchId+'-controls'} disabled={denied} onClick={()=>setSearchOpen(value=>!value)}><Search size={16}/></button><button className="icon-button manual-refresh" aria-label="Refresh run log" title="Refresh run log" disabled={query.isFetching||!enabled} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button><button className="icon-button" aria-label="Download loaded log" title="Download loaded log" disabled={denied||loading||!text} onClick={download}><Download size={16}/></button><button className="icon-button" aria-label="Go to end of loaded log" title="Go to end of loaded log" disabled={denied||loading||!text} onClick={()=>end.current?.scrollIntoView({block:'end'})}><ArrowDownToLine size={16}/></button></div></div>
   <div id={searchId+'-controls'} className="workflow-log-search" hidden={!wide&&!searchOpen}><div className="repository-list-controls"><div className="search-input"><label className="sr-only" htmlFor={searchId}>Search loaded run log</label><Search size={16} aria-hidden="true"/><input id={searchId} type="search" aria-label="Search loaded run log" placeholder="Search loaded log…" value={search} onChange={event=>setSearch(event.target.value)} disabled={denied}/></div><span className="loaded-list-count" role="status">{search?`${matches} match${matches===1?'':'es'}${matches>200?' · first 200 highlighted':''}`:query.hasNextPage?'More output available':'Loaded output'}</span></div></div>
   {query.error?<PanelError error={query.error} retry={()=>void query.refetch()}/>:loading?<Loading label="Loading run log…"/>:null}
-  {!denied&&query.isSuccess?<div hidden={loading}><pre className="source-code execution-log" tabIndex={0} aria-label="Workflow run log"><LogHighlight text={text||'No log output yet.'} search={search}/><span ref={end}/></pre></div>:null}
+  {!denied&&withheld?<p className="panel-footnote" role="status">Output is withheld pending a verified execution result and current authorization.</p>:null}
+  {!denied&&run.outputState===WorkflowOutputState.REDACTED?<p className="panel-footnote">Configured secret values were masked before this log was published.</p>:null}
+  {!denied&&!withheld&&query.isSuccess?<div hidden={loading}><pre className="source-code execution-log" tabIndex={0} aria-label="Workflow run log"><LogHighlight text={text||'No log output yet.'} search={search}/><span ref={end}/></pre></div>:null}
   {!denied&&!loading?<More hasMore={Boolean(query.hasNextPage)} loading={query.isFetchingNextPage} load={()=>void query.fetchNextPage()} label="log output"/>:null}
   {!denied&&!loading&&(truncated||query.data?.pages.some(page=>page.truncated))?<p className="panel-footnote" role="status">Output reached the worker limit. The stored log is truncated; loading more cannot recover omitted output.</p>:null}
   <p className="panel-footnote">Search and download cover loaded chunks only.</p>
@@ -181,7 +189,7 @@ export function WorkflowRunPage({userId,owner,name,repositoryId,runId,signingOut
    </>}
    </div></details></aside><div className="automation-run-output">
     {selectedStepId||selectedJobInstanceId?<h3>{engineStep?.name||job?.name||'Selected job'}</h3>:selectedStep!==undefined?<h3>{run.progress?.steps.find(step=>step.index===selectedStep)?.name||'Selected step'}</h3>:null}
-    {badSelection?<PanelError error={new ConnectError('The selected job or step does not belong to this recorded run.',Code.NotFound)} retry={()=>void query.refetch()}/>:!selectedRecorded?<p className="panel-footnote" role="status">{selectedJobInstanceId?'The selected job or step has no recorded start or output. Choose all run output or a job/step that started.':'The selected step has no recorded output. Choose all run output or a step that started.'}</p>:<WorkflowRunLogs onAuthorityDenied={denyLogAuthority} key={`${run.attemptId}-${selectedJobInstanceId||'all'}-${selectedStepId||'all'}-${selectedStep??'all'}`} run={run} userId={userId} owner={owner} name={name} runId={runId} stepIndex={selectedStep} jobInstanceId={selectedJobInstanceId} stepId={selectedStepId} truncated={run.logsTruncated} enabled={!query.isFetching&&!signingOut}/>}
+    {badSelection?<PanelError error={new ConnectError('The selected job or step does not belong to this recorded run.',Code.NotFound)} retry={()=>void query.refetch()}/>:!selectedRecorded?<p className="panel-footnote" role="status">{selectedJobInstanceId?'The selected job or step has no recorded start or output. Choose all run output or a job/step that started.':'The selected step has no recorded output. Choose all run output or a step that started.'}</p>:<WorkflowRunLogs onAuthorityDenied={denyLogAuthority} key={`${run.attemptId}-${run.outputState}-${selectedJobInstanceId||'all'}-${selectedStepId||'all'}-${selectedStep??'all'}`} run={run} userId={userId} owner={owner} name={name} runId={runId} stepIndex={selectedStep} jobInstanceId={selectedJobInstanceId} stepId={selectedStepId} truncated={run.logsTruncated} enabled={!query.isFetching&&!signingOut}/>}
     {engineRun&&!selectedJobInstanceId&&run.jobs.some(job=>!job.eventsRecorded)?<p className="panel-footnote">Job outcomes without recorded events are shown as pending or unrecorded. The overall run result does not establish missing job or step outcomes.</p>:null}
    </div></div>
   </div>{query.isFetching?<Loading label="Checking run access…"/>:null}</>:null}

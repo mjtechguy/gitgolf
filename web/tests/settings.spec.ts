@@ -1,4 +1,4 @@
-import { disabledAgentUsage } from './rpc';
+import { unconfiguredOwnEmail,emptyOwnEmailHistory,disabledAgentUsage } from './rpc';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
@@ -12,6 +12,8 @@ async function backend(page: Page, admin = true) {
  if(method === 'GetAgentUsage') return disabledAgentUsage(route);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: state.user });
+    if(method==='GetOwnEmailNotifications')return unconfiguredOwnEmail(route,state.user.id);
+    if(method==='ListOwnEmailDeliveries')return emptyOwnEmailHistory(route,state.user.id);
     if (method === 'GetProfile') return respond(route, GetProfileResponseSchema, { profile: { userId: state.user.id, login: state.user.login, fullName: state.user.fullName, revision: 'profile-revision', canEdit: true } });
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, {});

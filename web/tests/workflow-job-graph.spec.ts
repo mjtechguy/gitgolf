@@ -1,12 +1,12 @@
 import {expect,test,type Page,type Route} from '@playwright/test';
 import {respond,request,reject,disabledAgentTasks} from './rpc';
-import {GetSessionResponseSchema,GetRepositoryResponseSchema,ListRepositoriesResponseSchema,ListCapabilitiesResponseSchema,GetWorkflowRunRequestSchema,GetWorkflowRunResponseSchema,GetWorkflowRunLogsRequestSchema,GetWorkflowRunLogsResponseSchema,WorkflowRunState,WorkflowRunOrigin,WorkflowStepState} from '../src/gen/golf/v1/golf_pb';
+import {GetSessionResponseSchema,GetRepositoryResponseSchema,ListRepositoriesResponseSchema,ListCapabilitiesResponseSchema,GetWorkflowRunRequestSchema,GetWorkflowRunResponseSchema,GetWorkflowRunLogsRequestSchema,GetWorkflowRunLogsResponseSchema,WorkflowOutputState,WorkflowRunState,WorkflowRunOrigin,WorkflowStepState} from '../src/gen/golf/v1/golf_pb';
 
 const runId='12345678-1234-4234-8234-123456789abc',commit='a'.repeat(40),attempt='d'.repeat(32),catalog='golf.workflow.act.v0.2.89.linux.v1',engineCommit='4f411281417e88660bea1c1a1749aa71ae0bd60f';
 const build='1'.repeat(32),test22='2'.repeat(32),test24='3'.repeat(32),skip='4'.repeat(32),image='alpine:3.23@sha256:'+'5'.repeat(64),path=`/alex/demo/actions/runs/${runId}`;
 const started='2026-10-04T00:01:00Z',finished='2026-10-04T00:01:10Z';
 async function fixture(page:Page){
- const state={reads:0,deny:false,logDeny:false,logError:'' as ''|'permission_denied'|'not_found'|'unauthenticated',runBarrier:undefined as Promise<void>|undefined,badGraph:'',badReceipt:'',unrecorded:false,startSecond:false,complete:false,logBarrier:undefined as Promise<void>|undefined,filters:[] as {jobInstanceId:string;stepId:string;stepIndex:number|undefined;after:string}[]};
+ const state={publication:'' as ''|'withheld'|'redacted',rawWithheld:false,reads:0,deny:false,logDeny:false,logError:'' as ''|'permission_denied'|'not_found'|'unauthenticated',runBarrier:undefined as Promise<void>|undefined,badGraph:'',badReceipt:'',unrecorded:false,startSecond:false,complete:false,logBarrier:undefined as Promise<void>|undefined,filters:[] as {jobInstanceId:string;stepId:string;stepIndex:number|undefined;after:string}[]};
  const run=()=>{
   const steps=(pending=false)=>[{id:'0',name:'Inspect source',state:pending?WorkflowStepState.PENDING:WorkflowStepState.SUCCEEDED,startedAt:pending?undefined:started,finishedAt:pending?undefined:finished},{id:'verify-code',name:'Verify source',state:pending?WorkflowStepState.PENDING:state.complete?WorkflowStepState.SUCCEEDED:WorkflowStepState.RUNNING,startedAt:pending?undefined:finished,finishedAt:state.complete&&!pending?'2026-10-04T00:01:30Z':undefined}];
   const jobs=[{instanceId:build,jobId:'build',name:'Build source',matrix:[],needs:[],state:WorkflowStepState.SUCCEEDED,startedAt:started,finishedAt:finished,eventsRecorded:true,imageDigest:image,steps:[{id:'compile',name:'Compile',state:WorkflowStepState.SUCCEEDED,startedAt:started,finishedAt:finished}]},{instanceId:test22,jobId:'test',name:'Test source',matrix:[{name:'node',valueJson:'"22"'}],needs:['build'],state:state.complete?WorkflowStepState.SUCCEEDED:WorkflowStepState.RUNNING,startedAt:finished,finishedAt:state.complete?'2026-10-04T00:01:30Z':undefined,eventsRecorded:true,imageDigest:image,steps:steps()},{instanceId:test24,jobId:'test',name:'Test source',matrix:[{name:'node',valueJson:'"24"'}],needs:['build'],state:state.startSecond?WorkflowStepState.RUNNING:WorkflowStepState.PENDING,startedAt:state.startSecond?started:undefined,eventsRecorded:state.startSecond,imageDigest:image,steps:steps(!state.startSecond)},{instanceId:skip,jobId:'optional',name:'Optional check',matrix:[],needs:['build'],state:WorkflowStepState.SKIPPED,finishedAt:finished,eventsRecorded:true,imageDigest:image,steps:[{id:'optional',name:'Optional source check',state:WorkflowStepState.SKIPPED,startedAt:undefined,finishedAt:undefined}]}];
@@ -18,7 +18,8 @@ async function fixture(page:Page){
   if(state.badGraph==='needs')jobs[1]!.needs=['missing'];
   if(state.badGraph==='image')jobs[1]!.imageDigest='alpine:latest';
   if(state.badGraph==='state')jobs[1]!.state=999 as WorkflowStepState;
-  return {id:runId,repositoryId:'11',ownerId:'42',version:'9',workflowPath:'.github/workflows/graph.yml',workflowBlobId:'b'.repeat(40),sourceSha256:'c'.repeat(64),commitId:commit,attemptId:state.badGraph==='attempt'?'wrong':attempt,engineCatalog:state.badGraph==='catalog'?'unqualified.engine':catalog,engineCommit:state.badGraph==='pin'?'6'.repeat(40):engineCommit,createdAt:'2026-10-04T00:00:00Z',startedAt:started,state:state.unrecorded?WorkflowRunState.FAILED:WorkflowRunState.RUNNING,origin:WorkflowRunOrigin.MANUAL,runnerId:'owned-source-fixture',canCancel:false,jobs};
+  if(state.publication==='redacted')for(const job of jobs){if(job.state!==WorkflowStepState.SKIPPED){job.state=WorkflowStepState.SUCCEEDED;job.startedAt=started;job.finishedAt=finished;for(const step of job.steps){step.state=WorkflowStepState.SUCCEEDED;step.startedAt=started;step.finishedAt=finished;}}}
+  return {outputState:state.publication==='withheld'?WorkflowOutputState.WITHHELD:state.publication==='redacted'?WorkflowOutputState.REDACTED:WorkflowOutputState.UNSPECIFIED,executionBindingId:state.publication?'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa':'',executionBindingVersion:state.publication?'3':'',id:runId,repositoryId:'11',ownerId:'42',version:'9',workflowPath:'.github/workflows/graph.yml',workflowBlobId:'b'.repeat(40),sourceSha256:'c'.repeat(64),commitId:commit,attemptId:state.badGraph==='attempt'?'wrong':attempt,engineCatalog:state.badGraph==='catalog'?'unqualified.engine':catalog,engineCommit:state.badGraph==='pin'?'6'.repeat(40):engineCommit,createdAt:'2026-10-04T00:00:00Z',startedAt:started,state:state.publication==='redacted'?WorkflowRunState.SUCCEEDED:state.unrecorded?WorkflowRunState.FAILED:WorkflowRunState.RUNNING,origin:WorkflowRunOrigin.MANUAL,runnerId:'owned-source-fixture',canCancel:false,jobs};
  };
  await page.route('**/rpc/**',async(route:Route)=>{
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
@@ -40,13 +41,14 @@ async function fixture(page:Page){
    if(state.logBarrier)await state.logBarrier;
    if(state.logError)return reject(route,state.logError,'Job log unavailable.');
    if(state.logDeny)return reject(route,'permission_denied','Job log access removed.');
-   const receipt={runId,attemptId:attempt,repositoryId:'11',sourceCommitId:commit,jobInstanceId:input.jobInstanceId,stepId:input.stepId};
+   const receipt={outputState:state.publication==='withheld'?WorkflowOutputState.WITHHELD:state.publication==='redacted'?WorkflowOutputState.REDACTED:WorkflowOutputState.UNSPECIFIED,runId,attemptId:attempt,repositoryId:'11',sourceCommitId:commit,jobInstanceId:input.jobInstanceId,stepId:input.stepId};
    if(state.badReceipt==='run')receipt.runId='87654321-1234-4234-8234-123456789abc';
    if(state.badReceipt==='attempt')receipt.attemptId='e'.repeat(32);
    if(state.badReceipt==='repository')receipt.repositoryId='12';
    if(state.badReceipt==='source')receipt.sourceCommitId='f'.repeat(40);
    if(state.badReceipt==='job')receipt.jobInstanceId=test24;
    if(state.badReceipt==='step')receipt.stepId='wrong-step';
+   if(state.publication==='withheld')return respond(route,GetWorkflowRunLogsResponseSchema,{...receipt,logs:state.rawWithheld?[{sequence:1n,text:'forbidden-private-output'}]:[],hasMore:false});
    const scope=input.jobInstanceId===test22?'Node22':input.jobInstanceId===test24?'Node24':input.jobInstanceId===build?'Build':'All jobs';
    const text=`${scope} ${input.stepId||'job output'}\n`;
    // A global log sequence may have gaps when filtered by exact attribution.
@@ -161,4 +163,19 @@ test('unauthenticated log read ends the managed session and clears the entire pr
  state.logError='unauthenticated';await page.getByRole('button',{name:'Refresh run log',exact:true}).click();
  await expect(page.getByRole('form',{name:'Golf account sign-in',exact:true})).toBeVisible();
  await expect(page.getByLabel('Jobs and steps')).toHaveCount(0);await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);
+});
+
+
+test('withheld execution output is explicit and cannot be downloaded as an empty successful log',async({page})=>{
+ const state=await fixture(page);state.publication='withheld';await page.goto(path);
+ await expect(page.getByText('Output is withheld pending a verified execution result and current authorization.',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Download loaded log',exact:true})).toBeDisabled();
+ await expect(page.getByText('No log output yet.',{exact:true})).toHaveCount(0);
+ state.publication='redacted';await page.getByRole('button',{name:'Refresh selected run',exact:true}).click();
+ await expect(page.getByText('Configured secret values were masked before this log was published.',{exact:true})).toBeVisible();await expect(page.getByLabel('Workflow run log',{exact:true})).toContainText('All jobs');
+});
+
+test('a malformed withheld receipt never renders or downloads private bytes',async({page})=>{
+ const state=await fixture(page);state.publication='withheld';state.rawWithheld=true;await page.goto(path);
+ await expect(page.getByRole('alert')).toContainText('Withheld execution output cannot contain readable chunks');await expect(page.locator('body')).not.toContainText('forbidden-private-output');await expect(page.getByRole('button',{name:'Download loaded log',exact:true})).toBeDisabled();
 });

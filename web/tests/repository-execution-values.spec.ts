@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { create } from '@bufbuild/protobuf';
-import { GetRepositoryAccessResponseSchema, ListRepositoryExecutionValuesResponseSchema, SaveRepositoryExecutionValueRequestSchema, GetRepositoryExecutionValueOperationRequestSchema, RepositoryExecutionValueKind as Kind, type RepositoryExecutionValue } from '../src/gen/golf/v1/golf_pb';
+import { GetAuthenticationOptionsResponseSchema,GetSessionResponseSchema,ListCapabilitiesResponseSchema,ListRepositoriesResponseSchema,GetRepositoryAccessResponseSchema, ListRepositoryExecutionValuesResponseSchema, SaveRepositoryExecutionValueRequestSchema, GetRepositoryExecutionValueOperationRequestSchema, RepositoryExecutionValueKind as Kind, type RepositoryExecutionValue } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 // This mounts the actual new component/Connect client in a test-only host. The
@@ -18,6 +18,10 @@ async function backend(page: Page) {
  const state = { rows: [] as RepositoryExecutionValue[], revision: '0', drop: false, none: false, denied: false, writes: [] as ReturnType<typeof create<typeof SaveRepositoryExecutionValueRequestSchema>>[], inspections: [] as string[], receipt: undefined as Record<string, unknown> | undefined, delayed: undefined as Promise<void> | undefined };
  await page.route('**/rpc/**', async route => {
   const method = route.request().url().split('/').at(-1);
+  if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{localPasswordEnabled:true});
+  if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user:{id:'42',login:'alice'}});
+  if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
+  if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{});
   if (method === 'GetRepositoryAccess') { if(state.denied)return reject(route,'permission_denied','Current repository permission denied.'); return respond(route,GetRepositoryAccessResponseSchema,{access:{repositoryId:target.repositoryId,ownerId:target.ownerId,currentPermission:'owner',canManage:true,revision:target.accessRevision}}); }
   if (method === 'ListRepositoryExecutionValues') { if(state.denied)return reject(route,'permission_denied','Current repository permission denied.'); if(state.delayed)await state.delayed;return respond(route,ListRepositoryExecutionValuesResponseSchema,{target,brokerRevision:state.revision,values:state.rows,maximumValues:64,maximumBindings:20,consumerProfile:'golf.repository-env.v1'}); }
   if (method === 'SaveRepositoryExecutionValue') {
@@ -47,3 +51,15 @@ test('private editor and prior inventory disappear on native permission loss',as
  const state=await backend(page);state.rows=[createValue('10000000-0000-4000-8000-000000000001','BUILD_CREDENTIAL',Kind.SECRET)];await open(page);await newValue(page);state.denied=true;await page.getByRole('button',{name:'Refresh execution values',exact:true}).click();await expect(page.getByRole('form')).toHaveCount(0);await expect(page.getByRole('table')).toHaveCount(0);await expect(page.getByText('BUILD_CREDENTIAL',{exact:true})).toHaveCount(0);
 });
 for(const width of [390,1440])test(`both inventories use bounded shared tables at${width}`,async({page})=>{await page.setViewportSize({width,height:900});const state=await backend(page);state.rows=[createValue('10000000-0000-4000-8000-000000000001','BUILD_CREDENTIAL',Kind.SECRET),createValue('20000000-0000-4000-8000-000000000002','BUILD_REGION',Kind.VARIABLE)];await open(page);await expect(page.getByRole('searchbox',{name:'Search loaded Repository secrets and variables',exact:true})).toBeVisible();await page.evaluate(()=>document.fonts.ready);expect(await page.evaluate(()=>document.fonts.check('12px Archivo'))).toBe(true);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);await page.getByRole('button',{name:'Add value',exact:true}).click();await expect(page.getByRole('form')).toBeVisible();});
+
+
+test('product secrets route has one contextual layout and the shared generated client',async({page})=>{
+ const state=await backend(page);await page.goto('/alice/example/settings/secrets');
+ await expect(page.getByRole('navigation',{name:'Repository settings',exact:true})).toHaveCount(1);
+ await expect(page.getByRole('navigation',{name:'Breadcrumb',exact:true})).toContainText('Secrets and variables');
+ await expect(page.getByRole('link',{name:'Secrets and variables',exact:true})).toHaveAttribute('data-status','active');
+ await expect(page.getByRole('table',{name:'Repository secrets and variables',exact:true})).toBeVisible();
+ await newValue(page,'BUILD_REGION','ordinary');await page.getByLabel('Type',{exact:true}).selectOption(String(Kind.VARIABLE));await page.getByRole('button',{name:'Save value',exact:true}).click();
+ await expect(page.getByRole('table',{name:'Repository secrets and variables',exact:true})).toContainText('BUILD_REGION');expect(state.writes).toHaveLength(1);
+ await page.reload();await expect(page.getByRole('table',{name:'Repository secrets and variables',exact:true})).toContainText('BUILD_REGION');expect(state.writes).toHaveLength(1);
+});

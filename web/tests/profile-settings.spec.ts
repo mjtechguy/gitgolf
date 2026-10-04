@@ -1,13 +1,15 @@
 import { expect, test, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, GetProfileResponseSchema, UpdateProfileRequestSchema, UpdateProfileResponseSchema, ProfileSchema, UserSchema } from '../src/gen/golf/v1/golf_pb';
-import { reject, request, respond } from './rpc';
+import { unconfiguredOwnEmail,emptyOwnEmailHistory,reject, request, respond } from './rpc';
 async function backend(page: Page, canEdit = true) {
   const state = { profile: create(ProfileSchema, { userId: '42', login: 'alex', fullName: 'Alex Original', bio: 'Original bio', location: 'Original location', website: 'https://example.test', revision: 'original-profile-revision', canEdit }), writes: [] as ReturnType<typeof request<typeof UpdateProfileRequestSchema>>[], dropped: false, denied: false, logoutFailed: false, barrier: undefined as Promise<void> | undefined };
   await page.route('**/rpc/**', async route => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: create(UserSchema, { id: '42', login: 'alex', fullName: state.profile.fullName, isInstanceAdmin: true }) });
+    if(method==='GetOwnEmailNotifications')return unconfiguredOwnEmail(route,'42');
+    if(method==='ListOwnEmailDeliveries')return emptyOwnEmailHistory(route,'42');
     if (method === 'GetProfile') return state.denied ? reject(route, 'permission_denied', 'Profile access denied.') : respond(route, GetProfileResponseSchema, { profile: state.profile });
     if (method === 'UpdateProfile') {
       const input = request(route, UpdateProfileRequestSchema); state.writes.push(input);
@@ -36,7 +38,7 @@ test('cancel and pagehide clear drafts without submitting profile changes', asyn
 });
 test('save sends only changed public fields with original identity and revision, including empty strings', async ({ page }) => {
   const state = await backend(page); await page.goto('/account/settings'); await page.getByRole('button', { name: 'Edit profile', exact: true }).click(); await page.getByLabel('Display name', { exact: true }).fill('Alex Updated'); await page.getByLabel('Bio', { exact: true }).fill(''); await page.getByRole('button', { name: 'Save profile', exact: true }).click();
-  await expect(page.getByRole('status')).toHaveText('Profile saved.'); expect(state.writes).toHaveLength(1); const input = state.writes[0]!; expect(input.userId).toBe('42'); expect(input.expectedRevision).toBe('original-profile-revision'); expect(input.fullName).toBe('Alex Updated'); expect(input.bio).toBe(''); expect(input.location).toBeUndefined(); expect(input.website).toBeUndefined();
+  await expect(page.getByRole('region',{name:'Account profile',exact:true}).getByRole('status')).toHaveText('Profile saved.'); expect(state.writes).toHaveLength(1); const input = state.writes[0]!; expect(input.userId).toBe('42'); expect(input.expectedRevision).toBe('original-profile-revision'); expect(input.fullName).toBe('Alex Updated'); expect(input.bio).toBe(''); expect(input.location).toBeUndefined(); expect(input.website).toBeUndefined();
   await expect(page.getByRole('region', { name: 'Account profile', exact: true }).getByText('Alex Updated', { exact: true })).toBeVisible(); await expect(page.getByRole('button', { name: 'Edit profile', exact: true })).toBeFocused();
 });
 test('UTF-8 byte bounds and credential-bearing websites reject edits before dispatch', async ({ page }) => {
