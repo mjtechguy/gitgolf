@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -449,6 +450,17 @@ func tagRuleEquivalent(a, b *golfv1.RepositoryTagProtection) bool {
 	bb.Id = ""
 	bb.CreatedAt = ""
 	bb.UpdatedAt = ""
+	// Native ToTagProtection emits names in reader/team inventory order, not
+	// the submitted ID order. Only these membership lists are unordered;
+	// keep exact values and reject duplicates rather than silently deduplicate.
+	for _, list := range [][]string{aa.AllowedUsernames, aa.AllowedTeams, bb.AllowedUsernames, bb.AllowedTeams} {
+		slices.Sort(list)
+		for i := 1; i < len(list); i++ {
+			if list[i] == list[i-1] {
+				return false
+			}
+		}
+	}
 	return proto.Equal(aa, bb)
 }
 

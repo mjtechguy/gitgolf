@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -183,6 +184,79 @@ func TestRuleMutationEncodedReadbackBound(t *testing.T) {
 	}
 }
 
+func TestRuleMutationTagAllowlistEquivalence(t *testing.T) {
+	desired := &golfv1.RepositoryTagProtection{NamePattern: "v*", AllowedUsernames: []string{"owner", "direct"}, AllowedTeams: []string{"Writers", "Readers"}}
+	native := proto.Clone(desired).(*golfv1.RepositoryTagProtection)
+	native.Id, native.CreatedAt, native.UpdatedAt = "21", "2026-10-04T00:00:00Z", "2026-10-04T01:00:00Z"
+	slices.Reverse(native.AllowedUsernames)
+	slices.Reverse(native.AllowedTeams)
+	originalDesired, originalNative := proto.Clone(desired), proto.Clone(native)
+	if !tagRuleEquivalent(desired, native) || !proto.Equal(desired, originalDesired) || !proto.Equal(native, originalNative) {
+		t.Fatal("unordered native membership should match without mutating intent or receipt")
+	}
+	for name, change := range map[string]func(*golfv1.RepositoryTagProtection){
+		"added user":        func(v *golfv1.RepositoryTagProtection) { v.AllowedUsernames = append(v.AllowedUsernames, "extra") },
+		"removed user":      func(v *golfv1.RepositoryTagProtection) { v.AllowedUsernames = v.AllowedUsernames[:1] },
+		"duplicate user":    func(v *golfv1.RepositoryTagProtection) { v.AllowedUsernames = []string{"owner", "owner"} },
+		"duplicate team":    func(v *golfv1.RepositoryTagProtection) { v.AllowedTeams = []string{"Writers", "Writers"} },
+		"changed user case": func(v *golfv1.RepositoryTagProtection) { v.AllowedUsernames[0] = "Direct" },
+		"changed team case": func(v *golfv1.RepositoryTagProtection) { v.AllowedTeams[0] = "readers" },
+		"changed pattern":   func(v *golfv1.RepositoryTagProtection) { v.NamePattern = "v2*" },
+		"unknown field":     func(v *golfv1.RepositoryTagProtection) { v.ProtoReflect().SetUnknown([]byte{0xa0, 0x06, 0x01}) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			bad := proto.Clone(native).(*golfv1.RepositoryTagProtection)
+			change(bad)
+			if tagRuleEquivalent(desired, bad) {
+				t.Fatal("changed exact membership/configuration accepted")
+			}
+		})
+	}
+	duplicate := proto.Clone(desired).(*golfv1.RepositoryTagProtection)
+	duplicate.AllowedUsernames = []string{"owner", "owner"}
+	if tagRuleEquivalent(duplicate, duplicate) {
+		t.Fatal("duplicates must not become a valid set even on both sides")
+	}
+	empty := &golfv1.RepositoryTagProtection{NamePattern: "v*"}
+	if !tagRuleEquivalent(empty, &golfv1.RepositoryTagProtection{Id: "21", NamePattern: "v*", AllowedUsernames: []string{}, AllowedTeams: []string{}}) {
+		t.Fatal("explicit empty tag edit should remain equivalent")
+	}
+}
+
+func TestRuleMutationTagAllowlistWholeReadback(t *testing.T) {
+	m := ruleRequestFixture()
+	m.Action, m.RuleName, m.DesiredBranch, m.TagId = golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_EDIT_TAG, "", nil, "21"
+	m.DesiredTag = &golfv1.RepositoryTagProtection{NamePattern: "v*", AllowedUsernames: []string{"owner", "direct"}, AllowedTeams: []string{"Writers", "Readers"}}
+	merge, _ := wireMergeConfiguration(rulesRepositoryFixture())
+	before := &golfv1.GetRepositoryRulesResponse{RepositoryId: m.RepositoryId, OwnerId: m.OwnerId, AccessRevision: m.ExpectedAccessRevision, BranchProtections: []*golfv1.RepositoryBranchProtection{writableBranchFixture()}, TagProtections: []*golfv1.RepositoryTagProtection{{Id: "21", NamePattern: "v*"}, {Id: "22", NamePattern: "release*", AllowedUsernames: []string{"other"}}}, MergeConfiguration: merge}
+	receipt := proto.Clone(m.DesiredTag).(*golfv1.RepositoryTagProtection)
+	receipt.Id, receipt.CreatedAt, receipt.UpdatedAt = "21", "2026-10-04T00:00:00Z", "2026-10-04T01:00:00Z"
+	slices.Reverse(receipt.AllowedUsernames)
+	slices.Reverse(receipt.AllowedTeams)
+	after := proto.Clone(before).(*golfv1.GetRepositoryRulesResponse)
+	after.TagProtections[0] = receipt
+	if !verifyRuleReadback(m, before, after, nil, receipt, nil) {
+		t.Fatal("native reordered selected allowlist refused")
+	}
+	for name, change := range map[string]func(*golfv1.GetRepositoryRulesResponse){
+		"selected membership": func(v *golfv1.GetRepositoryRulesResponse) { v.TagProtections[0].AllowedUsernames[0] = "extra" },
+		"selected ID":         func(v *golfv1.GetRepositoryRulesResponse) { v.TagProtections[0].Id = "23" },
+		"selected timestamp":  func(v *golfv1.GetRepositoryRulesResponse) { v.TagProtections[0].UpdatedAt = "2026-10-04T02:00:00Z" },
+		"unrelated tag":       func(v *golfv1.GetRepositoryRulesResponse) { v.TagProtections[1].AllowedUsernames = []string{"extra"} },
+		"unrelated branch":    func(v *golfv1.GetRepositoryRulesResponse) { v.BranchProtections[0].RequiredApprovals = "0" },
+		"merge settings":      func(v *golfv1.GetRepositoryRulesResponse) { v.MergeConfiguration.AllowManualMerge = true },
+		"authority":           func(v *golfv1.GetRepositoryRulesResponse) { v.AccessRevision = strings.Repeat("c", 64) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			bad := proto.Clone(after).(*golfv1.GetRepositoryRulesResponse)
+			change(bad)
+			if verifyRuleReadback(m, before, bad, nil, receipt, nil) {
+				t.Fatal("independent receipt or unrelated drift accepted")
+			}
+		})
+	}
+}
+
 type ruleMutationFixture struct {
 	*rulesFixture
 	writes atomic.Int64
@@ -265,6 +339,10 @@ func newRuleMutationFixture(t *testing.T) *ruleMutationFixture {
 			}
 			var v forgeTagProtection
 			json.Unmarshal(raw, &v)
+			if f.fault == "tag-inventory-order" {
+				slices.Reverse(v.AllowedUsernames)
+				slices.Reverse(v.AllowedTeams)
+			}
 			v.CreatedAt = "2026-10-04T00:00:00Z"
 			v.UpdatedAt = "2026-10-04T01:00:00Z"
 			if r.Method == "POST" {
@@ -388,5 +466,55 @@ func TestRuleMutationsManagedPostgres(t *testing.T) {
 				t.Fatal("invalid authority released receipt", fault)
 			}
 		})
+	}
+}
+
+func TestRuleMutationsTagAllowlistOrderPostgres(t *testing.T) {
+	db := testDatabase(t)
+	f := newRuleMutationFixture(t)
+	s, err := New(testConfig(f.provider.URL), db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := s.createSession(t.Context(), User{ID: 42, Login: "alice"}, "pat", "rules-source-only", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential := forgeCredential{Kind: "pat", Token: "rules-source-only"}
+	ctx := context.WithValue(t.Context(), sessionTokenKey{}, credential)
+	before, err := s.currentRuleInventory(ctx, session.Value, credential, repositoryKey{"alice", "example"}, "9007199254740993", "42")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := ruleRequestFixture()
+	m.Action, m.RuleName, m.DesiredBranch = golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_EDIT_TAG, "", nil
+	m.TagId = before.TagProtections[0].Id
+	m.ExpectedAccessRevision, m.ExpectedRulesRevision = before.AccessRevision, before.RulesRevision
+	m.DesiredTag = &golfv1.RepositoryTagProtection{NamePattern: before.TagProtections[0].NamePattern, AllowedUsernames: []string{"alice", "direct"}}
+	f.fault = "tag-inventory-order"
+	request := connect.NewRequest(m)
+	request.Header().Set("Origin", s.config.PublicURL)
+	request.Header().Set("Cookie", s.sessionCookie(session.Value, session.Expires, 3600).String())
+	result, err := s.MutateRepositoryRules(ctx, request)
+	if err != nil || result == nil || result.Msg.Operation.Phase != "SUCCEEDED" || result.Msg.CurrentRules == nil || f.writes.Load() != 1 {
+		t.Fatal("reordered native tag acknowledgement/readback must succeed exactly once", err)
+	}
+	if !slices.Equal(result.Msg.CurrentRules.TagProtections[0].AllowedUsernames, []string{"direct", "alice"}) || !slices.Equal(m.DesiredTag.AllowedUsernames, []string{"alice", "direct"}) {
+		t.Fatal("native receipt order or original request was rewritten")
+	}
+	statusRequest := connect.NewRequest(&golfv1.GetRepositoryRuleMutationRequest{Repository: m.Repository, RepositoryId: m.RepositoryId, OwnerId: m.OwnerId, OperationId: m.OperationId})
+	statusRequest.Header().Set("Origin", s.config.PublicURL)
+	statusRequest.Header().Set("Cookie", request.Header().Get("Cookie"))
+	status, err := s.GetRepositoryRuleMutation(ctx, statusRequest)
+	if err != nil || status.Msg.Operation.Phase != "SUCCEEDED" || f.writes.Load() != 1 {
+		t.Fatal("original status changed or resent", err)
+	}
+	replayed, err := s.MutateRepositoryRules(ctx, request)
+	if err != nil || replayed.Msg.Operation.Phase != "SUCCEEDED" || replayed.Msg.CurrentRules != nil || f.writes.Load() != 1 {
+		t.Fatal("exact key replay redispatched", err)
+	}
+	slices.Reverse(m.DesiredTag.AllowedUsernames)
+	if _, err = s.MutateRepositoryRules(ctx, request); connect.CodeOf(err) != connect.CodeFailedPrecondition || f.writes.Load() != 1 {
+		t.Fatal("equivalent membership must not weaken original intent fingerprint", err)
 	}
 }
