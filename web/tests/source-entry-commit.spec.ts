@@ -216,3 +216,62 @@ test('invalid commit dates retain the unavailable fallback without inventing a r
   await expect(page.locator('.commit-list')).toContainText('Date unavailable');
   await expect(page.locator('.commit-list time')).toHaveCount(0);
 });
+
+// Accepted exact row observations remain mounted even when they are offscreen.
+// The surrounding repository/session gate separately revalidates current access.
+test('repeated scrolling preserves the accepted row DOM and performs no duplicate exact history read', async ({ page }) => {
+  const state = await fixture(page, 1000);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`/alex/entry-history/tree/${ref}`);
+  const link = entry(page).getByRole('link');
+  await expect(link).toHaveText('PRIVATE alex: row-000.ts');
+  await link.evaluate(element => { (window as Window & { acceptedRow?: Element }).acceptedRow = element; });
+  const exactCalls = () => state.calls.filter(call => call.path === 'row-000.ts').length;
+  expect(exactCalls()).toBe(1);
+  for (let iteration = 0; iteration < 3; iteration++) {
+    await entry(page, 'row-050.ts').scrollIntoViewIfNeeded();
+    await expect(entry(page, 'row-050.ts').getByRole('link')).toHaveText('PRIVATE alex: row-050.ts');
+    expect(await page.evaluate(() => (window as Window & { acceptedRow?: Element }).acceptedRow?.isConnected)).toBe(true);
+    await entry(page).scrollIntoViewIfNeeded();
+    await expect(link).toHaveText('PRIVATE alex: row-000.ts');
+    expect(await link.evaluate(element => element === (window as Window & { acceptedRow?: Element }).acceptedRow)).toBe(true);
+    expect(exactCalls()).toBe(1);
+  }
+  await page.evaluate(() => { window.dispatchEvent(new Event('offline')); window.dispatchEvent(new Event('online')); document.dispatchEvent(new Event('visibilitychange')); });
+  await expect(link).toHaveText('PRIVATE alex: row-000.ts');
+  expect(exactCalls()).toBe(1);
+});
+
+test('terminal row authority denial remains unavailable across viewport reentry without retrying', async ({ page }) => {
+  const state = await fixture(page, 1000); state.invalid = 'denied';
+  await page.goto(`/alex/entry-history/tree/${ref}`);
+  await expect(entry(page)).toHaveText('Latest change unavailable');
+  const calls = state.calls.filter(call => call.path === 'row-000.ts').length;
+  await entry(page, 'row-050.ts').scrollIntoViewIfNeeded();
+  await expect(entry(page, 'row-050.ts')).toHaveText('Latest change unavailable');
+  await entry(page).scrollIntoViewIfNeeded();
+  await expect(entry(page)).toHaveText('Latest change unavailable');
+  await expect(entry(page).getByRole('link')).toHaveCount(0);
+  expect(state.calls.filter(call => call.path === 'row-000.ts').length).toBe(calls);
+});
+
+test('changing the selected immutable commit clears old row content and admits a fresh bound observation', async ({ page }) => {
+  const state = await fixture(page); const nextRef = 'c'.repeat(40);
+  await page.route('**/rpc/golf.v1.RepositoryService/GetContents', route => {
+    const input = request(route, GetContentsRequestSchema);
+    if (![ref, nextRef].includes(input.ref)) return reject(route, 'not_found', 'Unknown source fixture.');
+    return respond(route, GetContentsResponseSchema, { repositoryId, commitId: input.ref, path: input.path, kind: SourceEntryType.DIRECTORY,
+      entries: [{ name: 'row-000.ts', path: 'row-000.ts', type: SourceEntryType.FILE, sha: input.ref, size: 10n }] });
+  });
+  await page.goto(`/alex/entry-history/tree/${ref}`);
+  await expect(entry(page).getByRole('link')).toHaveText('PRIVATE alex: row-000.ts');
+  state.hold = true; state.titlePrefix = 'NEXT SNAPSHOT';
+  await page.goto(`/alex/entry-history/tree/${nextRef}`);
+  await expect.poll(() => state.calls.some(call => call.ref === nextRef)).toBe(true);
+  await expect(page.locator('.source-tree')).not.toContainText('PRIVATE alex');
+  await expect(entry(page).getByRole('link')).toHaveCount(0);
+  state.hold = false; state.held.splice(0).forEach(release => release());
+  await expect(entry(page).getByRole('link')).toHaveText('NEXT SNAPSHOT alex: row-000.ts');
+  expect(state.calls.filter(call => call.ref === ref)).toHaveLength(1);
+  expect(state.calls.filter(call => call.ref === nextRef)).toHaveLength(1);
+});

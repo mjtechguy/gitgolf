@@ -5,7 +5,7 @@ import { Code, ConnectError } from '@connectrpc/connect';
 import { repositoryClient } from './api';
 import { isCommitID, repositoryOptions } from './navigation';
 import type { RepositoryLocation } from './navigation';
-import { DateLabel, privateQuery } from './RepositoryUI';
+import { DateLabel, privateSnapshotQuery } from './RepositoryUI';
 
 // Only these directory-row reads share this cap. No speculative/offscreen RPCs.
 let activeReads = 0;
@@ -32,11 +32,13 @@ export function SourceEntryCommit({ userId, repositoryId, commitId, path, locati
   const key = useMemo(() => ['repository', userId, location.owner, location.name, 'source-entry-commit', repositoryId, commitId, path], [userId, location.owner, location.name, repositoryId, commitId, path]);
   const identity = JSON.stringify(key);
   const [visibleIdentity, setVisibleIdentity] = useState('');
+  const [finishedIdentity, setFinishedIdentity] = useState('');
+  const finished = finishedIdentity === identity;
   const eligible = Boolean(userId && /^[1-9][0-9]{0,18}$/.test(repositoryId) && BigInt(repositoryId) <= 9223372036854775807n && isCommitID(commitId) && path && new TextEncoder().encode(path).byteLength <= 4096 && !/[\\\p{Cc}]/u.test(path) && path.split('/').every(part => part && part !== '.' && part !== '..'));
   const visible = visibleIdentity === identity;
   useEffect(() => {
     const element = target.current;
-    if (!eligible || !element || typeof IntersectionObserver === 'undefined') return;
+    if (!eligible || finished || !element || typeof IntersectionObserver === 'undefined') return;
     let intersects = false;
     const update = () => setVisibleIdentity(intersects && document.visibilityState === 'visible' ? identity : '');
     const observer = new IntersectionObserver(entries => {
@@ -45,12 +47,12 @@ export function SourceEntryCommit({ userId, repositoryId, commitId, path, locati
     const hide = () => setVisibleIdentity('');
     observer.observe(element); document.addEventListener('visibilitychange', update); window.addEventListener('pagehide', hide);
     return () => { observer.disconnect(); document.removeEventListener('visibilitychange', update); window.removeEventListener('pagehide', hide); };
-  }, [identity, eligible]);
+  }, [identity, eligible, finished]);
   useEffect(() => {
-    if (!visible) void client.cancelQueries({ queryKey: key, exact: true });
-  }, [client, key, visible]);
+    if (!visible && !finished) void client.cancelQueries({ queryKey: key, exact: true });
+  }, [client, key, visible, finished]);
   useEffect(() => () => { void client.cancelQueries({ queryKey: key, exact: true }); }, [client, key]);
-  const query = useQuery({ ...privateQuery, queryKey: key, enabled: eligible && visible, retry: false,
+  const query = useQuery({ ...privateSnapshotQuery, queryKey: key, enabled: eligible && (visible || finished), retry: false,
     queryFn: async ({ signal }) => {
       const release = await entryReadSlot(signal);
       try {
@@ -62,7 +64,13 @@ export function SourceEntryCommit({ userId, repositoryId, commitId, path, locati
       } finally { release(); }
     },
   });
-  const commit = visible && query.isSuccess && !query.isFetching ? query.data : undefined;
+  // Once a validated read (or terminal refusal) settles, stop watching viewport
+  // edges. Pending offscreen work still cancels; completed exact observations
+  // stay mounted and never refetch merely because the user scrolls back.
+  useEffect(() => {
+    if (!query.isFetching && (query.isSuccess || query.isError)) setFinishedIdentity(identity);
+  }, [identity, query.isFetching, query.isSuccess, query.isError]);
+  const commit = eligible && query.isSuccess ? query.data : undefined;
   return <span ref={target} className="source-entry-commit" aria-label={`Latest change for ${path}`}>
     {commit ? <><Link className="source-entry-commit-title" {...repositoryOptions(location, { view: 'commits', ref:commitId, refKind:undefined,refName:undefined, commit: commit.sha, historyPath: undefined })} title={commit.message.split('\n')[0] || 'Commit message unavailable'}>{commit.message.split('\n')[0] || 'Commit message unavailable'}</Link><span className="source-entry-commit-date"><DateLabel relative value={commit.authoredAt}/></span></> : <span className="muted source-entry-commit-unavailable">{query.isError || !eligible ? 'Latest change unavailable' : visible ? 'Reading latest change…' : 'Latest change not loaded'}</span>}
   </span>;
