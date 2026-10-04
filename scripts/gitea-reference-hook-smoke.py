@@ -30,6 +30,7 @@ HOOKS = ('pre-receive', 'update', 'post-receive', 'proc-receive', 'reference-tra
 PIN = re.compile(r'^sha256:[0-9a-f]{64}$')
 OID = re.compile(r'^[0-9a-f]{40}$')
 CONTAINER_ID = re.compile(r'^[0-9a-f]{64}$')
+GIT_HOOKS_ENV = 'GITEA__git_0x2E_config__core_0x2E_hooksPath'
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -97,6 +98,18 @@ def self_check():
     tree = ast.parse(Path(__file__).read_text())
     require(not any(isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del))
                     and node.id in ('subprocess_run', 'inventory', 'api', 'cli') for node in ast.walk(tree)))
+    # Pinned config_env.go consumes the terminating underscore of each escape.
+    # These fixed fixture cases model that decoder, not a general config API.
+    def decode_fixture_setting(name):
+        require(name.startswith('GITEA__'))
+        decoded = re.sub(r'_0[xX](([0-9a-fA-F][0-9a-fA-F])+)_',
+                         lambda match: bytes.fromhex(match.group(1)).decode('ascii'), name[7:])
+        section, key = decoded.split('__', 1)
+        return section.lower(), key
+    require(decode_fixture_setting(GIT_HOOKS_ENV) == ('git.config', 'core.hooksPath'))
+    require(decode_fixture_setting('GITEA__git_0X2e_config__core_0X2e_hooksPath') == ('git.config', 'core.hooksPath'))
+    require(decode_fixture_setting('GITEA__git_0x2Econfig__core_0x2EhooksPath') != ('git.config', 'core.hooksPath'))
+    require(decode_fixture_setting('GITEA__git_0x2E_config__core_0x2EhooksPath') != ('git.config', 'core.hooksPath'))
     # A lifecycle counter alone is an observation. Identity/image/runtime drift
     # remains a failure; neither is silently relabeled completely unchanged.
     baseline = [{'id': 'a', 'image': 'pin', 'status': 'running', 'running': True,
@@ -176,6 +189,8 @@ def main():
     reserve_id = None
     compose_started = False
     owner_token = None
+    bootstrap_token = None
+    bootstrap = project+'-bootstrap'
     repository_created = False
     hook_dir = None
     with tempfile.TemporaryDirectory(prefix=project+'-') as temporary:
@@ -221,6 +236,7 @@ def main():
                 'GITEA__database__PASSWD': secrets.token_urlsafe(32), 'GITEA__server__ROOT_URL': base+'/',
                 'GITEA__server__APP_DATA_PATH': '/var/lib/gitea/data',
                 'GITEA__server__APP_TEMP_PATH': '',
+                'GITEA__git__HOME_PATH': '/var/lib/gitea/data/home',
                 'GITEA__repository__ROOT': '/var/lib/gitea/git/repositories',
                 'GITEA__server__DISABLE_SSH': 'true', 'GITEA__security__INSTALL_LOCK': 'true',
                 'GITEA__service__DISABLE_REGISTRATION': 'true', 'GITEA__actions__ENABLED': 'false'}
@@ -245,7 +261,8 @@ def main():
                                       'admin', 'user', *words, expected=expected)
 
             def api(token, method, path, payload=None, expected=200):
-                require(path == 'version' or path.startswith(('admin/users', 'repos/'+owner_name+'/', 'user/repos')))
+                require(path == 'version' or path == 'token' and method in ('GET', 'DELETE')
+                        or path.startswith(('admin/users', 'repos/'+owner_name+'/', 'user/repos')))
                 headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
                 if token: headers['Authorization'] = 'token '+token
                 request = urllib.request.Request(base+'/api/v1/'+path, method=method, headers=headers,
@@ -280,8 +297,30 @@ def main():
                 return env
 
             def events():
-                return telemetry(subprocess_run(*compose, 'exec', '-T', 'gitea', 'sh', '-c',
-                                                'cat /run/golf-hook-telemetry/*.json')[1])
+                diagnostic = {'state': 'count_unavailable'}
+                manifest['telemetryDiagnostic'] = diagnostic
+                try:
+                    code, raw_count = subprocess_run(*compose, 'exec', '-T', 'gitea', 'sh', '-c',
+                        'test -d /run/golf-hook-telemetry && test -r /run/golf-hook-telemetry || exit 1; '
+                        'count=0; for file in /run/golf-hook-telemetry/*.json; do '
+                        'if test -f "$file"; then count=$((count+1)); fi; done; printf "%s\\n" "$count"', expected=None)
+                    diagnostic['directoryReadable'] = code == 0
+                    require(code == 0 and re.fullmatch(r'[0-9]+\n', raw_count))
+                    count = int(raw_count); require(count <= 512)
+                    diagnostic['fileCount'] = count
+                    diagnostic['state'] = 'missing' if count == 0 else 'read_pending'
+                    require(count > 0)
+                    code, raw = subprocess_run(*compose, 'exec', '-T', 'gitea', 'sh', '-c',
+                                              'cat /run/golf-hook-telemetry/*.json', expected=None)
+                    diagnostic['state'] = 'parse_pending' if code == 0 else 'read_refused'
+                    require(code == 0)
+                    rows = telemetry(raw)
+                    require(len(rows) == count)
+                    diagnostic['state'] = 'available'
+                    return rows
+                except Exception:
+                    if diagnostic['state'] == 'parse_pending': diagnostic['state'] = 'parse_refused'
+                    raise
 
             stage = 'bootstrap_and_seed'
             compose_started = True
@@ -289,7 +328,7 @@ def main():
             pg_version = subprocess_run(*compose, 'exec', '-T', 'postgres', 'postgres', '--version')[1].strip()
             require(pg_version.startswith('postgres (PostgreSQL) 18.4'))
             require(subprocess_run(*compose, 'exec', '-T', 'gitea', '/usr/bin/git', '--version')[1].strip() == 'git version 2.54.0')
-            bootstrap = project+'-bootstrap'; cli('create', '--username', bootstrap, '--email', bootstrap+'@example.invalid',
+            cli('create', '--username', bootstrap, '--email', bootstrap+'@example.invalid',
                 '--random-password', '--random-password-length', '32', '--admin', '--must-change-password=false'); users.append(bootstrap)
             bootstrap_token = token_for(bootstrap); actors = {}
             for role in ('owner', 'writer', 'reader', 'outsider'):
@@ -311,7 +350,7 @@ def main():
             baseline = api(owner_token, 'GET', route+'/branches/main')[1]['commit']['id']; require(OID.fullmatch(baseline))
             manifest['repository'] = {'id': repo['id'], 'ownerId': repo['owner']['id'], 'fullName': repo['full_name'], 'initialHead': baseline}
             stage = 'activate_operator_hooks'
-            spec['services']['gitea']['environment']['GITEA__git_0x2Econfig__core_0x2EhooksPath'] = '/opt/golf-hook-fixture'
+            spec['services']['gitea']['environment'][GIT_HOOKS_ENV] = '/opt/golf-hook-fixture'
             write_json(spec_path, spec)
             subprocess_run(*compose, 'up', '-d', '--no-deps', '--force-recreate', '--pull', 'never', 'gitea', timeout=90); ready()
             native_id = subprocess_run(*compose, 'ps', '-q', 'gitea')[1].strip()
@@ -321,6 +360,15 @@ def main():
             manifest['nativeContainerId'] = subprocess_run('docker', 'inspect', '--format', '{{.Id}}', native_id)[1].strip()
             require(subprocess_run(*compose, 'exec', '-T', 'gitea', 'sha256sum', '/opt/golf-hook-fixture/fixture')[1].split()[0] == args.hook_sha256)
             require(api(owner_token, 'GET', route)[1]['id'] == repo['id'])
+            stage = 'effective_hooks_configuration'
+            code, observed_hooks = subprocess_run(*compose, 'exec', '-T', 'gitea', 'env',
+                'HOME=/var/lib/gitea/data/home', 'XDG_CONFIG_HOME=', 'GIT_CONFIG_NOSYSTEM=1',
+                'GIT_NO_REPLACE_OBJECTS=1', '/usr/bin/git', '--git-dir', descriptor['receiver'],
+                'config', '--get', 'core.hooksPath', expected=None)
+            manifest['effectiveHooksConfiguration'] = {'exitCode': code, 'valuePresent': bool(observed_hooks),
+                'matchesExpected': code == 0 and observed_hooks == '/opt/golf-hook-fixture\n',
+                'nativeGitHomeExplicit': True}
+            require(manifest['effectiveHooksConfiguration']['matchesExpected'])
             remote = base+'/'+repo['full_name']+'.git'; work = directory/'client'
             def git(*words, actor='writer', expected=0):
                 return subprocess_run('git', *words, cwd=work if work.exists() else directory,
@@ -403,8 +451,25 @@ def main():
                     try: api(owner_token, 'DELETE', 'repos/'+owner_name+'/native-hook', expected=204)
                     except Exception: cleanup_errors.append('supported_native_repository_cleanup')
                 for name in reversed(users):
-                    try: cli('delete', '--username', name, '--purge')
+                    if name == bootstrap:
+                        continue
+                    try:
+                        cli('delete', '--username', name, '--purge')
+                        manifest['cleanup']['ordinaryActorsPurgedCount'] = manifest['cleanup'].get('ordinaryActorsPurgedCount', 0)+1
                     except Exception: cleanup_errors.append('supported_native_actor_cleanup')
+                manifest['cleanup']['ordinaryActorsPurgeExpectedCount'] = sum(name != bootstrap for name in users)
+                if bootstrap in users:
+                    manifest['cleanup']['bootstrapCliPurgeAttempted'] = False
+                    manifest['cleanup']['bootstrapTokenRevoked'] = False
+                    if bootstrap_token:
+                        try:
+                            current_token = api(bootstrap_token, 'GET', 'token')[1]
+                            require(current_token['name'] == project and current_token['user']['login'] == bootstrap)
+                            api(bootstrap_token, 'DELETE', 'token', expected=204)
+                            api(bootstrap_token, 'GET', 'token', expected=401)
+                            manifest['cleanup']['bootstrapTokenRevoked'] = True
+                        except Exception:
+                            cleanup_errors.append('bootstrap_token_revocation')
                 try:
                     current_ids = subprocess_run('docker', 'ps', '-aq', '--filter', 'label=com.docker.compose.project='+project)[1].split()
                     template = ('{"id":{{json .Id}},"image":{{json .Image}},'
@@ -435,6 +500,8 @@ def main():
                            for kind in ('container', 'volume', 'network')}
                 manifest['cleanup']['ownResourcesZero'] = not any(residue.values())
                 manifest['cleanup']['residualCounts'] = {kind: len(rows) for kind, rows in residue.items()}
+                if bootstrap in users:
+                    manifest['cleanup']['bootstrapAccountDisposedWithFreshVolumes'] = not any(residue.values())
                 if any(residue.values()): cleanup_errors.append('owned_resource_residue')
             except Exception: cleanup_errors.append('owned_resource_observation')
             if before is not None:
