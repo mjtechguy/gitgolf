@@ -58,6 +58,10 @@ test('repository general editor cancels drafts and sends exact IDs/revision with
   await page.goto('/repositories/alex/demo/settings');
   await expect(page.getByText('Original description', { exact: true })).toBeVisible();
   await expect(page.locator('tr[data-row-id="general"]').getByText('Ready', { exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open Collaborators and deploy keys', exact: true })).toHaveAttribute('href', '/alex/demo/settings/access');
+  await expect(page.getByRole('link', { name: 'Open CI engines and workflow controls', exact: true })).toHaveAttribute('href', '/alex/demo/settings/workflows');
+  await expect(page.getByRole('link', { name: 'Open Webhooks and notifications', exact: true })).toHaveAttribute('href', '/alex/demo/settings/webhooks');
+  await expect(page.locator('tr[data-row-id="events"]').getByText('Partial', { exact: true })).toBeVisible();
   await expect(page.locator('tr[data-row-id="rules"]').getByText('Planned', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Description', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Edit general settings', exact: true }).click();

@@ -3,7 +3,7 @@ import { AgentUsageScope } from './gen/golf/v1/golf_pb';
 import { ProfileSettings } from './ProfileSettings';
 import { ExecutionPolicyPanel } from './ExecutionPolicyPanel';
 import { ExecutionScope } from './gen/golf/v1/golf_pb';
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Webhook, History, KeyRound, ShieldCheck, UserRound } from 'lucide-react';
 import type { User } from './gen/golf/v1/golf_pb';
@@ -71,14 +71,14 @@ const inventory: Record<SettingsScope, SettingEntry[]> = {
   ],
   repository: [
     { id: 'general', section: 'General and features', state: 'Partial', detail: 'General configuration requires a verified current native read. Website/topics and explicit tracker/wiki controls are separately qualified; a native wiki configuration is not a Golf workspace.', task: 'P1.4 / G1' },
-    { id: 'access', section: 'Collaborators and deploy keys', state: 'Partial', detail: 'Personal repository owners and direct admins can manage existing accounts’ read/write/admin grants and read-only or read-write deploy keys. Owner, self and exceptional owner-level grants are locked. Organization/team grants and invitations remain required.', task: 'P1.5 / P1.8' },
+    { id: 'access', section: 'Collaborators and deploy keys', state: 'Partial', detail: 'Personal repository owners and direct admins can manage existing accounts’ read/write/admin grants and read-only or read-write deploy keys. Owner, self and exceptional owner-level grants are locked. Organization owners can attach/detach existing eligible teams on organization repositories; protected native teams stay locked. Invitations and custom roles remain required.', task: 'P1.5 / P1.8' },
     { id: 'rules', section: 'Rulesets, reviews and merge policy', state: 'Planned', detail: 'Required reviews/checks, branch/tag protection, trusted publishers and merge queues remain gated on complete mutation enforcement.', task: 'P0.8 / P2.3 / G5' },
-    { id: 'ci', section: 'CI engines and workflow controls', state: 'Partial', detail: 'Manual and signed-push shell workflows have real isolated execution, policy ceilings and Actions run/log pages. Full Actions/GitLab engines, additional event triggers, artifacts and cache remain required.', task: 'P4 / G3' },
+    { id: 'ci', section: 'CI engines and workflow controls', state: 'Partial', detail: 'Manual and signed-push shell workflows have qualified isolated execution and policy ceilings. The opt-in pinned Linux Actions profile qualifies dependency/matrix/local-composite graphs with exact run/job/step logs. Full Actions/GitLab compatibility, additional triggers, artifacts and cache remain required.', task: 'P4 / G3' },
     { id: 'runners', section: 'Runners and resource limits', state: 'Planned', detail: 'Choose approved groups and resources only after pools exist and organization ceilings can be enforced.', task: 'P4 / G3' },
     { id: 'secrets', section: 'Secrets, variables and OIDC', state: 'Planned', detail: 'Repository/environment credentials, metadata-only inventories and rotation need a broker; workflow text must not expand permission.', task: 'G3 / G5' },
     { id: 'deployments', section: 'Environments, previews and production', state: 'Planned', detail: 'Reviewers, branch restrictions, protected temporary links, exact artifact promotion and rollback need real CD and destination authority.', task: 'P6 / G5' },
     { id: 'agents', section: 'Agents, MCP and models', state: 'Partial', detail: 'Scoped connections, models, coding tasks and PR-review assignments have controls in Workflows; results and bounded private Codex conversation records are in Actions. Interactive follow-ups, other harness journals and complete tool/network policies remain required.', task: 'P5 / G4' },
-    { id: 'events', section: 'Webhooks and notifications', state: 'Planned', detail: 'Verified destinations, signing secrets, replay/retry controls and email subscriptions require durable delivery and safe outbound access.', task: 'P3 / P6' },
+    { id: 'events', section: 'Webhooks and notifications', state: 'Partial', detail: 'Named encrypted webhooks have explicit background consent, signed deliveries, durable history, retries and confirmed redelivery. Enablement requires an operator-configured outbound worker; email subscriptions and complete notification semantics remain required.', task: 'P3 / P6' },
     { id: 'danger', section: 'Archive, transfer and deletion', state: 'Planned', detail: 'Destructive administration is not exposed yet; ownership recovery, confirmation, target binding and audit must precede these controls.', task: 'P1.5 / P2.3' },
   ],
   instance: [
@@ -94,16 +94,20 @@ const inventory: Record<SettingsScope, SettingEntry[]> = {
     { id: 'limits', section: 'Budgets, quotas and retention', state: 'Planned', detail: 'Shared resource ceilings, cost accounting and lifecycle retention need actual execution/storage measurements and auditable policy.', task: 'G3 / G6 / P8' },
   ],
 };
-const settingsColumns: DataTableColumn<SettingEntry>[] = [
+function settingsColumns(repository?: { owner: string; name: string }): DataTableColumn<SettingEntry>[] { return [
   { accessorKey: 'section', header: 'Section' },
   { accessorKey: 'state', header: 'Availability', cell: ({ row }) => <span className="visibility">{row.original.state}</span> },
   { accessorKey: 'detail', header: 'Details', cell: ({ row }) => <>{row.original.detail}<small><a href="https://github.com/ghost-hardened-open-source/golf-git/blob/main/GOLF_IMPLEMENTATION_PLAN.md" target="_blank" rel="noreferrer">Plan tasks: {row.original.task}</a></small></> },
-  { id: 'actions', header: 'Action', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => row.original.to ? <Link className="text-button" to={row.original.to} hash={row.original.hash}>Open</Link> : <span className="muted">{row.original.state === 'Planned' ? 'Not configurable yet' : row.original.state === 'Partial' ? 'See available scope controls' : 'No browser editor'}</span> },
-];
+  { id: 'actions', header: 'Action', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => {
+    const route = repository && ({ access: '/$owner/$name/settings/access', ci: '/$owner/$name/settings/workflows', agents: '/$owner/$name/settings/workflows', events: '/$owner/$name/settings/webhooks' } as const)[row.original.id as 'access' | 'ci' | 'agents' | 'events'];
+    return route && repository ? <Link className="text-button" to={route} params={repository} aria-label={`Open ${row.original.section}`}>Open</Link> : row.original.to ? <Link className="text-button" to={row.original.to} hash={row.original.hash}>Open</Link> : <span className="muted">{row.original.state === 'Planned' ? 'Not configurable yet' : row.original.state === 'Partial' ? 'See available scope controls' : 'No browser editor'}</span>;
+  } },
+]; }
 
-export function SettingsInventory({ scope, generalObservation }: { scope: SettingsScope; generalObservation?: { canEdit: boolean; implemented: boolean; issues: string; wiki: string } }) {
+export function SettingsInventory({ scope, generalObservation, repository }: { scope: SettingsScope; repository?: { owner: string; name: string }; generalObservation?: { canEdit: boolean; implemented: boolean; issues: string; wiki: string } }) {
+ const columns = useMemo(() => settingsColumns(scope === 'repository' && repository ? { owner: repository.owner, name: repository.name } : undefined), [scope, repository?.owner, repository?.name]);
  const entries = scope === 'repository' && generalObservation ? inventory[scope].map((entry) => entry.id === 'general' ? { ...entry, state: generalObservation.implemented ? 'Ready' as const : 'Partial' as const, detail: `Verified current configuration: issues ${generalObservation.issues.toLowerCase()}, wiki ${generalObservation.wiki.toLowerCase()}. ${generalObservation.implemented ? 'Website, topics, default branch and tracker/wiki configuration editors are qualified.' : 'Editor support unavailable.'} ${generalObservation.canEdit ? 'You can administer these settings.' : 'You have view-only access.'} Wiki configuration does not include a Golf wiki workspace.` } : entry) : inventory[scope];
-  return <section className="browser-panel credential-list-panel" aria-labelledby={`${scope}-inventory-title`}><div className="browser-panel-heading"><h2 id={`${scope}-inventory-title`}>Settings coverage</h2><span className="visibility">Current preview</span></div><DataTable data={entries} columns={settingsColumns} getRowId={(entry) => entry.id} label={`${scope.charAt(0).toUpperCase()}${scope.slice(1)} settings`} /><p className="panel-footnote">Availability describes this build. Planned rows document missing enforcement and do not grant execution or administration. Search and sorting cover this displayed inventory.</p></section>;
+  return <section className="browser-panel credential-list-panel" aria-labelledby={`${scope}-inventory-title`}><div className="browser-panel-heading"><h2 id={`${scope}-inventory-title`}>Settings coverage</h2><span className="visibility">Current preview</span></div><DataTable data={entries} columns={columns} getRowId={(entry) => entry.id} label={`${scope.charAt(0).toUpperCase()}${scope.slice(1)} settings`} /><p className="panel-footnote">Availability describes this build. Planned rows document missing enforcement and do not grant execution or administration. Search and sorting cover this displayed inventory.</p></section>;
 }
 
 export function ScopedSettings({ scope, name, userId, signingOut=false }: { signingOut?:boolean; scope: 'organization' | 'instance'; name?: string; userId: string }) {

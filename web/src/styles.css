@@ -411,6 +411,8 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .data-table td p { margin:3px 0 0; color:var(--muted); font-size:.8125rem; }
 .data-table td code { white-space:nowrap; font-size:.8125rem; }
 .data-table td .button { padding:7px 10px; min-height:34px; font-size:.8125rem; white-space:nowrap; }
+.data-table td .credential-actions { margin:0; gap:4px; flex-wrap:nowrap; align-items:center; width:max-content; }
+.data-table td .credential-actions > * { flex-shrink:0; }
 .data-table-sort { display:inline-flex; gap:6px; align-items:center; padding:3px 0; background:none; border:0; color:inherit; font:inherit; cursor:pointer; }
 .data-table-sort:hover { color:var(--text); }
 .data-table-empty { color:var(--muted); padding:22px 15px !important; }
