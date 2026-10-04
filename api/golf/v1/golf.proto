@@ -2447,3 +2447,61 @@ message TestRepositoryWebhookRequest { RepositoryWebhookTarget target = 1; strin
 message RedeliverRepositoryWebhookRequest { RepositoryWebhookTarget target = 1; string delivery_id = 2; string expected_version = 3; string operation_id = 4; }
 message TestRepositoryWebhookResponse { RepositoryWebhookTarget target = 1; RepositoryWebhookDelivery delivery = 2; }
 message RedeliverRepositoryWebhookResponse { RepositoryWebhookTarget target = 1; RepositoryWebhookDelivery delivery = 2; }
+
+// Repository association only; global team permissions are read-only observations.
+service RepositoryTeamAccessService {
+  rpc ListRepositoryTeamAccess(ListRepositoryTeamAccessRequest) returns (ListRepositoryTeamAccessResponse);
+  rpc AttachRepositoryTeam(AttachRepositoryTeamRequest) returns (AttachRepositoryTeamResponse);
+  rpc DetachRepositoryTeam(DetachRepositoryTeamRequest) returns (DetachRepositoryTeamResponse);
+}
+message RepositoryTeamAccess {
+  OrganizationTeam team = 1;
+  bool attached = 2;
+  bool is_owner_team = 3;
+  bool can_attach = 4;
+  bool can_detach = 5;
+  string revision = 6;
+}
+message ListRepositoryTeamAccessRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string expected_revision = 4;
+  PageRequest page = 5;
+}
+message ListRepositoryTeamAccessResponse {
+  string repository_id = 1;
+  string owner_id = 2;
+  string access_revision = 3;
+  bool can_manage = 4;
+  repeated RepositoryTeamAccess teams = 5;
+  PageResponse page = 6;
+}
+message AttachRepositoryTeamRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string expected_revision = 4;
+  string team_id = 5;
+  string expected_team_revision = 6;
+}
+message AttachRepositoryTeamResponse {
+  string repository_id = 1;
+  string owner_id = 2;
+  string access_revision = 3;
+  RepositoryTeamAccess team = 4;
+}
+message DetachRepositoryTeamRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string expected_revision = 4;
+  string team_id = 5;
+  string expected_team_revision = 6;
+}
+message DetachRepositoryTeamResponse {
+  string repository_id = 1;
+  string owner_id = 2;
+  string access_revision = 3;
+  RepositoryTeamAccess team = 4;
+}

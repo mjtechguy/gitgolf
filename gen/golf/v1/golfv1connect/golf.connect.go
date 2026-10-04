@@ -80,6 +80,9 @@ const (
 	RepositoryDeployKeyServiceName = "golf.v1.RepositoryDeployKeyService"
 	// RepositoryWebhookServiceName is the fully-qualified name of the RepositoryWebhookService service.
 	RepositoryWebhookServiceName = "golf.v1.RepositoryWebhookService"
+	// RepositoryTeamAccessServiceName is the fully-qualified name of the RepositoryTeamAccessService
+	// service.
+	RepositoryTeamAccessServiceName = "golf.v1.RepositoryTeamAccessService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -488,6 +491,15 @@ const (
 	// RepositoryWebhookServiceRedeliverRepositoryWebhookProcedure is the fully-qualified name of the
 	// RepositoryWebhookService's RedeliverRepositoryWebhook RPC.
 	RepositoryWebhookServiceRedeliverRepositoryWebhookProcedure = "/golf.v1.RepositoryWebhookService/RedeliverRepositoryWebhook"
+	// RepositoryTeamAccessServiceListRepositoryTeamAccessProcedure is the fully-qualified name of the
+	// RepositoryTeamAccessService's ListRepositoryTeamAccess RPC.
+	RepositoryTeamAccessServiceListRepositoryTeamAccessProcedure = "/golf.v1.RepositoryTeamAccessService/ListRepositoryTeamAccess"
+	// RepositoryTeamAccessServiceAttachRepositoryTeamProcedure is the fully-qualified name of the
+	// RepositoryTeamAccessService's AttachRepositoryTeam RPC.
+	RepositoryTeamAccessServiceAttachRepositoryTeamProcedure = "/golf.v1.RepositoryTeamAccessService/AttachRepositoryTeam"
+	// RepositoryTeamAccessServiceDetachRepositoryTeamProcedure is the fully-qualified name of the
+	// RepositoryTeamAccessService's DetachRepositoryTeam RPC.
+	RepositoryTeamAccessServiceDetachRepositoryTeamProcedure = "/golf.v1.RepositoryTeamAccessService/DetachRepositoryTeam"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -5153,4 +5165,128 @@ func (UnimplementedRepositoryWebhookServiceHandler) TestRepositoryWebhook(contex
 
 func (UnimplementedRepositoryWebhookServiceHandler) RedeliverRepositoryWebhook(context.Context, *connect.Request[v1.RedeliverRepositoryWebhookRequest]) (*connect.Response[v1.RedeliverRepositoryWebhookResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryWebhookService.RedeliverRepositoryWebhook is not implemented"))
+}
+
+// RepositoryTeamAccessServiceClient is a client for the golf.v1.RepositoryTeamAccessService
+// service.
+type RepositoryTeamAccessServiceClient interface {
+	ListRepositoryTeamAccess(context.Context, *connect.Request[v1.ListRepositoryTeamAccessRequest]) (*connect.Response[v1.ListRepositoryTeamAccessResponse], error)
+	AttachRepositoryTeam(context.Context, *connect.Request[v1.AttachRepositoryTeamRequest]) (*connect.Response[v1.AttachRepositoryTeamResponse], error)
+	DetachRepositoryTeam(context.Context, *connect.Request[v1.DetachRepositoryTeamRequest]) (*connect.Response[v1.DetachRepositoryTeamResponse], error)
+}
+
+// NewRepositoryTeamAccessServiceClient constructs a client for the
+// golf.v1.RepositoryTeamAccessService service. By default, it uses the Connect protocol with the
+// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
+// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRepositoryTeamAccessServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepositoryTeamAccessServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	repositoryTeamAccessServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryTeamAccessService").Methods()
+	return &repositoryTeamAccessServiceClient{
+		listRepositoryTeamAccess: connect.NewClient[v1.ListRepositoryTeamAccessRequest, v1.ListRepositoryTeamAccessResponse](
+			httpClient,
+			baseURL+RepositoryTeamAccessServiceListRepositoryTeamAccessProcedure,
+			connect.WithSchema(repositoryTeamAccessServiceMethods.ByName("ListRepositoryTeamAccess")),
+			connect.WithClientOptions(opts...),
+		),
+		attachRepositoryTeam: connect.NewClient[v1.AttachRepositoryTeamRequest, v1.AttachRepositoryTeamResponse](
+			httpClient,
+			baseURL+RepositoryTeamAccessServiceAttachRepositoryTeamProcedure,
+			connect.WithSchema(repositoryTeamAccessServiceMethods.ByName("AttachRepositoryTeam")),
+			connect.WithClientOptions(opts...),
+		),
+		detachRepositoryTeam: connect.NewClient[v1.DetachRepositoryTeamRequest, v1.DetachRepositoryTeamResponse](
+			httpClient,
+			baseURL+RepositoryTeamAccessServiceDetachRepositoryTeamProcedure,
+			connect.WithSchema(repositoryTeamAccessServiceMethods.ByName("DetachRepositoryTeam")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// repositoryTeamAccessServiceClient implements RepositoryTeamAccessServiceClient.
+type repositoryTeamAccessServiceClient struct {
+	listRepositoryTeamAccess *connect.Client[v1.ListRepositoryTeamAccessRequest, v1.ListRepositoryTeamAccessResponse]
+	attachRepositoryTeam     *connect.Client[v1.AttachRepositoryTeamRequest, v1.AttachRepositoryTeamResponse]
+	detachRepositoryTeam     *connect.Client[v1.DetachRepositoryTeamRequest, v1.DetachRepositoryTeamResponse]
+}
+
+// ListRepositoryTeamAccess calls golf.v1.RepositoryTeamAccessService.ListRepositoryTeamAccess.
+func (c *repositoryTeamAccessServiceClient) ListRepositoryTeamAccess(ctx context.Context, req *connect.Request[v1.ListRepositoryTeamAccessRequest]) (*connect.Response[v1.ListRepositoryTeamAccessResponse], error) {
+	return c.listRepositoryTeamAccess.CallUnary(ctx, req)
+}
+
+// AttachRepositoryTeam calls golf.v1.RepositoryTeamAccessService.AttachRepositoryTeam.
+func (c *repositoryTeamAccessServiceClient) AttachRepositoryTeam(ctx context.Context, req *connect.Request[v1.AttachRepositoryTeamRequest]) (*connect.Response[v1.AttachRepositoryTeamResponse], error) {
+	return c.attachRepositoryTeam.CallUnary(ctx, req)
+}
+
+// DetachRepositoryTeam calls golf.v1.RepositoryTeamAccessService.DetachRepositoryTeam.
+func (c *repositoryTeamAccessServiceClient) DetachRepositoryTeam(ctx context.Context, req *connect.Request[v1.DetachRepositoryTeamRequest]) (*connect.Response[v1.DetachRepositoryTeamResponse], error) {
+	return c.detachRepositoryTeam.CallUnary(ctx, req)
+}
+
+// RepositoryTeamAccessServiceHandler is an implementation of the
+// golf.v1.RepositoryTeamAccessService service.
+type RepositoryTeamAccessServiceHandler interface {
+	ListRepositoryTeamAccess(context.Context, *connect.Request[v1.ListRepositoryTeamAccessRequest]) (*connect.Response[v1.ListRepositoryTeamAccessResponse], error)
+	AttachRepositoryTeam(context.Context, *connect.Request[v1.AttachRepositoryTeamRequest]) (*connect.Response[v1.AttachRepositoryTeamResponse], error)
+	DetachRepositoryTeam(context.Context, *connect.Request[v1.DetachRepositoryTeamRequest]) (*connect.Response[v1.DetachRepositoryTeamResponse], error)
+}
+
+// NewRepositoryTeamAccessServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRepositoryTeamAccessServiceHandler(svc RepositoryTeamAccessServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	repositoryTeamAccessServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryTeamAccessService").Methods()
+	repositoryTeamAccessServiceListRepositoryTeamAccessHandler := connect.NewUnaryHandler(
+		RepositoryTeamAccessServiceListRepositoryTeamAccessProcedure,
+		svc.ListRepositoryTeamAccess,
+		connect.WithSchema(repositoryTeamAccessServiceMethods.ByName("ListRepositoryTeamAccess")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryTeamAccessServiceAttachRepositoryTeamHandler := connect.NewUnaryHandler(
+		RepositoryTeamAccessServiceAttachRepositoryTeamProcedure,
+		svc.AttachRepositoryTeam,
+		connect.WithSchema(repositoryTeamAccessServiceMethods.ByName("AttachRepositoryTeam")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryTeamAccessServiceDetachRepositoryTeamHandler := connect.NewUnaryHandler(
+		RepositoryTeamAccessServiceDetachRepositoryTeamProcedure,
+		svc.DetachRepositoryTeam,
+		connect.WithSchema(repositoryTeamAccessServiceMethods.ByName("DetachRepositoryTeam")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RepositoryTeamAccessService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RepositoryTeamAccessServiceListRepositoryTeamAccessProcedure:
+			repositoryTeamAccessServiceListRepositoryTeamAccessHandler.ServeHTTP(w, r)
+		case RepositoryTeamAccessServiceAttachRepositoryTeamProcedure:
+			repositoryTeamAccessServiceAttachRepositoryTeamHandler.ServeHTTP(w, r)
+		case RepositoryTeamAccessServiceDetachRepositoryTeamProcedure:
+			repositoryTeamAccessServiceDetachRepositoryTeamHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRepositoryTeamAccessServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRepositoryTeamAccessServiceHandler struct{}
+
+func (UnimplementedRepositoryTeamAccessServiceHandler) ListRepositoryTeamAccess(context.Context, *connect.Request[v1.ListRepositoryTeamAccessRequest]) (*connect.Response[v1.ListRepositoryTeamAccessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryTeamAccessService.ListRepositoryTeamAccess is not implemented"))
+}
+
+func (UnimplementedRepositoryTeamAccessServiceHandler) AttachRepositoryTeam(context.Context, *connect.Request[v1.AttachRepositoryTeamRequest]) (*connect.Response[v1.AttachRepositoryTeamResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryTeamAccessService.AttachRepositoryTeam is not implemented"))
+}
+
+func (UnimplementedRepositoryTeamAccessServiceHandler) DetachRepositoryTeam(context.Context, *connect.Request[v1.DetachRepositoryTeamRequest]) (*connect.Response[v1.DetachRepositoryTeamResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryTeamAccessService.DetachRepositoryTeam is not implemented"))
 }
