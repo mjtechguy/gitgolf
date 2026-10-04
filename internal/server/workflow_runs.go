@@ -149,11 +149,37 @@ func workflowBrowserToken(ctx context.Context) (forgeCredential, error) {
 }
 
 // Provider checks remain observations, never calls under local transaction locks.
+func workflowRepositoryReadError(err error) error {
+	var upstream forgeError
+	if errors.As(err, &upstream) {
+		switch upstream.status {
+		case http.StatusMovedPermanently, http.StatusFound, http.StatusSeeOther, http.StatusTemporaryRedirect, http.StatusPermanentRedirect:
+			// Historical run addresses are never rebound by following a rename or
+			// transfer redirect. Report unavailable authority, not provider downtime.
+			return errResourceNotFound
+		}
+	}
+	return err
+}
+
+func (s *Server) workflowRepositoryTargetError(ctx context.Context, credential forgeCredential, key repositoryKey, repoID, ownerID int64, err error) error {
+	if repoID > 0 && errors.Is(err, errInvalidForgeResponse) {
+		// Some native aliases return a new namespace with HTTP200. Inspect the
+		// supported immutable-ID route only on a failed address observation;
+		// healthy reads incur no extra native lookup and never rebind the run.
+		current, readErr := s.executionSelectedRepository(ctx, credential, repoID)
+		if readErr == nil && (current.Owner.ID != ownerID || !strings.EqualFold(current.FullName, key.Owner+"/"+key.Name) || !strings.EqualFold(current.Name, key.Name)) {
+			return errResourceNotFound
+		}
+	}
+	return workflowRepositoryReadError(err)
+}
+
 func (s *Server) withWorkflowRepository(ctx context.Context, session string, credential forgeCredential, key repositoryKey, repoID, ownerID int64, write bool, operation func(User, *golfv1.RepositoryAccess) error) error {
 	return s.withForgeCaller(ctx, session, credential, func(user User) error {
 		before, err := s.readRepositoryAccess(ctx, credential, key, user)
 		if err != nil {
-			return err
+			return s.workflowRepositoryTargetError(ctx, credential, key, repoID, ownerID, err)
 		}
 		check := func(a *golfv1.RepositoryAccess) error {
 			if repoID > 0 && (a.RepositoryId != strconv.FormatInt(repoID, 10) || a.OwnerId != strconv.FormatInt(ownerID, 10)) {
@@ -172,7 +198,7 @@ func (s *Server) withWorkflowRepository(ctx context.Context, session string, cre
 		}
 		after, err := s.readRepositoryAccess(ctx, credential, key, user)
 		if err != nil {
-			return err
+			return s.workflowRepositoryTargetError(ctx, credential, key, repoID, ownerID, err)
 		}
 		if after.RepositoryId != before.RepositoryId || after.OwnerId != before.OwnerId || after.OrganizationOwned != before.OrganizationOwned {
 			return errResourceNotFound

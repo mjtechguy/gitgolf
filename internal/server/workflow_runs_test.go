@@ -160,6 +160,8 @@ type workflowRunFixture struct {
 	archives           int
 	onArchive          func()
 	denied             bool
+	repositoryStatus   int
+	redirectReads      int
 }
 
 func newWorkflowRunFixture(t *testing.T) *workflowRunFixture {
@@ -184,6 +186,16 @@ func newWorkflowRunFixture(t *testing.T) *workflowRunFixture {
 			return
 		}
 		base := "/api/v1/repos/alice/example"
+		if r.URL.Path == "/api/v1/repos/moved/example" {
+			f.redirectReads++
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if r.URL.Path == base && f.repositoryStatus != 0 {
+			w.Header().Set("Location", "/api/v1/repos/moved/example")
+			w.WriteHeader(f.repositoryStatus)
+			return
+		}
 		switch r.URL.Path {
 		case "/api/v1/user":
 			write(f.user)
