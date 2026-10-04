@@ -39,3 +39,24 @@ Isolated pure/compile race checks pass1.523s; real-PostgreSQL cases are skipped 
 The isolated source tests exercise transition/version/delegation guards and author real-PostgreSQL cases for admin/password/CAS/restart retention, inherited policy and exact native binding, claim-lock races, active work continuing while draining, and revoke cancellation/source/result fences. PostgreSQL cases require`GOLF_TEST_DATABASE_URL` and are **not qualified by a skipped run**. A standalone browser component harness covers compact explicit controls, exact receipts, lost response inspection, denial clearing and theme/mobile behavior; this is source-fixture evidence, not a served/native runner qualification.
 
 Root integration still must register/mount the service/client/components, run the database suite and qualify actual controlled execution, cancellation/daemon cleanup and current authority/race/restart behavior on exact new runtime images. Capacity, trust classes, enrollment lifecycle, runner groups/labels, autoscaling, Kubernetes/Cloudflare runtime gates and latest-schema recovery remain open.
+
+## Prepared fresh runtime qualification
+
+The new `scripts/runner-controls-smoke.py` / `runner-controls-browser.mjs` pair is prepared, **not run**. Pure `--self-check`, Python AST, Node syntax and whitespace checks are preparation evidence only. Root executes it against explicitly supplied already-cached core and runner images:
+
+```sh
+python3 scripts/runner-controls-smoke.py --image sha256:CORE --runner-image sha256:RUNNER --output .tmp/runner-controls-served-attempt1 --ui
+```
+
+`--stack-root` optionally selects the actual Compose/client checkout. Image placeholders must be replaced with exact local identities; nothing is pulled or built. The core/native/PostgreSQL/DinD dependencies must already exist. Before runtime setup, the helper checks a 2GiB Docker VM reserve. It uses a fresh uniquely labeled Compose project and loopback ports, owner-only temporary credentials, ordinary supported native actors/APIs and managed Golf operator enrollment. No retained stack, provider inference, paid calls, notification destination or native database/repository write is used.
+
+A bounded `seed-pending.json` advertises **only** the owned fresh daemon container ID, expiry and exact public Alpine/DinD references. Root must explicitly seed those already-approved cached images into that daemon during the window; the helper never pulls, builds or tags them. `seed-ready.json` records independently inspected exact local image identities. Compose image-init is explicitly replaced with `/bin/true`; there is no hidden pull path.
+
+Evidence separates two scopes:
+
+- A controlled `protocol-worker` obtains genuine server lease/capabilities and exercises source hash, draining heartbeat/log/finish acceptance, second-queue exclusion, resume, revoke source/log/heartbeat/finish refusal, stale CAS and terminal restart behavior. Its supplied completion is **not evidence of an executed job**. Capabilities and source/log bytes stay in transient memory.
+- A distinct real `local-docker` worker runs owned bounded shell workflows in the seeded fresh daemon. The helper inspects actual managed/worker/attempt labels, proves heartbeat expiry renewal while draining, observes continuation logs and successful finish, proves the next queued run waits until Resume, then revokes a separate live attempt and independently waits for both its containers and source volumes to disappear. Existing configured identity remains blocked after core/worker restart. Cancellation does not substitute for these resource checks.
+
+The optional browser helper uses canonical `/admin/settings/runners` and `/OWNER/REPO/settings/runners`, exact selected workflow metadata, shared explicit controls and password confirmation. It records twelve actual font-settled dark/light1440/390 inventory, requested-confirmation and repository-policy captures, plus once-only Drain/Resume/Revoke/reload checks against four fresh idle worker identities. No auto-retry or password-bearing capture is allowed. Each fixture account uses a distinct existing password-rate bucket; limits are not changed.
+
+Finalization stops the actual consumer and independently checks owned attempt cleanup before revoking managed sessions, disabling only owned Golf accounts, supported native actor purging and exact fresh-project container/network/volume removal. Original failure stage/type/line metadata is preserved separately from cleanup failure categories. No raw subprocess/provider/worker logs, passwords, enrollment keys or capabilities are retained in artifacts. Final PASS requires the runtime identities to remain unchanged and every cleanup check to pass. This gate does not qualify production scale, hostile-tenant isolation, pools, labels, autoscaling, Kubernetes/Cloudflare runners or latest-schema recovery.
