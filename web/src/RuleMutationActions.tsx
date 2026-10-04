@@ -24,12 +24,22 @@ type OperationIdentity = { operationId: string; action: Action; accessRevision: 
 type Props = { client: Client<typeof RepositoryRulesService>; userId: string; owner: string; name: string; inventory: GetRepositoryRulesResponse; disabled?: boolean; onVerified?: () => void; onUnavailable?: (code: Code) => void };
 
 function verifiedOperation(value: RepositoryRuleMutation | undefined, identity: OperationIdentity, props: Props) {
- if (!value || value.operationId !== identity.operationId || value.actorId !== props.userId || value.repository?.owner !== props.owner || value.repository.name !== props.name || value.repositoryId !== props.inventory.repositoryId || value.ownerId !== props.inventory.ownerId || value.action !== identity.action || value.expectedAccessRevision !== identity.accessRevision || value.expectedRulesRevision !== identity.rulesRevision || !revision(value.inputFingerprint) || !phases.includes(value.phase) || (value.phase === 'SUCCEEDED') !== Boolean(value.observedRulesRevision && revision(value.observedRulesRevision)) || (value.phase === 'REJECTED') !== (value.failureCode === 'preflight_refused') || !Number.isFinite(Date.parse(value.createdAt)) || !Number.isFinite(Date.parse(value.updatedAt))) throw new ConnectError('The original rule operation receipt could not be verified.', Code.Internal);
+ const time = (v: string) => v.length <= 64 && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(v) && Number.isFinite(Date.parse(v));
+ if (!value || value.operationId !== identity.operationId || value.actorId !== props.userId || value.repository?.owner !== props.owner || value.repository.name !== props.name || value.repositoryId !== props.inventory.repositoryId || value.ownerId !== props.inventory.ownerId || value.action !== identity.action || value.expectedAccessRevision !== identity.accessRevision || value.expectedRulesRevision !== identity.rulesRevision || !revision(value.inputFingerprint) || !phases.includes(value.phase) || (value.phase === 'SUCCEEDED' ? !value.observedRulesRevision || !revision(value.observedRulesRevision) : value.observedRulesRevision !== undefined) || value.failureCode !== (value.phase === 'REJECTED' ? 'preflight_refused' : '') || !time(value.createdAt) || !time(value.updatedAt) || Date.parse(value.updatedAt) < Date.parse(value.createdAt)) throw new ConnectError('The original rule operation receipt could not be verified.', Code.Internal);
  return value;
 }
-function loadIdentity(key: string): OperationIdentity | null {
- try { const v = JSON.parse(sessionStorage.getItem(key) || 'null') as OperationIdentity | null; return v && uuid(v.operationId) && v.action >= 1 && v.action <= 7 && revision(v.accessRevision) && revision(v.rulesRevision) ? v : null; } catch { return null; }
+function loadIdentity(key: string): { identity: OperationIdentity | null; blocked: boolean } {
+ try {
+  const encoded = sessionStorage.getItem(key);
+  if (encoded === null) return { identity: null, blocked: false };
+  const value: unknown = JSON.parse(encoded);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Malformed original operation');
+  const v = value as Record<string, unknown>;
+  if (Object.keys(v).length !== 4 || typeof v.operationId !== 'string' || !uuid(v.operationId) || typeof v.action !== 'number' || !Number.isInteger(v.action) || v.action < 1 || v.action > 7 || typeof v.accessRevision !== 'string' || !revision(v.accessRevision) || typeof v.rulesRevision !== 'string' || !revision(v.rulesRevision)) throw new Error('Malformed original operation');
+  return { identity: v as OperationIdentity, blocked: false };
+ } catch { return { identity: null, blocked: true }; }
 }
+
 function stripBranch(v?: RepositoryBranchProtection) { const b = create(RepositoryBranchProtectionSchema, v ? { ...v, createdAt: '', updatedAt: '' } : { priority: '0', requiredApprovals: '1', blockOnRejectedReviews: true, blockAdminMergeOverride: true }); return b; }
 function stripTag(v?: RepositoryTagProtection) { return create(RepositoryTagProtectionSchema, v ? { ...v, id: '', createdAt: '', updatedAt: '' } : {}); }
 const split = (v: string | boolean | undefined) => String(v || '').split('\n').map(s => s.trim()).filter(Boolean);
@@ -41,7 +51,7 @@ function inputProblem(input: Pick<MutateRepositoryRulesRequest, 'action' | 'rule
  const b = input.desiredBranch;
  if (b && (!text(b.ruleName, 512) || !integer(b.priority) || !integer(b.requiredApprovals, true) || !text(b.protectedFilePatterns, 4096, true) || !text(b.unprotectedFilePatterns, 4096, true) || branchLists.some(([key]) => !list(b[key])))) return 'Use a trimmed branch pattern, canonical signed64 counts and bounded unique list entries.';
  if (b && ((!b.enablePush && (b.enablePushWhitelist || b.pushWhitelistDeployKeys || b.enableForcePush)) || (!b.enablePushWhitelist && b.pushWhitelistDeployKeys) || (!b.enableForcePush && (b.enableForcePushAllowlist || b.forcePushAllowlistDeployKeys)) || (!b.enableForcePushAllowlist && b.forcePushAllowlistDeployKeys) || (!b.enableBypassAllowlist && (b.bypassUsernames.length || b.bypassTeams.length)))) return 'Enable the parent push, force-push and bypass options before enabling their dependent settings.';
- const t = input.desiredTag; if (t && (!text(t.namePattern, 512) || !list(t.allowedUsernames) || !list(t.allowedTeams) || t.allowedUsernames.length + t.allowedTeams.length === 0)) return 'Provide a trimmed tag pattern and at least one allowed account or organization team.';
+ const t = input.desiredTag; if (t && (!text(t.namePattern, 512) || !list(t.allowedUsernames) || !list(t.allowedTeams) || (input.action === Action.CREATE_TAG && t.allowedUsernames.length + t.allowedTeams.length === 0))) return 'Provide a trimmed tag pattern and at least one allowed account or organization team.';
  const m = input.desiredMerge;
  if (m) { const enabled: Record<string, boolean> = { merge: m.allowMergeCommits, rebase: m.allowRebase, 'rebase-merge': m.allowRebaseExplicit, squash: m.allowSquashMerge, 'fast-forward-only': m.allowFastForwardOnlyMerge }; if (!enabled[m.defaultMergeStyle] || (m.defaultUpdateStyle !== 'merge' && m.defaultUpdateStyle !== 'rebase') || (m.defaultUpdateStyle === 'merge' && !m.allowMergeUpdate) || (m.defaultUpdateStyle === 'rebase' && !m.allowRebaseUpdate)) return 'Choose enabled default merge and update methods.'; }
  return null;
@@ -79,34 +89,82 @@ function RuleEditor({ selection, inventory, close, save, pending }: { selection:
 export function RuleMutationActions(props: Props) {
  const { client, userId, owner, name, inventory, disabled = false } = props;
  const key = `golf.rule-operation.${userId}.${inventory.repositoryId}.${inventory.ownerId}`;
- const [identity, setIdentity] = useState<OperationIdentity | null>(() => loadIdentity(key)); const [receipt, setReceipt] = useState<RepositoryRuleMutation | null>(null); const [selection, select] = useState<Selection | null>(null); const [pending, setPending] = useState(false); const [error, setError] = useState(''); const abort = useRef<AbortController | null>(null); const currentKey = useRef(key); currentKey.current = key;
+ const scope = JSON.stringify([key, owner, name]);
  const current = !disabled && decimal(userId) && decimal(inventory.repositoryId) && decimal(inventory.ownerId) && revision(inventory.accessRevision) && revision(inventory.rulesRevision);
+ const [saved, setSaved] = useState(() => ({ scope, ...loadIdentity(key) }));
+ const identity = saved.scope === scope ? saved.identity : null;
+ const metadataBlocked = saved.scope !== scope || saved.blocked;
+ const [receipt, setReceipt] = useState<RepositoryRuleMutation | null>(null);
+ const [selection, select] = useState<Selection | null>(null);
+ const [pending, setPending] = useState(false);
+ const [error, setError] = useState('');
+ const abort = useRef<AbortController | null>(null);
+ const busy = useRef(false);
+ const guard = useRef({ scope, current, epoch: 0 });
+ if (guard.current.scope !== scope || guard.current.current !== current) guard.current = { scope, current, epoch: guard.current.epoch + 1 };
  const unresolved = Boolean(identity && (!receipt || !['SUCCEEDED', 'REJECTED'].includes(receipt.phase)));
- useEffect(() => { setIdentity(loadIdentity(key)); setReceipt(null); select(null); setError(''); return () => { abort.current?.abort(); }; }, [key]);
- useEffect(() => { if (!current) { abort.current?.abort(); setReceipt(null); select(null); setError(''); } }, [current]);
+ useEffect(() => {
+  abort.current?.abort(); abort.current = null; busy.current = false;
+  setSaved({ scope, ...loadIdentity(key) }); setReceipt(null); select(null); setError(''); setPending(false);
+  return () => { abort.current?.abort(); };
+ }, [scope, key]);
+ useEffect(() => {
+  if (!current) { abort.current?.abort(); abort.current = null; busy.current = false; setPending(false); setReceipt(null); select(null); setError(''); }
+ }, [current]);
+ const accepted = (epoch: number, controller: AbortController) => guard.current.epoch === epoch && guard.current.scope === scope && guard.current.current && !controller.signal.aborted;
  const failure = (reason: unknown) => { const e = ConnectError.from(reason); if ([Code.Unauthenticated, Code.PermissionDenied, Code.NotFound].includes(e.code)) { setReceipt(null); select(null); props.onUnavailable?.(e.code); } setError('The operation could not be verified. Inspect its original status before making another change.'); };
  const inspect = async () => {
-  if (!identity || !current || pending) return; const capturedKey = key, original = identity; abort.current?.abort(); const controller = new AbortController(); abort.current = controller; setPending(true); setError('');
-  try { const response = await client.getRepositoryRuleMutation({ repository: { owner, name }, repositoryId: inventory.repositoryId, ownerId: inventory.ownerId, operationId: original.operationId }, { signal: controller.signal, timeoutMs: 15000 }); controller.signal.throwIfAborted(); if (currentKey.current !== capturedKey) return; setReceipt(verifiedOperation(response.operation, original, props)); } catch (e) { if (!controller.signal.aborted && currentKey.current === capturedKey) failure(e); } finally { if (currentKey.current === capturedKey) setPending(false); }
+  if (!identity || !current || metadataBlocked || busy.current) return;
+  busy.current = true;
+  const epoch = guard.current.epoch, original = identity, controller = new AbortController();
+  abort.current?.abort(); abort.current = controller; setPending(true); setReceipt(null); setError('');
+  try {
+   const response = await client.getRepositoryRuleMutation({ repository: { owner, name }, repositoryId: inventory.repositoryId, ownerId: inventory.ownerId, operationId: original.operationId }, { signal: controller.signal, timeoutMs: 15000 });
+   if (accepted(epoch, controller)) setReceipt(verifiedOperation(response.operation, original, props));
+  } catch (e) { if (accepted(epoch, controller)) failure(e); }
+  finally { if (abort.current === controller) { abort.current = null; busy.current = false; setPending(false); } }
  };
  const save = async (input: Pick<MutateRepositoryRulesRequest, 'action' | 'ruleName' | 'tagId' | 'desiredBranch' | 'desiredTag' | 'desiredMerge'>, snapshot: GetRepositoryRulesResponse) => {
-  if (!current || pending || unresolved) return; const original: OperationIdentity = { operationId: crypto.randomUUID(), action: input.action, accessRevision: snapshot.accessRevision, rulesRevision: snapshot.rulesRevision }; const capturedKey = key;
-  // Persist only original operation metadata before dispatch. An unavailable
-  // browser store stops submission; reload is always inspection-only.
-  try { sessionStorage.setItem(key, JSON.stringify(original)); } catch { setError('Operation metadata could not be retained. No configuration request was sent.'); return; }
-  setIdentity(original); setReceipt(null); setPending(true); setError(''); const controller = new AbortController(); abort.current = controller;
-  try { const response = await client.mutateRepositoryRules({ repository: { owner, name }, repositoryId: inventory.repositoryId, ownerId: inventory.ownerId, expectedAccessRevision: original.accessRevision, expectedRulesRevision: original.rulesRevision, operationId: original.operationId, ...input }, { signal: controller.signal, timeoutMs: 15000 }); controller.signal.throwIfAborted(); if (currentKey.current !== capturedKey) return; const value = verifiedOperation(response.operation, original, props); if (value.phase !== 'SUCCEEDED' && response.currentRules) throw new ConnectError('Unverified configuration payload was refused.', Code.Internal); if (value.phase === 'SUCCEEDED') { const r = response.currentRules; if (!r || r.repositoryId !== inventory.repositoryId || r.ownerId !== inventory.ownerId || r.accessRevision !== original.accessRevision || r.rulesRevision !== value.observedRulesRevision) throw new ConnectError('The independent configuration receipt could not be verified.', Code.Internal); props.onVerified?.(); select(null); } setReceipt(value); } catch (e) { if (!controller.signal.aborted && currentKey.current === capturedKey) failure(e); } finally { if (currentKey.current === capturedKey) setPending(false); }
+  if (!current || metadataBlocked || busy.current || unresolved) return;
+  busy.current = true;
+  const original: OperationIdentity = { operationId: crypto.randomUUID(), action: input.action, accessRevision: snapshot.accessRevision, rulesRevision: snapshot.rulesRevision };
+  const epoch = guard.current.epoch;
+  // Persist metadata before dispatch and verify the exact readback. Any changed,
+  // malformed or inaccessible previous record blocks replacement, never retry.
+  try {
+   const prior = loadIdentity(key);
+   if (prior.blocked || prior.identity?.operationId !== identity?.operationId) throw new Error('Original metadata changed');
+   const encoded = JSON.stringify(original); sessionStorage.setItem(key, encoded);
+   if (sessionStorage.getItem(key) !== encoded) throw new Error('Original metadata not retained');
+  } catch { busy.current = false; setSaved(previous => ({ ...previous, blocked: true })); setError('Operation metadata could not be retained. No configuration request was sent.'); return; }
+  setSaved({ scope, identity: original, blocked: false }); setReceipt(null); setPending(true); setError('');
+  const controller = new AbortController(); abort.current = controller;
+  try {
+   const response = await client.mutateRepositoryRules({ repository: { owner, name }, repositoryId: inventory.repositoryId, ownerId: inventory.ownerId, expectedAccessRevision: original.accessRevision, expectedRulesRevision: original.rulesRevision, operationId: original.operationId, ...input }, { signal: controller.signal, timeoutMs: 15000 });
+   if (!accepted(epoch, controller)) return;
+   const value = verifiedOperation(response.operation, original, props);
+   if (value.phase !== 'SUCCEEDED' && response.currentRules) throw new ConnectError('Unverified configuration payload was refused.', Code.Internal);
+   if (value.phase === 'SUCCEEDED') {
+    const r = response.currentRules;
+    if (!r || r.repositoryId !== inventory.repositoryId || r.ownerId !== inventory.ownerId || r.accessRevision !== original.accessRevision || r.rulesRevision !== value.observedRulesRevision) throw new ConnectError('The independent configuration receipt could not be verified.', Code.Internal);
+    props.onVerified?.(); select(null);
+   }
+   setReceipt(value);
+  } catch (e) { if (accepted(epoch, controller)) failure(e); }
+  finally { if (abort.current === controller) { abort.current = null; busy.current = false; setPending(false); } }
  };
- const choose = (selection: Selection) => { if (!current || pending || unresolved) return; select({...selection, inventory}); setError(''); };
- return <div className="page-stack"><section className="browser-panel"><div className="browser-panel-heading"><h2>Configure rules</h2><div className="credential-actions"><button type="button" className="button secondary" disabled={!current || pending || unresolved || Boolean(selection)} onClick={() => choose({ action: Action.CREATE_BRANCH })}><Plus size={14} />Branch rule</button><button type="button" className="button secondary" disabled={!current || pending || unresolved || Boolean(selection)} onClick={() => choose({ action: Action.CREATE_TAG })}><Plus size={14} />Tag rule</button><button type="button" className="icon-button" aria-label="Edit merge configuration" disabled={!current || pending || unresolved || Boolean(selection)} onClick={() => choose({ action: Action.EDIT_MERGE })}><Pencil size={16} /></button></div></div>
-  {identity && current ? <div className="page-stack"><dl className="detail-grid"><div><dt>Operation</dt><dd>{identity.operationId}</dd></div><div><dt>Observed outcome</dt><dd>{receipt?.phase || 'Status not inspected'}</dd></div>{receipt?.observedRulesRevision ? <div><dt>Verified configuration revision</dt><dd>{receipt.observedRulesRevision}</dd></div> : null}</dl><button className="button secondary" disabled={pending} onClick={() => void inspect()}><RefreshCw size={14} />Inspect original operation</button>{unresolved ? <p className="field-help">This original operation remains inspection-only. No automatic retry or replacement operation is available.</p> : <p className="field-help">{receipt?.phase === 'SUCCEEDED' ? 'Historical verified readback; current configuration may change independently.' : 'This operation was refused before dispatch. Start an explicit new change after refreshing current configuration.'}</p>}</div> : null}
-  {error ? <p role="alert">{error}</p> : null}
+ const blocked = !current || metadataBlocked || pending || unresolved;
+ const choose = (selection: Selection) => { if (blocked || busy.current) return; select({ ...selection, inventory }); setError(''); };
+ return <div className="page-stack"><section className="browser-panel"><div className="browser-panel-heading"><h2>Configure rules</h2><div className="credential-actions"><button type="button" className="button secondary" disabled={blocked || Boolean(selection)} onClick={() => choose({ action: Action.CREATE_BRANCH })}><Plus size={14} />Branch rule</button><button type="button" className="button secondary" disabled={blocked || Boolean(selection)} onClick={() => choose({ action: Action.CREATE_TAG })}><Plus size={14} />Tag rule</button><button type="button" className="icon-button" aria-label="Edit merge configuration" disabled={blocked || Boolean(selection)} onClick={() => choose({ action: Action.EDIT_MERGE })}><Pencil size={16} /></button></div></div>
+  {metadataBlocked && current ? <p role="alert">Original rule operation metadata is unavailable. New configuration changes are blocked; no request was retried.</p> : null}
+  {identity && current ? <div className="page-stack"><dl className="detail-grid"><div><dt>Operation</dt><dd>{identity.operationId}</dd></div><div><dt>Observed outcome</dt><dd>{receipt?.phase || 'Status not inspected'}</dd></div>{receipt?.observedRulesRevision ? <div><dt>Verified configuration revision</dt><dd>{receipt.observedRulesRevision}</dd></div> : null}</dl><button className="button secondary" disabled={pending || metadataBlocked} onClick={() => void inspect()}><RefreshCw size={14} />Inspect original operation</button>{unresolved ? <p className="field-help">This original operation remains inspection-only. No automatic retry or replacement operation is available.</p> : <p className="field-help">{receipt?.phase === 'SUCCEEDED' ? 'Historical verified readback; current configuration may change independently.' : 'This operation was refused before dispatch. Start an explicit new change after refreshing current configuration.'}</p>}</div> : null}
+  {error && current ? <p role="alert">{error}</p> : null}
   {current ? <details><summary>Edit or remove an existing rule</summary><DataTable label="Configured rule actions" getRowId={row => row.id} data={[
     ...inventory.branchProtections.map(v => ({ id: `branch:${v.ruleName}`, kind: 'Branch', pattern: v.ruleName, branch: v, tag: undefined as RepositoryTagProtection | undefined })),
     ...inventory.tagProtections.map(v => ({ id: `tag:${v.id}`, kind: 'Tag', pattern: v.namePattern, branch: undefined as RepositoryBranchProtection | undefined, tag: v })),
    ]} columns={[
     { accessorKey: 'pattern', header: 'Rule pattern' }, { accessorKey: 'kind', header: 'Kind' },
-    { id: 'actions', header: 'Actions', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => <div className="credential-actions"><button type="button" className="icon-button" aria-label={`Edit ${row.original.kind.toLowerCase()} rule ${row.original.pattern}`} disabled={!current || pending || unresolved || Boolean(selection)} onClick={() => choose({ action: row.original.branch ? Action.EDIT_BRANCH : Action.EDIT_TAG, branch: row.original.branch, tag: row.original.tag })}><Pencil size={16} /></button><button type="button" className="icon-button" aria-label={`Remove ${row.original.kind.toLowerCase()} rule ${row.original.pattern}`} disabled={!current || pending || unresolved || Boolean(selection)} onClick={() => choose({ action: row.original.branch ? Action.REMOVE_BRANCH : Action.REMOVE_TAG, branch: row.original.branch, tag: row.original.tag })}><Trash2 size={16} /></button></div> },
+    { id: 'actions', header: 'Actions', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => <div className="credential-actions"><button type="button" className="icon-button" aria-label={`Edit ${row.original.kind.toLowerCase()} rule ${row.original.pattern}`} disabled={blocked || Boolean(selection)} onClick={() => choose({ action: row.original.branch ? Action.EDIT_BRANCH : Action.EDIT_TAG, branch: row.original.branch, tag: row.original.tag })}><Pencil size={16} /></button><button type="button" className="icon-button" aria-label={`Remove ${row.original.kind.toLowerCase()} rule ${row.original.pattern}`} disabled={blocked || Boolean(selection)} onClick={() => choose({ action: row.original.branch ? Action.REMOVE_BRANCH : Action.REMOVE_TAG, branch: row.original.branch, tag: row.original.tag })}><Trash2 size={16} /></button></div> },
    ]} emptyMessage="No configured rules were reported." /></details> : null}
- </section>{selection && current ? <RuleEditor key={`${selection.action}:${selection.branch?.ruleName || selection.tag?.id || ''}`} selection={selection} inventory={selection.inventory || inventory} close={() => select(null)} save={save} pending={pending || unresolved} /> : null}</div>;
+ </section>{selection && current && !metadataBlocked ? <RuleEditor key={`${selection.action}:${selection.branch?.ruleName || selection.tag?.id || ''}`} selection={selection} inventory={selection.inventory || inventory} close={() => select(null)} save={save} pending={pending || unresolved} /> : null}</div>;
 }

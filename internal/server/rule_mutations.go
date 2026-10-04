@@ -78,8 +78,8 @@ func branchRulePayload(v *golfv1.RepositoryBranchProtection) (map[string]any, er
 		"enable_push": v.EnablePush, "enable_push_whitelist": v.EnablePushWhitelist, "push_whitelist_deploy_keys": v.PushWhitelistDeployKeys, "enable_force_push": v.EnableForcePush, "enable_force_push_allowlist": v.EnableForcePushAllowlist, "force_push_allowlist_deploy_keys": v.ForcePushAllowlistDeployKeys, "enable_merge_whitelist": v.EnableMergeWhitelist, "enable_bypass_allowlist": v.EnableBypassAllowlist, "enable_status_check": v.EnableStatusCheck, "enable_approvals_whitelist": v.EnableApprovalsWhitelist, "block_on_rejected_reviews": v.BlockOnRejectedReviews, "block_on_official_review_requests": v.BlockOnOfficialReviewRequests, "block_on_outdated_branch": v.BlockOnOutdatedBranch, "dismiss_stale_approvals": v.DismissStaleApprovals, "ignore_stale_approvals": v.IgnoreStaleApprovals, "require_signed_commits": v.RequireSignedCommits, "block_admin_merge_override": v.BlockAdminMergeOverride,
 	}, nil
 }
-func tagRulePayload(v *golfv1.RepositoryTagProtection) (map[string]any, error) {
-	if v == nil || v.Id != "" || v.CreatedAt != "" || v.UpdatedAt != "" || !ruleText(v.NamePattern, 512, false) || strings.TrimSpace(v.NamePattern) != v.NamePattern || !validRuleList(v.AllowedUsernames) || !validRuleList(v.AllowedTeams) || len(v.AllowedUsernames)+len(v.AllowedTeams) == 0 {
+func tagRulePayload(v *golfv1.RepositoryTagProtection, edit bool) (map[string]any, error) {
+	if v == nil || v.Id != "" || v.CreatedAt != "" || v.UpdatedAt != "" || !ruleText(v.NamePattern, 512, false) || strings.TrimSpace(v.NamePattern) != v.NamePattern || !validRuleList(v.AllowedUsernames) || !validRuleList(v.AllowedTeams) || (!edit && len(v.AllowedUsernames)+len(v.AllowedTeams) == 0) {
 		return nil, invalid("Provide a trimmed tag pattern and at least one allowed account or team without native identity/timestamps.")
 	}
 	for _, list := range [][]string{v.AllowedUsernames, v.AllowedTeams} {
@@ -148,7 +148,7 @@ func parseRuleWrite(m *golfv1.MutateRepositoryRulesRequest) (ruleWrite, error) {
 		if count != 1 || m.DesiredTag == nil || m.RuleName != "" {
 			return w, invalid("Bind exactly one complete tag configuration.")
 		}
-		w.payload, e = tagRulePayload(m.DesiredTag)
+		w.payload, e = tagRulePayload(m.DesiredTag, m.Action == golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_EDIT_TAG)
 		w.method = http.MethodPost
 		w.suffix = "/tag_protections"
 		if m.Action == golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_EDIT_TAG {

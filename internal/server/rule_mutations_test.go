@@ -75,6 +75,20 @@ func TestRuleMutationPayloadAdmission(t *testing.T) {
 	if _, e := parseRuleWrite(tag); e == nil {
 		t.Fatal("native rejects empty tag allowlist")
 	}
+	// Native tag creation requires an allowlist, but editing can explicitly
+	// clear both lists while preserving the exact existing protected tag ID.
+	tag.Action = golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_EDIT_TAG
+	tag.TagId = "21"
+	if write, err := parseRuleWrite(tag); err != nil || write.method != "PATCH" {
+		t.Fatal("native tag edit must accept explicit empty lists", err)
+	} else {
+		for _, field := range []string{"whitelist_usernames", "whitelist_teams"} {
+			encoded, err := json.Marshal(write.payload[field])
+			if err != nil || string(encoded) != "[]" {
+				t.Fatal("empty tag edit list must not become null", field, err)
+			}
+		}
+	}
 	merge, e := wireMergeConfiguration(rulesRepositoryFixture())
 	if e != nil {
 		t.Fatal(e)
