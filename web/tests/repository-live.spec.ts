@@ -138,9 +138,9 @@ test('Actions source and run events refresh workflow observations without dispat
  await expect(workflow).toHaveText('Updated CI');
  expect(state.inspections).toBeGreaterThan(reads);
  await workflow.click();
- await expect(page.getByText('Manual policy: Ceilings allow',{exact:false})).toBeVisible();
+ await expect(page.locator('.workflow-selected-heading')).toContainText('Manual: Ceilings allow');
  state.manualAllowed=false;state.topics=['actions'];state.cursor++;
- await expect(page.getByText('Manual policy: Ceilings deny',{exact:false})).toBeVisible();
+ await expect(page.locator('.workflow-selected-heading')).toContainText('Manual: Ceilings deny');
  expect(state.dispatches).toBe(0);
  expect(page.url()).toBe(url);
 });
