@@ -5,7 +5,7 @@ import { ExecutionPolicyPanel } from './ExecutionPolicyPanel';
 import { ExecutionScope } from './gen/golf/v1/golf_pb';
 import type { ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
-import { History, KeyRound, ShieldCheck, UserRound } from 'lucide-react';
+import { Webhook, History, KeyRound, ShieldCheck, UserRound } from 'lucide-react';
 import type { User } from './gen/golf/v1/golf_pb';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { useQuery } from '@tanstack/react-query';
@@ -28,6 +28,7 @@ export function RepositorySettingsLayout({ children, owner, name }: { children: 
   return <div className="account-layout"><nav className="account-navigation" aria-label="Repository settings"><span className="eyebrow">REPOSITORY SETTINGS</span>
     <Link to="/$owner/$name/settings" params={{ owner, name }} activeOptions={{ exact: true }}><UserRound size={18} />General</Link>
     <Link to="/$owner/$name/settings/access" params={{ owner, name }} activeOptions={{ exact: true }}><ShieldCheck size={18} />Access</Link>
+    <Link to="/$owner/$name/settings/webhooks" params={{ owner, name }} activeOptions={{exact:true}}><Webhook size={18}/>Webhooks</Link>
     <Link to="/$owner/$name/settings/workflows" params={{ owner, name }} activeOptions={{ exact: true }}><History size={18} />Workflows</Link>
   </nav><div className="account-content">{children}</div></div>;
 }

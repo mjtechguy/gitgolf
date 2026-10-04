@@ -78,6 +78,8 @@ const (
 	// RepositoryDeployKeyServiceName is the fully-qualified name of the RepositoryDeployKeyService
 	// service.
 	RepositoryDeployKeyServiceName = "golf.v1.RepositoryDeployKeyService"
+	// RepositoryWebhookServiceName is the fully-qualified name of the RepositoryWebhookService service.
+	RepositoryWebhookServiceName = "golf.v1.RepositoryWebhookService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -471,6 +473,21 @@ const (
 	// RepositoryDeployKeyServiceDeleteRepositoryDeployKeyProcedure is the fully-qualified name of the
 	// RepositoryDeployKeyService's DeleteRepositoryDeployKey RPC.
 	RepositoryDeployKeyServiceDeleteRepositoryDeployKeyProcedure = "/golf.v1.RepositoryDeployKeyService/DeleteRepositoryDeployKey"
+	// RepositoryWebhookServiceListRepositoryWebhooksProcedure is the fully-qualified name of the
+	// RepositoryWebhookService's ListRepositoryWebhooks RPC.
+	RepositoryWebhookServiceListRepositoryWebhooksProcedure = "/golf.v1.RepositoryWebhookService/ListRepositoryWebhooks"
+	// RepositoryWebhookServiceSaveRepositoryWebhookProcedure is the fully-qualified name of the
+	// RepositoryWebhookService's SaveRepositoryWebhook RPC.
+	RepositoryWebhookServiceSaveRepositoryWebhookProcedure = "/golf.v1.RepositoryWebhookService/SaveRepositoryWebhook"
+	// RepositoryWebhookServiceListRepositoryWebhookDeliveriesProcedure is the fully-qualified name of
+	// the RepositoryWebhookService's ListRepositoryWebhookDeliveries RPC.
+	RepositoryWebhookServiceListRepositoryWebhookDeliveriesProcedure = "/golf.v1.RepositoryWebhookService/ListRepositoryWebhookDeliveries"
+	// RepositoryWebhookServiceTestRepositoryWebhookProcedure is the fully-qualified name of the
+	// RepositoryWebhookService's TestRepositoryWebhook RPC.
+	RepositoryWebhookServiceTestRepositoryWebhookProcedure = "/golf.v1.RepositoryWebhookService/TestRepositoryWebhook"
+	// RepositoryWebhookServiceRedeliverRepositoryWebhookProcedure is the fully-qualified name of the
+	// RepositoryWebhookService's RedeliverRepositoryWebhook RPC.
+	RepositoryWebhookServiceRedeliverRepositoryWebhookProcedure = "/golf.v1.RepositoryWebhookService/RedeliverRepositoryWebhook"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -4960,4 +4977,180 @@ func (UnimplementedRepositoryDeployKeyServiceHandler) AddRepositoryDeployKey(con
 
 func (UnimplementedRepositoryDeployKeyServiceHandler) DeleteRepositoryDeployKey(context.Context, *connect.Request[v1.DeleteRepositoryDeployKeyRequest]) (*connect.Response[v1.DeleteRepositoryDeployKeyResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryDeployKeyService.DeleteRepositoryDeployKey is not implemented"))
+}
+
+// RepositoryWebhookServiceClient is a client for the golf.v1.RepositoryWebhookService service.
+type RepositoryWebhookServiceClient interface {
+	ListRepositoryWebhooks(context.Context, *connect.Request[v1.ListRepositoryWebhooksRequest]) (*connect.Response[v1.ListRepositoryWebhooksResponse], error)
+	SaveRepositoryWebhook(context.Context, *connect.Request[v1.SaveRepositoryWebhookRequest]) (*connect.Response[v1.SaveRepositoryWebhookResponse], error)
+	ListRepositoryWebhookDeliveries(context.Context, *connect.Request[v1.ListRepositoryWebhookDeliveriesRequest]) (*connect.Response[v1.ListRepositoryWebhookDeliveriesResponse], error)
+	TestRepositoryWebhook(context.Context, *connect.Request[v1.TestRepositoryWebhookRequest]) (*connect.Response[v1.TestRepositoryWebhookResponse], error)
+	RedeliverRepositoryWebhook(context.Context, *connect.Request[v1.RedeliverRepositoryWebhookRequest]) (*connect.Response[v1.RedeliverRepositoryWebhookResponse], error)
+}
+
+// NewRepositoryWebhookServiceClient constructs a client for the golf.v1.RepositoryWebhookService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRepositoryWebhookServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepositoryWebhookServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	repositoryWebhookServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryWebhookService").Methods()
+	return &repositoryWebhookServiceClient{
+		listRepositoryWebhooks: connect.NewClient[v1.ListRepositoryWebhooksRequest, v1.ListRepositoryWebhooksResponse](
+			httpClient,
+			baseURL+RepositoryWebhookServiceListRepositoryWebhooksProcedure,
+			connect.WithSchema(repositoryWebhookServiceMethods.ByName("ListRepositoryWebhooks")),
+			connect.WithClientOptions(opts...),
+		),
+		saveRepositoryWebhook: connect.NewClient[v1.SaveRepositoryWebhookRequest, v1.SaveRepositoryWebhookResponse](
+			httpClient,
+			baseURL+RepositoryWebhookServiceSaveRepositoryWebhookProcedure,
+			connect.WithSchema(repositoryWebhookServiceMethods.ByName("SaveRepositoryWebhook")),
+			connect.WithClientOptions(opts...),
+		),
+		listRepositoryWebhookDeliveries: connect.NewClient[v1.ListRepositoryWebhookDeliveriesRequest, v1.ListRepositoryWebhookDeliveriesResponse](
+			httpClient,
+			baseURL+RepositoryWebhookServiceListRepositoryWebhookDeliveriesProcedure,
+			connect.WithSchema(repositoryWebhookServiceMethods.ByName("ListRepositoryWebhookDeliveries")),
+			connect.WithClientOptions(opts...),
+		),
+		testRepositoryWebhook: connect.NewClient[v1.TestRepositoryWebhookRequest, v1.TestRepositoryWebhookResponse](
+			httpClient,
+			baseURL+RepositoryWebhookServiceTestRepositoryWebhookProcedure,
+			connect.WithSchema(repositoryWebhookServiceMethods.ByName("TestRepositoryWebhook")),
+			connect.WithClientOptions(opts...),
+		),
+		redeliverRepositoryWebhook: connect.NewClient[v1.RedeliverRepositoryWebhookRequest, v1.RedeliverRepositoryWebhookResponse](
+			httpClient,
+			baseURL+RepositoryWebhookServiceRedeliverRepositoryWebhookProcedure,
+			connect.WithSchema(repositoryWebhookServiceMethods.ByName("RedeliverRepositoryWebhook")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// repositoryWebhookServiceClient implements RepositoryWebhookServiceClient.
+type repositoryWebhookServiceClient struct {
+	listRepositoryWebhooks          *connect.Client[v1.ListRepositoryWebhooksRequest, v1.ListRepositoryWebhooksResponse]
+	saveRepositoryWebhook           *connect.Client[v1.SaveRepositoryWebhookRequest, v1.SaveRepositoryWebhookResponse]
+	listRepositoryWebhookDeliveries *connect.Client[v1.ListRepositoryWebhookDeliveriesRequest, v1.ListRepositoryWebhookDeliveriesResponse]
+	testRepositoryWebhook           *connect.Client[v1.TestRepositoryWebhookRequest, v1.TestRepositoryWebhookResponse]
+	redeliverRepositoryWebhook      *connect.Client[v1.RedeliverRepositoryWebhookRequest, v1.RedeliverRepositoryWebhookResponse]
+}
+
+// ListRepositoryWebhooks calls golf.v1.RepositoryWebhookService.ListRepositoryWebhooks.
+func (c *repositoryWebhookServiceClient) ListRepositoryWebhooks(ctx context.Context, req *connect.Request[v1.ListRepositoryWebhooksRequest]) (*connect.Response[v1.ListRepositoryWebhooksResponse], error) {
+	return c.listRepositoryWebhooks.CallUnary(ctx, req)
+}
+
+// SaveRepositoryWebhook calls golf.v1.RepositoryWebhookService.SaveRepositoryWebhook.
+func (c *repositoryWebhookServiceClient) SaveRepositoryWebhook(ctx context.Context, req *connect.Request[v1.SaveRepositoryWebhookRequest]) (*connect.Response[v1.SaveRepositoryWebhookResponse], error) {
+	return c.saveRepositoryWebhook.CallUnary(ctx, req)
+}
+
+// ListRepositoryWebhookDeliveries calls
+// golf.v1.RepositoryWebhookService.ListRepositoryWebhookDeliveries.
+func (c *repositoryWebhookServiceClient) ListRepositoryWebhookDeliveries(ctx context.Context, req *connect.Request[v1.ListRepositoryWebhookDeliveriesRequest]) (*connect.Response[v1.ListRepositoryWebhookDeliveriesResponse], error) {
+	return c.listRepositoryWebhookDeliveries.CallUnary(ctx, req)
+}
+
+// TestRepositoryWebhook calls golf.v1.RepositoryWebhookService.TestRepositoryWebhook.
+func (c *repositoryWebhookServiceClient) TestRepositoryWebhook(ctx context.Context, req *connect.Request[v1.TestRepositoryWebhookRequest]) (*connect.Response[v1.TestRepositoryWebhookResponse], error) {
+	return c.testRepositoryWebhook.CallUnary(ctx, req)
+}
+
+// RedeliverRepositoryWebhook calls golf.v1.RepositoryWebhookService.RedeliverRepositoryWebhook.
+func (c *repositoryWebhookServiceClient) RedeliverRepositoryWebhook(ctx context.Context, req *connect.Request[v1.RedeliverRepositoryWebhookRequest]) (*connect.Response[v1.RedeliverRepositoryWebhookResponse], error) {
+	return c.redeliverRepositoryWebhook.CallUnary(ctx, req)
+}
+
+// RepositoryWebhookServiceHandler is an implementation of the golf.v1.RepositoryWebhookService
+// service.
+type RepositoryWebhookServiceHandler interface {
+	ListRepositoryWebhooks(context.Context, *connect.Request[v1.ListRepositoryWebhooksRequest]) (*connect.Response[v1.ListRepositoryWebhooksResponse], error)
+	SaveRepositoryWebhook(context.Context, *connect.Request[v1.SaveRepositoryWebhookRequest]) (*connect.Response[v1.SaveRepositoryWebhookResponse], error)
+	ListRepositoryWebhookDeliveries(context.Context, *connect.Request[v1.ListRepositoryWebhookDeliveriesRequest]) (*connect.Response[v1.ListRepositoryWebhookDeliveriesResponse], error)
+	TestRepositoryWebhook(context.Context, *connect.Request[v1.TestRepositoryWebhookRequest]) (*connect.Response[v1.TestRepositoryWebhookResponse], error)
+	RedeliverRepositoryWebhook(context.Context, *connect.Request[v1.RedeliverRepositoryWebhookRequest]) (*connect.Response[v1.RedeliverRepositoryWebhookResponse], error)
+}
+
+// NewRepositoryWebhookServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRepositoryWebhookServiceHandler(svc RepositoryWebhookServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	repositoryWebhookServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryWebhookService").Methods()
+	repositoryWebhookServiceListRepositoryWebhooksHandler := connect.NewUnaryHandler(
+		RepositoryWebhookServiceListRepositoryWebhooksProcedure,
+		svc.ListRepositoryWebhooks,
+		connect.WithSchema(repositoryWebhookServiceMethods.ByName("ListRepositoryWebhooks")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryWebhookServiceSaveRepositoryWebhookHandler := connect.NewUnaryHandler(
+		RepositoryWebhookServiceSaveRepositoryWebhookProcedure,
+		svc.SaveRepositoryWebhook,
+		connect.WithSchema(repositoryWebhookServiceMethods.ByName("SaveRepositoryWebhook")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryWebhookServiceListRepositoryWebhookDeliveriesHandler := connect.NewUnaryHandler(
+		RepositoryWebhookServiceListRepositoryWebhookDeliveriesProcedure,
+		svc.ListRepositoryWebhookDeliveries,
+		connect.WithSchema(repositoryWebhookServiceMethods.ByName("ListRepositoryWebhookDeliveries")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryWebhookServiceTestRepositoryWebhookHandler := connect.NewUnaryHandler(
+		RepositoryWebhookServiceTestRepositoryWebhookProcedure,
+		svc.TestRepositoryWebhook,
+		connect.WithSchema(repositoryWebhookServiceMethods.ByName("TestRepositoryWebhook")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryWebhookServiceRedeliverRepositoryWebhookHandler := connect.NewUnaryHandler(
+		RepositoryWebhookServiceRedeliverRepositoryWebhookProcedure,
+		svc.RedeliverRepositoryWebhook,
+		connect.WithSchema(repositoryWebhookServiceMethods.ByName("RedeliverRepositoryWebhook")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RepositoryWebhookService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RepositoryWebhookServiceListRepositoryWebhooksProcedure:
+			repositoryWebhookServiceListRepositoryWebhooksHandler.ServeHTTP(w, r)
+		case RepositoryWebhookServiceSaveRepositoryWebhookProcedure:
+			repositoryWebhookServiceSaveRepositoryWebhookHandler.ServeHTTP(w, r)
+		case RepositoryWebhookServiceListRepositoryWebhookDeliveriesProcedure:
+			repositoryWebhookServiceListRepositoryWebhookDeliveriesHandler.ServeHTTP(w, r)
+		case RepositoryWebhookServiceTestRepositoryWebhookProcedure:
+			repositoryWebhookServiceTestRepositoryWebhookHandler.ServeHTTP(w, r)
+		case RepositoryWebhookServiceRedeliverRepositoryWebhookProcedure:
+			repositoryWebhookServiceRedeliverRepositoryWebhookHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRepositoryWebhookServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRepositoryWebhookServiceHandler struct{}
+
+func (UnimplementedRepositoryWebhookServiceHandler) ListRepositoryWebhooks(context.Context, *connect.Request[v1.ListRepositoryWebhooksRequest]) (*connect.Response[v1.ListRepositoryWebhooksResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryWebhookService.ListRepositoryWebhooks is not implemented"))
+}
+
+func (UnimplementedRepositoryWebhookServiceHandler) SaveRepositoryWebhook(context.Context, *connect.Request[v1.SaveRepositoryWebhookRequest]) (*connect.Response[v1.SaveRepositoryWebhookResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryWebhookService.SaveRepositoryWebhook is not implemented"))
+}
+
+func (UnimplementedRepositoryWebhookServiceHandler) ListRepositoryWebhookDeliveries(context.Context, *connect.Request[v1.ListRepositoryWebhookDeliveriesRequest]) (*connect.Response[v1.ListRepositoryWebhookDeliveriesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryWebhookService.ListRepositoryWebhookDeliveries is not implemented"))
+}
+
+func (UnimplementedRepositoryWebhookServiceHandler) TestRepositoryWebhook(context.Context, *connect.Request[v1.TestRepositoryWebhookRequest]) (*connect.Response[v1.TestRepositoryWebhookResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryWebhookService.TestRepositoryWebhook is not implemented"))
+}
+
+func (UnimplementedRepositoryWebhookServiceHandler) RedeliverRepositoryWebhook(context.Context, *connect.Request[v1.RedeliverRepositoryWebhookRequest]) (*connect.Response[v1.RedeliverRepositoryWebhookResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryWebhookService.RedeliverRepositoryWebhook is not implemented"))
 }

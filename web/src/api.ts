@@ -1,6 +1,6 @@
 import { createClient, ConnectError } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
-import { RepositoryDeployKeyService, ActionRunService, RepositoryActivityService, ReviewerService, AgentTaskService, AgentUsageService, CodexAccountService, AutomationGrantService, AccountSecurityService, ProfileService, InfrastructureConnectionService, OrganizationCreationService, ExecutionPolicyService, WorkflowRunService, WorkflowService, RepositoryAccessService, InstanceAdminService, OrganizationAdminService, RepositorySettingsService, GitAccessService, ApiCredentialService, AuditService, CapabilityService, OrganizationService, RepositoryService, SessionService } from './gen/golf/v1/golf_pb';
+import { RepositoryWebhookService, RepositoryDeployKeyService, ActionRunService, RepositoryActivityService, ReviewerService, AgentTaskService, AgentUsageService, CodexAccountService, AutomationGrantService, AccountSecurityService, ProfileService, InfrastructureConnectionService, OrganizationCreationService, ExecutionPolicyService, WorkflowRunService, WorkflowService, RepositoryAccessService, InstanceAdminService, OrganizationAdminService, RepositorySettingsService, GitAccessService, ApiCredentialService, AuditService, CapabilityService, OrganizationService, RepositoryService, SessionService } from './gen/golf/v1/golf_pb';
 
 const transport = createConnectTransport({
   baseUrl: '/rpc',
@@ -22,6 +22,7 @@ export const organizationCreationApi = createClient(OrganizationCreationService,
 export const executionPolicyApi = createClient(ExecutionPolicyService, transport);
 export const workflowRunClient = createClient(WorkflowRunService, transport);
 export const workflowClient = createClient(WorkflowService, transport);
+export const repositoryWebhookClient = createClient(RepositoryWebhookService, transport);
 export const repositoryDeployKeyClient = createClient(RepositoryDeployKeyService, transport);
 export const repositoryAccessClient = createClient(RepositoryAccessService, transport);
 export const instanceAdminClient = createClient(InstanceAdminService, transport);

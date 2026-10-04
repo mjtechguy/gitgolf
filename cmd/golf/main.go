@@ -36,6 +36,9 @@ func run() error {
 
 func runCommand(ctx context.Context, args []string, output io.Writer, logger zerolog.Logger) error {
 	if len(args) > 0 {
+		if args[0] == "webhook-worker" {
+			return runWebhookWorker(ctx, args)
+		}
 		if args[0] == "agent-worker" {
 			return runAgentWorker(ctx, args)
 		}
@@ -72,16 +75,17 @@ func serverConfig() server.Config {
 		databaseTLS = parsed.Query().Get("sslmode")
 	}
 	return server.Config{
-		AgentImage:           os.Getenv("GOLF_AGENT_IMAGE"),
-		ReviewImage:          os.Getenv("GOLF_REVIEW_IMAGE"),
-		ReviewPublisherToken: os.Getenv("GOLF_REVIEW_PUBLISHER_TOKEN"),
-		CodexBinary:          os.Getenv("GOLF_CODEX_BINARY"),
-		ClaudeBinary:         os.Getenv("GOLF_CLAUDE_BINARY"),
-		OpenCodeBinary:       os.Getenv("GOLF_OPENCODE_BINARY"),
-		PushCIEnabled:        os.Getenv("GOLF_PUSH_CI_ENABLED") == "true",
-		ActionsEngineCatalog: os.Getenv("GOLF_ACTIONS_ENGINE_CATALOG"),
-		ActionsEngineBinary:  os.Getenv("GOLF_ACTIONS_ENGINE_BINARY"),
-		DatabaseEndpoint:     databaseEndpoint, DatabaseTLSMode: databaseTLS, NativeDatabaseEndpoint: os.Getenv("GOLF_NATIVE_DATABASE_ENDPOINT"),
+		WebhookEgressPolicyJSON: os.Getenv("GOLF_WEBHOOK_EGRESS_POLICY"),
+		AgentImage:              os.Getenv("GOLF_AGENT_IMAGE"),
+		ReviewImage:             os.Getenv("GOLF_REVIEW_IMAGE"),
+		ReviewPublisherToken:    os.Getenv("GOLF_REVIEW_PUBLISHER_TOKEN"),
+		CodexBinary:             os.Getenv("GOLF_CODEX_BINARY"),
+		ClaudeBinary:            os.Getenv("GOLF_CLAUDE_BINARY"),
+		OpenCodeBinary:          os.Getenv("GOLF_OPENCODE_BINARY"),
+		PushCIEnabled:           os.Getenv("GOLF_PUSH_CI_ENABLED") == "true",
+		ActionsEngineCatalog:    os.Getenv("GOLF_ACTIONS_ENGINE_CATALOG"),
+		ActionsEngineBinary:     os.Getenv("GOLF_ACTIONS_ENGINE_BINARY"),
+		DatabaseEndpoint:        databaseEndpoint, DatabaseTLSMode: databaseTLS, NativeDatabaseEndpoint: os.Getenv("GOLF_NATIVE_DATABASE_ENDPOINT"),
 		ObjectStoreConfig:              objectstore.Config{Endpoint: os.Getenv("GOLF_OBJECT_ENDPOINT"), Bucket: os.Getenv("GOLF_OBJECT_BUCKET"), Region: env("GOLF_OBJECT_REGION", "us-east-1"), Prefix: os.Getenv("GOLF_OBJECT_PREFIX"), AccessKeyID: os.Getenv("GOLF_OBJECT_ACCESS_KEY_ID"), SecretAccessKey: os.Getenv("GOLF_OBJECT_SECRET_ACCESS_KEY"), SessionToken: os.Getenv("GOLF_OBJECT_SESSION_TOKEN"), PathStyle: os.Getenv("GOLF_OBJECT_PATH_STYLE") == "true", AllowHTTP: os.Getenv("GOLF_OBJECT_ALLOW_HTTP") == "true"},
 		RepositoryEventConnectionsJSON: os.Getenv("GOLF_REPOSITORY_EVENT_CONNECTIONS"),
 		RunnerKeysJSON:                 os.Getenv("GOLF_RUNNER_KEYS"), RunnerImagesJSON: os.Getenv("GOLF_RUNNER_IMAGES"),

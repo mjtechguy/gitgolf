@@ -14,6 +14,8 @@ import (
 	"strings"
 )
 
+const webhookCredentialDomain = "webhook_credential"
+
 const reviewContentDomain = "review_content"
 
 const sessionDomain = "session"
@@ -111,7 +113,7 @@ func ParseKeyring(legacyKeyBase64, keysJSON, activeKeyID string) (*Keyring, erro
 }
 
 func keyAAD(id, domain string, binding []byte) ([]byte, error) {
-	if domain != sessionDomain && domain != oauthAttemptDomain && domain != localAccountDomain && domain != infrastructureConnectionDomain && domain != automationRepositoryDomain && domain != reviewContentDomain && domain != conversationContentDomain || len(binding) != 32 {
+	if domain != sessionDomain && domain != oauthAttemptDomain && domain != localAccountDomain && domain != infrastructureConnectionDomain && domain != automationRepositoryDomain && domain != reviewContentDomain && domain != conversationContentDomain && domain != webhookCredentialDomain || len(binding) != 32 {
 		return nil, errCredentialUnavailable
 	}
 	if id == "legacy" && (domain == sessionDomain || domain == oauthAttemptDomain) {

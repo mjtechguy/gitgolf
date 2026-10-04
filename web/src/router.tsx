@@ -60,6 +60,7 @@ const canonicalRepositoryAccessSettingsRoute = createRoute({
   beforeLoad: ({ params }) => validateRepositoryIdentity(params.owner, params.name),
   component: () => { const { owner, name } = canonicalRepositoryAccessSettingsRoute.useParams(); return <App location={{ kind: 'repository-access-settings', owner, name }} />; },
 });
+const canonicalRepositoryWebhooksRoute=createRoute({getParentRoute:()=>rootRoute,path:'/$owner/$name/settings/webhooks',beforeLoad:({params})=>validateRepositoryIdentity(params.owner,params.name),component:()=>{const {owner,name}=canonicalRepositoryWebhooksRoute.useParams();return <App location={{kind:'repository-webhooks',owner,name}}/>;}});
 const canonicalRepositoryWorkflowsRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/$owner/$name/settings/workflows',
   beforeLoad: ({ params }) => validateRepositoryIdentity(params.owner, params.name),
@@ -244,7 +245,7 @@ function OrganizationPage() {
 
 // Router owns navigation only. Private server data stays in the cancellable Query cache.
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([homeRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountSecurityRoute, accountAgentsRoute, sessionsRoute]),
+  routeTree: rootRoute.addChildren([homeRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWebhooksRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountSecurityRoute, accountAgentsRoute, sessionsRoute]),
   defaultPreload: false,
   // Refs and paths are opaque strings, including names such as "1234" or "true".
   parseSearch: (search) => {

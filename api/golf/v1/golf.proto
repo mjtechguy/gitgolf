@@ -2379,3 +2379,71 @@ message WorkflowEngineStep {
  optional string started_at = 4;
  optional string finished_at = 5;
 }
+// Managed repository administration only. No receiver URL, native credential,
+// signing secret or receiver response body is returned by this service.
+service RepositoryWebhookService {
+  rpc ListRepositoryWebhooks(ListRepositoryWebhooksRequest) returns (ListRepositoryWebhooksResponse);
+  rpc SaveRepositoryWebhook(SaveRepositoryWebhookRequest) returns (SaveRepositoryWebhookResponse);
+  rpc ListRepositoryWebhookDeliveries(ListRepositoryWebhookDeliveriesRequest) returns (ListRepositoryWebhookDeliveriesResponse);
+  rpc TestRepositoryWebhook(TestRepositoryWebhookRequest) returns (TestRepositoryWebhookResponse);
+  rpc RedeliverRepositoryWebhook(RedeliverRepositoryWebhookRequest) returns (RedeliverRepositoryWebhookResponse);
+}
+message RepositoryWebhookTarget {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+}
+message RepositoryWebhookSubscription {
+  string id = 1;
+  string version = 2;
+  string name = 3;
+  string destination_host = 4;
+  repeated string event_topics = 5;
+  bool enabled = 6;
+  string authorization_state = 7;
+  bool has_signing_secret = 8;
+  string created_at = 9;
+  string updated_at = 10;
+  string sponsor_user_id = 11;
+}
+message RepositoryWebhookDelivery {
+  string id = 1;
+  string subscription_id = 2;
+  string subscription_version = 3;
+  string event_id = 4;
+  string event_topic = 5;
+  string state = 6;
+  uint32 attempts = 7;
+  uint32 response_status = 8;
+  string failure_code = 9;
+  string next_attempt_at = 10;
+  string created_at = 11;
+  string completed_at = 12;
+  bool possible_duplicate = 13;
+}
+message ListRepositoryWebhooksRequest { RepositoryWebhookTarget target = 1; PageRequest page = 2; }
+message ListRepositoryWebhooksResponse {
+  RepositoryWebhookTarget target = 1;
+  repeated RepositoryWebhookSubscription subscriptions = 2;
+  PageResponse page = 3;
+  bool background_authorization_supported = 4;
+}
+message SaveRepositoryWebhookRequest {
+  RepositoryWebhookTarget target = 1;
+  string id = 2;
+  string expected_version = 3;
+  string name = 4;
+  repeated string event_topics = 5;
+  // Empty preserves the saved private value on an existing subscription.
+  string endpoint = 6;
+  string signing_secret = 7;
+  bool enabled = 8;
+  bool authorize_background = 9;
+}
+message SaveRepositoryWebhookResponse { RepositoryWebhookTarget target = 1; RepositoryWebhookSubscription subscription = 2; }
+message ListRepositoryWebhookDeliveriesRequest { RepositoryWebhookTarget target = 1; string subscription_id = 2; PageRequest page = 3; }
+message ListRepositoryWebhookDeliveriesResponse { RepositoryWebhookTarget target = 1; repeated RepositoryWebhookDelivery deliveries = 2; PageResponse page = 3; }
+message TestRepositoryWebhookRequest { RepositoryWebhookTarget target = 1; string subscription_id = 2; string expected_version = 3; string operation_id = 4; }
+message RedeliverRepositoryWebhookRequest { RepositoryWebhookTarget target = 1; string delivery_id = 2; string expected_version = 3; string operation_id = 4; }
+message TestRepositoryWebhookResponse { RepositoryWebhookTarget target = 1; RepositoryWebhookDelivery delivery = 2; }
+message RedeliverRepositoryWebhookResponse { RepositoryWebhookTarget target = 1; RepositoryWebhookDelivery delivery = 2; }

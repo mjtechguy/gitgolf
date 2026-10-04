@@ -254,6 +254,7 @@ type GolfCryptoEvent struct {
 	AutomationCredentialsCount     int64
 	ReviewContentsCount            int64
 	ConversationContentsCount      int64
+	WebhookCredentialsCount        int64
 }
 
 type GolfEncryptionKey struct {
@@ -755,6 +756,79 @@ type GolfUser struct {
 	Login       string
 	FullName    string
 	AvatarURL   string
+}
+
+type GolfWebhookAttempt struct {
+	DeliveryID     uuid.UUID
+	Attempt        int32
+	LeaseID        uuid.UUID
+	StartedAt      time.Time
+	CompletedAt    sql.NullTime
+	ResponseStatus int32
+	Outcome        string
+}
+
+type GolfWebhookConfigurationEvent struct {
+	ID             int64
+	SubscriptionID uuid.UUID
+	Version        int64
+	SponsorUserID  int64
+	Enabled        bool
+	EventTopics    json.RawMessage
+	CreatedAt      time.Time
+}
+
+type GolfWebhookCredential struct {
+	SubscriptionID      uuid.UUID
+	Version             int64
+	DestinationHost     string
+	EncryptedCredential []byte
+	CredentialBinding   []byte
+	CredentialKeyID     string
+}
+
+type GolfWebhookDelivery struct {
+	ID                   uuid.UUID
+	SubscriptionID       uuid.UUID
+	SubscriptionVersion  int64
+	Epoch                int64
+	EventID              string
+	EventTopic           string
+	Payload              []byte
+	State                string
+	Attempts             int32
+	ResponseStatus       int32
+	FailureCode          string
+	PossibleDuplicate    bool
+	NextAttemptAt        time.Time
+	LeaseID              uuid.NullUUID
+	LeaseUntil           sql.NullTime
+	OperationID          uuid.NullUUID
+	OperationFingerprint []byte
+	RequestedBy          sql.NullInt64
+	CreatedAt            time.Time
+	CompletedAt          sql.NullTime
+}
+
+type GolfWebhookSubscription struct {
+	ID                 uuid.UUID
+	ForgeURL           string
+	RepositoryID       int64
+	OwnerID            int64
+	RepositoryOwner    string
+	RepositoryName     string
+	Name               string
+	Version            int64
+	Epoch              int64
+	EventTopics        json.RawMessage
+	Enabled            bool
+	AuthorizationState string
+	SponsorUserID      int64
+	SponsorNativeID    int64
+	LocalAccountID     int64
+	CredentialVersion  int64
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 type GolfWorkflowGraphEvent struct {

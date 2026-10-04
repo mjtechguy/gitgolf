@@ -24,6 +24,7 @@ import (
 var immutableWebAsset = regexp.MustCompile(`^assets/[^/]+-[A-Za-z0-9_-]{8}\.(js|css|woff2?)$`)
 
 type Config struct {
+	WebhookEgressPolicyJSON                                    string
 	AgentImage, ReviewImage, ReviewPublisherToken              string
 	ClaudeBinary, OpenCodeBinary, CodexBinary                  string
 	PushCIEnabled                                              bool
@@ -57,6 +58,9 @@ type Server struct {
 }
 
 func New(config Config, db *sql.DB) (*Server, error) {
+	if _, err := parseWebhookEgress(config.WebhookEgressPolicyJSON); err != nil {
+		return nil, errors.New("Webhook operator egress policy is invalid")
+	}
 	if config.ReviewImage != "" && !regexp.MustCompile(`^sha256:[a-f0-9]{64}$`).MatchString(config.ReviewImage) {
 		return nil, errors.New("GOLF_REVIEW_IMAGE must identify an exact local image")
 	}

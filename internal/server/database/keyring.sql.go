@@ -13,8 +13,8 @@ import (
 )
 
 const appendCryptoEvent = `-- name: AppendCryptoEvent :exec
-INSERT INTO golf_crypto_events (operation_id, action, key_id, sessions_count, oauth_attempts_count, local_accounts_count,infrastructure_connections_count,automation_credentials_count,review_contents_count,conversation_contents_count)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+INSERT INTO golf_crypto_events (operation_id, action, key_id, sessions_count, oauth_attempts_count, local_accounts_count,infrastructure_connections_count,automation_credentials_count,review_contents_count,conversation_contents_count,webhook_credentials_count)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 `
 
 type AppendCryptoEventParams struct {
@@ -28,6 +28,7 @@ type AppendCryptoEventParams struct {
 	AutomationCredentialsCount     int64
 	ReviewContentsCount            int64
 	ConversationContentsCount      int64
+	WebhookCredentialsCount        int64
 }
 
 func (q *Queries) AppendCryptoEvent(ctx context.Context, arg AppendCryptoEventParams) error {
@@ -42,6 +43,7 @@ func (q *Queries) AppendCryptoEvent(ctx context.Context, arg AppendCryptoEventPa
 		arg.AutomationCredentialsCount,
 		arg.ReviewContentsCount,
 		arg.ConversationContentsCount,
+		arg.WebhookCredentialsCount,
 	)
 	return err
 }
@@ -234,17 +236,64 @@ func (q *Queries) BootstrapLegacySessions(ctx context.Context, afterID int64) ([
 	return items, nil
 }
 
+const bootstrapLegacyWebhookCredentials = `-- name: BootstrapLegacyWebhookCredentials :many
+SELECT subscription_id::text,version,encrypted_credential,credential_binding FROM golf_webhook_credentials
+WHERE credential_key_id='legacy' AND (subscription_id::text>$1::text OR (subscription_id::text=$1::text AND version>$2))
+ORDER BY subscription_id,version LIMIT 500
+`
+
+type BootstrapLegacyWebhookCredentialsParams struct {
+	AfterSubscription string
+	AfterVersion      int64
+}
+
+type BootstrapLegacyWebhookCredentialsRow struct {
+	SubscriptionID      string
+	Version             int64
+	EncryptedCredential []byte
+	CredentialBinding   []byte
+}
+
+func (q *Queries) BootstrapLegacyWebhookCredentials(ctx context.Context, arg BootstrapLegacyWebhookCredentialsParams) ([]BootstrapLegacyWebhookCredentialsRow, error) {
+	rows, err := q.db.QueryContext(ctx, bootstrapLegacyWebhookCredentials, arg.AfterSubscription, arg.AfterVersion)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BootstrapLegacyWebhookCredentialsRow
+	for rows.Next() {
+		var i BootstrapLegacyWebhookCredentialsRow
+		if err := rows.Scan(
+			&i.SubscriptionID,
+			&i.Version,
+			&i.EncryptedCredential,
+			&i.CredentialBinding,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countCredentialKeys = `-- name: CountCredentialKeys :many
-SELECT credential_key_id,sum(s)::bigint AS sessions,sum(o)::bigint AS oauth_attempts,sum(l)::bigint AS local_accounts,sum(i)::bigint AS infrastructure_connections,sum(a)::bigint AS automation_credentials,sum(r)::bigint AS review_contents,sum(c)::bigint AS conversation_contents
+SELECT credential_key_id,sum(s)::bigint AS sessions,sum(o)::bigint AS oauth_attempts,sum(l)::bigint AS local_accounts,sum(i)::bigint AS infrastructure_connections,sum(a)::bigint AS automation_credentials,sum(r)::bigint AS review_contents,sum(c)::bigint AS conversation_contents,sum(w)::bigint AS webhook_credentials
 FROM (
- SELECT credential_key_id,count(*) AS s,0::bigint AS o,0::bigint AS l,0::bigint AS i,0::bigint AS a,0::bigint AS r,0::bigint AS c FROM golf_sessions GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0,count(*),0,0,0,0,0 FROM golf_oauth_attempts GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0,0,count(*),0,0,0,0 FROM golf_local_accounts GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0,0,0,count(*),0,0,0 FROM golf_infrastructure_connection_versions GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0,0,0,0,count(*),0,0 FROM golf_automation_credentials GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0,0,0,count(*),0,0,0 FROM golf_codex_auth GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0,0,0,0,0,count(*),0 FROM golf_review_contents GROUP BY credential_key_id
- UNION ALL SELECT credential_key_id,0,0,0,0,0,0,count(*) FROM golf_agent_conversation_contents GROUP BY credential_key_id
+ SELECT credential_key_id,count(*) AS s,0::bigint AS o,0::bigint AS l,0::bigint AS i,0::bigint AS a,0::bigint AS r,0::bigint AS c,0::bigint AS w FROM golf_sessions GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,count(*),0,0,0,0,0,0 FROM golf_oauth_attempts GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,count(*),0,0,0,0,0 FROM golf_local_accounts GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,count(*),0,0,0,0 FROM golf_infrastructure_connection_versions GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,0,count(*),0,0,0 FROM golf_automation_credentials GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,count(*),0,0,0,0 FROM golf_codex_auth GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,0,0,count(*),0,0 FROM golf_review_contents GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,0,0,0,count(*),0 FROM golf_agent_conversation_contents GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0,0,0,0,0,0,0,count(*) FROM golf_webhook_credentials GROUP BY credential_key_id
 ) counts GROUP BY credential_key_id ORDER BY credential_key_id
 `
 
@@ -257,6 +306,7 @@ type CountCredentialKeysRow struct {
 	AutomationCredentials     int64
 	ReviewContents            int64
 	ConversationContents      int64
+	WebhookCredentials        int64
 }
 
 func (q *Queries) CountCredentialKeys(ctx context.Context) ([]CountCredentialKeysRow, error) {
@@ -277,6 +327,7 @@ func (q *Queries) CountCredentialKeys(ctx context.Context) ([]CountCredentialKey
 			&i.AutomationCredentials,
 			&i.ReviewContents,
 			&i.ConversationContents,
+			&i.WebhookCredentials,
 		); err != nil {
 			return nil, err
 		}
@@ -659,6 +710,54 @@ func (q *Queries) LockRotationSessions(ctx context.Context, arg LockRotationSess
 	return items, nil
 }
 
+const lockRotationWebhookCredentials = `-- name: LockRotationWebhookCredentials :many
+SELECT subscription_id::text,version,encrypted_credential,credential_binding,credential_key_id
+FROM golf_webhook_credentials WHERE credential_key_id <> $1
+ORDER BY subscription_id,version LIMIT $2 FOR UPDATE SKIP LOCKED
+`
+
+type LockRotationWebhookCredentialsParams struct {
+	ActiveKeyID string
+	RowLimit    int32
+}
+
+type LockRotationWebhookCredentialsRow struct {
+	SubscriptionID      string
+	Version             int64
+	EncryptedCredential []byte
+	CredentialBinding   []byte
+	CredentialKeyID     string
+}
+
+func (q *Queries) LockRotationWebhookCredentials(ctx context.Context, arg LockRotationWebhookCredentialsParams) ([]LockRotationWebhookCredentialsRow, error) {
+	rows, err := q.db.QueryContext(ctx, lockRotationWebhookCredentials, arg.ActiveKeyID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LockRotationWebhookCredentialsRow
+	for rows.Next() {
+		var i LockRotationWebhookCredentialsRow
+		if err := rows.Scan(
+			&i.SubscriptionID,
+			&i.Version,
+			&i.EncryptedCredential,
+			&i.CredentialBinding,
+			&i.CredentialKeyID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const registerKeyFingerprint = `-- name: RegisterKeyFingerprint :exec
 INSERT INTO golf_encryption_keys (key_id, fingerprint) VALUES ($1, $2)
 `
@@ -779,5 +878,27 @@ type UpdateKeyedSessionCredentialParams struct {
 
 func (q *Queries) UpdateKeyedSessionCredential(ctx context.Context, arg UpdateKeyedSessionCredentialParams) error {
 	_, err := q.db.ExecContext(ctx, updateKeyedSessionCredential, arg.TokenHash, arg.EncryptedToken, arg.CredentialKeyID)
+	return err
+}
+
+const updateKeyedWebhookCredential = `-- name: UpdateKeyedWebhookCredential :exec
+UPDATE golf_webhook_credentials SET encrypted_credential=$1,credential_key_id=$2
+WHERE subscription_id=$3::uuid AND version=$4
+`
+
+type UpdateKeyedWebhookCredentialParams struct {
+	EncryptedCredential []byte
+	CredentialKeyID     string
+	SubscriptionID      uuid.UUID
+	Version             int64
+}
+
+func (q *Queries) UpdateKeyedWebhookCredential(ctx context.Context, arg UpdateKeyedWebhookCredentialParams) error {
+	_, err := q.db.ExecContext(ctx, updateKeyedWebhookCredential,
+		arg.EncryptedCredential,
+		arg.CredentialKeyID,
+		arg.SubscriptionID,
+		arg.Version,
+	)
 	return err
 }
