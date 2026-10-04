@@ -1239,6 +1239,9 @@ message WorkflowConfiguration {
   // verifies a live worker, or establishes an active push sponsor grant.
   optional bool manual_policy_allowed = 10;
   optional bool push_policy_allowed = 11;
+  repeated WorkflowDispatchInputDefinition manual_inputs = 12;
+  string manual_inputs_schema_sha256 = 13;
+
 }
 message InspectWorkflowsRequest {
   RepositoryKey repository = 1;
@@ -1383,6 +1386,10 @@ message WorkflowRun {
  string execution_binding_version = 30;
  WorkflowRunnerPlacement runner_placement = 31;
  WorkflowJobResourceBinding job_resources = 32;
+ string submitted_sha256 = 33;
+ string effective_sha256 = 34;
+ string schema_sha256 = 35;
+ string input_contract = 36;
 }
 enum WorkflowStepState {
  WORKFLOW_STEP_STATE_UNSPECIFIED = 0;
@@ -1409,7 +1416,22 @@ message WorkflowJobProgress {
  repeated WorkflowStepProgress steps = 4;
  bool events_recorded = 5;
 }
-message DispatchWorkflowRequest { RepositoryKey repository = 1; string ref = 2; string workflow_path = 3; string idempotency_key = 4; }
+message DispatchWorkflowRequest {
+ RepositoryKey repository = 1;
+ string ref = 2;
+ string workflow_path = 3;
+ string idempotency_key = 4;
+ repeated WorkflowDispatchInputValue inputs = 5;
+ optional string submitted_sha256 = 6;
+ string workflow_blob_id = 7;
+ string repository_id = 8;
+ string owner_id = 9;
+ string schema_sha256 = 10;
+ // Presence selects typed admission. All exact-source/digest bindings are required.
+ // Absence preserves the original input-free intent contract.
+ optional string input_contract = 11;
+ string effective_sha256 = 12;
+}
 message DispatchWorkflowResponse { WorkflowRun run = 1; }
 message GetWorkflowRunRequest { string run_id = 1; }
 message GetWorkflowRunResponse { WorkflowRun run = 1; }
@@ -3645,6 +3667,11 @@ message GetWorkflowDispatchRequest {
  string commit_id = 4;
  string workflow_path = 5;
  string idempotency_key = 6;
+ optional string submitted_sha256 = 7;
+ optional string schema_sha256 = 8;
+ optional string workflow_blob_id = 9;
+ optional string input_contract = 10;
+ optional string effective_sha256 = 11;
 }
 message GetWorkflowDispatchResponse {
  RepositoryKey repository = 1;
@@ -3653,6 +3680,10 @@ message GetWorkflowDispatchResponse {
  string native_actor_id = 4;
  string idempotency_key = 5;
  WorkflowRun run = 6;
+ string submitted_sha256 = 7;
+ string effective_sha256 = 8;
+ string schema_sha256 = 9;
+ string input_contract = 10;
 }
 
 // Presence in the value oneof distinguishes false/zero/empty from omission.
