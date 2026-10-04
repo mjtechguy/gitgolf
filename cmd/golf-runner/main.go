@@ -124,10 +124,17 @@ func (c *coordinator) post(ctx context.Context, a assignment, action string, bod
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusNoContent {
-		return errTransport
+		return &coordinatorPostError{status: response.StatusCode}
 	}
 	return nil
 }
+
+// Only a numeric response status is retained; never response bytes or headers.
+type coordinatorPostError struct{ status int }
+
+func (e *coordinatorPostError) Error() string { return errTransport.Error() }
+func (e *coordinatorPostError) Unwrap() error { return errTransport }
+
 func (c *coordinator) poll(ctx context.Context) (*assignment, error) {
 	response, err := c.request(ctx, http.MethodPost, "/internal/ci/poll", "", c.pollCapabilities())
 	if err != nil {
@@ -468,6 +475,25 @@ func reportActionsFailure(output io.Writer, err error) {
 		phase = "coordinator_preparation"
 	}
 	fmt.Fprintln(output, "Golf Actions lifecycle failure: stage="+phase)
+	var ack *actionFrameAckError
+	if errors.As(err, &ack) {
+		kind := "unknown"
+		switch ack.kind {
+		case "log", "job_started", "job_finished", "step_started", "step_finished", "complete":
+			kind = ack.kind
+		}
+		scope := "unknown"
+		switch ack.scope {
+		case "job", "step", "run":
+			scope = ack.scope
+		}
+		status := "unknown"
+		var response *coordinatorPostError
+		if errors.As(ack.cause, &response) && response.status >= 100 && response.status <= 599 {
+			status = fmt.Sprint(response.status)
+		}
+		fmt.Fprintln(output, "Golf Actions acknowledgement failure: kind="+kind+"; scope="+scope+"; http_status="+status)
+	}
 }
 
 func (c *coordinator) executeActions(ctx context.Context, a assignment, source string, forward *logForwarder) (runner.Result, error) {
@@ -483,19 +509,52 @@ func (c *coordinator) executeActions(ctx context.Context, a assignment, source s
 		return runner.Result{}, errTransport
 	}
 	input := runner.ActionExecutionInput{Input: runner.ActionPlanInput{Catalog: runner.ActionsCatalog, WorkflowPath: a.ActionsPlan.WorkflowPath, WorkflowBlobID: a.ActionsPlan.WorkflowBlobID, Archive: archive, Event: a.ActionsPlan.Event, Ref: a.ActionsPlan.Ref, Images: images}, Plan: *a.ActionsPlan, EventJSON: a.EventJSON, CommitID: a.CommitID, TimeoutSeconds: a.TimeoutSeconds, ExecutionEnvironment: a.ExecutionEnvironment}
-	return c.actions.Execute(ctx, a.AttemptID, input, func(ctx context.Context, frame runner.ActionFrame) error {
-		if frame.Kind == "log" {
-			forward.jobInstanceID, forward.stepID = frame.InstanceID, frame.StepID
-			return forward.write(ctx, runner.LogChunk{Stream: "stdout", Data: []byte(frame.Text)}, true)
-		}
-		return c.post(ctx, a, "graph", struct {
+	var acknowledgementFailure error
+	result, err := c.actions.Execute(ctx, a.AttemptID, input, func(ctx context.Context, frame runner.ActionFrame) error {
+		acknowledgementFailure = c.acknowledgeActionFrame(ctx, a, forward, frame)
+		return acknowledgementFailure
+	})
+	// The executor intentionally returns a closed infrastructure error on failure.
+	// Retain only our bounded acknowledgement classification beside that policy.
+	if err != nil && acknowledgementFailure != nil {
+		return result, errors.Join(err, acknowledgementFailure)
+	}
+	return result, err
+}
+
+type actionFrameAckError struct {
+	kind, scope string
+	cause       error
+}
+
+func (e *actionFrameAckError) Error() string { return "Actions durable acknowledgement refused" }
+func (e *actionFrameAckError) Unwrap() error { return e.cause }
+
+func (c *coordinator) acknowledgeActionFrame(ctx context.Context, a assignment, forward *logForwarder, frame runner.ActionFrame) error {
+	var err error
+	if frame.Kind == "log" {
+		forward.jobInstanceID, forward.stepID = frame.InstanceID, frame.StepID
+		err = forward.write(ctx, runner.LogChunk{Stream: "stdout", Data: []byte(frame.Text)}, true)
+	} else {
+		err = c.post(ctx, a, "graph", struct {
 			Sequence      int    `json:"sequence"`
 			JobInstanceID string `json:"jobInstanceId"`
 			StepID        string `json:"stepId"`
 			Kind          string `json:"kind"`
 			State         string `json:"state"`
 		}{frame.EventSequence, frame.InstanceID, frame.StepID, frame.Kind, frame.State})
-	})
+	}
+	if err == nil {
+		return nil
+	}
+	scope := "run"
+	if frame.InstanceID != "" {
+		scope = "job"
+	}
+	if frame.StepID != "" {
+		scope = "step"
+	}
+	return &actionFrameAckError{kind: frame.Kind, scope: scope, cause: err}
 }
 
 // HTTPS identity is verified by net/http using system roots plus an optional
