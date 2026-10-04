@@ -41,6 +41,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def require(value, category):
     if not value:
+        record(validationFailureCategory=category)
         raise AssertionError(category)
 
 def record(**values):
@@ -150,9 +151,10 @@ def main():
         # Parent directory is0700. Bind only individual readonly certificate/key
         # files;0444 inside the container allows its existing unprivileged user.
         tls=directory/'tls';tls.mkdir(mode=0o700)
-        run('openssl','req','-x509','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256','-nodes','-days','1','-subj','/CN=Golf disposable READ CA','-keyout',str(tls/'ca.key'),'-out',str(tls/'ca.crt'),timeout=20)
+        private_write(tls/'ca.conf','[req]\ndistinguished_name=dn\nx509_extensions=ca\n[dn]\n[ca]\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid:always\n')
+        run('openssl','req','-config',str(tls/'ca.conf'),'-x509','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256','-nodes','-days','1','-subj','/CN=Golf disposable READ CA','-keyout',str(tls/'ca.key'),'-out',str(tls/'ca.crt'),timeout=20)
         run('openssl','req','-new','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256','-nodes','-subj','/CN=127.0.0.1','-keyout',str(tls/'server.key'),'-out',str(tls/'server.csr'),timeout=20)
-        private_write(tls/'extensions','subjectAltName=IP:127.0.0.1\nextendedKeyUsage=serverAuth\n')
+        private_write(tls/'extensions','basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid,issuer\nsubjectAltName=IP:127.0.0.1\nextendedKeyUsage=serverAuth\n')
         run('openssl','x509','-req','-in',str(tls/'server.csr'),'-CA',str(tls/'ca.crt'),'-CAkey',str(tls/'ca.key'),'-CAcreateserial','-days','1','-extfile',str(tls/'extensions'),'-out',str(tls/'server.crt'),timeout=20)
         for path in (tls/'server.key',tls/'server.crt',tls/'ca.crt'):path.chmod(0o444)
         context=ssl.create_default_context(cafile=str(tls/'ca.crt'));context.minimum_version=ssl.TLSVersion.TLSv1_3
@@ -199,14 +201,14 @@ def main():
         def native_call(token,method,path,body=None,expected=200):
             payload={'project':project,'token':token,'method':method,'path':'/api/v1/'+path}
             if body is not None:payload['body']=body
-            result=json.loads(command('exec','-T','golf','/run/golf/read-proof/native-helper',payload=payload,timeout=20));require(result.get('status')==expected,'native_status');return result.get('body')
+            result=json.loads(command('exec','-T','golf','/run/golf/read-proof/native-helper',payload=payload,timeout=20));record(lastNativeCall={'method':method,'path':path,'expectedStatus':expected,'actualStatus':result.get('status')});require(result.get('status')==expected,'native_status');return result.get('body')
         def opener():return urllib.request.build_opener(urllib.request.ProxyHandler({}),NoRedirect(),urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
         def call(actor,procedure,body=None,expected=200,code=None,headers=None):
             req=urllib.request.Request(browser+'/rpc/golf.v1.'+procedure,data=json.dumps(body or {}).encode(),method='POST',headers={'Origin':browser,'Content-Type':'application/json','Connect-Protocol-Version':'1',**(headers or {})})
             try:response=actor['session'].open(req,timeout=20)
             except urllib.error.HTTPError as e:response=e
             with response:
-                raw=response.read(2<<20);require(response.status==expected and response.headers.get('Cache-Control')=='no-store','rpc_status_or_cache');value=json.loads(raw) if raw else {}
+                raw=response.read(2<<20);value=json.loads(raw) if raw else {};record(lastRpcCall={'procedure':procedure,'expectedStatus':expected,'actualStatus':response.status,'cacheNoStore':response.headers.get('Cache-Control')=='no-store','code':value.get('code') if value.get('code') in ['internal','unauthenticated','permission_denied','not_found','invalid_argument','failed_precondition','resource_exhausted','unavailable','unimplemented'] else None});require(response.status==expected and response.headers.get('Cache-Control')=='no-store','rpc_status_or_cache')
             if code:require(value.get('code')==code,'rpc_code')
             return value
         def ready():
@@ -257,6 +259,11 @@ def main():
             else:raise AssertionError('tls_hostname_not_enforced')
             record(runtime=initial_runtime,topology=topology(),tls={'protocol':'TLSv1.3','ownCaVerified':True,'ipSAN':'127.0.0.1','wrongHostnameRefused':True,'serverAuthenticationOnly':True})
             stage('supported ordinary actors and own managed sessions')
+            # A disposable unmanaged bootstrap administrator prevents the native
+            # last-admin safeguard from blocking supported test-actor cleanup.
+            # It has no token or Golf enrollment; fresh volume teardown removes it.
+            admin('create','--username',project+'-bootstrap','--email',project+'-bootstrap@example.invalid','--random-password','--must-change-password=false','--admin=true')
+            record(unmanagedBootstrap='owned fresh fixture only; removed with fresh native volume')
             for role in ['owner','reader','outside','admin']:
                 actor={'name':project+'-'+role,'created':False,'enrolled':False,'loggedIn':False,'session':opener()};actors[role]=actor
                 admin('create','--username',actor['name'],'--email',actor['name']+'@example.invalid','--random-password','--must-change-password=false','--admin='+('true' if role=='admin' else 'false'));actor['created']=True
@@ -335,7 +342,9 @@ def main():
             require(runtime()==initial_runtime and topology()==PROOF['topology'],'final_runtime_topology')
             record(renameReplacement='passed',runtimeUnchanged=True);passed=True
         except Exception as original:
-            record(failedStage=STAGE,originalFailureClass=type(original).__name__);raise
+            record(failedStage=STAGE,originalFailureClass=type(original).__name__,originalValidationFailureCategory=PROOF.get('validationFailureCategory'))
+            if isinstance(original,ssl.SSLCertVerificationError):record(tlsVerificationCode=original.verify_code)
+            raise
         finally:
             if not passed:record(failedStage=STAGE)
             failures=[]
@@ -348,13 +357,20 @@ def main():
                 if actor['loggedIn']:
                     try:call(actor,'SessionService/RevokeOtherSessions');call(actor,'SessionService/Logout');actor['loggedIn']=False
                     except Exception:failures.append('managed_session')
+            if 'owner' in actors and actors['owner'].get('token'):
+                for fixture_name in ['proof','proof-renamed','other']:
+                    try:
+                        token=actors['owner']['token'];path='repos/'+actors['owner']['name']+'/'+fixture_name
+                        result=json.loads(command('exec','-T','golf','/run/golf/read-proof/native-helper',payload={'project':project,'token':token,'method':'DELETE','path':'/api/v1/'+path},timeout=20))
+                        require(result.get('status') in (204,404),'cleanup_native_repository')
+                    except Exception:failures.append('native_repository_delete')
             for actor in reversed(list(actors.values())):
                 if actor['enrolled']:
                     try:require(operator('disable',{'username':actor['name']}).get('disabled') is True,'managed_disable')
                     except Exception:failures.append('managed_account_disable')
                 if actor['created']:
                     try:admin('delete','--username',actor['name'],'--purge')
-                    except Exception:failures.append('native_actor_purge')
+                    except Exception:failures.append('native_actor_purge');record(nativePurgeFailedRoles=[r for r,a in actors.items() if a is actor])
             if started:
                 try:
                     command('down','--volumes','--remove-orphans',timeout=180)
