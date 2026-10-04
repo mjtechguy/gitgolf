@@ -290,6 +290,32 @@ def main():
                 assert result.stdout.decode().startswith('PASS: actual full-General requested editors,')
                 print(result.stdout.decode().strip(), flush=True)
                 current = read()
+            stage('archived native state refuses both editors without changing source')
+            smoke.provider(owner['token'], 'PATCH', path, {'archived':True})
+            archived = read(); assert archived['archived'] and not archived.get('canEdit', False)
+            for method, extra in [('UpdateRepositorySettings', {'description':'must not edit archive'}), ('UpdateRepositoryTopics', {'topics':['must-not-edit-archive']})]:
+                call(owner, method, {**target(archived), **extra}, expected=403)
+            assert read() == archived
+            smoke.provider(owner['token'], 'PATCH', path, {'archived':False})
+            current = read(); assert not current.get('archived', False) and current['canEdit']
+            assert smoke.rpc(owner['session'], 'RepositoryService/GetContents', exact_source) == original_source
+            record(archivedEditFences='passed')
+            stage('native rename and replacement cannot reuse the former immutable target')
+            pinned = current
+            renamed = smoke.provider(owner['token'], 'PATCH', path, {'name':'general-renamed'})
+            assert renamed['id'] == int(pinned['repositoryId']) and renamed['owner']['id'] == int(pinned['ownerId'])
+            replacement = smoke.provider(owner['token'], 'POST', 'user/repos', {'name':'general', 'private':True, 'auto_init':True}, 201)
+            assert replacement['id'] != renamed['id']
+            replacement_before = native_shape(smoke.provider(owner['token'], 'GET', path))
+            call(owner, 'GetRepositorySettings', {'repository':repository, 'repositoryId':pinned['repositoryId']}, expected=400, code='failed_precondition')
+            for method, extra in [('UpdateRepositorySettings', {'description':'must not edit replacement'}), ('UpdateRepositoryTopics', {'topics':['must-not-edit-replacement']})]:
+                call(owner, method, {**target(pinned), **extra}, expected=400, code='failed_precondition')
+            assert native_shape(smoke.provider(owner['token'], 'GET', path)) == replacement_before
+            smoke.provider(owner['token'], 'DELETE', path, expected=204)
+            restored = smoke.provider(owner['token'], 'PATCH', 'repos/'+renamed['full_name'], {'name':'general'})
+            assert restored['id'] == int(pinned['repositoryId'])
+            current = read(); assert current == pinned
+            record(renameReplacementFences='passed')
             stage('Origin and bearer boundaries, then persisted source truth after logout')
             credential = smoke.rpc(owner['session'], 'ApiCredentialService/CreateApiCredential', {'label':'General qualifier'})
             bearers.append((owner, credential['credential']['id']))
