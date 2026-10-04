@@ -3094,3 +3094,48 @@ message RepositoryMergeConfiguration {
   string default_merge_style = 12;
   string default_update_style = 13;
 }
+
+// Configured Docker identities; control state is not a health/capacity claim.
+service RunnerControlService {
+  rpc GetInstanceRunners(GetInstanceRunnersRequest) returns (GetInstanceRunnersResponse);
+  rpc UpdateRunnerControl(UpdateRunnerControlRequest) returns (UpdateRunnerControlResponse);
+  rpc GetRepositoryRunners(GetRepositoryRunnersRequest) returns (GetRepositoryRunnersResponse);
+}
+enum RunnerControlState {
+  RUNNER_CONTROL_STATE_UNSPECIFIED = 0;
+  RUNNER_CONTROL_STATE_ACTIVE = 1;
+  RUNNER_CONTROL_STATE_DRAINING = 2;
+  RUNNER_CONTROL_STATE_REVOKED = 3;
+}
+message EnrolledRunner {
+  string worker_id = 1;
+  RunnerControlState state = 2;
+  string version = 3;
+  optional string last_seen = 4;
+  bool recent_connection = 5;
+  bool has_active_attempt = 6;
+}
+message GetInstanceRunnersRequest {}
+message GetInstanceRunnersResponse { repeated EnrolledRunner runners = 1; }
+message UpdateRunnerControlRequest {
+  string worker_id = 1;
+  string expected_version = 2;
+  RunnerControlState state = 3;
+  string current_password = 4;
+}
+message UpdateRunnerControlResponse { EnrolledRunner runner = 1; }
+message GetRepositoryRunnersRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string workflow_path = 4;
+}
+message GetRepositoryRunnersResponse {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string workflow_path = 4;
+  bool manual_allowed = 5;
+  bool push_allowed = 6;
+  repeated EnrolledRunner runners = 7;
+}

@@ -333,8 +333,17 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Only one live assignment per enrolled ID. Poll retries cannot duplicate it.
-	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, s.config.GiteaURL+"/runner/"+id); err != nil {
+	if err = s.lockRunnerControl(ctx, tx, id); err != nil {
 		runnerFail(w, 503)
+		return
+	}
+	control, _, err := s.runnerControl(ctx, tx, id)
+	if err != nil {
+		runnerFail(w, 503)
+		return
+	}
+	if control != "active" {
+		w.WriteHeader(204)
 		return
 	}
 	var busy bool
@@ -512,6 +521,19 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var state string
+	if err = s.lockRunnerControl(ctx, tx, id); err != nil {
+		runnerFail(w, 503)
+		return
+	}
+	control, _, err := s.runnerControl(ctx, tx, id)
+	if err != nil {
+		runnerFail(w, 503)
+		return
+	}
+	if control == "revoked" {
+		runnerFail(w, 403)
+		return
+	}
 	err = tx.QueryRowContext(ctx, `SELECT state FROM golf_workflow_runs WHERE id=$1 AND forge_url=$2 AND runner_id=$3 AND attempt_id=$4 AND lease_token_hash=$5 AND lease_expires_at>clock_timestamp() FOR UPDATE`, run.ID, s.config.GiteaURL, id, attempt, hash[:]).Scan(&state)
 	if err != nil || state != "running" {
 		runnerFail(w, 403)
