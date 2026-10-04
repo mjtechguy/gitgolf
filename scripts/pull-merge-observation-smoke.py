@@ -114,6 +114,40 @@ def exact_ref(rows, name):
     return row['object']['sha']
 
 
+def native_pull_metadata(row):
+    # Never retain title/body, names, ref paths, user data or complete responses.
+    result={}
+    for native,wire in (('id','pullRequestId'),('number','number'),('content_version','contentVersion')):
+        value=row.get(native)
+        assert isinstance(value,int) and not isinstance(value,bool) and 0<=value<=9223372036854775807
+        result[wire]=str(value)
+    for field in ('created_at','updated_at'):
+        value=row.get(field)
+        assert isinstance(value,str) and re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,9})?(?:Z|[+-]\d\d:\d\d)',value)
+        result[field]=value
+    assert row.get('state') in ('open','closed');result['state']=row['state']
+    for field in ('draft','merged','mergeable'):
+        value=row.get(field)
+        if isinstance(value,bool):result[field]=value
+    for side in ('head','base'):
+        value=row[side];assert isinstance(value,dict) and isinstance(value['repo_id'],int) and -1<=value['repo_id']<=9223372036854775807 and OID.fullmatch(value['sha'])
+        result[side]={'repositoryId':str(value['repo_id']),'commitId':value['sha'],'refKind':'retained' if isinstance(value.get('ref'),str) and value['ref'].startswith('refs/pull/') else 'named' if isinstance(value.get('ref'),str) and value['ref'] else 'unavailable'}
+    merge_base=row.get('merge_base')
+    if isinstance(merge_base,str) and OID.fullmatch(merge_base):result['mergeBaseCommitId']=merge_base
+    return result
+
+
+def changed_pull_predicates(before, after):
+    changes=[]
+    for field in ('id','number','content_version','title','body','state','created_at','updated_at','draft','merged','merged_at','merge_commit_sha'):
+        if before.get(field)!=after.get(field):changes.append(field)
+    if (before.get('user') or {}).get('id')!=(after.get('user') or {}).get('id'):changes.append('author_id')
+    for side in ('head','base'):
+        for field in ('repo_id','ref','sha'):
+            if (before.get(side) or {}).get(field)!=(after.get(side) or {}).get(field):changes.append(side+'.'+field)
+    return changes
+
+
 def receipt(value, selected, native_branch, raw_repo, source_id, source_name, live_head):
     v=value['observation']
     assert v['selection']==selected['selection'] and v['pullRevision']==selected['expectedPullRevision']
@@ -238,6 +272,12 @@ def self_check():
     try:request(Opener(),'POST',url,{}, {},200)
     except HTTPContractFailure as error:assert error.diagnostic==diagnostic and secret not in str(error)
     else:raise AssertionError('Unexpected HTTP status did not fail')
+    native={'id':9,'number':1,'content_version':0,'title':secret,'body':secret,'state':'open','created_at':'2026-10-04T12:00:00Z','updated_at':'2026-10-04T12:00:00Z','draft':False,'merged':False,'user':{'id':2,'login':secret},'head':{'repo_id':3,'ref':secret,'sha':'a'*40,'repo':{'private':secret}},'base':{'repo_id':1,'ref':'main','sha':'b'*40}}
+    assert secret not in json.dumps(native_pull_metadata(native))
+    changed=copy.deepcopy(native);changed['updated_at']='2026-10-04T12:00:01Z';changed['body']='changed '+secret;changed['head']['sha']='d'*40
+    assert changed_pull_predicates(native,changed)==['body','updated_at','head.sha']
+    unchanged=copy.deepcopy(native);unchanged['head']['repo']={'description':'different '+secret};unchanged['user']['login']='different '+secret
+    assert changed_pull_predicates(native,unchanged)==[]
     syntax=subprocess.run(['node','--input-type=module','--check'],input=BROWSER,text=True,capture_output=True,timeout=10)
     assert syntax.returncode==0
     print('PASS: pure URL/namespace, closed native API vocabulary, exact observation/tamper/privacy and browser syntax checks; no runtime')
@@ -282,7 +322,31 @@ def main():
         row=rpc(actor,'RepositoryService/GetPullRequest',{'repository':target,'number':number})['pullRequest']
         selection={'repository':target,'repositoryId':str(repo['id']),'pullRequestId':row['id'],'number':number,'headCommitId':row['head']['commitId'],'baseCommitId':row['base']['commitId']}
         return {'selection':selection,'expectedPullRevision':row['revision'],'headRef':row['head']['ref']}
-    def inspect(actor,intent):return rpc(actor,SERVICE,{k:v for k,v in intent.items() if k!='headRef'})
+    def inspect(actor,intent):
+        # These independent reads diagnose drift; they do not retry failed
+        # inspection or prove the server's interior reads were atomic.
+        native_before=api(actor,'GET',path+'/pulls/'+str(number))
+        entry={'ordinal':len(manifest.setdefault('inspectionDiagnostics',[]))+1,'stage':stage,'selected':copy.deepcopy(intent['selection']),'expectedPullRevision':intent['expectedPullRevision'],'nativeBefore':native_pull_metadata(native_before),'outcome':'pending'}
+        manifest['inspectionDiagnostics'].append(entry);persist()
+        try:
+            value=rpc(actor,SERVICE,{k:v for k,v in intent.items() if k!='headRef'})
+            entry['outcome']='accepted';persist();return value
+        except Exception:
+            entry['outcome']='failed';entry['diagnosticReads']=[]
+            for kind in ('nativeAfter','golfAfter','retainedHeadAfter'):
+                try:
+                    if kind=='nativeAfter':
+                        native_after=api(actor,'GET',path+'/pulls/'+str(number));entry[kind]=native_pull_metadata(native_after);entry['observedChangedPredicates']=changed_pull_predicates(native_before,native_after)
+                    elif kind=='golfAfter':
+                        latest=selected(actor,target,number);entry[kind]={key:value for key,value in latest.items() if key!='headRef'};entry['golfSelectionChanged']=latest['selection']!=intent['selection'];entry['golfRevisionChanged']=latest['expectedPullRevision']!=intent['expectedPullRevision']
+                    else:
+                        rows=api(actor,'GET',path+'/commits?sha=refs%2Fpull%2F'+str(number)+'%2Fhead&limit=1&stat=false&files=false&verification=false');assert isinstance(rows,list) and len(rows)==1 and OID.fullmatch(rows[0]['sha']);entry[kind]=rows[0]['sha']
+                    entry['diagnosticReads'].append({'kind':kind,'outcome':'read'})
+                except Exception as diagnostic_error:
+                    safe={'kind':kind,'outcome':'unavailable','type':type(diagnostic_error).__name__}
+                    if isinstance(diagnostic_error,HTTPContractFailure):safe['http']=diagnostic_error.diagnostic
+                    entry['diagnosticReads'].append(safe)
+            entry['limits']='Independent exterior reads; stable snapshots do not exclude an interior transient; no inspection retry';persist();raise
     def runtime_now():
         container=command(compose+['ps','-q','golf']);assert re.fullmatch(r'[a-f0-9]{64}',container)
         raw=json.loads(command(['docker','inspect','--format','{"id":{{json .Id}},"image":{{json .Image}},"project":{{json (index .Config.Labels "com.docker.compose.project")}},"service":{{json (index .Config.Labels "com.docker.compose.service")}},"running":{{json .State.Running}},"configHash":{{json (index .Config.Labels "com.docker.compose.config-hash")}}}',container]))
