@@ -1,6 +1,6 @@
 # Readable source URLs and exact source identity
 
-Prepared 2026-10-03. **Implementation design, not an implemented resolver or qualification result.** The full requirement is ordinary readable branch/tag browsing **and** immutable commit permalinks, on both infrastructure tracks. The next packet strengthens the source API and its callers before readable route parsing. It does not close the [implementation plan](../GOLF_IMPLEMENTATION_PLAN.md), protected merge, native review or recovery gates.
+Prepared 2026-10-03. **RS-1 exact-source foundation is implemented and locally qualified; RS-2 readable routing remains design work.** The full requirement is ordinary readable branch/tag browsing **and** immutable commit permalinks, on both infrastructure tracks. The first packet strengthens the source API and its callers before readable route parsing. It does not close the [implementation plan](../GOLF_IMPLEMENTATION_PLAN.md), protected merge, native review or recovery gates.
 
 ## User-visible end state
 
@@ -10,7 +10,7 @@ Normal browsing retains an address such as `/OWNER/REPO/tree/main/src` or `/OWNE
 
 **Copy permalink** produces `/OWNER/REPO/tree/FULL_SHA/PATH` or `/blob/FULL_SHA/PATH`, preserving a valid line fragment and removing irrelevant readable selectors. Commit links, path-history snapshots, review/draft coordinates and mutation intent continue to use full immutable identities. No abbreviated SHA, tag object, branch label or current-head guess is an operation authority. [GitHub documents ordinary branch views and separate commit permalinks](https://docs.github.com/en/repositories/working-with-files/using-files/getting-permanent-links-to-files); Golf should deliver both behaviors.
 
-## Current source and first boundary to repair
+## Historical source boundary before RS-1
 
 | Existing code | Current behavior / required change |
 | --- | --- |
@@ -22,7 +22,7 @@ Normal browsing retains an address such as `/OWNER/REPO/tree/main/src` or `/OWNE
 | [README](../web/src/RepositoryReadme.tsx), [navigator](../web/src/SourceNavigator.tsx), [image adapter](../internal/server/repository_images.go) | All dependent source reads need the same expected repository ID and SHA. Image reads already have an outer current-repository boundary; their nested source and content requests still need explicit selection propagation. |
 | [CLI](../internal/cli/cli.go), [MCP tool](../internal/cli/mcp.go) | `repo contents` and `golf_repo_contents` currently pass address/ref/path directly. Migrate both through the shared typed resolver/exact read; preserve bounded read-only delegation. |
 
-The first packet is **exact GetContents binding and all known caller migration**, including default-branch/legacy inputs. No readable URL control is complete merely because an entry URL redirects to a SHA. The [navigator contract](SOURCE_NAVIGATOR_CONTRACT.md) explicitly records the present server-ID gap; its existing limits/privacy behavior remain requirements.
+The first packet is **exact GetContents binding and all known caller migration**, including default-branch/legacy inputs. No readable URL control is complete merely because an entry URL redirects to a SHA. The [navigator contract](SOURCE_NAVIGATOR_CONTRACT.md) now records the repaired server-ID contract; its existing limits/privacy behavior remain requirements.
 
 ## Supported-native evidence and qualification boundary
 
@@ -97,3 +97,13 @@ Query keys include account/native repository ID/full SHA/path. Readable selectio
 Meaningful tests: wrong/changed expected native IDs and replaced repositories; exact SHA echo/content identity including empty text and duplicate directory entries; revoke/expire during each provider wait and after resolver-before-content; delegated/PAT/bearer/session/Origin boundaries; all migrated default/legacy callers; branch/tag collision at identical and different SHA, annotated/lightweight tags, slash/prefix refs, SHA-looking names, deleted/moved refs, native capped/paged inventories and deadline/bound exhaustion. Verify malformed/double-encoded/literal percent/Unicode/reserved paths, no credential redirect, same-ID rename versus recreated address, and no broadened private-fork source rights. Browser tests cover readable address remaining after load and directory traversal, exact displayed content versus commit banner/images/history, Latest replacing all snapshot-dependent state, Copy permalink and line fragment reload, back/forward, ambiguity focus/keyboard, both themes at 1280/390/320px and late-result private clearing. Actual native Git/blob evidence and exact served image identity are required before runtime qualification.
 
 Full acceptance requires readable branch **and tag** browsing with slash/collision handling, explicit immutable permalinks, all exact source consumers and current authorization, safe alias/rename behavior where supported, and CLI/MCP read parity. RS-1 exact binding alone is a necessary foundation; it is not readable-route completion, protected write fencing, native review lifecycle, release readiness or either infrastructure track’s completion.
+
+## RS-1 implementation checkpoint (2026-10-03)
+
+Main source through `eabe5b9` implements the typed resolver and expected-ID source/image receipts, with all browser/README/navigator/CLI/MCP callers migrated. Explicit branch/tag namespaces handle slash names and SHA-looking names; conflicting browser labels are refused before content dispatch. CLI/MCP bare named refs now mean branch only; tags require `--ref-kind tag` / `ref_kind: "tag"`. The API credential catalogue remains read-only (23 tools).
+
+Native investigation found `contents-ext?ref=FULL_SHA` can select a same-named branch or tag before the object. Exact reads now use supported `/git/commits`, bounded nonrecursive paged `/git/trees` and `/git/blobs`. Child tree and blob object hashes are independently checked. Native root tree receipts expose the commit ID rather than the true root-tree object; this is an exact commit-resolved inventory observation, not a cryptographic root-tree receipt. Empty ordinary files remain valid, while binary/oversize/LFS/symlink/submodule reads remain metadata-only. Workflow inspection, automation-grant admission and manual/push workflow preparation also use the same object reader, preserving aggregate/file budgets and refusing actual LFS pointer bytes before execution or grant persistence.
+
+`make check` passes; affected browser source integration passes239 cases and final conflicting-label coverage34. Supported-native fixtures prove explicit namespaces, prefix neighbors, annotated/lightweight tags, SHA-looking branch versus commit, original bytes after ref movement, bounded tree/blob/image receipts and current-access refusal. Actual served `scripts/source-identity-smoke.py` passes on manifest `sha256:b7286f49e17e81e89c04f5ded6d07e5a7ff5db59496e359ac88ae171e21c50b3`: API/session-delegated/CLI exact reads, wrong-ID/private denial, Unicode/reserved path and fragment reload, README/image identity, four theme/mobile captures and live private revocation. Its three actors/repository are purged and managed accounts disabled/sessions revoked. [Implementation status](IMPLEMENTATION_STATUS.md) distinguishes native/real-PG/browser/runtime evidence and limits.
+
+RS-2 is still required: normal branch/tag addresses remain readable after loading, exhaustive bounded suffix ambiguity resolution, explicit Latest/Copy permalink, encoded selectors and safe same-ID rename/recreation handling. Current browser source navigation still canonicalizes to SHA; RS-1 is not that user-facing URL completion. No protected merge, full review lifecycle, workflow execution, inference, Cloudflare or recovery qualification is implied.
