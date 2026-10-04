@@ -10,6 +10,8 @@ Parse the exact selected workflow blob, preserving the existing 64-KiB single-do
 
 Bound declarations/submissions to 25 names, 2048 UTF-8 bytes per string and 8192 bytes per canonical submitted/effective map, within the existing 16-KiB event envelope. Reject unknown or duplicate names, unsupported fields/types, invalid defaults, non-finite or out-of-contract numbers, invalid choices and oversized payloads before admission or credential release. Never trim or evaluate a supplied string. Error text must not contain submitted values.
 
+Refuse declaration names that differ only by ASCII letter case: the pinned evaluator looks up map properties case-insensitively, so two such names would be ambiguous. Submitted names must use the exact declared spelling. This restriction is a published catalog limit rather than a change to the generic expression evaluator.
+
 Presence differs from truthiness: explicit false, zero and an empty string are supplied values. A required omission without a default is refused. The foundation contract uses empty string/false for omitted optional string/boolean values. An omitted optional number or choice without a declared default is refused rather than inventing zero or the first choice. Publish these compatibility limits with the catalog; they are not a blanket GitHub parity claim.
 
 Numbers use explicitly documented finite binary64 semantics and canonical JSON representation. Refuse unsafe integral magnitudes and underflow. Tests must establish normalization, negative-zero behavior and precision limits. Choices remain strings. Definition ordering and submission ordering must not change their canonical hashes; changes to types, defaults or choices must change the schema digest.
