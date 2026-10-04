@@ -301,7 +301,8 @@ def main():
             assert not runs()
             policy('INSTANCE', True); policy('REPOSITORY', True)
             inspection = rpc('WorkflowService/InspectWorkflows', {'repository': selection, 'repositoryId': created['id']})
-            assert inspection['repositoryId'] == created['id'] and len(inspection.get('policyRevision', '')) == 64
+            revision = inspection.get('policyRevision', '')
+            assert inspection['repositoryId'] == created['id'] and len(revision) == 64 and all(c in '0123456789abcdef' for c in revision)
             configurations = inspection.get('configurations', [])
             assert len(configurations) == 1 and configurations[0]['path'] == workflow_path
             assert configurations[0].get('manualPolicyAllowed') is False and configurations[0].get('pushPolicyAllowed') is True

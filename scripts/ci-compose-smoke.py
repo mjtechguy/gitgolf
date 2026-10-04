@@ -129,6 +129,7 @@ def main():
             assert len(revision)==64 and all(c in '0123456789abcdef' for c in revision), 'Policy observation revision missing'
             configurations=response.get('configurations',[])
             assert len(configurations)==len(files), 'Unexpected workflow observation count'
+            assert {item.get('path') for item in configurations}==set(files), 'Inspection source path set mismatch'
             assert all(item.get('manualPolicyAllowed') is manual and item.get('pushPolicyAllowed') is push for item in configurations), 'Independent policy observations mismatch'
             return revision
         def dispatch(file,key=None):return rpc('WorkflowRunService/DispatchWorkflow',{'repository':repository,'workflowPath':file,'idempotencyKey':key or str(uuid.uuid4())})['run']
