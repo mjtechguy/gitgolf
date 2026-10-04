@@ -1141,3 +1141,9 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
  .workflow-runs-panel .data-table th,.workflow-runs-panel .data-table td { padding:10px 9px; }
  .workflow-runs-panel .data-table td:last-child { min-width:100px; }
 }
+
+.workflow-selected-heading { flex-wrap:wrap; padding:0 0 12px; margin-bottom:16px; border-bottom:1px solid var(--line); }
+.workflow-selected-heading>div { flex:1 1 220px; min-width:0; }
+.workflow-selected-heading h2 { overflow-wrap:anywhere; }
+.workflow-selected-heading .field-help { margin:6px 0 0; }
+.workflow-selected-heading>.button { flex-shrink:0; }

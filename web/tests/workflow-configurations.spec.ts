@@ -1,14 +1,14 @@
 import { disabledAgentTasks, disabledAgentUsage } from './rpc';
 import { expect, test, type Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetRepositorySettingsResponseSchema, GetSessionResponseSchema, GetReviewerResponseSchema, ListReviewerRunsResponseSchema, GetRepositoryResponseSchema, InspectWorkflowsRequestSchema, InspectWorkflowsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ExecutionScope, ExecutionMode, GetExecutionPolicyResponseSchema, ListWorkflowRunsResponseSchema, ListWorkflowRunsRequestSchema, WorkflowRunState, WorkflowRunOrigin, WorkflowConfigurationSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
+import { DispatchWorkflowRequestSchema, DispatchWorkflowResponseSchema, GetAuthenticationOptionsResponseSchema, GetRepositoryAccessResponseSchema, GetRepositorySettingsResponseSchema, GetSessionResponseSchema, GetReviewerResponseSchema, ListReviewerRunsResponseSchema, GetRepositoryResponseSchema, InspectWorkflowsRequestSchema, InspectWorkflowsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema, ExecutionScope, ExecutionMode, GetExecutionPolicyResponseSchema, ListWorkflowRunsResponseSchema, ListWorkflowRunsRequestSchema, WorkflowRunState, WorkflowRunOrigin, WorkflowConfigurationSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 const path = '/repositories/alex/private/settings/workflows';
 const commit = 'a'.repeat(40);
 const manual = create(WorkflowConfigurationSchema, { path: '.github/workflows/manual.yml', blobId: 'b'.repeat(40), byteSize: 123n, format: WorkflowFormat.GITHUB_ACTIONS, state: WorkflowInspectionState.VALIDATED_SUBSET, name: '<literal-workflow>', events: ['workflow_dispatch'], jobs: [{ id: 'check', name: '<img src=x onerror=alert(1)>', stepCount: 1 }] });
 async function backend(page: Page) {
-  const state = { mode: 'ready', worker: false, policyKnown: true, manualPolicy: false, pushPolicy: false, badPolicyRevision: false, badTarget: false, badMetadata: false, missingMetadata: false, signedIn: true, barrier: undefined as Promise<void> | undefined, requests: [] as unknown[], runPages: false, matchingRuns: false, methods: [] as string[], denyRuns: false, requestedRunPages: [] as number[] };
+  const state = { mode: 'ready', worker: false, policyKnown: true, manualPolicy: false, pushPolicy: false, badPolicyRevision: false, badTarget: false, dispatchLost: false, badMetadata: false, missingMetadata: false, signedIn: true, barrier: undefined as Promise<void> | undefined, requests: [] as unknown[], runPages: false, matchingRuns: false, methods: [] as string[], denyRuns: false, requestedRunPages: [] as number[] };
   await page.route('**/rpc/**', async route => {
     const method = new URL(route.request().url()).pathname.split('/').at(-1); state.methods.push(method||'');
  if(method === 'ListAgentTasks') return disabledAgentTasks(route);
@@ -31,6 +31,7 @@ async function backend(page: Page) {
       return respond(route, ListWorkflowRunsResponseSchema, { runs: Array.from({ length: current === 1 ? 20 : 1 }, (_, index) => ({ id: `12345678-1234-4234-8234-${(current*100+index).toString(16).padStart(12,'0')}`, workflowPath: state.matchingRuns && index===0 ? manual.path : current === 2 ? '.github/workflows/later.yml' : `.github/workflows/job-${index}.yml`, state: WorkflowRunState.SUCCEEDED, origin: index === 0 ? WorkflowRunOrigin.PUSH : WorkflowRunOrigin.MANUAL, commitId: commit })), page: { nextPage: current === 1 ? 2 : 0 } });
     }
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, {});
+    if(method==='DispatchWorkflow') { const input=request(route,DispatchWorkflowRequestSchema);if(state.dispatchLost)return reject(route,'unavailable','Dispatch acknowledgement unavailable.');return respond(route,DispatchWorkflowResponseSchema,{run:{id:'12345678-1234-4234-8234-123456789012',commitId:input.ref,workflowPath:input.workflowPath,state:WorkflowRunState.QUEUED}}); }
     if (method === 'InspectWorkflows') {
       state.requests.push(request(route, InspectWorkflowsRequestSchema));
       if (state.barrier) await state.barrier;
@@ -192,4 +193,24 @@ for(const missing of [false,true])test(`settings workflow inspection refuses ${m
  await expect(page.getByRole('table',{name:'Workflow configurations',exact:true})).toHaveCount(0);
  await expect(page.getByRole('link',{name:manual.path,exact:true})).toHaveCount(0);
  expect(state.methods.some(method=>/^(Dispatch|Update|Create)/.test(method))).toBe(false);
+});
+
+for(const mode of ['manual','denied','unknown','push'] as const)test(`selected workflow exposes only a guarded manual action (${mode})`,async({page})=>{
+ const s=await backend(page);s.worker=true;s.manualPolicy=mode==='manual';s.pushPolicy=true;s.policyKnown=mode!=='unknown';if(mode==='push')s.mode='push';
+ await page.setViewportSize({width:390,height:844});await page.goto('/alex/private/actions');
+ await expect(page.getByRole('button',{name:'All workflows',exact:true})).toHaveAttribute('aria-current','page');await expect(page.getByRole('button',{name:'Run workflow',exact:true})).toBeHidden();
+ await page.getByRole('button',{name:'Show loaded runs for '+manual.path,exact:true}).click();
+ const action=page.locator('.workflow-selected-heading').getByRole('button',{name:'Run workflow',exact:true});
+ if(mode==='manual'){await expect(action).toBeEnabled();await action.click();await expect(page.getByRole('status').filter({hasText:'Run 12345678-1234-4234-8234-123456789012 recorded.'})).toBeVisible();expect(s.methods.filter(m=>m==='DispatchWorkflow')).toHaveLength(1);let release!:()=>void;s.barrier=new Promise<void>(resolve=>release=resolve);s.mode='denied';await page.getByText('Workflow configuration files',{exact:true}).click();await page.getByRole('button',{name:'Refresh workflow inspection',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'Run 12345678-1234-4234-8234-123456789012 recorded.'})).toHaveCount(0);release();s.barrier=undefined;await expect(page.getByRole('alert').filter({hasText:'Workflow inspection requires repository read access.'}).first()).toBeVisible();await expect(page.getByText('12345678-1234-4234-8234-123456789012',{exact:false})).toHaveCount(0);}
+ else if(mode==='push')await expect(action).toHaveCount(0);else await expect(action).toBeDisabled();
+ if(mode!=='manual')expect(s.methods).not.toContain('DispatchWorkflow');
+ await expect(page.getByRole('table',{name:'Workflow configurations',exact:true})).toBeHidden();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('selected manual dispatch uncertainty survives inspection refresh without another write',async({page})=>{
+ const s=await backend(page);s.worker=true;s.manualPolicy=true;s.dispatchLost=true;await page.goto('/alex/private/actions');
+ await page.getByRole('button',{name:'Show loaded runs for '+manual.path,exact:true}).click();const action=page.locator('.workflow-selected-heading').getByRole('button',{name:'Run workflow',exact:true});await action.click();
+ const notice=page.getByRole('status').filter({hasText:'Dispatch acknowledgement unavailable.'});await expect(notice).toBeVisible();await expect(action).toBeDisabled();
+ let release!:()=>void;s.barrier=new Promise<void>(resolve=>release=resolve);await page.getByText('Workflow configuration files',{exact:true}).click();await page.getByRole('button',{name:'Refresh workflow inspection',exact:true}).click();await expect(notice).toHaveCount(0);release();s.barrier=undefined;
+ await expect(notice).toBeVisible();await expect(action).toBeDisabled();expect(s.methods.filter(m=>m==='DispatchWorkflow')).toHaveLength(1);
 });
