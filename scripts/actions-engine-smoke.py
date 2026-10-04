@@ -39,6 +39,7 @@ STAGE = 'arguments'
 
 # Only closed operational codes are retained from trusted worker output.
 WORKER_STAGES = {'input_validation','worker_residue_check','daemon_image_validation','job_image_validation','owner_generation','volume_creation','daemon_creation','daemon_receipt_validation','daemon_start','daemon_readiness','image_transfer','helper_transfer','helper_local_hash','helper_remote_hash','helper_process_start','helper_input','helper_frames','durable_frame_ack','helper_ack_write','helper_completion','container_cleanup','volume_cleanup','unknown','coordinator_preparation'}
+WORKER_STAGES.update('engine_'+value for value in ('input_validation','environment_validation','plan_binding','daemon_empty','image_map_validation','image_receipt_validation','workspace_open','source_extract','job_source_open','job_source_copy','event_write','native_execution','observation','graph_completion','inner_cleanup','completion_ack','job_inventory','job_receipt','job_shape','job_environment','job_mounts','job_source_transfer','job_volume_ownership','job_action_ancestors','job_source_readback'))
 def worker_failure_stages(text):
     return sorted({line.removeprefix('Golf Actions lifecycle failure: stage=') for line in text.splitlines() if line.startswith('Golf Actions lifecycle failure: stage=') and line.removeprefix('Golf Actions lifecycle failure: stage=') in WORKER_STAGES})
 
