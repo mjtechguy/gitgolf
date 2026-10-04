@@ -164,7 +164,7 @@ func (s *Server) GetRepositoryImage(ctx context.Context, req *connect.Request[go
 			return errIssueTargetChanged
 		}
 		id = repo.ID
-		document, e := s.getBoundContents(ctx, s.cookieValue(req.Header()), token, keyFrom(input.Repository), id, input.CommitId, input.DocumentPath)
+		document, e := s.getBoundContents(ctx, s.cookieValue(req.Header()), token, keyFrom(input.Repository), id, input.CommitId, input.DocumentPath, false)
 		if e != nil {
 			return e
 		}

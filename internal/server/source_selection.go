@@ -282,8 +282,8 @@ func (s *Server) legacySourceSelection(ctx context.Context, base string, repo Re
 	}
 	return selected.CommitId, nil
 }
-func (s *Server) getBoundContents(ctx context.Context, session string, token forgeCredential, key repositoryKey, id int64, ref, requestedPath string) (sourceResult, error) {
-	if !validRef(ref) || !validSourcePath(requestedPath) || id < 0 || id > 0 && !objectID.MatchString(ref) {
+func (s *Server) getBoundContents(ctx context.Context, session string, token forgeCredential, key repositoryKey, id int64, ref, requestedPath string, includeLatestChanges bool) (sourceResult, error) {
+	if !validRef(ref) || !validSourcePath(requestedPath) || id < 0 || id > 0 && !objectID.MatchString(ref) || includeLatestChanges && id == 0 {
 		return sourceResult{}, invalid("Exact source reads require a positive repository ID, full lowercase commit ID and literal path.")
 	}
 	var result sourceResult
@@ -303,6 +303,9 @@ func (s *Server) getBoundContents(ctx context.Context, session string, token for
 		}
 		result, err = s.readContentsAtCommit(ctx, base, token, sha, requestedPath)
 		result.RepositoryID = repo.ID
+		if err == nil && includeLatestChanges && result.Kind == "dir" && len(result.Entries) > 0 {
+			err = s.projectHeadChanges(ctx, base, token, sha, result.Entries)
+		}
 		return err
 	})
 	return result, err

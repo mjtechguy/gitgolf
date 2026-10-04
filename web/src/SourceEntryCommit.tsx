@@ -5,6 +5,8 @@ import { Code, ConnectError } from '@connectrpc/connect';
 import { repositoryClient } from './api';
 import { isCommitID, repositoryOptions } from './navigation';
 import type { RepositoryLocation } from './navigation';
+import { validSourceLatestChange } from './sourceReads';
+import type { Commit } from './gen/golf/v1/golf_pb';
 import { DateLabel, privateSnapshotQuery } from './RepositoryUI';
 
 // Only these directory-row reads share this cap. No speculative/offscreen RPCs.
@@ -24,8 +26,8 @@ function entryReadSlot(signal: AbortSignal) {
   });
 }
 
-export function SourceEntryCommit({ userId, repositoryId, commitId, path, location }: {
-  userId: string; repositoryId: string; commitId: string; path: string; location: RepositoryLocation;
+export function SourceEntryCommit({ userId, repositoryId, commitId, path, location, latestChange }: {
+  userId: string; repositoryId: string; commitId: string; path: string; location: RepositoryLocation; latestChange?: Commit;
 }) {
   const target = useRef<HTMLSpanElement>(null);
   const client = useQueryClient();
@@ -34,7 +36,8 @@ export function SourceEntryCommit({ userId, repositoryId, commitId, path, locati
   const [visibleIdentity, setVisibleIdentity] = useState('');
   const [finishedIdentity, setFinishedIdentity] = useState('');
   const finished = finishedIdentity === identity;
-  const eligible = Boolean(userId && /^[1-9][0-9]{0,18}$/.test(repositoryId) && BigInt(repositoryId) <= 9223372036854775807n && isCommitID(commitId) && path && new TextEncoder().encode(path).byteLength <= 4096 && !/[\\\p{Cc}]/u.test(path) && path.split('/').every(part => part && part !== '.' && part !== '..'));
+  const projected = latestChange && validSourceLatestChange(latestChange, commitId) ? latestChange : undefined;
+  const eligible = Boolean(!projected && userId && /^[1-9][0-9]{0,18}$/.test(repositoryId) && BigInt(repositoryId) <= 9223372036854775807n && isCommitID(commitId) && path && new TextEncoder().encode(path).byteLength <= 4096 && !/[\\\p{Cc}]/u.test(path) && path.split('/').every(part => part && part !== '.' && part !== '..'));
   const visible = visibleIdentity === identity;
   useEffect(() => {
     const element = target.current;
@@ -70,7 +73,7 @@ export function SourceEntryCommit({ userId, repositoryId, commitId, path, locati
   useEffect(() => {
     if (!query.isFetching && (query.isSuccess || query.isError)) setFinishedIdentity(identity);
   }, [identity, query.isFetching, query.isSuccess, query.isError]);
-  const commit = eligible && query.isSuccess ? query.data : undefined;
+  const commit = projected || (eligible && query.isSuccess ? query.data : undefined);
   return <span ref={target} className="source-entry-commit" aria-label={`Latest change for ${path}`}>
     {commit ? <><Link className="source-entry-commit-title" {...repositoryOptions(location, { view: 'commits', ref:commitId, refKind:undefined,refName:undefined, commit: commit.sha, historyPath: undefined })} title={commit.message.split('\n')[0] || 'Commit message unavailable'}>{commit.message.split('\n')[0] || 'Commit message unavailable'}</Link><span className="source-entry-commit-date"><DateLabel relative value={commit.authoredAt}/></span></> : <span className="muted source-entry-commit-unavailable">{query.isError || !eligible ? 'Latest change unavailable' : visible ? 'Reading latest change…' : 'Latest change not loaded'}</span>}
   </span>;

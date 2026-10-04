@@ -215,7 +215,11 @@ func sourceType(value string) golfv1.SourceEntryType {
 	}
 }
 func wireEntry(entry sourceEntry) *golfv1.SourceEntry {
-	return &golfv1.SourceEntry{Name: entry.Name, Path: entry.Path, Type: sourceType(entry.Type), Sha: entry.SHA, Size: uint64(entry.Size)}
+	result := &golfv1.SourceEntry{Name: entry.Name, Path: entry.Path, Type: sourceType(entry.Type), Sha: entry.SHA, Size: uint64(entry.Size)}
+	if row := entry.LatestChange; row != nil {
+		result.LatestChange = &golfv1.Commit{Sha: row.SHA, Message: row.Commit.Message, AuthorName: row.Commit.Author.Name, AuthoredAt: row.Commit.Author.Date}
+	}
+	return result
 }
 func wireIssue(issue Issue) *golfv1.Issue {
 	state := golfv1.IssueState_ISSUE_STATE_OPEN
@@ -500,7 +504,7 @@ func (s *Server) GetContents(ctx context.Context, req *connect.Request[golfv1.Ge
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	result, err := s.getBoundContents(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), id, req.Msg.Ref, req.Msg.Path)
+	result, err := s.getBoundContents(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), id, req.Msg.Ref, req.Msg.Path, req.Msg.IncludeLatestChanges)
 	if err != nil {
 		return nil, rpcError(err)
 	}

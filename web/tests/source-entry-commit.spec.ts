@@ -9,6 +9,7 @@ import {
 import { resolveSourceFixture, reject, request, respond } from './rpc';
 
 const ref = 'a'.repeat(40), latest = 'b'.repeat(40), repositoryId = '9007199254740993';
+type Projection = { sha: string; message: string; authorName: string; authoredAt: string };
 type Invalid = 'path' | 'ref' | 'repository' | 'sha' | 'empty' | 'multiple' | 'date' | 'denied';
 
 async function fixture(page: Page, count = 1) {
@@ -16,7 +17,7 @@ async function fixture(page: Page, count = 1) {
   const repository = create(RepositorySchema, { id: repositoryId, name: 'entry-history', fullName: 'alex/entry-history', private: true, defaultBranch: 'main', htmlUrl: 'https://forge.example/alex/entry-history' });
   const entries = Array.from({ length: count }, (_, i) => ({ name: `row-${String(i).padStart(3, '0')}.ts`, path: `row-${String(i).padStart(3, '0')}.ts`, type: SourceEntryType.FILE, sha: ref, size: 10n }));
   const state = { user, signedIn: true, hold: false, titlePrefix: 'PRIVATE', invalid: undefined as Invalid | undefined,
-    calls: [] as ReturnType<typeof request<typeof ListCommitsRequestSchema>>[], held: [] as (() => void)[], active: 0, peak: 0 };
+    calls: [] as ReturnType<typeof request<typeof ListCommitsRequestSchema>>[], held: [] as (() => void)[], active: 0, peak: 0, projections: {} as Record<string, Projection>, sourceInputs: [] as ReturnType<typeof request<typeof GetContentsRequestSchema>>[], sourceWait: undefined as Promise<void> | undefined };
   await page.route('**/rpc/**', async route => {
     const method = route.request().url().split('/').at(-1);
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
@@ -28,8 +29,9 @@ async function fixture(page: Page, count = 1) {
     if (method === 'ListBranches') return respond(route, ListBranchesResponseSchema, { branches: [{ name: 'main', commitId: ref }] });
     if (method === 'ResolveRepositorySource') return resolveSourceFixture(route, repositoryId, { owner: 'alex', name: 'entry-history' }, 'main', { main: ref });
     if (method === 'GetContents') {
-      const input = request(route, GetContentsRequestSchema);
-      return respond(route, GetContentsResponseSchema, { repositoryId: repositoryId, commitId: ref, path: input.path, kind: SourceEntryType.DIRECTORY, entries });
+      const input = request(route, GetContentsRequestSchema); state.sourceInputs.push(input);
+      if(state.sourceWait) await state.sourceWait;
+      return respond(route, GetContentsResponseSchema, { repositoryId: repositoryId, commitId: ref, path: input.path, kind: SourceEntryType.DIRECTORY, entries:entries.map(entry=>({...entry,latestChange:state.projections[entry.path]})) });
     }
     if (method === 'ListCommits') {
       const input = request(route, ListCommitsRequestSchema);
@@ -274,4 +276,72 @@ test('changing the selected immutable commit clears old row content and admits a
   await expect(entry(page).getByRole('link')).toHaveText('NEXT SNAPSHOT alex: row-000.ts');
   expect(state.calls.filter(call => call.ref === ref)).toHaveLength(1);
   expect(state.calls.filter(call => call.ref === nextRef)).toHaveLength(1);
+});
+
+const projected = (message = 'PRIVATE selected-head change'): Projection => ({ sha: ref, message, authorName: 'Alex', authoredAt: '2026-10-01T12:00:00Z' });
+
+test('cold 16-row selected-head projection eliminates all path-history requests', async ({ page }) => {
+  const state = await fixture(page, 16);
+  for(let i=0;i<16;i++) state.projections[`row-${String(i).padStart(3,'0')}.ts`] = projected();
+  await page.goto(`/alex/entry-history/tree/${ref}`);
+  await expect(entry(page).getByRole('link')).toHaveText('PRIVATE selected-head change');
+  await entry(page,'row-015.ts').scrollIntoViewIfNeeded();
+  await expect(entry(page,'row-015.ts').getByRole('link')).toHaveText('PRIVATE selected-head change');
+  expect(state.calls).toHaveLength(0);
+  expect(state.sourceInputs.filter(input=>input.path==='').every(input=>input.includeLatestChanges)).toBe(true);
+  expect(state.sourceInputs.filter(input=>input.path==='').length).toBeGreaterThan(0);
+});
+
+test('partial projection uses literal-path fallback only for unmatched current entries', async ({ page }) => {
+  const state=await fixture(page,2); state.projections['row-000.ts']=projected();
+  await page.goto(`/alex/entry-history/tree/${ref}`);
+  await expect(entry(page).getByRole('link')).toHaveText('PRIVATE selected-head change');
+  await expect(entry(page,'row-001.ts').getByRole('link')).toHaveText('PRIVATE alex: row-001.ts');
+  expect(state.calls.map(call=>call.path)).toEqual(['row-001.ts']);
+});
+
+for(const bad of ['head','date','name','message'] as const) test(`invalid ${bad} projection refuses the whole private source receipt without history probes`,async({page})=>{
+  const state=await fixture(page); const value=projected();
+  if(bad==='head')value.sha=latest;
+  if(bad==='date')value.authoredAt='yesterday';
+  if(bad==='name')value.authorName='bad\u0000name';
+  if(bad==='message')value.message='bad\u0000message';
+  state.projections['row-000.ts']=value;
+  await page.goto(`/alex/entry-history/tree/${ref}`);
+  await expect(page.getByRole('alert')).toContainText('latest change does not identify');
+  await expect(page.locator('.source-tree')).toHaveCount(0);
+  expect(state.calls).toHaveLength(0);
+});
+
+test('late projected source after logout cannot reveal private change text',async({page})=>{
+  const state=await fixture(page);state.projections['row-000.ts']=projected();
+  let release!:()=>void;state.sourceWait=new Promise<void>(resolve=>release=resolve);
+  await page.goto(`/alex/entry-history/tree/${ref}`);
+  await expect.poll(()=>state.sourceInputs.length).toBeGreaterThan(0);
+  await page.getByLabel('Your account',{exact:true}).click();await page.getByRole('button',{name:'Sign out',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Welcome to Golf'})).toBeVisible();
+  release();await expect(page.locator('body')).not.toContainText('PRIVATE selected-head change');
+  expect(state.calls).toHaveLength(0);
+});
+
+test('file responses cannot smuggle a directory projection into source metadata',async({page})=>{
+  await fixture(page);
+  await page.route('**/rpc/golf.v1.RepositoryService/GetContents',route=>{
+    const input=request(route,GetContentsRequestSchema);
+    return respond(route,GetContentsResponseSchema,{repositoryId,commitId:ref,path:input.path,kind:SourceEntryType.FILE,file:{entry:{name:'row-000.ts',path:input.path,type:SourceEntryType.FILE,sha:ref,size:3n,latestChange:projected()},content:'PRIVATE'}});
+  });
+  await page.goto(`/alex/entry-history/blob/${ref}/row-000.ts`);
+  await expect(page.getByRole('alert')).toContainText('only supported for directory entries');
+  await expect(page.getByLabel('Plain text preview of row-000.ts')).toHaveCount(0);
+});
+
+for(const theme of ['dark','light']) test(`projected selected-head changes preserve escaping and mobile density ${theme}`,async({page})=>{
+  const state=await fixture(page);state.projections['row-000.ts']=projected('<img src=x onerror="window.executed=true">');
+  await page.setViewportSize({width:390,height:844});await page.goto(`/alex/entry-history/tree/${ref}`);
+  await page.evaluate(t=>{document.documentElement.dataset.theme=t},theme);
+  await expect(entry(page).getByRole('link')).toHaveText('<img src=x onerror="window.executed=true">');
+  await expect(entry(page).locator('img')).toHaveCount(0);
+  expect(await page.evaluate(()=>Boolean((window as Window&{executed?:boolean}).executed))).toBe(false);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true);
+  expect(state.calls).toHaveLength(0);
 });

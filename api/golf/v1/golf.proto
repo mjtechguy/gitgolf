@@ -462,6 +462,8 @@ message SourceEntry {
   string sha = 4;
   // Integral bytes, preserved without JavaScript precision loss.
   uint64 size = 5;
+  // Optional exact selected-head change observation, never an older guessed change.
+  Commit latest_change = 6;
 }
 message SourceFile {
   SourceEntry entry = 1;
@@ -518,6 +520,8 @@ message GetContentsRequest {
   string ref = 2;
   string path = 3;
   string repository_id = 4;
+  // Exact-ID/full-SHA directory optimization; unmatched entries omit the observation.
+  bool include_latest_changes = 5;
 }
 message GetContentsResponse {
   string commit_id = 1;

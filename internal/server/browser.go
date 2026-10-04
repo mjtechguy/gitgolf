@@ -198,11 +198,12 @@ func (s *Server) listCommits(ctx context.Context, token forgeCredential, key rep
 }
 
 type sourceEntry struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
-	Type string `json:"type"`
-	SHA  string `json:"sha"`
-	Size int64  `json:"size"`
+	LatestChange *forgeCommit `json:"-"`
+	Name         string       `json:"name"`
+	Path         string       `json:"path"`
+	Type         string       `json:"type"`
+	SHA          string       `json:"sha"`
+	Size         int64        `json:"size"`
 }
 type forgeContents struct {
 	sourceEntry
@@ -240,7 +241,7 @@ func escapedSourcePath(value string) string {
 	return strings.Join(parts, "/")
 }
 func (s *Server) getContents(ctx context.Context, token forgeCredential, key repositoryKey, ref, requestedPath string) (sourceResult, error) {
-	return s.getBoundContents(ctx, "", token, key, 0, ref, requestedPath)
+	return s.getBoundContents(ctx, "", token, key, 0, ref, requestedPath, false)
 }
 func (s *Server) readContentsAtCommit(ctx context.Context, base string, token forgeCredential, commit, requestedPath string) (sourceResult, error) {
 	result := sourceResult{CommitID: commit, Path: requestedPath}
