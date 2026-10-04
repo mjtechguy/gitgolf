@@ -1,0 +1,33 @@
+# Optional portable notification consumer. SMTP transports, mailbox verification
+# and each repository subscription still require explicit managed-user consent.
+# Only the operator can approve a private/local SMTP network exception.
+services:
+  golf:
+    environment:
+      GOLF_EMAIL_EGRESS_POLICY: ${GOLF_EMAIL_EGRESS_POLICY:-}
+  email-worker:
+    build: .
+    command: [email-worker]
+    environment:
+      GOLF_PUBLIC_URL: ${GOLF_PUBLIC_URL:-http://localhost:8080}
+      GOLF_ALLOW_INSECURE_COOKIES: 'true'
+      GOLF_ENCRYPTION_KEY: ${GOLF_ENCRYPTION_KEY:-}
+      GOLF_ENCRYPTION_KEYS: ${GOLF_ENCRYPTION_KEYS:-}
+      GOLF_ACTIVE_ENCRYPTION_KEY: ${GOLF_ACTIVE_ENCRYPTION_KEY:-}
+      GOLF_EMAIL_EGRESS_POLICY: ${GOLF_EMAIL_EGRESS_POLICY:-}
+      DATABASE_URL: postgres://golf:${GOLF_DB_PASSWORD:?Run scripts/init-env.sh}@postgres:5432/golf?sslmode=disable
+      GITEA_URL: http://gitea:3000
+    read_only: true
+    tmpfs: ["/tmp:size=16777216,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    restart: unless-stopped
+    stop_grace_period: 20s
+    depends_on:
+      golf:
+        condition: service_started
+      postgres:
+        condition: service_healthy
