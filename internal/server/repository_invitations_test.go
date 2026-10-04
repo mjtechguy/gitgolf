@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 	"github.com/mjtechguy/golf-git/internal/server/database"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestRepositoryInvitationValidation(t *testing.T) {
@@ -26,9 +28,9 @@ func TestRepositoryInvitationValidation(t *testing.T) {
 	for _, mutate := range []func(*golfv1.CreateRepositoryInvitationRequest){func(r *golfv1.CreateRepositoryInvitationRequest) { r.PersistentConsent = false }, func(r *golfv1.CreateRepositoryInvitationRequest) { r.Permission = "owner" }, func(r *golfv1.CreateRepositoryInvitationRequest) { r.RecipientId = "043" }, func(r *golfv1.CreateRepositoryInvitationRequest) {
 		r.ExpiresAt = now.Add(8 * 24 * time.Hour).Format(time.RFC3339)
 	}, func(r *golfv1.CreateRepositoryInvitationRequest) { r.RecipientUsername = "../bob" }, func(r *golfv1.CreateRepositoryInvitationRequest) { r.RecipientRevision = "" }} {
-		copy := *m
-		mutate(&copy)
-		if _, _, _, _, e := validateInvitationCreate(&copy, now); e == nil {
+		copy := proto.Clone(m).(*golfv1.CreateRepositoryInvitationRequest)
+		mutate(copy)
+		if _, _, _, _, e := validateInvitationCreate(copy, now); e == nil {
 			t.Fatal("invalid consent/identity accepted")
 		}
 	}
@@ -64,7 +66,7 @@ func newInvitationFixture(t *testing.T) *invitationFixture {
 	f := &invitationFixture{db: testDatabase(t), actors: map[string]invitationTestActor{}, row: settingsFixtureRow(), direct: map[string]string{}}
 	f.row.ID = 17
 	f.row.HTMLURL = "http://forge.invalid/alice/example"
-	users := map[string]User{"alice": {ID: 42, Login: "alice"}, "bob": {ID: 43, Login: "bob"}, "carol": {ID: 44, Login: "carol"}}
+	users := map[string]User{"alice": {ID: 42, Login: "alice"}, "bob": {ID: 43, Login: "bob"}, "carol": {ID: 44, Login: "carol"}, "dave": {ID: 45, Login: "dave"}}
 	f.provider = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		login := strings.TrimSuffix(strings.TrimPrefix(r.Header.Get("Authorization"), "token "), "-invitation-token")
@@ -113,7 +115,7 @@ func newInvitationFixture(t *testing.T) *invitationFixture {
 			if strings.HasSuffix(target, "/permission") {
 				target = strings.TrimSuffix(target, "/permission")
 				permission := f.direct[target]
-				if target == "alice" || target == "carol" {
+				if target == "alice" || target == "carol" && f.direct["carol"] != "admin" {
 					permission = "owner"
 				}
 				if permission == "" {
@@ -127,6 +129,14 @@ func newInvitationFixture(t *testing.T) *invitationFixture {
 					w.WriteHeader(404)
 				} else {
 					w.WriteHeader(204)
+					if target == "bob" && f.writes > 0 {
+						if f.mode == "deny-readback" {
+							f.mode = "denied"
+						} else if f.mode == "changed-readback" {
+							f.row.Private = !f.row.Private
+							f.mode = "changed-after"
+						}
+					}
 				}
 				return
 			}
@@ -249,7 +259,7 @@ func TestRepositoryInvitationAcceptConsentPostgres(t *testing.T) {
 	}
 }
 func TestRepositoryInvitationUnknownPostgres(t *testing.T) {
-	for _, mode := range []string{"lost", "deny-after"} {
+	for _, mode := range []string{"lost", "deny-after", "deny-readback", "changed-readback"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newInvitationFixture(t)
 			i := f.create(t)
@@ -544,5 +554,105 @@ func TestRepositoryInvitationOrganizationIndividualAuthority(t *testing.T) {
 				t.Fatalf("individual organization authority %v", e)
 			}
 		})
+	}
+}
+
+// Different managed issuers must share the repository quota, rather than
+// serializing only their own user/account rows. Hold that repository gate to
+// prove both transactions wait before counting the last available slot.
+func TestRepositoryInvitationConcurrentIssuerQuotaPostgres(t *testing.T) {
+	f := newInvitationFixture(t)
+	seed := f.create(t)
+	if _, err := f.db.Exec(`UPDATE golf_repository_invitations SET state='REVOKED',revision=revision+1 WHERE id=$1`, seed.Id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.db.Exec(`INSERT INTO golf_repository_invitations(id,forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,issuer_user_id,issuer_native_id,issuer_login,issuer_account_id,issuer_account_version,recipient_native_id,recipient_login,recipient_revision,permission,access_revision,persistent_consent,expires_at,create_key,input_hash)
+ SELECT gen_random_uuid(),forge_url,repository_id,owner_id,repository_owner,repository_name,organization_owned,issuer_user_id,issuer_native_id,issuer_login,issuer_account_id,issuer_account_version,1000+n,'seed-'||n,recipient_revision,permission,access_revision,persistent_consent,expires_at,gen_random_uuid()::text,input_hash FROM golf_repository_invitations CROSS JOIN generate_series(1,99) AS n WHERE id=$1`, seed.Id); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	f.direct["carol"] = "admin" // Ordinary direct administrator, not site-owner permission.
+	f.mu.Unlock()
+	type attempt struct {
+		ctx context.Context
+		req *connect.Request[golfv1.CreateRepositoryInvitationRequest]
+	}
+	attempts := make([]attempt, 0, 2)
+	for _, names := range [][2]string{{"alice", "bob"}, {"carol", "dave"}} {
+		issuer, recipient := names[0], names[1]
+		ctx, req := invitationReq(f, issuer, &golfv1.PreviewRepositoryInvitationRecipientRequest{})
+		access, err := f.s.invitationAdmin(ctx, f.actors[issuer].token, repositoryKey{"alice", "example"}, f.actors[issuer].user)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Msg = &golfv1.PreviewRepositoryInvitationRecipientRequest{Repository: &golfv1.RepositoryKey{Owner: "alice", Name: "example"}, RepositoryId: "17", OwnerId: "42", ExpectedRevision: access.Revision, Username: recipient}
+		preview, err := f.s.PreviewRepositoryInvitationRecipient(ctx, req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, create := invitationReq(f, issuer, &golfv1.CreateRepositoryInvitationRequest{Repository: req.Msg.Repository, RepositoryId: "17", OwnerId: "42", ExpectedRevision: access.Revision, RecipientId: preview.Msg.Recipient.User.Id, RecipientUsername: recipient, RecipientRevision: preview.Msg.Recipient.Revision, Permission: "write", PersistentConsent: true, ExpiresAt: time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano), IdempotencyKey: uuid.NewString()})
+		attempts = append(attempts, attempt{ctx, create})
+	}
+	holder, err := f.db.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Rollback()
+	if _, err = holder.Exec(`SELECT pg_advisory_xact_lock(hashtextextended($1||'/repository-invitation-quota/'||$2::bigint::text,0))`, f.s.config.GiteaURL, int64(17)); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 2)
+	for _, a := range attempts {
+		go func() {
+			_, err := f.s.CreateRepositoryInvitation(a.ctx, a.req)
+			done <- err
+		}()
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	waiting := 0
+	for time.Now().Before(deadline) {
+		if err = f.db.QueryRow(`SELECT count(*) FROM pg_stat_activity WHERE wait_event='advisory' AND query LIKE '%repository-invitation-quota%'`).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting == 2 {
+			break
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("creation bypassed the repository quota gate: %v", err)
+		default:
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if waiting != 2 {
+		t.Fatalf("both independent issuers must wait before quota admission; waiting=%d", waiting)
+	}
+	if err = holder.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	succeeded, refused := 0, 0
+	for range attempts {
+		select {
+		case err := <-done:
+			if err == nil {
+				succeeded++
+			} else if connect.CodeOf(err) == connect.CodeInvalidArgument {
+				refused++
+			} else {
+				t.Fatal(err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("quota admission deadlocked")
+		}
+	}
+	var count, operations int
+	if err = f.db.QueryRow(`SELECT count(*) FROM golf_repository_invitations WHERE state IN ('PENDING','GRANTING')`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if err = f.db.QueryRow(`SELECT count(*) FROM golf_repository_invitation_operations`).Scan(&operations); err != nil {
+		t.Fatal(err)
+	}
+	if succeeded != 1 || refused != 1 || count != 100 || operations != 0 || f.writes != 0 {
+		t.Fatal(fmt.Sprintf("quota outcomes: admitted=%d refused=%d pending=%d operations=%d nativeWrites=%d", succeeded, refused, count, operations, f.writes))
 	}
 }

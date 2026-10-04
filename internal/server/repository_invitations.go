@@ -365,6 +365,15 @@ func (s *Server) CreateRepositoryInvitation(ctx context.Context, req *connect.Re
 			if !errors.Is(e, sql.ErrNoRows) {
 				return errStorageUnavailable
 			}
+			// Keep user/session/credential -> lifecycle -> quota ordering. The
+			// shared lifecycle gate precedes this exclusive repository quota
+			// lock so different issuers cannot both admit the final slot.
+			if _, e = tx.ExecContext(ctx, `SELECT golf_repository_lifecycle_lock($1,$2,false)`, s.config.GiteaURL, rid); e != nil {
+				return errStorageUnavailable
+			}
+			if _, e = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1||'/repository-invitation-quota/'||$2::bigint::text,0))`, s.config.GiteaURL, rid); e != nil {
+				return errStorageUnavailable
+			}
 			var count int
 			e = tx.QueryRowContext(ctx, `SELECT count(*) FROM golf_repository_invitations WHERE forge_url=$1 AND repository_id=$2 AND state IN ('PENDING','GRANTING')`, s.config.GiteaURL, rid).Scan(&count)
 			if e != nil {
@@ -878,6 +887,24 @@ func (s *Server) invitationGrant(ctx context.Context, value string, token forgeC
 		}
 		if member.User.Id != strconv.FormatInt(current.RecipientNativeID, 10) || !member.IsDirect || member.Permission != current.Permission || after.Revision != current.AccessRevision {
 			return nil
+		}
+		// Collaborator readback is another external await: issuer/target
+		// authority may have changed while that response was in flight.
+		// Withhold success on denial or a changed observation; the already
+		// dispatched intent remains durable and must never be resent.
+		_, _, final, e := s.invitationIssuer(ctx, q, current, false)
+		if e != nil {
+			return e
+		}
+		if final.Revision != current.AccessRevision {
+			return errRepositoryAccessConflict
+		}
+		native, e = s.currentUser(ctx, token)
+		if e != nil {
+			return e
+		}
+		if native.ID != current.RecipientNativeID || !strings.EqualFold(native.Login, current.RecipientLogin) {
+			return errUnauthenticated
 		}
 		*operation, e = advanceInvitationOperation(ctx, tx, r, "SUCCEEDED")
 		if e != nil {
