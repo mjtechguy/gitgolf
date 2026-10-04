@@ -5,10 +5,10 @@ import { BookOpen } from 'lucide-react';
 import { readExactSource } from './sourceReads';
 import { SourceEntryType, type SourceEntry } from './gen/golf/v1/golf_pb';
 import { FileContent } from './RepositoryContent';
-import { Loading, PanelError, privateQuery } from './RepositoryUI';
+import { Loading, PanelError, privateSnapshotQuery } from './RepositoryUI';
 
 export function RepositoryReadme({owner,name,refId,path,entries,userId,repositoryId,location}:{location?:RepositoryLocation;repositoryId:string;owner:string;name:string;refId:string;path:string;entries:SourceEntry[];userId:string}) {
- const query=useQuery({...privateQuery,queryKey:['repository',userId,owner,name,'readme',repositoryId,refId,path],queryFn:async({signal})=>{
+ const query=useQuery({...privateSnapshotQuery,queryKey:['repository',userId,owner,name,'readme',repositoryId,refId,path],queryFn:async({signal})=>{
   const repository={owner,name};
   const choose=(rows:SourceEntry[])=>rows.filter(e=>e.type===SourceEntryType.FILE&&/^readme\.(md|markdown|mdown)$/i.test(e.name)).sort((a,b)=>a.name.localeCompare(b.name))[0];
   let readme=choose(entries);

@@ -6,6 +6,9 @@ import { errorMessage } from './api';
 
 // Private panels revalidate on mount, discard inactive content, and hide data while revalidating.
 export const privateQuery = { staleTime: 0, gcTime: 0 };
+// Exact immutable observations remain in memory only while mounted. The enclosing
+// repository/session gate still revalidates authority and hides on denial.
+export const privateSnapshotQuery = { ...privateQuery, staleTime: Infinity, refetchOnWindowFocus: false, refetchOnReconnect: false };
 export const nextPage = (response: { page?: PageResponse }) => response.page?.nextPage || undefined;
 export const shortSHA = (value: string) => value.slice(0, 12);
 

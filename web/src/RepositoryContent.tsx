@@ -1,6 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
-import { lazy, Suspense, useState, type ReactNode } from 'react';
-import Markdown from 'react-markdown';
+import { lazy, memo, Suspense, useMemo, useState, type ReactNode } from 'react';
+import Markdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
@@ -48,17 +48,18 @@ function headingAnchors(){return (tree:Root)=>{
   visit(child);
  }};visit(tree);
 };}
-export function MarkdownBody({text,label,context}:{text:string;label:string;context?:DocumentContext}) {
+export const MarkdownBody = memo(function MarkdownBody({text,label,context}:{text:string;label:string;context?:DocumentContext}) {
  const navigate=useNavigate();
- return <div className="markdown-body" aria-label={label} tabIndex={0}><Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw,[rehypeSanitize,{...defaultSchema,attributes:{...defaultSchema.attributes,div:[...(defaultSchema.attributes?.div||[]),'align'],p:[...(defaultSchema.attributes?.p||[]),'align'],img:[...(defaultSchema.attributes?.img||[]),'height','width']}}],headingAnchors]} urlTransform={(value,key)=>key==='src'?value:contentLink(value,context)||''} components={{
+ const components=useMemo<Components>(()=>({
   div:({children,node})=><div className={node?.properties.align==='center'?'markdown-align-center':node?.properties.align==='right'?'markdown-align-right':undefined}>{children}</div>,
   p:({children,node})=><p className={node?.properties.align==='center'?'markdown-align-center':node?.properties.align==='right'?'markdown-align-right':undefined}>{children}</p>,
   a:({href,children})=>href?<a href={href} onClick={event=>{if(href.startsWith('/')&&!event.metaKey&&!event.ctrlKey&&!event.shiftKey&&!event.altKey&&event.button===0){event.preventDefault();void navigate({href});}}} target={/^https?:/.test(href)?'_blank':undefined} rel="noopener noreferrer">{children}</a>:<span>{children}</span>,
   img:({src,alt,height,width})=><RepositoryImage src={src} alt={alt} height={height} width={width} context={context}/>,
   code:({className,children})=><code className={className}><Tokens text={String(children)} language={className?.replace(/^language-/,'')||''}/></code>,
   pre:({children,node})=><div className="code-block"><CopyButton text={node?.children.map(nodeText).join('')||''} label="Copy code block"/><pre>{children}</pre></div>,
- }}>{text}</Markdown></div>;
-}
+ }),[navigate,context?.repositoryId,context?.owner,context?.name,context?.ref,context?.path,context?.userId,context?.sourceAddress?.kind,context?.sourceAddress?.name]);
+ return <div className="markdown-body" aria-label={label} tabIndex={0}><Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw,[rehypeSanitize,{...defaultSchema,attributes:{...defaultSchema.attributes,div:[...(defaultSchema.attributes?.div||[]),'align'],p:[...(defaultSchema.attributes?.p||[]),'align'],img:[...(defaultSchema.attributes?.img||[]),'height','width']}}],headingAnchors]} urlTransform={(value,key)=>key==='src'?value:contentLink(value,context)||''} components={components}>{text}</Markdown></div>;
+},(previous,next)=>previous.text===next.text&&previous.label===next.label&&previous.context?.repositoryId===next.context?.repositoryId&&previous.context?.owner===next.context?.owner&&previous.context?.name===next.context?.name&&previous.context?.ref===next.context?.ref&&previous.context?.path===next.context?.path&&previous.context?.userId===next.context?.userId&&previous.context?.sourceAddress?.kind===next.context?.sourceAddress?.kind&&previous.context?.sourceAddress?.name===next.context?.sourceAddress?.name);
 export function FileContent({text,path,context,heading}:{text:string;path:string;context:DocumentContext;heading?:ReactNode}) {
  const [raw,setRaw]=useState(false);
  return <><div className={heading?'browser-panel-heading':'content-view-controls'}>{heading}<button className="text-button" onClick={()=>setRaw(!raw)} aria-pressed={raw}>{raw?<Eye size={15}/>:<Code2 size={15}/>} {raw?'Rendered':'Source'}</button></div>{raw?<CodePreview text={text} path={path}/>:<MarkdownBody text={text} label={`Rendered ${path}`} context={context}/>}</>;

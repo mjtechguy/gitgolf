@@ -14,7 +14,7 @@ const body = '# PRIVATE source\n![Private badge](./badge.svg)\n';
 const blob = 'e'.repeat(40);
 async function fixture(page: Page) {
   const state = {
-    signedIn: true, userId: '17', badSource: '', badSourcePath: undefined as string | undefined, badResolver: '', badImage: '', deniedResolver: '', holdResolver: false,
+    signedIn: true, userId: '17', metadataReads: 0, metadataWait: undefined as Promise<void> | undefined, metadataDenied: false, badSource: '', badSourcePath: undefined as string | undefined, badResolver: '', badImage: '', deniedResolver: '', holdResolver: false,
     held: [] as (() => void)[], resolverReads: [] as ReturnType<typeof request<typeof ResolveRepositorySourceRequestSchema>>[],
     reads: [] as ReturnType<typeof request<typeof GetContentsRequestSchema>>[], images: [] as ReturnType<typeof request<typeof GetRepositoryImageRequestSchema>>[],
   };
@@ -25,7 +25,7 @@ async function fixture(page: Page) {
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
-    if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository });
+    if (method === 'GetRepository') { state.metadataReads++; if(state.metadataWait)await state.metadataWait; return state.metadataDenied ? reject(route,'permission_denied','Repository access removed.') : respond(route, GetRepositoryResponseSchema, { repository }); }
     if (method === 'ListBranches') return respond(route, ListBranchesResponseSchema, { repositoryId, branches: [{ name: 'main', commitId: head }, { name: 'feature/UI', commitId: feature }] });
     if (method === 'ResolveRepositorySource') {
       const input = request(route, ResolveRepositorySourceRequestSchema); state.resolverReads.push(input);
@@ -243,4 +243,25 @@ test('a late resolver cannot restore private content over a conflicting selectio
   await expect(page.getByRole('navigation', { name: 'Repository files', exact: true })).toHaveCount(0);
   expect(state.resolverReads).toHaveLength(resolverCount); expect(state.reads).toHaveLength(sourceCount);
   await expect(page).toHaveURL(/ref=release&branch=release&tag=release/);
+});
+
+
+test('immutable source and decoded image survive authority checks without collapse or repeated reads',async({page})=>{
+ const state=await fixture(page);await page.goto(`/alex/identity/tree/${head}?branch=main`);
+ const image=page.locator('img[alt="Private badge"]');await expect(image).toBeVisible();
+ const retained=await image.elementHandle();const height=await page.evaluate(()=>document.documentElement.scrollHeight);
+ const sources=state.reads.length,images=state.images.length,metadata=state.metadataReads;
+ let release!:()=>void;state.metadataWait=new Promise<void>(resolve=>release=resolve);
+ await page.getByRole('button',{name:'Refresh repository access',exact:true}).click();
+ await expect.poll(()=>state.metadataReads).toBeGreaterThan(metadata);
+ await expect(page.getByText('Checking repository access…',{exact:true})).toBeVisible();await expect(image).toBeHidden();
+ expect(await page.evaluate(()=>document.documentElement.scrollHeight)).toBe(height);
+ expect(await image.evaluate((node,previous)=>node===previous,retained)).toBe(true);
+ release();state.metadataWait=undefined;await expect(image).toBeVisible();
+ expect(await image.evaluate((node,previous)=>node===previous,retained)).toBe(true);expect(state.reads).toHaveLength(sources);expect(state.images).toHaveLength(images);
+ await page.evaluate(()=>{window.dispatchEvent(new Event('blur'));window.dispatchEvent(new Event('focus'));});
+ await expect(image).toBeVisible();expect(state.reads).toHaveLength(sources);expect(state.images).toHaveLength(images);
+ state.metadataDenied=true;await page.getByRole('button',{name:'Refresh repository access',exact:true}).click();
+ await expect(page.getByRole('alert')).toContainText('Repository access removed');await expect(page.getByRole('img',{name:'Private badge',exact:true})).toHaveCount(0);await expect(page.locator('.source-tree')).toHaveCount(0);
+ await retained?.dispose();
 });
