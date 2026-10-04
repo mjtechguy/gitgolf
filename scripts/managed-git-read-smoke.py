@@ -114,16 +114,20 @@ def main():
     parser.add_argument('--self-check',action='store_true')
     parser.add_argument('--stack-root',type=Path,default=ROOT,help='Immutable stack/CLI source root; no code edits')
     parser.add_argument('--image',help='Cached frozen product image (must resolve to the documented exact image)')
+    parser.add_argument('--source-revision',help='Explicit full Git revision for a newer root-built immutable image; default is the documented051 proof')
     parser.add_argument('--native-helper',type=Path,help='Root-precompiled Linux helper mounted read-only; launcher never builds it')
     parser.add_argument('--output',type=Path,help='New owner-only evidence directory')
     args=parser.parse_args()
     if args.self_check:self_check();return
     if not args.image or not args.output or not args.native_helper:parser.error('--image, --native-helper and --output are required')
+    expected_source=args.source_revision or PINNED_SOURCE
+    expected_image=args.image if args.source_revision else PINNED_IMAGE
+    require(re.fullmatch(r'[a-f0-9]{40}',expected_source) and re.fullmatch(r'sha256:[a-f0-9]{64}',expected_image),'immutable_image_source_arguments')
     stack=args.stack_root.resolve(strict=True);helper=args.native_helper.resolve(strict=True)
     require(helper.is_file() and 0<helper.stat().st_size<16<<20 and os.access(helper,os.X_OK),'helper_binary_missing')
     helper_bytes=helper.read_bytes();require(helper_bytes[:4]==b'\x7fELF','helper_not_linux_elf');helper_sha=hashlib.sha256(helper_bytes).hexdigest()
     args.output.mkdir(parents=True,exist_ok=False,mode=0o700);args.output.chmod(0o700);OUTPUT=args.output.resolve(strict=True)
-    record(status='running',helperSha256=helper_sha,helperSourceSha256=hashlib.sha256((ROOT/'scripts/managed-git-native/main.go').read_bytes()).hexdigest(),expectedSource=PINNED_SOURCE)
+    record(status='running',helperSha256=helper_sha,helperSourceSha256=hashlib.sha256((ROOT/'scripts/managed-git-native/main.go').read_bytes()).hexdigest(),expectedSource=expected_source,launcherSha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
     signal.signal(signal.SIGTERM,interrupt);signal.signal(signal.SIGINT,interrupt)
     environment={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_','GIT_')) and k not in ['DATABASE_URL','SSH_AUTH_SOCK','SSH_ASKPASS'] and k.lower() not in ['http_proxy','https_proxy','all_proxy','no_proxy']}
     def run(*command,payload=None,raw=None,timeout=180,expected=0,cwd=stack,env=None):
@@ -134,7 +138,7 @@ def main():
     stage('cached exact source and base images; reserve')
     core=json.loads(run('docker','image','inspect',args.image))[0]
     require(helper_bytes[5]==1 and int.from_bytes(helper_bytes[18:20],'little')==({'amd64':62,'arm64':183}.get(core.get('Architecture'))),'helper_architecture')
-    require(core['Id']==PINNED_IMAGE and core['Config'].get('Labels',{}).get('org.opencontainers.image.revision')==PINNED_SOURCE,'image_source_binding')
+    require(core['Id']==expected_image and core['Config'].get('Labels',{}).get('org.opencontainers.image.revision')==expected_source,'image_source_binding')
     native=json.loads(run('docker','image','inspect','gitea/gitea:1.27.3-rootless'))[0]
     database=json.loads(run('docker','image','inspect','postgres:18.4-alpine3.24'))[0]
     space=run('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/bin/df',core['Id'],'-Pk','/').decode()
@@ -145,7 +149,7 @@ def main():
     browser_port,tls_port=free_port(),free_port();require(browser_port!=tls_port,'port_collision')
     browser=f'http://127.0.0.1:{browser_port}';git_origin=f'https://127.0.0.1:{tls_port}'
     actors={};started=False;passed=False;bearers=[];git_credentials=[]
-    record(project=project,productImage=core['Id'],sourceRevision=PINNED_SOURCE,nativeImage=native['Id'],postgresImage=database['Id'],ports={'browser':browser_port,'gitTls':tls_port})
+    record(project=project,productImage=core['Id'],sourceRevision=expected_source,nativeImage=native['Id'],postgresImage=database['Id'],ports={'browser':browser_port,'gitTls':tls_port})
     with tempfile.TemporaryDirectory(prefix=project+'-') as temporary:
         directory=Path(temporary);directory.chmod(0o700)
         # Parent directory is0700. Bind only individual readonly certificate/key

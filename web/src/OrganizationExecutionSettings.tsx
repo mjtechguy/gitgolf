@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Code, ConnectError } from '@connectrpc/connect';
-import { executionPolicyApi, organizationClient, organizationExecutionValueClient } from './api';
+import { executionPolicyApi, organizationClient, organizationExecutionValueClient, repositoryClient } from './api';
 import { ExecutionScope } from './gen/golf/v1/golf_pb';
 import { OrganizationExecutionValues } from './OrganizationExecutionValues';
 import { OrganizationSettingsLayout } from './AccountSettings';
@@ -29,6 +29,6 @@ export function OrganizationExecutionSettings({ userId, organization, signingOut
   const refresh = () => { void currentOrganization.refetch(); void authority.refetch(); };
   return <OrganizationSettingsLayout organization={organization}><section className="page-stack">
     <header className="repository-intro"><div><h1>Secrets and variables</h1><p>Share versioned values with selected repositories. Each workflow also requires its own source approval.</p></div></header>
-    {signingOut ? <Loading label="Signing out…" /> : error ? <PanelError error={error} retry={refresh} /> : !ready ? <Loading label="Verifying organization ownership…" /> : !exact ? <p role="alert" className="error">Organization identity changed. Refresh before continuing.</p> : <OrganizationExecutionValues key={`${userId}/${organization}/${currentOrganization.data.id}`} client={organizationExecutionValueClient} userId={userId} organization={organization} organizationId={currentOrganization.data.id} signingOut={signingOut} canManage />}
+    {signingOut ? <Loading label="Signing out…" /> : error ? <PanelError error={error} retry={refresh} /> : !ready ? <Loading label="Verifying organization ownership…" /> : !exact ? <p role="alert" className="error">Organization identity changed. Refresh before continuing.</p> : <OrganizationExecutionValues key={`${userId}/${organization}/${currentOrganization.data.id}`} client={organizationExecutionValueClient} repositoryClient={repositoryClient} userId={userId} organization={organization} organizationId={currentOrganization.data.id} signingOut={signingOut} canManage />}
   </section></OrganizationSettingsLayout>;
 }
