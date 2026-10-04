@@ -95,6 +95,7 @@ try{
           await page.getByRole('heading',{name:config.run.workflowPath,exact:true}).waitFor();
           if(id==='actions-selected-step'){
             result.check='selected-step-navigation';
+            if(width===390)await page.getByLabel('Jobs and steps').locator('summary').click();
             await page.getByLabel('Jobs and steps').getByRole('link',{name:/Read source/}).click();
             await page.waitForURL(url=>url.searchParams.get('step')==='0');
             assert(new URL(page.url()).searchParams.get('step')==='0','Selected step URL differs');
@@ -103,7 +104,7 @@ try{
             // request identities fence any late responses from the old one.
             inflight.clear();
             await page.reload({waitUntil:'domcontentloaded'});
-            await page.getByLabel('Jobs and steps').getByRole('link',{name:/Read source/}).waitFor();
+            await page.getByLabel('Jobs and steps').getByRole('link',{name:/Read source/}).waitFor({state:width===390?'attached':'visible'});
             assert(await page.getByLabel('Jobs and steps').getByRole('link',{name:/Read source/}).getAttribute('aria-current')==='page','Reload lost selected step');
           }
           const log=page.getByLabel('Workflow run log',{exact:true});await log.waitFor();
@@ -128,7 +129,8 @@ try{
           assert(current.some(r=>r.procedure==='GetWorkflowRunLogs'&&r.request.runId===config.run.id&&(id==='actions-selected-step'?r.request.stepIndex===0:r.request.stepIndex===undefined)),'Exact log request missing');
         }
         result.check='layout';
-        result.metrics=await page.evaluate(()=>({documentWidth:document.documentElement.scrollWidth,viewportWidth:innerWidth,firstLogY:document.querySelector('.execution-log')?.getBoundingClientRect().y??null,jobNavigationWidth:document.querySelector('.automation-job-navigation')?.getBoundingClientRect().width??null}));
+        result.metrics=await page.evaluate(()=>({documentWidth:document.documentElement.scrollWidth,viewportWidth:innerWidth,firstLogY:document.querySelector('.execution-log')?.getBoundingClientRect().y??null,jobNavigationWidth:document.querySelector('.automation-job-navigation')?.getBoundingClientRect().width??null,jobsOpen:document.querySelector('.workflow-jobs-disclosure')?.open??null}));
+        if(width===390&&id!=='actions-inventory'){assert(result.metrics.jobsOpen===false,'Mobile jobs disclosure did not start collapsed');assert(result.metrics.firstLogY!==null&&result.metrics.firstLogY<750,'Mobile log begins too far below the run header');}
         assert(!errors.length&&!writes.length&&!rpc.some(r=>r.status>=400)&&result.actualTheme===theme&&result.metrics.documentWidth<=width,'Runtime/read-only/theme/layout boundary failed');
         result.actualRoute=new URL(page.url()).pathname+new URL(page.url()).search;
         const basename=id+'-'+theme+'-'+width;

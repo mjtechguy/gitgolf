@@ -1,3 +1,4 @@
+import { InspectWorkflowsResponseSchema, ListWorkflowRunsResponseSchema, WorkflowFormat, WorkflowInspectionState } from '../src/gen/golf/v1/golf_pb';
 import {expect,test,type Page,type Route} from '@playwright/test';
 import {create,toJson} from '@bufbuild/protobuf';
 import {resolveSourceFixture,respond,reject,request} from './rpc';
@@ -7,7 +8,7 @@ import {GetSessionResponseSchema,GetRepositoryResponseSchema,ListRepositoriesRes
 const head='a'.repeat(40);
 function envelope(flag:number,body:unknown){const text=Buffer.from(JSON.stringify(body));const size=Buffer.alloc(5);size[0]=flag;size.writeUInt32BE(text.length,1);return Buffer.concat([size,text]);}
 async function fixture(page:Page){
- const state={cursor:1,title:'Original issue',topics:[] as string[],denied:false,offline:false,cursors:[] as string[],sources:0,pullHead:head,pullReads:0,checkState:ReportedCheckState.PENDING,commitReads:0,checkReads:0,issuesEnabled:undefined as boolean|undefined,metadataReads:0};
+ const state={workflowName:'Original CI',manualAllowed:true,inspections:0,dispatches:0,cursor:1,title:'Original issue',topics:[] as string[],denied:false,offline:false,cursors:[] as string[],sources:0,pullHead:head,pullReads:0,checkState:ReportedCheckState.PENDING,commitReads:0,checkReads:0,issuesEnabled:undefined as boolean|undefined,metadataReads:0};
  await page.route('**/rpc/**',async(route:Route)=>{
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
   if(method==='WatchRepository'){
@@ -27,6 +28,9 @@ async function fixture(page:Page){
   if(method==='GetRepository'){state.metadataReads++;return respond(route,GetRepositoryResponseSchema,{repository:{...repository,issuesEnabled:state.issuesEnabled}});}
   if(method==='ResolveRepositorySource')return resolveSourceFixture(route,'11',{owner:'alex',name:'demo'},'main',{main:head});
   if(method==='GetContents'){state.sources++;return respond(route,GetContentsResponseSchema,{repositoryId:'11',kind:SourceEntryType.DIRECTORY,commitId:head,entries:[{name:'src',path:'src',sha:head,type:SourceEntryType.DIRECTORY}]});}
+  if(method==='InspectWorkflows'){state.inspections++;return respond(route,InspectWorkflowsResponseSchema,{repositoryId:'11',commitId:head,catalogVersion:'golf.workflow.shell.v1',executionAvailable:true,policyRevision:'d'.repeat(64),configurations:[{path:'.github/workflows/ci.yml',name:state.workflowName,blobId:'e'.repeat(40),byteSize:100n,format:WorkflowFormat.GITHUB_ACTIONS,state:WorkflowInspectionState.VALIDATED_SUBSET,events:['workflow_dispatch','push'],manualPolicyAllowed:state.manualAllowed,pushPolicyAllowed:true}]});}
+  if(method==='ListWorkflowRuns')return respond(route,ListWorkflowRunsResponseSchema,{});
+  if(method==='DispatchWorkflow'){state.dispatches++;return reject(route,'permission_denied','Unexpected dispatch.');}
   if(method==='ListBranches')return respond(route,ListBranchesResponseSchema,{branches:[{name:'main',commitId:head}]});
   if(method==='GetPullRequest'){state.pullReads++;return respond(route,GetPullRequestResponseSchema,{pullRequest:{id:'4',number:1,title:'Live contribution',state:IssueState.OPEN,user,base:{repositoryId:'11',ref:'main',commitId:'b'.repeat(40)},head:{repositoryId:'11',ref:'feature',commitId:state.pullHead}}});}
   if(method==='ListPullRequestCommits'){state.commitReads++;const input=request(route,ListPullRequestCommitsRequestSchema);return respond(route,ListPullRequestCommitsResponseSchema,{selection:input.selection,commits:[{sha:input.selection!.headCommitId,message:'Pinned private commit',authorName:'Alex',authoredAt:'2026-10-03T00:00:00Z'}]});}
@@ -120,4 +124,23 @@ test('offline reconnect attempts keep source controls stable without repeated me
  expect(state.metadataReads).toBe(reads);
  await expect(page.locator('.source-action-options')).toBeVisible();
  await expect(page.locator('.source-tree')).toBeVisible();
+});
+
+
+test('Actions source and run events refresh workflow observations without dispatching or moving the URL',async({page})=>{
+ const state=await fixture(page);
+ await page.goto('/alex/demo/actions');
+ const workflow=page.getByRole('button',{name:'Show loaded runs for .github/workflows/ci.yml',exact:true});
+ await expect(workflow).toHaveText('Original CI');
+ await expect(page.getByText('Live',{exact:true})).toBeVisible();
+ const url=page.url(),reads=state.inspections;
+ state.workflowName='Updated CI';state.topics=['source'];state.cursor++;
+ await expect(workflow).toHaveText('Updated CI');
+ expect(state.inspections).toBeGreaterThan(reads);
+ await workflow.click();
+ await expect(page.getByText('Manual policy: Ceilings allow',{exact:false})).toBeVisible();
+ state.manualAllowed=false;state.topics=['actions'];state.cursor++;
+ await expect(page.getByText('Manual policy: Ceilings deny',{exact:false})).toBeVisible();
+ expect(state.dispatches).toBe(0);
+ expect(page.url()).toBe(url);
 });
