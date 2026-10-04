@@ -182,8 +182,20 @@ def mime_capture_self_check():
         facts=values['mailfacts'];assert len(facts)==1 and facts[0]['label']==label and facts[0]['runId']==run_id and facts[0]['attemptId']==attempt and facts[0]['repositoryId']=='9007199254740993' and facts[0]['ownerId']=='42' and facts[0]['link']==link and facts[0]['truthfulLost'] and facts[0]['truthfulCancellation']
         assert 'fact_text' not in values and values['text']==text and hashlib.sha256(wire).hexdigest()==before
 
+def assert_subprocess_binding(source):
+    tree=ast.parse(source)
+    definitions=[v for v in ast.walk(tree) if isinstance(v,(ast.FunctionDef,ast.AsyncFunctionDef)) and v.name=='subprocess_run']
+    assert len(definitions)==1,'Exactly one subprocess callable definition is required'
+    for node in ast.walk(tree):
+        assert not (isinstance(node,ast.Name) and node.id=='subprocess_run' and isinstance(node.ctx,(ast.Store,ast.Del))),'Subprocess callable was overwritten'
+        assert not (isinstance(node,ast.arg) and node.arg=='subprocess_run'),'Subprocess callable was shadowed by a parameter'
+
 def self_check():
-    ast.parse(sink_source());mime_capture_self_check()
+    ast.parse(sink_source());mime_capture_self_check();assert_subprocess_binding(Path(__file__).read_text())
+    for mutation in ('subprocess_run = {}','for subprocess_run in []: pass','del subprocess_run'):
+        try:assert_subprocess_binding('def main():\n def subprocess_run(): pass\n '+mutation+'\n')
+        except AssertionError:pass
+        else:raise AssertionError('Subprocess callable reassignment was accepted')
     row={'Id':'a'*64,'Image':'sha256:'+'b'*64,'State':{'Status':'running','Running':True,'StartedAt':'2026-10-04T12:00:00Z'},'RestartCount':0,'Config':{'Env':['PRIVATE_DIAGNOSTIC_ENV']}}
     snapshot=filtered_foreign([row]);assert 'PRIVATE_DIAGNOSTIC_ENV' not in json.dumps(snapshot) and foreign_diff(snapshot,snapshot)['unchanged']
     changed=filtered_foreign([row|{'RestartCount':1}]);delta=foreign_diff(snapshot,changed);assert delta['changed']==[{'containerId':'a'*64,'fields':['restartCount']}] and not delta['unchanged']
@@ -226,40 +238,40 @@ def main():
     args.output.mkdir(mode=0o700,parents=True,exist_ok=False);OUTPUT=args.output.resolve();rules.ROOT=stack;rules.PROOF=PROOF;rules.OUTPUT=OUTPUT
     record(status='running',helperSha256=rules.file_sha256(Path(__file__),1<<20),runtimeSourceRevision=args.source_revision)
     env={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k not in ('DATABASE_URL','DOCKER_HOST','DOCKER_CONTEXT','SSL_CERT_FILE','SSL_CERT_DIR')};env['COMPOSE_DISABLE_ENV_FILE']='true'
-    def run(*arguments,payload=None,timeout=180):
+    def subprocess_run(*arguments,payload=None,timeout=180):
         result=subprocess.run(arguments,cwd=stack,env=env,input=None if payload is None else json.dumps(payload).encode(),capture_output=True,timeout=timeout)
         assert result.returncode==0 and len(result.stdout)<=8<<20 and len(result.stderr)<=8<<20,'Bounded private subprocess failed; output withheld'
         return result.stdout.decode().strip()
     stage('cached exact images and binary source receipts;2GiB reserve')
     images={}
     for role,ref in [('golf',args.image),('runner',args.runner_image),('sink',args.sink_image),('native',email.NATIVE_IMAGE),('postgres',email.PG_IMAGE),('daemon',DIND)]:
-        row=json.loads(run('docker','image','inspect',ref))[0];images[role]=row['Id'];assert re.fullmatch(r'sha256:[a-f0-9]{64}',row['Id'])
+        row=json.loads(subprocess_run('docker','image','inspect',ref))[0];images[role]=row['Id'];assert re.fullmatch(r'sha256:[a-f0-9]{64}',row['Id'])
         if role in ('golf','runner'):
             assert row['Id']==ref;revision=(row['Config'].get('Labels') or {}).get('org.opencontainers.image.revision');assert revision==args.source_revision
     binaries={}
     for role,name,digest in [('golf','golf',args.expected_core_sha256),('runner','golf-runner',args.expected_runner_sha256)]:
-        value=run('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/usr/bin/sha256sum',images[role],'/usr/local/bin/'+name);assert value.split()==[digest,'/usr/local/bin/'+name];binaries[role]=digest
-    free=run('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/bin/df',images['golf'],'-Pk','/');assert int(free.splitlines()[-1].split()[3])>=2*1024*1024,'Require2GiB reserve'
-    def foreign_snapshot():
-        identifiers=run('docker','ps','-aq','--no-trunc').splitlines();assert len(identifiers)<=500
+        value=subprocess_run('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/usr/bin/sha256sum',images[role],'/usr/local/bin/'+name);assert value.split()==[digest,'/usr/local/bin/'+name];binaries[role]=digest
+    free=subprocess_run('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/bin/df',images['golf'],'-Pk','/');assert int(free.splitlines()[-1].split()[3])>=2*1024*1024,'Require2GiB reserve'
+    def foreign_snapshot(_execute=subprocess_run):
+        identifiers=_execute('docker','ps','-aq','--no-trunc').splitlines();assert len(identifiers)<=500
         if not identifiers:return {}
-        return filtered_foreign(json.loads(run('docker','inspect',*identifiers)))
+        return filtered_foreign(json.loads(_execute('docker','inspect',*identifiers)))
     foreign_before=foreign_snapshot();private_snapshot('foreign-before',foreign_before);record(foreignBeforeCaptured=True,foreignBeforeCount=len(foreign_before))
     project='golf-rules49-'+secrets.token_hex(5);ports=helpers.free_ports(4)
     previous=smoke.GOLF,smoke.GITEA;smoke.GOLF,smoke.GITEA='http://127.0.0.1:'+str(ports[0]),'http://127.0.0.1:'+str(ports[1])
     occupied=[]
-    for cid in run('docker','network','ls','-q').splitlines():
-        row=json.loads(run('docker','network','inspect',cid))[0];occupied.extend(network_subnets(row))
+    for cid in subprocess_run('docker','network','ls','-q').splitlines():
+        row=json.loads(subprocess_run('docker','network','inspect',cid))[0];occupied.extend(network_subnets(row))
     subnet=next(ipaddress.ip_network(f'172.{a}.{b}.0/24') for a in range(16,32) for b in range(32,224) if not any(ipaddress.ip_network(f'172.{a}.{b}.0/24').overlaps(v) for v in occupied if v.version==4));sink_ip=str(subnet.network_address+10)
     actors={};keys={role:secrets.token_urlsafe(32) for role in MODES};control_key=secrets.token_urlsafe(32);started=False;passed=False;repos={};bootstrap_created=False
-    record(project=project,proofKind='workflow-notifications056',images=images,binarySha256=binaries,helperGitRevision=run('git','rev-parse','HEAD'),proxyBinarySha256=binary_sha)
+    record(project=project,proofKind='workflow-notifications056',images=images,binarySha256=binaries,helperGitRevision=subprocess_run('git','rev-parse','HEAD'),proxyBinarySha256=binary_sha)
     with native_proxy.NativeProxy(ports[2],project) as proxy,tempfile.TemporaryDirectory(prefix=project+'-') as tmp:
         directory=Path(tmp);directory.chmod(0o700);fixture=directory/'fixture';fixture.mkdir(mode=0o700);rules.ACTIVE_PROXY=proxy
         roles={project+'-'+role+'@example.invalid':role for role in MODES}
         for name,value in [('sink.py',sink_source()),('sink.json',json.dumps({'golf':smoke.GOLF,'controlKey':control_key,'roles':roles,'keys':keys})),('ca.conf',email.CA_CONFIG),('extensions',email.SERVER_EXTENSIONS)]:helpers.private_write(fixture/name,value)
-        run('openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1','-config',str(fixture/'ca.conf'),'-keyout',str(fixture/'ca.key'),'-out',str(fixture/'ca.crt'))
-        run('openssl','req','-newkey','rsa:2048','-nodes','-subj','/CN=receiver.golf.test','-keyout',str(fixture/'server.key'),'-out',str(fixture/'server.csr'))
-        run('openssl','x509','-req','-days','1','-in',str(fixture/'server.csr'),'-CA',str(fixture/'ca.crt'),'-CAkey',str(fixture/'ca.key'),'-CAcreateserial','-extfile',str(fixture/'extensions'),'-out',str(fixture/'server.crt'));(fixture/'ca.crt').chmod(0o644)
+        subprocess_run('openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1','-config',str(fixture/'ca.conf'),'-keyout',str(fixture/'ca.key'),'-out',str(fixture/'ca.crt'))
+        subprocess_run('openssl','req','-newkey','rsa:2048','-nodes','-subj','/CN=receiver.golf.test','-keyout',str(fixture/'server.key'),'-out',str(fixture/'server.csr'))
+        subprocess_run('openssl','x509','-req','-days','1','-in',str(fixture/'server.csr'),'-CA',str(fixture/'ca.crt'),'-CAkey',str(fixture/'ca.key'),'-CAcreateserial','-extfile',str(fixture/'extensions'),'-out',str(fixture/'server.crt'));(fixture/'ca.crt').chmod(0o644)
         worker_key=base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=')
         values={name:secrets.token_hex(24) for name in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD')};values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),GOLF_PUBLIC_URL=smoke.GOLF,GOLF_PUSH_CI_ENABLED='false',GOLF_RUNNER_KEYS=json.dumps({'local-docker':worker_key}),GOLF_RUNNER_KEY=worker_key,GOLF_RUNNER_IMAGES=json.dumps({'linux':JOB_IMAGE}),GOLF_RUNNER_APPROVED_IMAGES=json.dumps([JOB_IMAGE]),GOLF_RUNNER_JOB_IMAGE=JOB_IMAGE)
         smtp_policy=json.dumps([{'host':'receiver.golf.test','port':465,'tls_mode':'implicit','ips':[sink_ip+'/32']}]);web_policy=json.dumps([{'origin':'https://receiver.golf.test','addresses':[sink_ip],'path_prefix':'/workflow-proof'}])
@@ -277,7 +289,7 @@ def main():
     depends_on: !override {{golf: {{condition: service_started}}, runner-daemon: {{condition: service_healthy}}}}
 ''')
         env.update(proxy.environment());compose=['docker','compose','--project-directory',str(stack),'-p',project,'--env-file',str(directory/'proof.env'),'-f',str(stack/'compose.yaml'),'-f',str(stack/'compose.ci.yaml'),'-f',str(directory/'services.json'),'-f',str(directory/'ports.yaml')]
-        command=lambda *arguments,**kw:run(*compose,*arguments,**kw)
+        def command(*arguments,_execute=subprocess_run,**kw):return _execute(*compose,*arguments,**kw)
         admin=lambda *arguments:command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*arguments)
         native=rules.native
         def rpc(role,method,body=None,expected=200,code=None):return rules.rpc(actors[role]['session'],method,body,expected,code)
@@ -294,7 +306,7 @@ def main():
         def runtime():
             observed={}
             for service in ('golf','runner','email-worker','webhook-worker'):
-                cid=command('ps','-aq',service);assert re.fullmatch(r'[a-f0-9]{12,64}',cid);row=json.loads(run('docker','inspect',cid))[0]
+                cid=command('ps','-aq',service);assert re.fullmatch(r'[a-f0-9]{12,64}',cid);row=json.loads(subprocess_run('docker','inspect',cid))[0]
                 assert row['Config']['Labels']['com.docker.compose.project']==project and row['Image']==images['runner' if service=='runner' else 'golf']
                 observed[service]={'containerId':cid,'imageId':row['Image'],'composeConfigHash':row['Config']['Labels']['com.docker.compose.config-hash']}
             return observed
@@ -352,7 +364,7 @@ def main():
                 selection={'scope':'EXECUTION_SCOPE_'+scope,**({'repository':repository} if scope=='REPOSITORY' else {})};old=rpc('owner','ExecutionPolicyService/GetExecutionPolicy',selection)['policy'];rpc('owner','ExecutionPolicyService/UpdateExecutionPolicy',{**selection,'scopeId':old['scopeId'],'expectedRevision':old['revision'],'expectedAuthorityRevision':old['authorityRevision'],'mode':'EXECUTION_MODE_ALL','manualDispatchEnabled':True,'pushAllowed':False,'allowAllWorkflows':True})
             inspection=rpc('owner','WorkflowService/InspectWorkflows',{'repository':repository,'repositoryId':target['repositoryId'],'ref':head});assert inspection['commitId']==head and len(inspection['configurations'])==3 and all(v.get('manualPolicyAllowed') is True and v.get('pushPolicyAllowed') is False for v in inspection['configurations'])
             stage('bounded exact owned daemon image seed; helper never pulls')
-            daemon=command('ps','-q','runner-daemon');row=json.loads(run('docker','inspect',daemon))[0];assert row['Image']==images['daemon'] and row['Config']['Labels']['com.docker.compose.project']==project and row['Config']['Labels']['com.docker.compose.service']=='runner-daemon';daemon=row['Id']
+            daemon=command('ps','-q','runner-daemon');row=json.loads(subprocess_run('docker','inspect',daemon))[0];assert row['Image']==images['daemon'] and row['Config']['Labels']['com.docker.compose.project']==project and row['Config']['Labels']['com.docker.compose.service']=='runner-daemon';daemon=row['Id']
             seed_tmp=OUTPUT/'seed-request.json.tmp';helpers.private_write(seed_tmp,json.dumps({'schema':'golf.owned-notification-seed.v1','project':project,'containerId':daemon,'containerImage':images['daemon'],'approvedImage':JOB_IMAGE,'deadlineSeconds':args.seed_wait_seconds,'operatorScope':'Only this owned daemon, no retained resources'}));seed_tmp.replace(OUTPUT/'seed-request.json')
             def seeded():
                 result=subprocess.run([*compose,'exec','-T','runner-daemon','docker','image','inspect',JOB_IMAGE],cwd=stack,env=env,capture_output=True,timeout=15)
@@ -381,7 +393,7 @@ def main():
                 browser=stack/'scripts/workflow-dispatch-browser.mjs';assert browser.is_file();ui_output=OUTPUT/'original-dispatch-ui';ui_output.mkdir(mode=0o700)
                 selected=next(v for v in inspection['configurations'] if v['path']=='.github/workflows/success.yml')
                 config={'stackRoot':str(stack),'golf':smoke.GOLF,'repository':repo['full_name'],'repositoryId':target['repositoryId'],'ownerId':target['ownerId'],'actorId':actors['owner']['id'],'commitId':head,'workflowPath':'.github/workflows/success.yml','workflowBlobId':selected['blobId'],'email':actors['owner']['email'],'password':actors['owner']['password'],'runtime':{'containers':baseline,'images':images,'binarySha256':binaries,'sourceRevision':args.source_revision},'output':str(ui_output)}
-                run('node',str(browser),payload=config,timeout=180)
+                subprocess_run('node',str(browser),payload=config,timeout=180)
                 manifest=json.loads((ui_output/'browser-manifest.json').read_text());assert manifest['status']=='browser_checks_passed_parent_cleanup_pending' and len(manifest['captures'])==4
                 original=manifest['original'];assert original['repositoryId']==target['repositoryId'] and original['ownerId']==target['ownerId'] and original['actorId']==actors['owner']['id'] and original['commitId']==head and original['workflowPath']=='.github/workflows/success.yml'
                 ui_run=rpc('owner','WorkflowRunService/GetWorkflowRun',{'runId':original['runId']})['run'];assert ui_run['state']=='WORKFLOW_RUN_STATE_SUCCEEDED' and ui_run['commitId']==head and ui_run['workflowBlobId']==original['workflowBlobId'] and ui_run['sourceSha256']==original['sourceSha256']
@@ -407,16 +419,18 @@ def main():
                 for delivery in email_history(role):
                     matches=[v for v in facts['mail'] if v['deliveryId']==delivery['id'] and v['role']==role];assert len(matches)==delivery['attempts']
                     if delivery['eventId'].startswith('workflow-terminal:'):
-                        run=runs[delivery['eventId'].removeprefix('workflow-terminal:')]
-                        for fact in matches:assert fact['runId']==run['id'] and fact['attemptId']==(run.get('attemptId') or 'Not assigned') and fact['repositoryId']==target['repositoryId'] and fact['ownerId']==target['ownerId'] and fact['link']==smoke.GOLF+'/'+repository['owner']+'/'+repository['name']+'/actions/runs/'+run['id'] and fact['truthfulCancellation'] and fact['truthfulLost']
+                        workflow_run=runs[delivery['eventId'].removeprefix('workflow-terminal:')]
+                        for fact in matches:assert fact['runId']==workflow_run['id'] and fact['attemptId']==(workflow_run.get('attemptId') or 'Not assigned') and fact['repositoryId']==target['repositoryId'] and fact['ownerId']==target['ownerId'] and fact['link']==smoke.GOLF+'/'+repository['owner']+'/'+repository['name']+'/actions/runs/'+workflow_run['id'] and fact['truthfulCancellation'] and fact['truthfulLost']
                     else:assert all(v.get('activity') is True for v in matches)
             smtp_records=[email.receiver_receipt(v) for v in control('/receipts')['receipts']]
             for identifier,rows in [(retry_email['id'],smtp_records),(drop_email['id'],smtp_records),(retry_web['id'],closed),(drop_web['id'],closed)]:
                 copies=[v for v in rows if v['deliveryId']==identifier];assert len(copies)==2 and copies[0]['bodySha256']==copies[1]['bodySha256']
             assert next(v for v in email_history('completed') if v['id']==drop_email['id']).get('possibleDuplicate') is True and next(v for v in email_history('completed') if v['id']==retry_email['id']).get('possibleDuplicate',False) is False
             assert next(v for v in web_history('completed') if v['id']==drop_web['id']).get('possibleDuplicate') is True and next(v for v in web_history('failures') if v['id']==retry_web['id']).get('possibleDuplicate',False) is False
+            record(deliveryCheckpoint='independently_verified_before_restart',runs=[{k:v.get(k,'') for k in ('id','state','commitId','workflowPath','workflowBlobId','sourceSha256','attemptId')} for v in runs.values()],originalDispatchReceipts=original_receipts,hmacReceipts=closed,smtpReceipts=smtp_records,filterModesVerified=list(MODES),retryFrozenBodies=True,acceptedResponseLossFrozenBodies=True,lost='not_exercised',timedOut='not_exercised')
+            stage('restart no duplicate delivery and unchanged fixture image/config')
             count=len(facts['webhooks'])+len(facts['mail']);command('restart','golf','email-worker','webhook-worker');smoke.ready();time.sleep(3);after=control('/workflow-facts');assert len(after['webhooks'])+len(after['mail'])==count and runtime()==baseline
-            record(runtimeAfter=runtime(),runs=[{k:v.get(k,'') for k in ('id','state','commitId','workflowPath','workflowBlobId','sourceSha256','attemptId')} for v in runs.values()],originalDispatchReceipts=original_receipts,hmacReceipts=closed,smtpReceipts=smtp_records,filterModesVerified=list(MODES),retryFrozenBodies=True,acceptedResponseLossFrozenBodies=True,restartNoDuplicate=True,lost='not_exercised',timedOut='not_exercised');passed=True
+            record(runtimeAfter=runtime(),restartNoDuplicate=True);passed=True
         except Exception as error:
             record(failedStage=STAGE,**closed_failure(error));raise
         finally:
@@ -442,7 +456,7 @@ def main():
                 except Exception:failures.append('owned compose cleanup')
                 survivors={};resource_errors={}
                 for kind,arguments in [('containers',('ps','-aq','--no-trunc')),('volumes',('volume','ls','-q')),('networks',('network','ls','-q'))]:
-                    try:survivors[kind]=run('docker',*arguments,'--filter','label=com.docker.compose.project='+project).splitlines()
+                    try:survivors[kind]=subprocess_run('docker',*arguments,'--filter','label=com.docker.compose.project='+project).splitlines()
                     except Exception as error:resource_errors[kind]=closed_failure(error)
                 own_zero=not resource_errors and not any(survivors.values());record(ownedResourcesZero=own_zero,ownedResourceSurvivors=survivors,ownedResourceCheckErrors=resource_errors)
                 if not own_zero:failures.append('owned resource survivors or unavailable observation')
