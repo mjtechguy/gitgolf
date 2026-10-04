@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -125,8 +126,15 @@ func (r *unreadBody) Read([]byte) (int, error) {
 func TestRepositoryBrowserWithPostgres(t *testing.T) {
 	db := testDatabase(t)
 	const sha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	const otherSHA = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	const plain = "<script>alert('text only')</script>\nHello 雪\n"
+	files := map[string]string{"plain.txt": plain, "nested/hello world 雪.txt": plain, "limit.txt": strings.Repeat("x", maxPreviewBytes), "binary": "hello\x00binary", "control": "hello\x1b[31m", "invalid-utf8": "\xff\xfe", "lfs": "version https://git-lfs.github.com/spec/v1\noid sha256:" + strings.Repeat("b", 64) + "\nsize 90000000\n", "lfs-pointer": "version https://git-lfs.github.com/spec/v1\noid sha256:" + strings.Repeat("b", 64) + "\nsize 90000000\n", "large": strings.Repeat("x", maxPreviewBytes+1), "symlink": "outside", "submodule": "submodule", "mismatch": "expected"}
+	objects := newSourceObjectFixture(sha, files, map[string]string{"symlink": "symlink", "submodule": "submodule"})
+	for i := range objects.root {
+		if objects.root[i].Path == "large" {
+			objects.root[i].Size = maxPreviewBytes + 1
+		}
+	}
+	objects.root = append(objects.root, sourceTreeEntry{Path: "huge-directory", Mode: "040000", Type: "tree", SHA: strings.Repeat("f", 40)})
 	var revoked atomic.Bool
 	var contentFetches atomic.Int64
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -152,7 +160,7 @@ func TestRepositoryBrowserWithPostgres(t *testing.T) {
 			return
 		}
 		if r.URL.Path == "/api/v1/repos/developer/empty" {
-			respond(w, 200, Repository{ID: 2, Name: "empty", FullName: "developer/empty", Empty: true})
+			respond(w, 200, Repository{ID: 2, Name: "empty", FullName: "developer/empty", HTMLURL: "https://forge.invalid/developer/empty", Empty: true})
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/v1/repos/developer/empty/") {
@@ -163,9 +171,32 @@ func TestRepositoryBrowserWithPostgres(t *testing.T) {
 			return
 		}
 		base := "/api/v1/repos/developer/example"
+		if strings.HasPrefix(r.URL.Path, base+"/git/refs/heads/") {
+			name := strings.TrimPrefix(r.URL.Path, base+"/git/refs/heads/")
+			respond(w, 200, []map[string]any{{"ref": "refs/heads/" + name, "object": map[string]string{"type": "commit", "sha": sha}}})
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, base+"/tags/") {
+			w.WriteHeader(404)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/git/trees/"+strings.Repeat("f", 40)) {
+			respond(w, 200, sourceTree{SHA: strings.Repeat("f", 40), Page: 1, Total: maxDirectoryEntries + 1, Truncated: true})
+			return
+		}
+		if strings.Contains(r.URL.Path, "/git/blobs/") {
+			contentFetches.Add(1)
+			if path.Base(r.URL.Path) == sourceBlobHash([]byte("expected"), 40) {
+				respond(w, 200, map[string]any{"sha": path.Base(r.URL.Path), "size": 8, "encoding": "base64", "content": base64.StdEncoding.EncodeToString([]byte("wrong!!!"))})
+				return
+			}
+		}
+		if objects.serve(w, r, base) {
+			return
+		}
 		switch r.URL.Path {
 		case base:
-			respond(w, 200, Repository{ID: 1, Name: "example", FullName: "developer/example", DefaultBranch: "main", Private: true})
+			respond(w, 200, Repository{ID: 1, Name: "example", FullName: "developer/example", HTMLURL: "https://forge.invalid/developer/example", DefaultBranch: "main", Private: true})
 		case base + "/branches":
 			w.Header().Set("Link", `</ignored?page=2>; rel="next"`)
 			fmt.Fprintf(w, `[{"name":"feature/slash","protected":true,"commit":{"id":%q}}]`, sha)
@@ -193,64 +224,7 @@ func TestRepositoryBrowserWithPostgres(t *testing.T) {
 		case base + "/issues/2":
 			fmt.Fprint(w, `{"id":2,"number":2,"title":"PR","state":"open","pull_request":{}}`)
 		default:
-			prefix := base + "/contents-ext/"
-			if !strings.HasPrefix(r.URL.Path, prefix) {
-				w.WriteHeader(404)
-				return
-			}
-			if r.URL.Query().Get("ref") != sha {
-				t.Error("source metadata/content was not pinned to resolved commit")
-			}
-			name := strings.TrimPrefix(r.URL.Path, prefix)
-			if name == "missing" {
-				w.WriteHeader(404)
-				return
-			}
-			if name == "huge-directory" {
-				entries := make([]forgeContents, maxDirectoryEntries+1)
-				respond(w, 200, contentsEnvelope{Directory: entries})
-				return
-			}
-			if name == "." {
-				respond(w, 200, contentsEnvelope{Directory: []forgeContents{{sourceEntry: sourceEntry{Name: "plain.txt", Path: "plain.txt", Type: "file", SHA: sha, Size: int64(len(plain))}}}})
-				return
-			}
-			entry := forgeContents{sourceEntry: sourceEntry{Name: name, Path: name, Type: "file", SHA: sha, Size: int64(len(plain))}}
-			data := plain
-			switch name {
-			case "binary":
-				data = "hello\x00binary"
-			case "control":
-				data = "hello\x1b[31m"
-			case "invalid-utf8":
-				data = "\xff\xfe"
-			case "lfs-pointer":
-				data = "version https://git-lfs.github.com/spec/v1\noid sha256:" + strings.Repeat("b", 64) + "\nsize 90000000\n"
-			case "symlink", "submodule":
-				entry.Type = name
-			case "large":
-				entry.Size = maxPreviewBytes + 1
-			case "lfs":
-				entry.LFSOID = strings.Repeat("b", 64)
-			case "limit.txt":
-				data = strings.Repeat("x", maxPreviewBytes)
-			case "nested/hello world 雪.txt":
-				entry.Name = "hello world 雪.txt"
-			}
-			if name != "large" {
-				entry.Size = int64(len(data))
-			}
-			if strings.Contains(r.URL.Query().Get("includes"), "file_content") {
-				contentFetches.Add(1)
-				if name == "large" || name == "lfs" || name == "symlink" || name == "submodule" {
-					t.Errorf("fetched metadata-only file %s", name)
-				}
-				entry.Encoding, entry.Content = "base64", base64.StdEncoding.EncodeToString([]byte(data))
-				if name == "mismatch" {
-					entry.SHA = otherSHA
-				}
-			}
-			respond(w, 200, contentsEnvelope{File: &entry})
+			w.WriteHeader(404)
 		}
 	}))
 	defer upstream.Close()
@@ -398,7 +372,7 @@ func TestRepositoryBrowserWithPostgres(t *testing.T) {
 			} else if file.Content != nil || file.PreviewReason == "" {
 				t.Fatal("unsafe preview exposed")
 			}
-			if (name == "large" || name == "lfs" || name == "symlink" || name == "submodule") && contentFetches.Load() != before {
+			if (name == "large" || name == "symlink" || name == "submodule") && contentFetches.Load() != before {
 				t.Fatal("metadata-only object fetched")
 			}
 		})

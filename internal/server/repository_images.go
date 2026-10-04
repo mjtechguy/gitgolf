@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/xml"
 	"html"
 	"image"
@@ -15,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -146,16 +146,29 @@ func (s *Server) GetRepositoryImage(ctx context.Context, req *connect.Request[go
 		return nil, e
 	}
 	input := req.Msg
+	var id int64
+	if input.RepositoryId != "" {
+		id, e = discussionID(input.RepositoryId)
+		if e != nil {
+			return nil, rpcError(e)
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
 	if !objectID.MatchString(input.CommitId) || input.DocumentPath == "" || !validSourcePath(input.DocumentPath) || len(input.ImageUrl) > 2048 || strings.ContainsAny(input.ImageUrl, "\x00\r\n") {
 		return nil, rpcError(invalid("Select an immutable document and image reference."))
 	}
 	var data []byte
-	e = s.withRepositoryRead(ctx, s.cookieValue(req.Header()), token, keyFrom(input.Repository), func(base string, _ Repository) error {
-		document, e := s.getContents(ctx, token, keyFrom(input.Repository), input.CommitId, input.DocumentPath)
+	e = s.withRepositoryRead(ctx, s.cookieValue(req.Header()), token, keyFrom(input.Repository), func(base string, repo Repository) error {
+		if id > 0 && repo.ID != id {
+			return errIssueTargetChanged
+		}
+		id = repo.ID
+		document, e := s.getBoundContents(ctx, s.cookieValue(req.Header()), token, keyFrom(input.Repository), id, input.CommitId, input.DocumentPath)
 		if e != nil {
 			return e
 		}
-		if document.CommitID != input.CommitId || document.File == nil || document.File.Content == nil || !strings.Contains(html.UnescapeString(*document.File.Content), input.ImageUrl) {
+		if document.RepositoryID != id || document.CommitID != input.CommitId || document.File == nil || document.File.Content == nil || !strings.Contains(html.UnescapeString(*document.File.Content), input.ImageUrl) {
 			return invalid("Image is not referenced by this source document.")
 		}
 		if strings.HasPrefix(input.ImageUrl, "https://") {
@@ -166,19 +179,16 @@ func (s *Server) GetRepositoryImage(ctx context.Context, req *connect.Request[go
 		if e != nil {
 			return e
 		}
-		var content contentsEnvelope
-		query := url.Values{"ref": {input.CommitId}, "includes": {"file_content,lfs_metadata"}}
-		_, e = s.forge(ctx, http.MethodGet, base+"/contents-ext/"+escapedSourcePath(sourcePath)+"?"+query.Encode(), token, nil, &content)
+		file, entries, e := s.sourceObjectAtPath(ctx, base, token, input.CommitId, sourcePath)
 		if e != nil {
 			return e
 		}
-		file := content.File
-		if file == nil || content.Directory != nil || !validEntry(file.sourceEntry) || file.Path != sourcePath || file.Type != "file" || file.LFSOID != "" || file.Size > maxPreviewBytes || file.Encoding != "base64" {
+		if entries != nil || file.Type != "file" || file.Size > maxPreviewBytes {
 			return invalid("Image is not an ordinary bounded repository file.")
 		}
-		data, e = base64.StdEncoding.DecodeString(file.Content)
-		if e != nil || int64(len(data)) != file.Size {
-			return errInvalidForgeResponse
+		data, e = s.sourceBlob(ctx, base, token, file)
+		if e != nil {
+			return e
 		}
 		return nil
 	})
@@ -189,5 +199,5 @@ func (s *Server) GetRepositoryImage(ctx context.Context, req *connect.Request[go
 	if e != nil {
 		return nil, rpcError(e)
 	}
-	return connect.NewResponse(&golfv1.GetRepositoryImageResponse{Content: data, MediaType: media}), nil
+	return connect.NewResponse(&golfv1.GetRepositoryImageResponse{Content: data, MediaType: media, RepositoryId: strconv.FormatInt(id, 10), CommitId: input.CommitId, DocumentPath: input.DocumentPath, ImageUrl: input.ImageUrl}), nil
 }

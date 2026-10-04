@@ -3,8 +3,6 @@ package server
 import (
 	"connectrpc.com/connect"
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 	"net"
 	"net/http"
@@ -54,31 +52,21 @@ func TestRepositoryImagePrivateRPCPostgres(t *testing.T) {
 			if mode == "unreferenced" {
 				document = "No image here."
 			}
-			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path == "/api/v1/repos/alice/private/commits" {
-					json.NewEncoder(w).Encode([]map[string]string{{"sha": sha}})
-					return
+			objects := newSourceObjectFixture(sha, map[string]string{"README.md": document, "logo.svg": svg}, nil)
+			for i := range objects.root {
+				if objects.root[i].Path == "logo.svg" {
+					switch mode {
+					case "symlink":
+						objects.root[i].Mode = "120000"
+					case "oversized":
+						objects.root[i].Size = maxPreviewBytes + 1
+					case "mismatched-size":
+						objects.root[i].Size++
+					}
 				}
-				if strings.HasPrefix(r.URL.Path, "/api/v1/repos/alice/private/contents-ext/") {
-					requested := strings.TrimPrefix(r.URL.Path, "/api/v1/repos/alice/private/contents-ext/")
-					text := document
-					if requested == "logo.svg" {
-						text = svg
-					}
-					kind := "file"
-					size := len(text)
-					if requested == "logo.svg" {
-						if mode == "symlink" {
-							kind = "symlink"
-						}
-						if mode == "oversized" {
-							size = maxPreviewBytes + 1
-						}
-						if mode == "mismatched-size" {
-							size++
-						}
-					}
-					json.NewEncoder(w).Encode(contentsEnvelope{File: &forgeContents{sourceEntry: sourceEntry{Name: requested, Path: requested, Type: kind, SHA: sha, Size: int64(size)}, Encoding: "base64", Content: base64.StdEncoding.EncodeToString([]byte(text))}})
+			}
+			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if objects.serve(w, r, "/api/v1/repos/alice/private") {
 					return
 				}
 				f.serveProvider(w, r)

@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -221,6 +220,7 @@ type sourceFile struct {
 	PreviewReason string  `json:"preview_reason,omitempty"`
 }
 type sourceResult struct {
+	RepositoryID         int64
 	CommitID, Path, Kind string
 	Entries              []sourceEntry
 	File                 *sourceFile
@@ -240,91 +240,39 @@ func escapedSourcePath(value string) string {
 	return strings.Join(parts, "/")
 }
 func (s *Server) getContents(ctx context.Context, token forgeCredential, key repositoryKey, ref, requestedPath string) (sourceResult, error) {
-	base, err := repositoryPath(key)
+	return s.getBoundContents(ctx, "", token, key, 0, ref, requestedPath)
+}
+func (s *Server) readContentsAtCommit(ctx context.Context, base string, token forgeCredential, commit, requestedPath string) (sourceResult, error) {
+	result := sourceResult{CommitID: commit, Path: requestedPath}
+	entry, entries, err := s.sourceObjectAtPath(ctx, base, token, commit, requestedPath)
 	if err != nil {
 		return sourceResult{}, err
 	}
-	if !validRef(ref) || !validSourcePath(requestedPath) {
-		return sourceResult{}, invalid("Use a valid ref and relative repository path without dot segments.")
-	}
-	commits, _, err := s.readCommits(ctx, base, token, ref, 1, 1)
-	if err != nil {
-		return sourceResult{}, err
-	}
-	if len(commits) != 1 {
-		return sourceResult{}, errResourceNotFound
-	}
-	result := sourceResult{CommitID: commits[0].SHA, Path: requestedPath}
-	query := url.Values{"ref": {result.CommitID}, "includes": {"lfs_metadata"}}
-	endpoint := base + "/contents-ext/" + escapedSourcePath(requestedPath)
-	var metadata contentsEnvelope
-	if _, err := s.forge(ctx, "GET", endpoint+"?"+query.Encode(), token, nil, &metadata); err != nil {
-		return sourceResult{}, err
-	}
-	if metadata.File == nil {
-		if metadata.Directory == nil {
-			return sourceResult{}, errInvalidForgeResponse
-		}
-		if len(metadata.Directory) > maxDirectoryEntries {
-			return sourceResult{}, errForgeResponseTooLarge
-		}
-		result.Kind = "dir"
-		result.Entries = make([]sourceEntry, 0, len(metadata.Directory))
-		for _, entry := range metadata.Directory {
-			parent := path.Dir(entry.Path)
-			if parent == "." {
-				parent = ""
-			}
-			if !validEntry(entry.sourceEntry) || parent != requestedPath {
-				return sourceResult{}, errInvalidForgeResponse
-			}
-			result.Entries = append(result.Entries, entry.sourceEntry)
-		}
+	if entries != nil {
+		result.Kind, result.Entries = "dir", entries
 		return result, nil
 	}
-	entry := metadata.File
-	if !validEntry(entry.sourceEntry) || entry.Path != requestedPath || entry.Type == "dir" || metadata.Directory != nil {
-		return sourceResult{}, errInvalidForgeResponse
-	}
-	file := &sourceFile{sourceEntry: entry.sourceEntry}
+	file := &sourceFile{sourceEntry: entry}
 	switch {
 	case entry.Type == "symlink":
 		file.PreviewReason = "Symbolic links are metadata-only; Golf does not follow their targets."
 	case entry.Type == "submodule":
 		file.PreviewReason = "Submodules are metadata-only; Golf does not fetch another repository."
-	case entry.LFSOID != "":
-		file.PreviewReason = "Git LFS objects are metadata-only; Golf does not download the large object."
 	case entry.Size > maxPreviewBytes:
 		file.PreviewReason = "This file exceeds the 256 KiB preview limit."
 	default:
-		query.Set("includes", "file_content,lfs_metadata")
-		var content contentsEnvelope
-		if _, err := s.forge(ctx, "GET", endpoint+"?"+query.Encode(), token, nil, &content); err != nil {
+		data, err := s.sourceBlob(ctx, base, token, entry)
+		if err != nil {
 			return sourceResult{}, err
 		}
-		if content.File == nil || content.File.sourceEntry != entry.sourceEntry || content.Directory != nil {
-			return sourceResult{}, errInvalidForgeResponse
-		}
-		if content.File.LFSOID != "" {
-			file.PreviewReason = "Git LFS objects are metadata-only; Golf does not download the large object."
-		} else if content.File.Encoding != "base64" {
-			return sourceResult{}, errInvalidForgeResponse
-		} else {
-			data, err := base64.StdEncoding.DecodeString(content.File.Content)
-			if err != nil || int64(len(data)) != entry.Size {
-				return sourceResult{}, errInvalidForgeResponse
-			}
-			switch {
-			case len(data) > maxPreviewBytes:
-				file.PreviewReason = "This file exceeds the 256 KiB preview limit."
-			case strings.HasPrefix(string(data), "version https://git-lfs.github.com/spec/v1\n") || strings.HasPrefix(string(data), "version https://git-lfs.github.com/spec/v1\r\n"):
-				file.PreviewReason = "Git LFS pointers are metadata-only."
-			case !utf8.Valid(data) || strings.IndexFunc(string(data), func(r rune) bool { return unicode.IsControl(r) && r != '\n' && r != '\r' && r != '\t' }) != -1:
-				file.PreviewReason = "Binary or non-text content cannot be previewed."
-			default:
-				text := string(data)
-				file.Content = &text
-			}
+		switch {
+		case strings.HasPrefix(string(data), "version https://git-lfs.github.com/spec/v1\n") || strings.HasPrefix(string(data), "version https://git-lfs.github.com/spec/v1\r\n"):
+			file.PreviewReason = "Git LFS pointers are metadata-only."
+		case !utf8.Valid(data) || strings.IndexFunc(string(data), func(r rune) bool { return unicode.IsControl(r) && r != '\n' && r != '\r' && r != '\t' }) != -1:
+			file.PreviewReason = "Binary or non-text content cannot be previewed."
+		default:
+			text := string(data)
+			file.Content = &text
 		}
 	}
 	result.Kind, result.File = entry.Type, file

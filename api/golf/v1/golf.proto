@@ -136,6 +136,7 @@ service RepositoryService {
   rpc GetPullRequestDiff(GetPullRequestDiffRequest) returns (GetPullRequestDiffResponse);
   rpc GetRepositoryComparison(GetRepositoryComparisonRequest) returns (GetRepositoryComparisonResponse);
   rpc GetRepositoryImage(GetRepositoryImageRequest) returns (GetRepositoryImageResponse);
+  rpc ResolveRepositorySource(ResolveRepositorySourceRequest) returns (ResolveRepositorySourceResponse);
   rpc GetContents(GetContentsRequest) returns (GetContentsResponse);
   rpc ListIssues(ListIssuesRequest) returns (ListIssuesResponse);
   rpc GetPullRequestDiscussion(GetPullRequestDiscussionRequest) returns (GetPullRequestDiscussionResponse);
@@ -435,10 +436,15 @@ message GetRepositoryImageRequest {
   string document_path = 3;
   // Literal image reference from this immutable source document.
   string image_url = 4;
+  string repository_id = 5;
 }
 message GetRepositoryImageResponse {
   bytes content = 1;
   string media_type = 2;
+  string repository_id = 3;
+  string commit_id = 4;
+  string document_path = 5;
+  string image_url = 6;
 }
 
 enum SourceEntryType {
@@ -462,10 +468,41 @@ message SourceFile {
   optional string content = 2;
   string preview_reason = 3;
 }
+enum RepositorySourceRefKind {
+  REPOSITORY_SOURCE_REF_KIND_UNSPECIFIED = 0;
+  REPOSITORY_SOURCE_REF_KIND_DEFAULT_BRANCH = 1;
+  REPOSITORY_SOURCE_REF_KIND_BRANCH = 2;
+  REPOSITORY_SOURCE_REF_KIND_TAG = 3;
+  REPOSITORY_SOURCE_REF_KIND_COMMIT = 4;
+}
+message RepositorySourceSelector {
+  RepositorySourceRefKind kind = 1;
+  string name = 2;
+}
+message RepositorySourceSelection {
+  RepositorySourceRefKind kind = 1;
+  string name = 2;
+  string commit_id = 3;
+  optional string tag_object_id = 4;
+}
+message ResolveRepositorySourceRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  RepositorySourceSelector selector = 3;
+  string path = 4;
+}
+message ResolveRepositorySourceResponse {
+  string repository_id = 1;
+  RepositoryKey repository = 2;
+  RepositorySourceSelection selection = 3;
+  string path = 4;
+}
 message GetContentsRequest {
   RepositoryKey repository = 1;
+  // Exact mode requires a full lowercase SHA. Omitted ID is legacy compatibility.
   string ref = 2;
   string path = 3;
+  string repository_id = 4;
 }
 message GetContentsResponse {
   string commit_id = 1;
@@ -473,6 +510,7 @@ message GetContentsResponse {
   SourceEntryType kind = 3;
   repeated SourceEntry entries = 4;
   SourceFile file = 5;
+  string repository_id = 6;
 }
 
 enum IssueState {

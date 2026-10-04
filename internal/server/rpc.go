@@ -144,7 +144,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.SessionServiceListSessionsProcedure, golfv1connect.SessionServiceRevokeSessionProcedure, golfv1connect.SessionServiceRevokeOtherSessionsProcedure,
 			golfv1connect.RepositoryActivityServiceWatchRepositoryProcedure,
 			golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceCreateRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryCreationProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure,
-			golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListTagsProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure,
+			golfv1connect.RepositoryServiceListBranchesProcedure, golfv1connect.RepositoryServiceListTagsProcedure, golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure, golfv1connect.RepositoryServiceResolveRepositorySourceProcedure,
 			golfv1connect.RepositoryServiceGetCommitDiffProcedure, golfv1connect.RepositoryServiceGetPullRequestDiffProcedure, golfv1connect.RepositoryServiceGetRepositoryComparisonProcedure, golfv1connect.RepositoryServiceListPullRequestCommitsProcedure, golfv1connect.RepositoryServiceListPullRequestChecksProcedure, golfv1connect.RepositoryServiceGetRepositoryImageProcedure,
 			golfv1connect.RepositoryServiceListIssuesProcedure, golfv1connect.RepositoryServiceGetIssueProcedure,
 			golfv1connect.RepositoryServiceGetPullRequestDiscussionProcedure, golfv1connect.RepositoryServiceListIssueCommentsProcedure, golfv1connect.RepositoryServiceGetIssueMutationProcedure, golfv1connect.RepositoryServiceCreateIssueProcedure, golfv1connect.RepositoryServiceCreateIssueCommentProcedure, golfv1connect.RepositoryServiceUpdateIssueProcedure, golfv1connect.RepositoryServiceCreatePullRequestProcedure, golfv1connect.RepositoryServiceUpdatePullRequestProcedure,
@@ -487,11 +487,20 @@ func (s *Server) GetContents(ctx context.Context, req *connect.Request[golfv1.Ge
 	if err != nil {
 		return nil, err
 	}
-	result, err := s.getContents(ctx, token, keyFrom(req.Msg.Repository), req.Msg.Ref, req.Msg.Path)
+	var id int64
+	if req.Msg.RepositoryId != "" {
+		id, err = discussionID(req.Msg.RepositoryId)
+		if err != nil {
+			return nil, rpcError(err)
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	result, err := s.getBoundContents(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), id, req.Msg.Ref, req.Msg.Path)
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	response := &golfv1.GetContentsResponse{CommitId: result.CommitID, Path: result.Path, Kind: sourceType(result.Kind)}
+	response := &golfv1.GetContentsResponse{RepositoryId: strconv.FormatInt(result.RepositoryID, 10), CommitId: result.CommitID, Path: result.Path, Kind: sourceType(result.Kind)}
 	for _, entry := range result.Entries {
 		response.Entries = append(response.Entries, wireEntry(entry))
 	}

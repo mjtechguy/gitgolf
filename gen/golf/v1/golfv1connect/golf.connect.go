@@ -172,6 +172,9 @@ const (
 	// RepositoryServiceGetRepositoryImageProcedure is the fully-qualified name of the
 	// RepositoryService's GetRepositoryImage RPC.
 	RepositoryServiceGetRepositoryImageProcedure = "/golf.v1.RepositoryService/GetRepositoryImage"
+	// RepositoryServiceResolveRepositorySourceProcedure is the fully-qualified name of the
+	// RepositoryService's ResolveRepositorySource RPC.
+	RepositoryServiceResolveRepositorySourceProcedure = "/golf.v1.RepositoryService/ResolveRepositorySource"
 	// RepositoryServiceGetContentsProcedure is the fully-qualified name of the RepositoryService's
 	// GetContents RPC.
 	RepositoryServiceGetContentsProcedure = "/golf.v1.RepositoryService/GetContents"
@@ -1075,6 +1078,7 @@ type RepositoryServiceClient interface {
 	GetPullRequestDiff(context.Context, *connect.Request[v1.GetPullRequestDiffRequest]) (*connect.Response[v1.GetPullRequestDiffResponse], error)
 	GetRepositoryComparison(context.Context, *connect.Request[v1.GetRepositoryComparisonRequest]) (*connect.Response[v1.GetRepositoryComparisonResponse], error)
 	GetRepositoryImage(context.Context, *connect.Request[v1.GetRepositoryImageRequest]) (*connect.Response[v1.GetRepositoryImageResponse], error)
+	ResolveRepositorySource(context.Context, *connect.Request[v1.ResolveRepositorySourceRequest]) (*connect.Response[v1.ResolveRepositorySourceResponse], error)
 	GetContents(context.Context, *connect.Request[v1.GetContentsRequest]) (*connect.Response[v1.GetContentsResponse], error)
 	ListIssues(context.Context, *connect.Request[v1.ListIssuesRequest]) (*connect.Response[v1.ListIssuesResponse], error)
 	GetPullRequestDiscussion(context.Context, *connect.Request[v1.GetPullRequestDiscussionRequest]) (*connect.Response[v1.GetPullRequestDiscussionResponse], error)
@@ -1186,6 +1190,12 @@ func NewRepositoryServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+RepositoryServiceGetRepositoryImageProcedure,
 			connect.WithSchema(repositoryServiceMethods.ByName("GetRepositoryImage")),
+			connect.WithClientOptions(opts...),
+		),
+		resolveRepositorySource: connect.NewClient[v1.ResolveRepositorySourceRequest, v1.ResolveRepositorySourceResponse](
+			httpClient,
+			baseURL+RepositoryServiceResolveRepositorySourceProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("ResolveRepositorySource")),
 			connect.WithClientOptions(opts...),
 		),
 		getContents: connect.NewClient[v1.GetContentsRequest, v1.GetContentsResponse](
@@ -1338,6 +1348,7 @@ type repositoryServiceClient struct {
 	getPullRequestDiff                 *connect.Client[v1.GetPullRequestDiffRequest, v1.GetPullRequestDiffResponse]
 	getRepositoryComparison            *connect.Client[v1.GetRepositoryComparisonRequest, v1.GetRepositoryComparisonResponse]
 	getRepositoryImage                 *connect.Client[v1.GetRepositoryImageRequest, v1.GetRepositoryImageResponse]
+	resolveRepositorySource            *connect.Client[v1.ResolveRepositorySourceRequest, v1.ResolveRepositorySourceResponse]
 	getContents                        *connect.Client[v1.GetContentsRequest, v1.GetContentsResponse]
 	listIssues                         *connect.Client[v1.ListIssuesRequest, v1.ListIssuesResponse]
 	getPullRequestDiscussion           *connect.Client[v1.GetPullRequestDiscussionRequest, v1.GetPullRequestDiscussionResponse]
@@ -1425,6 +1436,11 @@ func (c *repositoryServiceClient) GetRepositoryComparison(ctx context.Context, r
 // GetRepositoryImage calls golf.v1.RepositoryService.GetRepositoryImage.
 func (c *repositoryServiceClient) GetRepositoryImage(ctx context.Context, req *connect.Request[v1.GetRepositoryImageRequest]) (*connect.Response[v1.GetRepositoryImageResponse], error) {
 	return c.getRepositoryImage.CallUnary(ctx, req)
+}
+
+// ResolveRepositorySource calls golf.v1.RepositoryService.ResolveRepositorySource.
+func (c *repositoryServiceClient) ResolveRepositorySource(ctx context.Context, req *connect.Request[v1.ResolveRepositorySourceRequest]) (*connect.Response[v1.ResolveRepositorySourceResponse], error) {
+	return c.resolveRepositorySource.CallUnary(ctx, req)
 }
 
 // GetContents calls golf.v1.RepositoryService.GetContents.
@@ -1553,6 +1569,7 @@ type RepositoryServiceHandler interface {
 	GetPullRequestDiff(context.Context, *connect.Request[v1.GetPullRequestDiffRequest]) (*connect.Response[v1.GetPullRequestDiffResponse], error)
 	GetRepositoryComparison(context.Context, *connect.Request[v1.GetRepositoryComparisonRequest]) (*connect.Response[v1.GetRepositoryComparisonResponse], error)
 	GetRepositoryImage(context.Context, *connect.Request[v1.GetRepositoryImageRequest]) (*connect.Response[v1.GetRepositoryImageResponse], error)
+	ResolveRepositorySource(context.Context, *connect.Request[v1.ResolveRepositorySourceRequest]) (*connect.Response[v1.ResolveRepositorySourceResponse], error)
 	GetContents(context.Context, *connect.Request[v1.GetContentsRequest]) (*connect.Response[v1.GetContentsResponse], error)
 	ListIssues(context.Context, *connect.Request[v1.ListIssuesRequest]) (*connect.Response[v1.ListIssuesResponse], error)
 	GetPullRequestDiscussion(context.Context, *connect.Request[v1.GetPullRequestDiscussionRequest]) (*connect.Response[v1.GetPullRequestDiscussionResponse], error)
@@ -1660,6 +1677,12 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 		RepositoryServiceGetRepositoryImageProcedure,
 		svc.GetRepositoryImage,
 		connect.WithSchema(repositoryServiceMethods.ByName("GetRepositoryImage")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryServiceResolveRepositorySourceHandler := connect.NewUnaryHandler(
+		RepositoryServiceResolveRepositorySourceProcedure,
+		svc.ResolveRepositorySource,
+		connect.WithSchema(repositoryServiceMethods.ByName("ResolveRepositorySource")),
 		connect.WithHandlerOptions(opts...),
 	)
 	repositoryServiceGetContentsHandler := connect.NewUnaryHandler(
@@ -1822,6 +1845,8 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 			repositoryServiceGetRepositoryComparisonHandler.ServeHTTP(w, r)
 		case RepositoryServiceGetRepositoryImageProcedure:
 			repositoryServiceGetRepositoryImageHandler.ServeHTTP(w, r)
+		case RepositoryServiceResolveRepositorySourceProcedure:
+			repositoryServiceResolveRepositorySourceHandler.ServeHTTP(w, r)
 		case RepositoryServiceGetContentsProcedure:
 			repositoryServiceGetContentsHandler.ServeHTTP(w, r)
 		case RepositoryServiceListIssuesProcedure:
@@ -1925,6 +1950,10 @@ func (UnimplementedRepositoryServiceHandler) GetRepositoryComparison(context.Con
 
 func (UnimplementedRepositoryServiceHandler) GetRepositoryImage(context.Context, *connect.Request[v1.GetRepositoryImageRequest]) (*connect.Response[v1.GetRepositoryImageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.GetRepositoryImage is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) ResolveRepositorySource(context.Context, *connect.Request[v1.ResolveRepositorySourceRequest]) (*connect.Response[v1.ResolveRepositorySourceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.ResolveRepositorySource is not implemented"))
 }
 
 func (UnimplementedRepositoryServiceHandler) GetContents(context.Context, *connect.Request[v1.GetContentsRequest]) (*connect.Response[v1.GetContentsResponse], error) {
