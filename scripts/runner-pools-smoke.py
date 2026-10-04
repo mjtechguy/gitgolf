@@ -79,6 +79,106 @@ def stage(value):
     STAGE = value; record(stage=value); print('CHECK: '+value,flush=True)
 
 
+# Diagnostics expose only a closed operation vocabulary and numeric observations.
+# Never persist argv, stdout/stderr, exception messages, env, inspect config or logs.
+SERVICES = {'postgres','gitea','golf','runner-daemon','runner-image-init','runner','runner-second'}
+COMPOSE_ACTIONS = {'up','exec','ps','stop','restart','down'}
+PROCESS_LIMIT = 8 << 20
+
+
+class PrivateSubprocessFailure(AssertionError):
+    def __init__(self, observation):
+        super().__init__('Private subprocess failed; bounded metadata recorded')
+        self.observation = observation
+
+
+def operation_category(argv):
+    category = {'operation':'other'}
+    if len(argv) >= 2 and argv[0:2] == ('docker','compose'):
+        # Skip values of global Compose flags, including private env/override paths.
+        index = 2
+        while index < len(argv):
+            if argv[index] in ('-p','--env-file','-f'): index += 2; continue
+            break
+        action = argv[index] if index < len(argv) else ''
+        category['operation'] = 'compose_' + action if action in COMPOSE_ACTIONS else 'compose_other'
+        if action in COMPOSE_ACTIONS:
+            category['services'] = sorted(set(argv[index+1:]) & SERVICES)
+    elif argv[:3] == ('docker','image','inspect'): category['operation'] = 'docker_image_inspect'
+    elif argv[:2] == ('docker','inspect'): category['operation'] = 'docker_container_inspect'
+    elif argv[:2] == ('docker','run'): category['operation'] = 'docker_reserve_check'
+    elif argv[:2] == ('docker','ps'): category['operation'] = 'docker_project_containers'
+    elif argv[:3] == ('docker','volume','ls'): category['operation'] = 'docker_project_volumes'
+    elif argv[:3] == ('docker','network','ls'): category['operation'] = 'docker_project_networks'
+    elif argv[:3] == ('git','rev-parse','HEAD'): category['operation'] = 'git_working_revision'
+    elif len(argv) == 2 and argv[0] == 'node' and Path(argv[1]).name == 'runner-pools-browser.mjs': category['operation'] = 'pool_browser'
+    return category
+
+
+def process_reason(stdout, stderr, timed_out=False):
+    if timed_out: return 'process_timeout'
+    if len(stdout) > PROCESS_LIMIT or len(stderr) > PROCESS_LIMIT: return 'process_output_bound'
+    text = stderr[:1 << 20].lower()
+    # Classifications are hints, never evidence that a specific service was healthy.
+    for code, fragments in (
+        ('compose_dependency_failed',(b'dependency failed to start',b'didn\'t complete successfully',b'did not complete successfully')),
+        ('compose_service_unhealthy',(b'is unhealthy',b'container is unhealthy')),
+        ('compose_network_namespace_missing',(b'cannot join network',b'network namespace',b'no such container')),
+        ('compose_no_command',(b'no command specified',b'no command has been specified')),
+        ('compose_missing_image',(b'no such image',b'image not found')),
+        ('compose_port_unavailable',(b'port is already allocated',b'address already in use')),
+        ('compose_invalid_config',(b'validating ',b'unsupported config option',b'invalid compose project')),
+        ('compose_mount_failure',(b'error while mounting',b'invalid mount config')),
+        ('daemon_unavailable',(b'cannot connect to the docker daemon',b'error during connect')),
+        ('compose_service_start_failed',(b'failed to create task',b'failed to start container',b'oci runtime create failed')),
+    ):
+        if any(fragment in text for fragment in fragments): return code
+    return 'unclassified_subprocess_failure'
+
+
+def safe_callsites(frames):
+    # Unknown/helper paths can themselves carry private material: include only this file.
+    return [{'file':'runner-pools-smoke.py','line':f.lineno} for f in frames if Path(f.filename).name == 'runner-pools-smoke.py'][-8:]
+
+
+def process_observation(argv, return_code, stdout=b'', stderr=b'', timed_out=False):
+    return {**operation_category(tuple(argv)), 'returnCode':return_code,
+            'stdoutBytes':len(stdout or b''), 'stderrBytes':len(stderr or b''),
+            'reason':process_reason(stdout or b'',stderr or b'',timed_out),
+            'callSites':safe_callsites(traceback.extract_stack()[:-1])}
+
+
+def safe_service_states(raw):
+    assert len(raw) <= 1 << 20
+    text = raw.decode()
+    try: rows = json.loads(text)
+    except json.JSONDecodeError: rows = [json.loads(line) for line in text.splitlines() if line]
+    if isinstance(rows,dict): rows = [rows]
+    assert isinstance(rows,list) and len(rows) <= 32
+    observed = []
+    for row in rows:
+        assert isinstance(row,dict)
+        service = row.get('Service')
+        if service not in SERVICES: continue
+        state = row.get('State')
+        health = row.get('Health','')
+        exit_code = row.get('ExitCode')
+        value = {'service':service,'state':state if state in {'created','restarting','running','removing','paused','exited','dead'} else 'unreported'}
+        value['health'] = health if health in {'','healthy','unhealthy','starting'} else 'unreported'
+        if isinstance(exit_code,int) and not isinstance(exit_code,bool) and 0 <= exit_code <= 255: value['exitCode'] = exit_code
+        observed.append(value)
+    return sorted(observed,key=lambda row:row['service'])
+
+
+def original_failure_metadata(error, procedure):
+    frames = traceback.extract_tb(error.__traceback__)
+    observation = {'type':type(error).__name__,'stage':STAGE,'line':frames[-1].lineno,'callSites':safe_callsites(frames)}
+    if isinstance(error,PrivateSubprocessFailure): observation['subprocess'] = error.observation
+    # Caller already restricted these fields to fixed RPC names/statuses/no-store.
+    if procedure is not None: observation['lastProcedure'] = dict(procedure)
+    return observation
+
+
 def positive(value):
     return isinstance(value,str) and bool(re.fullmatch(r'[1-9][0-9]{0,18}',value)) and int(value)<=9223372036854775807
 
@@ -160,9 +260,42 @@ def self_check():
     try:safe_manifest({'value':'private'},['private'])
     except AssertionError:pass
     else:raise AssertionError('Private metadata accepted')
+    private = 'owned-private-password-and-token'
+    argv = ('docker','compose','-p',private,'--env-file','/'+private,'-f','/'+private,'up','-d','--no-build','--pull','never','runner','runner-second')
+    observed = process_observation(argv,1,private.encode(),('dependency failed to start: '+private).encode())
+    assert observed['operation']=='compose_up' and observed['services']==['runner','runner-second']
+    assert observed['returnCode']==1 and observed['stdoutBytes']==len(private) and observed['reason']=='compose_dependency_failed'
+    safe_manifest(observed,[private])
+    assert process_reason(b'',('unrecognized '+private).encode())=='unclassified_subprocess_failure'
+    assert process_reason(b'',b'no command specified')=='compose_no_command'
+    assert process_reason(b'',b'no such image')=='compose_missing_image'
+    assert process_reason(b'',b'OCI runtime create failed')=='compose_service_start_failed'
+    assert process_reason(b'',b'',True)=='process_timeout'
+    assert process_reason(b'x'*(PROCESS_LIMIT+1),b'')=='process_output_bound'
+    assert operation_category(('docker','compose','-p',private,'exec','-T','golf','golf','local-account','create',private))=={'operation':'compose_exec','services':['golf']}
+    assert operation_category(('node','/'+private+'/runner-pools-browser.mjs'))=={'operation':'pool_browser'}
+    assert operation_category(('unknown',private))=={'operation':'other'}
+    states=safe_service_states(json.dumps([
+        {'Service':'runner','State':'exited','Health':'','ExitCode':2,'Name':private,'Command':private,'Labels':{private:private}},
+        {'Service':'runner-second','State':private,'Health':private,'ExitCode':True},
+        {'Service':private,'State':'running','ExitCode':0},
+    ]).encode())
+    assert states==[{'service':'runner','state':'exited','health':'','exitCode':2},{'service':'runner-second','state':'unreported','health':'unreported'}]
+    safe_manifest(states,[private])
+    assert safe_service_states(b'{"Service":"runner","State":"running"}\n{"Service":"golf","State":"running"}\n')[0]['service']=='golf'
+    calls=safe_callsites([traceback.FrameSummary('/'+private+'/runner-pools-smoke.py',123,'private'),traceback.FrameSummary('/'+private+'/unknown.py',456,'private')])
+    assert calls==[{'file':'runner-pools-smoke.py','line':123}];safe_manifest(calls,[private])
+    procedure={'procedure':'WorkflowRunService/DispatchWorkflow','status':200,'noStore':True}
+    try: raise PrivateSubprocessFailure(observed)
+    except PrivateSubprocessFailure as error:
+        original=original_failure_metadata(error,procedure)
+    # Later teardown observations must not alias or overwrite the saved original RPC.
+    procedure['procedure']='SessionService/Logout'
+    assert original['lastProcedure']['procedure']=='WorkflowRunService/DispatchWorkflow' and original['subprocess']==observed
+    assert procedure['procedure']!=original['lastProcedure']['procedure'];safe_manifest(original,[private])
     proto=(ROOT/'api/golf/v1/golf.proto').read_text();assert 'service RunnerPoolService' in proto and 'RUNNER_POOL_STATE_DRAINING = 2;' in proto and 'WorkflowRunnerPlacement runner_placement = 31;' in proto
     text=Path(__file__).read_text();assert 'runner-second' in text and 'io.golf.runner.attempt' in text and '--pull=never' in text and b'sleep 16' in SLOW_SOURCE
-    print('PASS: pure pool/placement receipt and privacy guards; actual Docker/native/browser qualification unrun.')
+    print('PASS: pure pool/placement receipts and private subprocess diagnostic guards; actual Docker/native/browser qualification unrun.')
 
 
 def main():
@@ -181,8 +314,16 @@ def main():
     helpers=importlib.util.module_from_spec(spec); spec.loader.exec_module(helpers)
     environment={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k!='DATABASE_URL'}
     def run(*argv,payload=None,timeout=180):
-        result=subprocess.run(argv,cwd=stack,env=environment,input=None if payload is None else json.dumps(payload).encode(),capture_output=True,timeout=timeout)
-        assert result.returncode==0 and len(result.stdout)<=8<<20 and len(result.stderr)<=8<<20, 'Private subprocess failed; diagnostics withheld'
+        try:
+            result=subprocess.run(argv,cwd=stack,env=environment,input=None if payload is None else json.dumps(payload).encode(),capture_output=True,timeout=timeout)
+        except subprocess.TimeoutExpired as error:
+            raise PrivateSubprocessFailure(process_observation(argv,None,error.stdout,error.stderr,True)) from None
+        except OSError as error:
+            observation=process_observation(argv,None);observation['reason']='process_launch_failed'
+            if isinstance(error.errno,int): observation['errno']=error.errno
+            raise PrivateSubprocessFailure(observation) from None
+        if result.returncode!=0 or len(result.stdout)>PROCESS_LIMIT or len(result.stderr)>PROCESS_LIMIT:
+            raise PrivateSubprocessFailure(process_observation(argv,result.returncode,result.stdout,result.stderr))
         return result.stdout.decode().strip()
     stage('exact cached images and fresh-stack reserve')
     core_row=json.loads(run('docker','image','inspect',args.image))[0]; core=core_row['Id']; worker=json.loads(run('docker','image','inspect',args.runner_image))[0]['Id']
@@ -248,7 +389,17 @@ def main():
     pull_policy: never
 ''')
         compose=['docker','compose','-p',project,'--env-file',str(env_file),'-f',str(stack/'compose.yaml'),'-f',str(stack/'compose.ci.yaml'),'-f',str(override)]
-        def command(*argv,**kw): return run(*compose,*argv,**kw)
+        def command(*argv,**kw):
+            try: return run(*compose,*argv,**kw)
+            except PrivateSubprocessFailure as error:
+                if argv and argv[0]=='up':
+                    # Diagnostic read is bounded and cannot replace the original failure.
+                    try:
+                        result=subprocess.run([*compose,'ps','-a','--format','json'],cwd=stack,env=environment,capture_output=True,timeout=10)
+                        if result.returncode==0: error.observation['serviceStates']=safe_service_states(result.stdout)
+                        else: error.observation['serviceStateInspection']='failed'
+                    except Exception: error.observation['serviceStateInspection']='unavailable'
+                raise
         def admin(*argv): return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*argv)
         def rpc(actor,procedure,payload=None,**kw):return checked_rpc(actor['session'],procedure,payload,**kw)
         def controls(actor):return inventory(rpc(actor,CONTROL+'GetInstanceRunners'),workers)
@@ -443,7 +594,7 @@ def main():
             smoke.provider(owner['token'],'DELETE',base+'/collaborators/'+actors['reader']['name'],expected=204);rpc(actors['reader'],SERVICE+'GetRepositoryRunnerPlacement',{k:v for k,v in placement_intent.items() if k in ('repository','repositoryId','ownerId','expectedRevision')},expected=404)
             assert runtime()==baseline;record(runtimeAfter=runtime());passed=True
         except Exception as error:
-            original_failure=error;frame=traceback.extract_tb(error.__traceback__)[-1];record(originalFailure={'type':type(error).__name__,'stage':STAGE,'line':frame.lineno})
+            original_failure=error;record(originalFailure=original_failure_metadata(error,PROOF.get('lastProcedure')))
         finally:
             # Stop the actual consumer first; check cleanup separately from cancellation.
             if started:
@@ -480,6 +631,8 @@ if __name__=='__main__':
     try:main()
     except Exception as error:
         frames=traceback.extract_tb(error.__traceback__);frame=next((f for f in reversed(frames) if f.filename==__file__),frames[-1])
-        try:record(status='failed',failureType=type(error).__name__,failedStage=PROOF.get('originalFailure',{}).get('stage',STAGE),failureLine=frame.lineno)
+        try:
+            if 'originalFailure' not in PROOF: record(originalFailure=original_failure_metadata(error,PROOF.get('lastProcedure')))
+            record(status='failed',failureType=type(error).__name__,failedStage=PROOF['originalFailure']['stage'],failureLine=PROOF['originalFailure']['line'])
         except Exception:pass
         print('Runner pool qualifier failed at '+STAGE+': '+type(error).__name__+'; line '+str(frame.lineno)+'; private diagnostics withheld',file=sys.stderr);raise SystemExit(1)
