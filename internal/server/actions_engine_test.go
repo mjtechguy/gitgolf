@@ -416,3 +416,31 @@ func TestActionsManualPlanBinding(t *testing.T) {
 		t.Fatal("legacy plan behavior changed", err)
 	}
 }
+
+// Use the independently built maintained planner so inspection cannot appear
+// supported through an unconditional fake planner response.
+func TestActionsManualInspectionPostgres(t *testing.T) {
+	f := engineRunFixture(t)
+	f.row.HTMLURL = "https://forge.invalid/alice/example"
+	f.workflow = []byte(typedDispatchWorkflow)
+	f.server.config.ActionsEngineCatalog = runner.ActionsInputsCatalog
+	response, err := f.server.InspectWorkflows(f.context(t), workflowRunRequest(f, &golfv1.InspectWorkflowsRequest{Repository: &golfv1.RepositoryKey{Owner: "alice", Name: "example"}, RepositoryId: fmt.Sprint(f.row.ID), Ref: f.commit}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema, err := parseWorkflowDispatchInputs(f.workflow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Msg.ExecutionCatalog != runner.ActionsInputsCatalog || len(response.Msg.Configurations) != 1 {
+		t.Fatal("manual inspection catalog/inventory lost")
+	}
+	c := response.Msg.Configurations[0]
+	if c.State != golfv1.WorkflowInspectionState_WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET || c.ManualInputsSchemaSha256 != schema.SHA256 || len(c.ManualInputs) != 4 || c.BlobId != sourceBlobHash(f.workflow, 40) {
+		t.Fatal("exact-source manual workflow refused by actual planner or metadata mismatched")
+	}
+	var count int
+	if err = f.server.db.QueryRow(`SELECT count(*) FROM golf_workflow_runs`).Scan(&count); err != nil || count != 0 {
+		t.Fatal("source inspection created work", err)
+	}
+}

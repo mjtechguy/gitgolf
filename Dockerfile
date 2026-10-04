@@ -32,6 +32,7 @@ COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 COPY gen/ ./gen/
 COPY engines/ ./engines/
+RUN apk add --no-cache python3 && python3 engines/act/verify_upstream_source.py
 RUN CGO_ENABLED=0 go build -trimpath -o /golf ./cmd/golf
 RUN cd engines/act && CGO_ENABLED=0 go build -trimpath -o /golf-actions-engine ./cmd/golf-actions-engine
 
@@ -40,6 +41,9 @@ RUN apk add --no-cache ca-certificates libstdc++ && addgroup -S golf && adduser 
 WORKDIR /app
 COPY --from=server /golf /usr/local/bin/golf
 COPY --from=server /golf-actions-engine /usr/local/bin/golf-actions-engine
+COPY --from=server /src/engines/act/third_party/act/LICENSE /usr/share/licenses/golf-actions-engine/act-MIT.txt
+COPY --from=server /src/engines/act/third_party/act/pkg/lookpath/LICENSE /usr/share/licenses/golf-actions-engine/lookpath-MIT.txt
+COPY --from=server /src/engines/act/third_party/act/pkg/container/DOCKER_LICENSE /usr/share/licenses/golf-actions-engine/docker-Apache-2.0.txt
 COPY --from=codex /codex /usr/local/bin/codex
 COPY --from=agents /claude /usr/local/bin/claude
 COPY --from=agents /opencode /usr/local/bin/opencode

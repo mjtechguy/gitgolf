@@ -3,7 +3,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 COPY cmd/golf-runner ./cmd/golf-runner
 COPY internal/runner ./internal/runner
+COPY internal/workflowinputs ./internal/workflowinputs
 COPY engines/ ./engines/
+RUN apk add --no-cache python3 && python3 engines/act/verify_upstream_source.py
 RUN CGO_ENABLED=0 go build -trimpath -o /golf-runner ./cmd/golf-runner
 RUN cd engines/act && CGO_ENABLED=0 go build -trimpath -o /golf-actions-engine ./cmd/golf-actions-engine
 
@@ -11,5 +13,8 @@ FROM alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9
 RUN apk add --no-cache ca-certificates docker-cli=29.5.2-r0 && addgroup -g 1000 golf && adduser -D -u 1000 -G golf golf
 COPY --from=build /golf-runner /usr/local/bin/golf-runner
 COPY --from=build /golf-actions-engine /usr/local/bin/golf-actions-engine
+COPY --from=build /src/engines/act/third_party/act/LICENSE /usr/share/licenses/golf-actions-engine/act-MIT.txt
+COPY --from=build /src/engines/act/third_party/act/pkg/lookpath/LICENSE /usr/share/licenses/golf-actions-engine/lookpath-MIT.txt
+COPY --from=build /src/engines/act/third_party/act/pkg/container/DOCKER_LICENSE /usr/share/licenses/golf-actions-engine/docker-Apache-2.0.txt
 USER 1000:1000
 ENTRYPOINT ["/usr/local/bin/golf-runner"]

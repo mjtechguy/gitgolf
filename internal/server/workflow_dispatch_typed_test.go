@@ -26,7 +26,7 @@ func insertTypedWorkflowInputFixtureRun(t *testing.T, tx *sql.Tx, source string,
 	t.Helper()
 	i := row.Identity
 	plan := map[string]any{"Format": 1, "Actions": map[string]any{"catalog": workflowTypedEngineCatalog, "archiveSha256": i.SourceSHA256, "manualInputsContract": workflowManualInputsContract, "manualInputsSchemaSha256": i.SchemaSHA256, "jobs": []any{map[string]any{"instanceId": strings.Repeat("1", 32), "jobId": "input_fixture", "name": "Input fixture", "image": "fixture@sha256:" + strings.Repeat("b", 64), "matrix": []any{}, "needs": []any{}, "steps": []any{map[string]string{"id": "input", "name": "Input"}}}}}}
-	patch, _ := json.Marshal(map[string]any{"id": i.RunID, "idempotency_key": i.IdempotencyKey, "input_contract": workflowManualInputsContract, "input_schema_sha256": i.SchemaSHA256, "submitted_inputs_sha256": i.SubmittedSHA256, "effective_inputs_sha256": i.EffectiveSHA256, "plan": plan, "event_ref": i.CommitID})
+	patch, _ := json.Marshal(map[string]any{"id": i.RunID, "idempotency_key": i.IdempotencyKey, "input_contract": workflowManualInputsContract, "input_schema_sha256": i.SchemaSHA256, "submitted_inputs_sha256": i.SubmittedSHA256, "effective_inputs_sha256": i.EffectiveSHA256, "plan": plan})
 	if _, err := tx.ExecContext(t.Context(), `INSERT INTO golf_workflow_runs SELECT (jsonb_populate_record(NULL::golf_workflow_runs,to_jsonb(r)||$2::jsonb)).* FROM golf_workflow_runs r WHERE id=$1`, source, string(patch)); err != nil {
 		t.Fatal("typed run fixture insert", err)
 	}

@@ -60,7 +60,7 @@ func (s *Server) executionImage(plan *workflowExecutionPlan) (string, error) {
 		return "", errRunnerUnavailable
 	}
 	if plan.Actions != nil {
-		if !s.actionsEngineConfigured() || plan.Actions.Catalog != runner.ActionsCatalog || len(plan.Actions.Jobs) == 0 {
+		if !s.actionsEngineConfigured() || !runner.IsActionsCatalog(plan.Actions.Catalog) || plan.Actions.Catalog == runner.ActionsInputsCatalog && s.config.ActionsEngineCatalog != runner.ActionsInputsCatalog || len(plan.Actions.Jobs) == 0 {
 			return "", errRunnerUnavailable
 		}
 		for _, job := range plan.Actions.Jobs {
@@ -231,8 +231,8 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 	if !runnerDecode(w, r, &input, 512) {
 		return
 	}
-	secureBroker, resourceConsumer := false, false
-	if len(input.Capabilities) > 2 {
+	secureBroker, resourceConsumer, manualConsumer := false, false, false
+	if len(input.Capabilities) > 3 {
 		runnerFail(w, 400)
 		return
 	}
@@ -248,6 +248,8 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 			resourceConsumer = true
 		case runner.ExecutionValuesCapability:
 			secureBroker = r.TLS != nil && r.TLS.Version >= tls.VersionTLS13
+		case runner.ManualInputsCapability:
+			manualConsumer = r.TLS != nil && r.TLS.Version >= tls.VersionTLS13
 		default:
 			runnerFail(w, 400)
 			return
@@ -259,16 +261,18 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	catalogs := []string{workflowExecutionCatalog}
-	if len(input.Catalogs) > 2 {
+	if len(input.Catalogs) > 3 {
 		runnerFail(w, 400)
 		return
 	}
+	seenCatalogs := map[string]bool{}
 	for _, catalog := range input.Catalogs {
-		if catalog != workflowExecutionCatalog && catalog != runner.ActionsCatalog {
+		if seenCatalogs[catalog] || catalog != workflowExecutionCatalog && !runner.IsActionsCatalog(catalog) {
 			runnerFail(w, 400)
 			return
 		}
-		if catalog == runner.ActionsCatalog && s.actionsEngineConfigured() {
+		seenCatalogs[catalog] = true
+		if catalog == runner.ActionsCatalog && s.actionsEngineConfigured() || catalog == runner.ActionsInputsCatalog && s.actionsEngineConfigured() && s.config.ActionsEngineCatalog == runner.ActionsInputsCatalog && manualConsumer {
 			catalogs = append(catalogs, catalog)
 		}
 	}
@@ -305,6 +309,26 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 			runnerFail(w, 503)
 		}
 		return
+	}
+	var manualSchema *workflowDispatchInputSchema
+	if run.InputContract != "" {
+		if !manualConsumer || run.EngineCatalog != runner.ActionsInputsCatalog {
+			runnerFail(w, 403)
+			return
+		}
+		// Slow object reads happen before transaction locks. The source binding
+		// and typed run identity are immutable; current authority is fenced below.
+		source, e := s.workflowSourceObject(ctx, run)
+		if e != nil {
+			runnerFail(w, 503)
+			return
+		}
+		schema, e := workflowDispatchStoredSourceSchema(run, source)
+		if e != nil {
+			runnerFail(w, 503)
+			return
+		}
+		manualSchema = &schema
 	}
 	approval, err := storedExecutionRunBinding(ctx, s.db, run)
 	if err == nil {
@@ -412,6 +436,34 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		runnerFail(w, 503)
 		return
 	}
+	var manualInputs *runner.ActionManualInputs
+	var eventJSON []byte
+	if plan.Actions != nil {
+		if run.InputContract != "" {
+			var nativeActor int64
+			if err = tx.QueryRowContext(ctx, `SELECT forge_user_id FROM golf_users WHERE id=$1 AND forge_url=$2`, run.UserID, run.ForgeURL).Scan(&nativeActor); err != nil || manualSchema == nil {
+				runnerFail(w, 503)
+				return
+			}
+			values, e := s.loadWorkflowDispatchTypedValues(ctx, tx, run, nativeActor)
+			if e != nil {
+				runnerFail(w, 503)
+				return
+			}
+			validated, e := validateWorkflowDispatchInputs(*manualSchema, values.Submitted)
+			if e != nil || validated.SubmittedSHA256 != run.SubmittedSHA256 || validated.EffectiveSHA256 != run.EffectiveSHA256 {
+				runnerFail(w, 503)
+				return
+			}
+			manualInputs = &runner.ActionManualInputs{Contract: run.InputContract, SchemaSHA256: run.SchemaSHA256, SubmittedSHA256: run.SubmittedSHA256, EffectiveSHA256: run.EffectiveSHA256, Submitted: values.Submitted, Effective: values.Effective}
+		}
+		var e error
+		eventJSON, e = workflowActionEventJSON(run, *plan.Actions, manualInputs)
+		if e != nil {
+			runnerFail(w, 503)
+			return
+		}
+	}
 	if err = tx.Commit(); err != nil {
 		runnerFail(w, 503)
 		return
@@ -435,11 +487,24 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		runnerFail(w, 403)
 		return
 	}
+	if manualInputs != nil {
+		if err = s.runnerManualInputReleaseFence(ctx, run, id, attempt, hash[:]); err != nil {
+			if isRunnerAuthorityDenied(err) || errors.Is(err, errUnauthenticated) || errors.Is(err, errResourceNotFound) || errors.Is(err, errExecutionPolicyConflict) || errors.Is(err, errRunnerResourcesStale) || errors.Is(err, errRunnerPoolStale) || errors.Is(err, errWorkflowRunConflict) {
+				s.cancelRunnerAttempt(ctx, run.ID, "Manual parameter release authority changed.")
+				runnerFail(w, 403)
+			} else {
+				runnerFail(w, 503)
+			}
+			return
+		}
+	}
 	if plan.Actions != nil {
-		eventJSON, _ := json.Marshal(map[string]any{"ref": plan.Actions.Ref, "after": run.CommitID, "repository": map[string]any{"id": run.RepositoryID, "name": run.RepositoryName, "full_name": run.RepositoryOwner + "/" + run.RepositoryName, "owner": map[string]any{"id": run.OwnerID, "login": run.RepositoryOwner}}})
-		assignment := map[string]any{"runId": run.ID, "attemptId": attempt, "attemptToken": token, "imageDigest": plan.ImageDigest, "commitId": run.CommitID, "sourceSha256": run.SourceSHA256, "timeoutSeconds": run.Resources.TimeoutSeconds, "jobResources": resourceBinding(run), "leaseSeconds": runnerLeaseSeconds, "engineCatalog": runner.ActionsCatalog, "actionsPlan": plan.Actions, "eventJson": eventJSON}
+		assignment := map[string]any{"runId": run.ID, "attemptId": attempt, "attemptToken": token, "imageDigest": plan.ImageDigest, "commitId": run.CommitID, "sourceSha256": run.SourceSHA256, "timeoutSeconds": run.Resources.TimeoutSeconds, "jobResources": resourceBinding(run), "leaseSeconds": runnerLeaseSeconds, "engineCatalog": plan.Actions.Catalog, "actionsPlan": plan.Actions, "eventJson": eventJSON}
 		if environment != nil {
 			assignment["executionEnvironment"] = environment
+		}
+		if manualInputs != nil {
+			assignment["manualInputs"] = manualInputs
 		}
 		w.Header().Set("Cache-Control", "no-store")
 		respond(w, 200, assignment)
@@ -483,6 +548,10 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	run, err := scanWorkflowRun(s.db.QueryRowContext(ctx, `SELECT `+workflowRunColumns+` FROM golf_workflow_runs WHERE forge_url=$1 AND runner_id=$2 AND attempt_id=$3 AND lease_token_hash=$4 AND state='running' AND lease_expires_at>clock_timestamp()`, s.config.GiteaURL, id, attempt, hash[:]))
 	if err != nil {
+		runnerFail(w, 403)
+		return
+	}
+	if run.InputContract != "" && (run.EngineCatalog != runner.ActionsInputsCatalog || r.TLS == nil || r.TLS.Version < tls.VersionTLS13) {
 		runnerFail(w, 403)
 		return
 	}
@@ -677,7 +746,7 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 			_, err = tx.ExecContext(ctx, `UPDATE golf_workflow_runs SET log_sequence=$2,log_bytes=log_bytes+$3 WHERE id=$1`, run.ID, input.Sequence, len(input.Text))
 		}
 	case "graph":
-		if run.EngineCatalog != runner.ActionsCatalog {
+		if !runner.IsActionsCatalog(run.EngineCatalog) {
 			runnerFail(w, 400)
 			return
 		}
@@ -718,12 +787,12 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 			runnerFail(w, 503)
 			return
 		}
-		if finishCatalog == workflowExecutionCatalog && input.EngineConclusion != "" || finishCatalog == runner.ActionsCatalog && input.ExitCode != 0 {
+		if finishCatalog == workflowExecutionCatalog && input.EngineConclusion != "" || runner.IsActionsCatalog(finishCatalog) && input.ExitCode != 0 {
 			runnerFail(w, 400)
 			return
 		}
 		if !input.TimedOut && !input.Cancelled && !input.InfrastructureError && !input.LogsTruncated {
-			if finishCatalog == runner.ActionsCatalog {
+			if runner.IsActionsCatalog(finishCatalog) {
 				if input.ExitCode != 0 || (input.EngineConclusion != "success" && input.EngineConclusion != "failure") {
 					runnerFail(w, 400)
 					return
@@ -827,7 +896,7 @@ func (s *Server) runnerRecover(w http.ResponseWriter, r *http.Request) {
 }
 
 func workflowFinishExit(exit int32, catalog string) any {
-	if catalog == runner.ActionsCatalog {
+	if runner.IsActionsCatalog(catalog) {
 		return nil
 	}
 	return exit

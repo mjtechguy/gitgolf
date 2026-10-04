@@ -4,7 +4,7 @@
 services:
   golf:
     environment:
-      GOLF_ACTIONS_ENGINE_CATALOG: golf.workflow.act.v0.2.89.linux.v1
+      GOLF_ACTIONS_ENGINE_CATALOG: ${GOLF_ACTIONS_ENGINE_CATALOG:-golf.workflow.act.v0.2.89.linux.v1}
       GOLF_ACTIONS_ENGINE_BINARY: /usr/local/bin/golf-actions-engine
   runner-actions-image-init:
     image: docker:29.8.1-dind@sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0

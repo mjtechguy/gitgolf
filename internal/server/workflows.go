@@ -633,7 +633,7 @@ func (s *Server) InspectWorkflows(ctx context.Context, req *connect.Request[golf
 				var plan *runner.ActionPlan
 				var e error
 				if s.config.ActionsEngineCatalog == runner.ActionsInputsCatalog && manualSchema != nil {
-					plan, e = s.planActionsInput(ctx, runner.ActionPlanInput{Catalog: runner.ActionsInputsCatalog, WorkflowPath: candidate.Path, WorkflowBlobID: candidate.SHA, Archive: engineArchive, Event: "inspect", Images: s.runnerImages, ManualInputsContract: runner.ManualInputsCapability, ManualInputsSchemaSHA256: manualSchema.SHA256})
+					plan, e = s.planActionsInput(ctx, runner.ActionPlanInput{Catalog: runner.ActionsInputsCatalog, WorkflowPath: candidate.Path, WorkflowBlobID: candidate.SHA, Archive: engineArchive, Event: "inspect", Ref: result.CommitId, Images: s.runnerImages, ManualInputsContract: runner.ManualInputsCapability, ManualInputsSchemaSHA256: manualSchema.SHA256})
 				} else {
 					plan, e = s.planActions(ctx, candidate.Path, candidate.SHA, "inspect", "", engineArchive)
 				}
