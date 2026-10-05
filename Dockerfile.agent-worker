@@ -4,4 +4,5 @@ USER root
 RUN apk add --no-cache docker-cli=29.5.2-r0
 COPY deploy/docker/codex/seccomp.json /app/seccomp.json
 USER golf
-ENTRYPOINT ["golf", "agent-worker"]
+ENTRYPOINT ["golf"]
+CMD ["agent-worker"]

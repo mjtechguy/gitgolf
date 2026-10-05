@@ -7,6 +7,7 @@ services:
       GOLF_REVIEW_PUBLISHER_TOKEN: ${GOLF_REVIEW_PUBLISHER_TOKEN:-}
       GOLF_AGENT_IMAGE: ${GOLF_AGENT_IMAGE:?Run scripts/init-agent-env.py}
   agent-worker:
+    command: [agent-worker]
     build:
       context: .
       dockerfile: Dockerfile.agent-worker
