@@ -709,6 +709,9 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .discussion-layout { display:grid; grid-template-columns:minmax(0,1fr) 280px; align-items:start; gap:24px; }
 .discussion-main { display:flex; flex-direction:column; gap:16px; min-width:0; }
 .discussion-main>.browser-panel,.discussion-main>.pull-reviews { margin-top:0; }
+.pull-reviews > .empty-state,.issue-comments > .empty-state { display:grid; grid-template-columns:24px minmax(0,1fr); gap:4px 8px; padding:16px; text-align:left; align-items:start; }
+.pull-reviews > .empty-state > svg,.issue-comments > .empty-state > svg { grid-column:1; grid-row:1 / 3; }
+.pull-reviews > .empty-state > h3,.pull-reviews > .empty-state > p,.issue-comments > .empty-state > h3,.issue-comments > .empty-state > p { grid-column:2; margin:0; }
 .discussion-description .browser-panel-heading { font-size:.8125rem; background:var(--raised); }
 .discussion-description .issue-footer { padding:0 16px 16px; }
 .discussion-sidebar { min-width:0; font-size:.8125rem; }

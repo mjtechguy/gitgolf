@@ -1,4 +1,4 @@
-import { UpdatePullRequestRequestSchema, UpdatePullRequestResponseSchema, GetIssueMutationRequestSchema, GetIssueMutationResponseSchema, IssueMutationKind, IssueMutationState } from '../src/gen/golf/v1/golf_pb';
+import { GetStandardPullMergeOperationResponseSchema, StandardPullMergePhase, UpdatePullRequestRequestSchema, UpdatePullRequestResponseSchema, GetIssueMutationRequestSchema, GetIssueMutationResponseSchema, IssueMutationKind, IssueMutationState } from '../src/gen/golf/v1/golf_pb';
 import type { UpdatePullRequestRequest, IssueMutation } from '../src/gen/golf/v1/golf_pb';
 import {ListPullRequestCommitsRequestSchema,ListPullRequestCommitsResponseSchema,ListPullRequestChecksRequestSchema,ListPullRequestChecksResponseSchema,ReportedCheckState} from '../src/gen/golf/v1/golf_pb';
 import {GetPullRequestDiffRequestSchema,GetPullRequestDiffResponseSchema} from '../src/gen/golf/v1/golf_pb';
@@ -201,7 +201,7 @@ test('retained or deleted source metadata and merged records never imply a live 
   await page.goto('/repositories/alex/design-system?view=pulls&pull=13');
   await expect(page.locator('.pull-merge-record')).toContainText(merged);
   await expect(page.locator('.pull-detail .pull-state')).toHaveText('Merged');
-  await expect(page.getByText('protected integration remains unavailable.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('region',{name:'Pull request merge observation',exact:true})).toHaveCount(0);
 });
 
 test('review and detail denials remove cached private content throughout retry and parent access rechecks', async ({ page }) => {
@@ -524,8 +524,8 @@ for(const mode of ['unknown','wrongMutation','wrongObject','missingObject','drop
   if(mode==='dropUpdate'){await expect(page.getByRole('region',{name:'Edit description',exact:true})).toHaveCount(0);expect(await intentRows(page)).toEqual([]);}else{expect(await intentRows(page)).toHaveLength(1);await expect(page.getByRole('button',{name:'Save changes',exact:true})).toHaveCount(0);}
  });
 }
-test('PR merged/unverified lifecycle is disabled, editors are explicit, and both mobile themes keep focus and fit',async({page})=>{
- const state=await backend(page);await page.goto('/alex/design-system/pull/13');await expect(page.getByRole('button',{name:'Reopen pull request',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'Convert to draft',exact:true})).toBeDisabled();
+test('PR merged lifecycle controls are absent, unverified edits stay disabled, and mobile editors keep focus and fit',async({page})=>{
+ const state=await backend(page);await page.goto('/alex/design-system/pull/13');await expect(page.getByRole('button',{name:'Reopen pull request',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Convert to draft',exact:true})).toHaveCount(0);
  await page.goto('/alex/design-system/pull/12');state.pull.revision='';await page.getByRole('button',{name:'Refresh pull request',exact:true}).click();await expect(page.getByRole('button',{name:'Edit pull request title',exact:true})).toBeDisabled();
  state.pull.revision=pull.revision;await page.getByRole('button',{name:'Refresh pull request',exact:true}).click();await expect(page.getByRole('button',{name:'Edit pull request description',exact:true})).toBeEnabled();await page.setViewportSize({width:390,height:844});
  for(const theme of ['dark','light']){if(await page.locator('html').getAttribute('data-theme')!==theme)await page.getByRole('button',{name:`Switch to ${theme} theme`,exact:true}).click();await page.getByLabel('More pull request actions',{exact:true}).click();await page.getByRole('button',{name:'Edit pull request description',exact:true}).click();await expect(page.getByLabel('Description, Markdown',{exact:true})).toBeFocused();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/pr-edit-mobile-${theme}.png`,fullPage:true});await page.getByRole('button',{name:'Close editor',exact:true}).click();await expect(page.getByLabel('More pull request actions',{exact:true})).toBeFocused();}
@@ -559,4 +559,44 @@ test('mobile PR action disclosure dismisses without dispatch and private editors
  await summary.click();await page.getByRole('button',{name:'Edit pull request title',exact:true}).click();await page.getByLabel('Pull request title',{exact:true}).fill('PRIVATE_MOBILE_UNSENT');
  state.metadataStatus=404;await page.getByRole('button',{name:'Refresh repository access',exact:true}).click();await expect(page.getByRole('alert')).toHaveText('Repository not found or inaccessible.');
  await expect(menu).toHaveCount(0);await expect(page.getByLabel('Pull request title',{exact:true})).toHaveCount(0);expect(await page.locator('body').innerText()).not.toContain('PRIVATE_MOBILE_UNSENT');expect(state.updates).toHaveLength(0);
+});
+
+
+test('merged conversation keeps readable compact empty panels without advertising another merge',async({page})=>{
+ const state=await backend(page);
+ await page.route('**/rpc/golf.v1.RepositoryService/ListPullRequestReviews',route=>respond(route,ListPullRequestReviewsResponseSchema,{}));
+ await page.goto('/alex/design-system/pull/13');
+ await expect(page.locator('.pull-detail .pull-state')).toHaveText('Merged');
+ await expect(page.getByRole('region',{name:'Pull request merge observation',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('region',{name:'Standard native merge',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Edit pull request title',exact:true})).toBeEnabled();
+ for(const width of [390,1440])for(const theme of ['dark','light']){
+  await page.setViewportSize({width,height:900});await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);await page.evaluate(()=>document.fonts.ready);
+  if(width===390){await page.getByLabel('More pull request actions',{exact:true}).click();await expect(page.getByRole('button',{name:'Edit pull request description',exact:true})).toBeVisible();}
+  await expect(page.getByRole('button',{name:/^(Reopen|Close) pull request$/})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:/^(Convert to draft|Ready for review)$/})).toHaveCount(0);
+  if(width===390)await page.getByLabel('More pull request actions',{exact:true}).press('Escape');
+  for(const selector of ['.pull-reviews > .empty-state','.issue-comments > .empty-state']){
+   const empty=page.locator(selector);await expect(empty).toBeVisible();
+   const box=await empty.boundingBox();expect(box!.height).toBeLessThan(180);
+   expect(await empty.locator('h3').evaluate(element=>parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
+  }
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ }
+ expect(state.updates).toHaveLength(0);expect(state.methods).not.toContain('GetPullRequestMergeObservation');expect(state.methods).not.toContain('SubmitStandardPullMerge');
+});
+
+test('merged pull request retains explicit original-success inspection through current inventory refresh',async({page})=>{
+ const state=await backend(page),operationId='3a2d1ef1-3cb7-4da2-81f2-123456789abc';let reads=0;
+ const original={operationId,actorId:user.id,repository:{owner:'alex',name:'design-system'},repositoryId:repository.id,ownerId:user.id,pullRequestId:closed.id,number:closed.number,expectedPullRevision:pull.revision,headCommitId:head,baseCommitId:base,sourceRef:closed.head!.ref,targetRef:closed.base!.ref};
+ await page.addInitScript(original=>sessionStorage.setItem(`golf.standard-merge.v1:${location.origin}:${original.actorId}:${original.repositoryId}:${original.pullRequestId}`,JSON.stringify(original)),original);
+ await page.route('**/rpc/golf.v1.StandardPullMergeService/GetStandardPullMergeOperation',route=>{reads++;return respond(route,GetStandardPullMergeOperationResponseSchema,{operation:{...original,observedBaseCommitId:base,phase:StandardPullMergePhase.SUCCEEDED,mergeCommitId:merged,actualBaseCommitId:base,method:'merge',contract:'golf.pull.standard-native-merge.v1',createdAt:'2026-10-04T12:00:00Z',updatedAt:'2026-10-04T12:01:00Z'}});});
+ await page.goto('/alex/design-system/pull/13');
+ const history=page.getByRole('region',{name:'Standard native merge',exact:true});
+ await expect(history.getByRole('button',{name:'Inspect original merge',exact:true})).toBeEnabled();expect(reads).toBe(0);
+ await expect(page.getByRole('region',{name:'Pull request merge observation',exact:true})).toHaveCount(0);
+ await history.getByRole('button',{name:'Inspect original merge',exact:true}).click();
+ await expect(history.getByRole('status')).toContainText('Native merge confirmed.');
+ await page.getByRole('button',{name:'Refresh pull request',exact:true}).click();await expect(history.getByRole('status')).toContainText('Native merge confirmed.');
+ expect(reads).toBe(1);expect(state.updates).toHaveLength(0);expect(state.methods).not.toContain('SubmitStandardPullMerge');
 });
