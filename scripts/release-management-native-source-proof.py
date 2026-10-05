@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Qualify source release handlers against an owned native fixture; no Docker jobs."""
-import argparse,json,os,secrets,subprocess,sys,time
+import argparse,hashlib,json,os,secrets,subprocess,sys,time
 from pathlib import Path
 sys.dont_write_bytecode=True
 import smoke
@@ -10,6 +10,8 @@ def main():
  smoke.admin=lambda *items:smoke.command('docker','compose','exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*items,cwd=args.compose_root)
  name='golf-release-source-'+secrets.token_hex(4);created=False;token='';report={'passed':False,'ownedUserPurged':False,'productionHTTPHandlers':True,'newDockerJobs':0}
  try:
+  report['sourceRevision']=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+  report['sourceFilesSha256']={str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in map(Path,['internal/server/repository_release_operations.go','internal/server/repository_release_operations_test.go','internal/server/repository_releases.go','internal/server/rpc.go','api/golf/v1/golf.proto','scripts/release-management-native-source-proof.py'])}
   smoke.admin('create','--username',name,'--email',name+'@example.invalid','--random-password','--must-change-password=false');created=True
   token=smoke.admin('generate-access-token','--username',name,'--token-name',name,'--scopes','write:user,write:repository','--raw')
   user=smoke.provider(token,'GET','user');repo=smoke.provider(token,'POST','user/repos',{'name':'releases','private':True,'auto_init':True},201);base='repos/'+repo['full_name'];smoke.wait_for_push(token,repo['full_name'])
