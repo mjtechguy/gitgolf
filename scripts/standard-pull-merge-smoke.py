@@ -51,6 +51,7 @@ def status_request(intent):
 def validate_receipt(common,row,intent,actor,phase):
     s=intent['selection'];assert row['phase']==phase and phase in PHASES and intent.get('method','merge') in ('merge','squash')
     for key,value in {'operationId':intent['operationId'],'actorId':actor,'repository':s['repository'],'repositoryId':s['repositoryId'],'ownerId':intent['ownerId'],'pullRequestId':s['pullRequestId'],'number':s['number'],'expectedPullRevision':intent['expectedPullRevision'],'headCommitId':s['headCommitId'],'observedBaseCommitId':s['baseCommitId'],'sourceRef':intent['sourceRef'],'targetRef':intent['targetRef'],'method':intent.get('method','merge'),'contract':FORK_CONTRACT if intent.get('sourceRepository') else CONTRACT}.items():assert row[key]==value
+    assert intent['sourceRef']!=intent['targetRef'] or (intent.get('sourceRepository') and common.decimal(intent.get('sourceRepositoryId','')) and intent['sourceRepositoryId']!=s['repositoryId'])
     if intent.get('sourceRepository'):
         for key in ('sourceRepository','sourceRepositoryId','sourceOwnerId'):assert row[key]==intent[key]
     else:assert not row.get('sourceRepository') and not row.get('sourceRepositoryId') and not row.get('sourceOwnerId')
@@ -99,6 +100,12 @@ def self_check(stack):
     fork_intent={**intent,'sourceRepository':{'owner':'author','name':'fork'},'sourceRepositoryId':'5','sourceOwnerId':'6'}
     fork_row={**row,'contract':FORK_CONTRACT,**{key:fork_intent[key] for key in ('sourceRepository','sourceRepositoryId','sourceOwnerId')}}
     validate_receipt(common,fork_row,fork_intent,'4',row['phase'])
+    same_named_intent={**fork_intent,'sourceRef':'main','targetRef':'main'};same_named_row={**fork_row,'sourceRef':'main','targetRef':'main'}
+    validate_receipt(common,same_named_row,same_named_intent,'4',row['phase'])
+    for invalid in ({key:value for key,value in same_named_intent.items() if key not in ('sourceRepository','sourceRepositoryId','sourceOwnerId')},same_named_intent|{'sourceRepositoryId':'1'}):
+        try:validate_receipt(common,same_named_row,invalid,'4',row['phase'])
+        except AssertionError:pass
+        else:raise AssertionError('Unbound same-named source admitted')
     for key in ('sourceRepository','sourceRepositoryId','sourceOwnerId'):
         bad=copy.deepcopy(fork_row);bad.pop(key)
         try:validate_receipt(common,bad,fork_intent,'4',row['phase'])
@@ -237,7 +244,14 @@ def main():
             first_head=fork_content['commit']['sha'];fork_content=api(author,'PUT',fork_path+'/contents/fixture.txt',{'branch':fork_ref,'sha':fork_content['content']['sha'],'message':'Second owned fork squash source','content':base64.b64encode(b'owned fork squash second commit\n').decode()})
             assert fork_content['commit']['sha']!=first_head and [p['sha'] for p in api(author,'GET',fork_path+'/git/commits/'+fork_content['commit']['sha'])['parents']]==[first_head]
         for a in (owner,writer):api(author,'PUT',fork_path+'/collaborators/'+a['name'],{'permission':'read'},204)
-        fork_pull=pull(author['name']+':'+fork_ref,base_ref);fork_intent=intent(owner,path,target,fork_pull);fork_rejected=validate_receipt(common,rpc(owner,SUBMIT,fork_intent)['operation'],fork_intent,owner['id'],'STANDARD_PULL_MERGE_PHASE_REJECTED');assert reference(owner,path,base_ref)==B;manifest['forkRejected']=fork_rejected;persist()
+        fork_pull=pull(author['name']+':'+fork_ref,base_ref);fork_intent=intent(owner,path,target,fork_pull)
+        if args.same_branch_fork:
+            rpc(owner,SUBMIT,fork_intent,400,'invalid_argument')
+            assert api(owner,'GET',path+'/pulls/'+str(fork_pull['number']))['merged'] is False
+            manifest['unboundSameNamedForkRefusedBeforeJournal']=True
+        else:
+            fork_rejected=validate_receipt(common,rpc(owner,SUBMIT,fork_intent)['operation'],fork_intent,owner['id'],'STANDARD_PULL_MERGE_PHASE_REJECTED');manifest['forkRejected']=fork_rejected
+        assert reference(owner,path,base_ref)==B;persist()
         if args.fork:
             manifest['scope']='Standard native unprotected explicitly source-bound fork '+args.method+' only'
             manifest['limits']=[v.replace('No protected or fork publication','No protected publication') for v in manifest['limits']]
