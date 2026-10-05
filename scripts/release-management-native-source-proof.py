@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Qualify source release handlers against an owned native fixture; no Docker jobs."""
-import argparse,hashlib,json,os,secrets,subprocess,sys,time
+import argparse,hashlib,json,os,secrets,subprocess,sys
 from pathlib import Path
 sys.dont_write_bytecode=True
 import smoke
@@ -8,10 +8,8 @@ import smoke
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=Path,required=True);p.add_argument('--compose-root',type=Path,required=True);p.add_argument('--include-imports',action='store_true');args=p.parse_args();os.umask(0o077);args.output.mkdir(parents=True,exist_ok=False);smoke.ROOT=args.compose_root
  smoke.admin=lambda *items:smoke.command('docker','compose','exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*items,cwd=args.compose_root)
- name='golf-release-source-'+secrets.token_hex(4);created=False;token='';report={'passed':False,'ownedUserPurged':False,'productionHTTPHandlers':True,'newDockerJobs':0}
+ name='golf-release-source-'+secrets.token_hex(4);created=False;token='';report={'passed':False,'ownedUserPurged':False,'productionHTTPHandlers':True,'newDockerJobs':0,'sourceRevision':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'sourceFileSHA256':{path:hashlib.sha256(Path(path).read_bytes()).hexdigest() for path in ('api/golf/v1/golf.proto','internal/server/repository_release_operations.go','internal/server/repository_release_operations_test.go','internal/server/repository_public_import.go','internal/server/repository_creation.go','internal/server/repository_mirrors.go','internal/server/rpc.go','internal/server/database/migrations/202610050074_repository_release_operations.sql')}}
  try:
-  report['sourceRevision']=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-  report['sourceFilesSha256']={str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in map(Path,['internal/server/repository_release_operations.go','internal/server/repository_release_operations_test.go','internal/server/repository_releases.go','internal/server/rpc.go','api/golf/v1/golf.proto','scripts/release-management-native-source-proof.py'])}
   smoke.admin('create','--username',name,'--email',name+'@example.invalid','--random-password','--must-change-password=false');created=True
   token=smoke.admin('generate-access-token','--username',name,'--token-name',name,'--scopes','write:user,write:repository','--raw')
   user=smoke.provider(token,'GET','user');repo=smoke.provider(token,'POST','user/repos',{'name':'releases','private':True,'auto_init':True},201);base='repos/'+repo['full_name'];smoke.wait_for_push(token,repo['full_name'])
