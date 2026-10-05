@@ -1,10 +1,14 @@
 package server
 
 import (
+	"strings"
+	"testing"
+
 	"connectrpc.com/connect"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
+	"github.com/mjtechguy/golf-git/gen/golf/v1/golfv1connect"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-	"testing"
 )
 
 func TestRepositoryMilestoneInventoryPostgres(t *testing.T) {
@@ -40,5 +44,28 @@ func TestRepositoryMilestoneInventoryPostgres(t *testing.T) {
 	f.rows[0].OpenIssues = proto.Int64(-1)
 	if _, err := client.ListRepositoryMilestones(t.Context(), connect.NewRequest(req)); err == nil {
 		t.Fatal("invalid native count accepted")
+	}
+}
+
+func TestRepositoryMilestoneApiCredentialPostgres(t *testing.T) {
+	f := newMilestoneFixture(t)
+	_, session := f.client(t, "alice")
+	credential := issueApiCredential(t, apiManagementClient(t, &managementFixture{s: f.s, db: f.db}, session), "milestone read", 0)
+	req := &golfv1.ListRepositoryMilestonesRequest{Repository: &golfv1.RepositoryKey{Owner: "alice", Name: "example"}, RepositoryId: "10", State: golfv1.IssueState_ISSUE_STATE_ALL, Page: &golfv1.PageRequest{Page: 1, Limit: 100}}
+	raw, err := protojson.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := apiRequest(f.s, credential.Token, golfv1connect.RepositoryServiceListRepositoryMilestonesProcedure, string(raw))
+	var out golfv1.ListRepositoryMilestonesResponse
+	if response.Code != 200 || response.Header().Get("Cache-Control") != "no-store" || protojson.Unmarshal(response.Body.Bytes(), &out) != nil || len(out.Milestones) != 50 || out.CanEditMilestone {
+		t.Fatal("read-only API milestone boundary", response.Code)
+	}
+	if err := f.s.logoutSession(t.Context(), session.Value); err != nil {
+		t.Fatal(err)
+	}
+	response = apiRequest(f.s, credential.Token, golfv1connect.RepositoryServiceListRepositoryMilestonesProcedure, string(raw))
+	if response.Code != 401 || strings.Contains(response.Body.String(), "Milestone 1") {
+		t.Fatal("expired source exposed milestone inventory", response.Code)
 	}
 }

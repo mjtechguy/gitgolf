@@ -131,7 +131,8 @@ func (s *Server) ListRepositoryMilestones(ctx context.Context, req *connect.Requ
 		if allowed != after {
 			return errInvalidForgeResponse
 		}
-		result.CanEditMilestone = after
+		_, delegated := ctx.Value(apiAuthKey{}).(apiAuth)
+		result.CanEditMilestone = after && !delegated
 		return nil
 	})
 	if err != nil {

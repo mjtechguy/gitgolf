@@ -128,6 +128,7 @@ func TestApiCredentialBoundary(t *testing.T) {
 		golfv1connect.RepositoryServiceListIssuesProcedure:                   true,
 		golfv1connect.RepositoryServiceGetIssueProcedure:                     true,
 		golfv1connect.RepositoryServiceListPullRequestsProcedure:             true,
+		golfv1connect.RepositoryServiceListRepositoryLabelsProcedure:         true,
 		golfv1connect.RepositoryServiceListRepositoryMilestonesProcedure:     true,
 		golfv1connect.RepositoryServiceListIssueCommentsProcedure:            true,
 		golfv1connect.RepositoryServiceGetIssueMutationProcedure:             true,

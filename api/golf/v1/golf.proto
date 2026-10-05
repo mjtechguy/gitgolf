@@ -188,6 +188,7 @@ service RepositoryService {
   rpc ListIssues(ListIssuesRequest) returns (ListIssuesResponse);
   rpc GetPullRequestDiscussion(GetPullRequestDiscussionRequest) returns (GetPullRequestDiscussionResponse);
   rpc GetIssue(GetIssueRequest) returns (GetIssueResponse);
+  rpc ListRepositoryLabels(ListRepositoryLabelsRequest) returns (ListRepositoryLabelsResponse);
   rpc ListRepositoryMilestones(ListRepositoryMilestonesRequest) returns (ListRepositoryMilestonesResponse);
   rpc ListIssueComments(ListIssueCommentsRequest) returns (ListIssueCommentsResponse);
   rpc CreateIssue(CreateIssueRequest) returns (CreateIssueResponse);
@@ -729,6 +730,24 @@ message CreateIssueCommentResponse {
   IssueMutation mutation = 1;
   IssueComment comment = 2;
 }
+message ListRepositoryLabelsRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  PageRequest page = 3;
+}
+message ListRepositoryLabelsResponse {
+  repeated DiscussionLabel labels = 1;
+  PageResponse page = 2;
+  // Initial repository-only editor admits current native repository admins.
+  bool can_edit_labels = 3;
+}
+message IssueLabelsChange {
+  // Sorted, unique canonical positive decimal int64 IDs; maximum 256 per set.
+  repeated string expected_label_ids = 1;
+  // Explicit replacement; empty clears. Native numeric decoding additionally
+  // limits selected IDs to 9007199254740991 for lossless transport.
+  repeated string label_ids = 2;
+}
 message ListRepositoryMilestonesRequest {
   RepositoryKey repository = 1;
   string repository_id = 2;
@@ -761,6 +780,7 @@ message UpdateIssueRequest {
   // Unspecified means unchanged; only OPEN/CLOSED are accepted when changing state.
   IssueState state = 9;
   IssueMilestoneChange milestone = 10;
+  IssueLabelsChange labels = 11;
 }
 message UpdateIssueResponse {
   IssueMutation mutation = 1;
