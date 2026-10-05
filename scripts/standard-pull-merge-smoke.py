@@ -6,6 +6,7 @@ ordinary writer merge, optional browser confirmation and explicit core restart.
 Protected/fork integration, atomic base/checks and fault recovery remain open.
 """
 import argparse
+import ast
 import base64
 import copy
 import importlib.util
@@ -56,7 +57,14 @@ def validate_receipt(common,row,intent,actor,phase):
     return row
 
 
+def callable_bindings_safe(source):
+    names={'command','rpc','api','admin','operator'}
+    return not any(isinstance(n,ast.Name) and isinstance(n.ctx,ast.Store) and n.id in names for n in ast.walk(ast.parse(source)))
+
+
 def self_check(stack):
+    assert callable_bindings_safe(Path(__file__).read_text())
+    assert not callable_bindings_safe('def command(): pass\ncommand = {}\n')
     common=load_common(stack);prefix='golf-mergeobs-'+'a'*10
     assert allowed(common,'GET','repos/'+prefix+'-owner/private/git/commits/'+'a'*40,prefix)
     for method,path in [('POST','repos/'+prefix+'-owner/private/pulls/1/merge'),('GET','repos/foreign/private/git/commits/'+'a'*40),('PUT','repos/'+prefix+'-owner/private/git/refs/heads/main')]:assert not allowed(common,method,path,prefix)
