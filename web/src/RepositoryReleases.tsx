@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Client } from '@connectrpc/connect';
-import { ArrowLeft, Package, RefreshCw, Tag } from 'lucide-react';
+import { ArrowLeft, Download, Package, RefreshCw, Tag } from 'lucide-react';
 import { RepositoryService, type RepositoryKey, type RepositoryRelease, type RepositoryReleaseAsset, type ListRepositoryReleasesResponse } from './gen/golf/v1/golf_pb';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { MarkdownBody } from './RepositoryContent';
@@ -16,6 +16,7 @@ const date = (value: string) => value.length <= 64 && /^\d{4}-\d\d-\d\dT\d\d:\d\
 const tag = sourceRef;
 const invalid = () => new Error('Release metadata could not be verified.');
 const formatted = (value: string) => new Intl.NumberFormat().format(BigInt(value));
+const downloadLimit = 10485760n;
 function validateRelease(value: RepositoryRelease) {
  if (!sourceRepositoryID(value.id) || !text(value.title, 1024, true) || !tag(value.tagName) || !text(value.targetCommitish, 4096, true) || bytes(value.bodyMarkdown) > 128 * 1024 || /[\p{Cc}\p{Cs}]/u.test(value.bodyMarkdown.replace(/[\t\n\r]/g, '')) || !date(value.createdAt) || !date(value.publishedAt) || !count(value.assetCount) || BigInt(value.assetCount) !== BigInt(value.assets.length) || value.assets.length > 100) throw invalid();
  if (value.author && (!sourceRepositoryID(value.author.id) || !text(value.author.login, 100) || !text(value.author.fullName, 255, true))) throw invalid();
@@ -69,11 +70,11 @@ function ReleaseReader(props: Props) {
   {accessorKey:'assetCount', header:'Assets', accessorFn:v=>BigInt(v.assetCount), sortFn:'basic', cell:({row})=>formatted(row.original.assetCount)},
  ], [base]);
  const assetColumns = useMemo<DataTableColumn<RepositoryReleaseAsset>[]>(() => [
-  {accessorKey:'name', header:'Asset'},
+  {accessorKey:'name', header:'Asset', cell:({row})=>releaseId && BigInt(row.original.sizeBytes)<=downloadLimit ? <a className="text-button" aria-label={`Download asset ${row.original.name}`} title={`Download asset ${row.original.name}`} href={`/api/repositories/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/${repositoryId}/releases/${releaseId}/assets/${row.original.id}/download`}><Download size={15} aria-hidden="true"/>{row.original.name}</a> : <div>{row.original.name}<small>Over the 10 MiB download limit</small></div>},
   {accessorKey:'sizeBytes', header:'Size', accessorFn:v=>BigInt(v.sizeBytes), sortFn:'basic', cell:({row})=>`${formatted(row.original.sizeBytes)} bytes`},
   {accessorKey:'downloadCount', header:'Native downloads', accessorFn:v=>BigInt(v.downloadCount), sortFn:'basic', cell:({row})=>formatted(row.original.downloadCount)},
   {accessorKey:'createdAt', header:'Created', cell:({row})=><DateLabel value={row.original.createdAt}/>},
- ], []);
+ ], [repository.owner,repository.name,repositoryId,releaseId]);
  const active = releaseId === undefined ? list : detail;
  const pages = list.data?.pages;
  const duplicate = pages && (new Set(pages.flatMap(p=>p.releases.map(r=>r.id))).size !== pages.flatMap(p=>p.releases).length || pages.some(p=>p.totalCount !== pages[0]!.totalCount) || BigInt(pages.flatMap(p=>p.releases).length) > BigInt(pages[0]!.totalCount) || (!pages.at(-1)?.page?.nextPage && BigInt(pages.flatMap(p=>p.releases).length) !== BigInt(pages[0]!.totalCount)));
@@ -83,7 +84,7 @@ function ReleaseReader(props: Props) {
  {!enabled ? <p className="field-help">Current repository authority is unavailable.</p> : active.error || duplicate ? <PanelError error={active.error || invalid()} retry={()=>void active.refetch()}/> : active.isFetching ? <Loading label="Loading releases…"/> : releaseId === undefined && result && pages ? <section className="browser-panel"><div className="browser-panel-heading"><h2>Release inventory</h2><span className="field-help">{formatted(pages[0]!.totalCount)} native releases · {pages.flatMap(p=>p.releases).length} loaded</span></div><DataTable label="Repository releases" data={pages.flatMap(p=>p.releases)} columns={columns} getRowId={v=>v.id} emptyMessage="No releases reported."/><More label="releases" hasMore={!!list.hasNextPage} loading={list.isFetchingNextPage} load={()=>void list.fetchNextPage()}/></section> : release ? <>
  <section className="browser-panel"><div className="browser-panel-heading"><h2>Release notes</h2></div>{release.bodyMarkdown ? <MarkdownBody text={release.bodyMarkdown} label="Release notes"/> : <p className="credential-form-content field-help">No release notes provided.</p>}</section>
  <details className="metadata-details"><summary>Native release metadata</summary><dl className="detail-grid"><div><dt>Release ID</dt><dd>{release.id}</dd></div><div><dt>Native target commitish</dt><dd>{release.targetCommitish || 'Not recorded'}</dd></div><div><dt>Native release timestamp</dt><dd><DateLabel value={release.publishedAt}/></dd></div></dl><p className="field-help">Target and timestamps are native metadata, not an exact source snapshot or proof of publication.</p></details>
- <section className="browser-panel"><div className="browser-panel-heading"><h2><Package size={17}/>Assets</h2><span className="field-help">Metadata only; downloads are unavailable.</span></div><DataTable label="Release assets" data={release.assets} columns={assetColumns} getRowId={v=>v.id} emptyMessage="No assets reported."/></section>
+ <section className="browser-panel"><div className="browser-panel-heading"><h2><Package size={17}/>Assets</h2><span className="field-help">Downloads up to 10 MiB; current access is checked on download.</span></div><DataTable label="Release assets" data={release.assets} columns={assetColumns} getRowId={v=>v.id} emptyMessage="No assets reported."/></section>
  </> : null}
  </div>;
 }
