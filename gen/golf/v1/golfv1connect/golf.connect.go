@@ -193,6 +193,12 @@ const (
 	// RepositoryServiceGetRepositoryOverviewProcedure is the fully-qualified name of the
 	// RepositoryService's GetRepositoryOverview RPC.
 	RepositoryServiceGetRepositoryOverviewProcedure = "/golf.v1.RepositoryService/GetRepositoryOverview"
+	// RepositoryServiceListRepositoryReleasesProcedure is the fully-qualified name of the
+	// RepositoryService's ListRepositoryReleases RPC.
+	RepositoryServiceListRepositoryReleasesProcedure = "/golf.v1.RepositoryService/ListRepositoryReleases"
+	// RepositoryServiceGetRepositoryReleaseProcedure is the fully-qualified name of the
+	// RepositoryService's GetRepositoryRelease RPC.
+	RepositoryServiceGetRepositoryReleaseProcedure = "/golf.v1.RepositoryService/GetRepositoryRelease"
 	// RepositoryServiceListBranchesProcedure is the fully-qualified name of the RepositoryService's
 	// ListBranches RPC.
 	RepositoryServiceListBranchesProcedure = "/golf.v1.RepositoryService/ListBranches"
@@ -1380,6 +1386,8 @@ type RepositoryServiceClient interface {
 	GetRepositoryCreation(context.Context, *connect.Request[v1.GetRepositoryCreationRequest]) (*connect.Response[v1.GetRepositoryCreationResponse], error)
 	GetRepository(context.Context, *connect.Request[v1.GetRepositoryRequest]) (*connect.Response[v1.GetRepositoryResponse], error)
 	GetRepositoryOverview(context.Context, *connect.Request[v1.GetRepositoryOverviewRequest]) (*connect.Response[v1.GetRepositoryOverviewResponse], error)
+	ListRepositoryReleases(context.Context, *connect.Request[v1.ListRepositoryReleasesRequest]) (*connect.Response[v1.ListRepositoryReleasesResponse], error)
+	GetRepositoryRelease(context.Context, *connect.Request[v1.GetRepositoryReleaseRequest]) (*connect.Response[v1.GetRepositoryReleaseResponse], error)
 	ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error)
 	ListTags(context.Context, *connect.Request[v1.ListTagsRequest]) (*connect.Response[v1.ListTagsResponse], error)
 	ListCommits(context.Context, *connect.Request[v1.ListCommitsRequest]) (*connect.Response[v1.ListCommitsResponse], error)
@@ -1453,6 +1461,18 @@ func NewRepositoryServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+RepositoryServiceGetRepositoryOverviewProcedure,
 			connect.WithSchema(repositoryServiceMethods.ByName("GetRepositoryOverview")),
+			connect.WithClientOptions(opts...),
+		),
+		listRepositoryReleases: connect.NewClient[v1.ListRepositoryReleasesRequest, v1.ListRepositoryReleasesResponse](
+			httpClient,
+			baseURL+RepositoryServiceListRepositoryReleasesProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("ListRepositoryReleases")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryRelease: connect.NewClient[v1.GetRepositoryReleaseRequest, v1.GetRepositoryReleaseResponse](
+			httpClient,
+			baseURL+RepositoryServiceGetRepositoryReleaseProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("GetRepositoryRelease")),
 			connect.WithClientOptions(opts...),
 		),
 		listBranches: connect.NewClient[v1.ListBranchesRequest, v1.ListBranchesResponse](
@@ -1657,6 +1677,8 @@ type repositoryServiceClient struct {
 	getRepositoryCreation              *connect.Client[v1.GetRepositoryCreationRequest, v1.GetRepositoryCreationResponse]
 	getRepository                      *connect.Client[v1.GetRepositoryRequest, v1.GetRepositoryResponse]
 	getRepositoryOverview              *connect.Client[v1.GetRepositoryOverviewRequest, v1.GetRepositoryOverviewResponse]
+	listRepositoryReleases             *connect.Client[v1.ListRepositoryReleasesRequest, v1.ListRepositoryReleasesResponse]
+	getRepositoryRelease               *connect.Client[v1.GetRepositoryReleaseRequest, v1.GetRepositoryReleaseResponse]
 	listBranches                       *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
 	listTags                           *connect.Client[v1.ListTagsRequest, v1.ListTagsResponse]
 	listCommits                        *connect.Client[v1.ListCommitsRequest, v1.ListCommitsResponse]
@@ -1714,6 +1736,16 @@ func (c *repositoryServiceClient) GetRepository(ctx context.Context, req *connec
 // GetRepositoryOverview calls golf.v1.RepositoryService.GetRepositoryOverview.
 func (c *repositoryServiceClient) GetRepositoryOverview(ctx context.Context, req *connect.Request[v1.GetRepositoryOverviewRequest]) (*connect.Response[v1.GetRepositoryOverviewResponse], error) {
 	return c.getRepositoryOverview.CallUnary(ctx, req)
+}
+
+// ListRepositoryReleases calls golf.v1.RepositoryService.ListRepositoryReleases.
+func (c *repositoryServiceClient) ListRepositoryReleases(ctx context.Context, req *connect.Request[v1.ListRepositoryReleasesRequest]) (*connect.Response[v1.ListRepositoryReleasesResponse], error) {
+	return c.listRepositoryReleases.CallUnary(ctx, req)
+}
+
+// GetRepositoryRelease calls golf.v1.RepositoryService.GetRepositoryRelease.
+func (c *repositoryServiceClient) GetRepositoryRelease(ctx context.Context, req *connect.Request[v1.GetRepositoryReleaseRequest]) (*connect.Response[v1.GetRepositoryReleaseResponse], error) {
+	return c.getRepositoryRelease.CallUnary(ctx, req)
 }
 
 // ListBranches calls golf.v1.RepositoryService.ListBranches.
@@ -1884,6 +1916,8 @@ type RepositoryServiceHandler interface {
 	GetRepositoryCreation(context.Context, *connect.Request[v1.GetRepositoryCreationRequest]) (*connect.Response[v1.GetRepositoryCreationResponse], error)
 	GetRepository(context.Context, *connect.Request[v1.GetRepositoryRequest]) (*connect.Response[v1.GetRepositoryResponse], error)
 	GetRepositoryOverview(context.Context, *connect.Request[v1.GetRepositoryOverviewRequest]) (*connect.Response[v1.GetRepositoryOverviewResponse], error)
+	ListRepositoryReleases(context.Context, *connect.Request[v1.ListRepositoryReleasesRequest]) (*connect.Response[v1.ListRepositoryReleasesResponse], error)
+	GetRepositoryRelease(context.Context, *connect.Request[v1.GetRepositoryReleaseRequest]) (*connect.Response[v1.GetRepositoryReleaseResponse], error)
 	ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error)
 	ListTags(context.Context, *connect.Request[v1.ListTagsRequest]) (*connect.Response[v1.ListTagsResponse], error)
 	ListCommits(context.Context, *connect.Request[v1.ListCommitsRequest]) (*connect.Response[v1.ListCommitsResponse], error)
@@ -1953,6 +1987,18 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 		RepositoryServiceGetRepositoryOverviewProcedure,
 		svc.GetRepositoryOverview,
 		connect.WithSchema(repositoryServiceMethods.ByName("GetRepositoryOverview")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryServiceListRepositoryReleasesHandler := connect.NewUnaryHandler(
+		RepositoryServiceListRepositoryReleasesProcedure,
+		svc.ListRepositoryReleases,
+		connect.WithSchema(repositoryServiceMethods.ByName("ListRepositoryReleases")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryServiceGetRepositoryReleaseHandler := connect.NewUnaryHandler(
+		RepositoryServiceGetRepositoryReleaseProcedure,
+		svc.GetRepositoryRelease,
+		connect.WithSchema(repositoryServiceMethods.ByName("GetRepositoryRelease")),
 		connect.WithHandlerOptions(opts...),
 	)
 	repositoryServiceListBranchesHandler := connect.NewUnaryHandler(
@@ -2159,6 +2205,10 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 			repositoryServiceGetRepositoryHandler.ServeHTTP(w, r)
 		case RepositoryServiceGetRepositoryOverviewProcedure:
 			repositoryServiceGetRepositoryOverviewHandler.ServeHTTP(w, r)
+		case RepositoryServiceListRepositoryReleasesProcedure:
+			repositoryServiceListRepositoryReleasesHandler.ServeHTTP(w, r)
+		case RepositoryServiceGetRepositoryReleaseProcedure:
+			repositoryServiceGetRepositoryReleaseHandler.ServeHTTP(w, r)
 		case RepositoryServiceListBranchesProcedure:
 			repositoryServiceListBranchesHandler.ServeHTTP(w, r)
 		case RepositoryServiceListTagsProcedure:
@@ -2250,6 +2300,14 @@ func (UnimplementedRepositoryServiceHandler) GetRepository(context.Context, *con
 
 func (UnimplementedRepositoryServiceHandler) GetRepositoryOverview(context.Context, *connect.Request[v1.GetRepositoryOverviewRequest]) (*connect.Response[v1.GetRepositoryOverviewResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.GetRepositoryOverview is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) ListRepositoryReleases(context.Context, *connect.Request[v1.ListRepositoryReleasesRequest]) (*connect.Response[v1.ListRepositoryReleasesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.ListRepositoryReleases is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) GetRepositoryRelease(context.Context, *connect.Request[v1.GetRepositoryReleaseRequest]) (*connect.Response[v1.GetRepositoryReleaseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.GetRepositoryRelease is not implemented"))
 }
 
 func (UnimplementedRepositoryServiceHandler) ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error) {
