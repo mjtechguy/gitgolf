@@ -262,6 +262,26 @@ type GolfCryptoEvent struct {
 	WorkflowDispatchInputsCount      int64
 }
 
+type GolfDeploymentEvent struct {
+	DeploymentID uuid.UUID
+	Version      int64
+	State        string
+	ActorID      sql.NullInt64
+	CreatedAt    time.Time
+}
+
+type GolfDeploymentReview struct {
+	Sequence      sql.NullInt64
+	DeploymentID  uuid.UUID
+	UserID        int64
+	OperationID   uuid.UUID
+	NativeActorID int64
+	SessionHash   []byte
+	Approved      bool
+	ExpiresAt     time.Time
+	CreatedAt     time.Time
+}
+
 type GolfEmailAttempt struct {
 	DeliveryID  uuid.UUID
 	Attempt     int32
@@ -814,6 +834,16 @@ type GolfOrganizationExecutionVersion struct {
 	CreatedAt            time.Time
 }
 
+type GolfPreviewCredential struct {
+	TokenHash         []byte
+	DeploymentID      uuid.UUID
+	UserID            int64
+	NativeActorID     int64
+	ParentSessionHash []byte
+	Kind              string
+	ExpiresAt         time.Time
+}
+
 type GolfPullReviewMutation struct {
 	ID                 int64
 	UserID             int64
@@ -948,6 +978,28 @@ type GolfRepositoryCreationEvent struct {
 	CreationID int64
 	OccurredAt time.Time
 	State      string
+}
+
+type GolfRepositoryDeployment struct {
+	ID                 uuid.UUID
+	ForgeURL           string
+	RepositoryID       int64
+	OwnerID            int64
+	UserID             int64
+	NativeActorID      int64
+	SessionHash        []byte
+	RunID              uuid.UUID
+	AttemptID          string
+	ArchiveSha256      string
+	EnvironmentID      uuid.UUID
+	EnvironmentVersion int64
+	InputHash          []byte
+	Receipt            []byte
+	State              string
+	Version            int64
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	ExpiresAt          sql.NullTime
 }
 
 type GolfRepositoryEnvironment struct {

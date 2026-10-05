@@ -118,6 +118,9 @@ const (
 	// RepositoryReleasePublicationServiceName is the fully-qualified name of the
 	// RepositoryReleasePublicationService service.
 	RepositoryReleasePublicationServiceName = "golf.v1.RepositoryReleasePublicationService"
+	// RepositoryDeploymentServiceName is the fully-qualified name of the RepositoryDeploymentService
+	// service.
+	RepositoryDeploymentServiceName = "golf.v1.RepositoryDeploymentService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -749,6 +752,27 @@ const (
 	// fully-qualified name of the RepositoryReleasePublicationService's
 	// GetRepositoryReleasePublicationOperation RPC.
 	RepositoryReleasePublicationServiceGetRepositoryReleasePublicationOperationProcedure = "/golf.v1.RepositoryReleasePublicationService/GetRepositoryReleasePublicationOperation"
+	// RepositoryDeploymentServicePrepareStaticDeploymentProcedure is the fully-qualified name of the
+	// RepositoryDeploymentService's PrepareStaticDeployment RPC.
+	RepositoryDeploymentServicePrepareStaticDeploymentProcedure = "/golf.v1.RepositoryDeploymentService/PrepareStaticDeployment"
+	// RepositoryDeploymentServiceCreateRepositoryDeploymentProcedure is the fully-qualified name of the
+	// RepositoryDeploymentService's CreateRepositoryDeployment RPC.
+	RepositoryDeploymentServiceCreateRepositoryDeploymentProcedure = "/golf.v1.RepositoryDeploymentService/CreateRepositoryDeployment"
+	// RepositoryDeploymentServiceGetRepositoryDeploymentProcedure is the fully-qualified name of the
+	// RepositoryDeploymentService's GetRepositoryDeployment RPC.
+	RepositoryDeploymentServiceGetRepositoryDeploymentProcedure = "/golf.v1.RepositoryDeploymentService/GetRepositoryDeployment"
+	// RepositoryDeploymentServiceListRepositoryDeploymentsProcedure is the fully-qualified name of the
+	// RepositoryDeploymentService's ListRepositoryDeployments RPC.
+	RepositoryDeploymentServiceListRepositoryDeploymentsProcedure = "/golf.v1.RepositoryDeploymentService/ListRepositoryDeployments"
+	// RepositoryDeploymentServiceReviewRepositoryDeploymentProcedure is the fully-qualified name of the
+	// RepositoryDeploymentService's ReviewRepositoryDeployment RPC.
+	RepositoryDeploymentServiceReviewRepositoryDeploymentProcedure = "/golf.v1.RepositoryDeploymentService/ReviewRepositoryDeployment"
+	// RepositoryDeploymentServiceActivateRepositoryDeploymentProcedure is the fully-qualified name of
+	// the RepositoryDeploymentService's ActivateRepositoryDeployment RPC.
+	RepositoryDeploymentServiceActivateRepositoryDeploymentProcedure = "/golf.v1.RepositoryDeploymentService/ActivateRepositoryDeployment"
+	// RepositoryDeploymentServiceRevokeRepositoryDeploymentProcedure is the fully-qualified name of the
+	// RepositoryDeploymentService's RevokeRepositoryDeployment RPC.
+	RepositoryDeploymentServiceRevokeRepositoryDeploymentProcedure = "/golf.v1.RepositoryDeploymentService/RevokeRepositoryDeployment"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -8021,4 +8045,233 @@ func (UnimplementedRepositoryReleasePublicationServiceHandler) SubmitRepositoryR
 
 func (UnimplementedRepositoryReleasePublicationServiceHandler) GetRepositoryReleasePublicationOperation(context.Context, *connect.Request[v1.GetRepositoryReleasePublicationOperationRequest]) (*connect.Response[v1.GetRepositoryReleasePublicationOperationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryReleasePublicationService.GetRepositoryReleasePublicationOperation is not implemented"))
+}
+
+// RepositoryDeploymentServiceClient is a client for the golf.v1.RepositoryDeploymentService
+// service.
+type RepositoryDeploymentServiceClient interface {
+	PrepareStaticDeployment(context.Context, *connect.Request[v1.PrepareStaticDeploymentRequest]) (*connect.Response[v1.PrepareStaticDeploymentResponse], error)
+	CreateRepositoryDeployment(context.Context, *connect.Request[v1.CreateRepositoryDeploymentRequest]) (*connect.Response[v1.CreateRepositoryDeploymentResponse], error)
+	GetRepositoryDeployment(context.Context, *connect.Request[v1.GetRepositoryDeploymentRequest]) (*connect.Response[v1.GetRepositoryDeploymentResponse], error)
+	ListRepositoryDeployments(context.Context, *connect.Request[v1.ListRepositoryDeploymentsRequest]) (*connect.Response[v1.ListRepositoryDeploymentsResponse], error)
+	ReviewRepositoryDeployment(context.Context, *connect.Request[v1.ReviewRepositoryDeploymentRequest]) (*connect.Response[v1.ReviewRepositoryDeploymentResponse], error)
+	ActivateRepositoryDeployment(context.Context, *connect.Request[v1.ActivateRepositoryDeploymentRequest]) (*connect.Response[v1.ActivateRepositoryDeploymentResponse], error)
+	RevokeRepositoryDeployment(context.Context, *connect.Request[v1.RevokeRepositoryDeploymentRequest]) (*connect.Response[v1.RevokeRepositoryDeploymentResponse], error)
+}
+
+// NewRepositoryDeploymentServiceClient constructs a client for the
+// golf.v1.RepositoryDeploymentService service. By default, it uses the Connect protocol with the
+// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
+// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRepositoryDeploymentServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepositoryDeploymentServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	repositoryDeploymentServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryDeploymentService").Methods()
+	return &repositoryDeploymentServiceClient{
+		prepareStaticDeployment: connect.NewClient[v1.PrepareStaticDeploymentRequest, v1.PrepareStaticDeploymentResponse](
+			httpClient,
+			baseURL+RepositoryDeploymentServicePrepareStaticDeploymentProcedure,
+			connect.WithSchema(repositoryDeploymentServiceMethods.ByName("PrepareStaticDeployment")),
+			connect.WithClientOptions(opts...),
+		),
+		createRepositoryDeployment: connect.NewClient[v1.CreateRepositoryDeploymentRequest, v1.CreateRepositoryDeploymentResponse](
+			httpClient,
+			baseURL+RepositoryDeploymentServiceCreateRepositoryDeploymentProcedure,
+			connect.WithSchema(repositoryDeploymentServiceMethods.ByName("CreateRepositoryDeployment")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryDeployment: connect.NewClient[v1.GetRepositoryDeploymentRequest, v1.GetRepositoryDeploymentResponse](
+			httpClient,
+			baseURL+RepositoryDeploymentServiceGetRepositoryDeploymentProcedure,
+			connect.WithSchema(repositoryDeploymentServiceMethods.ByName("GetRepositoryDeployment")),
+			connect.WithClientOptions(opts...),
+		),
+		listRepositoryDeployments: connect.NewClient[v1.ListRepositoryDeploymentsRequest, v1.ListRepositoryDeploymentsResponse](
+			httpClient,
+			baseURL+RepositoryDeploymentServiceListRepositoryDeploymentsProcedure,
+			connect.WithSchema(repositoryDeploymentServiceMethods.ByName("ListRepositoryDeployments")),
+			connect.WithClientOptions(opts...),
+		),
+		reviewRepositoryDeployment: connect.NewClient[v1.ReviewRepositoryDeploymentRequest, v1.ReviewRepositoryDeploymentResponse](
+			httpClient,
+			baseURL+RepositoryDeploymentServiceReviewRepositoryDeploymentProcedure,
+			connect.WithSchema(repositoryDeploymentServiceMethods.ByName("ReviewRepositoryDeployment")),
+			connect.WithClientOptions(opts...),
+		),
+		activateRepositoryDeployment: connect.NewClient[v1.ActivateRepositoryDeploymentRequest, v1.ActivateRepositoryDeploymentResponse](
+			httpClient,
+			baseURL+RepositoryDeploymentServiceActivateRepositoryDeploymentProcedure,
+			connect.WithSchema(repositoryDeploymentServiceMethods.ByName("ActivateRepositoryDeployment")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeRepositoryDeployment: connect.NewClient[v1.RevokeRepositoryDeploymentRequest, v1.RevokeRepositoryDeploymentResponse](
+			httpClient,
+			baseURL+RepositoryDeploymentServiceRevokeRepositoryDeploymentProcedure,
+			connect.WithSchema(repositoryDeploymentServiceMethods.ByName("RevokeRepositoryDeployment")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// repositoryDeploymentServiceClient implements RepositoryDeploymentServiceClient.
+type repositoryDeploymentServiceClient struct {
+	prepareStaticDeployment      *connect.Client[v1.PrepareStaticDeploymentRequest, v1.PrepareStaticDeploymentResponse]
+	createRepositoryDeployment   *connect.Client[v1.CreateRepositoryDeploymentRequest, v1.CreateRepositoryDeploymentResponse]
+	getRepositoryDeployment      *connect.Client[v1.GetRepositoryDeploymentRequest, v1.GetRepositoryDeploymentResponse]
+	listRepositoryDeployments    *connect.Client[v1.ListRepositoryDeploymentsRequest, v1.ListRepositoryDeploymentsResponse]
+	reviewRepositoryDeployment   *connect.Client[v1.ReviewRepositoryDeploymentRequest, v1.ReviewRepositoryDeploymentResponse]
+	activateRepositoryDeployment *connect.Client[v1.ActivateRepositoryDeploymentRequest, v1.ActivateRepositoryDeploymentResponse]
+	revokeRepositoryDeployment   *connect.Client[v1.RevokeRepositoryDeploymentRequest, v1.RevokeRepositoryDeploymentResponse]
+}
+
+// PrepareStaticDeployment calls golf.v1.RepositoryDeploymentService.PrepareStaticDeployment.
+func (c *repositoryDeploymentServiceClient) PrepareStaticDeployment(ctx context.Context, req *connect.Request[v1.PrepareStaticDeploymentRequest]) (*connect.Response[v1.PrepareStaticDeploymentResponse], error) {
+	return c.prepareStaticDeployment.CallUnary(ctx, req)
+}
+
+// CreateRepositoryDeployment calls golf.v1.RepositoryDeploymentService.CreateRepositoryDeployment.
+func (c *repositoryDeploymentServiceClient) CreateRepositoryDeployment(ctx context.Context, req *connect.Request[v1.CreateRepositoryDeploymentRequest]) (*connect.Response[v1.CreateRepositoryDeploymentResponse], error) {
+	return c.createRepositoryDeployment.CallUnary(ctx, req)
+}
+
+// GetRepositoryDeployment calls golf.v1.RepositoryDeploymentService.GetRepositoryDeployment.
+func (c *repositoryDeploymentServiceClient) GetRepositoryDeployment(ctx context.Context, req *connect.Request[v1.GetRepositoryDeploymentRequest]) (*connect.Response[v1.GetRepositoryDeploymentResponse], error) {
+	return c.getRepositoryDeployment.CallUnary(ctx, req)
+}
+
+// ListRepositoryDeployments calls golf.v1.RepositoryDeploymentService.ListRepositoryDeployments.
+func (c *repositoryDeploymentServiceClient) ListRepositoryDeployments(ctx context.Context, req *connect.Request[v1.ListRepositoryDeploymentsRequest]) (*connect.Response[v1.ListRepositoryDeploymentsResponse], error) {
+	return c.listRepositoryDeployments.CallUnary(ctx, req)
+}
+
+// ReviewRepositoryDeployment calls golf.v1.RepositoryDeploymentService.ReviewRepositoryDeployment.
+func (c *repositoryDeploymentServiceClient) ReviewRepositoryDeployment(ctx context.Context, req *connect.Request[v1.ReviewRepositoryDeploymentRequest]) (*connect.Response[v1.ReviewRepositoryDeploymentResponse], error) {
+	return c.reviewRepositoryDeployment.CallUnary(ctx, req)
+}
+
+// ActivateRepositoryDeployment calls
+// golf.v1.RepositoryDeploymentService.ActivateRepositoryDeployment.
+func (c *repositoryDeploymentServiceClient) ActivateRepositoryDeployment(ctx context.Context, req *connect.Request[v1.ActivateRepositoryDeploymentRequest]) (*connect.Response[v1.ActivateRepositoryDeploymentResponse], error) {
+	return c.activateRepositoryDeployment.CallUnary(ctx, req)
+}
+
+// RevokeRepositoryDeployment calls golf.v1.RepositoryDeploymentService.RevokeRepositoryDeployment.
+func (c *repositoryDeploymentServiceClient) RevokeRepositoryDeployment(ctx context.Context, req *connect.Request[v1.RevokeRepositoryDeploymentRequest]) (*connect.Response[v1.RevokeRepositoryDeploymentResponse], error) {
+	return c.revokeRepositoryDeployment.CallUnary(ctx, req)
+}
+
+// RepositoryDeploymentServiceHandler is an implementation of the
+// golf.v1.RepositoryDeploymentService service.
+type RepositoryDeploymentServiceHandler interface {
+	PrepareStaticDeployment(context.Context, *connect.Request[v1.PrepareStaticDeploymentRequest]) (*connect.Response[v1.PrepareStaticDeploymentResponse], error)
+	CreateRepositoryDeployment(context.Context, *connect.Request[v1.CreateRepositoryDeploymentRequest]) (*connect.Response[v1.CreateRepositoryDeploymentResponse], error)
+	GetRepositoryDeployment(context.Context, *connect.Request[v1.GetRepositoryDeploymentRequest]) (*connect.Response[v1.GetRepositoryDeploymentResponse], error)
+	ListRepositoryDeployments(context.Context, *connect.Request[v1.ListRepositoryDeploymentsRequest]) (*connect.Response[v1.ListRepositoryDeploymentsResponse], error)
+	ReviewRepositoryDeployment(context.Context, *connect.Request[v1.ReviewRepositoryDeploymentRequest]) (*connect.Response[v1.ReviewRepositoryDeploymentResponse], error)
+	ActivateRepositoryDeployment(context.Context, *connect.Request[v1.ActivateRepositoryDeploymentRequest]) (*connect.Response[v1.ActivateRepositoryDeploymentResponse], error)
+	RevokeRepositoryDeployment(context.Context, *connect.Request[v1.RevokeRepositoryDeploymentRequest]) (*connect.Response[v1.RevokeRepositoryDeploymentResponse], error)
+}
+
+// NewRepositoryDeploymentServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRepositoryDeploymentServiceHandler(svc RepositoryDeploymentServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	repositoryDeploymentServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryDeploymentService").Methods()
+	repositoryDeploymentServicePrepareStaticDeploymentHandler := connect.NewUnaryHandler(
+		RepositoryDeploymentServicePrepareStaticDeploymentProcedure,
+		svc.PrepareStaticDeployment,
+		connect.WithSchema(repositoryDeploymentServiceMethods.ByName("PrepareStaticDeployment")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryDeploymentServiceCreateRepositoryDeploymentHandler := connect.NewUnaryHandler(
+		RepositoryDeploymentServiceCreateRepositoryDeploymentProcedure,
+		svc.CreateRepositoryDeployment,
+		connect.WithSchema(repositoryDeploymentServiceMethods.ByName("CreateRepositoryDeployment")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryDeploymentServiceGetRepositoryDeploymentHandler := connect.NewUnaryHandler(
+		RepositoryDeploymentServiceGetRepositoryDeploymentProcedure,
+		svc.GetRepositoryDeployment,
+		connect.WithSchema(repositoryDeploymentServiceMethods.ByName("GetRepositoryDeployment")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryDeploymentServiceListRepositoryDeploymentsHandler := connect.NewUnaryHandler(
+		RepositoryDeploymentServiceListRepositoryDeploymentsProcedure,
+		svc.ListRepositoryDeployments,
+		connect.WithSchema(repositoryDeploymentServiceMethods.ByName("ListRepositoryDeployments")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryDeploymentServiceReviewRepositoryDeploymentHandler := connect.NewUnaryHandler(
+		RepositoryDeploymentServiceReviewRepositoryDeploymentProcedure,
+		svc.ReviewRepositoryDeployment,
+		connect.WithSchema(repositoryDeploymentServiceMethods.ByName("ReviewRepositoryDeployment")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryDeploymentServiceActivateRepositoryDeploymentHandler := connect.NewUnaryHandler(
+		RepositoryDeploymentServiceActivateRepositoryDeploymentProcedure,
+		svc.ActivateRepositoryDeployment,
+		connect.WithSchema(repositoryDeploymentServiceMethods.ByName("ActivateRepositoryDeployment")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryDeploymentServiceRevokeRepositoryDeploymentHandler := connect.NewUnaryHandler(
+		RepositoryDeploymentServiceRevokeRepositoryDeploymentProcedure,
+		svc.RevokeRepositoryDeployment,
+		connect.WithSchema(repositoryDeploymentServiceMethods.ByName("RevokeRepositoryDeployment")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RepositoryDeploymentService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RepositoryDeploymentServicePrepareStaticDeploymentProcedure:
+			repositoryDeploymentServicePrepareStaticDeploymentHandler.ServeHTTP(w, r)
+		case RepositoryDeploymentServiceCreateRepositoryDeploymentProcedure:
+			repositoryDeploymentServiceCreateRepositoryDeploymentHandler.ServeHTTP(w, r)
+		case RepositoryDeploymentServiceGetRepositoryDeploymentProcedure:
+			repositoryDeploymentServiceGetRepositoryDeploymentHandler.ServeHTTP(w, r)
+		case RepositoryDeploymentServiceListRepositoryDeploymentsProcedure:
+			repositoryDeploymentServiceListRepositoryDeploymentsHandler.ServeHTTP(w, r)
+		case RepositoryDeploymentServiceReviewRepositoryDeploymentProcedure:
+			repositoryDeploymentServiceReviewRepositoryDeploymentHandler.ServeHTTP(w, r)
+		case RepositoryDeploymentServiceActivateRepositoryDeploymentProcedure:
+			repositoryDeploymentServiceActivateRepositoryDeploymentHandler.ServeHTTP(w, r)
+		case RepositoryDeploymentServiceRevokeRepositoryDeploymentProcedure:
+			repositoryDeploymentServiceRevokeRepositoryDeploymentHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRepositoryDeploymentServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRepositoryDeploymentServiceHandler struct{}
+
+func (UnimplementedRepositoryDeploymentServiceHandler) PrepareStaticDeployment(context.Context, *connect.Request[v1.PrepareStaticDeploymentRequest]) (*connect.Response[v1.PrepareStaticDeploymentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryDeploymentService.PrepareStaticDeployment is not implemented"))
+}
+
+func (UnimplementedRepositoryDeploymentServiceHandler) CreateRepositoryDeployment(context.Context, *connect.Request[v1.CreateRepositoryDeploymentRequest]) (*connect.Response[v1.CreateRepositoryDeploymentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryDeploymentService.CreateRepositoryDeployment is not implemented"))
+}
+
+func (UnimplementedRepositoryDeploymentServiceHandler) GetRepositoryDeployment(context.Context, *connect.Request[v1.GetRepositoryDeploymentRequest]) (*connect.Response[v1.GetRepositoryDeploymentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryDeploymentService.GetRepositoryDeployment is not implemented"))
+}
+
+func (UnimplementedRepositoryDeploymentServiceHandler) ListRepositoryDeployments(context.Context, *connect.Request[v1.ListRepositoryDeploymentsRequest]) (*connect.Response[v1.ListRepositoryDeploymentsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryDeploymentService.ListRepositoryDeployments is not implemented"))
+}
+
+func (UnimplementedRepositoryDeploymentServiceHandler) ReviewRepositoryDeployment(context.Context, *connect.Request[v1.ReviewRepositoryDeploymentRequest]) (*connect.Response[v1.ReviewRepositoryDeploymentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryDeploymentService.ReviewRepositoryDeployment is not implemented"))
+}
+
+func (UnimplementedRepositoryDeploymentServiceHandler) ActivateRepositoryDeployment(context.Context, *connect.Request[v1.ActivateRepositoryDeploymentRequest]) (*connect.Response[v1.ActivateRepositoryDeploymentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryDeploymentService.ActivateRepositoryDeployment is not implemented"))
+}
+
+func (UnimplementedRepositoryDeploymentServiceHandler) RevokeRepositoryDeployment(context.Context, *connect.Request[v1.RevokeRepositoryDeploymentRequest]) (*connect.Response[v1.RevokeRepositoryDeploymentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryDeploymentService.RevokeRepositoryDeployment is not implemented"))
 }
