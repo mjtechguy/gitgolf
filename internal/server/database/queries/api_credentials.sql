@@ -11,8 +11,13 @@ VALUES ($1, $2, $3, $4);
 -- Include the configured forge in every lookup; neither metadata nor a cookie
 -- string supplied by the client can select another upstream installation.
 -- name: GetLiveApiCredential :one
-SELECT c.source_token_hash, c.source_session_id, c.user_id, u.forge_user_id
+SELECT c.source_token_hash, c.source_session_id, c.user_id, u.forge_user_id,
+  COALESCE(g.repository_id, 0)::bigint AS write_repository_id,
+  COALESCE(g.repository_owner, '')::text AS write_repository_owner,
+  COALESCE(g.repository_name, '')::text AS write_repository_name,
+  COALESCE(g.scopes, '')::text AS write_scopes
 FROM golf_api_credentials c
+LEFT JOIN golf_api_write_grants g ON g.credential_id = c.id
 JOIN golf_users u ON u.id = c.user_id
 JOIN golf_sessions s ON s.token_hash = c.source_token_hash
   AND s.session_id = c.source_session_id AND s.user_id = c.user_id
@@ -31,19 +36,29 @@ WHERE c.user_id = sqlc.arg(user_id) AND u.forge_url = sqlc.arg(forge_url)
 
 -- name: ListApiCredentials :many
 SELECT c.id, c.label, c.created_at, c.expires_at, c.revoked_at, c.source_session_id,
+  COALESCE(g.repository_id, 0)::bigint AS write_repository_id,
+  COALESCE(g.repository_owner, '')::text AS write_repository_owner,
+  COALESCE(g.repository_name, '')::text AS write_repository_name,
+  COALESCE(g.scopes, '')::text AS write_scopes,
   EXISTS (SELECT 1 FROM golf_sessions s WHERE s.token_hash = c.source_token_hash
     AND s.session_id = c.source_session_id AND s.user_id = c.user_id
     AND s.expires_at > clock_timestamp()) AS source_session_active
 FROM golf_api_credentials c JOIN golf_users u ON u.id = c.user_id
+LEFT JOIN golf_api_write_grants g ON g.credential_id = c.id
 WHERE c.user_id = sqlc.arg(user_id) AND u.forge_url = sqlc.arg(forge_url)
 ORDER BY c.id DESC LIMIT sqlc.arg(row_limit) OFFSET sqlc.arg(row_offset);
 
 -- name: GetOwnApiCredential :one
 SELECT c.*,
+  COALESCE(g.repository_id, 0)::bigint AS write_repository_id,
+  COALESCE(g.repository_owner, '')::text AS write_repository_owner,
+  COALESCE(g.repository_name, '')::text AS write_repository_name,
+  COALESCE(g.scopes, '')::text AS write_scopes,
   EXISTS (SELECT 1 FROM golf_sessions s WHERE s.token_hash = c.source_token_hash
     AND s.session_id = c.source_session_id AND s.user_id = c.user_id
     AND s.expires_at > clock_timestamp()) AS source_session_active
 FROM golf_api_credentials c JOIN golf_users u ON u.id = c.user_id
+LEFT JOIN golf_api_write_grants g ON g.credential_id = c.id
 WHERE c.id = sqlc.arg(id) AND c.user_id = sqlc.arg(user_id) AND u.forge_url = sqlc.arg(forge_url);
 
 -- name: RevokeApiCredential :execrows
@@ -51,3 +66,7 @@ UPDATE golf_api_credentials c SET revoked_at = clock_timestamp()
 FROM golf_users u
 WHERE c.user_id = u.id AND c.id = sqlc.arg(id) AND c.user_id = sqlc.arg(user_id)
   AND u.forge_url = sqlc.arg(forge_url) AND c.revoked_at IS NULL;
+
+-- name: CreateApiWriteGrant :exec
+INSERT INTO golf_api_write_grants (credential_id, repository_id, repository_owner, repository_name, scopes)
+VALUES ($1,$2,$3,$4,$5);

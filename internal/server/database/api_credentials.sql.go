@@ -94,9 +94,38 @@ func (q *Queries) CreateApiCredential(ctx context.Context, arg CreateApiCredenti
 	return i, err
 }
 
+const createApiWriteGrant = `-- name: CreateApiWriteGrant :exec
+INSERT INTO golf_api_write_grants (credential_id, repository_id, repository_owner, repository_name, scopes)
+VALUES ($1,$2,$3,$4,$5)
+`
+
+type CreateApiWriteGrantParams struct {
+	CredentialID    int64
+	RepositoryID    int64
+	RepositoryOwner string
+	RepositoryName  string
+	Scopes          string
+}
+
+func (q *Queries) CreateApiWriteGrant(ctx context.Context, arg CreateApiWriteGrantParams) error {
+	_, err := q.db.ExecContext(ctx, createApiWriteGrant,
+		arg.CredentialID,
+		arg.RepositoryID,
+		arg.RepositoryOwner,
+		arg.RepositoryName,
+		arg.Scopes,
+	)
+	return err
+}
+
 const getLiveApiCredential = `-- name: GetLiveApiCredential :one
-SELECT c.source_token_hash, c.source_session_id, c.user_id, u.forge_user_id
+SELECT c.source_token_hash, c.source_session_id, c.user_id, u.forge_user_id,
+  COALESCE(g.repository_id, 0)::bigint AS write_repository_id,
+  COALESCE(g.repository_owner, '')::text AS write_repository_owner,
+  COALESCE(g.repository_name, '')::text AS write_repository_name,
+  COALESCE(g.scopes, '')::text AS write_scopes
 FROM golf_api_credentials c
+LEFT JOIN golf_api_write_grants g ON g.credential_id = c.id
 JOIN golf_users u ON u.id = c.user_id
 JOIN golf_sessions s ON s.token_hash = c.source_token_hash
   AND s.session_id = c.source_session_id AND s.user_id = c.user_id
@@ -111,10 +140,14 @@ type GetLiveApiCredentialParams struct {
 }
 
 type GetLiveApiCredentialRow struct {
-	SourceTokenHash []byte
-	SourceSessionID int64
-	UserID          int64
-	ForgeUserID     int64
+	SourceTokenHash      []byte
+	SourceSessionID      int64
+	UserID               int64
+	ForgeUserID          int64
+	WriteRepositoryID    int64
+	WriteRepositoryOwner string
+	WriteRepositoryName  string
+	WriteScopes          string
 }
 
 // The hash+ID+owner binding prevents session-ID reuse from reviving authority.
@@ -128,16 +161,25 @@ func (q *Queries) GetLiveApiCredential(ctx context.Context, arg GetLiveApiCreden
 		&i.SourceSessionID,
 		&i.UserID,
 		&i.ForgeUserID,
+		&i.WriteRepositoryID,
+		&i.WriteRepositoryOwner,
+		&i.WriteRepositoryName,
+		&i.WriteScopes,
 	)
 	return i, err
 }
 
 const getOwnApiCredential = `-- name: GetOwnApiCredential :one
 SELECT c.id, c.user_id, c.token_hash, c.label, c.source_session_id, c.source_token_hash, c.created_at, c.expires_at, c.revoked_at,
+  COALESCE(g.repository_id, 0)::bigint AS write_repository_id,
+  COALESCE(g.repository_owner, '')::text AS write_repository_owner,
+  COALESCE(g.repository_name, '')::text AS write_repository_name,
+  COALESCE(g.scopes, '')::text AS write_scopes,
   EXISTS (SELECT 1 FROM golf_sessions s WHERE s.token_hash = c.source_token_hash
     AND s.session_id = c.source_session_id AND s.user_id = c.user_id
     AND s.expires_at > clock_timestamp()) AS source_session_active
 FROM golf_api_credentials c JOIN golf_users u ON u.id = c.user_id
+LEFT JOIN golf_api_write_grants g ON g.credential_id = c.id
 WHERE c.id = $1 AND c.user_id = $2 AND u.forge_url = $3
 `
 
@@ -148,16 +190,20 @@ type GetOwnApiCredentialParams struct {
 }
 
 type GetOwnApiCredentialRow struct {
-	ID                  int64
-	UserID              int64
-	TokenHash           []byte
-	Label               string
-	SourceSessionID     int64
-	SourceTokenHash     []byte
-	CreatedAt           time.Time
-	ExpiresAt           time.Time
-	RevokedAt           sql.NullTime
-	SourceSessionActive bool
+	ID                   int64
+	UserID               int64
+	TokenHash            []byte
+	Label                string
+	SourceSessionID      int64
+	SourceTokenHash      []byte
+	CreatedAt            time.Time
+	ExpiresAt            time.Time
+	RevokedAt            sql.NullTime
+	WriteRepositoryID    int64
+	WriteRepositoryOwner string
+	WriteRepositoryName  string
+	WriteScopes          string
+	SourceSessionActive  bool
 }
 
 func (q *Queries) GetOwnApiCredential(ctx context.Context, arg GetOwnApiCredentialParams) (GetOwnApiCredentialRow, error) {
@@ -173,6 +219,10 @@ func (q *Queries) GetOwnApiCredential(ctx context.Context, arg GetOwnApiCredenti
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.WriteRepositoryID,
+		&i.WriteRepositoryOwner,
+		&i.WriteRepositoryName,
+		&i.WriteScopes,
 		&i.SourceSessionActive,
 	)
 	return i, err
@@ -180,10 +230,15 @@ func (q *Queries) GetOwnApiCredential(ctx context.Context, arg GetOwnApiCredenti
 
 const listApiCredentials = `-- name: ListApiCredentials :many
 SELECT c.id, c.label, c.created_at, c.expires_at, c.revoked_at, c.source_session_id,
+  COALESCE(g.repository_id, 0)::bigint AS write_repository_id,
+  COALESCE(g.repository_owner, '')::text AS write_repository_owner,
+  COALESCE(g.repository_name, '')::text AS write_repository_name,
+  COALESCE(g.scopes, '')::text AS write_scopes,
   EXISTS (SELECT 1 FROM golf_sessions s WHERE s.token_hash = c.source_token_hash
     AND s.session_id = c.source_session_id AND s.user_id = c.user_id
     AND s.expires_at > clock_timestamp()) AS source_session_active
 FROM golf_api_credentials c JOIN golf_users u ON u.id = c.user_id
+LEFT JOIN golf_api_write_grants g ON g.credential_id = c.id
 WHERE c.user_id = $1 AND u.forge_url = $2
 ORDER BY c.id DESC LIMIT $4 OFFSET $3
 `
@@ -196,13 +251,17 @@ type ListApiCredentialsParams struct {
 }
 
 type ListApiCredentialsRow struct {
-	ID                  int64
-	Label               string
-	CreatedAt           time.Time
-	ExpiresAt           time.Time
-	RevokedAt           sql.NullTime
-	SourceSessionID     int64
-	SourceSessionActive bool
+	ID                   int64
+	Label                string
+	CreatedAt            time.Time
+	ExpiresAt            time.Time
+	RevokedAt            sql.NullTime
+	SourceSessionID      int64
+	WriteRepositoryID    int64
+	WriteRepositoryOwner string
+	WriteRepositoryName  string
+	WriteScopes          string
+	SourceSessionActive  bool
 }
 
 func (q *Queries) ListApiCredentials(ctx context.Context, arg ListApiCredentialsParams) ([]ListApiCredentialsRow, error) {
@@ -226,6 +285,10 @@ func (q *Queries) ListApiCredentials(ctx context.Context, arg ListApiCredentials
 			&i.ExpiresAt,
 			&i.RevokedAt,
 			&i.SourceSessionID,
+			&i.WriteRepositoryID,
+			&i.WriteRepositoryOwner,
+			&i.WriteRepositoryName,
+			&i.WriteScopes,
 			&i.SourceSessionActive,
 		); err != nil {
 			return nil, err

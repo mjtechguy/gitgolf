@@ -19,9 +19,9 @@ service SessionService {
   rpc Logout(LogoutRequest) returns (LogoutResponse);
 }
 
-// Owner-managed, read-only delegation of an existing browser session.
-// Cookie authentication is required for lifecycle operations. Bearer credentials
-// cannot issue, list or revoke credentials, or invoke mutating procedures.
+// Owner-managed delegation of an existing browser session. Existing credentials
+// remain read-only. Optional explicit write scopes bind one native repository.
+// Cookie authentication is required for credential lifecycle operations.
 service ApiCredentialService {
   rpc CreateApiCredential(CreateApiCredentialRequest) returns (CreateApiCredentialResponse);
   rpc ListApiCredentials(ListApiCredentialsRequest) returns (ListApiCredentialsResponse);
@@ -37,6 +37,9 @@ message ApiCredential {
   string revoked_at = 5;
   string source_session_id = 6;
   bool source_session_active = 7;
+  repeated string write_scopes = 8;
+  RepositoryKey write_repository = 9;
+  string write_repository_id = 10;
 }
 message CreateApiCredentialRequest {
   // Exact nonempty trimmed UTF-8, at most 64 bytes; no control characters.
@@ -44,6 +47,11 @@ message CreateApiCredentialRequest {
   // Zero defaults to 3600; otherwise 60..43200. Actual expiry is capped by
   // the authenticated source session's absolute expiry.
   uint32 lifetime_seconds = 2;
+  // Optional: issues:write and/or pulls:write. Never grants native permissions.
+  repeated string write_scopes = 3;
+  // Both key and observed native ID are required with any write scope.
+  RepositoryKey write_repository = 4;
+  string write_repository_id = 5;
 }
 message CreateApiCredentialResponse {
   ApiCredential credential = 1;

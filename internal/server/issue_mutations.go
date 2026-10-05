@@ -210,8 +210,12 @@ func (s *Server) recordIssueMutationReceipt(ctx context.Context, record database
 }
 
 func (s *Server) createIssueMutation(ctx context.Context, session string, token forgeCredential, key string, input issueMutationInput) (*golfv1.GetIssueMutationResponse, error) {
-	if _, delegated := ctx.Value(apiAuthKey{}).(apiAuth); delegated {
-		return nil, errApiCredentialReadOnly
+	scope := "issues:write"
+	if input.PullRequest || isPullMutationKind(input.Kind) {
+		scope = "pulls:write"
+	}
+	if err := s.requireApiWriteTarget(ctx, scope, repositoryKey{input.Owner, input.Repository}, input.RepositoryID); err != nil {
+		return nil, err
 	}
 	if err := input.validate(key); err != nil {
 		return nil, err

@@ -45,7 +45,7 @@ func TestCredentialSourcesFailBeforeInputOrNetwork(t *testing.T) {
 			t.Fatal("ambiguous/reserved credential input did not fail privately")
 		}
 	}
-	for _, token := range []string{"golf_ro_", fixtureAPIToken + "=", strings.Replace(fixtureAPIToken, "golf_ro_", "golf_rw_", 1), fixtureAPIToken[:50] + "R", " " + fixtureAPIToken, fixtureAPIToken + "\x1b", "golf_ro_" + strings.Repeat("a", 43)} {
+	for _, token := range []string{"golf_ro_", fixtureAPIToken + "=", fixtureAPIToken[:50] + "R", " " + fixtureAPIToken, fixtureAPIToken + "\x1b", "golf_ro_" + strings.Repeat("a", 43)} {
 		var output, diagnostic bytes.Buffer
 		code := Run(context.Background(), []string{"repo", "list"}, unreadInput{t}, &output, &diagnostic, func(key string) string {
 			if key == "GOLF_API_TOKEN" {

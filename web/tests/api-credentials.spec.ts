@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import {
   ApiCredentialSchema, CreateApiCredentialRequestSchema, CreateApiCredentialResponseSchema,
-  GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListApiCredentialsRequestSchema,
+  GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, GetRepositoryRequestSchema, GetRepositoryResponseSchema, ListApiCredentialsRequestSchema,
   ListApiCredentialsResponseSchema, ListCapabilitiesResponseSchema, ListRepositoriesResponseSchema,
   LoginWithPasswordResponseSchema, LogoutResponseSchema, RevokeApiCredentialRequestSchema,
   RevokeApiCredentialResponseSchema, UserSchema,
@@ -23,6 +23,7 @@ type Failure = 'permission_denied' | 'not_found' | 'unavailable' | 'unauthentica
 async function backend(page: Page) {
   const state = {
     signedIn: true, user, credentials: originals.map((credential) => ({ ...credential })), pages: [] as number[],
+    writeIssued: [] as { scopes: string[]; repository: string; id: string }[], repositoryLookups: [] as string[],
     issued: [] as { label: string; lifetimeSeconds: number }[], revoked: [] as string[],
     errors: {} as Record<string, Failure>, dropCreation: false, emptySecret: false,
     createBarrier: undefined as Promise<void> | undefined, listBarrier: undefined as Promise<void> | undefined,
@@ -50,10 +51,17 @@ async function backend(page: Page) {
       if (state.listBarrier) await state.listBarrier;
       return respond(route, ListApiCredentialsResponseSchema, { credentials: state.credentials.slice((number - 1) * 2, number * 2), page: { nextPage: state.credentials.length > number * 2 ? number + 1 : 0 }, currentSourceExpiresAt: sourceExpiry });
     }
+    if (method === 'GetRepository') {
+      const input = request(route, GetRepositoryRequestSchema);
+      const key = `${input.repository?.owner}/${input.repository?.name}`;
+      state.repositoryLookups.push(key);
+      return respond(route, GetRepositoryResponseSchema, { repository: { id: '9007199254740993', name: input.repository!.name, fullName: key } });
+    }
     if (method === 'CreateApiCredential') {
       const input = request(route, CreateApiCredentialRequestSchema);
       state.issued.push({ label: input.label, lifetimeSeconds: input.lifetimeSeconds });
-      const credential = create(ApiCredentialSchema, { ...originals[0]!, id: String(9007199254740996n + BigInt(state.issued.length - 1)), label: input.label, expiresAt: sourceExpiry });
+      if (input.writeScopes.length) state.writeIssued.push({ scopes: input.writeScopes, repository: `${input.writeRepository?.owner}/${input.writeRepository?.name}`, id: input.writeRepositoryId });
+      const credential = create(ApiCredentialSchema, { ...originals[0]!, id: String(9007199254740996n + BigInt(state.issued.length - 1)), label: input.label, expiresAt: sourceExpiry, writeScopes: input.writeScopes, writeRepository: input.writeRepository, writeRepositoryId: input.writeRepositoryId });
       state.credentials.unshift(credential);
       if (state.createBarrier) await state.createBarrier;
       if (state.dropCreation) return route.abort('failed');
@@ -374,4 +382,39 @@ test('credential page is usable in dark and light mobile layouts', async ({ page
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: 'test-results/api-credentials-mobile-light.png', fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+
+test('write scopes bind an observed repository without exposing identifier forms', async ({ page }) => {
+  const state = await backend(page);
+  await open(page); await edit(page);
+  await expect(page.getByLabel('Permissions', { exact: true })).toHaveValue('read');
+  await expect(page.getByLabel('Write repository', { exact: true })).toHaveCount(0);
+  await page.getByLabel('Permissions', { exact: true }).selectOption('both');
+  await page.getByLabel('Write repository', { exact: true }).fill('alex/example');
+  await page.getByLabel('Credential label', { exact: true }).fill('Review bot');
+  await page.getByRole('button', { name: 'Create API credential', exact: true }).click();
+  await expect(page.getByLabel('New API credential', { exact: true })).toHaveValue(token);
+  expect(state.repositoryLookups).toEqual(['alex/example']);
+  expect(state.writeIssued).toEqual([{ scopes: ['issues:write', 'pulls:write'], repository: 'alex/example', id: '9007199254740993' }]);
+  await expect(page.getByLabel('Native repository ID', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('table', { name: 'API credentials', exact: true })).toContainText('issues:write, pulls:write');
+  await noStoredSecret(page);
+});
+
+test('failed repository preflight issues no credential and permits correcting the target', async ({ page }) => {
+  const state = await backend(page); state.errors.GetRepository = 'not_found';
+  await open(page); await edit(page);
+  await page.getByLabel('Credential label', { exact: true }).fill('Issue bot');
+  await page.getByLabel('Permissions', { exact: true }).selectOption('issues:write');
+  await page.getByLabel('Write repository', { exact: true }).fill('alex/missing');
+  await page.getByRole('button', { name: 'Create API credential', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Credential access denied');
+  expect(state.issued).toHaveLength(0);
+  await expect(page.getByRole('button', { name: 'I reviewed the list; start a separate credential', exact: true })).toHaveCount(0);
+  delete state.errors.GetRepository;
+  await page.getByLabel('Write repository', { exact: true }).fill('alex/example');
+  await page.getByRole('button', { name: 'Create API credential', exact: true }).click();
+  await expect(page.getByLabel('New API credential', { exact: true })).toHaveValue(token);
+  expect(state.issued).toHaveLength(1);
 });

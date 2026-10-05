@@ -4,7 +4,7 @@ import { useForm } from '@tanstack/react-form';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Copy, KeyRound, LoaderCircle, Plus, RefreshCw, X } from 'lucide-react';
-import { apiCredentialClient, errorMessage } from './api';
+import { apiCredentialClient, repositoryClient, errorMessage } from './api';
 import type { ApiCredential, User } from './gen/golf/v1/golf_pb';
 import { Loading, More, privateQuery } from './RepositoryUI';
 import { DataTable, type DataTableColumn } from './DataTable';
@@ -53,6 +53,7 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
   const [notice, setNotice] = useState('');
   const alive = useRef(true);
   const submitting = useRef(false);
+  const issueDispatched = useRef(false);
   const revoking = useRef(false);
   const issueController = useRef<AbortController | null>(null);
   const revokeController = useRef<AbortController | null>(null);
@@ -73,9 +74,15 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
     gcTime: 0, retry: false,
     // Return no secret to the mutation cache. It lives only in this page's
     // component state and cannot be recovered after navigation or dismissal.
-    mutationFn: async (input: { label: string; lifetimeSeconds: number }) => {
+    mutationFn: async (input: { label: string; lifetimeSeconds: number; writeScopes: string[]; writeRepository?: { owner: string; name: string }; writeRepositoryId: string }) => {
       const controller = new AbortController();
       issueController.current = controller;
+      if (input.writeScopes.length && input.writeRepository) {
+        const observed = await repositoryClient.getRepository({ repository: input.writeRepository }, { signal: controller.signal, timeoutMs: 8_000 });
+        if (!observed.repository?.id || observed.repository.fullName !== `${input.writeRepository.owner}/${input.writeRepository.name}`) throw new ConnectError('Repository identity changed. Refresh before granting access.', Code.FailedPrecondition);
+        input = { ...input, writeRepositoryId: observed.repository.id };
+      }
+      issueDispatched.current = true;
       const response = await apiCredentialClient.createApiCredential(input, { signal: controller.signal, timeoutMs: 8_000 });
       if (!active() || controller.signal.aborted || client.getQueryState(queryKey)?.error) return;
       if (!response.credential?.id || !response.token) throw new ConnectError('Golf did not return a complete credential. Inspect the list before creating another.', Code.Internal);
@@ -85,13 +92,14 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
       setNotice('');
     },
     onSuccess: async () => { if (active()) await client.resetQueries({ queryKey, exact: true }); },
-    onError: () => {
+    onError: (error) => {
       if (!active()) return;
       setSecret(null);
+      if (!issueDispatched.current) { setValidation(errorMessage(error)); return; }
       setUncertain(true);
       setReviewed(false);
     },
-    onSettled: () => { submitting.current = false; issueController.current = null; },
+    onSettled: () => { submitting.current = false; issueDispatched.current = false; issueController.current = null; },
   });
   const revoke = useMutation({
     gcTime: 0, retry: false,
@@ -145,7 +153,7 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
 
   useEffect(() => { if (editing && !secret && !uncertain) labelInput.current?.focus(); }, [editing, secret, uncertain]);
   const form = useForm({
-    defaultValues: { label: '', lifetime: '3600' },
+    defaultValues: { label: '', lifetime: '3600', scope: 'read', repository: '' },
     onSubmit: ({ value }) => {
       if (submitting.current || secret || uncertain || listError || query.isFetching || signingOut) return;
       const trimmed = value.label.trim();
@@ -160,7 +168,10 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
       submitting.current = true;
       setValidation('');
       setNotice('');
-      issuance.mutate({ label: trimmed, lifetimeSeconds: seconds });
+      const writeScopes = value.scope === 'read' ? [] : value.scope === 'both' ? ['issues:write', 'pulls:write'] : [value.scope];
+      const parts = value.repository.split('/');
+      if (writeScopes.length && (parts.length !== 2 || parts.some(part => !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(part)))) { submitting.current = false; setValidation('Provide OWNER/REPO for write access.'); return; }
+      issuance.mutate({ label: trimmed, lifetimeSeconds: seconds, writeScopes, writeRepository: writeScopes.length ? { owner: parts[0]!, name: parts[1]! } : undefined, writeRepositoryId: '' });
     },
   });
   function cancelEditor() { returnToAction.current = true; form.reset(); setValidation(''); setEditing(false); }
@@ -189,6 +200,7 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
 
   const columns = useMemo<DataTableColumn<ApiCredential>[]>(() => [
     { id: 'credential', accessorFn: (credential) => `${credential.label} ${credential.id}`, header: 'Credential', cell: ({ row }) => <><strong>{row.original.label}</strong><small>Credential <code>{row.original.id}</code></small></> },
+    { id: 'scope', header: 'Permissions', accessorFn: (credential) => (credential.writeScopes ?? []).join(' ') || 'Read only', cell: ({ row }) => <><span>{row.original.writeScopes?.join(', ') || 'Read only'}</span>{row.original.writeRepository ? <small>{row.original.writeRepository.owner}/{row.original.writeRepository.name} · <code>{row.original.writeRepositoryId}</code></small> : null}</> },
     { id: 'status', accessorFn: credentialStatus, header: 'Status', cell: ({ row }) => <><span className="visibility">{credentialStatus(row.original)}</span>{row.original.revokedAt ? <small>Revoked <CredentialTime value={row.original.revokedAt} /></small> : null}</> },
     { accessorKey: 'expiresAt', header: 'Expires', cell: ({ row }) => <><CredentialTime value={row.original.expiresAt} /><small>Created <CredentialTime value={row.original.createdAt} /></small></> },
     { accessorKey: 'sourceSessionId', header: 'Source session', cell: ({ row }) => <><code>{row.original.sourceSessionId}</code><small>{row.original.sourceSessionActive ? 'Active at last check' : 'Ended'}</small></> },
@@ -196,10 +208,10 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
   ], [query.isFetching, revoke.isPending, issuance.isPending]);
 
   return <div className="api-credentials page-stack">
-    <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1><KeyRound size={29} />API credentials</h1><p>Short-lived, read-only access for your tools.</p></div><button ref={newButton} className="button primary" disabled={editing || Boolean(visibleSecret) || uncertain || Boolean(listError) || query.isFetching || signingOut} onClick={() => { setEditing(true); setNotice(''); }}><Plus size={16} />New API credential</button></header>
-    <p className="organization-guidance">These credentials can call Golf’s allowed read operations using your source session’s current repository access. They cannot create repositories, change your account or manage credentials. Signing out, revoking that source session or reaching its expiry also ends this access. They are not provider tokens or Git credentials.</p>
+    <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1><KeyRound size={29} />API credentials</h1><p>Short-lived, scoped access for your tools.</p></div><button ref={newButton} className="button primary" disabled={editing || Boolean(visibleSecret) || uncertain || Boolean(listError) || query.isFetching || signingOut} onClick={() => { setEditing(true); setNotice(''); }}><Plus size={16} />New API credential</button></header>
+    <p className="organization-guidance">These credentials can call Golf’s allowed read operations using your source session’s current repository access. Optional issue/PR write scopes bind one exact repository and retain your current native permissions. They cannot change source, merge, run jobs, create repositories, change your account or manage credentials. Signing out, revoking that source session or reaching its expiry also ends this access. They are not provider tokens or Git credentials.</p>
     {editing || visibleSecret || uncertain ? <section className="browser-panel credential-create-panel" aria-labelledby="credential-create-title">
-      <div className="browser-panel-heading"><h2 id="credential-create-title">Create a read-only credential</h2><span className="visibility">Read only</span></div>
+      <div className="browser-panel-heading"><h2 id="credential-create-title">Create an API credential</h2><span className="visibility">Explicit scopes</span></div>
       <div className="credential-form-content">
         {visibleSecret ? <section className="credential-secret" aria-labelledby="credential-secret-title">
           <h3 id="credential-secret-title">Save this credential now</h3><p>Golf shows the secret only once. Copy it into your tool’s private configuration. It disappears when dismissed, refreshed or when you leave this page.</p>
@@ -212,8 +224,10 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
           {issuance.error ? <p className="field-help">{errorMessage(issuance.error)}</p> : null}
           <div className="credential-actions"><button className="button secondary" disabled={query.isFetching} onClick={() => void refresh()}>Refresh credential list</button><button className="button secondary" disabled={!reviewed || Boolean(listError) || query.isFetching} onClick={() => { issuance.reset(); setUncertain(false); setReviewed(false); setValidation(''); }}>I reviewed the list; start a separate credential</button></div>
         </section> : <form onSubmit={(event) => { event.preventDefault(); void form.handleSubmit(); }}>
-          <form.Field name="label">{(field) => <><label htmlFor="credential-label">Credential label</label><input ref={labelInput} id="credential-label" required autoComplete="off" maxLength={64} value={field.state.value} disabled={issuance.isPending || signingOut} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} placeholder="Local read-only tool" aria-describedby="credential-label-help" />
+          <form.Field name="label">{(field) => <><label htmlFor="credential-label">Credential label</label><input ref={labelInput} id="credential-label" required autoComplete="off" maxLength={64} value={field.state.value} disabled={issuance.isPending || signingOut} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} placeholder="Local developer tool" aria-describedby="credential-label-help" />
           <p className="field-help" id="credential-label-help">A name you recognize, up to 64 UTF-8 bytes. Do not put a secret in the label.</p></>}</form.Field>
+          <form.Field name="scope">{field => <><label htmlFor="credential-scope">Permissions</label><select id="credential-scope" value={field.state.value} disabled={issuance.isPending || signingOut} onBlur={field.handleBlur} onChange={event => field.handleChange(event.target.value)}><option value="read">Read only</option><option value="issues:write">Read + issue writes</option><option value="pulls:write">Read + PR writes and reviews</option><option value="both">Read + issue and PR writes</option></select></>}</form.Field>
+          <form.Subscribe selector={state => state.values.scope}>{scope => scope !== 'read' ? <><form.Field name="repository">{field => <><label htmlFor="credential-repository">Write repository</label><input id="credential-repository" required placeholder="OWNER/REPO" value={field.state.value} disabled={issuance.isPending || signingOut} onBlur={field.handleBlur} onChange={event => field.handleChange(event.target.value)}/></>}</form.Field><p className="field-help">Golf verifies the repository and binds its exact identity. Native permissions are checked again for each write.</p></> : null}</form.Subscribe>
           <form.Field name="lifetime">{(field) => <><label htmlFor="credential-lifetime">Requested lifetime</label><select id="credential-lifetime" value={field.state.value} disabled={issuance.isPending || signingOut} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)}><option value="900">15 minutes</option><option value="3600">1 hour</option><option value="14400">4 hours</option><option value="43200">12 hours</option></select></>}</form.Field>
           <p className="field-help">The server caps expiry at this browser session’s remaining lifetime.{sourceExpiresAt ? <> This source session expires <CredentialTime value={sourceExpiresAt} />.</> : null}</p>
           {validation ? <p className="error" role="alert">{validation}</p> : null}

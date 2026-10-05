@@ -186,8 +186,12 @@ func (s *Server) CreatePullRequestReview(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, err
 	}
-	if _, delegated := ctx.Value(apiAuthKey{}).(apiAuth); delegated {
-		return nil, rpcError(errApiCredentialReadOnly)
+	grantID, grantErr := discussionID(req.Msg.RepositoryId)
+	if grantErr != nil {
+		return nil, rpcError(grantErr)
+	}
+	if err := s.requireApiWriteTarget(ctx, "pulls:write", keyFrom(req.Msg.Repository), grantID); err != nil {
+		return nil, rpcError(err)
 	}
 	m := req.Msg
 	key := keyFrom(m.Repository)

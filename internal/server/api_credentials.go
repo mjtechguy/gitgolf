@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -21,15 +22,19 @@ import (
 )
 
 const apiTokenPrefix = "golf_ro_"
+const apiWriteTokenPrefix = "golf_rw_"
 
 type apiAuthKey struct{}
-type apiAuth struct{ hash []byte }
+type apiAuth struct {
+	hash      []byte
+	procedure string
+}
 
 func apiTokenHash(value string) ([]byte, error) {
-	if len(value) != len(apiTokenPrefix)+43 || !strings.HasPrefix(value, apiTokenPrefix) {
+	if len(value) != len(apiTokenPrefix)+43 || (!strings.HasPrefix(value, apiTokenPrefix) && !strings.HasPrefix(value, apiWriteTokenPrefix)) {
 		return nil, errUnauthenticated
 	}
-	encoded := strings.TrimPrefix(value, apiTokenPrefix)
+	encoded := value[len(apiTokenPrefix):]
 	raw, err := base64.RawURLEncoding.DecodeString(encoded)
 	if err != nil || len(raw) != 32 || base64.RawURLEncoding.EncodeToString(raw) != encoded {
 		return nil, errUnauthenticated
@@ -94,6 +99,9 @@ func (s *Server) liveApiCredential(ctx context.Context, queries *database.Querie
 	}
 	if err != nil {
 		return row, errStorageUnavailable
+	}
+	if scope := apiWriteScope(auth.procedure); scope != "" && ((scope == "comment:write" && row.WriteScopes == "") || (scope != "comment:write" && !slices.Contains(apiScopes(row.WriteScopes), scope))) {
+		return row, errApiCredentialReadOnly
 	}
 	return row, nil
 }
@@ -192,7 +200,7 @@ func wireApiCredential(row database.ListApiCredentialsRow) *golfv1.ApiCredential
 		revoked = row.RevokedAt.Time.Format(time.RFC3339Nano)
 	}
 	return &golfv1.ApiCredential{Id: strconv.FormatInt(row.ID, 10), Label: row.Label, CreatedAt: row.CreatedAt.Format(time.RFC3339Nano),
-		ExpiresAt: row.ExpiresAt.Format(time.RFC3339Nano), RevokedAt: revoked, SourceSessionId: strconv.FormatInt(row.SourceSessionID, 10), SourceSessionActive: row.SourceSessionActive}
+		ExpiresAt: row.ExpiresAt.Format(time.RFC3339Nano), RevokedAt: revoked, SourceSessionId: strconv.FormatInt(row.SourceSessionID, 10), SourceSessionActive: row.SourceSessionActive, WriteScopes: apiScopes(row.WriteScopes), WriteRepository: apiWriteRepository(row.WriteRepositoryOwner, row.WriteRepositoryName), WriteRepositoryId: apiWriteRepositoryID(row.WriteRepositoryID)}
 }
 
 func (s *Server) CreateApiCredential(ctx context.Context, req *connect.Request[golfv1.CreateApiCredentialRequest]) (*connect.Response[golfv1.CreateApiCredentialResponse], error) {
@@ -213,11 +221,19 @@ func (s *Server) CreateApiCredential(ctx context.Context, req *connect.Request[g
 	if lifetime < 60 || lifetime > 43200 {
 		return nil, rpcError(invalid("Credential lifetime must be 60–43200 seconds."))
 	}
+	scopes, grantKey, grantID, err := s.validateApiWriteGrant(ctx, credential, req.Msg)
+	if err != nil {
+		return nil, rpcError(err)
+	}
 	var random [32]byte
 	if _, err := rand.Read(random[:]); err != nil {
 		return nil, rpcError(errStorageUnavailable)
 	}
-	token := apiTokenPrefix + base64.RawURLEncoding.EncodeToString(random[:])
+	prefix := apiTokenPrefix
+	if len(scopes) > 0 {
+		prefix = apiWriteTokenPrefix
+	}
+	token := prefix + base64.RawURLEncoding.EncodeToString(random[:])
 	tokenHash, _ := apiTokenHash(token)
 	var result *golfv1.ApiCredential
 	err = s.withManagedSession(ctx, s.cookieValue(req.Header()), credential, func(queries *database.Queries, caller database.LockManagedSessionRow, hash []byte) error {
@@ -236,10 +252,15 @@ func (s *Server) CreateApiCredential(ctx context.Context, req *connect.Request[g
 		if err != nil {
 			return errStorageUnavailable
 		}
+		if len(scopes) > 0 {
+			if err := queries.CreateApiWriteGrant(ctx, database.CreateApiWriteGrantParams{CredentialID: row.ID, RepositoryID: grantID, RepositoryOwner: grantKey.Owner, RepositoryName: grantKey.Name, Scopes: strings.Join(scopes, ",")}); err != nil {
+				return errStorageUnavailable
+			}
+		}
 		if err := appendApiCredentialEvent(ctx, queries, row.ID, caller.SessionID, "CREATED"); err != nil {
 			return err
 		}
-		result = wireApiCredential(database.ListApiCredentialsRow{ID: row.ID, Label: row.Label, CreatedAt: row.CreatedAt, ExpiresAt: row.ExpiresAt, SourceSessionID: row.SourceSessionID, SourceSessionActive: true})
+		result = wireApiCredential(database.ListApiCredentialsRow{ID: row.ID, Label: row.Label, CreatedAt: row.CreatedAt, ExpiresAt: row.ExpiresAt, SourceSessionID: row.SourceSessionID, SourceSessionActive: true, WriteScopes: strings.Join(scopes, ","), WriteRepositoryID: grantID, WriteRepositoryOwner: grantKey.Owner, WriteRepositoryName: grantKey.Name})
 		return nil
 	})
 	if err != nil {
@@ -314,7 +335,7 @@ func (s *Server) RevokeApiCredential(ctx context.Context, req *connect.Request[g
 		if err != nil {
 			return errStorageUnavailable
 		}
-		result = wireApiCredential(database.ListApiCredentialsRow{ID: row.ID, Label: row.Label, CreatedAt: row.CreatedAt, ExpiresAt: row.ExpiresAt, RevokedAt: row.RevokedAt, SourceSessionID: row.SourceSessionID, SourceSessionActive: row.SourceSessionActive})
+		result = wireApiCredential(database.ListApiCredentialsRow{ID: row.ID, Label: row.Label, CreatedAt: row.CreatedAt, ExpiresAt: row.ExpiresAt, RevokedAt: row.RevokedAt, SourceSessionID: row.SourceSessionID, SourceSessionActive: row.SourceSessionActive, WriteScopes: row.WriteScopes, WriteRepositoryID: row.WriteRepositoryID, WriteRepositoryOwner: row.WriteRepositoryOwner, WriteRepositoryName: row.WriteRepositoryName})
 		return nil
 	})
 	if err != nil {

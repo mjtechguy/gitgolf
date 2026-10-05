@@ -145,11 +145,11 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			return
 		}
 		if delegated {
-			if !apiReadProcedure(procedure) {
+			if !apiReadProcedure(procedure) && (apiWriteScope(procedure) == "" || !strings.HasPrefix(strings.Split(r.Header.Get("Authorization"), " ")[1], apiWriteTokenPrefix)) {
 				fail(rpcError(errApiCredentialReadOnly))
 				return
 			}
-			r = r.WithContext(context.WithValue(r.Context(), apiAuthKey{}, apiAuth{hash: apiHash}))
+			r = r.WithContext(context.WithValue(r.Context(), apiAuthKey{}, apiAuth{hash: apiHash, procedure: procedure}))
 		}
 		public := false
 		switch procedure {

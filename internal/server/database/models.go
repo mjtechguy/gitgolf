@@ -151,6 +151,14 @@ type GolfApiCredentialEvent struct {
 	OperationID    string
 }
 
+type GolfApiWriteGrant struct {
+	CredentialID    int64
+	RepositoryID    int64
+	RepositoryOwner string
+	RepositoryName  string
+	Scopes          string
+}
+
 type GolfAuditEvent struct {
 	ID              int64
 	UserID          int64
@@ -280,6 +288,37 @@ type GolfDeploymentReview struct {
 	Approved      bool
 	ExpiresAt     time.Time
 	CreatedAt     time.Time
+}
+
+type GolfDiscussionResourceEvent struct {
+	ID          int64
+	OperationID int64
+	Phase       string
+	OccurredAt  time.Time
+}
+
+type GolfDiscussionResourceOperation struct {
+	ID                 int64
+	UserID             int64
+	ForgeURL           string
+	ActorID            int64
+	OperationID        string
+	RepositoryID       int64
+	RepositoryOwner    string
+	RepositoryName     string
+	Kind               string
+	ResourceID         int64
+	ObservedResourceID int64
+	ExpectedRevision   string
+	CommentAuthorID    int64
+	IssueID            int64
+	IssueNumber        int64
+	PullRequest        bool
+	InputFingerprint   []byte
+	Phase              string
+	FailureCode        string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 type GolfEmailAttempt struct {
@@ -1078,6 +1117,41 @@ type GolfRepositoryEventPayload struct {
 	PushAdmissionRequested bool
 }
 
+type GolfRepositoryFileMutation struct {
+	ID               int64
+	UserID           int64
+	ForgeURL         string
+	ActorID          int64
+	OperationID      string
+	RepositoryID     int64
+	OwnerID          int64
+	RepositoryOwner  string
+	RepositoryName   string
+	AccessRevision   string
+	Kind             string
+	BranchName       string
+	ExpectedCommitID string
+	FilePath         string
+	ExpectedBlobID   string
+	ContentSha256    string
+	ContentSizeBytes int64
+	MessageSha256    string
+	ResultCommitID   string
+	ResultBlobID     string
+	InputFingerprint []byte
+	Phase            string
+	FailureCode      string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+type GolfRepositoryFileMutationEvent struct {
+	ID          int64
+	OperationID int64
+	Phase       string
+	OccurredAt  time.Time
+}
+
 type GolfRepositoryInvitation struct {
 	ID                   uuid.UUID
 	ForgeURL             string
@@ -1162,6 +1236,35 @@ type GolfRepositoryLifecycleOperation struct {
 	UpdatedAt           time.Time
 	Action              string
 	OwnerIsOrganization bool
+}
+
+type GolfRepositoryRefMutation struct {
+	ID               int64
+	UserID           int64
+	ForgeURL         string
+	ActorID          int64
+	OperationID      string
+	RepositoryID     int64
+	OwnerID          int64
+	RepositoryOwner  string
+	RepositoryName   string
+	AccessRevision   string
+	Kind             string
+	RefName          string
+	CommitID         string
+	TagObjectID      string
+	InputFingerprint []byte
+	Phase            string
+	FailureCode      string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+type GolfRepositoryRefMutationEvent struct {
+	ID          int64
+	OperationID int64
+	Phase       string
+	OccurredAt  time.Time
 }
 
 type GolfRepositoryReleasePublication struct {
@@ -1497,6 +1600,29 @@ type GolfUser struct {
 	Login       string
 	FullName    string
 	AvatarURL   string
+}
+
+type GolfUserAccess struct {
+	UserID    int64
+	Version   int64
+	Suspended bool
+	Reason    string
+	ChangedAt time.Time
+}
+
+type GolfUserAccessOperation struct {
+	OperationID             uuid.UUID
+	ActorUserID             int64
+	ActorSessionID          int64
+	UserID                  int64
+	NativeUserID            int64
+	InputHash               []byte
+	Version                 int64
+	Suspended               bool
+	Reason                  string
+	ChangedAt               time.Time
+	SessionsRevoked         int64
+	AutomationGrantsRevoked int64
 }
 
 type GolfWebhookAttempt struct {

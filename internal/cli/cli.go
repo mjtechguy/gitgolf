@@ -1,4 +1,4 @@
-// Package cli implements the read-only Golf client using generated Connect contracts.
+// Package cli implements Golf clients using generated Connect contracts.
 package cli
 
 import (
@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -28,11 +29,17 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const help = `Golf — inspect repositories, organizations and your account activity.
+const help = `Golf — inspect and collaborate on repositories using scoped credentials.
 
 Usage: golf [--url ORIGIN] [--token-stdin | --api-token-stdin] COMMAND
 
   mcp                         serve local MCP on stdin/stdout
+  issue create --input JSON_FILE
+  issue comment --input JSON_FILE
+  issue update --input JSON_FILE
+  pr create --input JSON_FILE
+  pr update --input JSON_FILE
+  pr review --input JSON_FILE
   repo list [--page N] [--limit N]
   repo view OWNER/REPO
   repo overview OWNER/REPO
@@ -51,6 +58,7 @@ Usage: golf [--url ORIGIN] [--token-stdin | --api-token-stdin] COMMAND
   issue view OWNER/REPO NUMBER
   issue comments OWNER/REPO NUMBER [--page N] [--limit N]
   issue operation IDEMPOTENCY_KEY
+  pr review-operation IDEMPOTENCY_KEY
   pr list OWNER/REPO [--state open|closed|all] [--page N] [--limit N]
   pr view OWNER/REPO NUMBER
   pr diff OWNER/REPO NUMBER --repo-id ID --pull-id ID --base SHA --head SHA
@@ -74,7 +82,11 @@ Pass a Golf API token on stdin with --api-token-stdin, or set GOLF_API_TOKEN.
 Do not mix Golf API and Gitea token sources. Stdin overrides the same-kind environment token.
 GOLF_URL defaults to http://localhost:8080. Remote origins require HTTPS.
 Credentials/cookies are never saved. Gitea token commands sign in and sign out.
-Golf API tokens send bearer-authenticated reads without a browser session or login/logout.
+Golf API tokens send bearer-authenticated requests without login/logout.
+Write commands require golf_rw_ credentials explicitly scoped to one repository.
+JSON files use the corresponding versioned Protobuf JSON request with exact IDs,
+expected revisions and an original UUID v4 idempotencyKey. No generated key or retries.
+Do not place request text or tokens in command arguments.
 They remain bound to the issuing browser session; expiry, revocation or source sign-out denies access.
 MCP takes one token from GOLF_API_TOKEN or GOLF_GITEA_TOKEN; stdin is reserved for the protocol.
 Global flags precede the command; resource flags follow positional arguments.
@@ -172,6 +184,23 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 	if mcpMode {
 		return runMCP(ctx, base, auth, input, output, diagnostic)
 	}
+	if command.writeInput != "" {
+		if !auth.api || !strings.HasPrefix(auth.token, "golf_rw_") {
+			fmt.Fprintln(diagnostic, "Writes require an explicitly scoped Golf API credential.")
+			return 2
+		}
+		file, openErr := os.Open(command.writeInput)
+		if openErr != nil {
+			fmt.Fprintln(diagnostic, "Could not read the request file.")
+			return 2
+		}
+		raw, readErr := io.ReadAll(io.LimitReader(file, 16385))
+		file.Close()
+		if readErr != nil || decodeWriteRequest(&command, raw) != nil {
+			fmt.Fprintln(diagnostic, "Invalid write request. Supply exact repository identity and your original idempotency key.")
+			return 2
+		}
+	}
 	result, err := execute(ctx, base, command, auth)
 	if err != nil {
 		fmt.Fprintln(diagnostic, err)
@@ -231,6 +260,8 @@ var commitID = regexp.MustCompile(`^(?:[a-f0-9]{40}|[a-f0-9]{64})$`)
 var creationKey = regexp.MustCompile(`^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$`)
 
 type command struct {
+	writeInput      string
+	writeRequest    proto.Message
 	name            string
 	organization    string
 	teamID          string
@@ -266,9 +297,12 @@ func parseCommand(args []string) (command, error) {
 	}
 	result.name = args[0] + " " + args[1]
 	rest := args[2:]
+	if newWriteRequest(result.name) != nil {
+		return parseWriteCommand(result, rest)
+	}
 	switch result.name {
 	case "repo list", "org list", "audit list":
-	case "repo creation", "issue operation":
+	case "repo creation", "issue operation", "pr review-operation":
 		if len(rest) == 0 || !creationKey.MatchString(rest[0]) {
 			return result, invalid
 		}
@@ -524,6 +558,9 @@ type credential struct {
 
 func validAPIToken(token string) bool {
 	value, ok := strings.CutPrefix(token, "golf_ro_")
+	if !ok {
+		value, ok = strings.CutPrefix(token, "golf_rw_")
+	}
 	if !ok || len(value) != 43 {
 		return false
 	}
@@ -571,9 +608,17 @@ func execute(ctx context.Context, origin string, command command, auth credentia
 	repositories := golfv1connect.NewRepositoryServiceClient(client, origin+"/rpc", options...)
 	organizations := golfv1connect.NewOrganizationServiceClient(client, origin+"/rpc", options...)
 	audit := golfv1connect.NewAuditServiceClient(client, origin+"/rpc", options...)
-	message, err := command.read(ctx, repositories, organizations, audit)
+	var message proto.Message
+	if command.writeRequest != nil {
+		if !auth.api || !strings.HasPrefix(auth.token, "golf_rw_") {
+			return nil, errors.New("Writes require an explicitly scoped Golf API credential")
+		}
+		message, err = command.write(ctx, repositories)
+	} else {
+		message, err = command.read(ctx, repositories, organizations, audit)
+	}
 	if err != nil {
-		return nil, operationError(err)
+		return nil, command.operationError(err)
 	}
 	return protojson.MarshalOptions{EmitDefaultValues: true}.Marshal(message)
 }
@@ -829,6 +874,12 @@ func (command command) read(ctx context.Context, client golfv1connect.Repository
 		return response.Msg, nil
 	case "issue operation":
 		response, err := client.GetIssueMutation(ctx, connect.NewRequest(&golfv1.GetIssueMutationRequest{IdempotencyKey: command.creationKey}))
+		if err != nil {
+			return nil, err
+		}
+		return response.Msg, nil
+	case "pr review-operation":
+		response, err := client.GetPullRequestReviewMutation(ctx, connect.NewRequest(&golfv1.GetPullRequestReviewMutationRequest{IdempotencyKey: command.creationKey}))
 		if err != nil {
 			return nil, err
 		}
