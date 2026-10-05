@@ -52,9 +52,11 @@ test('personal coverage distinguishes supported settings from missing enforcemen
   await page.getByRole('searchbox', { name: 'Search loaded Personal settings', exact: true }).fill('MFA');
   await expect(table.getByText('Passwords, recovery and MFA', { exact: true })).toBeVisible();
   await expect(table.getByText('Partial', { exact: true })).toBeVisible();
+  await expect(table.getByText(/MFA, passkeys, verified email and recovery remain planned/)).toBeHidden();
+  await table.getByLabel('Scope and limitations for Passwords, recovery and MFA', { exact: true }).click();
   await expect(table.getByText(/MFA, passkeys, verified email and recovery remain planned/)).toBeVisible();
   await expect(table.getByRole('link', { name: 'Open', exact: true })).toHaveAttribute('href', '/account/security');
-  await expect(table.getByRole('button')).toHaveCount(3);
+  await expect(table.getByRole('button', { name: 'Section and availability', exact: true })).toHaveCount(1);
 });
 
 test('repository general editor cancels drafts and sends exact IDs/revision with only changed values', async ({ page }) => {
@@ -191,5 +193,52 @@ test('private dirty form is hidden and inert during revalidation then restored w
 });
 
 test('authority downgrade clears the editor without claiming unsupported configuration',async({page})=>{
- const state=await backend(page);await page.goto('/alex/demo/settings');await page.getByRole('button',{name:'Edit topics',exact:true}).click();await page.getByRole('textbox',{name:'Topics',exact:true}).fill('private-draft');state.settings.canEdit=false;await page.getByRole('button',{name:'Refresh repository settings',exact:true}).click();await expect(page.getByRole('textbox',{name:'Topics',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Edit topics',exact:true})).toHaveCount(0);await expect(page.getByText('View only',{exact:true})).toBeVisible();await expect(page.getByText(/Website, topics, default branch and tracker\/wiki configuration editors are qualified/)).toBeVisible();expect(state.writes).toHaveLength(0);
+ const state=await backend(page);await page.goto('/alex/demo/settings');await page.getByRole('button',{name:'Edit topics',exact:true}).click();await page.getByRole('textbox',{name:'Topics',exact:true}).fill('private-draft');state.settings.canEdit=false;await page.getByRole('button',{name:'Refresh repository settings',exact:true}).click();await expect(page.getByRole('textbox',{name:'Topics',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Edit topics',exact:true})).toHaveCount(0);await expect(page.getByText('View only',{exact:true})).toBeVisible();await page.getByLabel('Scope and limitations for General and features',{exact:true}).click();await expect(page.getByText(/Website, topics, default branch and tracker\/wiki configuration editors are qualified/)).toBeVisible();expect(state.writes).toHaveLength(0);
+});
+
+
+test('settings coverage keeps names, availability and actions together without expanding all explanations', async ({ page }) => {
+  const state = await backend(page);
+  await page.goto('/alex/demo/settings');
+  const table = page.getByRole('table', { name: 'Repository settings', exact: true });
+  await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(10);
+  await page.evaluate(async () => { await document.fonts.ready; });
+  const row = table.locator('tr[data-row-id="general"]');
+  const details = row.locator('details');
+  const summary = row.getByLabel('Scope and limitations for General and features', { exact: true });
+  const search = page.getByRole('searchbox', { name: 'Search loaded Repository settings', exact: true });
+  for (const width of [390, 1440]) for (const theme of ['dark', 'light']) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
+    await expect(row.getByText('Ready', { exact: true })).toBeVisible();
+    await expect(table.locator('details[open]')).toHaveCount(0);
+    await row.getByRole('link', { name: 'Open General and features', exact: true }).focus();
+    expect(await table.evaluate(element => {
+      const scroll = element.parentElement!;
+      return scroll.scrollWidth <= scroll.clientWidth + 1 && scroll.scrollLeft === 0;
+    })).toBe(true);
+    const name = await row.getByText('General and features', { exact: true }).boundingBox();
+    expect(name!.x).toBeGreaterThanOrEqual(0);
+    expect(name!.x + name!.width).toBeLessThanOrEqual(width);
+    await summary.focus();
+    await page.keyboard.press('Enter');
+    await expect(details).toHaveAttribute('open', '');
+    await expect(row.getByText(/Wiki configuration does not include a Golf wiki workspace/)).toBeVisible();
+    await expect(row.getByRole('link', { name: 'Plan tasks: P1.4 / G1', exact: true })).toBeVisible();
+    expect(await table.evaluate(element => element.parentElement!.scrollWidth <= element.parentElement!.clientWidth + 1)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.keyboard.press('Enter');
+    await expect(details).not.toHaveAttribute('open', '');
+  }
+  // Collapsed explanations remain searchable; filtering never changes readiness or saves settings.
+  await search.fill('Wiki configuration does not include');
+  await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(1);
+  await expect(row.getByText('Ready', { exact: true })).toBeVisible();
+  await expect(details).not.toHaveAttribute('open', '');
+  await search.fill('Partial');
+  await expect(table.locator('tbody tr[data-row-id]')).toHaveCount(9);
+  await search.fill('');
+  await table.getByRole('button', { name: 'Section and availability', exact: true }).click();
+  await expect(table.locator('tbody tr[data-row-id]').first()).toHaveAttribute('data-row-id', 'agents');
+  expect(state.writes).toHaveLength(0);
 });

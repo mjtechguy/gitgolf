@@ -900,6 +900,8 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 
 /* Shared compact status and two-line inventory cells. */
 .table-primary { display:grid; gap:3px; min-width:0; }
+.table-primary > .metadata-details { margin-top:0; }
+.data-table td .metadata-details > summary { white-space:normal; }
 .table-description { color:var(--muted); font-size:.8125rem; white-space:normal; overflow-wrap:anywhere; }
 .reported-check-state { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
 .reported-check-state.check-success { color:var(--accent); }

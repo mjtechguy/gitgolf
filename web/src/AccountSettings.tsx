@@ -115,9 +115,10 @@ const inventory: Record<SettingsScope, SettingEntry[]> = {
   ],
 };
 function settingsColumns(repository?: { owner: string; name: string }, organization?: string): DataTableColumn<SettingEntry>[] { return [
-  { accessorKey: 'section', header: 'Section' },
-  { accessorKey: 'state', header: 'Availability', cell: ({ row }) => <span className="visibility">{row.original.state}</span> },
-  { accessorKey: 'detail', header: 'Details', cell: ({ row }) => <>{row.original.detail}<small><a href="https://github.com/ghost-hardened-open-source/golf-git/blob/main/GOLF_IMPLEMENTATION_PLAN.md" target="_blank" rel="noreferrer">Plan tasks: {row.original.task}</a></small></> },
+  { id: 'section', accessorFn: entry => `${entry.section} ${entry.state} ${entry.detail} ${entry.task}`, header: 'Section and availability', cell: ({ row }) => <div className="table-primary">
+    <strong>{row.original.section}</strong>
+    <details className="metadata-details"><summary aria-label={`Scope and limitations for ${row.original.section}`}><span className="visibility">{row.original.state}</span>{' '}Scope and limitations</summary><p>{row.original.detail}</p><small><a href="https://github.com/ghost-hardened-open-source/golf-git/blob/main/GOLF_IMPLEMENTATION_PLAN.md" target="_blank" rel="noreferrer">Plan tasks: {row.original.task}</a></small></details>
+  </div> },
   { id: 'actions', header: 'Action', enableSorting: false, enableGlobalFilter: false, cell: ({ row }) => {
     const route = repository && ({ general: '/$owner/$name/settings', runners: '/$owner/$name/settings/runners', rules: '/$owner/$name/settings/rules', secrets: '/$owner/$name/settings/secrets', deployments: '/$owner/$name/settings/environments', access: '/$owner/$name/settings/access', ci: '/$owner/$name/settings/workflows', agents: '/$owner/$name/settings/workflows', events: '/$owner/$name/settings/webhooks' } as const)[row.original.id as 'general' | 'runners' | 'rules' | 'secrets' | 'access' | 'ci' | 'agents' | 'events' | 'deployments'];
     return organization && row.original.id === 'secrets' ? <Link className="text-button" to="/organizations/$organization/settings/secrets" params={{ organization }} aria-label="Open Secrets, variables and OIDC">Open</Link> : route && repository ? <Link className="text-button" to={route} params={repository} hash={row.original.id === 'general' ? 'repository-general-title' : undefined} aria-label={`Open ${row.original.section}`}>Open</Link> : row.original.to ? <Link className="text-button" to={row.original.to} hash={row.original.hash}>Open</Link> : <span className="muted">{row.original.state === 'Planned' ? 'Not configurable yet' : row.original.state === 'Partial' ? 'See available scope controls' : 'No browser editor'}</span>;
