@@ -78,6 +78,13 @@ def custom_message_receipt(message,title,body):
     return {'customTitleAndBodyMatched':True,'submittedMessageSha256':hashlib.sha256(expected.encode()).hexdigest(),'nativeMessageSha256':hashlib.sha256(message.encode()).hexdigest()}
 
 
+def native_custom_message_receipt(commit,title,body):
+    # Pinned native Git commit API nests message under commit, as existing
+    # snapshot qualification does. Refuse a flattened or malformed response.
+    value=commit.get('commit');assert isinstance(value,dict) and isinstance(value.get('message'),str)
+    return custom_message_receipt(value['message'],title,body)
+
+
 def callable_bindings_safe(source):
     names={'command','rpc','api','admin','operator'}
     return not any(isinstance(n,ast.Name) and isinstance(n.ctx,ast.Store) and n.id in names for n in ast.walk(ast.parse(source)))
@@ -119,6 +126,10 @@ def self_check(stack):
     try:validate_receipt(common,rejected,intent,'4',rejected['phase'])
     except AssertionError:pass
     else:raise AssertionError('Rejection invented native effect')
+    native_custom_message_receipt({'commit':{'message':'Owned title\n\nOwned body.'}},'Owned title','Owned body.')
+    try:native_custom_message_receipt({'message':'Owned title\n\nOwned body.'},'Owned title','Owned body.')
+    except AssertionError:pass
+    else:raise AssertionError('Flattened native Git commit message admitted')
     squash_intent={**intent,'method':'squash'};squash_row={**row,'method':'squash'}
     validate_receipt(common,squash_row,squash_intent,'4',row['phase'])
     native_commit_receipt(common,{'sha':'d'*40,'parents':[{'sha':'b'*40}]},squash_row,'a'*40,'d'*40,'squash')
@@ -286,7 +297,7 @@ def main():
         commit=api(owner,'GET',path+'/git/commits/'+C);native_commit_receipt(common,commit,result,H,reference(owner,path,base_ref),args.method)
         native_unknown=False  # Independent acknowledged final effect is now recorded.
         manifest['nativeReceipt']={'C':C,'H':H,'observedB':B,'actualB':result['actualBaseCommitId'],'parents':[p['sha'] for p in commit['parents']],'targetCommitId':C};persist()
-        if args.method=='squash':manifest['nativeReceipt'].update(method='squash',sourceFirstCommitId=first_head,twoSourceCommits=True,singleParentVerified=True,**custom_message_receipt(commit['message'],m['commitTitle'],m['commitMessage']))
+        if args.method=='squash':manifest['nativeReceipt'].update(method='squash',sourceFirstCommitId=first_head,twoSourceCommits=True,singleParentVerified=True,**native_custom_message_receipt(commit,m['commitTitle'],m['commitMessage']))
         stage='original replay and changed intent refusal'
         assert validate_receipt(common,rpc(writer,SUBMIT,m)['operation'],m,writer['id'],result['phase'])==result
         changed=copy.deepcopy(m);changed['commitMessage']='Changed original request';rpc(writer,SUBMIT,changed,400,'failed_precondition');assert original(writer,m,result['phase'])==result and reference(owner,path,base_ref)==C
