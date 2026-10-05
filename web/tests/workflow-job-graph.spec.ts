@@ -196,7 +196,7 @@ test('unauthenticated log read ends the managed session and clears the entire pr
 test('withheld execution output is explicit and cannot be downloaded as an empty successful log',async({page})=>{
  const state=await fixture(page);state.publication='withheld';await page.goto(path);
  await expect(page.getByText('Output is withheld pending a verified execution result and current authorization.',{exact:true})).toBeVisible();
- await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Download loaded log',exact:true})).toBeDisabled();
+ await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Download loaded log',exact:true})).toHaveCount(0);
  await expect(page.getByText('No log output yet.',{exact:true})).toHaveCount(0);
  state.publication='redacted';await page.getByRole('button',{name:'Refresh selected run',exact:true}).click();
  await expect(page.getByText('Configured secret values were masked before this log was published.',{exact:true})).toBeVisible();await expect(page.getByLabel('Workflow run log',{exact:true})).toContainText('All jobs');
@@ -204,7 +204,7 @@ test('withheld execution output is explicit and cannot be downloaded as an empty
 
 test('a malformed withheld receipt never renders or downloads private bytes',async({page})=>{
  const state=await fixture(page);state.publication='withheld';state.rawWithheld=true;await page.goto(path);
- await expect(page.getByRole('alert')).toContainText('Withheld execution output cannot contain readable chunks');await expect(page.locator('body')).not.toContainText('forbidden-private-output');await expect(page.getByRole('button',{name:'Download loaded log',exact:true})).toBeDisabled();
+ await expect(page.getByRole('alert')).toContainText('Withheld execution output cannot contain readable chunks');await expect(page.locator('body')).not.toContainText('forbidden-private-output');await expect(page.getByRole('button',{name:'Download loaded log',exact:true})).toHaveCount(0);
 });
 
 test('two completed nonmatrix jobs keep equal step IDs in separate immutable log scopes',async({page})=>{
@@ -236,7 +236,7 @@ test('pending and unrecorded dependent descriptions wait for a real scoped start
 
 test('v2 typed secret output retains withholding then exact redacted two-job scope',async({page})=>{
  const state=await fixture(page);state.twoJobs=true;state.startSecond=true;state.typed=true;state.publication='withheld';await page.goto(path+`?jobInstanceId=${test22}&stepId=0`);
- await expect(page.getByText('Output is withheld pending a verified execution result and current authorization.',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Download loaded log',exact:true})).toBeDisabled();await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);
+ await expect(page.getByText('Output is withheld pending a verified execution result and current authorization.',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Download loaded log',exact:true})).toHaveCount(0);await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);
  await page.getByText('Execution receipt',{exact:true}).click();const receipt=page.getByRole('region',{name:'Run summary',exact:true});await expect(receipt).toContainText('golf.workflow.act.v0.2.89.linux.v2');await expect(receipt).toContainText('golf.workflow.dispatch.inputs.v1');await expect(receipt).toContainText('6'.repeat(64));await expect(receipt).toContainText('7'.repeat(64));await expect(receipt).toContainText('8'.repeat(64));
  state.publication='redacted';await page.getByRole('button',{name:'Refresh selected run',exact:true}).click();await expect(page.getByText('Configured secret values were masked before this log was published.',{exact:true})).toBeVisible();await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveText('Verify job 0');expect(state.filters.every(v=>v.jobInstanceId===test22&&v.stepId==='0'&&v.stepIndex===undefined)).toBe(true);
 });
@@ -244,5 +244,5 @@ for(const fault of ['schema','contract','binding','binding-version','origin'])te
  const state=await fixture(page);state.typed=true;state.publication='withheld';state.typedFault=fault;await page.goto(path);await expect(page.getByRole('alert')).toContainText('recorded job graph');await expect(page.getByLabel('Jobs and steps')).toHaveCount(0);expect(state.filters).toEqual([]);
 });
 test('v2 withheld receipt with raw bytes cannot publish or download output',async({page})=>{
- const state=await fixture(page);state.typed=true;state.publication='withheld';state.rawWithheld=true;await page.goto(path);await expect(page.getByRole('alert')).toContainText('Withheld execution output cannot contain readable chunks');await expect(page.locator('body')).not.toContainText('forbidden-private-output');await expect(page.getByRole('button',{name:'Download loaded log',exact:true})).toBeDisabled();
+ const state=await fixture(page);state.typed=true;state.publication='withheld';state.rawWithheld=true;await page.goto(path);await expect(page.getByRole('alert')).toContainText('Withheld execution output cannot contain readable chunks');await expect(page.locator('body')).not.toContainText('forbidden-private-output');await expect(page.getByRole('button',{name:'Download loaded log',exact:true})).toHaveCount(0);
 });
