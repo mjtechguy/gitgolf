@@ -154,6 +154,7 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	r.Handle("/rpc", rpc)
 	r.Handle("/rpc/*", rpc)
 	r.Get("/api/workflow-runs/{id}/artifact", s.WorkflowArtifactDownloadHandler())
+	r.Get("/api/repositories/{owner}/{name}/{repositoryId}/releases/{releaseId}/assets/{assetId}/download", s.RepositoryReleaseAssetDownloadHandler())
 	// Removed application REST paths are never served as SPA documents.
 	r.Handle("/api", http.NotFoundHandler())
 	r.Handle("/api/*", http.NotFoundHandler())
