@@ -562,7 +562,7 @@ test('lost milestone acknowledgement reloads into original-key inspection withou
 });
 for(const theme of ['dark','light'])test(`milestone editor is compact and denied inventories mask private content in ${theme}`,async({page})=>{
  const state=await backend(page);enableMilestones(state);await page.setViewportSize({width:390,height:900});await page.addInitScript(value=>localStorage.setItem('golf.theme',value),theme);await page.goto('/alex/project/issues/12');await page.getByRole('button',{name:'Edit issue milestone',exact:true}).click();
- await expect(page.getByRole('combobox',{name:'Issue milestone',exact:true})).toBeFocused();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:test.info().outputPath(`milestone-editor-${theme}-390.png`),fullPage:true});
+ await expect(page.getByRole('combobox',{name:'Issue milestone',exact:true})).toBeFocused();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:test.info().outputPath(`milestone-editor-${theme}-390.png`),fullPage:true});
  state.errors.ListRepositoryMilestones='permission_denied';await page.reload();await expect(page.getByRole('alert')).toBeVisible();await expect(page.getByText('PRIVATE_BODY <script>alert(1)</script>',{exact:true})).toHaveCount(0);await expect(page.getByRole('combobox',{name:'Issue milestone',exact:true})).toHaveCount(0);expect(state.updates).toHaveLength(0);
 });
 
