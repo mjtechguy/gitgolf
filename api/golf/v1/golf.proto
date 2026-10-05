@@ -170,6 +170,8 @@ service RepositoryService {
   rpc GetRepositoryCreation(GetRepositoryCreationRequest) returns (GetRepositoryCreationResponse);
   rpc GetRepository(GetRepositoryRequest) returns (GetRepositoryResponse);
   rpc GetRepositoryOverview(GetRepositoryOverviewRequest) returns (GetRepositoryOverviewResponse);
+  rpc GetRepositoryStar(GetRepositoryStarRequest) returns (GetRepositoryStarResponse);
+  rpc SetRepositoryStar(SetRepositoryStarRequest) returns (SetRepositoryStarResponse);
   rpc ListRepositoryReleases(ListRepositoryReleasesRequest) returns (ListRepositoryReleasesResponse);
   rpc GetRepositoryRelease(GetRepositoryReleaseRequest) returns (GetRepositoryReleaseResponse);
   rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse);
@@ -3939,3 +3941,28 @@ message GetRepositoryReleaseResponse {
   string repository_id = 2;
   RepositoryRelease release = 3;
 }
+
+// Current own-account preference, not an original mutation receipt or source
+// authority. Native counts are independent observations; absence is unknown.
+message RepositoryStarPreference {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string native_user_id = 4;
+  optional bool starred = 5;
+  optional string stars_count = 6;
+}
+message GetRepositoryStarRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+}
+message GetRepositoryStarResponse { RepositoryStarPreference preference = 1; }
+message SetRepositoryStarRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string native_user_id = 4;
+  // Presence required. One explicit desired-state write; never auto-retried.
+  optional bool starred = 5;
+}
+message SetRepositoryStarResponse { RepositoryStarPreference preference = 1; }
