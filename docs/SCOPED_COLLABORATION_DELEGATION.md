@@ -72,3 +72,11 @@ Browser checks cover scope defaults, exact-ID lookup, failed preflight correctio
 shared inventory/editor behavior, one-time secrets and light/dark/mobile controls.
 Actual native delegation and the retained localhost rollout are recorded separately
 in the implementation ledger when qualified.
+
+The optional `scripts/scoped-collaboration-native-proof.py` now passes against
+actual Gitea1.27.3 through production source HTTP handlers and isolated Golf
+PostgreSQL. Independent native readback verifies exactly one issue/comment after
+original-key replay, and revoked delegation is refused. Owned actors/repositories
+are purged. Receipt: [native attempt1](../.tmp/portable-completion075/native-delegation-attempt1/manifest.json).
+This qualifies the bounded native issue/comment slice; it does not qualify all six
+write operations, the CLI/MCP against actual native transport, or served localhost.

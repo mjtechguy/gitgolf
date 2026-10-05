@@ -1281,3 +1281,6 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .discussion-activity-list > li { display: flex; align-items: baseline; gap: .5rem; padding: .4rem 0; font-size: .85rem; }
 .discussion-activity-list > li > svg { flex-shrink: 0; }
 .discussion-timeline .browser-panel-heading h2 { display: flex; align-items: center; gap: .4rem; }
+
+.checkbox-field { display: flex; align-items: center; gap: 8px; }
+.checkbox-field input[type="checkbox"] { width: auto; flex: 0 0 auto; }
