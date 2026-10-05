@@ -1,0 +1,2 @@
+export const refMutationIntentPrefix='golf.ref-mutation.v1:';
+export function clearOtherRefMutationIntents(actor?:string){try{const keep=actor?`${refMutationIntentPrefix}${actor}:`:'';for(const key of Object.keys(sessionStorage))if(key.startsWith(refMutationIntentPrefix)&&(!keep||!key.startsWith(keep)))sessionStorage.removeItem(key);}catch{/* Admission independently requires writable original metadata. */}}

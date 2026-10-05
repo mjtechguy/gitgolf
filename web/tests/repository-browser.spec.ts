@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import {
   ResolveRepositorySourceRequestSchema, RepositorySourceRefKind, GetAuthenticationOptionsResponseSchema, GetRepositoryImageRequestSchema, GetRepositoryImageResponseSchema, GetContentsRequestSchema, GetContentsResponseSchema, GetIssueRequestSchema, GetIssueResponseSchema, GetRepositoryResponseSchema,
-  GetSessionResponseSchema, IssueSchema, IssueState, ListBranchesRequestSchema, ListBranchesResponseSchema, ListCapabilitiesResponseSchema,
+  GetSessionResponseSchema, GetRepositoryStarResponseSchema, IssueSchema, IssueState, ListBranchesRequestSchema, ListBranchesResponseSchema, ListCapabilitiesResponseSchema,
   ListCommitsRequestSchema, ListCommitsResponseSchema, ListTagsRequestSchema, ListTagsResponseSchema, ListIssueCommentsResponseSchema, ListIssuesRequestSchema, ListIssuesResponseSchema, ListRepositoriesResponseSchema,
   LoginWithPasswordResponseSchema, LogoutResponseSchema, RepositorySchema, SourceEntrySchema, SourceEntryType, UserSchema,
 } from '../src/gen/golf/v1/golf_pb';
@@ -42,6 +42,7 @@ async function backend(page: Page) {
     if (!state.signedIn) return error(401, 'Your session expired.');
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, { capabilities: [] });
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
+    if (method === 'GetRepositoryStar') return respond(route,GetRepositoryStarResponseSchema,{preference:{repository:{owner:'alex',name:'design-system'},repositoryId:repository.id,ownerId:user.id,nativeUserId:user.id,starred:false}});
     if (method === 'GetRepository') return state.metadataStatus === 200 ? respond(route, GetRepositoryResponseSchema, { repository: { ...repository, empty: state.empty, issuesEnabled: state.issuesEnabled, pullRequestsEnabled: state.pullRequestsEnabled } }) : error(state.metadataStatus, 'Repository not found or inaccessible.');
     if (method === 'ListBranches') return respond(route, ListBranchesResponseSchema, request(route, ListBranchesRequestSchema).page?.page === 2 ? { branches: [{ name: 'feature/UI', commitId: feature }] } : { branches: [{ name: 'main', commitId: head, protected: true }], page: { nextPage: 2 } });
     if(method==='GetRepositoryImage') { const image=request(route,GetRepositoryImageRequestSchema);return respond(route,GetRepositoryImageResponseSchema,{repositoryId:repository.id,commitId:image.commitId,documentPath:image.documentPath,imageUrl:image.imageUrl,mediaType:'image/svg+xml',content:new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 30"><path fill="green" d="M0 0h100v30H0z"/><script>window.executed=true</script><image href="https://tracker.invalid/pixel"/></svg>')});}
@@ -511,7 +512,7 @@ for (const width of [320, 1280, 1920]) for (const theme of ['dark', 'light']) te
   await expect(banner.locator('time')).toHaveAttribute('title', /2026/);
   expect(tagReads).toHaveLength(0);
   const tags = page.locator('.ref-controls>.ref-inventory-button').filter({ hasText: 'Tags' });
-  await expect(tags).toHaveText('Tags'); await tags.click();
+  await expect(tags).toHaveText('Tags'); await expect(tags).toHaveAttribute('href',/\/alex\/design-system\/tags/); await page.locator('.branch-picker>summary').click(); await page.getByRole('button',{name:'Tags',exact:true}).click();
   await expect(page.getByRole('link', { name: /v1.0 Listed at/ })).toBeVisible();
   expect(tagReads[0]).toMatchObject({ repository: { owner: 'alex', name: 'design-system' }, repositoryId: repository.id, page: { page: 1 } });
   await expect(tags).toHaveText('2 Tags');
@@ -556,7 +557,7 @@ test('tag inventory rejects wrong identity and never substitutes loaded-page cou
   }));
   await page.goto(`/alex/design-system/tree/${head}`);
   const tags = page.locator('.ref-controls>.ref-inventory-button').filter({ hasText: 'Tags' });
-  await tags.click(); await expect(page.getByRole('alert')).toContainText('do not match');
+  await page.locator('.branch-picker>summary').click(); await page.getByRole('button',{name:'Tags',exact:true}).click(); await expect(page.getByRole('alert')).toContainText('do not match');
   await expect(page.locator('.branch-picker>.branch-options')).not.toContainText('PRIVATE tag');
   bad = false; await page.getByRole('button', { name: 'Try again', exact: true }).click();
   await expect(page.getByRole('link', { name: /PRIVATE tag Listed at/ })).toBeVisible();

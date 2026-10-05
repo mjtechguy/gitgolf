@@ -57,8 +57,8 @@ export function RepositoryRefs({ repositoryKey, repositoryId, queryKey, location
         </>}
       </div>
     </details>
-    <button className="text-button ref-inventory-button" type="button" onClick={() => open('branches')}><GitBranch size={15}/>{count(branchesQuery.data)}Branches</button>
-    <button className="text-button ref-inventory-button" type="button" onClick={() => open('tags')}><Tag size={15}/>{count(tagsQuery.data)}Tags</button>
+    <Link className="text-button ref-inventory-button" {...repositoryOptions(location,{view:'branches'})}><GitBranch size={15}/>{count(branchesQuery.data)}Branches</Link>
+    <Link className="text-button ref-inventory-button" {...repositoryOptions(location,{view:'tags'})}><Tag size={15}/>{count(tagsQuery.data)}Tags</Link>
     {onLatest && !unresolvedSource && (location.refKind || !location.ref || branchName || location.tag) ? <button className="icon-button branch-refresh" title={location.refKind === 'tag' || location.tag ? 'Latest tag version' : 'Latest branch head'} aria-label={location.refKind === 'tag' || location.tag ? 'Latest tag version' : 'Latest branch head'} disabled={latestPending} onClick={latest}><RefreshCw size={14}/></button> : !onLatest && branchName ? <button className="icon-button branch-refresh" title="Latest branch head" aria-label="Latest branch head" onClick={() => void navigate(repositoryOptions(location, { ref: branchName, branch: branchName, tag: undefined }))}><RefreshCw size={14}/></button> : null}
     {pinnedCommitId || location.ref && isCommitID(location.ref) ? <span className="commit-pin" title={pinnedCommitId || location.ref}><LockKeyhole size={12}/>{shortSHA(pinnedCommitId || location.ref)}</span> : null}
   </div>;

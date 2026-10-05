@@ -1,5 +1,11 @@
 export type RepositorySearch = {
-  view: 'source' | 'commits' | 'issues' | 'pulls' | 'actions' | 'compare' | 'releases' | 'deployments';
+  view: 'source' | 'commits' | 'issues' | 'pulls' | 'actions' | 'compare' | 'releases' | 'deployments' | 'branches' | 'tags';
+  q?: string;
+  author?: string;
+  assignee?: string;
+  labels?: string;
+  milestone?: string;
+  sort?: 'newest' | 'oldest' | 'updated' | 'least-updated' | 'most-commented' | 'least-commented';
   ref: string;
   path: string;
   branch: string;
@@ -59,7 +65,8 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
     step: next.view === 'actions' && next.run && !next.jobInstanceId ? next.step : undefined,
     jobInstanceId: next.view==='actions'&&next.run&&(!next.runKind||next.runKind==='workflow')?next.jobInstanceId:undefined,
     stepId: next.view==='actions'&&next.run&&next.jobInstanceId&&(!next.runKind||next.runKind==='workflow')?next.stepId:undefined,
-    base:next.view==='compare'?next.base:undefined,head:next.view==='compare'?next.head:undefined,
+    q:next.view==='issues'||next.view==='pulls'?next.q:undefined,author:next.view==='issues'||next.view==='pulls'?next.author:undefined,assignee:next.view==='issues'||next.view==='pulls'?next.assignee:undefined,labels:next.view==='issues'||next.view==='pulls'?next.labels:undefined,milestone:next.view==='issues'||next.view==='pulls'?next.milestone:undefined,sort:next.view==='issues'||next.view==='pulls'?next.sort:undefined,
+    base:next.view==='compare'||next.view==='pulls'?next.base:undefined,head:next.view==='compare'?next.head:undefined,
     sourceOwner:next.view==='compare'?next.sourceOwner:undefined,sourceName:next.view==='compare'?next.sourceName:undefined,
     historyPath:next.view==='commits'&&!next.commit?next.historyPath:undefined,
     releaseId:next.view==='releases'?next.releaseId:undefined,
@@ -67,7 +74,8 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
   };
   const params = {owner:next.owner,name:next.name};
   let path = '';
-  if(next.view==='deployments')path=next.deploymentId?`deployments/${next.deploymentId}`:'deployments';
+  if(next.view==='branches'||next.view==='tags')path=next.view;
+  else if(next.view==='deployments')path=next.deploymentId?`deployments/${next.deploymentId}`:'deployments';
   else if(next.view==='releases')path=next.releaseId?`releases/${next.releaseId}`:'releases';
   else if(next.view==='compare')path='compare';
   else if(next.view==='issues') path=next.issueNew&&!next.issue?'issues/new':next.issue?`issues/${next.issue}`:'issues';

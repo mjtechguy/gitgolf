@@ -131,10 +131,18 @@ const organizationRoute = createRoute({
 const validateRepositorySearch = (search: Record<string, unknown>): RepositorySearch => {
     if (search.refKind !== undefined && search.refKind !== 'branch' && search.refKind !== 'tag' || (search.refKind === undefined) !== (search.refName === undefined) || search.refName !== undefined && (typeof search.refName !== 'string' || !sourceRef(search.refName))) throw notFound();
     if(search.runKind!==undefined&&!['workflow','coding-task','review'].includes(String(search.runKind))||search.actionKind!==undefined&&!['workflow','coding-task','review'].includes(String(search.actionKind))||search.workflowPath!==undefined&&(typeof search.workflowPath!=='string'||!search.workflowPath||!sourcePath(search.workflowPath)||search.actionKind!=='workflow'))throw notFound();
+    const textBytes=(value:string)=>new TextEncoder().encode(value).length;
+    for(const key of ['q','author','assignee','labels','milestone','sort'] as const) if(search[key]!==undefined&&typeof search[key]!=='string')throw notFound();
+    if(typeof search.q==='string'&&(textBytes(search.q)>512||/[\p{Cc}\p{Cs}]/u.test(search.q)))throw notFound();
+    for(const key of ['author','assignee'] as const)if(typeof search[key]==='string'&&search[key]!==''&&(!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(search[key])))throw notFound();
+    if(typeof search.milestone==='string'&&(textBytes(search.milestone)>255||/[\p{Cc}\p{Cs}]/u.test(search.milestone)))throw notFound();
+    if(typeof search.labels==='string'&&(search.labels.split(',').length>20||search.labels.split(',').some(value=>textBytes(value)>255||/[\p{Cc}\p{Cs}]/u.test(value))))throw notFound();
+    if(search.sort!==undefined&&!['newest','oldest','updated','least-updated','most-commented','least-commented'].includes(search.sort as string))throw notFound();
     const issue = search.issue === undefined ? undefined : typeof search.issue === 'number' ? search.issue : typeof search.issue === 'string' && /^[1-9][0-9]*$/.test(search.issue) ? Number(search.issue) : NaN;
     const pull = search.pull === undefined ? undefined : typeof search.pull === 'number' ? search.pull : typeof search.pull === 'string' && /^[1-9][0-9]*$/.test(search.pull) ? Number(search.pull) : NaN;
     return {
-      view: search.view === 'commits' || search.view === 'issues' || search.view === 'pulls' || search.view === 'actions' || search.view === 'compare' || search.view === 'releases' || search.view === 'deployments' ? search.view : 'source',
+      view: search.view === 'commits' || search.view === 'issues' || search.view === 'pulls' || search.view === 'actions' || search.view === 'compare' || search.view === 'releases' || search.view === 'deployments' || search.view === 'branches' || search.view === 'tags' ? search.view : 'source',
+      q:typeof search.q==='string'?search.q:undefined,author:typeof search.author==='string'?search.author:undefined,assignee:typeof search.assignee==='string'?search.assignee:undefined,labels:typeof search.labels==='string'?search.labels:undefined,milestone:typeof search.milestone==='string'?search.milestone:undefined,sort:search.sort as RepositorySearch['sort'],
       ref: typeof search.ref === 'string' ? search.ref : '', path: typeof search.path === 'string' ? search.path : '',
       base:typeof search.base==='string'?search.base:undefined,head:typeof search.head==='string'?search.head:undefined,sourceOwner:typeof search.sourceOwner==='string'?search.sourceOwner:undefined,sourceName:typeof search.sourceName==='string'?search.sourceName:undefined,
       branch: typeof search.branch === 'string' ? search.branch : '',
@@ -212,6 +220,7 @@ function canonicalLocation(owner:string,name:string,tail:string,search:Repositor
     if(parts.length===2 && sourceRepositoryID(item) && (search.releaseId===undefined || search.releaseId===item))return {...location,view:'releases' as const,releaseId:item};
     throw notFound();
   }
+  if(tail==='branches'||tail==='tags')return {...location,view:tail as 'branches'|'tags'};
   if(tail==='compare')return {...location,view:'compare' as const};
   if(parts[0]==='commits'&&parts.length>=3&&isCommitID(item)) {
     const historyPath=parts.slice(2).join('/');
