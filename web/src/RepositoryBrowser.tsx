@@ -1,4 +1,6 @@
 import { RepositorySidebar } from './RepositorySidebar';
+import { RepositoryStars } from './RepositoryStars';
+import { forgetPrivateQueries } from './queryClient';
 import { readExactSource, sourceRepositoryID } from './sourceReads';
 import { useRepositorySourceSelection } from './RepositorySourceSelection';
 import { SourceRefChoice } from './SourceRefChoice';
@@ -11,8 +13,8 @@ import { useRepositoryLive, RepositoryLiveStatus, RepositoryLiveContext } from '
 import { DiffViewer } from './DiffViewer';
 import { RepositoryReadme } from './RepositoryReadme';
 import { CodePreview, FileContent, isMarkdownPath } from './RepositoryContent';
-import { lazy, Suspense, useEffect, useState } from 'react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, BookOpen, ChevronRight, CircleDot, Code2, File, Folder, GitBranch, GitCommitHorizontal, GitPullRequest, Link2, LockKeyhole, Play, RefreshCw, Settings, Tag } from 'lucide-react';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { Link, useNavigate, useRouter } from '@tanstack/react-router';
@@ -149,6 +151,7 @@ function CommitDiffPanel({ repositoryKey, queryKey, location, repositoryId }: { 
 }
 
 export function RepositoryBrowser({ location: addressLocation, userId }: { location: RepositoryLocation; userId: string }) {
+  const cache = useQueryClient();
   const repositoryKey = { owner: addressLocation.owner, name: addressLocation.name };
   const queryKey = ['repository', userId, addressLocation.owner, addressLocation.name];
   const query = useQuery({ ...privateQuery, queryKey: [...queryKey, 'metadata'], queryFn: ({ signal }) => repositoryClient.getRepository({ repository: repositoryKey }, { signal }).then((response) => { signal.throwIfAborted(); if (!response.repository) throw new ConnectError('The repository response is missing its metadata.', Code.Internal); if(addressLocation.view==='releases' && (!sourceRepositoryID(response.repository.id) || response.repository.name!==repositoryKey.name || response.repository.fullName!==`${repositoryKey.owner}/${repositoryKey.name}`)) throw new ConnectError('The repository response does not identify the selected release target.', Code.Internal); return response.repository; }) });
@@ -156,13 +159,24 @@ export function RepositoryBrowser({ location: addressLocation, userId }: { locat
   const location = sourceSelection.location;
   const live=useRepositoryLive(userId,location.owner,location.name,query.data?.id,sourceSelection.selection?.commitId||location.ref,query.isSuccess&&!query.isError,location.view==='compare'||location.view==='pulls'&&Boolean(location.pull)&&location.pullView!==undefined&&location.pullView!=='conversation');
   const repository = query.isSuccess ? query.data : undefined;
+  const denyStarAuthority = useCallback(async (error: ConnectError) => {
+    const key = ['repository', userId, addressLocation.owner, addressLocation.name, 'metadata'];
+    const matches = () => repository?.id && cache.getQueryData(key) === repository;
+    if (!matches()) return;
+    if (error.code === Code.Unauthenticated) { cache.setQueryData(['session'], null); forgetPrivateQueries(cache); return; }
+    const scope = ['repository', userId, addressLocation.owner, addressLocation.name];
+    await cache.cancelQueries({queryKey:scope});
+    if (!matches()) return;
+    cache.removeQueries({predicate:q => q.queryKey.length > key.length && scope.every((value,index) => q.queryKey[index] === value)});
+    cache.getQueryCache().find({queryKey:key,exact:true})?.setState({data:undefined,error,status:'error',fetchStatus:'idle'});
+  }, [cache, userId, addressLocation.owner, addressLocation.name, repository]);
   const disabledFeature = location.view === 'issues' && repository?.issuesEnabled === false ? 'Issues' : (location.view === 'pulls' || location.view === 'compare') && repository?.pullRequestsEnabled === false ? 'Pull requests' : '';
   const panelProps = { repositoryKey, queryKey, location, defaultBranch: repository?.defaultBranch || '',repositoryId:repository?.id||'' };
   const codeToolbar = <div className="repository-code-toolbar"><RepositoryRefs {...panelProps} onLatest={location.view === 'source' ? sourceSelection.latest : undefined} latestPending={sourceSelection.pending} pinnedCommitId={sourceSelection.selection?.commitId} unresolvedSource={!sourceSelection.selection&&Boolean(addressLocation.sourceSuffix)}/>{location.view === 'source' && (repository?.cloneUrl || repository?.sshUrl) ? <CloneMenu https={repository.cloneUrl} ssh={repository.sshUrl}/> : null}</div>;
   const emptyState = <section className="browser-panel empty-state"><GitBranch size={29} /><h2>No commits yet.</h2><p>This repository is empty. Push your first commit through Git to add source and branches.</p>{repository?.cloneUrl ? <div className="clone-address"><span>HTTPS clone URL</span><code>{repository?.cloneUrl}</code></div> : null}{repository?.sshUrl ? <div className="clone-address"><span>SSH clone URL</span><code>{repository?.sshUrl}</code></div> : null}</section>;
   return <RepositoryLiveContext value={live.status}><div className={`repository-browser ${live.status==='live'?'live-connected':''}`}>
     {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : !repository ? <Loading label="Opening repository…" /> : <>{query.isFetching ? <div className="repository-access-check"><Loading label="Checking repository access…"/></div> : null}<div className="repository-authorized-content" data-revalidating={query.isFetching || undefined} aria-hidden={query.isFetching || undefined} inert={query.isFetching}>
-      <header className="repository-intro repository-work-header"><div><h1><BookOpen size={20} /><span className="repository-owner">{location.owner}</span><span className="repository-title-slash">/</span>{repository.name}<span className={`visibility ${repository.private ? 'private' : ''}`}>{repository.private ? <LockKeyhole size={11} /> : null}{repository.private ? 'Private' : 'Public'}</span></h1></div><div className="panel-actions"><RepositoryLiveStatus status={live.status} reconnect={live.reconnect}/><button className="icon-button manual-refresh" aria-label="Refresh repository access" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} /></button></div></header>
+      <header className="repository-intro repository-work-header"><div><h1><BookOpen size={20} /><span className="repository-owner">{location.owner}</span><span className="repository-title-slash">/</span>{repository.name}<span className={`visibility ${repository.private ? 'private' : ''}`}>{repository.private ? <LockKeyhole size={11} /> : null}{repository.private ? 'Private' : 'Public'}</span></h1></div><div className="panel-actions"><RepositoryStars client={repositoryClient} userId={userId} repository={repositoryKey} repositoryId={repository.id} revalidating={query.isFetching} onAuthorityDenied={denyStarAuthority}/><RepositoryLiveStatus status={live.status} reconnect={live.reconnect}/><button className="icon-button manual-refresh" aria-label="Refresh repository access" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} /></button></div></header>
       {live.newSource && location.view!=='releases'?<p className="source-update-notice" role="status"><GitCommitHorizontal size={15}/>{location.view==='compare'||location.view==='pulls'&&Boolean(location.pull)&&location.pullView!==undefined&&location.pullView!=='conversation'?<>Repository activity changed. This comparison stays pinned.<button className="text-button" onClick={live.refreshComparison}>Refresh comparison</button></>:<>New repository activity is available. This source snapshot stays pinned; choose Latest {location.refKind==='tag'?'tag version':'branch head'} to view new code.</>}</p>:null}
       <RepositoryTabs label="Repository" selection={location.view}><Link {...repositoryOptions(location, { view: 'source', issue: undefined })} aria-current={location.view === 'source' ? 'page' : undefined}><Code2 size={16} />Code</Link><Link {...repositoryOptions(location, { view: 'commits', ref:sourceSelection.selection?.commitId||location.ref, issue: undefined, commit: undefined,historyPath:undefined })} aria-current={location.view === 'commits' ? 'page' : undefined}><GitCommitHorizontal size={17} />Commits</Link>{repository.issuesEnabled !== false ? <Link {...repositoryOptions(location, { view: 'issues', issue: undefined,issueNew:undefined })} aria-current={location.view === 'issues' ? 'page' : undefined}><CircleDot size={16} />Issues</Link> : null}{repository.pullRequestsEnabled !== false ? <Link {...repositoryOptions(location, { view: 'pulls', pull: undefined })} aria-current={location.view === 'pulls' || location.view === 'compare' ? 'page' : undefined}><GitPullRequest size={16} />Pull requests</Link> : null}<Link {...repositoryOptions(location, { view: 'actions',run:undefined })} aria-current={location.view === 'actions' ? 'page' : undefined}><Play size={16}/>Actions</Link><Link {...repositoryOptions(location,{view:'releases',releaseId:undefined})} aria-current={location.view==='releases'?'page':undefined}><Tag size={16}/>Releases</Link><Link to="/$owner/$name/settings" params={{owner:location.owner,name:location.name}}><Settings size={16}/>Settings</Link></RepositoryTabs>
       {disabledFeature ? <section className="browser-panel empty-state"><Settings size={25}/><h2>{disabledFeature} are disabled</h2><p>This repository has this feature turned off.</p><Link className="button secondary" {...repositoryOptions(location, { view: 'source' })}>Back to code</Link></section> : (location.view === 'source' || location.view === 'commits') && repository.empty ? location.view === 'source' && !location.path ? <div className="repository-source-layout"><div className="repository-source-main">{emptyState}</div><RepositorySidebar key={`${userId}-${repository.id}`} repository={repository} location={location} userId={userId}/></div> : emptyState : <>
