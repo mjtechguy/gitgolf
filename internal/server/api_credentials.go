@@ -47,6 +47,7 @@ func apiReadProcedure(procedure string) bool {
 		golfv1connect.AuditServiceListAuditEventsProcedure,
 		golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryOverviewProcedure,
 		golfv1connect.RepositoryServiceGetRepositoryCreationProcedure, golfv1connect.RepositoryServiceListBranchesProcedure,
+		golfv1connect.RepositoryServiceListRepositoryReleasesProcedure, golfv1connect.RepositoryServiceGetRepositoryReleaseProcedure,
 		golfv1connect.RepositoryServiceListCommitsProcedure, golfv1connect.RepositoryServiceListTagsProcedure, golfv1connect.RepositoryServiceGetContentsProcedure, golfv1connect.RepositoryServiceResolveRepositorySourceProcedure,
 		golfv1connect.RepositoryServiceGetCommitDiffProcedure, golfv1connect.RepositoryServiceGetPullRequestDiffProcedure, golfv1connect.RepositoryServiceGetRepositoryComparisonProcedure, golfv1connect.RepositoryServiceListPullRequestCommitsProcedure, golfv1connect.RepositoryServiceListPullRequestChecksProcedure, golfv1connect.RepositoryServiceGetRepositoryImageProcedure, golfv1connect.RepositoryServiceListIssuesProcedure,
 		golfv1connect.RepositoryServiceGetIssueProcedure, golfv1connect.RepositoryServiceListPullRequestsProcedure,
@@ -138,7 +139,17 @@ func (s *Server) apiReadInterceptor(next connect.UnaryFunc) connect.UnaryFunc {
 		}
 		if err == nil {
 			credential, credentialErr := rpcToken(ctx)
-			if credentialErr == nil && credential.Local && !acknowledgesCurrentSessionRevocation(request, response) {
+			if credentialErr == nil && !acknowledgesCurrentSessionRevocation(request, response) {
+				// PAT/OAuth sessions also lose authority on suspension or revocation.
+				// Delegated reads already recheck their exact source above.
+				if _, delegated := ctx.Value(apiAuthKey{}).(apiAuth); !delegated {
+					if _, sessionErr := s.sessionCredential(ctx, s.cookieValue(request.Header())); sessionErr != nil {
+						return nil, rpcError(sessionErr)
+					}
+				}
+				if !credential.Local {
+					return response, err
+				}
 				user, currentErr := s.currentUser(ctx, credential)
 				if currentErr != nil {
 					return nil, rpcError(currentErr)

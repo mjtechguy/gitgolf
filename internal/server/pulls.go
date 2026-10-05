@@ -239,7 +239,14 @@ func (s *Server) readPull(ctx context.Context, token forgeCredential, base strin
 	return row, err
 }
 
-func (s *Server) listPullRequests(ctx context.Context, value string, token forgeCredential, key repositoryKey, state golfv1.IssueState, paging pageRequest) ([]*golfv1.PullRequest, uint32, error) {
+func (s *Server) listPullRequests(ctx context.Context, value string, token forgeCredential, key repositoryKey, state golfv1.IssueState, paging pageRequest, options ...pullListQuery) ([]*golfv1.PullRequest, uint32, error) {
+	var option pullListQuery
+	if len(options) > 0 {
+		option = options[0]
+	}
+	if err := option.validate(); err != nil {
+		return nil, 0, err
+	}
 	filter, err := pullState(state)
 	if err != nil {
 		return nil, 0, err
@@ -252,9 +259,18 @@ func (s *Server) listPullRequests(ctx context.Context, value string, token forge
 	var next uint32
 	err = s.withRepositoryRead(ctx, value, token, key, func(base string, repo Repository) error {
 		return s.withNativePageSize(ctx, token, limit, func(limit uint32) error {
+			if nonemptyDiscussionQuery(option.Discussion) {
+				var err error
+				result, next, err = s.searchPullRequests(ctx, token, base, repo, filter, page, limit, option)
+				return err
+			}
 			query := pageQuery(page, limit)
 			query.Set("state", filter)
-			query.Set("sort", "recentupdate")
+			sort, _ := nativePullSort(option.Sort)
+			query.Set("sort", sort)
+			if option.BaseBranch != "" {
+				query.Set("base_branch", option.BaseBranch)
+			}
 			var rows []forgePull
 			headers, err := s.forge(ctx, http.MethodGet, base+"/pulls?"+query.Encode(), token, nil, &rows)
 			if err != nil {
@@ -268,7 +284,7 @@ func (s *Server) listPullRequests(ctx context.Context, value string, token forge
 			}
 			seenID, seenNumber := map[int64]bool{}, map[int64]bool{}
 			for _, row := range rows {
-				if !validPull(row, repo) || seenID[row.ID] || seenNumber[row.Number] || (filter != "all" && row.State != filter) {
+				if !validPull(row, repo) || seenID[row.ID] || seenNumber[row.Number] || (filter != "all" && row.State != filter) || option.BaseBranch != "" && row.Base.Ref != option.BaseBranch {
 					return errInvalidForgeResponse
 				}
 				seenID[row.ID], seenNumber[row.Number] = true, true

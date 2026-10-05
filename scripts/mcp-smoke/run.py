@@ -110,8 +110,11 @@ def main():
             'branch': 'feature/mcp', 'message': 'MCP fixture source',
             'content': base64.b64encode(file_content.encode()).decode()}, expected=201)
         revision = content['commit']['sha']
+        label = provider(owner['token'], 'POST', route+'/labels', {'name': 'MCP qualification', 'color': 'aabbcc'}, expected=201)
+        milestone = provider(owner['token'], 'POST', route+'/milestones', {'title': 'MCP release'}, expected=201)
+        release = provider(owner['token'], 'POST', route+'/releases', {'tag_name': 'mcp-v1', 'target_commitish': revision, 'name': 'MCP fixture release', 'body': 'Private release notes', 'draft': False}, expected=201)
         issues = [provider(owner['token'], 'POST', route + '/issues', {
-            'title': 'MCP issue ' + str(i), 'body': 'Private issue <script> text'}, expected=201) for i in range(2)]
+            'title': 'MCP issue ' + str(i), 'body': 'Private issue <script> text', **({'labels': [label['id']], 'milestone': milestone['id'], 'assignees': [owner['name']]} if i == 0 else {})}, expected=201) for i in range(2)]
         # The first repository-wide comment belongs to another issue: callers
         # must preserve an empty target-filtered page's continuation.
         provider(owner['token'], 'POST', route + f'/issues/{issues[1]["number"]}/comments',
@@ -135,6 +138,8 @@ def main():
         pull = provider(owner['token'], 'POST', route + '/pulls', {
             'head': 'feature/mcp', 'base': repository['default_branch'], 'title': 'MCP proposal',
             'body': 'Native proposal <script> untrusted text'}, expected=201)
+        provider(owner['token'], 'PATCH', route+f'/issues/{pull["number"]}', {'milestone': milestone['id'], 'assignees': [owner['name']]})
+        provider(owner['token'], 'PUT', route+f'/issues/{pull["number"]}/labels', {'labels': [label['id']]})
         reviews = [provider(owner['token'], 'POST', route + f'/pulls/{pull["number"]}/reviews', {
             'event': 'COMMENT', 'commit_id': revision, 'body': 'Native review ' + str(i)}, expected=200) for i in range(2)]
         STAGE = 'private organization and team fixtures'
@@ -153,6 +158,7 @@ def main():
             'readerToken': reader['token'], 'narrowToken': narrow, 'outsiderToken': outsider['token'],
             'reader': reader['name'], 'repository': full, 'repositoryId': str(repository['id']),
             'revision': revision, 'filePath': file_path, 'fileContent': file_content,
+            'owner': owner['name'], 'releaseId': str(release['id']), 'labelId': str(label['id']), 'milestoneId': str(milestone['id']), 'baseBranch': repository['default_branch'],
             'organization': organization, 'teamId': team_id, 'orgRepositoryId': str(org_repo['id']),
             'issue': issues[0]['number'], 'pull': pull['number'], 'reviewId': str(reviews[0]['id']),
             'creationKey': creation_key, 'creationRepositoryId': created['repository']['id'], 'apiCredentials': args.api_credentials,

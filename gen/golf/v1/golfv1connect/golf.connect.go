@@ -121,6 +121,9 @@ const (
 	// RepositoryDeploymentServiceName is the fully-qualified name of the RepositoryDeploymentService
 	// service.
 	RepositoryDeploymentServiceName = "golf.v1.RepositoryDeploymentService"
+	// RepositoryRefMutationServiceName is the fully-qualified name of the RepositoryRefMutationService
+	// service.
+	RepositoryRefMutationServiceName = "golf.v1.RepositoryRefMutationService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -361,6 +364,15 @@ const (
 	// InstanceAdminServiceListLocalAccountsProcedure is the fully-qualified name of the
 	// InstanceAdminService's ListLocalAccounts RPC.
 	InstanceAdminServiceListLocalAccountsProcedure = "/golf.v1.InstanceAdminService/ListLocalAccounts"
+	// InstanceAdminServiceListGolfUserAccessProcedure is the fully-qualified name of the
+	// InstanceAdminService's ListGolfUserAccess RPC.
+	InstanceAdminServiceListGolfUserAccessProcedure = "/golf.v1.InstanceAdminService/ListGolfUserAccess"
+	// InstanceAdminServiceChangeGolfUserAccessProcedure is the fully-qualified name of the
+	// InstanceAdminService's ChangeGolfUserAccess RPC.
+	InstanceAdminServiceChangeGolfUserAccessProcedure = "/golf.v1.InstanceAdminService/ChangeGolfUserAccess"
+	// InstanceAdminServiceGetGolfUserAccessOperationProcedure is the fully-qualified name of the
+	// InstanceAdminService's GetGolfUserAccessOperation RPC.
+	InstanceAdminServiceGetGolfUserAccessOperationProcedure = "/golf.v1.InstanceAdminService/GetGolfUserAccessOperation"
 	// AuditServiceListAuditEventsProcedure is the fully-qualified name of the AuditService's
 	// ListAuditEvents RPC.
 	AuditServiceListAuditEventsProcedure = "/golf.v1.AuditService/ListAuditEvents"
@@ -782,6 +794,12 @@ const (
 	// RepositoryDeploymentServiceRevokeRepositoryDeploymentProcedure is the fully-qualified name of the
 	// RepositoryDeploymentService's RevokeRepositoryDeployment RPC.
 	RepositoryDeploymentServiceRevokeRepositoryDeploymentProcedure = "/golf.v1.RepositoryDeploymentService/RevokeRepositoryDeployment"
+	// RepositoryRefMutationServiceSubmitRepositoryRefMutationProcedure is the fully-qualified name of
+	// the RepositoryRefMutationService's SubmitRepositoryRefMutation RPC.
+	RepositoryRefMutationServiceSubmitRepositoryRefMutationProcedure = "/golf.v1.RepositoryRefMutationService/SubmitRepositoryRefMutation"
+	// RepositoryRefMutationServiceGetRepositoryRefMutationOperationProcedure is the fully-qualified
+	// name of the RepositoryRefMutationService's GetRepositoryRefMutationOperation RPC.
+	RepositoryRefMutationServiceGetRepositoryRefMutationOperationProcedure = "/golf.v1.RepositoryRefMutationService/GetRepositoryRefMutationOperation"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -2974,6 +2992,9 @@ type InstanceAdminServiceClient interface {
 	EnableRegularLocalAccount(context.Context, *connect.Request[v1.EnableRegularLocalAccountRequest]) (*connect.Response[v1.EnableRegularLocalAccountResponse], error)
 	DisableLocalAccount(context.Context, *connect.Request[v1.DisableLocalAccountRequest]) (*connect.Response[v1.DisableLocalAccountResponse], error)
 	ListLocalAccounts(context.Context, *connect.Request[v1.ListLocalAccountsRequest]) (*connect.Response[v1.ListLocalAccountsResponse], error)
+	ListGolfUserAccess(context.Context, *connect.Request[v1.ListGolfUserAccessRequest]) (*connect.Response[v1.ListGolfUserAccessResponse], error)
+	ChangeGolfUserAccess(context.Context, *connect.Request[v1.ChangeGolfUserAccessRequest]) (*connect.Response[v1.ChangeGolfUserAccessResponse], error)
+	GetGolfUserAccessOperation(context.Context, *connect.Request[v1.GetGolfUserAccessOperationRequest]) (*connect.Response[v1.GetGolfUserAccessOperationResponse], error)
 }
 
 // NewInstanceAdminServiceClient constructs a client for the golf.v1.InstanceAdminService service.
@@ -3017,16 +3038,37 @@ func NewInstanceAdminServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(instanceAdminServiceMethods.ByName("ListLocalAccounts")),
 			connect.WithClientOptions(opts...),
 		),
+		listGolfUserAccess: connect.NewClient[v1.ListGolfUserAccessRequest, v1.ListGolfUserAccessResponse](
+			httpClient,
+			baseURL+InstanceAdminServiceListGolfUserAccessProcedure,
+			connect.WithSchema(instanceAdminServiceMethods.ByName("ListGolfUserAccess")),
+			connect.WithClientOptions(opts...),
+		),
+		changeGolfUserAccess: connect.NewClient[v1.ChangeGolfUserAccessRequest, v1.ChangeGolfUserAccessResponse](
+			httpClient,
+			baseURL+InstanceAdminServiceChangeGolfUserAccessProcedure,
+			connect.WithSchema(instanceAdminServiceMethods.ByName("ChangeGolfUserAccess")),
+			connect.WithClientOptions(opts...),
+		),
+		getGolfUserAccessOperation: connect.NewClient[v1.GetGolfUserAccessOperationRequest, v1.GetGolfUserAccessOperationResponse](
+			httpClient,
+			baseURL+InstanceAdminServiceGetGolfUserAccessOperationProcedure,
+			connect.WithSchema(instanceAdminServiceMethods.ByName("GetGolfUserAccessOperation")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // instanceAdminServiceClient implements InstanceAdminServiceClient.
 type instanceAdminServiceClient struct {
-	enrollRegularLocalAccount *connect.Client[v1.EnrollRegularLocalAccountRequest, v1.EnrollRegularLocalAccountResponse]
-	resetRegularLocalPassword *connect.Client[v1.ResetRegularLocalPasswordRequest, v1.ResetRegularLocalPasswordResponse]
-	enableRegularLocalAccount *connect.Client[v1.EnableRegularLocalAccountRequest, v1.EnableRegularLocalAccountResponse]
-	disableLocalAccount       *connect.Client[v1.DisableLocalAccountRequest, v1.DisableLocalAccountResponse]
-	listLocalAccounts         *connect.Client[v1.ListLocalAccountsRequest, v1.ListLocalAccountsResponse]
+	enrollRegularLocalAccount  *connect.Client[v1.EnrollRegularLocalAccountRequest, v1.EnrollRegularLocalAccountResponse]
+	resetRegularLocalPassword  *connect.Client[v1.ResetRegularLocalPasswordRequest, v1.ResetRegularLocalPasswordResponse]
+	enableRegularLocalAccount  *connect.Client[v1.EnableRegularLocalAccountRequest, v1.EnableRegularLocalAccountResponse]
+	disableLocalAccount        *connect.Client[v1.DisableLocalAccountRequest, v1.DisableLocalAccountResponse]
+	listLocalAccounts          *connect.Client[v1.ListLocalAccountsRequest, v1.ListLocalAccountsResponse]
+	listGolfUserAccess         *connect.Client[v1.ListGolfUserAccessRequest, v1.ListGolfUserAccessResponse]
+	changeGolfUserAccess       *connect.Client[v1.ChangeGolfUserAccessRequest, v1.ChangeGolfUserAccessResponse]
+	getGolfUserAccessOperation *connect.Client[v1.GetGolfUserAccessOperationRequest, v1.GetGolfUserAccessOperationResponse]
 }
 
 // EnrollRegularLocalAccount calls golf.v1.InstanceAdminService.EnrollRegularLocalAccount.
@@ -3054,6 +3096,21 @@ func (c *instanceAdminServiceClient) ListLocalAccounts(ctx context.Context, req 
 	return c.listLocalAccounts.CallUnary(ctx, req)
 }
 
+// ListGolfUserAccess calls golf.v1.InstanceAdminService.ListGolfUserAccess.
+func (c *instanceAdminServiceClient) ListGolfUserAccess(ctx context.Context, req *connect.Request[v1.ListGolfUserAccessRequest]) (*connect.Response[v1.ListGolfUserAccessResponse], error) {
+	return c.listGolfUserAccess.CallUnary(ctx, req)
+}
+
+// ChangeGolfUserAccess calls golf.v1.InstanceAdminService.ChangeGolfUserAccess.
+func (c *instanceAdminServiceClient) ChangeGolfUserAccess(ctx context.Context, req *connect.Request[v1.ChangeGolfUserAccessRequest]) (*connect.Response[v1.ChangeGolfUserAccessResponse], error) {
+	return c.changeGolfUserAccess.CallUnary(ctx, req)
+}
+
+// GetGolfUserAccessOperation calls golf.v1.InstanceAdminService.GetGolfUserAccessOperation.
+func (c *instanceAdminServiceClient) GetGolfUserAccessOperation(ctx context.Context, req *connect.Request[v1.GetGolfUserAccessOperationRequest]) (*connect.Response[v1.GetGolfUserAccessOperationResponse], error) {
+	return c.getGolfUserAccessOperation.CallUnary(ctx, req)
+}
+
 // InstanceAdminServiceHandler is an implementation of the golf.v1.InstanceAdminService service.
 type InstanceAdminServiceHandler interface {
 	EnrollRegularLocalAccount(context.Context, *connect.Request[v1.EnrollRegularLocalAccountRequest]) (*connect.Response[v1.EnrollRegularLocalAccountResponse], error)
@@ -3061,6 +3118,9 @@ type InstanceAdminServiceHandler interface {
 	EnableRegularLocalAccount(context.Context, *connect.Request[v1.EnableRegularLocalAccountRequest]) (*connect.Response[v1.EnableRegularLocalAccountResponse], error)
 	DisableLocalAccount(context.Context, *connect.Request[v1.DisableLocalAccountRequest]) (*connect.Response[v1.DisableLocalAccountResponse], error)
 	ListLocalAccounts(context.Context, *connect.Request[v1.ListLocalAccountsRequest]) (*connect.Response[v1.ListLocalAccountsResponse], error)
+	ListGolfUserAccess(context.Context, *connect.Request[v1.ListGolfUserAccessRequest]) (*connect.Response[v1.ListGolfUserAccessResponse], error)
+	ChangeGolfUserAccess(context.Context, *connect.Request[v1.ChangeGolfUserAccessRequest]) (*connect.Response[v1.ChangeGolfUserAccessResponse], error)
+	GetGolfUserAccessOperation(context.Context, *connect.Request[v1.GetGolfUserAccessOperationRequest]) (*connect.Response[v1.GetGolfUserAccessOperationResponse], error)
 }
 
 // NewInstanceAdminServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -3100,6 +3160,24 @@ func NewInstanceAdminServiceHandler(svc InstanceAdminServiceHandler, opts ...con
 		connect.WithSchema(instanceAdminServiceMethods.ByName("ListLocalAccounts")),
 		connect.WithHandlerOptions(opts...),
 	)
+	instanceAdminServiceListGolfUserAccessHandler := connect.NewUnaryHandler(
+		InstanceAdminServiceListGolfUserAccessProcedure,
+		svc.ListGolfUserAccess,
+		connect.WithSchema(instanceAdminServiceMethods.ByName("ListGolfUserAccess")),
+		connect.WithHandlerOptions(opts...),
+	)
+	instanceAdminServiceChangeGolfUserAccessHandler := connect.NewUnaryHandler(
+		InstanceAdminServiceChangeGolfUserAccessProcedure,
+		svc.ChangeGolfUserAccess,
+		connect.WithSchema(instanceAdminServiceMethods.ByName("ChangeGolfUserAccess")),
+		connect.WithHandlerOptions(opts...),
+	)
+	instanceAdminServiceGetGolfUserAccessOperationHandler := connect.NewUnaryHandler(
+		InstanceAdminServiceGetGolfUserAccessOperationProcedure,
+		svc.GetGolfUserAccessOperation,
+		connect.WithSchema(instanceAdminServiceMethods.ByName("GetGolfUserAccessOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/golf.v1.InstanceAdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case InstanceAdminServiceEnrollRegularLocalAccountProcedure:
@@ -3112,6 +3190,12 @@ func NewInstanceAdminServiceHandler(svc InstanceAdminServiceHandler, opts ...con
 			instanceAdminServiceDisableLocalAccountHandler.ServeHTTP(w, r)
 		case InstanceAdminServiceListLocalAccountsProcedure:
 			instanceAdminServiceListLocalAccountsHandler.ServeHTTP(w, r)
+		case InstanceAdminServiceListGolfUserAccessProcedure:
+			instanceAdminServiceListGolfUserAccessHandler.ServeHTTP(w, r)
+		case InstanceAdminServiceChangeGolfUserAccessProcedure:
+			instanceAdminServiceChangeGolfUserAccessHandler.ServeHTTP(w, r)
+		case InstanceAdminServiceGetGolfUserAccessOperationProcedure:
+			instanceAdminServiceGetGolfUserAccessOperationHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -3139,6 +3223,18 @@ func (UnimplementedInstanceAdminServiceHandler) DisableLocalAccount(context.Cont
 
 func (UnimplementedInstanceAdminServiceHandler) ListLocalAccounts(context.Context, *connect.Request[v1.ListLocalAccountsRequest]) (*connect.Response[v1.ListLocalAccountsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InstanceAdminService.ListLocalAccounts is not implemented"))
+}
+
+func (UnimplementedInstanceAdminServiceHandler) ListGolfUserAccess(context.Context, *connect.Request[v1.ListGolfUserAccessRequest]) (*connect.Response[v1.ListGolfUserAccessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InstanceAdminService.ListGolfUserAccess is not implemented"))
+}
+
+func (UnimplementedInstanceAdminServiceHandler) ChangeGolfUserAccess(context.Context, *connect.Request[v1.ChangeGolfUserAccessRequest]) (*connect.Response[v1.ChangeGolfUserAccessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InstanceAdminService.ChangeGolfUserAccess is not implemented"))
+}
+
+func (UnimplementedInstanceAdminServiceHandler) GetGolfUserAccessOperation(context.Context, *connect.Request[v1.GetGolfUserAccessOperationRequest]) (*connect.Response[v1.GetGolfUserAccessOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InstanceAdminService.GetGolfUserAccessOperation is not implemented"))
 }
 
 // AuditServiceClient is a client for the golf.v1.AuditService service.
@@ -8361,4 +8457,104 @@ func (UnimplementedRepositoryDeploymentServiceHandler) ActivateRepositoryDeploym
 
 func (UnimplementedRepositoryDeploymentServiceHandler) RevokeRepositoryDeployment(context.Context, *connect.Request[v1.RevokeRepositoryDeploymentRequest]) (*connect.Response[v1.RevokeRepositoryDeploymentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryDeploymentService.RevokeRepositoryDeployment is not implemented"))
+}
+
+// RepositoryRefMutationServiceClient is a client for the golf.v1.RepositoryRefMutationService
+// service.
+type RepositoryRefMutationServiceClient interface {
+	SubmitRepositoryRefMutation(context.Context, *connect.Request[v1.SubmitRepositoryRefMutationRequest]) (*connect.Response[v1.SubmitRepositoryRefMutationResponse], error)
+	GetRepositoryRefMutationOperation(context.Context, *connect.Request[v1.GetRepositoryRefMutationOperationRequest]) (*connect.Response[v1.GetRepositoryRefMutationOperationResponse], error)
+}
+
+// NewRepositoryRefMutationServiceClient constructs a client for the
+// golf.v1.RepositoryRefMutationService service. By default, it uses the Connect protocol with the
+// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
+// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRepositoryRefMutationServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepositoryRefMutationServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	repositoryRefMutationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryRefMutationService").Methods()
+	return &repositoryRefMutationServiceClient{
+		submitRepositoryRefMutation: connect.NewClient[v1.SubmitRepositoryRefMutationRequest, v1.SubmitRepositoryRefMutationResponse](
+			httpClient,
+			baseURL+RepositoryRefMutationServiceSubmitRepositoryRefMutationProcedure,
+			connect.WithSchema(repositoryRefMutationServiceMethods.ByName("SubmitRepositoryRefMutation")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryRefMutationOperation: connect.NewClient[v1.GetRepositoryRefMutationOperationRequest, v1.GetRepositoryRefMutationOperationResponse](
+			httpClient,
+			baseURL+RepositoryRefMutationServiceGetRepositoryRefMutationOperationProcedure,
+			connect.WithSchema(repositoryRefMutationServiceMethods.ByName("GetRepositoryRefMutationOperation")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// repositoryRefMutationServiceClient implements RepositoryRefMutationServiceClient.
+type repositoryRefMutationServiceClient struct {
+	submitRepositoryRefMutation       *connect.Client[v1.SubmitRepositoryRefMutationRequest, v1.SubmitRepositoryRefMutationResponse]
+	getRepositoryRefMutationOperation *connect.Client[v1.GetRepositoryRefMutationOperationRequest, v1.GetRepositoryRefMutationOperationResponse]
+}
+
+// SubmitRepositoryRefMutation calls
+// golf.v1.RepositoryRefMutationService.SubmitRepositoryRefMutation.
+func (c *repositoryRefMutationServiceClient) SubmitRepositoryRefMutation(ctx context.Context, req *connect.Request[v1.SubmitRepositoryRefMutationRequest]) (*connect.Response[v1.SubmitRepositoryRefMutationResponse], error) {
+	return c.submitRepositoryRefMutation.CallUnary(ctx, req)
+}
+
+// GetRepositoryRefMutationOperation calls
+// golf.v1.RepositoryRefMutationService.GetRepositoryRefMutationOperation.
+func (c *repositoryRefMutationServiceClient) GetRepositoryRefMutationOperation(ctx context.Context, req *connect.Request[v1.GetRepositoryRefMutationOperationRequest]) (*connect.Response[v1.GetRepositoryRefMutationOperationResponse], error) {
+	return c.getRepositoryRefMutationOperation.CallUnary(ctx, req)
+}
+
+// RepositoryRefMutationServiceHandler is an implementation of the
+// golf.v1.RepositoryRefMutationService service.
+type RepositoryRefMutationServiceHandler interface {
+	SubmitRepositoryRefMutation(context.Context, *connect.Request[v1.SubmitRepositoryRefMutationRequest]) (*connect.Response[v1.SubmitRepositoryRefMutationResponse], error)
+	GetRepositoryRefMutationOperation(context.Context, *connect.Request[v1.GetRepositoryRefMutationOperationRequest]) (*connect.Response[v1.GetRepositoryRefMutationOperationResponse], error)
+}
+
+// NewRepositoryRefMutationServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRepositoryRefMutationServiceHandler(svc RepositoryRefMutationServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	repositoryRefMutationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryRefMutationService").Methods()
+	repositoryRefMutationServiceSubmitRepositoryRefMutationHandler := connect.NewUnaryHandler(
+		RepositoryRefMutationServiceSubmitRepositoryRefMutationProcedure,
+		svc.SubmitRepositoryRefMutation,
+		connect.WithSchema(repositoryRefMutationServiceMethods.ByName("SubmitRepositoryRefMutation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryRefMutationServiceGetRepositoryRefMutationOperationHandler := connect.NewUnaryHandler(
+		RepositoryRefMutationServiceGetRepositoryRefMutationOperationProcedure,
+		svc.GetRepositoryRefMutationOperation,
+		connect.WithSchema(repositoryRefMutationServiceMethods.ByName("GetRepositoryRefMutationOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RepositoryRefMutationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RepositoryRefMutationServiceSubmitRepositoryRefMutationProcedure:
+			repositoryRefMutationServiceSubmitRepositoryRefMutationHandler.ServeHTTP(w, r)
+		case RepositoryRefMutationServiceGetRepositoryRefMutationOperationProcedure:
+			repositoryRefMutationServiceGetRepositoryRefMutationOperationHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRepositoryRefMutationServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRepositoryRefMutationServiceHandler struct{}
+
+func (UnimplementedRepositoryRefMutationServiceHandler) SubmitRepositoryRefMutation(context.Context, *connect.Request[v1.SubmitRepositoryRefMutationRequest]) (*connect.Response[v1.SubmitRepositoryRefMutationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryRefMutationService.SubmitRepositoryRefMutation is not implemented"))
+}
+
+func (UnimplementedRepositoryRefMutationServiceHandler) GetRepositoryRefMutationOperation(context.Context, *connect.Request[v1.GetRepositoryRefMutationOperationRequest]) (*connect.Response[v1.GetRepositoryRefMutationOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryRefMutationService.GetRepositoryRefMutationOperation is not implemented"))
 }

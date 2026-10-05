@@ -238,6 +238,9 @@ service InstanceAdminService {
   rpc EnableRegularLocalAccount(EnableRegularLocalAccountRequest) returns (EnableRegularLocalAccountResponse);
   rpc DisableLocalAccount(DisableLocalAccountRequest) returns (DisableLocalAccountResponse);
   rpc ListLocalAccounts(ListLocalAccountsRequest) returns (ListLocalAccountsResponse);
+  rpc ListGolfUserAccess(ListGolfUserAccessRequest) returns (ListGolfUserAccessResponse);
+  rpc ChangeGolfUserAccess(ChangeGolfUserAccessRequest) returns (ChangeGolfUserAccessResponse);
+  rpc GetGolfUserAccessOperation(GetGolfUserAccessOperationRequest) returns (GetGolfUserAccessOperationResponse);
 }
 
 // Own-account successful session lifecycle. This is not a complete security audit.
@@ -611,6 +614,7 @@ message DiscussionLabel {
   string description = 4;
   bool exclusive = 5;
   bool archived = 6;
+  string revision = 7;
 }
 message DiscussionMilestone {
   string id = 1;
@@ -621,6 +625,7 @@ message DiscussionMilestone {
   uint64 closed_issues = 6;
   // Empty when the provider supplies no deadline.
   string due_on = 7;
+  string revision = 8;
 }
 message DiscussionMetadata {
   repeated DiscussionLabel labels = 1;
@@ -631,11 +636,21 @@ message DiscussionMetadata {
   bool assignees_known = 5;
   bool milestone_known = 6;
 }
+// Repository-native search, newest first. Label names are AND filters.
+// Native filtered pages may be empty and still have a continuation page.
+message DiscussionQuery {
+  string search = 1;
+  string author = 2;
+  string assignee = 3;
+  repeated string label_names = 4;
+  string milestone_title = 5;
+}
 message ListIssuesRequest {
   RepositoryKey repository = 1;
   // Unspecified defaults to open. Other unknown enum values are invalid.
   IssueState state = 2;
   PageRequest page = 3;
+  DiscussionQuery query = 4;
 }
 message ListIssuesResponse {
   repeated Issue issues = 1;
@@ -655,6 +670,9 @@ message IssueComment {
   string created_at = 4;
   string updated_at = 5;
   string html_url = 6;
+  string revision = 7;
+  bool can_edit = 8;
+  bool can_delete = 9;
 }
 message ListIssueCommentsRequest {
   RepositoryKey repository = 1;
@@ -735,12 +753,14 @@ message ListRepositoryLabelsRequest {
   RepositoryKey repository = 1;
   string repository_id = 2;
   PageRequest page = 3;
+  bool pull_request = 4;
 }
 message ListRepositoryLabelsResponse {
   repeated DiscussionLabel labels = 1;
   PageResponse page = 2;
   // Initial repository-only editor admits current native repository admins.
   bool can_edit_labels = 3;
+  bool can_manage = 4;
 }
 message IssueLabelsChange {
   // Sorted, unique canonical positive decimal int64 IDs; maximum 256 per set.
@@ -752,6 +772,7 @@ message IssueLabelsChange {
 message ListRepositoryAssigneesRequest {
   RepositoryKey repository = 1;
   string repository_id = 2;
+  bool pull_request = 3;
 }
 message ListRepositoryAssigneesResponse {
   // Native inventory is unpaginated; at most 1000 candidates are supported.
@@ -776,6 +797,7 @@ message ListRepositoryMilestonesRequest {
   // Unspecified defaults to OPEN. ALL includes closed milestones.
   IssueState state = 3;
   PageRequest page = 4;
+  bool pull_request = 5;
 }
 message ListRepositoryMilestonesResponse {
   repeated DiscussionMilestone milestones = 1;
@@ -783,6 +805,7 @@ message ListRepositoryMilestonesResponse {
   // Initial editor admits only current native repository administrators.
   // This is an observation, not a reservation or general issue-unit write grant.
   bool can_edit_milestone = 3;
+  bool can_manage = 4;
 }
 message IssueMilestoneChange {
   // Canonical decimal IDs; 0 is explicitly observed None or requested clear.
@@ -858,6 +881,11 @@ message ListPullRequestsRequest {
   // Unspecified defaults to open; ALL includes merged and unmerged closed PRs.
   IssueState state = 2;
   PageRequest page = 3;
+  DiscussionQuery query = 4;
+  // newest, oldest, updated, least-updated, most-commented, least-commented.
+  // A nonempty discussion query supports newest only.
+  string sort = 5;
+  string base_branch = 6;
 }
 message ListPullRequestsResponse {
   repeated PullRequest pull_requests = 1;
@@ -2178,6 +2206,9 @@ message UpdatePullRequestRequest {
  optional string body = 8;
  IssueState state = 9;
  optional bool draft = 10;
+ IssueMilestoneChange milestone = 11;
+ IssueLabelsChange labels = 12;
+ IssueAssigneesChange assignees = 13;
 }
 message UpdatePullRequestResponse { IssueMutation mutation = 1; PullRequest pull_request = 2; }
 
@@ -4173,3 +4204,235 @@ message ReviewRepositoryDeploymentResponse { RepositoryDeployment deployment=1; 
 message ActivateRepositoryDeploymentResponse { RepositoryDeployment deployment=1; }
 
 message RevokeRepositoryDeploymentResponse { RepositoryDeployment deployment=1; }
+
+// Ordinary unprotected ref operations. Native observations are not atomic CAS.
+service RepositoryRefMutationService {
+  rpc SubmitRepositoryRefMutation(SubmitRepositoryRefMutationRequest) returns (SubmitRepositoryRefMutationResponse);
+  rpc GetRepositoryRefMutationOperation(GetRepositoryRefMutationOperationRequest) returns (GetRepositoryRefMutationOperationResponse);
+}
+enum RepositoryRefMutationKind {
+  REPOSITORY_REF_MUTATION_KIND_UNSPECIFIED = 0;
+  REPOSITORY_REF_MUTATION_KIND_CREATE_BRANCH = 1;
+  REPOSITORY_REF_MUTATION_KIND_DELETE_BRANCH = 2;
+  REPOSITORY_REF_MUTATION_KIND_CREATE_TAG = 3;
+  REPOSITORY_REF_MUTATION_KIND_DELETE_TAG = 4;
+}
+enum RepositoryRefMutationPhase {
+  REPOSITORY_REF_MUTATION_PHASE_UNSPECIFIED = 0;
+  REPOSITORY_REF_MUTATION_PHASE_RESERVED = 1;
+  REPOSITORY_REF_MUTATION_PHASE_DISPATCH_UNKNOWN = 2;
+  REPOSITORY_REF_MUTATION_PHASE_SUCCEEDED = 3;
+  REPOSITORY_REF_MUTATION_PHASE_REJECTED = 4;
+}
+message SubmitRepositoryRefMutationRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string access_revision = 4;
+  string operation_id = 5;
+  RepositoryRefMutationKind kind = 6;
+  string name = 7;
+  string commit_id = 8;
+  // DELETE_TAG requires the exact tag object (equal to commit_id for lightweight tags).
+  string tag_object_id = 9;
+}
+message GetRepositoryRefMutationOperationRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string operation_id = 4;
+}
+message RepositoryRefMutationOperation {
+  string contract = 1;
+  string operation_id = 2;
+  string actor_id = 3;
+  RepositoryKey repository = 4;
+  string repository_id = 5;
+  string owner_id = 6;
+  string access_revision = 7;
+  RepositoryRefMutationKind kind = 8;
+  string name = 9;
+  string commit_id = 10;
+  string tag_object_id = 11;
+  RepositoryRefMutationPhase phase = 12;
+  string created_at = 13;
+  string updated_at = 14;
+  string failure_code = 15;
+}
+message SubmitRepositoryRefMutationResponse { RepositoryRefMutationOperation operation = 1; }
+message GetRepositoryRefMutationOperationResponse { RepositoryRefMutationOperation operation = 1; }
+
+// Golf-managed access only; native independently authenticated ingress is separate.
+message GolfUserAccess {
+  string golf_user_id = 1;
+  string native_user_id = 2;
+  string login = 3;
+  bool is_instance_admin = 4;
+  bool suspended = 5;
+  string version = 6;
+  string reason = 7;
+  string changed_at = 8;
+}
+message ListGolfUserAccessRequest { PageRequest page = 1; }
+message ListGolfUserAccessResponse { repeated GolfUserAccess users = 1; PageResponse page = 2; }
+message ChangeGolfUserAccessRequest {
+  string golf_user_id = 1;
+  string native_user_id = 2;
+  string expected_version = 3;
+  bool suspended = 4;
+  string reason = 5;
+  string password_confirmation = 6;
+  string operation_id = 7;
+}
+message GolfUserAccessOperation {
+  string operation_id = 1;
+  string golf_user_id = 2;
+  string native_user_id = 3;
+  string version = 4;
+  bool suspended = 5;
+  string reason = 6;
+  string changed_at = 7;
+  uint64 sessions_revoked = 8;
+  uint64 automation_grants_revoked = 9;
+}
+message GetGolfUserAccessOperationRequest {
+  string golf_user_id = 1;
+  string native_user_id = 2;
+  string operation_id = 3;
+}
+message ChangeGolfUserAccessResponse { GolfUserAccessOperation operation = 1; GolfUserAccess user = 2; }
+message GetGolfUserAccessOperationResponse { GolfUserAccessOperation operation = 1; GolfUserAccess user = 2; }
+
+enum DiscussionResourceOperationKind {
+  DISCUSSION_RESOURCE_OPERATION_KIND_UNSPECIFIED = 0;
+  DISCUSSION_RESOURCE_OPERATION_KIND_CREATE_LABEL = 1;
+  DISCUSSION_RESOURCE_OPERATION_KIND_UPDATE_LABEL = 2;
+  DISCUSSION_RESOURCE_OPERATION_KIND_DELETE_LABEL = 3;
+  DISCUSSION_RESOURCE_OPERATION_KIND_CREATE_MILESTONE = 4;
+  DISCUSSION_RESOURCE_OPERATION_KIND_UPDATE_MILESTONE = 5;
+  DISCUSSION_RESOURCE_OPERATION_KIND_DELETE_MILESTONE = 6;
+  DISCUSSION_RESOURCE_OPERATION_KIND_UPDATE_COMMENT = 7;
+  DISCUSSION_RESOURCE_OPERATION_KIND_DELETE_COMMENT = 8;
+}
+enum DiscussionResourceOperationPhase {
+  DISCUSSION_RESOURCE_OPERATION_PHASE_UNSPECIFIED = 0;
+  DISCUSSION_RESOURCE_OPERATION_PHASE_RESERVED = 1;
+  DISCUSSION_RESOURCE_OPERATION_PHASE_DISPATCH_UNKNOWN = 2;
+  DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED = 3;
+  DISCUSSION_RESOURCE_OPERATION_PHASE_REJECTED = 4;
+}
+message DiscussionLabelDraft {
+  string name = 1;
+  string color = 2;
+  string description = 3;
+  bool exclusive = 4;
+  bool archived = 5;
+}
+message DiscussionMilestoneDraft {
+  string title = 1;
+  string description = 2;
+  IssueState state = 3;
+  // UTC calendar YYYY-MM-DD; empty explicitly clears.
+  string due_date = 4;
+}
+message SubmitDiscussionResourceOperationRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string operation_id = 3;
+  DiscussionResourceOperationKind kind = 4;
+  string resource_id = 5;
+  string expected_revision = 6;
+  string issue_id = 7;
+  uint32 number = 8;
+  bool pull_request = 9;
+  oneof change {
+    DiscussionLabelDraft label = 10;
+    DiscussionMilestoneDraft milestone = 11;
+    string comment_body = 12;
+  }
+}
+message DiscussionResourceOperation {
+  string operation_id = 1;
+  DiscussionResourceOperationKind kind = 2;
+  DiscussionResourceOperationPhase phase = 3;
+  RepositoryKey repository = 4;
+  string repository_id = 5;
+  string resource_id = 6;
+  string observed_resource_id = 7;
+  string expected_revision = 8;
+  string issue_id = 9;
+  uint32 number = 10;
+  bool pull_request = 11;
+  string failure_code = 12;
+  string created_at = 13;
+  string updated_at = 14;
+}
+message SubmitDiscussionResourceOperationResponse {
+  DiscussionResourceOperation operation = 1;
+  DiscussionLabel label = 2;
+  DiscussionMilestone milestone = 3;
+  IssueComment comment = 4;
+}
+message GetDiscussionResourceOperationRequest { string operation_id = 1; }
+message GetDiscussionResourceOperationResponse { DiscussionResourceOperation operation = 1; }
+
+enum RepositoryFileMutationKind {
+  REPOSITORY_FILE_MUTATION_KIND_UNSPECIFIED = 0;
+  REPOSITORY_FILE_MUTATION_KIND_CREATE = 1;
+  REPOSITORY_FILE_MUTATION_KIND_UPDATE = 2;
+  REPOSITORY_FILE_MUTATION_KIND_DELETE = 3;
+}
+enum RepositoryFileMutationPhase {
+  REPOSITORY_FILE_MUTATION_PHASE_UNSPECIFIED = 0;
+  REPOSITORY_FILE_MUTATION_PHASE_RESERVED = 1;
+  REPOSITORY_FILE_MUTATION_PHASE_DISPATCH_UNKNOWN = 2;
+  REPOSITORY_FILE_MUTATION_PHASE_SUCCEEDED = 3;
+  REPOSITORY_FILE_MUTATION_PHASE_REJECTED = 4;
+}
+// Ordinary unprotected branch contents only. The native API accepts a blob SHA
+// for updates/deletes; expected_commit_id is an observed HEAD, not atomic CAS.
+message SubmitRepositoryFileMutationRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string access_revision = 4;
+  string operation_id = 5;
+  RepositoryFileMutationKind kind = 6;
+  string branch = 7;
+  string expected_commit_id = 8;
+  string path = 9;
+  string expected_blob_id = 10;
+  bytes content = 11; // At most 256 KiB; empty for deletion.
+  string commit_message = 12;
+}
+message GetRepositoryFileMutationOperationRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string operation_id = 4;
+}
+message RepositoryFileMutationOperation {
+  string contract = 1;
+  string operation_id = 2;
+  string actor_id = 3;
+  RepositoryKey repository = 4;
+  string repository_id = 5;
+  string owner_id = 6;
+  string access_revision = 7;
+  RepositoryFileMutationKind kind = 8;
+  string branch = 9;
+  string expected_commit_id = 10;
+  string path = 11;
+  string expected_blob_id = 12;
+  string content_sha256 = 13;
+  uint64 content_size_bytes = 14;
+  string commit_message_sha256 = 15;
+  RepositoryFileMutationPhase phase = 16;
+  string commit_id = 17;
+  string blob_id = 18;
+  string created_at = 19;
+  string updated_at = 20;
+  string failure_code = 21;
+}
+message SubmitRepositoryFileMutationResponse { RepositoryFileMutationOperation operation = 1; }
+message GetRepositoryFileMutationOperationResponse { RepositoryFileMutationOperation operation = 1; }

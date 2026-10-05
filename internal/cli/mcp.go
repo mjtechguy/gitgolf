@@ -33,17 +33,25 @@ var mcpReads = []mcpRead{
 	{"golf_repo_overview", "Read exact-ID authorized repository overview, topics, optional counts and indexed language/license states. Independent current metadata, not selected-commit statistics. No website fetch, contributors or mutation.", "repo overview", []string{"repository"}, nil},
 	{"golf_repo_creation", "Inspect your recorded creation intent. Unknown/rejected is not creation success. Never redispatches.", "repo creation", []string{"idempotency_key"}, nil},
 	{"golf_repo_branches", "List branches; select an exact commit for stable later reads.", "repo branches", []string{"repository"}, []string{"page", "limit"}},
+	{"golf_repo_tags", "List tags with exact current repository identity and separate tag object/peeled commit IDs.", "repo tags", []string{"repository"}, []string{"page", "limit"}},
+	{"golf_repo_releases", "List current authorized native releases with assets; page sizes up to50. Does not publish or download attachments.", "repo releases", []string{"repository"}, []string{"page", "limit"}},
+	{"golf_repo_release", "Read one exact current authorized release after resolving repository identity.", "repo release", []string{"repository", "release_id"}, nil},
+	{"golf_repo_labels", "Read current repository label inventory; does not administer labels.", "repo labels", []string{"repository"}, []string{"page", "limit"}},
+	{"golf_repo_milestones", "Read current repository milestones with explicit state and pagination; does not administer milestones.", "repo milestones", []string{"repository"}, []string{"state", "page", "limit"}},
+	{"golf_repo_assignees", "Read bounded repository assignee candidates. Discovery is not eligibility; saves require separate native checks. No mutation.", "repo assignees", []string{"repository"}, nil},
 	{"golf_repo_commits", "List native commit history; optional path requires a full immutable ref and returns exact path history pages.", "repo commits", []string{"repository"}, []string{"ref", "path", "page", "limit"}},
 	{"golf_repo_contents", "Read bounded source through exact repository/ref resolution. Omitted ref selects default branch; bare SHA selects commit; other bare refs select branch only. Tags require ref_kind=tag. Use returned repositoryId/commitId for immutable identity; non-text files return metadata.", "repo contents", []string{"repository"}, []string{"ref", "ref_kind", "path"}},
 	{"golf_commit_diff", "Read bounded raw native diff at a full exact commit ID. Roots/first-parent merges are labeled; no completeness or merge-readiness claim.", "commit diff", []string{"repository", "commit_id"}, nil},
-	{"golf_issue_list", "List issues with explicit state and pagination.", "issue list", []string{"repository"}, []string{"state", "page", "limit"}},
+	{"golf_issue_list", "Search repository issues newest-first with native keyword, author, assignee, exact milestone title and comma-separated label names (all required). Explicit pagination; empty filtered pages may continue.", "issue list", []string{"repository"}, []string{"state", "search", "author", "assignee", "labels", "milestone", "page", "limit"}},
 	{"golf_issue_view", "Read issue metadata and plain-text description.", "issue view", []string{"repository", "number"}, nil},
 	{"golf_issue_comments", "Read issue comments after resolving exact native identities. Repository-wide pages are filtered; continue page.nextPage even on an empty page.", "issue comments", []string{"repository", "number"}, []string{"page", "limit"}},
 	{"golf_issue_operation", "Inspect your recorded issue/comment operation by key. Unknown/rejected is not success. Never posts, retries or adopts an outcome.", "issue operation", []string{"idempotency_key"}, nil},
-	{"golf_pr_list", "List pull requests. Native list heads are retained snapshots, not freshness evidence.", "pr list", []string{"repository"}, []string{"state", "page", "limit"}},
+	{"golf_pr_list", "List/search repository pull requests. Native keyword/author/assignee/label/milestone search supports newest-first and at most20 rows per page; base filters target branch. Empty filtered pages may continue. Heads are retained snapshots, not freshness evidence.", "pr list", []string{"repository"}, []string{"state", "search", "author", "assignee", "labels", "milestone", "sort", "base", "page", "limit"}},
 	{"golf_pr_view", "Read pull-request metadata. Native review/check state does not establish Golf merge eligibility.", "pr view", []string{"repository", "number"}, nil},
 	{"golf_pr_diff", "Read a bounded native PR diff with exact repository/PR IDs and selected base/head commits. mergeBaseCommitId identifies the old side, distinct from base tip. No lookup, pagination, completeness or merge readiness.", "pr diff", []string{"repository", "number"}, []string{"repository_id", "pull_request_id", "base_commit_id", "head_commit_id"}},
 	{"golf_pr_reviews", "Read native reviews; continue page.nextPage even on an empty filtered page. No Golf approval eligibility claim.", "pr reviews", []string{"repository", "number"}, []string{"page", "limit"}},
+	{"golf_pr_commits", "Read paged commits at an exact repository/PR/base/head selection. No source freshness or merge eligibility claim.", "pr commits", []string{"repository", "number", "repository_id", "pull_request_id", "base_commit_id", "head_commit_id"}, []string{"page", "limit"}},
+	{"golf_pr_checks", "Read paged native check observations at an exact repository/PR/base/head selection. These are not trusted merge evidence.", "pr checks", []string{"repository", "number", "repository_id", "pull_request_id", "base_commit_id", "head_commit_id"}, []string{"page", "limit"}},
 	{"golf_pr_review_comments", "Read an entire bounded native review-comment collection at explicit repository/PR/review IDs and reviewed commit. No inferred threads, pagination, source freshness or merge eligibility.", "pr review-comments", []string{"repository", "number", "review_id"}, []string{"repository_id", "pull_request_id", "review_commit_id"}},
 	{"golf_org_list", "List your current native organization memberships.", "org list", nil, []string{"page", "limit"}},
 	{"golf_org_view", "Read a member-scoped organization.", "org view", []string{"organization"}, nil},
@@ -74,6 +82,14 @@ func (tool mcpRead) schema() map[string]any {
 			field = map[string]any{"type": "integer", "minimum": 1, "maximum": maximum}
 		case "state":
 			field["enum"] = []string{"open", "closed", "all"}
+		case "sort":
+			field["enum"] = []string{"newest", "oldest", "updated", "least-updated", "most-commented", "least-commented"}
+		case "search":
+			field["maxLength"] = 512
+		case "author", "assignee":
+			field["maxLength"] = 100
+		case "milestone":
+			field["maxLength"] = 255
 		case "ref_kind":
 			field["enum"] = []string{"branch", "tag", "commit"}
 		case "ref":
@@ -83,7 +99,7 @@ func (tool mcpRead) schema() map[string]any {
 		case "repository":
 			field["description"] = "OWNER/REPO"
 			field["minLength"] = 3
-		case "team_id", "before_id", "snapshot_id", "review_id", "repository_id", "pull_request_id":
+		case "team_id", "before_id", "snapshot_id", "review_id", "repository_id", "pull_request_id", "release_id":
 			field["pattern"] = "^[1-9][0-9]*$"
 		case "commit_id", "review_commit_id", "base_commit_id", "head_commit_id":
 			field["pattern"] = commitID.String()
@@ -137,7 +153,7 @@ func (tool mcpRead) parse(raw json.RawMessage) (command, error) {
 			if key == "state" && value != "open" && value != "closed" && value != "all" {
 				return command{}, invalid
 			}
-			if key == "team_id" || key == "before_id" || key == "snapshot_id" || key == "review_id" || key == "repository_id" || key == "pull_request_id" {
+			if key == "team_id" || key == "before_id" || key == "snapshot_id" || key == "review_id" || key == "repository_id" || key == "pull_request_id" || key == "release_id" {
 				if !canonicalNativeID(value) {
 					return command{}, invalid
 				}
@@ -150,7 +166,12 @@ func (tool mcpRead) parse(raw json.RawMessage) (command, error) {
 		if values[key] == "" {
 			return command{}, invalid
 		}
-		args = append(args, values[key])
+		if (tool.command == "pr commits" || tool.command == "pr checks") && key != "repository" && key != "number" {
+			flag := map[string]string{"repository_id": "repo-id", "pull_request_id": "pull-id", "base_commit_id": "base", "head_commit_id": "head"}[key]
+			args = append(args, "--"+flag, values[key])
+		} else {
+			args = append(args, values[key])
+		}
 	}
 	for _, key := range tool.flags {
 		if value, ok := values[key]; ok {

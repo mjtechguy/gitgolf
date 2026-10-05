@@ -1263,3 +1263,10 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .metadata-choice-list .field-help { margin:8px 0; }
 .metadata-choice-scroll { max-height:240px; overflow:auto; scrollbar-gutter:stable; }
 .metadata-choice-list label>span { min-width:0; overflow-wrap:anywhere; }
+
+/* Shared server-side discussion filters; editors open only on request. */
+.discussion-filter-fields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; padding:12px 16px; border-bottom:1px solid var(--line); }
+.discussion-filter-fields label { display:grid; gap:5px; min-width:0; font-size:.8125rem; color:var(--muted); }
+.discussion-filter-fields input,.discussion-filter-fields select { width:100%; min-width:0; }
+.discussion-filter-fields .field-help,.discussion-filter-fields .credential-actions { grid-column:1/-1; }
+@media(max-width:720px) { .discussion-filter-fields { grid-template-columns:1fr; padding:12px; } }

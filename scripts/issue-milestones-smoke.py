@@ -5,6 +5,7 @@ Supported APIs create all data. Credentials remain in memory; owned sessions and
 native accounts are removed afterward. No retained repository or account changes.
 """
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
@@ -88,6 +89,7 @@ def main():
     modes.add_argument('--labels', action='store_true', help='Qualify repository-only label replacement instead of milestones')
     modes.add_argument('--assignees', action='store_true', help='Qualify assignable-user add/replace/clear instead of milestones')
     parser.add_argument('--self-check', action='store_true', help='Check pure request builders without touching the runtime')
+    parser.add_argument('--pull', action='store_true', help='Qualify pull-request metadata on a real native pull request')
     args = parser.parse_args()
     if args.self_check:
         self_check()
@@ -122,12 +124,23 @@ def main():
             smoke.provider(token, 'PUT', base+'/collaborators/'+actor[0], {'permission': permission}, expected=204)
         labels = [smoke.provider(token, 'POST', base+'/labels', {'name': 'Label '+label, 'color': 'aabbcc'}, expected=201) for label in ('A', 'B')] if args.labels or args.assignees else []
         milestones = [smoke.provider(token, 'POST', base+'/milestones', {'title': 'Release '+label, 'due_on': '2026-12-01T00:00:00Z'}, expected=201) for label in ('A', 'B')] if not args.labels else []
-        issue = smoke.provider(token, 'POST', base+'/issues', {'title': 'Metadata assignment qualification', 'body': 'Unchanged private description', **({'labels': [labels[0]['id']]} if labels else {}), **({'milestone': milestones[0]['id']} if milestones else {}), **({'assignees': [name]} if args.assignees else {})}, expected=201)
+        if args.pull:
+            smoke.provider(token, 'POST', base+'/branches', {'new_branch_name': 'metadata-proof', 'old_branch_name': native['default_branch']}, expected=201)
+            smoke.provider(token, 'POST', base+'/contents/metadata-proof.txt', {'branch': 'metadata-proof', 'message': 'Create metadata fixture', 'content': base64.b64encode(b'Metadata fixture\n').decode()}, expected=201)
+            pull = smoke.provider(token, 'POST', base+'/pulls', {'title': 'Metadata assignment qualification', 'body': 'Unchanged private description', 'base': native['default_branch'], 'head': 'metadata-proof'}, expected=201)
+            number = pull['number']
+            smoke.provider(token, 'PATCH', base+'/issues/'+str(number), {**({'milestone': milestones[0]['id']} if milestones else {}), **({'assignees': [name]} if args.assignees else {})})
+            if labels:
+                smoke.provider(token, 'PUT', base+'/issues/'+str(number)+'/labels', {'labels': [labels[0]['id']]})
+            issue = smoke.provider(token, 'GET', base+'/issues/'+str(number))
+        else:
+            issue = smoke.provider(token, 'POST', base+'/issues', {'title': 'Metadata assignment qualification', 'body': 'Unchanged private description', **({'labels': [labels[0]['id']]} if labels else {}), **({'milestone': milestones[0]['id']} if milestones else {}), **({'assignees': [name]} if args.assignees else {})}, expected=201)
         baseline = smoke.provider(token, 'GET', base+'/issues/'+str(issue['number']))
+        target_field = 'pullRequest' if args.pull else 'issue'
         def read(session=owner):
-            return smoke.rpc(session, 'RepositoryService/GetIssue', {'repository': repo, 'number': issue['number']})['issue']
+            return smoke.rpc(session, 'RepositoryService/'+('GetPullRequest' if args.pull else 'GetIssue'), {'repository': repo, 'number': issue['number']})[target_field]
         def change(session, current, expected, selected):
-            return smoke.rpc(session, 'RepositoryService/UpdateIssue', {'repository': repo, 'repositoryId': str(native['id']), 'issueId': str(issue['id']), 'number': issue['number'], 'expectedRevision': current['revision'], 'idempotencyKey': str(uuid.uuid4()), **metadata_change(field, expected, selected)})
+            return smoke.rpc(session, 'RepositoryService/'+('UpdatePullRequest' if args.pull else 'UpdateIssue'), {'repository': repo, 'repositoryId': str(native['id']), ('pullRequestId' if args.pull else 'issueId'): str(pull['id'] if args.pull else issue['id']), 'number': issue['number'], 'expectedRevision': current['revision'], 'idempotencyKey': str(uuid.uuid4()), **metadata_change(field, expected, selected)})
         def pair(actor):
             row = native_users[actor[0]]
             return {'id': str(row['id']), 'login': row['login']}
@@ -137,18 +150,22 @@ def main():
         inventory_field = 'assignees' if args.assignees else 'labels' if args.labels else 'milestones'
         capability = 'canEditAssignees' if args.assignees else 'canEditLabels' if args.labels else 'canEditMilestone'
         for actor in actors[:3]:
-            result = smoke.rpc(actor[2], 'RepositoryService/'+inventory, {'repository': repo, 'repositoryId': str(native['id']), **({} if args.assignees else {'page': {'page': 1, 'limit': 20}}), **({'state': 'ISSUE_STATE_ALL'} if field == 'milestone' else {})})
-            assert result.get(capability, False) == (actor == actors[0]), 'Native admin capability mismatch'
+            result = smoke.rpc(actor[2], 'RepositoryService/'+inventory, {'repository': repo, 'repositoryId': str(native['id']), 'pullRequest': args.pull, **({} if args.assignees else {'page': {'page': 1, 'limit': 20}}), **({'state': 'ISSUE_STATE_ALL'} if field == 'milestone' else {})})
+            assert result.get(capability, False) == (actor in actors[:2]), 'Native discussion-write capability mismatch'
             if args.assignees:
                 native_inventory = smoke.provider(token, 'GET', base+'/assignees')
                 assert len(result.get('assignees', [])) <= 1000 and {(row['id'], row['login']) for row in result.get('assignees', [])} == {(str(row['id']), row['login']) for row in native_inventory}, 'Native assignable inventory mismatch'
                 assert all((row['id'], row['login']) in {(str(user['id']), user['login']) for user in native_inventory} for row in selected), 'Owned selected users must actually be assignable'
             else:
                 assert {row['id'] for row in result[inventory_field]} == {str(row['id']) for row in (labels if args.labels else milestones)}
-        for actor in actors[1:3]:
-            denied = change(actor[2], read(actor[2]), original, selected)
-            assert denied['mutation']['state'] == 'ISSUE_MUTATION_STATE_REJECTED', 'Nonadmin metadata edit accepted'
-        smoke.rpc(actors[3][2], 'RepositoryService/'+inventory, {'repository': repo, 'repositoryId': str(native['id'])}, expected=404)
+        writer_result = change(actors[1][2], read(actors[1][2]), original, selected)
+        assert writer_result['mutation']['state'] == 'ISSUE_MUTATION_STATE_SUCCEEDED', 'Native discussion writer refused'
+        reset_expected = [row['id'] for row in selected] if args.assignees else selected
+        reset_selected = [pair(actors[0])] if args.assignees else original
+        assert change(owner, read(), reset_expected, reset_selected)['mutation']['state'] == 'ISSUE_MUTATION_STATE_SUCCEEDED', 'Owner baseline restore failed'
+        denied = change(actors[2][2], read(actors[2][2]), original, selected)
+        assert denied['mutation']['state'] == 'ISSUE_MUTATION_STATE_REJECTED', 'Reader metadata edit accepted'
+        smoke.rpc(actors[3][2], 'RepositoryService/'+inventory, {'repository': repo, 'repositoryId': str(native['id']), 'pullRequest': args.pull}, expected=404)
         if args.assignees:
             denied = change(actors[3][2], read(), original, selected)
             assert denied['mutation']['state'] == 'ISSUE_MUTATION_STATE_REJECTED', 'Outsider assignee mutation accepted'
@@ -166,7 +183,7 @@ def main():
                     smoke.provider(token, 'GET', base+'/assignees/'+choice['login'], expected=204)
                 result = change(owner, read(), expected_ids, choices)
                 assert result['mutation']['state'] == 'ISSUE_MUTATION_STATE_SUCCEEDED', 'Assignee edit was not confirmed'
-                assert result['issue']['metadata']['assigneesKnown'] and ids([row['id'] for row in result['issue']['metadata'].get('assignees', [])]) == ids([row['id'] for row in choices]), 'Assignee receipt IDs differ'
+                assert result[target_field]['metadata']['assigneesKnown'] and ids([row['id'] for row in result[target_field]['metadata'].get('assignees', [])]) == ids([row['id'] for row in choices]), 'Assignee receipt IDs differ'
                 verify_native([row['id'] for row in choices])
             verify_native(original)
             mismatch = change(owner, read(), original, [{'id': pair(actors[1])['id'], 'login': name}])
@@ -195,7 +212,7 @@ def main():
             smoke.provider(token, 'PUT', base+'/collaborators/'+actors[1][0], {'permission': 'write'}, expected=204)
             apply_assignees([], [pair(actors[0])])
         cookies = [dict(name=c.name, value=c.value, url=smoke.GOLF, httpOnly=c.has_nonstandard_attr('HttpOnly'), sameSite='Lax') for handler in owner.handlers if isinstance(handler, urllib.request.HTTPCookieProcessor) for c in handler.cookiejar]
-        config = dict(labels=args.labels, assignees=args.assignees, assigneeChoices=selected if args.assignees else [], originalAssigneeIds=original if args.assignees else [], labelNames=[row['name'] for row in labels], labelIds=[str(row['id']) for row in labels], url=smoke.GOLF+'/'+native['full_name']+'/issues/'+str(issue['number']), cookies=cookies, forbidden=[a[1] for a in actors], repositoryId=str(native['id']), issueId=str(issue['id']), number=issue['number'], originalId=str(milestones[0]['id']) if milestones else '', selectedId=str(milestones[1]['id']) if milestones else '', output=str((args.output/'browser').resolve()))
+        config = dict(pull=args.pull, labels=args.labels, assignees=args.assignees, assigneeChoices=selected if args.assignees else [], originalAssigneeIds=original if args.assignees else [], labelNames=[row['name'] for row in labels], labelIds=[str(row['id']) for row in labels], url=smoke.GOLF+'/'+native['full_name']+('/pull/' if args.pull else '/issues/')+str(issue['number']), cookies=cookies, forbidden=[a[1] for a in actors], repositoryId=str(native['id']), issueId=str(issue['id']), pullRequestId=str(pull['id']) if args.pull else '', number=issue['number'], originalId=str(milestones[0]['id']) if milestones else '', selectedId=str(milestones[1]['id']) if milestones else '', output=str((args.output/'browser').resolve()))
         result = subprocess.run(['node', 'scripts/issue-milestone-browser.mjs'], input=json.dumps(config), text=True, capture_output=True, timeout=150)
         assert all(a[1] not in result.stdout+result.stderr for a in actors), 'Child credential diagnostic withheld'
         report['browserExitCode'] = result.returncode
@@ -205,7 +222,7 @@ def main():
             verify_native([])
         else:
             assert (not final['labels'] if args.labels else final['milestone'] is None) and all(final[k] == issue[k] for k in ('id', 'title', 'body', 'state')), 'Native clear changed unrelated fields'
-        report.update(passed=True, nativeVersion=smoke.provider(token, 'GET', 'version')['version'], roles=['owner admitted', 'writer/reader refused', 'outsider masked'], scope='Actual deployed issue '+field+' change/clear; admin-only admission; not PR metadata or atomic native CAS')
+        report.update(passed=True, nativeVersion=smoke.provider(token, 'GET', 'version')['version'], roles=['owner/writer admitted', 'reader refused', 'outsider masked'], scope='Actual deployed '+('pull-request' if args.pull else 'issue')+' '+field+' change/clear; native discussion-write admission; not atomic native CAS')
     finally:
         cleanup_errors = []
         for _, _, session in actors:

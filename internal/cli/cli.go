@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"connectrpc.com/connect"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
@@ -36,6 +38,12 @@ Usage: golf [--url ORIGIN] [--token-stdin | --api-token-stdin] COMMAND
   repo overview OWNER/REPO
   repo creation IDEMPOTENCY_KEY
   repo branches OWNER/REPO [--page N] [--limit N]
+  repo tags OWNER/REPO [--page N] [--limit N]
+  repo releases OWNER/REPO [--page N] [--limit N]
+  repo release OWNER/REPO RELEASE_ID
+  repo labels OWNER/REPO [--page N] [--limit N]
+  repo milestones OWNER/REPO [--state open|closed|all] [--page N] [--limit N]
+  repo assignees OWNER/REPO
   repo commits OWNER/REPO [--ref REF] [--path PATH] [--page N] [--limit N]
   repo contents OWNER/REPO [--ref REF] [--ref-kind branch|tag|commit] [--path PATH]
   commit diff OWNER/REPO SHA
@@ -47,6 +55,8 @@ Usage: golf [--url ORIGIN] [--token-stdin | --api-token-stdin] COMMAND
   pr view OWNER/REPO NUMBER
   pr diff OWNER/REPO NUMBER --repo-id ID --pull-id ID --base SHA --head SHA
   pr reviews OWNER/REPO NUMBER [--page N] [--limit N]
+  pr commits OWNER/REPO NUMBER --repo-id ID --pull-id ID --base SHA --head SHA [--page N] [--limit N]
+  pr checks OWNER/REPO NUMBER --repo-id ID --pull-id ID --base SHA --head SHA [--page N] [--limit N]
   pr review-comments OWNER/REPO NUMBER REVIEW_ID --repo-id ID --pull-id ID --review-commit SHA
   org list [--page N] [--limit N]
   org view ORG
@@ -83,6 +93,12 @@ An observed result ID is a provisional receipt; OUTCOME_UNKNOWN still means unco
 Source contents: omitted ref selects the default branch; a bare full SHA selects
 a commit, other bare refs select only a branch. Tags require --ref-kind tag.
 Typed branch/tag selectors also support names that look like a full SHA.
+Issue/PR list filters: --search TEXT --author USER --assignee USER
+  --labels NAME,NAME --milestone TITLE. Label names are all required.
+PR lists also accept --sort newest|oldest|updated|least-updated|most-commented|least-commented
+  and --base BRANCH. Filtered PR search is newest-first with page sizes up to20.
+Native search may yield empty filtered pages with a continuation; no automatic traversal.
+Release pages support at most50 rows. Inventory commands do not administer labels/milestones.
 
 `
 
@@ -215,27 +231,31 @@ var commitID = regexp.MustCompile(`^(?:[a-f0-9]{40}|[a-f0-9]{64})$`)
 var creationKey = regexp.MustCompile(`^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$`)
 
 type command struct {
-	name         string
-	organization string
-	teamID       string
-	repositoryID string
-	pullID       string
-	baseCommit   string
-	headCommit   string
-	reviewID     string
-	reviewCommit string
-	repository   *golfv1.RepositoryKey
-	page         *golfv1.PageRequest
-	ref          string
-	refKind      string
-	commitID     string
-	creationKey  string
-	path         string
-	state        golfv1.IssueState
-	number       uint32
-	auditLimit   uint32
-	beforeID     string
-	snapshotID   string
+	name            string
+	organization    string
+	teamID          string
+	repositoryID    string
+	pullID          string
+	baseCommit      string
+	headCommit      string
+	reviewID        string
+	reviewCommit    string
+	repository      *golfv1.RepositoryKey
+	page            *golfv1.PageRequest
+	ref             string
+	refKind         string
+	commitID        string
+	creationKey     string
+	path            string
+	state           golfv1.IssueState
+	discussionQuery *golfv1.DiscussionQuery
+	sort            string
+	baseBranch      string
+	releaseID       string
+	number          uint32
+	auditLimit      uint32
+	beforeID        string
+	snapshotID      string
 }
 
 func parseCommand(args []string) (command, error) {
@@ -270,7 +290,7 @@ func parseCommand(args []string) (command, error) {
 			result.teamID = rest[0]
 			rest = rest[1:]
 		}
-	case "repo view", "repo overview", "repo branches", "repo commits", "repo contents", "commit diff", "issue list", "issue view", "issue comments", "pr list", "pr view", "pr reviews", "pr review-comments", "pr diff":
+	case "repo view", "repo overview", "repo branches", "repo tags", "repo releases", "repo release", "repo labels", "repo milestones", "repo assignees", "repo commits", "repo contents", "commit diff", "issue list", "issue view", "issue comments", "pr list", "pr view", "pr reviews", "pr commits", "pr checks", "pr review-comments", "pr diff":
 		if len(rest) == 0 {
 			return result, invalid
 		}
@@ -285,6 +305,12 @@ func parseCommand(args []string) (command, error) {
 		}
 		result.repository = &golfv1.RepositoryKey{Owner: parts[0], Name: parts[1]}
 		rest = rest[1:]
+		if result.name == "repo release" {
+			if len(rest) == 0 || !canonicalNativeID(rest[0]) {
+				return result, invalid
+			}
+			result.releaseID, rest = rest[0], rest[1:]
+		}
 		if result.name == "commit diff" {
 			if len(rest) == 0 || !commitID.MatchString(rest[0]) {
 				return result, invalid
@@ -292,7 +318,7 @@ func parseCommand(args []string) (command, error) {
 			result.commitID = rest[0]
 			rest = rest[1:]
 		}
-		if result.name == "issue view" || result.name == "issue comments" || result.name == "pr view" || result.name == "pr reviews" || result.name == "pr review-comments" || result.name == "pr diff" {
+		if result.name == "issue view" || result.name == "issue comments" || result.name == "pr view" || result.name == "pr reviews" || result.name == "pr commits" || result.name == "pr checks" || result.name == "pr review-comments" || result.name == "pr diff" {
 			if len(rest) == 0 {
 				return result, invalid
 			}
@@ -315,8 +341,9 @@ func parseCommand(args []string) (command, error) {
 	flags := flag.NewFlagSet(result.name, flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	var ref, filePath, state string
+	var search, author, assignee, labels, milestone string
 	page, limit := 1, 20
-	paginated := result.name == "repo list" || result.name == "repo branches" || result.name == "repo commits" || result.name == "issue list" || result.name == "issue comments" || result.name == "pr list" || result.name == "pr reviews" || result.name == "org list" || result.name == "org teams" || result.name == "team members" || result.name == "team repos"
+	paginated := result.name == "repo list" || result.name == "repo branches" || result.name == "repo tags" || result.name == "repo releases" || result.name == "repo labels" || result.name == "repo milestones" || result.name == "repo commits" || result.name == "issue list" || result.name == "issue comments" || result.name == "pr list" || result.name == "pr reviews" || result.name == "pr commits" || result.name == "pr checks" || result.name == "org list" || result.name == "org teams" || result.name == "team members" || result.name == "team repos"
 	if result.name == "audit list" {
 		flags.IntVar(&limit, "limit", 20, "event limit")
 		flags.StringVar(&result.beforeID, "before-id", "", "exclusive event cursor")
@@ -335,7 +362,7 @@ func parseCommand(args []string) (command, error) {
 	if result.name == "repo contents" || result.name == "repo commits" {
 		flags.StringVar(&filePath, "path", "", "repository-relative file or directory")
 	}
-	if result.name == "pr review-comments" || result.name == "pr diff" {
+	if result.name == "pr review-comments" || result.name == "pr diff" || result.name == "pr commits" || result.name == "pr checks" {
 		flags.StringVar(&result.repositoryID, "repo-id", "", "expected native repository ID")
 		flags.StringVar(&result.pullID, "pull-id", "", "expected native pull-request ID")
 		if result.name == "pr review-comments" {
@@ -345,8 +372,20 @@ func parseCommand(args []string) (command, error) {
 			flags.StringVar(&result.headCommit, "head", "", "full selected head")
 		}
 	}
+	if result.name == "repo milestones" {
+		flags.StringVar(&state, "state", "open", "open, closed or all")
+	}
 	if result.name == "issue list" || result.name == "pr list" {
 		flags.StringVar(&state, "state", "open", "open, closed or all")
+		flags.StringVar(&search, "search", "", "repository-native keyword search")
+		flags.StringVar(&author, "author", "", "author username")
+		flags.StringVar(&assignee, "assignee", "", "assignee username")
+		flags.StringVar(&labels, "labels", "", "comma-separated label names (all required)")
+		flags.StringVar(&milestone, "milestone", "", "exact milestone title")
+	}
+	if result.name == "pr list" {
+		flags.StringVar(&result.sort, "sort", "", "newest, oldest, updated, least-updated, most-commented or least-commented")
+		flags.StringVar(&result.baseBranch, "base", "", "target branch")
 	}
 	if err := flags.Parse(rest); err != nil {
 		return result, err
@@ -354,10 +393,31 @@ func parseCommand(args []string) (command, error) {
 	if len(flags.Args()) != 0 || page < 1 || page > 10000 || limit < 1 || limit > 100 || (state != "" && state != "open" && state != "closed" && state != "all") {
 		return result, invalid
 	}
+	if result.name == "repo releases" && limit > 50 {
+		return result, invalid
+	}
+	if result.name == "issue list" || result.name == "pr list" {
+		q := &golfv1.DiscussionQuery{Search: search, Author: author, Assignee: assignee, MilestoneTitle: milestone}
+		if labels != "" {
+			q.LabelNames = strings.Split(labels, ",")
+		}
+		if !validDiscussionFlags(q) || !gitinput.ValidRef(result.baseBranch) {
+			return result, invalid
+		}
+		if search != "" || author != "" || assignee != "" || labels != "" || milestone != "" {
+			result.discussionQuery = q
+		}
+		if result.name == "pr list" {
+			allowed := map[string]bool{"": true, "newest": true, "oldest": true, "updated": true, "least-updated": true, "most-commented": true, "least-commented": true}
+			if !allowed[result.sort] || result.discussionQuery != nil && (limit > 20 || result.sort != "" && result.sort != "newest") {
+				return result, invalid
+			}
+		}
+	}
 	if result.name == "pr review-comments" && (!canonicalNativeID(result.repositoryID) || !canonicalNativeID(result.pullID) || !commitID.MatchString(result.reviewCommit)) {
 		return result, invalid
 	}
-	if result.name == "pr diff" && (!canonicalNativeID(result.repositoryID) || !canonicalNativeID(result.pullID) || !commitID.MatchString(result.baseCommit) || !commitID.MatchString(result.headCommit) || len(result.baseCommit) != len(result.headCommit)) {
+	if (result.name == "pr diff" || result.name == "pr commits" || result.name == "pr checks") && (!canonicalNativeID(result.repositoryID) || !canonicalNativeID(result.pullID) || !commitID.MatchString(result.baseCommit) || !commitID.MatchString(result.headCommit) || len(result.baseCommit) != len(result.headCommit)) {
 		return result, invalid
 	}
 	if result.name == "audit list" {
@@ -425,6 +485,36 @@ func parseCommand(args []string) (command, error) {
 func canonicalNativeID(value string) bool {
 	id, err := strconv.ParseInt(value, 10, 64)
 	return err == nil && id > 0 && strconv.FormatInt(id, 10) == value
+}
+
+func validDiscussionFlags(q *golfv1.DiscussionQuery) bool {
+	text := func(value string, max int, comma bool) bool {
+		if len(value) > max || !utf8.ValidString(value) || strings.TrimSpace(value) != value || comma && strings.Contains(value, ",") {
+			return false
+		}
+		for _, r := range value {
+			if unicode.IsControl(r) {
+				return false
+			}
+		}
+		return true
+	}
+	if !text(q.Search, 512, false) || !text(q.MilestoneTitle, 255, true) || len(q.LabelNames) > 20 {
+		return false
+	}
+	for _, login := range []string{q.Author, q.Assignee} {
+		if login != "" && (!organizationName.MatchString(login) || strings.ContainsAny(login[:1], "_.-")) {
+			return false
+		}
+	}
+	seen := map[string]bool{}
+	for _, name := range q.LabelNames {
+		if name == "" || !text(name, 255, true) || seen[name] {
+			return false
+		}
+		seen[name] = true
+	}
+	return true
 }
 
 type credential struct {
@@ -580,6 +670,65 @@ func (command command) read(ctx context.Context, client golfv1connect.Repository
 			return nil, err
 		}
 		return response.Msg, nil
+	case "repo tags", "repo releases", "repo release", "repo labels", "repo milestones", "repo assignees":
+		metadata, err := client.GetRepository(ctx, connect.NewRequest(&golfv1.GetRepositoryRequest{Repository: command.repository}))
+		if err != nil {
+			return nil, err
+		}
+		repository := metadata.Msg.GetRepository()
+		canonical, err := repositoryReadKey(repository, command.repository)
+		if err != nil {
+			return nil, err
+		}
+		id := repository.GetId()
+		switch command.name {
+		case "repo tags":
+			response, err := client.ListTags(ctx, connect.NewRequest(&golfv1.ListTagsRequest{Repository: canonical, RepositoryId: id, Page: command.page}))
+			if err != nil {
+				return nil, err
+			}
+			if response.Msg.RepositoryId != id {
+				return nil, errors.New("tag inventory identity mismatch")
+			}
+			return response.Msg, nil
+		case "repo releases":
+			response, err := client.ListRepositoryReleases(ctx, connect.NewRequest(&golfv1.ListRepositoryReleasesRequest{Repository: canonical, RepositoryId: id, Page: command.page}))
+			if err != nil {
+				return nil, err
+			}
+			if response.Msg.RepositoryId != id || !proto.Equal(response.Msg.Repository, canonical) {
+				return nil, errors.New("release inventory identity mismatch")
+			}
+			return response.Msg, nil
+		case "repo release":
+			response, err := client.GetRepositoryRelease(ctx, connect.NewRequest(&golfv1.GetRepositoryReleaseRequest{Repository: canonical, RepositoryId: id, ReleaseId: command.releaseID}))
+			if err != nil {
+				return nil, err
+			}
+			if response.Msg.RepositoryId != id || !proto.Equal(response.Msg.Repository, canonical) || response.Msg.GetRelease().GetId() != command.releaseID {
+				return nil, errors.New("release identity mismatch")
+			}
+			return response.Msg, nil
+		case "repo labels":
+			response, err := client.ListRepositoryLabels(ctx, connect.NewRequest(&golfv1.ListRepositoryLabelsRequest{Repository: canonical, RepositoryId: id, Page: command.page}))
+			if err != nil {
+				return nil, err
+			}
+			return response.Msg, nil
+		case "repo milestones":
+			response, err := client.ListRepositoryMilestones(ctx, connect.NewRequest(&golfv1.ListRepositoryMilestonesRequest{Repository: canonical, RepositoryId: id, State: command.state, Page: command.page}))
+			if err != nil {
+				return nil, err
+			}
+			return response.Msg, nil
+		case "repo assignees":
+			response, err := client.ListRepositoryAssignees(ctx, connect.NewRequest(&golfv1.ListRepositoryAssigneesRequest{Repository: canonical, RepositoryId: id}))
+			if err != nil {
+				return nil, err
+			}
+			return response.Msg, nil
+		}
+		return nil, errors.New("invalid inventory command")
 	case "repo commits":
 		input := &golfv1.ListCommitsRequest{Repository: command.repository, Page: command.page, Ref: command.ref, Path: command.path}
 		if command.path != "" {
@@ -645,7 +794,7 @@ func (command command) read(ctx context.Context, client golfv1connect.Repository
 		}
 		return response.Msg, nil
 	case "issue list":
-		response, err := client.ListIssues(ctx, connect.NewRequest(&golfv1.ListIssuesRequest{Repository: command.repository, State: command.state, Page: command.page}))
+		response, err := client.ListIssues(ctx, connect.NewRequest(&golfv1.ListIssuesRequest{Repository: command.repository, State: command.state, Page: command.page, Query: command.discussionQuery}))
 		if err != nil {
 			return nil, err
 		}
@@ -685,7 +834,7 @@ func (command command) read(ctx context.Context, client golfv1connect.Repository
 		}
 		return response.Msg, nil
 	case "pr list":
-		response, err := client.ListPullRequests(ctx, connect.NewRequest(&golfv1.ListPullRequestsRequest{Repository: command.repository, State: command.state, Page: command.page}))
+		response, err := client.ListPullRequests(ctx, connect.NewRequest(&golfv1.ListPullRequestsRequest{Repository: command.repository, State: command.state, Page: command.page, Query: command.discussionQuery, Sort: command.sort, BaseBranch: command.baseBranch}))
 		if err != nil {
 			return nil, err
 		}
@@ -703,6 +852,26 @@ func (command command) read(ctx context.Context, client golfv1connect.Repository
 		}))
 		if err != nil {
 			return nil, err
+		}
+		return response.Msg, nil
+	case "pr commits", "pr checks":
+		selection := &golfv1.PullRequestSelection{Repository: command.repository, RepositoryId: command.repositoryID, PullRequestId: command.pullID, Number: command.number, BaseCommitId: command.baseCommit, HeadCommitId: command.headCommit}
+		if command.name == "pr commits" {
+			response, err := client.ListPullRequestCommits(ctx, connect.NewRequest(&golfv1.ListPullRequestCommitsRequest{Selection: selection, Page: command.page}))
+			if err != nil {
+				return nil, err
+			}
+			if !proto.Equal(response.Msg.Selection, selection) {
+				return nil, errors.New("PR commit selection mismatch")
+			}
+			return response.Msg, nil
+		}
+		response, err := client.ListPullRequestChecks(ctx, connect.NewRequest(&golfv1.ListPullRequestChecksRequest{Selection: selection, Page: command.page}))
+		if err != nil {
+			return nil, err
+		}
+		if !proto.Equal(response.Msg.Selection, selection) {
+			return nil, errors.New("PR check selection mismatch")
 		}
 		return response.Msg, nil
 	case "pr review-comments":

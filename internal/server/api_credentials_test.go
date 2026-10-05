@@ -115,6 +115,8 @@ func TestApiCredentialBoundary(t *testing.T) {
 		golfv1connect.RepositoryServiceGetRepositoryOverviewProcedure:        true,
 		golfv1connect.RepositoryServiceGetRepositoryCreationProcedure:        true,
 		golfv1connect.RepositoryServiceListBranchesProcedure:                 true,
+		golfv1connect.RepositoryServiceListRepositoryReleasesProcedure:       true,
+		golfv1connect.RepositoryServiceGetRepositoryReleaseProcedure:         true,
 		golfv1connect.RepositoryServiceListCommitsProcedure:                  true,
 		golfv1connect.RepositoryServiceListTagsProcedure:                     true,
 		golfv1connect.RepositoryServiceGetContentsProcedure:                  true,
@@ -696,7 +698,9 @@ func TestSelfCredentialAcknowledgmentRouting(t *testing.T) {
 					if response.Code != http.StatusOK || checks.Load() != prior {
 						t.Fatalf("verified acknowledgment failed: status %d native checks %d", response.Code, checks.Load()-prior)
 					}
-				} else if response.Code != http.StatusUnauthorized || checks.Load() != prior+1 {
+					// There is no live Golf cookie in this fixture. Current source
+					// authority must refuse before consulting the native credential.
+				} else if response.Code != http.StatusUnauthorized || checks.Load() != prior {
 					t.Fatalf("invalid acknowledgment bypassed authority: status %d native checks %d", response.Code, checks.Load()-prior)
 				}
 			})

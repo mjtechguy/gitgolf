@@ -95,6 +95,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewPullMergeObservationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewStandardPullMergeServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryReleasePublicationServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewRepositoryRefMutationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryDeploymentServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRunnerControlServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRunnerPoolServiceHandler(s, options...))
@@ -164,6 +165,8 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.StandardPullMergeServiceSubmitStandardPullMergeProcedure, golfv1connect.StandardPullMergeServiceGetStandardPullMergeOperationProcedure,
 			golfv1connect.RepositoryDeploymentServicePrepareStaticDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceCreateRepositoryDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceGetRepositoryDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceListRepositoryDeploymentsProcedure, golfv1connect.RepositoryDeploymentServiceReviewRepositoryDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceActivateRepositoryDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceRevokeRepositoryDeploymentProcedure,
 			golfv1connect.RepositoryReleasePublicationServiceSubmitRepositoryReleasePublicationProcedure, golfv1connect.RepositoryReleasePublicationServiceGetRepositoryReleasePublicationOperationProcedure,
+			golfv1connect.RepositoryRefMutationServiceSubmitRepositoryRefMutationProcedure, golfv1connect.RepositoryRefMutationServiceGetRepositoryRefMutationOperationProcedure,
+			golfv1connect.InstanceAdminServiceListGolfUserAccessProcedure, golfv1connect.InstanceAdminServiceChangeGolfUserAccessProcedure, golfv1connect.InstanceAdminServiceGetGolfUserAccessOperationProcedure,
 			golfv1connect.PullMergeObservationServiceGetPullRequestMergeObservationProcedure, golfv1connect.RepositoryRulesServiceGetRepositoryRulesProcedure, golfv1connect.RepositoryRulesServiceMutateRepositoryRulesProcedure, golfv1connect.RepositoryRulesServiceGetRepositoryRuleMutationProcedure,
 			golfv1connect.RunnerControlServiceGetInstanceRunnerLimitsProcedure, golfv1connect.RunnerControlServiceSetInstanceRunnerLimitsProcedure, golfv1connect.RunnerControlServiceGetInstanceRunnersProcedure, golfv1connect.RunnerControlServiceUpdateRunnerControlProcedure, golfv1connect.RunnerControlServiceGetRepositoryRunnersProcedure,
 			golfv1connect.RunnerPoolServiceListRunnerPoolsProcedure, golfv1connect.RunnerPoolServiceSaveRunnerPoolProcedure, golfv1connect.RunnerPoolServiceGetRepositoryRunnerPlacementProcedure, golfv1connect.RunnerPoolServiceSetRepositoryRunnerPlacementProcedure,
@@ -214,7 +217,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		}
 		limit := int64(16 << 10)
 		switch procedure {
-		case golfv1connect.RepositoryReleasePublicationServiceSubmitRepositoryReleasePublicationProcedure, golfv1connect.RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure, golfv1connect.OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionBindingProcedure:
+		case golfv1connect.RepositoryReleasePublicationServiceSubmitRepositoryReleasePublicationProcedure, golfv1connect.RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure, golfv1connect.OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionBindingProcedure:
 			limit = 64 << 10
 		case golfv1connect.RepositoryServiceSavePullRequestReviewDraftProcedure:
 			limit = 2 << 20
@@ -576,11 +579,18 @@ func (s *Server) ListIssues(ctx context.Context, req *connect.Request[golfv1.Lis
 	if _, _, err := pagination(pageFrom(req.Msg.Page)); err != nil {
 		return nil, rpcError(err)
 	}
+	if err := validateDiscussionQuery(req.Msg.Query); err != nil {
+		return nil, rpcError(err)
+	}
 	var rows []Issue
 	var next uint32
-	err = s.withRepositoryRead(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), func(string, Repository) error {
+	err = s.withRepositoryRead(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), func(base string, repo Repository) error {
 		var readErr error
-		rows, next, readErr = s.listIssues(ctx, token, keyFrom(req.Msg.Repository), state, pageFrom(req.Msg.Page))
+		if nonemptyDiscussionQuery(req.Msg.Query) {
+			rows, next, readErr = s.searchIssues(ctx, token, base, repo, state, pageFrom(req.Msg.Page), req.Msg.Query)
+		} else {
+			rows, next, readErr = s.listIssues(ctx, token, keyFrom(req.Msg.Repository), state, pageFrom(req.Msg.Page))
+		}
 		return readErr
 	})
 	if err != nil {
@@ -791,7 +801,7 @@ func (s *Server) ListPullRequests(ctx context.Context, req *connect.Request[golf
 	if err != nil {
 		return nil, err
 	}
-	rows, next, err := s.listPullRequests(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), req.Msg.State, pageFrom(req.Msg.Page))
+	rows, next, err := s.listPullRequests(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), req.Msg.State, pageFrom(req.Msg.Page), pullListQuery{Discussion: req.Msg.Query, Sort: req.Msg.Sort, BaseBranch: req.Msg.BaseBranch})
 	if err != nil {
 		return nil, rpcError(err)
 	}

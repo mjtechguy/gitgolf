@@ -76,7 +76,7 @@ func TestMCPDiscoveryReadErrorsAndCleanup(t *testing.T) {
 			defer upstream.Close()
 			s := mcpTestSession(t, upstream.URL, version, context.Background())
 			tools, err := s.ListTools(context.Background(), &mcp.ListToolsParams{})
-			if err != nil || len(tools.Tools) != 24 || logins.Load() != 0 {
+			if err != nil || len(tools.Tools) != len(mcpReads) || logins.Load() != 0 {
 				t.Fatalf("discovery performed authentication or lost tools: %v", err)
 			}
 			for _, tool := range tools.Tools {
@@ -125,7 +125,7 @@ func TestMCPDiscoveryReadErrorsAndCleanup(t *testing.T) {
 }
 
 func TestMCPInputAndLaunchBoundary(t *testing.T) {
-	values := map[string]any{"repository": "alice/private", "organization": "org", "team_id": "9007199254740993", "idempotency_key": "12345678-1234-4234-8234-123456789abc", "commit_id": strings.Repeat("a", 40), "number": 1, "review_id": "9007199254740993", "repository_id": "9007199254740994", "pull_request_id": "9223372036854775807", "review_commit_id": strings.Repeat("a", 40), "base_commit_id": strings.Repeat("b", 40), "head_commit_id": strings.Repeat("a", 40)}
+	values := map[string]any{"repository": "alice/private", "organization": "org", "team_id": "9007199254740993", "release_id": "9007199254740993", "idempotency_key": "12345678-1234-4234-8234-123456789abc", "commit_id": strings.Repeat("a", 40), "number": 1, "review_id": "9007199254740993", "repository_id": "9007199254740994", "pull_request_id": "9223372036854775807", "review_commit_id": strings.Repeat("a", 40), "base_commit_id": strings.Repeat("b", 40), "head_commit_id": strings.Repeat("a", 40)}
 	for _, tool := range mcpReads {
 		args := map[string]any{}
 		for _, key := range tool.schema()["required"].([]string) {

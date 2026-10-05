@@ -36,6 +36,7 @@ type fixture struct {
 	Reader, Repository, RepositoryID, Revision, FilePath, FileContent                  string
 	Organization, TeamID, OrgRepositoryID, ReviewID, CreationKey, CreationRepositoryID string
 	IssueMutationKey, CommentMutationKey, CommentID, CommentBody                       string
+	Owner, ReleaseID, LabelID, MilestoneID, BaseBranch                                 string
 	Issue, Pull                                                                        int
 	APICredentials                                                                     bool
 }
@@ -187,7 +188,7 @@ func sessionIDs(client *http.Client) []string {
 	return ids
 }
 
-var names = []string{"golf_repo_list", "golf_repo_view", "golf_repo_overview", "golf_repo_creation", "golf_repo_branches", "golf_repo_commits", "golf_repo_contents", "golf_commit_diff", "golf_issue_list", "golf_issue_view", "golf_issue_comments", "golf_issue_operation", "golf_pr_list", "golf_pr_view", "golf_pr_diff", "golf_pr_reviews", "golf_pr_review_comments", "golf_org_list", "golf_org_view", "golf_org_teams", "golf_team_view", "golf_team_members", "golf_team_repos", "golf_audit_list"}
+var names = []string{"golf_repo_list", "golf_repo_view", "golf_repo_overview", "golf_repo_creation", "golf_repo_branches", "golf_repo_tags", "golf_repo_releases", "golf_repo_release", "golf_repo_labels", "golf_repo_milestones", "golf_repo_assignees", "golf_repo_commits", "golf_repo_contents", "golf_commit_diff", "golf_issue_list", "golf_issue_view", "golf_issue_comments", "golf_issue_operation", "golf_pr_list", "golf_pr_view", "golf_pr_diff", "golf_pr_reviews", "golf_pr_commits", "golf_pr_checks", "golf_pr_review_comments", "golf_org_list", "golf_org_view", "golf_org_teams", "golf_team_view", "golf_team_members", "golf_team_repos", "golf_audit_list"}
 
 func catalogue(ctx context.Context, session *mcp.ClientSession) {
 	result, err := session.ListTools(ctx, &mcp.ListToolsParams{})
@@ -238,6 +239,13 @@ func exercise(ctx context.Context, session *mcp.ClientSession) {
 	check(obj(recorded["creation"])["state"] == "REPOSITORY_CREATION_STATE_SUCCEEDED" && obj(recorded["repository"])["id"] == cfg.CreationRepositoryID)
 	branches := call(ctx, session, "golf_repo_branches", object{"repository": repo, "limit": 1})
 	check(len(rows(branches["branches"])) == 1 && obj(branches["page"])["nextPage"] == float64(2))
+	check(first(call(ctx, session, "golf_repo_tags", object{"repository": repo}), "tags")["name"] == "mcp-v1")
+	check(hasID(call(ctx, session, "golf_repo_releases", object{"repository": repo}), "releases", cfg.ReleaseID))
+	check(obj(call(ctx, session, "golf_repo_release", object{"repository": repo, "release_id": cfg.ReleaseID})["release"])["id"] == cfg.ReleaseID)
+	check(hasID(call(ctx, session, "golf_repo_labels", object{"repository": repo}), "labels", cfg.LabelID))
+	check(hasID(call(ctx, session, "golf_repo_milestones", object{"repository": repo, "state": "all"}), "milestones", cfg.MilestoneID))
+	assignees := call(ctx, session, "golf_repo_assignees", object{"repository": repo})
+	check(len(rows(assignees["assignees"])) > 0 && assignees["canEditAssignees"] != true)
 	commits := call(ctx, session, "golf_repo_commits", object{"repository": repo, "ref": cfg.Revision, "limit": 1})
 	check(first(commits, "commits")["sha"] == cfg.Revision && obj(commits["page"])["nextPage"] == float64(2))
 	source := call(ctx, session, "golf_repo_contents", object{"repository": repo, "ref": cfg.Revision, "path": cfg.FilePath})
@@ -248,6 +256,10 @@ func exercise(ctx context.Context, session *mcp.ClientSession) {
 	issues := call(ctx, session, "golf_issue_list", object{"repository": repo, "state": "all", "limit": 1})
 	check(len(rows(issues["issues"])) == 1 && obj(issues["page"])["nextPage"] == float64(2))
 	check(obj(call(ctx, session, "golf_issue_view", object{"repository": repo, "number": cfg.Issue})["issue"])["body"] == "Private issue <script> text")
+	filteredIssues := call(ctx, session, "golf_issue_list", object{"repository": repo, "search": "MCP issue 0", "author": cfg.Owner, "assignee": cfg.Owner, "labels": "MCP qualification", "milestone": "MCP release"})
+	check(len(rows(filteredIssues["issues"])) == 1 && first(filteredIssues, "issues")["number"] == float64(cfg.Issue))
+	unknownLabels := call(ctx, session, "golf_issue_list", object{"repository": repo, "labels": "nonexistent-qualified-label"})
+	check(unknownLabels["issues"] == nil || len(rows(unknownLabels["issues"])) == 0)
 	comments := call(ctx, session, "golf_issue_comments", object{"repository": repo, "number": cfg.Issue, "limit": 1})
 	check(len(rows(comments["comments"])) == 0 && obj(comments["page"])["nextPage"] == float64(2))
 	comments = call(ctx, session, "golf_issue_comments", object{"repository": repo, "number": cfg.Issue, "page": 2, "limit": 1})
@@ -267,6 +279,17 @@ func exercise(ctx context.Context, session *mcp.ClientSession) {
 	check(obj(first(pulls, "pullRequests")["head"])["retainedSnapshot"] == true)
 	pull := obj(call(ctx, session, "golf_pr_view", object{"repository": repo, "number": cfg.Pull})["pullRequest"])
 	check(obj(pull["head"])["commitId"] == cfg.Revision && strings.Contains(pull["body"].(string), "<script>"))
+	filteredPulls := call(ctx, session, "golf_pr_list", object{"repository": repo, "search": "MCP proposal", "author": cfg.Owner, "assignee": cfg.Owner, "labels": "MCP qualification", "milestone": "MCP release", "sort": "newest", "base": cfg.BaseBranch})
+	check(len(rows(filteredPulls["pullRequests"])) == 1 && first(filteredPulls, "pullRequests")["id"] == pull["id"])
+	snapshotArgs := object{"repository": repo, "number": cfg.Pull, "repository_id": cfg.RepositoryID, "pull_request_id": pull["id"], "base_commit_id": obj(pull["base"])["commitId"], "head_commit_id": obj(pull["head"])["commitId"]}
+	for _, tool := range []string{"golf_pr_commits", "golf_pr_checks"} {
+		data := call(ctx, session, tool, snapshotArgs)
+		selection := obj(data["selection"])
+		check(selection["repositoryId"] == cfg.RepositoryID && selection["pullRequestId"] == pull["id"] && selection["baseCommitId"] == obj(pull["base"])["commitId"] && selection["headCommitId"] == cfg.Revision)
+		if tool == "golf_pr_commits" {
+			check(len(rows(data["commits"])) == 1 && first(data, "commits")["sha"] == cfg.Revision)
+		}
+	}
 	pullDiff := call(ctx, session, "golf_pr_diff", object{"repository": repo, "number": cfg.Pull,
 		"repository_id": cfg.RepositoryID, "pull_request_id": pull["id"], "base_commit_id": obj(pull["base"])["commitId"], "head_commit_id": obj(pull["head"])["commitId"]})
 	check(pullDiff["repositoryId"] == cfg.RepositoryID && pullDiff["pullRequestId"] == pull["id"] && pullDiff["baseCommitId"] == obj(pull["base"])["commitId"] && pullDiff["headCommitId"] == obj(pull["head"])["commitId"])
@@ -429,7 +452,7 @@ func nativeCLI(ctx context.Context, token string, api, stdin, failure bool, reso
 }
 
 func bearerQualification(ctx context.Context, control *http.Client, baseline []string) (*mcp.ClientSession, func()) {
-	phase("owner-issued API credential: all 24 tools in both protocol revisions and CLI stdin/environment")
+	phase("owner-issued API credential: all 32 tools in both protocol revisions and CLI stdin/environment")
 	token, id := issueAPI(control)
 	before := rpc(control, "AuditService/ListAuditEvents", object{"limit": 1})["snapshotId"]
 	for _, version := range []string{"2026-07-28", "2025-11-25"} {
@@ -474,7 +497,7 @@ func bearerQualification(ctx context.Context, control *http.Client, baseline []s
 		denied(ctx, session, "golf_repo_view", object{"repository": cfg.Repository}, "unauthenticated")
 	}()
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
-	fmt.Println("PASS: API bearer all 24 tools under both revisions, CLI stdin/environment, unchanged session/audit snapshots, cancellation/SIGTERM, direct revocation and source logout")
+	fmt.Println("PASS: API bearer all 32 tools under both revisions, CLI stdin/environment, unchanged session/audit snapshots, cancellation/SIGTERM, direct revocation and source logout")
 	// Keep one live bearer process for the later real provider membership removal.
 	activeToken, _ := issueAPI(control)
 	session, closeSession, _ := connect(ctx, cfg.Golf, activeToken, "2026-07-28", true)
@@ -505,13 +528,13 @@ func run() (err error) {
 	nativeCLI(ctx, cfg.ReaderToken, false, true, false, "issue", "comments", cfg.Repository, strconv.Itoa(cfg.Issue), "--page", "2", "--limit", "1")
 	nativeCLI(ctx, cfg.ReaderToken, false, false, false, "issue", "operation", cfg.CommentMutationKey)
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
-	phase("modern discovery and all 24 native tools")
+	phase("modern discovery and all 32 native tools")
 	modern, closeModern, _ := connect(ctx, cfg.Golf, cfg.ReaderToken, "2026-07-28", false)
 	defer closeModern()
 	catalogue(ctx, modern)
 	exercise(ctx, modern)
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
-	fmt.Println("PASS: 2026-07-28 discovery, exact 24-tool catalogue, honest annotations, structured/text parity, private native reads, pagination and temporary-session cleanup")
+	fmt.Println("PASS: 2026-07-28 discovery, exact 32-tool catalogue, honest annotations, structured/text parity, private native reads, pagination and temporary-session cleanup")
 	phase("legacy initialization and native reads")
 	func() {
 		legacy, closeLegacy, _ := connect(ctx, cfg.Golf, cfg.ReaderToken, "2025-11-25", false)
@@ -520,7 +543,7 @@ func run() (err error) {
 		exercise(ctx, legacy)
 	}()
 	check(reflect.DeepEqual(sessionIDs(control), baseline))
-	fmt.Println("PASS: explicit 2025-11-25 initialization and all 24 native tools with JSON parity, pagination and session cleanup")
+	fmt.Println("PASS: explicit 2025-11-25 initialization and all 32 native tools with JSON parity, pagination and session cleanup")
 	phase("strict invalid input before authentication")
 	before := rpc(control, "AuditService/ListAuditEvents", object{"limit": 1})["snapshotId"]
 	for _, input := range []object{{"repository": cfg.Repository, "token": "DO-NOT-ECHO"}, {"repository": cfg.Repository, "origin": "http://DO-NOT-ECHO.invalid"}, {"repository": cfg.Repository, "command": "DO-NOT-ECHO"}, {"repository": "../private"}} {
