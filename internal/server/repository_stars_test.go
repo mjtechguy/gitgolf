@@ -98,6 +98,9 @@ func TestRepositoryStarsRequestAndUncertainty(t *testing.T) {
 	if err := repositoryStarError(errors.New("private provider credential"), true); connect.CodeOf(err) != connect.CodeUnavailable || strings.Contains(err.Error(), "credential") {
 		t.Fatal("uncertainty leaked provider error")
 	}
+	if connect.CodeOf(repositoryStarError(errRepositoryStarUnavailable, false)) != connect.CodeFailedPrecondition || connect.CodeOf(repositoryStarError(errRepositoryStarUnavailable, true)) != connect.CodeUnavailable {
+		t.Fatal("optional unavailability became repository denial or write certainty")
+	}
 	for _, err := range []error{errUnauthenticated, forgeError{status: 403}, forgeError{status: 404}} {
 		if connect.CodeOf(repositoryStarError(err, true)) != connect.CodeOf(rpcError(err)) {
 			t.Fatal("privacy denial lost")
@@ -123,12 +126,12 @@ func TestRepositoryStarsAuthorityPostgres(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]string{"version": "1.27.3"})
 		case "/api/v1/user":
 			id := int64(42)
-			if observed && mode == "actor" {
+			if observed && (mode == "actor" || mode == "disabled-actor") {
 				id++
 			}
 			json.NewEncoder(w).Encode(User{ID: id, Login: "reader"})
 		case "/api/v1/repos/alice/private":
-			if observed && mode == "denied" {
+			if observed && (mode == "denied" || mode == "disabled-denied") {
 				w.WriteHeader(404)
 				return
 			}
@@ -169,7 +172,7 @@ func TestRepositoryStarsAuthorityPostgres(t *testing.T) {
 				callback()
 				mu.Lock()
 			}
-			if mode == "disabled" {
+			if strings.HasPrefix(mode, "disabled") {
 				w.WriteHeader(403)
 				return
 			}
@@ -289,5 +292,51 @@ func TestRepositoryStarsAuthorityPostgres(t *testing.T) {
 	current, err := get(cookie)
 	if err != nil || current.Msg.Preference.Starred == nil || current.Msg.Preference.GetStarred() {
 		t.Fatal("authorized false preference", err)
+	}
+	for _, testMode := range []string{"disabled", "disabled-denied", "disabled-actor", "disabled-logout"} {
+		t.Run("read-"+testMode, func(t *testing.T) {
+			mu.Lock()
+			mode, observed, starred, writes, onRead = testMode, false, false, 0, nil
+			mu.Unlock()
+			cookie := newCookie()
+			if testMode == "disabled-logout" {
+				mu.Lock()
+				onRead = func() {
+					request := connect.NewRequest(&golfv1.LogoutRequest{})
+					request.Header().Set("Cookie", cookie)
+					if _, err := s.Logout(ctx, request); err != nil {
+						t.Error(err)
+					}
+				}
+				mu.Unlock()
+			}
+			got, err := get(cookie)
+			if err == nil || got != nil {
+				t.Fatal("unavailable preference fabricated a state")
+			}
+			expected := connect.CodeUnauthenticated
+			if testMode == "disabled" {
+				expected = connect.CodeFailedPrecondition
+			}
+			if testMode == "disabled-denied" {
+				expected = connect.CodeNotFound
+			}
+			if connect.CodeOf(err) != expected {
+				t.Fatal("optional failure hid late authority fence", err)
+			}
+			if testMode == "disabled" {
+				request := connect.NewRequest(&golfv1.GetRepositoryRequest{Repository: pullKey})
+				request.Header().Set("Cookie", cookie)
+				if repository, err := s.GetRepository(ctx, request); err != nil || repository.Msg.Repository.Id != "11" {
+					t.Fatal("optional preference failure blocked repository browsing", err)
+				}
+			}
+			mu.Lock()
+			count := writes
+			mu.Unlock()
+			if count != 0 {
+				t.Fatal("optional inspection wrote native state")
+			}
+		})
 	}
 }

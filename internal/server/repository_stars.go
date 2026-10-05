@@ -20,6 +20,13 @@ type forgeStarRepository struct {
 	StarsCount *int64 `json:"stars_count"`
 }
 
+var errRepositoryStarUnavailable = errors.New("repository star preference unavailable")
+
+func repositoryStarForbidden(err error) bool {
+	var upstream forgeError
+	return errors.As(err, &upstream) && upstream.status == http.StatusForbidden
+}
+
 func validateStarRepository(row forgeStarRepository, key repositoryKey, id int64) error {
 	owner, name, ok := strings.Cut(row.FullName, "/")
 	if !validRepository(row.Repository) || !ok || !validOrganizationName(owner) || !validOrganizationName(name) || row.Name != name || row.ID != id || !strings.EqualFold(row.FullName, key.Owner+"/"+key.Name) || row.Owner == nil || row.Owner.ID <= 0 || !validOrganizationName(row.Owner.Login) || row.Owner.Login != owner || (row.StarsCount != nil && *row.StarsCount < 0) {
@@ -63,6 +70,9 @@ func wireRepositoryStar(row forgeStarRepository, actor User, starred bool) *golf
 }
 
 func repositoryStarError(err error, attempted bool) error {
+	if errors.Is(err, errRepositoryStarUnavailable) && !attempted {
+		return connect.NewError(connect.CodeFailedPrecondition, errors.New("Star preference is unavailable for this account or repository."))
+	}
 	mapped := rpcError(err)
 	if !attempted {
 		return mapped
@@ -80,6 +90,7 @@ func repositoryStarError(err error, attempted bool) error {
 func (s *Server) repositoryStar(ctx context.Context, cookie string, token forgeCredential, key repositoryKey, id, ownerID, actorID int64, desired *bool) (*golfv1.RepositoryStarPreference, error) {
 	var result *golfv1.RepositoryStarPreference
 	attempted := false
+	optionalUnavailable := false
 	err := s.withForgeCaller(ctx, cookie, token, func(actor User) error {
 		if actorID != 0 && actor.ID != actorID {
 			return errUnauthenticated
@@ -100,15 +111,24 @@ func (s *Server) repositoryStar(ctx context.Context, cookie string, token forgeC
 			// write occurs even when the acknowledgement/readback/late fence is lost.
 			attempted = true
 			if _, err := s.forgeJSON(ctx, method, "/user/starred/"+key.Owner+"/"+key.Name, token, nil, nil, http.StatusNoContent); err != nil {
-				return err
+				if !repositoryStarForbidden(err) {
+					return err
+				}
+				optionalUnavailable = true
 			}
 		}
-		starred, err := s.readRepositoryStar(ctx, token, key)
-		if err != nil {
-			return err
-		}
-		if desired != nil && starred != *desired {
-			return errInvalidForgeResponse
+		starred := false
+		if !optionalUnavailable {
+			starred, err = s.readRepositoryStar(ctx, token, key)
+			if err != nil {
+				if !repositoryStarForbidden(err) {
+					return err
+				}
+				optionalUnavailable = true
+			}
+			if !optionalUnavailable && desired != nil && starred != *desired {
+				return errInvalidForgeResponse
+			}
 		}
 		after, err := s.readStarRepository(ctx, token, key, id)
 		if err != nil {
@@ -117,11 +137,20 @@ func (s *Server) repositoryStar(ctx context.Context, cookie string, token forgeC
 		if before.Owner.ID != after.Owner.ID || before.Owner.Login != after.Owner.Login || before.FullName != after.FullName {
 			return errIssueTargetChanged
 		}
-		result = wireRepositoryStar(after, actor, starred)
+		// Native stars-disabled/scope403 is an optional-feature failure only after
+		// the current repository, owner, actor and managed session still verify.
+		// Returning nil here allows withForgeCaller to finish its late fences;
+		// their authority denial takes precedence over optional unavailability.
+		if !optionalUnavailable {
+			result = wireRepositoryStar(after, actor, starred)
+		}
 		return nil
 	})
 	if err != nil {
 		return nil, repositoryStarError(err, attempted)
+	}
+	if optionalUnavailable {
+		return nil, repositoryStarError(errRepositoryStarUnavailable, attempted)
 	}
 	return result, nil
 }
