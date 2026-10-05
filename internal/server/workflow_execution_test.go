@@ -110,6 +110,12 @@ func TestCompileWorkflowPushExecutionMatchingAndManualSeparation(t *testing.T) {
 		match, manual bool
 	}{
 		{"plain", "on: push", "refs/heads/main", true, false},
+		{"push list", "on: [push]", "refs/heads/main", true, false},
+		{"manual list", "on: [workflow_dispatch]", "refs/heads/main", false, true},
+		{"both list", "on: [push, workflow_dispatch]", "refs/heads/topic/one", true, true},
+		{"reversed list", "on: [workflow_dispatch, push]", "refs/heads/main", true, true},
+		{"list tag refused", "on: [push, workflow_dispatch]", "refs/tags/main", false, true},
+		{"list invalid branch refused", "on: [push, workflow_dispatch]", "refs/heads/bad..name", false, true},
 		{"null", "on:\n  push:", "refs/heads/main", true, false},
 		{"empty", "on:\n  push: {}", "refs/heads/topic/one", true, false},
 		{"exact", "on:\n  push:\n    branches: [main, topic/one]", "refs/heads/topic/one", true, false},
@@ -155,7 +161,10 @@ func TestCompileWorkflowPushExecutionMatchingAndManualSeparation(t *testing.T) {
 
 func TestCompileWorkflowPushExecutionRejectsUnsupportedTriggers(t *testing.T) {
 	for _, on := range []string{
-		"on: [push]", "on: [push, workflow_dispatch]", "on: pull_request",
+		"on: []", "on: [push, push]", "on: [workflow_dispatch, workflow_dispatch]",
+		"on: [push, workflow_dispatch, push]", "on: [push, pull_request]", "on: [push, schedule]",
+		"on: [push, 42]", "on: [push, true]", "on: [push, null]", "on: [push, {workflow_dispatch: {}}]",
+		"on: [push, ['workflow_dispatch']]", "on: [push, '${{ secrets.private }}']", "on: [Push]", "on: ['']", "on: pull_request",
 		"on:\n  push: true", "on:\n  push: []", "on:\n  push: [main]",
 		"on:\n  push:\n    branches: main", "on:\n  push:\n    branches: []",
 		"on:\n  push:\n    branches: [main, main]", "on:\n  push:\n    branches: [42]",
@@ -180,12 +189,33 @@ func TestCompileWorkflowPushExecutionRejectsUnsupportedTriggers(t *testing.T) {
 				t.Fatalf("unsupported trigger produced a plan/skip or exposed source: %q", on)
 			}
 		}
+		if plan, err := compileWorkflowExecution(golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITHUB_ACTIONS, data); plan != nil || connect.CodeOf(err) != connect.CodeFailedPrecondition || strings.Contains(err.Error(), "secrets.private") {
+			t.Fatal("unsupported declaration became manual authority or exposed source")
+		}
 	}
 	gitlab := "check:\n  image: example/build@sha256:" + strings.Repeat("c", 64) + "\n  script: echo private-command\n"
 	for _, extra := range []string{"  rules: [{if: '$CI_PIPELINE_SOURCE == \"push\"'}]\n", "  only: [branches]\n", "  except: [tags]\n", "  when: manual\n", "workflow:\n  rules: [{when: always}]\n", "include: local.yml\n"} {
 		plan, matched, err := compileWorkflowPushExecution(golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITLAB_CI, []byte(gitlab+extra), "refs/heads/main")
 		if plan != nil || matched || connect.CodeOf(err) != connect.CodeFailedPrecondition || strings.Contains(err.Error(), "private-command") {
 			t.Fatal("GitLab policy syntax was silently treated as a push job")
+		}
+	}
+}
+
+func TestWorkflowEventListInspectionPreservesExplicitMetadata(t *testing.T) {
+	for _, declaration := range []struct {
+		source string
+		events []string
+	}{
+		{"on: [push]", []string{"push"}},
+		{"on: [workflow_dispatch]", []string{"workflow_dispatch"}},
+		{"on: [push, workflow_dispatch]", []string{"push", "workflow_dispatch"}},
+		{"on:\n  - workflow_dispatch\n  - push", []string{"workflow_dispatch", "push"}},
+	} {
+		config := &golfv1.WorkflowConfiguration{Format: golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITHUB_ACTIONS}
+		inspectWorkflow(config, []byte(strings.Replace(workflowActionsFixture, "on: workflow_dispatch", declaration.source, 1)))
+		if config.State != golfv1.WorkflowInspectionState_WORKFLOW_INSPECTION_STATE_VALIDATED_SUBSET || len(config.Diagnostics) != 0 || strings.Join(config.Events, ",") != strings.Join(declaration.events, ",") || len(config.Jobs) != 1 || strings.Contains(config.String(), "untrusted-script") {
+			t.Fatal("event membership/order or private shell metadata changed")
 		}
 	}
 }

@@ -200,16 +200,20 @@ func (v workflowInspector) actions(root *yaml.Node) {
 			}
 		}
 	case on != nil && on.Kind == yaml.SequenceNode:
-		if len(on.Content) > 50 {
-			v.invalid("event_limit", "Configuration exceeds the 50-event inspection limit.", on)
+		if len(on.Content) < 1 || len(on.Content) > 2 {
+			v.unsupported("event", "Event lists require one or two distinct literal push or workflow_dispatch declarations.", on)
 		}
+		seen := map[string]bool{}
 		for i, value := range on.Content {
-			if i >= 50 {
+			if i >= 2 {
 				break
 			}
 			v.config.Events = append(v.config.Events, v.label(value))
+			if !workflowString(value) || (value.Value != "push" && value.Value != "workflow_dispatch") || seen[value.Value] {
+				v.unsupported("event", "Event lists require one or two distinct literal push or workflow_dispatch declarations.", value)
+			}
+			seen[value.Value] = true
 		}
-		v.unsupported("event", "Event lists are outside this subset; use a supported scalar or explicit event mapping.", on)
 	default:
 		v.invalid("event_shape", "An Actions workflow requires a valid on declaration.", on)
 	}

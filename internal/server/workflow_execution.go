@@ -84,7 +84,13 @@ func compileWorkflowForTrigger(format golfv1.WorkflowFormat, data []byte, push b
 		}
 		on := workflowField(root, "on")
 		declaration := workflowField(on, event)
-		if !(workflowString(on) && on.Value == event) && declaration == nil {
+		matched := workflowString(on) && on.Value == event || declaration != nil
+		if on.Kind == yaml.SequenceNode {
+			for _, value := range on.Content {
+				matched = matched || value.Value == event
+			}
+		}
+		if !matched {
 			return nil, errWorkflowTriggerNotMatched
 		}
 		if push {
