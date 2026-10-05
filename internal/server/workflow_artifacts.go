@@ -63,7 +63,7 @@ func (s *Server) storeWorkflowArtifact(ctx context.Context, tx *sql.Tx, run work
 		if !bytes.Equal(original, data) {
 			return errWorkflowRunConflict
 		}
-		return nil
+		return requireWorkflowArtifactLease(ctx, tx, run)
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return errStorageUnavailable
@@ -80,14 +80,6 @@ func (s *Server) storeWorkflowArtifact(ctx context.Context, tx *sql.Tx, run work
 		if err = store.PutArtifactImmutable(ctx, binding.Key, data, digest); err != nil {
 			return err
 		}
-	}
-	// A bounded provider wait must not extend an expired original lease.
-	var live bool
-	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_workflow_runs WHERE id=$1 AND attempt_id=$2 AND state='running' AND lease_expires_at>clock_timestamp())`, run.ID, run.AttemptID).Scan(&live); err != nil {
-		return errStorageUnavailable
-	}
-	if !live {
-		return errWorkflowRunConflict
 	}
 	// Provider I/O finishes before the short shared count/insert lock. A later
 	// refusal/rollback may retain an orphan private object, never a published row.
@@ -106,6 +98,19 @@ func (s *Server) storeWorkflowArtifact(ctx context.Context, tx *sql.Tx, run work
 	_, err = tx.ExecContext(ctx, `INSERT INTO golf_workflow_artifacts(run_id,attempt_id,forge_url,repository_id,owner_id,commit_id,workflow_path,blob_id,source_sha256,archive_sha256,file_count,file_bytes,archive,storage,object_key,object_fingerprint,object_profile_id,object_profile_version,archive_bytes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`, run.ID, run.AttemptID, run.ForgeURL, run.RepositoryID, run.OwnerID, run.CommitID, run.WorkflowPath, run.BlobID, run.SourceSHA256, digest, files, fileBytes, binding.Archive, binding.Storage, binding.Key, binding.Fingerprint, binding.ProfileID, binding.ProfileVersion, len(data))
 	if err != nil {
 		return errStorageUnavailable
+	}
+	// Check after every provider/count/insert wait, including idempotent reads.
+	// The caller rolls the whole transaction back on an expired original lease.
+	return requireWorkflowArtifactLease(ctx, tx, run)
+}
+
+func requireWorkflowArtifactLease(ctx context.Context, tx *sql.Tx, run workflowRunRecord) error {
+	var live bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_workflow_runs WHERE id=$1 AND attempt_id=$2 AND state='running' AND lease_expires_at>clock_timestamp())`, run.ID, run.AttemptID).Scan(&live); err != nil {
+		return errStorageUnavailable
+	}
+	if !live {
+		return errWorkflowRunConflict
 	}
 	return nil
 }

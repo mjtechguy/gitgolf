@@ -19,7 +19,7 @@ import (
 )
 
 func TestWorkflowArtifactsUploadFinishDownloadAndPrivacyPostgres(t *testing.T) {
-	for _, outcome := range []string{"success", "cancelled", "revoked", "objects", "objects-failed", "objects-expired", "late-activation"} {
+	for _, outcome := range []string{"success", "cancelled", "revoked", "objects", "objects-failed", "objects-expired", "objects-replay-expired", "budget-wait-expired", "late-activation"} {
 		t.Run(outcome, func(t *testing.T) {
 			f := newWorkflowRunFixture(t, ".gitlab-ci.yml")
 			f.enable(t)
@@ -113,6 +113,67 @@ func TestWorkflowArtifactsUploadFinishDownloadAndPrivacyPostgres(t *testing.T) {
 				}
 				return
 			}
+			if outcome == "budget-wait-expired" {
+				// Hold only the shared budget gate on an independent connection.
+				// The real upload must pass its initial live-lease check and wait
+				// here, then refuse after expiry rather than acknowledge its INSERT.
+				gate, err := f.server.db.BeginTx(t.Context(), nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer gate.Rollback()
+				if _, err = gate.ExecContext(t.Context(), `SELECT pg_advisory_xact_lock(hashtextextended('golf.artifacts.pg.v1',0))`); err != nil {
+					t.Fatal(err)
+				}
+				if _, err = f.server.db.Exec(`UPDATE golf_workflow_runs SET lease_expires_at=clock_timestamp()+interval '2 seconds' WHERE id=$1`, lease.RunID); err != nil {
+					t.Fatal(err)
+				}
+				done := make(chan *httptest.ResponseRecorder, 1)
+				go func() { done <- call("artifact", archive, true) }()
+				deadline := time.Now().Add(5 * time.Second)
+				waiting := false
+				for time.Now().Before(deadline) {
+					if err := f.server.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event='advisory' AND query LIKE '%golf.artifacts.pg.v1%')`).Scan(&waiting); err != nil {
+						t.Fatal(err)
+					}
+					if waiting {
+						break
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+				if !waiting {
+					t.Fatal("upload never reached independent budget gate")
+				}
+				expired := false
+				for time.Now().Before(deadline) {
+					if err := f.server.db.QueryRow(`SELECT lease_expires_at<=clock_timestamp() FROM golf_workflow_runs WHERE id=$1`, lease.RunID).Scan(&expired); err != nil {
+						t.Fatal(err)
+					}
+					if expired {
+						break
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+				if !expired {
+					t.Fatal("original lease did not expire while waiting")
+				}
+				if err := gate.Rollback(); err != nil {
+					t.Fatal(err)
+				}
+				select {
+				case got := <-done:
+					if got.Code != 409 {
+						t.Fatal("budget wait extended original lease", got.Code)
+					}
+				case <-time.After(5 * time.Second):
+					t.Fatal("upload did not finish after releasing gate")
+				}
+				var count int
+				if err := f.server.db.QueryRow(`SELECT count(*) FROM golf_workflow_artifacts WHERE run_id=$1`, lease.RunID).Scan(&count); err != nil || count != 0 {
+					t.Fatal("expired upload retained metadata", err)
+				}
+				return
+			}
 			if outcome == "objects-failed" {
 				objects.mu.Lock()
 				objects.readMode = "hash"
@@ -131,6 +192,30 @@ func TestWorkflowArtifactsUploadFinishDownloadAndPrivacyPostgres(t *testing.T) {
 			}
 			if got := call("artifact", archive, true); got.Code != 204 {
 				t.Fatal("artifact upload", got.Code)
+			}
+			if outcome == "objects-replay-expired" {
+				if _, err := f.server.db.Exec(`UPDATE golf_workflow_runs SET lease_expires_at=clock_timestamp()+interval '1 second' WHERE id=$1`, lease.RunID); err != nil {
+					t.Fatal(err)
+				}
+				objects.mu.Lock()
+				objects.before = func(method string) {
+					if method == "GET" {
+						time.Sleep(1300 * time.Millisecond)
+					}
+				}
+				objects.mu.Unlock()
+				if got := call("artifact", archive, true); got.Code != 409 {
+					t.Fatal("replay read extended expired lease", got.Code)
+				}
+				var count int
+				if err := f.server.db.QueryRow(`SELECT count(*) FROM golf_workflow_artifacts WHERE run_id=$1`, lease.RunID).Scan(&count); err != nil || count != 1 {
+					t.Fatal("replay changed original metadata", err)
+				}
+				got, err := f.server.GetWorkflowArtifact(f.context(t), workflowRunRequest(f, &golfv1.GetWorkflowArtifactRequest{RunId: lease.RunID}))
+				if err != nil || got.Msg.Artifact != nil {
+					t.Fatal("expired replay published unfinished artifact", err)
+				}
+				return
 			}
 			if got := call("artifact", archive, true); got.Code != 204 {
 				t.Fatal("same upload not idempotent", got.Code)
