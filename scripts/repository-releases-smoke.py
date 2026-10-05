@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Prepared bounded releases read proof on an externally owned fresh stack.
-Never starts/builds/pulls/stops services. Two ordinary managed actors, two native
+Never provisions/builds/pulls/disposes services; optional recipes restart only
+the externally owned fresh core. Two ordinary managed actors, two native
 releases, independent exact list/detail reads, then native reader removal.
 Optional --browser captures eight actual read-only views. --assets additionally
 qualifies bounded managed native-asset attachments; no Golf asset writes,
-snapshot/publication, provider or full repository readiness claim.
+snapshot/publication, provider or full repository readiness claim. --publish
+adds one explicit existing-tag publication and original-key inspection.
+No lost-acknowledgement or protected publication qualification.
 """
 import argparse
+import uuid
 import hashlib
 from email.message import Message
 from datetime import datetime
@@ -21,15 +25,19 @@ import time
 sys.dont_write_bytecode=True
 LIST='RepositoryService/ListRepositoryReleases'
 GET='RepositoryService/GetRepositoryRelease'
+SUBMIT_PUBLICATION='RepositoryReleasePublicationService/SubmitRepositoryReleasePublication'
+GET_PUBLICATION='RepositoryReleasePublicationService/GetRepositoryReleasePublicationOperation'
+PUBLICATION_CONTRACT='golf.repository.release-publication.v1'
+PUBLICATION_PHASE='REPOSITORY_RELEASE_PUBLICATION_PHASE_'
 FIELDS={'id','title','tagName','targetCommitish','bodyMarkdown','draft','prerelease','createdAt','publishedAt','author','assets','assetCount'}
 
 def load_common(stack):
  spec=importlib.util.spec_from_file_location('release_native_helpers',stack/'scripts/pull-merge-observation-smoke.py')
  module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
- module.RPC_PROCEDURES=module.RPC_PROCEDURES|frozenset((LIST,GET))
+ module.RPC_PROCEDURES=module.RPC_PROCEDURES|frozenset((LIST,GET,SUBMIT_PUBLICATION,GET_PUBLICATION,'RepositoryAccessService/GetRepositoryAccess'))
  return module
 
-def allowed(method,path,prefix,assets=False):
+def allowed(method,path,prefix,assets=False,publish=False):
  if method=='GET' and path in ('user','version'):return True
  if method=='GET' and re.fullmatch('users/'+re.escape(prefix)+r'-(owner|reader)',path):return True
  if method=='POST' and path=='user/repos':return True
@@ -37,6 +45,9 @@ def allowed(method,path,prefix,assets=False):
  if re.fullmatch(base,path):return method in ('GET','DELETE')
  if re.fullmatch(base+r'/collaborators/'+re.escape(prefix)+r'-reader',path):return method in ('PUT','DELETE')
  if re.fullmatch(base+r'/releases',path):return method in ('GET','POST')
+ if publish and re.fullmatch(base+r'/tags',path):return method=='POST'
+ if publish and re.fullmatch(base+r'/tags/(v1\.0\.0|owned-publication)',path):return method=='GET'
+ if publish and re.fullmatch(base+r'/tag_protections',path):return method=='GET'
  if assets and re.fullmatch(base+r'/releases/[1-9][0-9]*/assets/[1-9][0-9]*',path):return method=='GET'
  if assets and re.fullmatch(base+r'/releases/[1-9][0-9]*/assets\?name=owned-release-[12]\.bin',path):return method=='POST'
  return method=='GET' and re.fullmatch(base+r'/releases/[1-9][0-9]*',path) is not None
@@ -73,6 +84,35 @@ def attachment_receipt(data,headers,asset,expected):
  assert disposition.get_content_disposition()=='attachment' and disposition.get_filename()==asset['name']
  return hashlib.sha256(data).hexdigest()
 
+def publication_status(intent):
+ return {key:intent[key] for key in ('repository','repositoryId','ownerId','operationId')}
+
+def publication_receipt(common,row,intent,actor,phase):
+ fields={'contract','operationId','actorId','repository','repositoryId','ownerId','accessRevision','tagName','tagObjectId','commitId','titleSha256','bodySha256','prerelease','phase','releaseId','createdAt','updatedAt','failureCode'}
+ assert isinstance(row,dict) and set(row)<=fields and row['contract']==PUBLICATION_CONTRACT
+ assert phase in {PUBLICATION_PHASE+p for p in ('RESERVED','DISPATCH_UNKNOWN','SUCCEEDED','REJECTED')} and row['phase']==phase
+ for key in ('operationId','repository','repositoryId','ownerId','accessRevision','tagName','tagObjectId','commitId'):assert row[key]==intent[key]
+ assert common.decimal(row['actorId']) and row['actorId']==actor
+ assert all(common.decimal(intent[key]) for key in ('repositoryId','ownerId'))
+ assert str(uuid.UUID(intent['operationId']))==intent['operationId'] and common.HASH.fullmatch(intent['accessRevision'])
+ assert common.OID.fullmatch(row['tagObjectId']) and common.OID.fullmatch(row['commitId']) and len(row['tagObjectId'])==len(row['commitId'])
+ for wire,source in (('titleSha256','title'),('bodySha256','bodyMarkdown')):assert row[wire]==hashlib.sha256(intent[source].encode()).hexdigest()
+ assert row.get('prerelease',False) is intent['prerelease']
+ for key in ('createdAt','updatedAt'):
+  assert re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,9})?Z',row[key]);datetime.fromisoformat(row[key].replace('Z','+00:00'))
+ if phase==PUBLICATION_PHASE+'SUCCEEDED':assert common.decimal(row['releaseId']) and not row.get('failureCode')
+ else:assert not row.get('releaseId') and row.get('failureCode','')==('preflight_refused' if phase==PUBLICATION_PHASE+'REJECTED' else '')
+ return row
+
+def publication_native_receipt(common,release,tag,intent,actor):
+ assert tag['name']==intent['tagName'] and tag['id']==intent['tagObjectId'] and tag['commit']['sha']==intent['commitId']
+ assert common.OID.fullmatch(tag['id']) and common.OID.fullmatch(tag['commit']['sha'])
+ assert common.decimal(str(release['id'])) and release['tag_name']==intent['tagName'] and release['target_commitish']==intent['commitId']
+ assert release['name']==intent['title'] and release['body']==intent['bodyMarkdown'] and release['draft'] is False and release['prerelease'] is intent['prerelease']
+ assert str(release['author']['id'])==actor and release['assets']==[]
+ for key in ('created_at','published_at'):datetime.fromisoformat(release[key].replace('Z','+00:00'))
+ return release
+
 def self_check(stack):
  common=load_common(stack);prefix='golf-mergeobs-'+'a'*10
  for method,path in [('POST','user/repos'),('GET','repos/'+prefix+'-owner/private/releases'),('POST','repos/'+prefix+'-owner/private/releases'),('DELETE','repos/'+prefix+'-owner/private/collaborators/'+prefix+'-reader')]:assert allowed(method,path,prefix)
@@ -105,13 +145,41 @@ def self_check(stack):
   try:attachment_receipt(data,h,asset,b'abc')
   except AssertionError:pass
   else:raise AssertionError('Unsafe attachment accepted')
- print('PASS: pure native scope, exact release/asset metadata and attachment tamper checks; no resources')
+ publication={'repository':{'owner':'owned','name':'private'},'repositoryId':'2','ownerId':'4','accessRevision':'b'*64,'operationId':'12345678-1234-4234-8234-123456789abc','tagName':'owned-publication','tagObjectId':'a'*40,'commitId':'a'*40,'title':'Owned publication','bodyMarkdown':'Literal "notes" café','prerelease':False}
+ receipt=publication_status(publication)|{key:publication[key] for key in ('accessRevision','tagName','tagObjectId','commitId')}|{'contract':PUBLICATION_CONTRACT,'actorId':'4','titleSha256':hashlib.sha256(publication['title'].encode()).hexdigest(),'bodySha256':hashlib.sha256(publication['bodyMarkdown'].encode()).hexdigest(),'phase':PUBLICATION_PHASE+'SUCCEEDED','releaseId':'12','createdAt':native['created_at'],'updatedAt':native['created_at']}
+ publication_receipt(common,receipt,publication,'4',receipt['phase'])
+ publication_receipt(common,receipt|{'prerelease':True},publication|{'prerelease':True},'4',receipt['phase'])
+ for change in ({'repositoryId':'3'},{'ownerId':'5'},{'actorId':'5'},{'repository':{'owner':'other','name':'private'}},{'accessRevision':'c'*64},{'tagObjectId':'c'*40},{'commitId':'c'*40},{'tagName':'other'},{'operationId':str(uuid.uuid4())},{'titleSha256':'c'*64},{'bodySha256':'c'*64},{'prerelease':True},{'phase':PUBLICATION_PHASE+'DISPATCH_UNKNOWN'},{'releaseId':'0'},{'title':publication['title']},{'bodyMarkdown':publication['bodyMarkdown']}):
+  try:publication_receipt(common,receipt|change,publication,'4',receipt['phase'])
+  except (AssertionError,ValueError):pass
+  else:raise AssertionError('Changed/private publication receipt accepted')
+ for phase in ('RESERVED','DISPATCH_UNKNOWN','REJECTED'):
+  partial={k:v for k,v in receipt.items() if k!='releaseId'};partial['phase']=PUBLICATION_PHASE+phase
+  if phase=='REJECTED':partial['failureCode']='preflight_refused'
+  publication_receipt(common,partial,publication,'4',partial['phase'])
+  try:publication_receipt(common,partial|{'releaseId':'12'},publication,'4',partial['phase'])
+  except AssertionError:pass
+  else:raise AssertionError('Unverified release ID accepted')
+ tag={'name':publication['tagName'],'id':publication['tagObjectId'],'commit':{'sha':publication['commitId']}}
+ published=native|{'tag_name':publication['tagName'],'target_commitish':publication['commitId'],'name':publication['title'],'body':publication['bodyMarkdown'],'prerelease':False,'author':{'id':4}}
+ publication_native_receipt(common,published,tag,publication,'4')
+ for change in ({'target_commitish':'main'},{'body':'changed'},{'draft':True},{'author':{'id':5}},{'tag_name':'other'}):
+  try:publication_native_receipt(common,published|change,tag,publication,'4')
+  except AssertionError:pass
+  else:raise AssertionError('Changed native publication accepted')
+ for tag_id in ('a'*40,'c'*40):publication_native_receipt(common,published,tag|{'id':tag_id},publication|{'tagObjectId':tag_id},'4')
+ tag_path='repos/'+prefix+'-owner/private/tags'
+ assert allowed('POST',tag_path,prefix,publish=True) and not allowed('POST',tag_path,prefix)
+ assert allowed('GET',tag_path+'/owned-publication',prefix,publish=True) and not allowed('GET',tag_path+'/foreign',prefix,publish=True)
+ assert not allowed('DELETE',tag_path+'/owned-publication',prefix,publish=True) and not allowed('POST',tag_path.replace(prefix,'foreign'),prefix,publish=True)
+ print('PASS: pure native scope, release/publication receipts and attachment tamper checks; no resources')
 
 def main():
  p=argparse.ArgumentParser(description=__doc__)
- p.add_argument('--self-check',action='store_true');p.add_argument('--stack-root',type=Path,default=Path(__file__).resolve().parents[1]);p.add_argument('--project');p.add_argument('--compose-file',type=Path);p.add_argument('--env-file',type=Path);p.add_argument('--image');p.add_argument('--source-revision');p.add_argument('--golf-url');p.add_argument('--native-url');p.add_argument('--output',type=Path);p.add_argument('--browser',action='store_true');p.add_argument('--assets',action='store_true',help='Also qualify current-authorized local native attachments <=10MiB')
+ p.add_argument('--self-check',action='store_true');p.add_argument('--stack-root',type=Path,default=Path(__file__).resolve().parents[1]);p.add_argument('--project');p.add_argument('--compose-file',type=Path);p.add_argument('--env-file',type=Path);p.add_argument('--image');p.add_argument('--source-revision');p.add_argument('--golf-url');p.add_argument('--native-url');p.add_argument('--output',type=Path);p.add_argument('--browser',action='store_true');p.add_argument('--assets',action='store_true',help='Also qualify current-authorized local native attachments <=10MiB');p.add_argument('--publish',action='store_true',help='Qualify one existing-tag Golf publication and original no-resend inspection');p.add_argument('--publication-tag-type',choices=('lightweight','annotated'),default='lightweight')
  args=p.parse_args();stack=args.stack_root.resolve();common=load_common(stack)
  if args.self_check:return self_check(stack)
+ assert args.publish or args.publication_tag_type=='lightweight'
  assert all((args.project,args.compose_file,args.env_file,args.image,args.source_revision,args.golf_url,args.native_url,args.output))
  assert re.fullmatch('golf-mergeobs-[a-f0-9]{10}',args.project) and re.fullmatch('sha256:[a-f0-9]{64}',args.image) and re.fullmatch('[a-f0-9]{40}',args.source_revision)
  golf,native=common.loopback(args.golf_url),common.loopback(args.native_url)
@@ -137,7 +205,7 @@ def main():
   return result
  def api(actor,method,path,payload=None,status=200):
   nonlocal native_unknown
-  assert allowed(method,path,prefix,args.assets)
+  assert allowed(method,path,prefix,args.assets,args.publish)
   if method not in ('GET','HEAD'):native_unknown=True
   result=common.request(common.client(),method,native+'/api/v1/'+path,payload,{'Content-Type':'application/json',**({'Authorization':'token '+actor['token']} if actor else {})},status)
   if method not in ('GET','HEAD'):native_unknown=False
@@ -250,13 +318,71 @@ def main():
    command(['node',str(stack/'scripts/repository-releases-browser.mjs')],{'golf':golf,'cookies':cookies,'repository':repository,'target':target,'releases':[release_receipt(common,rpc(owner,GET,target|{'releaseId':str(r['id'])})['release'],r) for r in releases],'sourceRevision':args.source_revision,'stackRoot':str(stack),'output':str(output/'browser'),'forbidden':forbidden,'assetMode':args.assets,'assetProof':manifest.get('assetProof')},timeout=180)
    browser=json.loads((output/'browser/manifest.json').read_text());assert browser['passed'] and browser['complete'] and len(browser['captures'])==8
    manifest['browser']={'manifest':'browser/manifest.json','captures':8,'readOnly':True,'assetDownloads':1 if args.assets else 0};persist()
+  if args.publish:
+   stage='existing unprotected native tag and exact publication bindings'
+   assert api(owner,'GET',path+'/tag_protections')==[]
+   original_tag=api(owner,'GET',path+'/tags/v1.0.0');H=original_tag['commit']['sha'];assert common.OID.fullmatch(H)
+   tag_name='owned-publication';tag_message='Owned annotated tag fixture' if args.publication_tag_type=='annotated' else ''
+   tag=api(owner,'POST',path+'/tags',{'tag_name':tag_name,'target':H,'message':tag_message},201)
+   tag=api(owner,'GET',path+'/tags/'+tag_name)
+   assert tag['name']==tag_name and common.OID.fullmatch(tag['id']) and tag['commit']['sha']==H and len(tag['id'])==len(H)
+   assert (tag['id']!=H) is (args.publication_tag_type=='annotated')
+   assert len(api(owner,'GET',path+'/releases'))==2
+   access=rpc(owner,'RepositoryAccessService/GetRepositoryAccess',{'repository':repository})['access']
+   assert access['repositoryId']==target['repositoryId'] and access['ownerId']==owner['id'] and access['owner']['id']==owner['id'] and access['owner']['login']==owner['name'] and access['canManage'] and access['currentPermission']=='owner' and common.HASH.fullmatch(access['revision'])
+   intent=target|{'ownerId':owner['id'],'accessRevision':access['revision'],'operationId':str(uuid.uuid4()),'tagName':tag_name,'tagObjectId':tag['id'],'commitId':H,'title':'Owned Golf publication','bodyMarkdown':'Controlled published notes.\n\n**Existing tag observation only.**','prerelease':False}
+   forbidden.extend((intent['title'],intent['bodyMarkdown']))
+   stage='stale publication revision durably refused without native publication'
+   refused=intent|{'operationId':str(uuid.uuid4()),'accessRevision':('0' if access['revision']!='0'*64 else '1')*64}
+   native_unknown=True
+   rejected=publication_receipt(common,rpc(owner,SUBMIT_PUBLICATION,refused)['operation'],refused,owner['id'],PUBLICATION_PHASE+'REJECTED')
+   assert publication_receipt(common,rpc(owner,GET_PUBLICATION,publication_status(refused))['operation'],refused,owner['id'],rejected['phase'])==rejected
+   assert publication_receipt(common,rpc(owner,SUBMIT_PUBLICATION,refused)['operation'],refused,owner['id'],rejected['phase'])==rejected
+   assert len(api(owner,'GET',path+'/releases'))==2;native_unknown=False
+   stage='one explicit Golf existing-tag publication'
+   native_unknown=True
+   receipt=publication_receipt(common,rpc(owner,SUBMIT_PUBLICATION,intent)['operation'],intent,owner['id'],PUBLICATION_PHASE+'SUCCEEDED')
+   observed=publication_native_receipt(common,api(owner,'GET',path+'/releases/'+receipt['releaseId']),api(owner,'GET',path+'/tags/'+tag_name),intent,owner['id'])
+   assert str(observed['id'])==receipt['releaseId'];native_unknown=False
+   published_ids={str(r['id']) for r in releases}|{receipt['releaseId']}
+   def verify_publication():
+    rows=api(owner,'GET',path+'/releases');assert len(rows)==3 and {str(r['id']) for r in rows}==published_ids
+    current=publication_native_receipt(common,api(owner,'GET',path+'/releases/'+receipt['releaseId']),api(owner,'GET',path+'/tags/'+tag_name),intent,owner['id'])
+    assert all(current[key]==observed[key] for key in ('id','name','tag_name','target_commitish','body','draft','prerelease','author','created_at','published_at','assets'))
+    assert publication_receipt(common,rpc(owner,GET_PUBLICATION,publication_status(intent))['operation'],intent,owner['id'],receipt['phase'])==receipt
+   stage='original publication status and exact-key replay without another release'
+   verify_publication()
+   native_unknown=True
+   assert publication_receipt(common,rpc(owner,SUBMIT_PUBLICATION,intent)['operation'],intent,owner['id'],receipt['phase'])==receipt
+   verify_publication();native_unknown=False
+   # Different content under the original key must never become a new intent.
+   native_unknown=True
+   rpc(owner,SUBMIT_PUBLICATION,intent|{'bodyMarkdown':'Changed original publication body'},400,'failed_precondition');verify_publication();native_unknown=False
+   stage='publication restart preserves original receipt and native release'
+   command(compose+['restart','golf']);deadline=time.monotonic()+60
+   while True:
+    try:common.request(common.client(),'GET',golf+'/readyz',None,{},200);break
+    except Exception:assert time.monotonic()<deadline;time.sleep(.25)
+   assert runtime_now()==runtime;verify_publication()
+   native_unknown=True
+   assert publication_receipt(common,rpc(owner,SUBMIT_PUBLICATION,intent)['operation'],intent,owner['id'],receipt['phase'])==receipt
+   verify_publication();native_unknown=False
+   # The reader cannot publish or inspect another actor's original operation.
+   stage='reader publication authority refusal'
+   native_unknown=True
+   rpc(reader,SUBMIT_PUBLICATION,intent|{'operationId':str(uuid.uuid4())},403,'permission_denied')
+   rpc(reader,GET_PUBLICATION,publication_status(intent),403,'permission_denied');verify_publication();native_unknown=False
+   manifest['scope']='Existing release reads plus one bounded existing-tag Golf publication'+(' and local asset attachments' if args.assets else '')
+   manifest['limits']=['No protected/atomic tag-source fencing or cryptographic artifact promotion','No publication lost-acknowledgement qualification or automatic replacement key','Publication UI remains unqualified; optional browser views are metadata/asset reads','Root owns stack disposal']
+   manifest['publicationProof']={'operation':receipt,'tagType':args.publication_tag_type,'explicitPublicationVerified':True,'independentNativeContentAndAuthorMatched':True,'nativeReleaseCount':'3','staleRevisionRejectedWithoutPublication':True,'originalInspectionAndReplayNoAdditionalRelease':True,'changedOriginalContentRefused':True,'restartReceiptAndReplayStable':True,'readerPublicationAndOriginalInspectionRefused':True,'titleAndBodyNotRetained':True};persist()
   stage='native reader removal and current denial'
   api(owner,'DELETE',path+'/collaborators/'+reader['name'],status=204)
   rpc(reader,LIST,target,404,'not_found');rpc(reader,GET,target|{'releaseId':str(releases[0]['id'])},404,'not_found')
   if args.assets:
    for release,asset,body in assets:download(reader,release,asset,body,404);assert download(owner,release,asset,body)==body
    manifest['assetProof']['readerRevocationDenied']=True
-  assert rpc(owner,LIST,target)['totalCount']=='2' and runtime_now()==runtime
+  assert rpc(owner,LIST,target)['totalCount']==('3' if args.publish else '2') and runtime_now()==runtime
+  if args.publish:verify_publication();manifest['publicationProof']['historicalInspectionAfterAccessRevisionChange']=True
   manifest['readerRevocationDenied']=True;manifest['runtimeAfter']=runtime_now();persist()
  except Exception as error:
   failure={'type':type(error).__name__,'stage':stage}
@@ -286,10 +412,10 @@ def main():
      except Exception:cleanup.append('owned_native_actor_cleanup')
   manifest['cleanup']={'failures':cleanup,'nativeScopePurged':not cleanup,'stackDisposal':'Root owns stack teardown','retainedGolfMetadata':'Own accounts disabled, no Golf history purge'}
   if cleanup:manifest['status']='failed'
-  elif failure is None:manifest['status']='qualified_bounded_release_assets' if args.assets else 'qualified_bounded_release_reads'
+  elif failure is None:manifest['status']='qualified_bounded_release_publication' if args.publish else 'qualified_bounded_release_assets' if args.assets else 'qualified_bounded_release_reads'
   persist()
  if failure or cleanup:print('FAIL: release qualifier; fixed private-safe receipt preserved',file=sys.stderr);return 1
- print('PASS: current native release reads'+(' and bounded local attachments' if args.assets else '')+'; publication/snapshot readiness remains separate');return 0
+ print('PASS: current native release reads'+(' and bounded local attachments' if args.assets else '')+(' and one existing-tag publication; protected publication/snapshot readiness remains separate' if args.publish else '; publication/snapshot readiness remains separate'));return 0
 
 if __name__=='__main__':
  try:sys.exit(main() or 0)
