@@ -193,6 +193,7 @@ def main():
         fork_pull=pull(author['name']+':fork-feature',base_ref);fork_intent=intent(owner,path,target,fork_pull);fork_rejected=validate_receipt(common,rpc(owner,SUBMIT,fork_intent)['operation'],fork_intent,owner['id'],'STANDARD_PULL_MERGE_PHASE_REJECTED');assert reference(owner,path,base_ref)==B;manifest['forkRejected']=fork_rejected;persist()
         if args.fork:
             manifest['scope']='Standard native unprotected explicitly source-bound fork merge only'
+            manifest['limits']=[v.replace('No protected or fork publication','No protected publication') for v in manifest['limits']]
             manifest['limits']=['No atomic-base/checks/all-writer fence','No protected publication','No accepted-response-loss recovery qualification','Root owns full stack disposal']
             stage='private fork unreadable source refuses before native merge'
             denied=bound_source(intent(writer,path,target,fork_pull));api(author,'DELETE',fork_path+'/collaborators/'+writer['name'],status=204);api(writer,'GET',fork_path,status=404)
