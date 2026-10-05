@@ -47,6 +47,7 @@ async function backend(page: Page) {
     if (method === 'LoginWithPassword') { state.signedIn = true; return respond(route, LoginWithPasswordResponseSchema, { user }); }
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (!state.signedIn) return error(401, 'Your session expired.');
+    if (method === 'GetRepositoryStar') return reject(route,'unimplemented','Stars are outside this PR fixture.');
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, { capabilities: [] });
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
     if (method === 'GetRepository') return state.metadataStatus === 200 ? respond(route, GetRepositoryResponseSchema, { repository: { ...repository, empty: state.empty } }) : error(state.metadataStatus, 'Repository not found or inaccessible.');
@@ -395,7 +396,14 @@ test('PR workspace exposes four canonical tabs, shared commit rows and latest re
  expect([...new Set(state.checkPages)]).toEqual([1,2]);
  await expect(page.getByRole('link',{name:'Open details for ci/build',exact:true})).toHaveAttribute('href','https://checks.example/build');
  await expect(page.getByRole('link',{name:'Open details for review/security',exact:true})).toHaveCount(0);
- await page.getByRole('searchbox',{name:'Search loaded checks',exact:true}).fill('security');
+ const search=page.getByRole('searchbox',{name:'Search loaded checks',exact:true});
+ const checkReads=state.checkPages.length;
+ await search.fill('Success');await expect(page.getByRole('cell',{name:'Success',exact:true})).toBeVisible();await expect(page.getByRole('cell',{name:'Pending',exact:true})).toHaveCount(0);
+ await search.fill('Pending');await expect(page.getByRole('cell',{name:'Pending',exact:true})).toBeVisible();await expect(page.getByRole('cell',{name:'Success',exact:true})).toHaveCount(0);
+ await search.fill('Security review queued');await expect(page.getByRole('cell',{name:'Pending',exact:true})).toBeVisible();await expect(page.getByRole('cell',{name:'Success',exact:true})).toHaveCount(0);
+ await search.fill('PRIVATE CHECK <img src=x>');await expect(page.getByRole('cell',{name:'Success',exact:true})).toBeVisible();await expect(page.locator('.browser-panel img')).toHaveCount(0);
+ expect(state.checkPages).toHaveLength(checkReads);
+ await search.fill('security');
  await expect(page.getByRole('cell',{name:'Success',exact:true})).toHaveCount(0);await expect(page.getByRole('cell',{name:'Pending',exact:true})).toBeVisible();
  await page.getByText('Check sources and permissions',{exact:true}).click();
  await expect(page.getByText('Publishers may be repository writers.',{exact:false})).toBeVisible();

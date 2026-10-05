@@ -8,7 +8,7 @@ import { workflowRunClient, errorMessage } from './api';
 import { WorkflowOutputState, WorkflowRunOrigin, WorkflowRunState, WorkflowStepState, type WorkflowStepProgress, type WorkflowRun, type WorkflowJobInstance } from './gen/golf/v1/golf_pb';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { DateLabel, Loading, More, PanelError, privateQuery } from './RepositoryUI';
-import { isRunID, isCommitID, isWorkflowJobInstanceID, isWorkflowStepID, repositoryOptions } from './navigation';
+import { isRunID, isCommitID, isWorkflowJobInstanceID, isWorkflowStepID, repositoryOptions, type RepositoryLocation } from './navigation';
 import { sourcePath, sourceRepositoryID } from './sourceReads';
 import { WorkflowArtifacts } from './WorkflowArtifacts';
 
@@ -96,9 +96,9 @@ function noJobOutput(job:WorkflowJobInstance,step?:{state:WorkflowStepState}){
  return `${outcome}The selected job or step has no recorded start or output. ${job.needs.length?`Declared dependencies: ${job.needs.join(', ')}. `:''}Choose all run output or a job/step that started.`;
 }
 function matrixLabel(job:WorkflowJobInstance){return job.matrix.map(entry=>{const value=JSON.parse(entry.valueJson) as unknown;return `${entry.name}: ${typeof value==='string'?value:entry.valueJson}`}).join(', ');}
-function graphOptions(owner:string,name:string,runId:string,jobInstanceId?:string,stepId?:string){return repositoryOptions({owner,name},{view:'actions',run:runId,step:undefined,jobInstanceId,stepId});}
-function JobGraphNavigation({run,owner,name,selectedJobInstanceId,selectedStepId}:{run:WorkflowRun;owner:string;name:string;selectedJobInstanceId?:string;selectedStepId?:string}){
- return <><h3>Jobs</h3><Link className="automation-step-link" aria-current={!selectedJobInstanceId?'page':undefined} {...graphOptions(owner,name,run.id)}>All run output</Link><ol>{run.jobs.map(job=><li key={job.instanceId}><Link className="automation-step-link" aria-current={selectedJobInstanceId===job.instanceId&&!selectedStepId?'page':undefined} title={`${job.jobId} · ${job.instanceId}`} {...graphOptions(owner,name,run.id,job.instanceId)}><StepState step={job}/><span>{job.name}<small>{matrixLabel(job)||job.jobId} · {stepDuration(job)}</small></span></Link>{selectedJobInstanceId===job.instanceId?<><small className="muted">{job.needs.length?`Needs: ${job.needs.join(', ')}`:'No dependencies'}</small><ol>{job.steps.map(step=><li key={step.id}><Link className="automation-step-link" aria-current={selectedStepId===step.id?'page':undefined} {...graphOptions(owner,name,run.id,job.instanceId,step.id)}><StepState step={step}/><span>{step.name}<small>{stepDuration(step)}</small></span></Link></li>)}</ol></>:null}</li>)}</ol></>;
+function graphOptions(location:RepositoryLocation,runId:string,jobInstanceId?:string,stepId?:string){return repositoryOptions(location,{view:'actions',run:runId,step:undefined,jobInstanceId,stepId});}
+function JobGraphNavigation({run,location,selectedJobInstanceId,selectedStepId}:{run:WorkflowRun;location:RepositoryLocation;selectedJobInstanceId?:string;selectedStepId?:string}){
+ return <><h3>Jobs</h3><Link className="automation-step-link" aria-current={!selectedJobInstanceId?'page':undefined} {...graphOptions(location,run.id)}>All run output</Link><ol>{run.jobs.map(job=><li key={job.instanceId}><Link className="automation-step-link" aria-current={selectedJobInstanceId===job.instanceId&&!selectedStepId?'page':undefined} title={`${job.jobId} · ${job.instanceId}`} {...graphOptions(location,run.id,job.instanceId)}><StepState step={job}/><span>{job.name}<small>{matrixLabel(job)||job.jobId} · {stepDuration(job)}</small></span></Link>{selectedJobInstanceId===job.instanceId?<><small className="muted">{job.needs.length?`Needs: ${job.needs.join(', ')}`:'No dependencies'}</small><ol>{job.steps.map(step=><li key={step.id}><Link className="automation-step-link" aria-current={selectedStepId===step.id?'page':undefined} {...graphOptions(location,run.id,job.instanceId,step.id)}><StepState step={step}/><span>{step.name}<small>{stepDuration(step)}</small></span></Link></li>)}</ol></>:null}</li>)}</ol></>;
 }
 
 function LogHighlight({text,search}:{text:string;search:string}) {
@@ -150,7 +150,7 @@ function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex,ru
  </section>;
 }
 
-export function WorkflowRunPage({userId,owner,name,repositoryId,runId,signingOut,selectedStep,selectedJobInstanceId,selectedStepId}:{userId:string;owner:string;name:string;repositoryId:string;runId:string;signingOut:boolean;selectedStep?:number;selectedJobInstanceId?:string;selectedStepId?:string}) {
+export function WorkflowRunPage({userId,owner,name,location,repositoryId,runId,signingOut,selectedStep,selectedJobInstanceId,selectedStepId}:{userId:string;owner:string;name:string;location:RepositoryLocation;repositoryId:string;runId:string;signingOut:boolean;selectedStep?:number;selectedJobInstanceId?:string;selectedStepId?:string}) {
  const client=useQueryClient();
  const [notice,setNotice]=useState('');const [pending,setPending]=useState(false);
  const desktop=useWideWorkflowLayout();
@@ -190,7 +190,7 @@ export function WorkflowRunPage({userId,owner,name,repositoryId,runId,signingOut
   finally{if(controller.current===request)controller.current=null;if(alive.current)setPending(false);}
  }
  return <section className="page-stack workflow-run-workspace" aria-label="Workflow run workspace">
-  <Link className="text-button" {...repositoryOptions({owner,name},{view:'actions'})}><ArrowLeft size={16}/>All runs</Link>
+  <Link className="text-button" {...repositoryOptions(location,{view:'actions',run:undefined,runKind:undefined,step:undefined,jobInstanceId:undefined,stepId:undefined})}><ArrowLeft size={16}/>All runs</Link>
   {query.error?<PanelError error={query.error} retry={()=>void query.refetch()}/>:!run?<Loading label="Loading selected run…"/>:null}
   {run?<><div hidden={query.isFetching} className="page-stack">
    <header className="discussion-summary workflow-run-summary"><div><h2>{run.workflowPath}</h2><p><RunState state={run.state}/><span>{run.origin===WorkflowRunOrigin.PUSH?'Push':run.origin===WorkflowRunOrigin.MANUAL?'Manual':'Unknown trigger'}{run.eventRef?` · ${run.eventRef}`:''}</span><span><Clock3 size={14}/>{elapsed(run)}</span></p></div><div className="row-actions"><button className="icon-button manual-refresh" aria-label="Refresh selected run" title="Refresh selected run" disabled={pending||query.isFetching||signingOut} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button>{run.canCancel?<button className="button secondary" disabled={pending||signingOut||query.isFetching} onClick={()=>void cancel()}>Cancel run</button>:null}</div></header>
@@ -198,9 +198,9 @@ export function WorkflowRunPage({userId,owner,name,repositoryId,runId,signingOut
    {run.reason?<p className="panel-footnote">{run.reason}</p>:null}
    <WorkflowArtifacts key={`${userId}-${run.repositoryId}-${run.ownerId}-${run.id}-${run.attemptId}`} run={run} userId={userId} enabled={!query.isFetching&&!signingOut} onAuthorityDenied={denyLogAuthority}/>
    <div className="automation-run-layout"><aside className="automation-job-navigation" aria-label="Jobs and steps"><details className="workflow-jobs-disclosure" open={desktop||mobileJobsOpen} onToggle={event=>{if(!desktop)setMobileJobsOpen(event.currentTarget.open)}}><summary>Jobs · {engineRun?job?`${job.name}${job.matrix.length?' · '+matrixLabel(job):''}`:`${run.jobs.length} recorded instances`:run.progress?.name||run.progress?.jobId||'Job'}{selectedStepId?` · ${engineStep?.name||'Selected step'}`:selectedStep!==undefined?` · ${run.progress?.steps.find(step=>step.index===selectedStep)?.name||'Selected step'}`:' · All run output'}</summary><div className="workflow-jobs-content">
-    {engineRun?<JobGraphNavigation run={run} owner={owner} name={name} selectedJobInstanceId={selectedJobInstanceId} selectedStepId={selectedStepId}/>:<><h3>Jobs</h3><strong>{run.progress?.name||run.progress?.jobId||'Job'}</strong>{run.progress?.stage?<span className="muted">{run.progress.stage}</span>:null}
-    <Link className="automation-step-link" aria-current={selectedStep===undefined?'page':undefined} {...repositoryOptions({owner,name},{view:'actions',run:runId,step:undefined})}>All run output</Link>
-    {run.progress?.steps.length?<ol>{run.progress.steps.map(step=><li key={step.index}>{step.startedAt?<Link className="automation-step-link" aria-current={selectedStep===step.index?'page':undefined} {...repositoryOptions({owner,name},{view:'actions',run:runId,step:step.index})}><StepState step={step}/><span>{step.name}<small>{stepDuration(step)}</small></span></Link>:<div className="automation-step-link"><StepState step={step}/><span>{step.name}<small>{stepLabel(step.state)}</small></span></div>}</li>)}</ol>:<p className="field-help">Step events were not recorded for this run.</p>}
+    {engineRun?<JobGraphNavigation run={run} location={location} selectedJobInstanceId={selectedJobInstanceId} selectedStepId={selectedStepId}/>:<><h3>Jobs</h3><strong>{run.progress?.name||run.progress?.jobId||'Job'}</strong>{run.progress?.stage?<span className="muted">{run.progress.stage}</span>:null}
+    <Link className="automation-step-link" aria-current={selectedStep===undefined?'page':undefined} {...repositoryOptions(location,{view:'actions',run:runId,step:undefined})}>All run output</Link>
+    {run.progress?.steps.length?<ol>{run.progress.steps.map(step=><li key={step.index}>{step.startedAt?<Link className="automation-step-link" aria-current={selectedStep===step.index?'page':undefined} {...repositoryOptions(location,{view:'actions',run:runId,step:step.index})}><StepState step={step}/><span>{step.name}<small>{stepDuration(step)}</small></span></Link>:<div className="automation-step-link"><StepState step={step}/><span>{step.name}<small>{stepLabel(step.state)}</small></span></div>}</li>)}</ol>:<p className="field-help">Step events were not recorded for this run.</p>}
     {run.progress&&!run.progress.eventsRecorded&&run.state!==WorkflowRunState.QUEUED&&run.state!==WorkflowRunState.RUNNING?<p className="field-help">This run has no recorded step outcomes. Its overall result does not establish individual step results.</p>:null}
    </>}
    </div></details></aside><div className="automation-run-output">

@@ -65,8 +65,8 @@ export function PullChecks(props:Props) {
  const checks=query.isSuccess&&(!query.isFetching||query.isFetchingNextPage)?[...new Map(query.data.pages.flatMap(page=>page.checks).map(check=>[check.id,check])).values()]:[];
  const changedPages=new Set(checks.map(check=>check.context)).size!==checks.length;
  const columns=useMemo<DataTableColumn<ReportedCheck>[]>(()=>[
-  {accessorKey:'context',header:'Check',cell:({row})=><div className="table-primary"><strong>{row.original.context}</strong>{row.original.description?<span className="table-description">{row.original.description}</span>:null}</div>},
-  {accessorKey:'state',header:'Reported result',cell:({row})=><CheckState state={row.original.state}/>},
+  {id:'context',accessorFn:check=>`${check.context} ${check.description}`,header:'Check',cell:({row})=><div className="table-primary"><strong>{row.original.context}</strong>{row.original.description?<span className="table-description">{row.original.description}</span>:null}</div>},
+  {id:'state',accessorFn:check=>labels[check.state]||'Unknown',header:'Reported result',cell:({row})=><CheckState state={row.original.state}/>},
   {id:'publisher',accessorFn:check=>check.creator?.login||'Unavailable',header:'Reported by'},
   {accessorKey:'updatedAt',header:'Reported',cell:({row})=><DateLabel value={row.original.updatedAt}/>},
   {id:'details',header:'',enableSorting:false,enableGlobalFilter:false,cell:({row})=>{const url=repositoryLink(row.original.targetUrl);return url?<a className="icon-button" href={url} target="_blank" rel="noopener noreferrer" aria-label={`Open details for ${row.original.context}`} title="Open reported details"><ExternalLink size={15}/></a>:<span className="muted">—</span>;}}

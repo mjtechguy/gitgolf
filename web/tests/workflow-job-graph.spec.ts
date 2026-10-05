@@ -1,12 +1,12 @@
 import {expect,test,type Page,type Route} from '@playwright/test';
 import {respond,request,reject,disabledAgentTasks} from './rpc';
-import {GetSessionResponseSchema,GetRepositoryResponseSchema,ListRepositoriesResponseSchema,ListCapabilitiesResponseSchema,GetWorkflowRunRequestSchema,GetWorkflowRunResponseSchema,GetWorkflowRunLogsRequestSchema,GetWorkflowRunLogsResponseSchema,WorkflowOutputState,WorkflowRunState,WorkflowRunOrigin,WorkflowStepState} from '../src/gen/golf/v1/golf_pb';
+import {GetSessionResponseSchema,GetRepositoryResponseSchema,ListRepositoriesResponseSchema,ListCapabilitiesResponseSchema,GetWorkflowRunRequestSchema,GetWorkflowRunResponseSchema,GetWorkflowRunLogsRequestSchema,GetWorkflowRunLogsResponseSchema,WorkflowOutputState,WorkflowRunState,WorkflowRunOrigin,WorkflowStepState,ActionRunKind,ListActionRunsRequestSchema,ListActionRunsResponseSchema,InspectWorkflowsResponseSchema} from '../src/gen/golf/v1/golf_pb';
 
 const runId='12345678-1234-4234-8234-123456789abc',commit='a'.repeat(40),attempt='d'.repeat(32),catalog='golf.workflow.act.v0.2.89.linux.v1',engineCommit='4f411281417e88660bea1c1a1749aa71ae0bd60f';
 const build='1'.repeat(32),test22='2'.repeat(32),test24='3'.repeat(32),skip='4'.repeat(32),image='alpine:3.23@sha256:'+'5'.repeat(64),path=`/alex/demo/actions/runs/${runId}`;
 const started='2026-10-04T00:01:00Z',finished='2026-10-04T00:01:10Z';
 async function fixture(page:Page){
- const state={twoJobs:false,dependencySkipped:false,typed:false,typedFault:'',publication:'' as ''|'withheld'|'redacted',rawWithheld:false,reads:0,deny:false,logDeny:false,logError:'' as ''|'permission_denied'|'not_found'|'unauthenticated',runBarrier:undefined as Promise<void>|undefined,badGraph:'',badReceipt:'',unrecorded:false,startSecond:false,complete:false,logBarrier:undefined as Promise<void>|undefined,filters:[] as {jobInstanceId:string;stepId:string;stepIndex:number|undefined;after:string}[]};
+ const state={methods:[] as string[],inventories:[] as {repositoryId:string;kindFilter:ActionRunKind;workflowPath:string}[],twoJobs:false,dependencySkipped:false,typed:false,typedFault:'',publication:'' as ''|'withheld'|'redacted',rawWithheld:false,reads:0,deny:false,logDeny:false,logError:'' as ''|'permission_denied'|'not_found'|'unauthenticated',runBarrier:undefined as Promise<void>|undefined,badGraph:'',badReceipt:'',unrecorded:false,startSecond:false,complete:false,logBarrier:undefined as Promise<void>|undefined,filters:[] as {jobInstanceId:string;stepId:string;stepIndex:number|undefined;after:string}[]};
  const run=()=>{
   const steps=(pending=false)=>[{id:'0',name:'Inspect source',state:pending?WorkflowStepState.PENDING:WorkflowStepState.SUCCEEDED,startedAt:pending?undefined:started,finishedAt:pending?undefined:finished},{id:'verify-code',name:'Verify source',state:pending?WorkflowStepState.PENDING:state.complete?WorkflowStepState.SUCCEEDED:WorkflowStepState.RUNNING,startedAt:pending?undefined:finished,finishedAt:state.complete&&!pending?'2026-10-04T00:01:30Z':undefined}];
   const jobs=[{instanceId:build,jobId:'build',name:'Build source',matrix:[],needs:[],state:WorkflowStepState.SUCCEEDED,startedAt:started,finishedAt:finished,eventsRecorded:true,imageDigest:image,steps:[{id:'compile',name:'Compile',state:WorkflowStepState.SUCCEEDED,startedAt:started,finishedAt:finished}]},{instanceId:test22,jobId:'test',name:'Test source',matrix:[{name:'node',valueJson:'"22"'}],needs:['build'],state:state.complete?WorkflowStepState.SUCCEEDED:WorkflowStepState.RUNNING,startedAt:finished,finishedAt:state.complete?'2026-10-04T00:01:30Z':undefined,eventsRecorded:true,imageDigest:image,steps:steps()},{instanceId:test24,jobId:'test',name:'Test source',matrix:[{name:'node',valueJson:'"24"'}],needs:['build'],state:state.startSecond?WorkflowStepState.RUNNING:WorkflowStepState.PENDING,startedAt:state.startSecond?started:undefined,eventsRecorded:state.startSecond,imageDigest:image,steps:steps(!state.startSecond)},{instanceId:skip,jobId:'optional',name:'Optional check',matrix:[],needs:['build'],state:WorkflowStepState.SKIPPED,finishedAt:finished,eventsRecorded:true,imageDigest:image,steps:[{id:'optional',name:'Optional source check',state:WorkflowStepState.SKIPPED,startedAt:undefined,finishedAt:undefined}]}];
@@ -27,7 +27,9 @@ async function fixture(page:Page){
   return {outputState:state.publication==='withheld'?WorkflowOutputState.WITHHELD:state.publication==='redacted'?WorkflowOutputState.REDACTED:WorkflowOutputState.UNSPECIFIED,executionBindingId:state.publication&&state.typedFault!=='binding'?'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa':'',executionBindingVersion:state.publication&&state.typedFault!=='binding-version'?'3':'',id:runId,repositoryId:'11',ownerId:'42',version:'9',workflowPath:'.github/workflows/graph.yml',workflowBlobId:'b'.repeat(40),sourceSha256:'c'.repeat(64),commitId:commit,attemptId:state.badGraph==='attempt'?'wrong':attempt,engineCatalog:state.badGraph==='catalog'?'unqualified.engine':state.typed?'golf.workflow.act.v0.2.89.linux.v2':catalog,inputContract:state.typed?state.typedFault==='contract'?'':'golf.workflow.dispatch.inputs.v1':'',schemaSha256:state.typed?state.typedFault==='schema'?'invalid':'6'.repeat(64):'',submittedSha256:state.typed?'7'.repeat(64):'',effectiveSha256:state.typed?'8'.repeat(64):'',engineCommit:state.badGraph==='pin'?'6'.repeat(40):engineCommit,createdAt:'2026-10-04T00:00:00Z',startedAt:started,finishedAt:state.publication==='redacted'||state.twoJobs&&state.complete||state.dependencySkipped?'2026-10-04T00:01:30Z':undefined,state:state.dependencySkipped?WorkflowRunState.FAILED:state.twoJobs&&state.complete?WorkflowRunState.SUCCEEDED:state.publication==='redacted'?WorkflowRunState.SUCCEEDED:state.unrecorded?WorkflowRunState.FAILED:WorkflowRunState.RUNNING,origin:state.typedFault==='origin'?WorkflowRunOrigin.PUSH:WorkflowRunOrigin.MANUAL,runnerId:'owned-source-fixture',canCancel:false,jobs};
  };
  await page.route('**/rpc/**',async(route:Route)=>{
-  const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
+  const method=new URL(route.request().url()).pathname.split('/').at(-1)!;state.methods.push(method);
+  if(method==='InspectWorkflows')return respond(route,InspectWorkflowsResponseSchema,{repositoryId:'11',commitId:commit,catalogVersion:'fixture'});
+  if(method==='ListActionRuns'){const input=request(route,ListActionRunsRequestSchema);state.inventories.push({repositoryId:input.repositoryId,kindFilter:input.kindFilter,workflowPath:input.workflowPath});return respond(route,ListActionRunsResponseSchema,{repositoryId:'11',runs:[{ref:{kind:ActionRunKind.WORKFLOW,id:runId},repositoryId:'11',ownerId:'42',title:'.github/workflows/graph.yml',workflowPath:'.github/workflows/graph.yml',state:'running',commitId:commit,trigger:'workflow_dispatch',createdAt:'2026-10-04T00:00:00Z'}]});}
   if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user:{id:'42',login:'alex'}});
   if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{});
@@ -81,6 +83,25 @@ test('matrix jobs use immutable scoped links and filtered logs survive reload wi
  await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveText('Node24 0');expect(state.filters.at(-1)?.jobInstanceId).toBe(test24);
  await page.getByRole('link',{name:'All run output',exact:true}).click();await expect(page).not.toHaveURL(/jobInstanceId=|stepId=/);
  await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveText('All jobs job output');
+});
+
+
+for(const workflowPath of ['', '.github/workflows/graph.yml'])test(`workflow drilldown preserves server filter ${workflowPath||'all workflows'} through jobs, reload and return`,async({page})=>{
+ const state=await fixture(page),filters=new URLSearchParams({actionKind:'workflow',...(workflowPath?{workflowPath}: {})});
+ await page.goto(`/alex/demo/actions?${filters}`);const table=page.getByRole('table',{name:'Action runs',exact:true});
+ await expect(table.getByRole('link',{name:'.github/workflows/graph.yml',exact:true})).toBeVisible();
+ await table.getByRole('link',{name:'.github/workflows/graph.yml',exact:true}).click();
+ const filterIsPreserved=async()=>{const query=new URL(page.url()).searchParams;expect(query.get('actionKind')).toBe('workflow');expect(query.get('workflowPath')||'').toBe(workflowPath);};
+ await expect(page.getByRole('link',{name:'All runs',exact:true})).toBeVisible();await filterIsPreserved();
+ await page.getByRole('link',{name:'running Test source node: 22 · In progress',exact:true}).click();await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveText('Node22 job output');await filterIsPreserved();
+ await page.getByRole('link',{name:'succeeded Inspect source 10s',exact:true}).click();await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveText('Node22 0');await filterIsPreserved();
+ await page.reload();await expect(page.getByRole('link',{name:'succeeded Inspect source 10s',exact:true})).toHaveAttribute('aria-current','page');await filterIsPreserved();
+ await page.getByRole('link',{name:'All run output',exact:true}).click();await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveText('All jobs job output');await filterIsPreserved();
+ await page.getByRole('link',{name:'All runs',exact:true}).click();await expect(table.getByRole('link',{name:'.github/workflows/graph.yml',exact:true})).toBeVisible();await filterIsPreserved();
+ const query=new URL(page.url()).searchParams;for(const name of ['run','runKind','step','jobInstanceId','stepId'])expect(query.has(name)).toBe(false);
+ expect(state.inventories.at(-1)).toEqual({repositoryId:'11',kindFilter:ActionRunKind.WORKFLOW,workflowPath});
+ expect(state.filters.some(input=>input.jobInstanceId===test22&&input.stepId==='0')).toBe(true);
+ expect(state.methods.filter(method=>/Dispatch|Cancel|Save|Set/.test(method))).toEqual([]);
 });
 
 test('pending and unrecorded jobs never imply starts or request scoped logs',async({page})=>{
