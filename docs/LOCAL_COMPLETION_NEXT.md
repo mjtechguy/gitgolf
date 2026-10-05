@@ -21,7 +21,7 @@ The earlier [fork attempt1](../.tmp/standard-fork063-served-attempt1/parent-mani
 
 ## Prioritized remaining local work
 
-Actions filter-preserving drilldown, visible Checks search, shared density and the xterm console now deploy on original `457d7a3`/schema 066; native newline correction is verified in both engine copies. Automatic history/footer removal/wheel handoff have separate served proof and 124 combined source checks. Static-preview source is integrated, with nine real PostgreSQL/source checks and 41 source UI cases; the prepared actual qualifier scripts remain unrun. Independent reviewers and isolated TLS origins still require actual artifact/runtime/browser qualification and 067 deployment. No preview runtime, full Actions compatibility or full Settings readiness is claimed. Latest-schema recovery remains open.
+Actions filter-preserving drilldown, visible Checks search, shared density and the xterm console now deploy on original `457d7a3`/schema 066; native newline correction is verified in both engine copies. Automatic history/footer removal/wheel handoff have separate served proof and 124 combined source checks. Static-preview source is integrated; deployment activity now uses the existing committed Actions stream, with15 PostgreSQL/race checks and61 combined deployment/live browser cases passing. The prepared actual qualifier scripts remain unrun. Independent reviewers and isolated TLS origins still require actual artifact/runtime/browser qualification and 067 deployment. No preview runtime, full Actions compatibility or full Settings readiness is claimed. Latest-schema recovery remains open.
 
 | Order | Functional packet | Concrete consumer and acceptance |
 | --- | --- | --- |

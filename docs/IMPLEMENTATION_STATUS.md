@@ -1,5 +1,14 @@
 # Golf implementation status
 
+## Deployment live events: source verification (2026-10-05)
+
+Source `73fa4f6` now appends repository `actions` invalidations for deployment state events and independent review decisions in their original PostgreSQL transaction. Existing repository streams revalidate deployment inventory/detail/current-access queries; no new topic, polling engine or automatic mutation is introduced. The payload contains no private receipt, decision, preview credential or artifact bytes. Current denial remains masked across later events; source snapshots and PR comparisons stay pinned.
+
+The [source proof](../.tmp/deployment-live067-source-proof/manifest.json) records 15 real PostgreSQL/race checks passing in32.926s, including exact activity deltas, replay/refusal and review rollback. The [database receipt](../.tmp/deployment-live067-postgres-attempt2/manifest.json) binds `73fa4f6` and verified owned schema/container cleanup. The [combined browser run](../.tmp/deployment-live067-browser-attempt4.log) passes61 cases in48.5s on `d215ce1`, including three new live deployment detail/inventory/review-denial cases and existing pinned source/PR/draft/cursor regressions. Typecheck, build, server vet and whitespace checks pass.
+
+Failed attempts remain preserved: the old live fixture returned native Star NotFound and lacked current workflow access, blocking its scenarios before the live behavior; these fixtures now explicitly represent an unavailable optional feature and positive ordinary access. A later combined attempt passed60 cases and failed one DOM identity assertion; three isolated repeats and the final sequential combined run pass, without weakening that assertion or changing source rendering. This does not prove the intermittent observation impossible. Native authorization remains httptest and artifact production a runner protocol fixture. No retained runtime image or schema was changed: localhost8080 remains066, and actual protected-preview TLS/browser/runtime qualification plus067 deployment remain required.
+
+
 ## Real xterm console, automatic history and neutral charcoal deploy (2026-10-05)
 
 Golf now uses pinned xterm.js 6.0.0 with Fit 0.11.0 and Search 0.16.0 for the read-only Actions terminal: real ANSI rendering, selection, search and Follow controls. Historical pages load automatically, the technical footer is removed, and wheel scrolling passes to the page at terminal boundaries. Global dark surfaces use neutral `#090909`/`#111111` across Golf, marketing and docs; the terminal stays `#080808` in both themes. The [actual marketing/docs theme observations](../.tmp/charcoal-sites-attempt2/manifest.json) pass dark/light checks. The [fresh combined source suite](../.tmp/terminal-ux-integrated-browser-attempt1.log) passes 124 cases in 1.6 minutes; earlier terminal/consumer/small-screen receipts retain their original scope.
