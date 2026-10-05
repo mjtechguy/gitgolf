@@ -90,3 +90,13 @@ test('an old denied inspection cannot clear a newly selected comparison',async({
  state.pull.revision='d'.repeat(64);state.pull.head!.commitId='c'.repeat(40);await page.getByRole('button',{name:'Refresh pull request',exact:true}).click();await expect(page.getByRole('button',{name:'Inspect merge observations'})).toBeVisible();
  state.denial=403;release();state.wait=undefined;await expect(page.getByText('PRIVATE PR BODY',{exact:true})).toBeVisible();state.denial=0;await inspect(page);await expect(panel(page)).toContainText('matches the selected head');
 });
+
+test('fork merge availability needs separately observed source owner identity',async({page})=>{
+ const state=await backend(page);state.change=v=>{v.nativeCallerCanMerge=true;v.currentTargetWriter=true;};await open(page);await inspect(page);await expect(panel(page)).toContainText('Merge unavailable');
+ state.change=v=>{v.nativeCallerCanMerge=true;v.currentTargetWriter=true;v.sourceOwnerId='7';};await page.getByRole('button',{name:'Refresh merge observation',exact:true}).click();await expect(panel(page)).toContainText('Standard native merge scope observed');await expect(page.getByRole('button',{name:'Merge pull request',exact:true})).toBeEnabled();
+ expect(state.methods).not.toContain('SubmitStandardPullMerge');
+});
+for(const fault of ['invalid-owner','retained-owner'] as const)test(`invalid fork observation ${fault} never enables merge`,async({page})=>{
+ const state=await backend(page);state.change=v=>{v.nativeCallerCanMerge=true;v.currentTargetWriter=true;v.sourceOwnerId='0';if(fault==='retained-owner'){v.sourceState=PullMergeSourceState.UNAVAILABLE;v.source=undefined;v.sourceRepository=undefined;v.sourceRepositoryId='';v.sourceOwnerId='7';}};
+ await open(page);await inspect(page);await expect(panel(page).getByRole('alert')).toContainText('does not match');await expect(page.getByRole('button',{name:'Merge pull request',exact:true})).toHaveCount(0);expect(state.methods).not.toContain('SubmitStandardPullMerge');
+});
