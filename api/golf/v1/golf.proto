@@ -3788,6 +3788,7 @@ message PullRequestMergeObservation {
   // Detects changed display observations only; never executable authority.
   string fingerprint = 14;
   string unavailable_reason = 15;
+  optional string source_owner_id = 16;
 }
 message GetPullRequestMergeObservationResponse { PullRequestMergeObservation observation = 1; }
 
@@ -3802,8 +3803,8 @@ message DeactivateEmailTransportResponse {
  EmailTransport transport = 1;
  string activation_generation = 2;
 }
-// One caller-owned native merge attempt for a same-repository, observed
-// unprotected PR. This is not protected integration or expected-base CAS.
+// One caller-owned native merge attempt for an observed unprotected PR.
+// Explicit source identity is required for forks; no expected-base CAS.
 service StandardPullMergeService {
  rpc SubmitStandardPullMerge(SubmitStandardPullMergeRequest) returns (SubmitStandardPullMergeResponse);
  rpc GetStandardPullMergeOperation(GetStandardPullMergeOperationRequest) returns (GetStandardPullMergeOperationResponse);
@@ -3824,6 +3825,10 @@ message SubmitStandardPullMergeRequest {
  string commit_message = 6;
  string source_ref = 7;
  string target_ref = 8;
+ // All three fields required for explicitly bound source repositories.
+ RepositoryKey source_repository = 9;
+ string source_repository_id = 10;
+ string source_owner_id = 11;
 }
 message GetStandardPullMergeOperationRequest {
  RepositoryKey repository = 1;
@@ -3856,6 +3861,9 @@ message StandardPullMergeOperation {
  string updated_at = 18;
  string method = 19;
  string contract = 20;
+ RepositoryKey source_repository = 21;
+ string source_repository_id = 22;
+ string source_owner_id = 23;
 }
 message SubmitStandardPullMergeResponse { StandardPullMergeOperation operation = 1; }
 message GetStandardPullMergeOperationResponse { StandardPullMergeOperation operation = 1; }

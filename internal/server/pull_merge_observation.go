@@ -152,6 +152,7 @@ func (s *Server) mergeObservationSnapshot(ctx context.Context, session string, t
 		}
 		result.SourceRepository = &golfv1.RepositoryKey{Owner: sourceKey.Owner, Name: sourceKey.Name}
 		result.SourceRepositoryId = strconv.FormatInt(current.ID, 10)
+		result.SourceOwnerId = &sourceOwnerID
 		result.Source = &golfv1.RepositorySourceSelection{Kind: golfv1.RepositorySourceRefKind_REPOSITORY_SOURCE_REF_KIND_BRANCH, Name: pull.Head.Ref, CommitId: sha}
 		_, latestActor, err := s.gitCurrentTarget(ctx, token, sourceKey, strconv.FormatInt(current.ID, 10), sourceOwnerID, false)
 		if err != nil {
@@ -173,6 +174,7 @@ func (s *Server) mergeObservationSnapshot(ctx context.Context, session string, t
 		result.Source = nil
 		result.SourceRepository = nil
 		result.SourceRepositoryId = ""
+		result.SourceOwnerId = nil
 		result.SourceState = golfv1.PullMergeSourceState_PULL_MERGE_SOURCE_STATE_UNAVAILABLE
 	}
 	return result, nil

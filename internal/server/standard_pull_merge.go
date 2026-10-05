@@ -19,7 +19,7 @@ import (
 
 const standardMergeContract = "golf.pull.standard-native-merge.v1"
 
-var errStandardMergeUnavailable = errors.New("standard native merge requires a current unprotected same-repository pull request")
+var errStandardMergeUnavailable = errors.New("standard native merge requires a current unprotected pull request and exact readable source")
 var errStandardMergeUnresolved = errors.New("original standard native merge outcome is unresolved")
 
 func standardMergeRPCError(e error) error {
@@ -27,7 +27,7 @@ func standardMergeRPCError(e error) error {
 		return connect.NewError(connect.CodeFailedPrecondition, errors.New("The original merge operation has a different intent. Inspect its original outcome."))
 	}
 	if errors.Is(e, errStandardMergeUnavailable) {
-		return connect.NewError(connect.CodeFailedPrecondition, errors.New("Standard merge is available only for a current unprotected same-repository pull request."))
+		return connect.NewError(connect.CodeFailedPrecondition, errors.New("Standard merge requires a current unprotected pull request and an exactly bound readable source."))
 	}
 	if errors.Is(e, errStandardMergeUnresolved) {
 		return connect.NewError(connect.CodeFailedPrecondition, errors.New("Inspect the original merge operation; an unresolved operation cannot be retried or replaced."))
@@ -62,7 +62,7 @@ func validateStandardMerge(m *golfv1.SubmitStandardPullMergeRequest) error {
 	if m.SourceRef == m.TargetRef || !discussionText(m.CommitTitle, 255) || !discussionText(m.CommitMessage, 6000) || m.CommitTitle != "" && !pullTitle(m.CommitTitle) {
 		return invalid("Choose different branches and a bounded trimmed merge title/message.")
 	}
-	return nil
+	return validateStandardMergeSource(m)
 }
 func standardMergeFingerprint(m *golfv1.SubmitStandardPullMergeRequest) []byte {
 	c := proto.Clone(m).(*golfv1.SubmitStandardPullMergeRequest)
@@ -73,20 +73,29 @@ func standardMergeFingerprint(m *golfv1.SubmitStandardPullMergeRequest) []byte {
 }
 
 type standardMergeRecord struct {
+	SourceRepositoryID, SourceOwnerID                                                                                       int64
+	SourceOwner, SourceName                                                                                                 string
 	ID, UserID, ActorID, RepositoryID, OwnerID, PullID, Number                                                              int64
 	ForgeURL, OperationID, Owner, Name, Revision, Head, Base, SourceRef, TargetRef, Phase, MergeCommit, ActualBase, Failure string
 	Fingerprint                                                                                                             []byte
 	Created, Updated                                                                                                        time.Time
 }
 
-const standardMergeColumns = `id,user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,pull_request_id,number,expected_pull_revision,head_commit_id,observed_base_commit_id,source_ref,target_ref,input_fingerprint,phase,merge_commit_id,actual_base_commit_id,failure_code,created_at,updated_at`
+const standardMergeColumns = `id,user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,pull_request_id,number,expected_pull_revision,head_commit_id,observed_base_commit_id,source_ref,target_ref,input_fingerprint,phase,merge_commit_id,actual_base_commit_id,failure_code,created_at,updated_at,source_repository_id,source_owner_id,source_repository_owner,source_repository_name`
 
 func scanStandardMerge(row interface{ Scan(...any) error }) (r standardMergeRecord, e error) {
-	e = row.Scan(&r.ID, &r.UserID, &r.ForgeURL, &r.ActorID, &r.OperationID, &r.RepositoryID, &r.OwnerID, &r.Owner, &r.Name, &r.PullID, &r.Number, &r.Revision, &r.Head, &r.Base, &r.SourceRef, &r.TargetRef, &r.Fingerprint, &r.Phase, &r.MergeCommit, &r.ActualBase, &r.Failure, &r.Created, &r.Updated)
+	e = row.Scan(&r.ID, &r.UserID, &r.ForgeURL, &r.ActorID, &r.OperationID, &r.RepositoryID, &r.OwnerID, &r.Owner, &r.Name, &r.PullID, &r.Number, &r.Revision, &r.Head, &r.Base, &r.SourceRef, &r.TargetRef, &r.Fingerprint, &r.Phase, &r.MergeCommit, &r.ActualBase, &r.Failure, &r.Created, &r.Updated, &r.SourceRepositoryID, &r.SourceOwnerID, &r.SourceOwner, &r.SourceName)
 	return
 }
 func standardMergeWire(r standardMergeRecord) *golfv1.StandardPullMergeOperation {
-	return &golfv1.StandardPullMergeOperation{OperationId: r.OperationID, ActorId: strconv.FormatInt(r.ActorID, 10), Repository: &golfv1.RepositoryKey{Owner: r.Owner, Name: r.Name}, RepositoryId: strconv.FormatInt(r.RepositoryID, 10), OwnerId: strconv.FormatInt(r.OwnerID, 10), PullRequestId: strconv.FormatInt(r.PullID, 10), Number: uint32(r.Number), ExpectedPullRevision: r.Revision, HeadCommitId: r.Head, ObservedBaseCommitId: r.Base, SourceRef: r.SourceRef, TargetRef: r.TargetRef, Phase: golfv1.StandardPullMergePhase(golfv1.StandardPullMergePhase_value["STANDARD_PULL_MERGE_PHASE_"+r.Phase]), MergeCommitId: r.MergeCommit, ActualBaseCommitId: r.ActualBase, FailureCode: r.Failure, CreatedAt: r.Created.UTC().Format(time.RFC3339Nano), UpdatedAt: r.Updated.UTC().Format(time.RFC3339Nano), Method: "merge", Contract: standardMergeContract}
+	result := &golfv1.StandardPullMergeOperation{OperationId: r.OperationID, ActorId: strconv.FormatInt(r.ActorID, 10), Repository: &golfv1.RepositoryKey{Owner: r.Owner, Name: r.Name}, RepositoryId: strconv.FormatInt(r.RepositoryID, 10), OwnerId: strconv.FormatInt(r.OwnerID, 10), PullRequestId: strconv.FormatInt(r.PullID, 10), Number: uint32(r.Number), ExpectedPullRevision: r.Revision, HeadCommitId: r.Head, ObservedBaseCommitId: r.Base, SourceRef: r.SourceRef, TargetRef: r.TargetRef, Phase: golfv1.StandardPullMergePhase(golfv1.StandardPullMergePhase_value["STANDARD_PULL_MERGE_PHASE_"+r.Phase]), MergeCommitId: r.MergeCommit, ActualBaseCommitId: r.ActualBase, FailureCode: r.Failure, CreatedAt: r.Created.UTC().Format(time.RFC3339Nano), UpdatedAt: r.Updated.UTC().Format(time.RFC3339Nano), Method: "merge", Contract: standardMergeContract}
+	if r.SourceRepositoryID > 0 {
+		result.Contract = standardMergeForkContract
+		result.SourceRepository = &golfv1.RepositoryKey{Owner: r.SourceOwner, Name: r.SourceName}
+		result.SourceRepositoryId = strconv.FormatInt(r.SourceRepositoryID, 10)
+		result.SourceOwnerId = strconv.FormatInt(r.SourceOwnerID, 10)
+	}
+	return result
 }
 func standardMergeTarget(r standardMergeRecord, m *golfv1.GetStandardPullMergeOperationRequest) bool {
 	return r.Owner == m.Repository.GetOwner() && r.Name == m.Repository.GetName() && strconv.FormatInt(r.RepositoryID, 10) == m.RepositoryId && strconv.FormatInt(r.OwnerID, 10) == m.OwnerId && strconv.FormatInt(r.PullID, 10) == m.PullRequestId && uint32(r.Number) == m.Number
@@ -134,15 +143,11 @@ func (s *Server) standardMergePreflight(ctx context.Context, session string, tok
 		if pullRevision(pull) != m.ExpectedPullRevision {
 			return errPullSnapshotChanged
 		}
-		if pull.State != "open" || pull.Draft == nil || *pull.Draft || pull.Merged == nil || *pull.Merged || pull.Head.RepositoryID != repo.ID || pull.Head.Ref != m.SourceRef || pull.Base.Ref != m.TargetRef || strings.HasPrefix(pull.Head.Ref, "refs/") {
+		if pull.State != "open" || pull.Draft == nil || *pull.Draft || pull.Merged == nil || *pull.Merged || pull.Head.Ref != m.SourceRef || pull.Base.Ref != m.TargetRef || strings.HasPrefix(pull.Head.Ref, "refs/") {
 			return errStandardMergeUnavailable
 		}
-		source, e := s.exactSourceBranch(ctx, base, token, m.SourceRef)
-		if e != nil {
+		if e := s.standardMergeSourcePreflight(ctx, session, token, m, pull, base, repo); e != nil {
 			return e
-		}
-		if source != m.Selection.HeadCommitId {
-			return errPullSnapshotChanged
 		}
 		target, e := s.readMergeBranch(ctx, token, base, m.TargetRef)
 		if e != nil {
@@ -196,7 +201,7 @@ func (s *Server) standardMergeReceipt(ctx context.Context, session string, token
 		if e != nil {
 			return e
 		}
-		if p.ID != r.PullID || p.Merged == nil || !*p.Merged || p.State != "closed" || p.MergeCommitID == nil || !objectID.MatchString(*p.MergeCommitID) || len(*p.MergeCommitID) != len(r.Head) || p.Head.SHA != r.Head || p.Head.RepositoryID != r.RepositoryID || p.Base.Ref != r.TargetRef || p.Head.Ref != r.SourceRef {
+		if p.ID != r.PullID || p.Merged == nil || !*p.Merged || p.State != "closed" || p.MergeCommitID == nil || !objectID.MatchString(*p.MergeCommitID) || len(*p.MergeCommitID) != len(r.Head) || p.Head.SHA != r.Head || p.Head.RepositoryID != standardMergeSourceID(r) || p.Base.Ref != r.TargetRef || p.Head.Ref != r.SourceRef {
 			return errInvalidForgeResponse
 		}
 		var object struct {
@@ -218,6 +223,14 @@ func (s *Server) standardMergeReceipt(ctx context.Context, session string, token
 		if target != object.SHA {
 			return errPullSnapshotChanged
 		}
+		if r.SourceRepositoryID > 0 {
+			if p.Head.Repository == nil || p.Head.Repository.FullName != r.SourceOwner+"/"+r.SourceName {
+				return errPullSnapshotChanged
+			}
+			if e := s.standardMergeSourceRead(ctx, session, token, r, r.SourceRef, r.Head); e != nil {
+				return e
+			}
+		}
 		commit, actualBase = object.SHA, object.Parents[0].SHA
 		return nil
 	})
@@ -236,6 +249,9 @@ func (s *Server) advanceStandardMerge(ctx context.Context, session string, token
 	e = s.workflowTransaction(ctx, session, actor.ID, func(tx *sql.Tx, c database.LockManagedSessionRow, _ []byte) error {
 		if c.UserID != r.UserID || actor.ID != r.ActorID {
 			return errUnauthenticated
+		}
+		if _, e := s.lockStandardMergeLifecycles(ctx, tx, r.RepositoryID, r.SourceRepositoryID, false); e != nil {
+			return e
 		}
 		if _, e := tx.ExecContext(ctx, `SELECT golf_standard_pull_merge_lock($1,$2,$3)`, r.ForgeURL, r.RepositoryID, r.PullID); e != nil {
 			return errStorageUnavailable
@@ -295,6 +311,14 @@ func (s *Server) GetStandardPullMergeOperation(ctx context.Context, req *connect
 	if _, e = s.standardMergeAuthority(ctx, session, token, keyFrom(m.Repository), m.RepositoryId, m.OwnerId); e != nil {
 		return nil, standardMergeRPCError(e)
 	}
+	if r.SourceRepositoryID > 0 {
+		if e = s.standardMergeSourceRead(ctx, session, token, r, "", ""); e != nil {
+			return nil, standardMergeRPCError(e)
+		}
+		if _, e = s.standardMergeAuthority(ctx, session, token, repositoryKey{r.Owner, r.Name}, strconv.FormatInt(r.RepositoryID, 10), strconv.FormatInt(r.OwnerID, 10)); e != nil {
+			return nil, standardMergeRPCError(e)
+		}
+	}
 	return connect.NewResponse(&golfv1.GetStandardPullMergeOperationResponse{Operation: standardMergeWire(r)}), nil
 }
 
@@ -318,10 +342,17 @@ func (s *Server) SubmitStandardPullMerge(ctx context.Context, req *connect.Reque
 	ownerID, _ := discussionID(m.OwnerId)
 	pullID, _ := discussionID(m.Selection.PullRequestId)
 	fingerprint := standardMergeFingerprint(m)
+	sourceID, sourceOwnerID := int64(0), int64(0)
+	sourceKey := repositoryKey{}
+	if m.SourceRepository != nil {
+		sourceID, _ = discussionID(m.SourceRepositoryId)
+		sourceOwnerID, _ = discussionID(m.SourceOwnerId)
+		sourceKey = keyFrom(m.SourceRepository)
+	}
 	var r standardMergeRecord
 	fresh := false
 	e = s.workflowTransaction(ctx, session, actor.ID, func(tx *sql.Tx, c database.LockManagedSessionRow, _ []byte) error {
-		held, e := s.lockRepositoryLifecycleTransaction(ctx, tx, repoID)
+		held, e := s.lockStandardMergeLifecycles(ctx, tx, repoID, sourceID, true)
 		if e != nil {
 			return e
 		}
@@ -338,7 +369,7 @@ func (s *Server) SubmitStandardPullMerge(ctx context.Context, req *connect.Reque
 		if !errors.Is(e, sql.ErrNoRows) {
 			return errStorageUnavailable
 		}
-		r, e = scanStandardMerge(tx.QueryRowContext(held, `INSERT INTO golf_standard_pull_merges(user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,pull_request_id,number,expected_pull_revision,head_commit_id,observed_base_commit_id,source_ref,target_ref,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING `+standardMergeColumns, c.UserID, s.config.GiteaURL, actor.ID, m.OperationId, repoID, ownerID, key.Owner, key.Name, pullID, m.Selection.Number, m.ExpectedPullRevision, m.Selection.HeadCommitId, m.Selection.BaseCommitId, m.SourceRef, m.TargetRef, fingerprint))
+		r, e = scanStandardMerge(tx.QueryRowContext(held, `INSERT INTO golf_standard_pull_merges(user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,pull_request_id,number,expected_pull_revision,head_commit_id,observed_base_commit_id,source_ref,target_ref,input_fingerprint,source_repository_id,source_owner_id,source_repository_owner,source_repository_name) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING `+standardMergeColumns, c.UserID, s.config.GiteaURL, actor.ID, m.OperationId, repoID, ownerID, key.Owner, key.Name, pullID, m.Selection.Number, m.ExpectedPullRevision, m.Selection.HeadCommitId, m.Selection.BaseCommitId, m.SourceRef, m.TargetRef, fingerprint, sourceID, sourceOwnerID, sourceKey.Owner, sourceKey.Name))
 		if e != nil {
 			var state interface{ SQLState() string }
 			if errors.As(e, &state) && state.SQLState() == "55000" {
@@ -378,7 +409,7 @@ func (s *Server) SubmitStandardPullMerge(ctx context.Context, req *connect.Reque
 		if c.UserID != r.UserID {
 			return errUnauthenticated
 		}
-		held, e := s.lockRepositoryLifecycleTransaction(ctx, tx, repoID)
+		held, e := s.lockStandardMergeLifecycles(ctx, tx, repoID, sourceID, true)
 		if e != nil {
 			return e
 		}
@@ -426,6 +457,14 @@ func (s *Server) standardMergeSubmitStatus(ctx context.Context, session string, 
 	}
 	if _, e = s.standardMergeAuthority(ctx, session, token, keyFrom(m.Selection.Repository), m.Selection.RepositoryId, m.OwnerId); e != nil {
 		return nil, standardMergeRPCError(e)
+	}
+	if r.SourceRepositoryID > 0 {
+		if e = s.standardMergeSourceRead(ctx, session, token, r, "", ""); e != nil {
+			return nil, standardMergeRPCError(e)
+		}
+		if _, e = s.standardMergeAuthority(ctx, session, token, repositoryKey{r.Owner, r.Name}, strconv.FormatInt(r.RepositoryID, 10), strconv.FormatInt(r.OwnerID, 10)); e != nil {
+			return nil, standardMergeRPCError(e)
+		}
 	}
 	return connect.NewResponse(&golfv1.SubmitStandardPullMergeResponse{Operation: standardMergeWire(r)}), nil
 }

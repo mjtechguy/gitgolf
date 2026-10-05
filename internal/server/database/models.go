@@ -1369,29 +1369,33 @@ type GolfSession struct {
 }
 
 type GolfStandardPullMerge struct {
-	ID                   int64
-	UserID               int64
-	ForgeURL             string
-	ActorID              int64
-	OperationID          string
-	RepositoryID         int64
-	OwnerID              int64
-	RepositoryOwner      string
-	RepositoryName       string
-	PullRequestID        int64
-	Number               int64
-	ExpectedPullRevision string
-	HeadCommitID         string
-	ObservedBaseCommitID string
-	SourceRef            string
-	TargetRef            string
-	InputFingerprint     []byte
-	Phase                string
-	MergeCommitID        string
-	ActualBaseCommitID   string
-	FailureCode          string
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+	ID                    int64
+	UserID                int64
+	ForgeURL              string
+	ActorID               int64
+	OperationID           string
+	RepositoryID          int64
+	OwnerID               int64
+	RepositoryOwner       string
+	RepositoryName        string
+	PullRequestID         int64
+	Number                int64
+	ExpectedPullRevision  string
+	HeadCommitID          string
+	ObservedBaseCommitID  string
+	SourceRef             string
+	TargetRef             string
+	InputFingerprint      []byte
+	Phase                 string
+	MergeCommitID         string
+	ActualBaseCommitID    string
+	FailureCode           string
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+	SourceRepositoryID    int64
+	SourceOwnerID         int64
+	SourceRepositoryOwner string
+	SourceRepositoryName  string
 }
 
 type GolfStandardPullMergeEvent struct {
