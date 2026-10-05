@@ -880,6 +880,29 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .workflow-run-metadata details dl>div { display:grid; grid-template-columns:140px minmax(0,1fr); gap:12px; }
 .workflow-log-panel .execution-log { margin:0; padding:16px; max-height:70vh; overflow:auto; white-space:pre; font-size:.8125rem; line-height:1.6; }
 .execution-log mark { background:var(--accent-bg); color:var(--accent-text); }
+/* The execution surface remains charcoal in both application themes. */
+.execution-console { --console-bg:#171b22; --console-text:#e6edf3; --console-muted:#a2acb9; min-width:0; }
+.execution-console-toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:10px var(--panel-padding); }
+.execution-console-toolbar>.search-input { flex:1 1 220px; min-width:0; }
+.execution-console-toolbar input { width:100%; min-width:0; }
+.execution-console-toolbar .row-actions { flex-wrap:wrap; }
+.execution-console-status,.execution-console-window { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:6px var(--panel-padding); color:var(--muted); font-size:.8125rem; border-top:1px solid var(--line); }
+.execution-console-window { justify-content:flex-start; }
+.workflow-log-panel .execution-console-viewport,.execution-console .execution-console-viewport { margin:0; padding:12px 0; height:clamp(240px,52vh,650px); max-width:100%; overflow:auto; white-space:pre; background:var(--console-bg); color:var(--console-text); font:14px/1.65 var(--mono); tab-size:4; border-top:1px solid var(--line); overscroll-behavior:contain; scrollbar-gutter:stable; }
+.execution-console-viewport:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+.execution-console-line::before { content:attr(data-line); display:inline-block; box-sizing:border-box; width:6ch; padding-right:2ch; color:var(--console-muted); text-align:right; user-select:none; }
+.execution-console-empty { display:block; padding:0 16px; color:var(--console-muted); }
+.execution-console mark { background:#6f5200; color:#fff3bf; border-radius:2px; }
+.execution-ansi-bold { font-weight:700; }
+.execution-ansi-30,.execution-ansi-90 { color:#a2acb9; }
+.execution-ansi-31,.execution-ansi-91 { color:#ff9b9b; }
+.execution-ansi-32,.execution-ansi-92 { color:#8cdb9f; }
+.execution-ansi-33,.execution-ansi-93 { color:#efd37b; }
+.execution-ansi-34,.execution-ansi-94 { color:#99caff; }
+.execution-ansi-35,.execution-ansi-95 { color:#d6a9ed; }
+.execution-ansi-36,.execution-ansi-96 { color:#8cddd8; }
+.execution-ansi-37,.execution-ansi-97 { color:#f0f4f8; }
+@media(max-width:700px) { .execution-console-toolbar button,.execution-console-window button { min-height:44px; } .execution-console-toolbar>.search-input { flex-basis:100%; } .execution-console-toolbar>.search-input[data-open="false"] { display:none; } }
 @media(max-width:700px) {
  .workflow-run-summary { flex-direction:column; }
  .workflow-run-metadata>dl { grid-template-columns:repeat(2,minmax(0,1fr)); }
