@@ -198,6 +198,8 @@ service RepositoryService {
   rpc CreatePullRequest(CreatePullRequestRequest) returns (CreatePullRequestResponse);
   rpc UpdatePullRequest(UpdatePullRequestRequest) returns (UpdatePullRequestResponse);
   rpc GetIssueMutation(GetIssueMutationRequest) returns (GetIssueMutationResponse);
+  rpc SubmitDiscussionResourceOperation(SubmitDiscussionResourceOperationRequest) returns (SubmitDiscussionResourceOperationResponse);
+  rpc GetDiscussionResourceOperation(GetDiscussionResourceOperationRequest) returns (GetDiscussionResourceOperationResponse);
   rpc ListPullRequests(ListPullRequestsRequest) returns (ListPullRequestsResponse);
   rpc GetPullRequest(GetPullRequestRequest) returns (GetPullRequestResponse);
   rpc ListPullRequestReviews(ListPullRequestReviewsRequest) returns (ListPullRequestReviewsResponse);
@@ -4376,6 +4378,10 @@ message SubmitDiscussionResourceOperationResponse {
 message GetDiscussionResourceOperationRequest { string operation_id = 1; }
 message GetDiscussionResourceOperationResponse { DiscussionResourceOperation operation = 1; }
 
+service RepositoryFileMutationService {
+  rpc SubmitRepositoryFileMutation(SubmitRepositoryFileMutationRequest) returns (SubmitRepositoryFileMutationResponse);
+  rpc GetRepositoryFileMutationOperation(GetRepositoryFileMutationOperationRequest) returns (GetRepositoryFileMutationOperationResponse);
+}
 enum RepositoryFileMutationKind {
   REPOSITORY_FILE_MUTATION_KIND_UNSPECIFIED = 0;
   REPOSITORY_FILE_MUTATION_KIND_CREATE = 1;

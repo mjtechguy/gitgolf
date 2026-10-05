@@ -47,6 +47,10 @@ func (s *Server) rpcHandler() http.Handler {
 		connect.WithReadMaxBytes(16 << 10), connect.WithSendMaxBytes(16 << 20), connect.WithRequireConnectProtocolHeader(),
 		connect.WithConditionalHandlerOptions(func(spec connect.Spec) []connect.HandlerOption {
 			switch spec.Procedure {
+			case golfv1connect.RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure:
+				return []connect.HandlerOption{connect.WithReadMaxBytes(384 << 10)}
+			case golfv1connect.RepositoryServiceSubmitDiscussionResourceOperationProcedure:
+				return []connect.HandlerOption{connect.WithReadMaxBytes(1 << 20)}
 			case golfv1connect.RepositoryReleasePublicationServiceSubmitRepositoryReleasePublicationProcedure, golfv1connect.RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure, golfv1connect.OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionBindingProcedure:
 				// Eight-KiB values can double under JSON escaping; organization
 				// requests also carry bounded selected-repository identities.
@@ -96,6 +100,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewStandardPullMergeServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryReleasePublicationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryRefMutationServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewRepositoryFileMutationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryDeploymentServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRunnerControlServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRunnerPoolServiceHandler(s, options...))
@@ -166,6 +171,8 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.RepositoryDeploymentServicePrepareStaticDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceCreateRepositoryDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceGetRepositoryDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceListRepositoryDeploymentsProcedure, golfv1connect.RepositoryDeploymentServiceReviewRepositoryDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceActivateRepositoryDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceRevokeRepositoryDeploymentProcedure,
 			golfv1connect.RepositoryReleasePublicationServiceSubmitRepositoryReleasePublicationProcedure, golfv1connect.RepositoryReleasePublicationServiceGetRepositoryReleasePublicationOperationProcedure,
 			golfv1connect.RepositoryRefMutationServiceSubmitRepositoryRefMutationProcedure, golfv1connect.RepositoryRefMutationServiceGetRepositoryRefMutationOperationProcedure,
+			golfv1connect.RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure, golfv1connect.RepositoryFileMutationServiceGetRepositoryFileMutationOperationProcedure,
+			golfv1connect.RepositoryServiceSubmitDiscussionResourceOperationProcedure, golfv1connect.RepositoryServiceGetDiscussionResourceOperationProcedure,
 			golfv1connect.InstanceAdminServiceListGolfUserAccessProcedure, golfv1connect.InstanceAdminServiceChangeGolfUserAccessProcedure, golfv1connect.InstanceAdminServiceGetGolfUserAccessOperationProcedure,
 			golfv1connect.PullMergeObservationServiceGetPullRequestMergeObservationProcedure, golfv1connect.RepositoryRulesServiceGetRepositoryRulesProcedure, golfv1connect.RepositoryRulesServiceMutateRepositoryRulesProcedure, golfv1connect.RepositoryRulesServiceGetRepositoryRuleMutationProcedure,
 			golfv1connect.RunnerControlServiceGetInstanceRunnerLimitsProcedure, golfv1connect.RunnerControlServiceSetInstanceRunnerLimitsProcedure, golfv1connect.RunnerControlServiceGetInstanceRunnersProcedure, golfv1connect.RunnerControlServiceUpdateRunnerControlProcedure, golfv1connect.RunnerControlServiceGetRepositoryRunnersProcedure,
@@ -217,6 +224,10 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		}
 		limit := int64(16 << 10)
 		switch procedure {
+		case golfv1connect.RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure:
+			limit = 384 << 10
+		case golfv1connect.RepositoryServiceSubmitDiscussionResourceOperationProcedure:
+			limit = 1 << 20
 		case golfv1connect.RepositoryReleasePublicationServiceSubmitRepositoryReleasePublicationProcedure, golfv1connect.RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure, golfv1connect.OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionBindingProcedure:
 			limit = 64 << 10
 		case golfv1connect.RepositoryServiceSavePullRequestReviewDraftProcedure:

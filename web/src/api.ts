@@ -1,6 +1,6 @@
 import { createClient, ConnectError } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
-import { RepositoryRefMutationService } from './gen/golf/v1/golf_pb';
+import { RepositoryRefMutationService, RepositoryFileMutationService } from './gen/golf/v1/golf_pb';
 import { RepositoryDeploymentService, RepositoryReleasePublicationService, WorkflowArtifactService, StandardPullMergeService, PullMergeObservationService, RepositoryEnvironmentService, OrganizationExecutionValueService, GitTransportService, RunnerPoolService, RunnerControlService, RepositoryRulesService, RepositoryInvitationService, RepositoryExecutionValueService, EmailNotificationService, RepositoryLifecycleService, RepositoryTeamAccessService, RepositoryWebhookService, RepositoryDeployKeyService, ActionRunService, RepositoryActivityService, ReviewerService, AgentTaskService, AgentUsageService, CodexAccountService, AutomationGrantService, AccountSecurityService, ProfileService, InfrastructureConnectionService, OrganizationCreationService, ExecutionPolicyService, WorkflowRunService, WorkflowService, RepositoryAccessService, InstanceAdminService, OrganizationAdminService, RepositorySettingsService, GitAccessService, ApiCredentialService, AuditService, CapabilityService, OrganizationService, RepositoryService, SessionService } from './gen/golf/v1/golf_pb';
 
 const transport = createConnectTransport({
@@ -67,3 +67,5 @@ export function repositoryLink(value: string): string | undefined {
     return undefined;
   }
 }
+
+export const repositoryFileMutationClient = createClient(RepositoryFileMutationService, transport);

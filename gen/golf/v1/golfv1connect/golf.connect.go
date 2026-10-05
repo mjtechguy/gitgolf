@@ -124,6 +124,9 @@ const (
 	// RepositoryRefMutationServiceName is the fully-qualified name of the RepositoryRefMutationService
 	// service.
 	RepositoryRefMutationServiceName = "golf.v1.RepositoryRefMutationService"
+	// RepositoryFileMutationServiceName is the fully-qualified name of the
+	// RepositoryFileMutationService service.
+	RepositoryFileMutationServiceName = "golf.v1.RepositoryFileMutationService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -286,6 +289,12 @@ const (
 	// RepositoryServiceGetIssueMutationProcedure is the fully-qualified name of the RepositoryService's
 	// GetIssueMutation RPC.
 	RepositoryServiceGetIssueMutationProcedure = "/golf.v1.RepositoryService/GetIssueMutation"
+	// RepositoryServiceSubmitDiscussionResourceOperationProcedure is the fully-qualified name of the
+	// RepositoryService's SubmitDiscussionResourceOperation RPC.
+	RepositoryServiceSubmitDiscussionResourceOperationProcedure = "/golf.v1.RepositoryService/SubmitDiscussionResourceOperation"
+	// RepositoryServiceGetDiscussionResourceOperationProcedure is the fully-qualified name of the
+	// RepositoryService's GetDiscussionResourceOperation RPC.
+	RepositoryServiceGetDiscussionResourceOperationProcedure = "/golf.v1.RepositoryService/GetDiscussionResourceOperation"
 	// RepositoryServiceListPullRequestsProcedure is the fully-qualified name of the RepositoryService's
 	// ListPullRequests RPC.
 	RepositoryServiceListPullRequestsProcedure = "/golf.v1.RepositoryService/ListPullRequests"
@@ -800,6 +809,12 @@ const (
 	// RepositoryRefMutationServiceGetRepositoryRefMutationOperationProcedure is the fully-qualified
 	// name of the RepositoryRefMutationService's GetRepositoryRefMutationOperation RPC.
 	RepositoryRefMutationServiceGetRepositoryRefMutationOperationProcedure = "/golf.v1.RepositoryRefMutationService/GetRepositoryRefMutationOperation"
+	// RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure is the fully-qualified name of
+	// the RepositoryFileMutationService's SubmitRepositoryFileMutation RPC.
+	RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure = "/golf.v1.RepositoryFileMutationService/SubmitRepositoryFileMutation"
+	// RepositoryFileMutationServiceGetRepositoryFileMutationOperationProcedure is the fully-qualified
+	// name of the RepositoryFileMutationService's GetRepositoryFileMutationOperation RPC.
+	RepositoryFileMutationServiceGetRepositoryFileMutationOperationProcedure = "/golf.v1.RepositoryFileMutationService/GetRepositoryFileMutationOperation"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -1482,6 +1497,8 @@ type RepositoryServiceClient interface {
 	CreatePullRequest(context.Context, *connect.Request[v1.CreatePullRequestRequest]) (*connect.Response[v1.CreatePullRequestResponse], error)
 	UpdatePullRequest(context.Context, *connect.Request[v1.UpdatePullRequestRequest]) (*connect.Response[v1.UpdatePullRequestResponse], error)
 	GetIssueMutation(context.Context, *connect.Request[v1.GetIssueMutationRequest]) (*connect.Response[v1.GetIssueMutationResponse], error)
+	SubmitDiscussionResourceOperation(context.Context, *connect.Request[v1.SubmitDiscussionResourceOperationRequest]) (*connect.Response[v1.SubmitDiscussionResourceOperationResponse], error)
+	GetDiscussionResourceOperation(context.Context, *connect.Request[v1.GetDiscussionResourceOperationRequest]) (*connect.Response[v1.GetDiscussionResourceOperationResponse], error)
 	ListPullRequests(context.Context, *connect.Request[v1.ListPullRequestsRequest]) (*connect.Response[v1.ListPullRequestsResponse], error)
 	GetPullRequest(context.Context, *connect.Request[v1.GetPullRequestRequest]) (*connect.Response[v1.GetPullRequestResponse], error)
 	ListPullRequestReviews(context.Context, *connect.Request[v1.ListPullRequestReviewsRequest]) (*connect.Response[v1.ListPullRequestReviewsResponse], error)
@@ -1704,6 +1721,18 @@ func NewRepositoryServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(repositoryServiceMethods.ByName("GetIssueMutation")),
 			connect.WithClientOptions(opts...),
 		),
+		submitDiscussionResourceOperation: connect.NewClient[v1.SubmitDiscussionResourceOperationRequest, v1.SubmitDiscussionResourceOperationResponse](
+			httpClient,
+			baseURL+RepositoryServiceSubmitDiscussionResourceOperationProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("SubmitDiscussionResourceOperation")),
+			connect.WithClientOptions(opts...),
+		),
+		getDiscussionResourceOperation: connect.NewClient[v1.GetDiscussionResourceOperationRequest, v1.GetDiscussionResourceOperationResponse](
+			httpClient,
+			baseURL+RepositoryServiceGetDiscussionResourceOperationProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("GetDiscussionResourceOperation")),
+			connect.WithClientOptions(opts...),
+		),
 		listPullRequests: connect.NewClient[v1.ListPullRequestsRequest, v1.ListPullRequestsResponse](
 			httpClient,
 			baseURL+RepositoryServiceListPullRequestsProcedure,
@@ -1808,6 +1837,8 @@ type repositoryServiceClient struct {
 	createPullRequest                  *connect.Client[v1.CreatePullRequestRequest, v1.CreatePullRequestResponse]
 	updatePullRequest                  *connect.Client[v1.UpdatePullRequestRequest, v1.UpdatePullRequestResponse]
 	getIssueMutation                   *connect.Client[v1.GetIssueMutationRequest, v1.GetIssueMutationResponse]
+	submitDiscussionResourceOperation  *connect.Client[v1.SubmitDiscussionResourceOperationRequest, v1.SubmitDiscussionResourceOperationResponse]
+	getDiscussionResourceOperation     *connect.Client[v1.GetDiscussionResourceOperationRequest, v1.GetDiscussionResourceOperationResponse]
 	listPullRequests                   *connect.Client[v1.ListPullRequestsRequest, v1.ListPullRequestsResponse]
 	getPullRequest                     *connect.Client[v1.GetPullRequestRequest, v1.GetPullRequestResponse]
 	listPullRequestReviews             *connect.Client[v1.ListPullRequestReviewsRequest, v1.ListPullRequestReviewsResponse]
@@ -1986,6 +2017,17 @@ func (c *repositoryServiceClient) GetIssueMutation(ctx context.Context, req *con
 	return c.getIssueMutation.CallUnary(ctx, req)
 }
 
+// SubmitDiscussionResourceOperation calls
+// golf.v1.RepositoryService.SubmitDiscussionResourceOperation.
+func (c *repositoryServiceClient) SubmitDiscussionResourceOperation(ctx context.Context, req *connect.Request[v1.SubmitDiscussionResourceOperationRequest]) (*connect.Response[v1.SubmitDiscussionResourceOperationResponse], error) {
+	return c.submitDiscussionResourceOperation.CallUnary(ctx, req)
+}
+
+// GetDiscussionResourceOperation calls golf.v1.RepositoryService.GetDiscussionResourceOperation.
+func (c *repositoryServiceClient) GetDiscussionResourceOperation(ctx context.Context, req *connect.Request[v1.GetDiscussionResourceOperationRequest]) (*connect.Response[v1.GetDiscussionResourceOperationResponse], error) {
+	return c.getDiscussionResourceOperation.CallUnary(ctx, req)
+}
+
 // ListPullRequests calls golf.v1.RepositoryService.ListPullRequests.
 func (c *repositoryServiceClient) ListPullRequests(ctx context.Context, req *connect.Request[v1.ListPullRequestsRequest]) (*connect.Response[v1.ListPullRequestsResponse], error) {
 	return c.listPullRequests.CallUnary(ctx, req)
@@ -2077,6 +2119,8 @@ type RepositoryServiceHandler interface {
 	CreatePullRequest(context.Context, *connect.Request[v1.CreatePullRequestRequest]) (*connect.Response[v1.CreatePullRequestResponse], error)
 	UpdatePullRequest(context.Context, *connect.Request[v1.UpdatePullRequestRequest]) (*connect.Response[v1.UpdatePullRequestResponse], error)
 	GetIssueMutation(context.Context, *connect.Request[v1.GetIssueMutationRequest]) (*connect.Response[v1.GetIssueMutationResponse], error)
+	SubmitDiscussionResourceOperation(context.Context, *connect.Request[v1.SubmitDiscussionResourceOperationRequest]) (*connect.Response[v1.SubmitDiscussionResourceOperationResponse], error)
+	GetDiscussionResourceOperation(context.Context, *connect.Request[v1.GetDiscussionResourceOperationRequest]) (*connect.Response[v1.GetDiscussionResourceOperationResponse], error)
 	ListPullRequests(context.Context, *connect.Request[v1.ListPullRequestsRequest]) (*connect.Response[v1.ListPullRequestsResponse], error)
 	GetPullRequest(context.Context, *connect.Request[v1.GetPullRequestRequest]) (*connect.Response[v1.GetPullRequestResponse], error)
 	ListPullRequestReviews(context.Context, *connect.Request[v1.ListPullRequestReviewsRequest]) (*connect.Response[v1.ListPullRequestReviewsResponse], error)
@@ -2295,6 +2339,18 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 		connect.WithSchema(repositoryServiceMethods.ByName("GetIssueMutation")),
 		connect.WithHandlerOptions(opts...),
 	)
+	repositoryServiceSubmitDiscussionResourceOperationHandler := connect.NewUnaryHandler(
+		RepositoryServiceSubmitDiscussionResourceOperationProcedure,
+		svc.SubmitDiscussionResourceOperation,
+		connect.WithSchema(repositoryServiceMethods.ByName("SubmitDiscussionResourceOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryServiceGetDiscussionResourceOperationHandler := connect.NewUnaryHandler(
+		RepositoryServiceGetDiscussionResourceOperationProcedure,
+		svc.GetDiscussionResourceOperation,
+		connect.WithSchema(repositoryServiceMethods.ByName("GetDiscussionResourceOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
 	repositoryServiceListPullRequestsHandler := connect.NewUnaryHandler(
 		RepositoryServiceListPullRequestsProcedure,
 		svc.ListPullRequests,
@@ -2429,6 +2485,10 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 			repositoryServiceUpdatePullRequestHandler.ServeHTTP(w, r)
 		case RepositoryServiceGetIssueMutationProcedure:
 			repositoryServiceGetIssueMutationHandler.ServeHTTP(w, r)
+		case RepositoryServiceSubmitDiscussionResourceOperationProcedure:
+			repositoryServiceSubmitDiscussionResourceOperationHandler.ServeHTTP(w, r)
+		case RepositoryServiceGetDiscussionResourceOperationProcedure:
+			repositoryServiceGetDiscussionResourceOperationHandler.ServeHTTP(w, r)
 		case RepositoryServiceListPullRequestsProcedure:
 			repositoryServiceListPullRequestsHandler.ServeHTTP(w, r)
 		case RepositoryServiceGetPullRequestProcedure:
@@ -2590,6 +2650,14 @@ func (UnimplementedRepositoryServiceHandler) UpdatePullRequest(context.Context, 
 
 func (UnimplementedRepositoryServiceHandler) GetIssueMutation(context.Context, *connect.Request[v1.GetIssueMutationRequest]) (*connect.Response[v1.GetIssueMutationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.GetIssueMutation is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) SubmitDiscussionResourceOperation(context.Context, *connect.Request[v1.SubmitDiscussionResourceOperationRequest]) (*connect.Response[v1.SubmitDiscussionResourceOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.SubmitDiscussionResourceOperation is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) GetDiscussionResourceOperation(context.Context, *connect.Request[v1.GetDiscussionResourceOperationRequest]) (*connect.Response[v1.GetDiscussionResourceOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.GetDiscussionResourceOperation is not implemented"))
 }
 
 func (UnimplementedRepositoryServiceHandler) ListPullRequests(context.Context, *connect.Request[v1.ListPullRequestsRequest]) (*connect.Response[v1.ListPullRequestsResponse], error) {
@@ -8557,4 +8625,104 @@ func (UnimplementedRepositoryRefMutationServiceHandler) SubmitRepositoryRefMutat
 
 func (UnimplementedRepositoryRefMutationServiceHandler) GetRepositoryRefMutationOperation(context.Context, *connect.Request[v1.GetRepositoryRefMutationOperationRequest]) (*connect.Response[v1.GetRepositoryRefMutationOperationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryRefMutationService.GetRepositoryRefMutationOperation is not implemented"))
+}
+
+// RepositoryFileMutationServiceClient is a client for the golf.v1.RepositoryFileMutationService
+// service.
+type RepositoryFileMutationServiceClient interface {
+	SubmitRepositoryFileMutation(context.Context, *connect.Request[v1.SubmitRepositoryFileMutationRequest]) (*connect.Response[v1.SubmitRepositoryFileMutationResponse], error)
+	GetRepositoryFileMutationOperation(context.Context, *connect.Request[v1.GetRepositoryFileMutationOperationRequest]) (*connect.Response[v1.GetRepositoryFileMutationOperationResponse], error)
+}
+
+// NewRepositoryFileMutationServiceClient constructs a client for the
+// golf.v1.RepositoryFileMutationService service. By default, it uses the Connect protocol with the
+// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
+// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRepositoryFileMutationServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepositoryFileMutationServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	repositoryFileMutationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryFileMutationService").Methods()
+	return &repositoryFileMutationServiceClient{
+		submitRepositoryFileMutation: connect.NewClient[v1.SubmitRepositoryFileMutationRequest, v1.SubmitRepositoryFileMutationResponse](
+			httpClient,
+			baseURL+RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure,
+			connect.WithSchema(repositoryFileMutationServiceMethods.ByName("SubmitRepositoryFileMutation")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryFileMutationOperation: connect.NewClient[v1.GetRepositoryFileMutationOperationRequest, v1.GetRepositoryFileMutationOperationResponse](
+			httpClient,
+			baseURL+RepositoryFileMutationServiceGetRepositoryFileMutationOperationProcedure,
+			connect.WithSchema(repositoryFileMutationServiceMethods.ByName("GetRepositoryFileMutationOperation")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// repositoryFileMutationServiceClient implements RepositoryFileMutationServiceClient.
+type repositoryFileMutationServiceClient struct {
+	submitRepositoryFileMutation       *connect.Client[v1.SubmitRepositoryFileMutationRequest, v1.SubmitRepositoryFileMutationResponse]
+	getRepositoryFileMutationOperation *connect.Client[v1.GetRepositoryFileMutationOperationRequest, v1.GetRepositoryFileMutationOperationResponse]
+}
+
+// SubmitRepositoryFileMutation calls
+// golf.v1.RepositoryFileMutationService.SubmitRepositoryFileMutation.
+func (c *repositoryFileMutationServiceClient) SubmitRepositoryFileMutation(ctx context.Context, req *connect.Request[v1.SubmitRepositoryFileMutationRequest]) (*connect.Response[v1.SubmitRepositoryFileMutationResponse], error) {
+	return c.submitRepositoryFileMutation.CallUnary(ctx, req)
+}
+
+// GetRepositoryFileMutationOperation calls
+// golf.v1.RepositoryFileMutationService.GetRepositoryFileMutationOperation.
+func (c *repositoryFileMutationServiceClient) GetRepositoryFileMutationOperation(ctx context.Context, req *connect.Request[v1.GetRepositoryFileMutationOperationRequest]) (*connect.Response[v1.GetRepositoryFileMutationOperationResponse], error) {
+	return c.getRepositoryFileMutationOperation.CallUnary(ctx, req)
+}
+
+// RepositoryFileMutationServiceHandler is an implementation of the
+// golf.v1.RepositoryFileMutationService service.
+type RepositoryFileMutationServiceHandler interface {
+	SubmitRepositoryFileMutation(context.Context, *connect.Request[v1.SubmitRepositoryFileMutationRequest]) (*connect.Response[v1.SubmitRepositoryFileMutationResponse], error)
+	GetRepositoryFileMutationOperation(context.Context, *connect.Request[v1.GetRepositoryFileMutationOperationRequest]) (*connect.Response[v1.GetRepositoryFileMutationOperationResponse], error)
+}
+
+// NewRepositoryFileMutationServiceHandler builds an HTTP handler from the service implementation.
+// It returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRepositoryFileMutationServiceHandler(svc RepositoryFileMutationServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	repositoryFileMutationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryFileMutationService").Methods()
+	repositoryFileMutationServiceSubmitRepositoryFileMutationHandler := connect.NewUnaryHandler(
+		RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure,
+		svc.SubmitRepositoryFileMutation,
+		connect.WithSchema(repositoryFileMutationServiceMethods.ByName("SubmitRepositoryFileMutation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryFileMutationServiceGetRepositoryFileMutationOperationHandler := connect.NewUnaryHandler(
+		RepositoryFileMutationServiceGetRepositoryFileMutationOperationProcedure,
+		svc.GetRepositoryFileMutationOperation,
+		connect.WithSchema(repositoryFileMutationServiceMethods.ByName("GetRepositoryFileMutationOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RepositoryFileMutationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure:
+			repositoryFileMutationServiceSubmitRepositoryFileMutationHandler.ServeHTTP(w, r)
+		case RepositoryFileMutationServiceGetRepositoryFileMutationOperationProcedure:
+			repositoryFileMutationServiceGetRepositoryFileMutationOperationHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRepositoryFileMutationServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRepositoryFileMutationServiceHandler struct{}
+
+func (UnimplementedRepositoryFileMutationServiceHandler) SubmitRepositoryFileMutation(context.Context, *connect.Request[v1.SubmitRepositoryFileMutationRequest]) (*connect.Response[v1.SubmitRepositoryFileMutationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryFileMutationService.SubmitRepositoryFileMutation is not implemented"))
+}
+
+func (UnimplementedRepositoryFileMutationServiceHandler) GetRepositoryFileMutationOperation(context.Context, *connect.Request[v1.GetRepositoryFileMutationOperationRequest]) (*connect.Response[v1.GetRepositoryFileMutationOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryFileMutationService.GetRepositoryFileMutationOperation is not implemented"))
 }

@@ -129,7 +129,9 @@ def main():
             smoke.provider(token, 'POST', base+'/contents/metadata-proof.txt', {'branch': 'metadata-proof', 'message': 'Create metadata fixture', 'content': base64.b64encode(b'Metadata fixture\n').decode()}, expected=201)
             pull = smoke.provider(token, 'POST', base+'/pulls', {'title': 'Metadata assignment qualification', 'body': 'Unchanged private description', 'base': native['default_branch'], 'head': 'metadata-proof'}, expected=201)
             number = pull['number']
-            smoke.provider(token, 'PATCH', base+'/issues/'+str(number), {**({'milestone': milestones[0]['id']} if milestones else {}), **({'assignees': [name]} if args.assignees else {})})
+            initial_metadata = {**({'milestone': milestones[0]['id']} if milestones else {}), **({'assignees': [name]} if args.assignees else {})}
+            if initial_metadata:
+                smoke.provider(token, 'PATCH', base+'/issues/'+str(number), initial_metadata, expected=201)
             if labels:
                 smoke.provider(token, 'PUT', base+'/issues/'+str(number)+'/labels', {'labels': [labels[0]['id']]})
             issue = smoke.provider(token, 'GET', base+'/issues/'+str(number))
