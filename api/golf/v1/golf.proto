@@ -4023,3 +4023,57 @@ message RepositoryReleasePublicationOperation {
 }
 message SubmitRepositoryReleasePublicationResponse { RepositoryReleasePublicationOperation operation = 1; }
 message GetRepositoryReleasePublicationOperationResponse { RepositoryReleasePublicationOperation operation = 1; }
+
+// Bounded local static previews; managed browser only, no provider execution.
+service RepositoryDeploymentService {
+ rpc PrepareStaticDeployment(PrepareStaticDeploymentRequest) returns (PrepareStaticDeploymentResponse);
+ rpc CreateRepositoryDeployment(CreateRepositoryDeploymentRequest) returns (CreateRepositoryDeploymentResponse);
+ rpc GetRepositoryDeployment(GetRepositoryDeploymentRequest) returns (GetRepositoryDeploymentResponse);
+ rpc ListRepositoryDeployments(ListRepositoryDeploymentsRequest) returns (ListRepositoryDeploymentsResponse);
+ rpc ReviewRepositoryDeployment(ReviewRepositoryDeploymentRequest) returns (ReviewRepositoryDeploymentResponse);
+ rpc ActivateRepositoryDeployment(ActivateRepositoryDeploymentRequest) returns (ActivateRepositoryDeploymentResponse);
+ rpc RevokeRepositoryDeployment(RevokeRepositoryDeploymentRequest) returns (RevokeRepositoryDeploymentResponse);
+}
+message StaticPreviewRoot { string path=1; string entry_path=2; }
+message PrepareStaticDeploymentRequest { RepositoryEnvironmentTarget target=1; string run_id=2; }
+message PrepareStaticDeploymentResponse {
+ RepositoryEnvironmentTarget target=1; WorkflowArtifact artifact=2; repeated StaticPreviewRoot roots=3;
+ string manifest_sha256=4; string target_fingerprint=5; bool available=6; string reason=7;
+}
+message CreateRepositoryDeploymentRequest {
+ RepositoryEnvironmentTarget target=1; string deployment_id=2; string run_id=3; string attempt_id=4;
+ string commit_id=5; string archive_sha256=6; string manifest_sha256=7; string environment_id=8;
+ string environment_version=9; RepositorySourceSelector source=10; string static_root=11; string target_fingerprint=12;
+ string current_password=13;
+}
+message RepositoryDeploymentRequest { RepositoryEnvironmentTarget target=1; string deployment_id=2; }
+message ReviewRepositoryDeploymentRequest { RepositoryEnvironmentTarget target=1; string deployment_id=2; string operation_id=3; bool approve=4; }
+message ListRepositoryDeploymentsRequest { RepositoryEnvironmentTarget target=1; uint32 page=2; uint32 page_size=3; }
+message DeploymentApproval { string actor_id=1; bool approved=2; string expires_at=3; string created_at=4; }
+message RepositoryDeployment {
+ string contract=1; string id=2; string actor_id=3; RepositoryEnvironmentTarget target=4;
+ WorkflowArtifact artifact=5; string manifest_sha256=6; string environment_id=7; string environment_version=8;
+ RepositoryEnvironmentPolicy policy=9; RepositorySourceSelector source=10; string static_root=11; string target_fingerprint=12;
+ string state=13; string version=14; string created_at=15; string updated_at=16; string eligible_at=17;
+ string expires_at=18; repeated DeploymentApproval approvals=19; bool can_approve=20; bool can_activate=21;
+ bool can_revoke=22; bool can_open=23; string reason=24; string open_path=25;
+ string environment_name=26; string artifact_storage=27; string artifact_profile_id=28; string artifact_profile_version=29; string artifact_storage_fingerprint=30;
+}
+message RepositoryDeploymentResponse { RepositoryDeployment deployment=1; }
+message ListRepositoryDeploymentsResponse { repeated RepositoryDeployment deployments=1; uint32 next_page=2; }
+
+message GetRepositoryDeploymentRequest { RepositoryEnvironmentTarget target=1; string deployment_id=2; }
+
+message ActivateRepositoryDeploymentRequest { RepositoryEnvironmentTarget target=1; string deployment_id=2; }
+
+message RevokeRepositoryDeploymentRequest { RepositoryEnvironmentTarget target=1; string deployment_id=2; }
+
+message CreateRepositoryDeploymentResponse { RepositoryDeployment deployment=1; }
+
+message GetRepositoryDeploymentResponse { RepositoryDeployment deployment=1; }
+
+message ReviewRepositoryDeploymentResponse { RepositoryDeployment deployment=1; }
+
+message ActivateRepositoryDeploymentResponse { RepositoryDeployment deployment=1; }
+
+message RevokeRepositoryDeploymentResponse { RepositoryDeployment deployment=1; }

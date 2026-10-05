@@ -41,6 +41,9 @@ type Config struct {
 	Telemetry                                                  *telemetry.Runtime
 }
 type Server struct {
+	preview                       *previewConfiguration
+	previewBound                  atomic.Bool
+	previewRequests               chan struct{}
 	managedGit                    managedGitConfiguration
 	activity                      activityLimits
 	codexMu                       sync.Mutex
@@ -59,6 +62,10 @@ type Server struct {
 }
 
 func New(config Config, db *sql.DB) (*Server, error) {
+	preview, previewErr := previewConfig(config.PublicURL, config.AllowInsecureCookies, os.Getenv)
+	if previewErr != nil {
+		return nil, previewErr
+	}
 	gitConfig, gitErr := managedGitConfig(os.Getenv)
 	if gitErr != nil {
 		return nil, gitErr
@@ -109,7 +116,7 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	}
 	config.PublicURL = public.Scheme + "://" + public.Host
 	config.GiteaURL = strings.TrimRight(config.GiteaURL, "/")
-	s := &Server{managedGit: gitConfig, config: config, db: db, keyring: keyring, client: &http.Client{Timeout: 10 * time.Second,
+	s := &Server{previewRequests: make(chan struct{}, 8), preview: preview, managedGit: gitConfig, config: config, db: db, keyring: keyring, client: &http.Client{Timeout: 10 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 	if config.Telemetry != nil {
 		s.client.Transport = config.Telemetry.HTTPTransport(http.DefaultTransport)
@@ -207,7 +214,13 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	})
 	return s, nil
 }
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handler.ServeHTTP(w, r) }
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/api/deployments/") {
+		s.DeploymentOpenHandler().ServeHTTP(w, r)
+		return
+	}
+	s.handler.ServeHTTP(w, r)
+}
 func (s *Server) security(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")

@@ -166,6 +166,15 @@ func serve(ctx context.Context, logger zerolog.Logger) error {
 		servers = append(servers, machineServer)
 		listeners = append(listeners, tls.NewListener(machineListener, internalTLS.config))
 	}
+	previewServer, previewListener, err := app.BindPreviewListener()
+	if err != nil {
+		return err
+	}
+	if previewServer != nil {
+		defer previewListener.Close()
+		servers = append(servers, previewServer)
+		listeners = append(listeners, previewListener)
+	}
 	if metricsAddress != "" {
 		private, err := net.Listen("tcp", metricsAddress)
 		if err != nil {
