@@ -1,6 +1,15 @@
 # Golf implementation status
 
 
+## Real popular-project upstream CI remains unsupported (2026-10-04)
+
+Express, Flask, Awesome and Spoon-Knife are real imported upstream repositories. Import/source/README and earlier agent-review evidence does **not** qualify their original CI. The [actual unchanged Express dispatch](../.tmp/upstream-express-dispatch-attempt1/manifest.json) compares the original pinned upstream YAML byte-for-byte, resolves native repository174 and workflow blob at `7ef98448f8b38099ab1ded55e458538ad47a51e7`, and returns HTTP400/failed_precondition: “Workflow is outside the selected pinned Linux Actions engine profile.” Zero runs were admitted. The temporary instance/repository manual policies were restored through supported revision-checked RPCs. This is an honest failed compatibility attempt, not a passing pipeline.
+
+All18 researched current Express/Flask/Requests workflows are unsupported. The first unchanged upstream target is [Requests lint.yml at611c616](https://github.com/psf/requests/blob/611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60/.github/workflows/lint.yml): remote pinned Node24 checkout/setup-python actions, genuine scoped Git checkout, restricted dependency egress and the original push/PR declarations must work before claiming acceptance. Linux/macOS/Windows matrices, artifacts, cache, permissions, concurrency and service containers remain separate compatibility work. Source archives alone do not supply checkout authorization or `.git` provenance.
+
+The retained controlled Docker run `a9031ab2-9500-4254-9301-435b5a7dd080` at repository163 has two actual recorded steps and logs. Its [actual run/step/reload/mobile browser proof](../.tmp/retained-ci-visual-review-attempt3/manifest.json) passes; its canonical route is `/golf-admin/golf-local-ci-0c61aa/actions/runs/a9031ab2-9500-4254-9301-435b5a7dd080`, with `?step=0` selecting the first step. Earlier helper attempts used an obsolete query-run URL and then an incorrect assumed theme-button state; both failed attempts are retained. This completed controlled run is not a currently running job or unchanged upstream CI. A terminal-style live-output refinement is being implemented and is not yet deployed.
+
+
 ## Existing-tag publication066 deploys; Actions and density update included (2026-10-04)
 
 Retained localhost8080 runs frozen component `457d7a316a2486ab8396e5a9517e0f66ae9ef10d` at schema202610040066: core/webhook `sha256:bd730b30fb8f74113337eb73515d6a15dca39d161a54b1aef25775f4c1723631`, runner `sha256:71e18df6c4d30a5000ce19a835f7d06cf89730c341e75efe131f970eb329c222`, agent-worker `sha256:02e52db581c78664a41b73629036b537a4222b60a321994615158a66f91a9f68`. The [stopped-writer backup/deployment receipt](../.tmp/settings-release66-retained-backup/receipt.json) and [independent running proof](../.tmp/settings-release66-running-proof/manifest.json) pass. Authentication, original session, seven agent connections, three Codex auth records, grants and116 historical issue operations are hash-identical; foreign containers are unchanged. Missing-Origin/session publication endpoints return403/401 with no-store.
