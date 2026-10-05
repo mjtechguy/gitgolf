@@ -22,17 +22,24 @@ function immutableReceipt(d,original){
   for(const field of ['id','contract','actorId','environmentId','environmentVersion','environmentName','manifestSha256','targetFingerprint','staticRoot','createdAt','eligibleAt','artifactStorage','artifactProfileId','artifactProfileVersion','artifactStorageFingerprint'])check(d?.[field]===original[field],'original-'+field);
   for(const field of ['artifact','target','source','policy'])check(isDeepStrictEqual(d?.[field],original[field]),'original-'+field);
 }
-function streamEvents(raw,repositoryId){
-  check(raw.length<=65536,'bounded-live-stream');const events=[];let offset=0;
+function watchRequest(raw,repositoryId,repository){
+  check(Buffer.isBuffer(raw)&&raw.length>=5&&raw.length<=16389&&raw[0]===0&&raw.readUInt32BE(1)===raw.length-5,'exact-live-request-frame');
+  const request=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(raw.subarray(5))),cursor=request?.cursor===undefined?'':request.cursor;
+  check(request&&Object.keys(request).every(key=>['repositoryId','repository','cursor'].includes(key))&&request.repositoryId===repositoryId&&isDeepStrictEqual(request.repository,repository),'original-live-request');
+  check(typeof cursor==='string'&&(cursor===''||/^(0|[1-9][0-9]{0,18})$/.test(cursor)&&BigInt(cursor)<=9223372036854775807n),'exact-live-request-cursor');
+  return {...request,cursor};
+}
+function streamEvents(raw,repositoryId,cursor=''){
+  check(raw.length<=65536,'bounded-live-stream');const events=[];let offset=0,ended=false;
   while(offset<raw.length){
     check(offset+5<=raw.length,'live-frame-header');const flag=raw[offset],size=raw.readUInt32BE(offset+1);offset+=5;
-    check([0,2].includes(flag)&&size<=16384&&offset+size<=raw.length,'live-frame-bound');const value=JSON.parse(raw.subarray(offset,offset+size).toString());offset+=size;
-    if(flag===2){check(!value.error&&offset===raw.length,'live-end');continue;}
+    check([0,2].includes(flag)&&size<=16384&&offset+size<=raw.length,'live-frame-bound');const value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(raw.subarray(offset,offset+size)));offset+=size;
+    if(flag===2){check(!value.error&&offset===raw.length,'live-end');ended=true;continue;}
     const topics=value.topics??[];
     check(value.repositoryId===repositoryId&&['reset','change','heartbeat','reconnect'].includes(value.kind)&&/^(0|[1-9][0-9]{0,18})$/.test(value.cursor)&&BigInt(value.cursor)<=9223372036854775807n&&Array.isArray(topics)&&topics.every(t=>['source','issues','pulls','actions','agents'].includes(t)),'exact-live-event');
-    check(!events.length||BigInt(value.cursor)>=BigInt(events.at(-1).cursor),'ordered-live-cursor');events.push({...value,topics});
+    check(BigInt(value.cursor)>=BigInt(events.at(-1)?.cursor??(cursor||'0')),'ordered-live-cursor');events.push({...value,topics});
   }
-  check(events.length>0,'nonempty-live-stream');return events;
+  check(ended&&events.length>0&&events.at(-1).kind==='reconnect','complete-live-stream');return events;
 }
 if(process.argv.includes('--self-check')){
   const id='00000000-0000-4000-8000-000000000001',other='00000000-0000-4000-8000-000000000002';
@@ -46,9 +53,14 @@ if(process.argv.includes('--self-check')){
   }
   immutableReceipt(requested.deployment,requested.deployment);
   for(const patch of [{artifact:{...requested.deployment.artifact,archiveSha256:'c'.repeat(64)}},{target:{repository:{owner:'foreign',name:'static'}}}]){let refused=false;try{immutableReceipt({...requested.deployment,...patch},requested.deployment);}catch{refused=true;}check(refused,'foreign-live-receipt-admitted');}
-  const frame=value=>{const body=Buffer.from(JSON.stringify(value)),head=Buffer.alloc(5);head.writeUInt32BE(body.length,1);return Buffer.concat([head,body]);};
-  const good=frame({repositoryId:'12',kind:'change',cursor:'3',topics:['actions']});check(streamEvents(good,'12')[0].topics[0]==='actions','live-frame-self-check');
-  for(const bad of [good.subarray(0,good.length-1),frame({repositoryId:'13',kind:'change',cursor:'3',topics:['actions']}),Buffer.concat([good,frame({repositoryId:'12',kind:'change',cursor:'2',topics:['actions']})])]){let refused=false;try{streamEvents(bad,'12');}catch{refused=true;}check(refused,'foreign-live-stream-admitted');}
+  const frame=(value,flag=0)=>{const body=Buffer.from(JSON.stringify(value)),head=Buffer.alloc(5);head[0]=flag;head.writeUInt32BE(body.length,1);return Buffer.concat([head,body]);};
+  const request=frame({repositoryId:'12',repository:c.repository,cursor:'0'});check(watchRequest(request,'12',c.repository).cursor==='0','live-request-self-check');
+  check(watchRequest(frame({repositoryId:'12',repository:c.repository}),'12',c.repository).cursor==='','omitted-live-cursor');
+  const badLength=Buffer.from(request);badLength.writeUInt32BE(request.length,1);
+  for(const bad of [null,request.subarray(0,4),request.subarray(0,request.length-1),badLength,Buffer.concat([request,request]),frame({repositoryId:'12',repository:c.repository},2),frame({repositoryId:'12',repository:c.repository},1),frame({repositoryId:'13',repository:c.repository}),frame({repositoryId:'12',repository:{owner:'foreign',name:'static'}}),frame({repositoryId:'12',repository:c.repository,cursor:'01'}),frame({repositoryId:'12',repository:c.repository,cursor:'9223372036854775808'}),frame({repositoryId:'12',repository:c.repository,cursor:0}),frame({repositoryId:'12',repository:c.repository,cursor:null}),frame({repositoryId:'12',repository:c.repository,foreign:true}),Buffer.concat([Buffer.from([0,0,0,0,1]),Buffer.from([255])]),Buffer.alloc(16390)]){let refused=false;try{watchRequest(bad,'12',c.repository);}catch{refused=true;}check(refused,'malformed-live-request-admitted');}
+  const change=frame({repositoryId:'12',kind:'change',cursor:'3',topics:['actions']}),end=frame({},2),reconnect=frame({repositoryId:'12',kind:'reconnect',cursor:'3'}),good=Buffer.concat([change,reconnect,end]);check(streamEvents(good,'12','2')[0].topics[0]==='actions','live-frame-self-check');
+  for(const bad of [good.subarray(0,good.length-1),change,Buffer.concat([change,end]),Buffer.concat([frame({repositoryId:'13',kind:'change',cursor:'3',topics:['actions']}),reconnect,end]),Buffer.concat([change,frame({repositoryId:'12',kind:'change',cursor:'2',topics:['actions']}),reconnect,end]),Buffer.concat([change,reconnect,frame({error:{code:'canceled'}},2)])]){let refused=false;try{streamEvents(bad,'12');}catch{refused=true;}check(refused,'foreign-or-incomplete-live-stream-admitted');}
+  let refused=false;try{streamEvents(good,'12','4');}catch{refused=true;}check(refused,'request-cursor-regression-admitted');
   console.log('PASS: pure original/browser/host-only TLS fixture checks; no resources.');process.exit(0);
 }
 let text='';for await(const piece of process.stdin){text+=piece;check(text.length<=262144,'private-stdin-bound');}
@@ -61,17 +73,17 @@ const reader=await browser.newContext({acceptDownloads:false});
 await context.addCookies(c.cookies);await reader.addCookies(c.readerCookies);
 const page=await context.newPage();
 const manifest={passed:false,complete:false,kind:'actual-protected-static-preview',sourceRevision:c.sourceRevision,deploymentId:c.deployment.id,captures:[],checks:{},limits:['One bounded secretless static fixture. Leaf SPKI is trusted in this disposable browser only; parent independently verifies CA/name/TLS1.3.','Reads/POST open only; parent independently qualifies deployment transitions/current authority.']};
-const requests=[],receipts=[],pending=[],observed=[],streams=[];let stage='configuration',observationFailure;
+const requests=[],receipts=[],pending=[],observed=[],streams=[];let stage='configuration',observationFailure,recordWatch=true;
 page.on('request',r=>{if(r.url().startsWith(c.golf+'/rpc/'))requests.push(r.url().split('/').at(-1));});
 page.on('response',r=>{if(r.url().endsWith('/GetRepositoryDeployment'))pending.push((async()=>{
   check(r.status()===200,'actual-deployment-rpc');const d=(await r.json()).deployment;
   immutableReceipt(d,c.deployment);
   check(observe||d.state==='READY'&&d.canOpen,'current-exact-artifact');receipts.push(d.id);observed.push(d);
 })().catch(error=>{observationFailure??=error;}));
-  if(observe&&r.url().endsWith('/WatchRepository'))pending.push((async()=>{
+  if(observe&&recordWatch&&r.url().endsWith('/WatchRepository'))pending.push((async()=>{
     check(r.status()===200&&r.headers()['cache-control']==='no-store'&&r.headers()['content-type']?.startsWith('application/connect+json'),'actual-live-stream');
-    const request=r.request().postDataJSON();check(request.repositoryId===c.deployment.target.repositoryId&&isDeepStrictEqual(request.repository,c.repository),'original-live-request');
-    streams.push(streamEvents(await r.body(),request.repositoryId));
+    const request=watchRequest(r.request().postDataBuffer(),c.deployment.target.repositoryId,c.repository);
+    streams.push(streamEvents(await r.body(),request.repositoryId,request.cursor));
   })().catch(error=>{observationFailure??=error;}));
 });
 const previewOrigin=`https://${c.deployment.id}.preview.localhost:${new URL(c.previewBase).port}`;
@@ -108,7 +120,9 @@ async function observeLive(){
   await phase('approved',d=>d?.state==='REQUESTED'&&(d.approvals??[]).some(a=>a.approved),async()=>{await approvals.getByText('Approved',{exact:true}).waitFor();check(await open.count()===0,'approved-not-active');},false);
   await phase('active',d=>d?.state==='READY'&&d.canOpen&&d.openPath===`/api/deployments/${c.deployment.id}/open`,async()=>{await state.getByText('Active protected preview',{exact:true}).waitFor();await open.waitFor();check(await open.isEnabled(),'active-open-enabled');},true);
   await phase('revoked',d=>d?.state==='REVOKED'&&!d.canOpen&&!d.openPath,async()=>{await state.getByText('revoked',{exact:true}).waitFor();check(await open.count()===0,'revoked-no-open');},true);
-  await Promise.all([...pending]);check(!observationFailure,'live-receipt-observation');
+  // Native streams end after 10s, before the client's 14s deadline. Drain
+  // the admitted snapshot; a later rotation is unnecessary for this proof.
+  recordWatch=false;await Promise.all([...pending]);check(!observationFailure,'live-receipt-observation');
   const events=streams.flat(),changes=events.filter(e=>e.kind==='change'&&e.topics.includes('actions'));
   check(changes.length>=3&&new Set(changes.map(e=>e.cursor)).size>=3,'actual-review-activation-revoke-events');
   manifest.checks={readOnlyDeploymentViews:true,noReloadOrRefresh:true,mainNavigations:navigations.length,actualImmutableReceipts:receipts.length,watchRequests:requests.filter(name=>name==='WatchRepository').length,actualActionsChanges:changes.map(e=>({kind:e.kind,cursor:e.cursor,topics:e.topics})),externalApprovalVisible:true,externalActivationVisible:true,externalRevocationVisible:true};
