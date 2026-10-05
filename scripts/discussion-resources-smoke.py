@@ -145,8 +145,9 @@ def main():
             label = apply(role, 'UPDATE_LABEL', resource=label, change={'label': {'name': role+'/edited', 'color': 'abcdef', 'description': '', 'exclusive': False, 'archived': False}})['label']
             raw = smoke.provider(token, 'GET', base+'/labels/'+label['id']); assert not raw['is_archived'] and not raw['exclusive'] and raw['description'] == ''
             apply(role, 'DELETE_LABEL', resource=label); smoke.provider(token, 'GET', base+'/labels/'+label['id'], expected=404)
-            milestone = apply(role, 'CREATE_MILESTONE', change={'milestone': {'title': role+' release', 'description': 'Milestone configuration', 'state': 'ISSUE_STATE_CLOSED', 'dueDate': '2026-12-01'}})['milestone']
-            raw = smoke.provider(token, 'GET', base+'/milestones/'+milestone['id']); assert raw['state'] == 'closed' and raw['due_on'].startswith('2026-12-01')
+            due = '1970-01-01' if role == 'owner' else '2026-12-01'
+            milestone = apply(role, 'CREATE_MILESTONE', change={'milestone': {'title': role+' release', 'description': 'Milestone configuration', 'state': 'ISSUE_STATE_CLOSED', 'dueDate': due}})['milestone']
+            raw = smoke.provider(token, 'GET', base+'/milestones/'+milestone['id']); assert raw['state'] == 'closed' and raw['due_on'].startswith(due)
             milestone = apply(role, 'UPDATE_MILESTONE', resource=milestone, change={'milestone': {'title': role+' next', 'description': '', 'state': 'ISSUE_STATE_OPEN', 'dueDate': ''}})['milestone']
             raw = smoke.provider(token, 'GET', base+'/milestones/'+milestone['id']); assert raw['state'] == 'open' and raw['description'] == '' and raw.get('due_on') is None
             apply(role, 'DELETE_MILESTONE', resource=milestone); smoke.provider(token, 'GET', base+'/milestones/'+milestone['id'], expected=404)
@@ -167,15 +168,17 @@ def main():
         smoke.provider(token, 'POST', 'orgs', {'username': organization, 'visibility': 'private'}, expected=201)
         org_repo = smoke.provider(token, 'POST', 'orgs/'+organization+'/repos', {'name': 'units', 'private': True, 'auto_init': True}, expected=201)
         org_target = {'repository': {'owner': organization, 'name': 'units'}, 'repositoryId': str(org_repo['id'])}
-        for role, units in [('writer', {'repo.code': 'read', 'repo.issues': 'write', 'repo.pulls': 'read'}), ('coder', {'repo.code': 'write', 'repo.issues': 'read', 'repo.pulls': 'read'})]:
+        for role, units in [('writer', {'repo.code': 'read', 'repo.issues': 'write', 'repo.pulls': 'read'}), ('pullwriter', {'repo.code': 'read', 'repo.issues': 'read', 'repo.pulls': 'write'}), ('coder', {'repo.code': 'write', 'repo.issues': 'read', 'repo.pulls': 'read'})]:
             team = smoke.provider(token, 'POST', 'orgs/'+organization+'/teams', {'name': role, 'permission': 'write', 'units_map': units, 'visibility': 'limited', 'includes_all_repositories': False}, expected=201)
             smoke.provider(token, 'PUT', 'teams/'+str(team['id'])+'/members/'+actors[role]['name'], expected=204)
             smoke.provider(token, 'PUT', 'teams/'+str(team['id'])+'/repos/'+org_repo['full_name'], expected=204)
-        assert inventory(True, org_target, 'writer')[1] and not inventory(True, org_target, 'coder')[1]
+        assert inventory(True, org_target, 'writer')[1] and inventory(True, org_target, 'pullwriter')[1] and not inventory(True, org_target, 'coder')[1]
         label = apply('writer', 'CREATE_LABEL', change={'label': {'name': 'unit-writer', 'color': 'abcdef'}}, override_target=org_target)['label']
         denied = {**org_target, 'operationId': str(uuid.uuid4()), 'kind': 'DISCUSSION_RESOURCE_OPERATION_KIND_DELETE_LABEL', 'resourceId': label['id'], 'expectedRevision': label['revision']}
         smoke.rpc(actors['coder']['session'], 'RepositoryService/SubmitDiscussionResourceOperation', denied, expected=403)
         apply('writer', 'DELETE_LABEL', resource=label, override_target=org_target)
+        label = apply('pullwriter', 'CREATE_LABEL', change={'label': {'name': 'pull-unit-writer', 'color': 'abcdef'}}, override_target=org_target)['label']
+        apply('pullwriter', 'DELETE_LABEL', resource=label, override_target=org_target)
         # Browser uses only owned repositories and the same in-memory managed session.
         if not args.skip_browser:
             for discussion, kind in [(issue, 'issue'), (pull, 'pull')]:

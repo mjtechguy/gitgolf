@@ -328,7 +328,8 @@ func resourceNative(m *golfv1.SubmitDiscussionResourceOperationRequest) (method,
 		}
 		var due any
 		if d.DueDate != "" {
-			due = d.DueDate + "T00:00:00Z"
+			// Native creation treats Unix zero as unset; edits already use end-of-day.
+			due = d.DueDate + "T23:59:59Z"
 		}
 		return method, suffix, map[string]any{"title": d.Title, "description": d.Description, "state": state, "due_on": due}
 	}

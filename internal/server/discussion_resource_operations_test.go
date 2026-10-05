@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
@@ -168,7 +169,11 @@ func (f *resourceFixture) serveResources(w http.ResponseWriter, r *http.Request)
 		var date *string
 		_ = json.Unmarshal(body["due_on"], &date)
 		if date != nil {
-			*date = strings.TrimSuffix(*date, "T00:00:00Z") + "T23:59:59Z"
+			parsed, err := time.Parse(time.RFC3339, *date)
+			if err != nil {
+				panic("invalid native fixture deadline")
+			}
+			*date = parsed.UTC().Format("2006-01-02") + "T23:59:59Z"
 		}
 		v := forgeDiscussionMilestone{ID: target, Title: readString("title"), Description: readString("description"), State: readString("state"), OpenIssues: proto.Int64(0), ClosedIssues: proto.Int64(0), DueOn: date}
 		if f.failure != "ignored" {
@@ -365,6 +370,12 @@ func TestDiscussionResourceMilestoneDraftBoundaries(t *testing.T) {
 	if e := validateResourceRequest(m); e != nil {
 		t.Fatal(e)
 	}
+	_, _, payload := resourceNative(m)
+	due, err := time.Parse(time.RFC3339, payload.(map[string]any)["due_on"].(string))
+	if err != nil || due.Unix() == 0 || due.UTC().Format("2006-01-02") != "1970-01-01" {
+		t.Fatal("earliest native calendar date became the unset deadline sentinel")
+	}
+
 	for name, change := range map[string]func(*golfv1.DiscussionMilestoneDraft){"spaces": func(d *golfv1.DiscussionMilestoneDraft) { d.Title = " milestone " }, "long": func(d *golfv1.DiscussionMilestoneDraft) { d.Title = strings.Repeat("x", 256) }, "impossible-day": func(d *golfv1.DiscussionMilestoneDraft) { d.DueDate = "2026-02-30" }, "before-native-epoch": func(d *golfv1.DiscussionMilestoneDraft) { d.DueDate = "1969-12-31" }, "unknown-state": func(d *golfv1.DiscussionMilestoneDraft) { d.State = golfv1.IssueState_ISSUE_STATE_UNSPECIFIED }} {
 		t.Run(name, func(t *testing.T) {
 			c := proto.Clone(m).(*golfv1.SubmitDiscussionResourceOperationRequest)
