@@ -47,7 +47,7 @@ func (s *Server) rpcHandler() http.Handler {
 		connect.WithReadMaxBytes(16 << 10), connect.WithSendMaxBytes(16 << 20), connect.WithRequireConnectProtocolHeader(),
 		connect.WithConditionalHandlerOptions(func(spec connect.Spec) []connect.HandlerOption {
 			switch spec.Procedure {
-			case golfv1connect.RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure:
+			case golfv1connect.RepositoryReleaseManagementServiceSubmitRepositoryReleaseOperationProcedure, golfv1connect.RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure:
 				return []connect.HandlerOption{connect.WithReadMaxBytes(384 << 10)}
 			case golfv1connect.RepositoryServiceSubmitDiscussionResourceOperationProcedure:
 				return []connect.HandlerOption{connect.WithReadMaxBytes(1 << 20)}
@@ -100,6 +100,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewPullMergeObservationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewStandardPullMergeServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryReleasePublicationServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewRepositoryReleaseManagementServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryRefMutationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryFileMutationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryDeploymentServiceHandler(s, options...))
@@ -171,6 +172,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.StandardPullMergeServiceSubmitStandardPullMergeProcedure, golfv1connect.StandardPullMergeServiceGetStandardPullMergeOperationProcedure,
 			golfv1connect.RepositoryDeploymentServicePrepareStaticDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceCreateRepositoryDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceGetRepositoryDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceListRepositoryDeploymentsProcedure, golfv1connect.RepositoryDeploymentServiceReviewRepositoryDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceActivateRepositoryDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceRevokeRepositoryDeploymentProcedure,
 			golfv1connect.RepositoryReleasePublicationServiceSubmitRepositoryReleasePublicationProcedure, golfv1connect.RepositoryReleasePublicationServiceGetRepositoryReleasePublicationOperationProcedure,
+			golfv1connect.RepositoryReleaseManagementServiceSubmitRepositoryReleaseOperationProcedure, golfv1connect.RepositoryReleaseManagementServiceGetRepositoryReleaseOperationProcedure,
 			golfv1connect.RepositoryRefMutationServiceSubmitRepositoryRefMutationProcedure, golfv1connect.RepositoryRefMutationServiceGetRepositoryRefMutationOperationProcedure,
 			golfv1connect.RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure, golfv1connect.RepositoryFileMutationServiceGetRepositoryFileMutationOperationProcedure,
 			golfv1connect.RepositoryServiceSubmitDiscussionResourceOperationProcedure, golfv1connect.RepositoryServiceGetDiscussionResourceOperationProcedure,
@@ -226,7 +228,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		}
 		limit := int64(16 << 10)
 		switch procedure {
-		case golfv1connect.RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure:
+		case golfv1connect.RepositoryReleaseManagementServiceSubmitRepositoryReleaseOperationProcedure, golfv1connect.RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure:
 			limit = 384 << 10
 		case golfv1connect.RepositoryServiceSubmitDiscussionResourceOperationProcedure:
 			limit = 1 << 20

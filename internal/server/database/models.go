@@ -1268,6 +1268,36 @@ type GolfRepositoryRefMutationEvent struct {
 	OccurredAt  time.Time
 }
 
+type GolfRepositoryReleaseOperation struct {
+	ID               int64
+	UserID           int64
+	ForgeURL         string
+	ActorID          int64
+	OperationID      string
+	RepositoryID     int64
+	OwnerID          int64
+	RepositoryOwner  string
+	RepositoryName   string
+	AccessRevision   string
+	ReleaseID        int64
+	AssetID          int64
+	Kind             int32
+	ExpectedRevision string
+	InputFingerprint []byte
+	Phase            string
+	ResultAssetID    int64
+	FailureCode      string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+type GolfRepositoryReleaseOperationEvent struct {
+	ID          int64
+	OperationID int64
+	Phase       string
+	OccurredAt  time.Time
+}
+
 type GolfRepositoryReleasePublication struct {
 	ID               int64
 	UserID           int64

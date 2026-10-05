@@ -41,7 +41,7 @@ func wireRepositoryRelease(row forgeRepositoryRelease) (*golfv1.RepositoryReleas
 	if row.Author != nil && (!profileText(row.Author.FullName, 1024, false) || !profileText(row.Author.AvatarURL, 4096, false)) {
 		return nil, errInvalidForgeResponse
 	}
-	result := &golfv1.RepositoryRelease{Id: strconv.FormatInt(row.ID, 10), Title: row.Title, TagName: row.TagName, TargetCommitish: row.TargetCommitish, BodyMarkdown: row.Body, Draft: *row.Draft, Prerelease: *row.Prerelease, CreatedAt: row.CreatedAt, PublishedAt: row.PublishedAt, Author: wirePullUser(row.Author), Assets: []*golfv1.RepositoryReleaseAsset{}, AssetCount: strconv.Itoa(len(row.Assets))}
+	result := &golfv1.RepositoryRelease{Id: strconv.FormatInt(row.ID, 10), Title: row.Title, TagName: row.TagName, TargetCommitish: row.TargetCommitish, BodyMarkdown: row.Body, Draft: *row.Draft, Prerelease: *row.Prerelease, CreatedAt: row.CreatedAt, PublishedAt: row.PublishedAt, Author: wirePullUser(row.Author), Assets: []*golfv1.RepositoryReleaseAsset{}, AssetCount: strconv.Itoa(len(row.Assets)), Revision: releaseRevision(row)}
 	seen := map[int64]bool{}
 	for _, asset := range row.Assets {
 		if asset.ID <= 0 || seen[asset.ID] || asset.Name == "" || !profileText(asset.Name, 1024, false) || asset.Size == nil || *asset.Size < 0 || asset.DownloadCount == nil || *asset.DownloadCount < 0 || !validRuleTime(asset.CreatedAt) {

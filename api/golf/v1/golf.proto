@@ -4056,6 +4056,7 @@ message RepositoryRelease {
   User author = 10;
   repeated RepositoryReleaseAsset assets = 11;
   string asset_count = 12;
+  string revision = 13;
 }
 message ListRepositoryReleasesRequest {
   RepositoryKey repository = 1;
@@ -4507,3 +4508,59 @@ message DiscussionTimelineEvent {
   string referenced_title = 11;
 }
 message ListDiscussionTimelineResponse { repeated DiscussionTimelineEvent events = 1; PageResponse page = 2; }
+
+// Release management uses original intent journals; inspection never resends writes.
+service RepositoryReleaseManagementService {
+  rpc SubmitRepositoryReleaseOperation(SubmitRepositoryReleaseOperationRequest) returns (SubmitRepositoryReleaseOperationResponse);
+  rpc GetRepositoryReleaseOperation(GetRepositoryReleaseOperationRequest) returns (GetRepositoryReleaseOperationResponse);
+}
+enum RepositoryReleaseOperationKind {
+  REPOSITORY_RELEASE_OPERATION_KIND_UNSPECIFIED = 0;
+  REPOSITORY_RELEASE_OPERATION_KIND_EDIT = 1;
+  REPOSITORY_RELEASE_OPERATION_KIND_DELETE = 2;
+  REPOSITORY_RELEASE_OPERATION_KIND_UPLOAD_ASSET = 3;
+  REPOSITORY_RELEASE_OPERATION_KIND_RENAME_ASSET = 4;
+  REPOSITORY_RELEASE_OPERATION_KIND_DELETE_ASSET = 5;
+}
+message SubmitRepositoryReleaseOperationRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string access_revision = 4;
+  string operation_id = 5;
+  string release_id = 6;
+  string expected_revision = 7;
+  RepositoryReleaseOperationKind kind = 8;
+  string title = 9;
+  string body_markdown = 10;
+  bool draft = 11;
+  bool prerelease = 12;
+  string asset_id = 13;
+  string asset_name = 14;
+  bytes asset_content = 15;
+}
+message GetRepositoryReleaseOperationRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string operation_id = 4;
+}
+message RepositoryReleaseOperation {
+  string contract = 1;
+  string operation_id = 2;
+  RepositoryKey repository = 3;
+  string repository_id = 4;
+  string owner_id = 5;
+  string actor_id = 6;
+  string release_id = 7;
+  RepositoryReleaseOperationKind kind = 8;
+  string expected_revision = 9;
+  string input_sha256 = 10;
+  RepositoryReleasePublicationPhase phase = 11;
+  string failure_code = 12;
+  string asset_id = 13;
+  string created_at = 14;
+  string updated_at = 15;
+}
+message SubmitRepositoryReleaseOperationResponse { RepositoryReleaseOperation operation = 1; }
+message GetRepositoryReleaseOperationResponse { RepositoryReleaseOperation operation = 1; }
