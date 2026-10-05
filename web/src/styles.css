@@ -898,6 +898,7 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .execution-console-status { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:6px var(--panel-padding); color:var(--muted); font-size:.8125rem; border-top:1px solid var(--line); }
 @media(max-width:700px) { .execution-console-toolbar button { min-height:44px; } .execution-console-toolbar>.search-input { flex-basis:100%; } .execution-console-toolbar>.search-input[data-open="false"] { display:none; } }
 @media(max-width:700px) { .execution-terminal-host { height:400px; } }
+@media(max-width:400px) { .execution-console-toolbar { padding-inline:8px; } .execution-console-toolbar .row-actions { gap:4px; flex-wrap:nowrap; } .execution-console-toolbar .button[aria-label="Follow output"] { width:36px; padding-inline:0; gap:0; } .workflow-log-follow-label { display:none; } }
 @media(max-width:700px) {
  .workflow-run-summary { flex-direction:column; }
  .workflow-run-metadata>dl { grid-template-columns:repeat(2,minmax(0,1fr)); }
