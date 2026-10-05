@@ -1248,3 +1248,10 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .discussion-milestone-due { display:flex; align-items:center; flex-wrap:wrap; gap:5px; margin-top:7px; color:var(--muted); }
 .discussion-milestone-details { margin-top:7px; }
 .discussion-milestone-details>p { margin-top:6px; white-space:pre-wrap; }
+
+.discussion-metadata-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+.discussion-metadata-heading h3 { margin-bottom:0; }
+.discussion-metadata-editor { margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid var(--line); }
+.discussion-metadata-editor .issue-composer { border:0; padding:0; margin:0; }
+.discussion-metadata-editor select { width:100%; min-width:0; }
+.discussion-metadata-editor .row-actions { flex-wrap:wrap; }

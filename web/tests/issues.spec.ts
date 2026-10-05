@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import {
-  DiscussionMetadataSchema, DiscussionMilestoneSchema, DiscussionLabelSchema, UpdateIssueRequestSchema, UpdateIssueResponseSchema, CreateIssueRequestSchema, CreateIssueResponseSchema, CreateIssueCommentRequestSchema, CreateIssueCommentResponseSchema,
+  ListRepositoryMilestonesRequestSchema, ListRepositoryMilestonesResponseSchema, DiscussionMetadataSchema, DiscussionMilestoneSchema, DiscussionLabelSchema, UpdateIssueRequestSchema, UpdateIssueResponseSchema, CreateIssueRequestSchema, CreateIssueResponseSchema, CreateIssueCommentRequestSchema, CreateIssueCommentResponseSchema,
   GetAuthenticationOptionsResponseSchema, GetIssueMutationRequestSchema, GetIssueMutationResponseSchema, GetIssueResponseSchema,
   GetRepositoryResponseSchema, GetSessionResponseSchema, IssueCommentSchema, IssueMutationKind, IssueMutationSchema, IssueMutationState,
   IssueSchema, IssueState, ListCapabilitiesResponseSchema, ListIssueCommentsRequestSchema, ListIssueCommentsResponseSchema,
@@ -25,6 +25,7 @@ async function backend(page: Page) {
     user, signedIn: true, repoId: repository.id, issueId: issue.id, issue: { ...issue }, comments: [comment],
     issueReadWait: undefined as Promise<void> | undefined, issueRows: undefined as Issue[] | undefined, listPages: [] as number[], emptyFirst: false, unknown: false, drop: false, rejected: false, missingObject: false, mismatch: false,
     updates: [] as UpdateIssueRequest[], updateFailure: '', creates: [] as CreateIssueRequest[], posts: [] as CreateIssueCommentRequest[], inspections: [] as string[], pages: [] as number[],
+    canEditMilestone: false, milestones: [create(DiscussionMilestoneSchema, { id:'51', title:'PRIVATE_MILESTONE_A', state:IssueState.OPEN }), create(DiscussionMilestoneSchema, { id:'52', title:'PRIVATE_MILESTONE_B', state:IssueState.CLOSED })], milestonePages: [] as number[], milestoneMore:false,
     records: new Map<string, IssueMutation>(), errors: {} as Record<string, Failure>, barrier: undefined as Promise<void> | undefined,
   };
   await page.route('**/rpc/**', async (route) => {
@@ -39,6 +40,11 @@ async function backend(page: Page) {
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
     if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository: { ...repository, id: state.repoId } });
+    if (method === 'ListRepositoryMilestones') {
+      const input=request(route,ListRepositoryMilestonesRequestSchema); expect(input.repository).toMatchObject(repoKey);expect(input.repositoryId).toBe(state.repoId);expect(input.state).toBe(IssueState.ALL);
+      const number=input.page?.page||1;state.milestonePages.push(number);
+      return respond(route,ListRepositoryMilestonesResponseSchema,{milestones:state.milestoneMore?state.milestones.slice(number-1,number):state.milestones,canEditMilestone:state.canEditMilestone,page:state.milestoneMore&&number===1?{nextPage:2}:undefined});
+    }
     if (method === 'ListIssues') {
       const input = request(route, ListIssuesRequestSchema), number = input.page?.page || 1; state.listPages.push(number);
       return respond(route, ListIssuesResponseSchema, state.issueRows ? { issues: state.issueRows.slice((number - 1) * 2, number * 2), page: number === 1 ? { nextPage: 2 } : undefined } : { issues: [state.issue] });
@@ -59,7 +65,7 @@ async function backend(page: Page) {
         issueId: state.issueId, number: 12, failureCode: state.updateFailure,
       });
       state.records.set(input.idempotencyKey, mutation);
-      if (!state.updateFailure) state.issue = { ...state.issue, ...(input.title !== undefined ? { title: input.title } : {}), ...(input.body !== undefined ? { body: input.body } : {}), ...(input.state !== IssueState.UNSPECIFIED ? { state: input.state } : {}), revision: 'b'.repeat(64) };
+      if (!state.updateFailure) state.issue = { ...state.issue, ...(input.title !== undefined ? { title: input.title } : {}), ...(input.body !== undefined ? { body: input.body } : {}), ...(input.state !== IssueState.UNSPECIFIED ? { state: input.state } : {}), ...(input.milestone ? {metadata: create(DiscussionMetadataSchema,{...create(DiscussionMetadataSchema,state.issue.metadata),milestoneKnown:true,milestone:state.milestones.find(row=>row.id===input.milestone!.milestoneId)})}:{}), revision: 'b'.repeat(64) };
       if (state.barrier) await state.barrier;
       if (state.drop) return route.abort('failed');
       return respond(route, UpdateIssueResponseSchema, { mutation: state.mismatch ? { ...mutation, issueId: '9999' } : mutation, issue: mutation.state === IssueMutationState.SUCCEEDED && !state.missingObject ? state.issue : undefined });
@@ -525,4 +531,43 @@ test('issue metadata preserves unknown sections and explicitly known empty inven
   state.issue.metadata = create(DiscussionMetadataSchema, { assigneesKnown: true, labels: [{ id: '41', name: 'UNVERIFIED_LABEL', color: 'ffffff' }] }); await page.getByRole('button', { name: 'Refresh issue', exact: true }).click(); await expect(sidebar.getByRole('region', { name: 'Assignees', exact: true })).toHaveText('AssigneesNone'); await expect(sidebar.getByRole('region', { name: 'Labels', exact: true })).toHaveCount(0); await expect(sidebar.getByRole('region', { name: 'Milestone', exact: true })).toHaveCount(0); await expect(sidebar).not.toContainText('UNVERIFIED_LABEL');
   state.issue.metadata = create(DiscussionMetadataSchema, { labelsKnown: true, assigneesKnown: true, milestoneKnown: true }); await page.getByRole('button', { name: 'Refresh issue', exact: true }).click(); await expect(sidebar.locator('.discussion-metadata>section')).toHaveText(['AssigneesNone', 'LabelsNone', 'MilestoneNone']);
   state.issue.metadata = create(DiscussionMetadataSchema, { milestoneKnown: true, milestone: { id: '51', title: 'Finished milestone', state: IssueState.CLOSED, openIssues: 0n, closedIssues: 4n } }); await page.getByRole('button', { name: 'Refresh issue', exact: true }).click(); await expect(sidebar.locator('.discussion-milestone-state')).toHaveText('Closed'); await expect(sidebar.locator('.discussion-milestone-state svg')).toHaveClass(/lucide-circle-check/); await expect(sidebar.locator('.discussion-milestone-due')).toHaveCount(0);
+});
+
+function enableMilestones(state: Awaited<ReturnType<typeof backend>>) {
+  state.canEditMilestone=true;
+  state.issue.metadata=create(DiscussionMetadataSchema,{milestoneKnown:true,milestone:state.milestones[0]});
+}
+test('milestone pencil opens the shared inline editor and saves change then explicit None without other fields',async({page})=>{
+ const state=await backend(page);enableMilestones(state);await page.goto('/alex/project/issues/12');
+ await expect(page.getByRole('combobox',{name:'Issue milestone',exact:true})).toHaveCount(0);
+ for(const [expected,selected] of [['51','52'],['52','0']]){
+  await page.getByRole('button',{name:'Edit issue milestone',exact:true}).click();const editor=page.getByRole('region',{name:'Edit issue milestone',exact:true});
+  await expect(editor.getByRole('button',{name:'Save changes',exact:true})).toBeDisabled();await editor.getByRole('combobox',{name:'Issue milestone',exact:true}).selectOption(selected!);
+  await expect(page.getByRole('button',{name:'Edit issue title',exact:true})).toBeDisabled();await editor.getByRole('button',{name:'Save changes',exact:true}).click();await expect(editor).toHaveCount(0);
+  const request=state.updates.at(-1)!;expect(request.milestone).toMatchObject({expectedMilestoneId:expected,milestoneId:selected});expect(request.title).toBeUndefined();expect(request.body).toBeUndefined();expect(request.state).toBe(IssueState.UNSPECIFIED);
+ }
+ expect(state.issue.title).toBe(issue.title);expect(state.issue.body).toBe(issue.body);expect(state.issue.state).toBe(issue.state);expect(state.updates).toHaveLength(2);expect(await stored(page)).toEqual([]);
+});
+test('milestone editing uses real paginated choices and preserves read-only/unknown capability',async({page})=>{
+ const state=await backend(page);enableMilestones(state);state.milestoneMore=true;await page.goto('/alex/project/issues/12');await page.getByRole('button',{name:'Edit issue milestone',exact:true}).click();
+ const editor=page.getByRole('region',{name:'Edit issue milestone',exact:true});await expect(editor.getByRole('option',{name:'PRIVATE_MILESTONE_B (closed)',exact:true})).toHaveCount(0);await editor.getByRole('button',{name:'Load more milestones',exact:true}).click();await expect(editor.getByRole('option',{name:'PRIVATE_MILESTONE_B (closed)',exact:true})).toHaveCount(1);expect(state.milestonePages.slice(-2)).toEqual([1,2]);expect(state.milestonePages.every(number=>number===1||number===2)).toBe(true);
+ await editor.getByRole('button',{name:'Close editor',exact:true}).click();state.canEditMilestone=false;await page.reload();await expect(page.getByRole('complementary',{name:'Issue metadata'})).toContainText('PRIVATE_MILESTONE_A');await expect(page.getByRole('button',{name:'Edit issue milestone',exact:true})).toHaveCount(0);expect(state.updates).toHaveLength(0);
+ state.canEditMilestone=true;state.issue.metadata=undefined;await page.reload();await expect(page.getByRole('button',{name:'Edit issue milestone',exact:true})).toHaveCount(0);
+});
+test('lost milestone acknowledgement reloads into original-key inspection without another update',async({page})=>{
+ const state=await backend(page);enableMilestones(state);state.drop=true;await page.goto('/alex/project/issues/12');await page.getByRole('button',{name:'Edit issue milestone',exact:true}).click();
+ const editor=page.getByRole('region',{name:'Edit issue milestone',exact:true});await editor.getByRole('combobox',{name:'Issue milestone',exact:true}).selectOption('52');await editor.getByRole('button',{name:'Save changes',exact:true}).click();await expect(editor.getByRole('button',{name:'Check request status',exact:true})).toBeEnabled();
+ const key=state.updates[0]!.idempotencyKey;expect(JSON.parse((await stored(page))[0]![1])).toEqual({key,kind:'update',repositoryId:repository.id,issueId:issue.id,number:12,editField:'milestone'});expect((await stored(page))[0]![1]).not.toContain('PRIVATE_MILESTONE');
+ await page.reload();await page.getByRole('button',{name:'Check request status',exact:true}).click();await expect(page.getByRole('region',{name:'Edit issue milestone',exact:true})).toHaveCount(0);expect(state.updates).toHaveLength(1);expect(state.inspections).toEqual([key]);
+});
+for(const theme of ['dark','light'])test(`milestone editor is compact and denied inventories mask private content in ${theme}`,async({page})=>{
+ const state=await backend(page);enableMilestones(state);await page.setViewportSize({width:390,height:900});await page.addInitScript(value=>localStorage.setItem('golf.theme',value),theme);await page.goto('/alex/project/issues/12');await page.getByRole('button',{name:'Edit issue milestone',exact:true}).click();
+ await expect(page.getByRole('combobox',{name:'Issue milestone',exact:true})).toBeFocused();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:test.info().outputPath(`milestone-editor-${theme}-390.png`),fullPage:true});
+ state.errors.ListRepositoryMilestones='permission_denied';await page.reload();await expect(page.getByRole('alert')).toBeVisible();await expect(page.getByText('PRIVATE_BODY <script>alert(1)</script>',{exact:true})).toHaveCount(0);await expect(page.getByRole('combobox',{name:'Issue milestone',exact:true})).toHaveCount(0);expect(state.updates).toHaveLength(0);
+});
+
+test('unavailable milestone inventory exposes retry without hiding the authorized issue',async({page})=>{
+ const state=await backend(page);enableMilestones(state);state.errors.ListRepositoryMilestones='unavailable';await page.goto('/alex/project/issues/12');
+ const sidebar=page.getByRole('complementary',{name:'Issue metadata',exact:true});await expect(sidebar.getByRole('alert')).toBeVisible();await expect(page.locator('#issue-detail-title')).toBeVisible();
+ delete state.errors.ListRepositoryMilestones;await sidebar.getByRole('button',{name:'Try again',exact:true}).click();await expect(page.getByRole('button',{name:'Edit issue milestone',exact:true})).toBeVisible();expect(state.updates).toHaveLength(0);
 });
