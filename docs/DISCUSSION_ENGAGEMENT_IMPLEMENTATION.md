@@ -1,0 +1,20 @@
+# Discussion engagement and activity
+
+Source implementation, 2026-10-05. This packet is not deployed/native-qualified evidence and does not mark collaboration or Settings complete.
+
+The existing discussion-resource journal now supports own issue/ordinary-comment reactions and own issue/PR subscriptions. No new queue, service container or native forge storage writes are introduced. Migration `202610050073` extends the immutable journal's explicit kinds and namespace binding. Saved requests contain only IDs, revisions and operation keys; repeated submission/inspection never dispatches an unresolved effect again. A witnessed supported native success and independently authorized matching current state are both required before SUCCEEDED. Target/actor changes and stale observations refuse before dispatch. Lost acknowledgements or ignored effects remain DISPATCH_UNKNOWN and retain the repository lifecycle fence.
+
+`DiscussionCollaborationService.GetDiscussionEngagement` returns complete bounded reaction counts and the current actor's reaction flags, own subscription state, actor login and an observation revision bound to the immutable repository/issue/comment identities. Issue reactions traverse at most100 provider pages/10000 reactions; comment reactions are bounded to10000 rows. Oversized, malformed or duplicate normal-user observations fail closed rather than report an absent own reaction. Ghost/deleted authors contribute counts without inventing a normal account. Only the authenticated current actor can subscribe; an administrator cannot use this endpoint to subscribe another user. Native locked-issue and blocked-user rules remain authoritative. Delegated API credentials cannot use this session-only surface.
+
+`ListDiscussionTimeline` reads bounded native activity pages and exposes ordinary event metadata. Nested same-repository references are independently fetched with their own issue/pull read authority and immutable ID check. Other references are omitted. Arbitrary non-comment event bodies are omitted. Native timeline X-Total-Count is the filtered current page length, not a global total: Golf offers another native page after any nonempty page and labels activity as loaded observations. Empty filtered pages do not establish a complete historical count. Rich structured events, cross-repository references and unified interleaving with comments remain acceptance work.
+
+The shared compact React controls use existing Query caching, operation inspection/state handling, Lucide actions and global CSS. New reaction choices open explicitly. Issue descriptions and ordinary issue/PR comments share the same controls. The new non-comment activity panel currently appears on issue detail; the shared component can be adopted by the PR conversation owner.
+
+Checks performed in the isolated worktree:
+
+- Focused real PostgreSQL `TestDiscussionEngagement` passes own add/remove reaction and subscribe/unsubscribe lifecycle, original-key replay, phase events, stale/other-user refusal, immutable target changes, lost/ignored effects and cross-repository timeline redaction.
+- Existing `TestDiscussionResource` PostgreSQL regression passes all previous operations and uncertainty cases.
+- Four focused Playwright cases pass exact retained target fields, own subscription login, reload/inspection without resend and keyboard/mobile light/dark layout. The first run used fallback fonts due to isolated dependency symlink serving limits; corrected isolated Vite configuration permits the existing dependency root. This is controlled browser API evidence, not native deployment evidence.
+- TypeScript typecheck and Buf lint pass.
+
+Remaining stream2 work: repository issue templates/forms and attachments, organization-level label administration and inherited label editing, own unread notification inbox/mark-read operations, richer linked references, native served qualification, and email preferences/delivery integration for native issue subscriptions. Subscribing establishes the native forge subscription only; it does not prove Golf email delivery for collaboration events.

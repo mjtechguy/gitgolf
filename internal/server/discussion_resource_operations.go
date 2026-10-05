@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -70,6 +71,7 @@ func validateResourceRequest(m *golfv1.SubmitDiscussionResourceOperationRequest)
 	}
 	create := strings.HasPrefix(k, "CREATE_")
 	comment := k == "UPDATE_COMMENT" || k == "DELETE_COMMENT"
+	engagement := engagementKind(k)
 	if create {
 		if m.ResourceId != "" || m.ExpectedRevision != "" {
 			return invalid("Creation cannot adopt an existing resource.")
@@ -82,7 +84,7 @@ func validateResourceRequest(m *golfv1.SubmitDiscussionResourceOperationRequest)
 			return invalid("Bind the original resource revision.")
 		}
 	}
-	if comment {
+	if comment || engagement {
 		if _, e := discussionID(m.IssueId); e != nil {
 			return e
 		}
@@ -90,9 +92,23 @@ func validateResourceRequest(m *golfv1.SubmitDiscussionResourceOperationRequest)
 			return e
 		}
 	} else if m.IssueId != "" || m.Number != 0 || m.PullRequest {
-		return invalid("Only comments accept a discussion identity.")
+		return invalid("Only comments and engagement accept a discussion identity.")
+	}
+	if !engagement && (m.SubscriptionLogin != "" || m.ReactionComment) {
+		return invalid("Only own subscription operations accept an actor login.")
 	}
 	switch k {
+	case "ADD_REACTION", "REMOVE_REACTION":
+		if !slices.Contains(discussionReactionNames, m.GetReaction()) || m.SubscriptionLogin != "" || !m.ReactionComment && m.ResourceId != m.IssueId {
+			return invalid("Select a supported own reaction.")
+		}
+	case "SUBSCRIBE", "UNSUBSCRIBE":
+		if m.ResourceId != m.IssueId || m.Change != nil || m.SubscriptionLogin == "" || m.ReactionComment {
+			return invalid("Own subscription changes require the issue identity and current actor login.")
+		}
+		if _, e := repositoryPath(repositoryKey{m.SubscriptionLogin, "subscription"}); e != nil {
+			return e
+		}
 	case "CREATE_LABEL", "UPDATE_LABEL":
 		v, ok := m.Change.(*golfv1.SubmitDiscussionResourceOperationRequest_Label)
 		if !ok || v.Label == nil {
@@ -163,6 +179,7 @@ func (s *Server) activeDiscussionUnit(ctx context.Context, token forgeCredential
 }
 
 type discussionResourceRecord struct {
+	EngagementComment                                                                           bool
 	ID, UserID, ActorID, RepositoryID, ResourceID, ObservedID, IssueID, Number, CommentAuthorID int64
 	ForgeURL, OperationID, Owner, Name, Kind, Revision, Phase, Failure                          string
 	Pull                                                                                        bool
@@ -170,10 +187,10 @@ type discussionResourceRecord struct {
 	Created, Updated                                                                            time.Time
 }
 
-const discussionResourceColumns = `id,user_id,forge_url,actor_id,operation_id,repository_id,repository_owner,repository_name,kind,resource_id,observed_resource_id,expected_revision,issue_id,issue_number,pull_request,comment_author_id,input_fingerprint,phase,failure_code,created_at,updated_at`
+const discussionResourceColumns = `id,user_id,forge_url,actor_id,operation_id,repository_id,repository_owner,repository_name,kind,resource_id,observed_resource_id,expected_revision,issue_id,issue_number,pull_request,comment_author_id,input_fingerprint,phase,failure_code,created_at,updated_at,reaction_comment`
 
 func scanDiscussionResource(row interface{ Scan(...any) error }) (r discussionResourceRecord, e error) {
-	e = row.Scan(&r.ID, &r.UserID, &r.ForgeURL, &r.ActorID, &r.OperationID, &r.RepositoryID, &r.Owner, &r.Name, &r.Kind, &r.ResourceID, &r.ObservedID, &r.Revision, &r.IssueID, &r.Number, &r.Pull, &r.CommentAuthorID, &r.Fingerprint, &r.Phase, &r.Failure, &r.Created, &r.Updated)
+	e = row.Scan(&r.ID, &r.UserID, &r.ForgeURL, &r.ActorID, &r.OperationID, &r.RepositoryID, &r.Owner, &r.Name, &r.Kind, &r.ResourceID, &r.ObservedID, &r.Revision, &r.IssueID, &r.Number, &r.Pull, &r.CommentAuthorID, &r.Fingerprint, &r.Phase, &r.Failure, &r.Created, &r.Updated, &r.EngagementComment)
 	return
 }
 func wireDiscussionResource(r discussionResourceRecord) *golfv1.DiscussionResourceOperation {
@@ -208,6 +225,9 @@ func (s *Server) readResourceMilestone(ctx context.Context, token forgeCredentia
 }
 
 func (s *Server) resourceAuthority(ctx context.Context, session string, token forgeCredential, r discussionResourceRecord) (err error) {
+	if engagementKind(r.Kind) {
+		return s.engagementAuthority(ctx, session, token, r)
+	}
 	return s.withRepositoryRead(ctx, session, token, repositoryKey{r.Owner, r.Name}, func(base string, repo Repository) error {
 		if repo.ID != r.RepositoryID {
 			return errIssueTargetChanged
@@ -302,6 +322,9 @@ func (s *Server) preflightDiscussionResource(ctx context.Context, session string
 }
 func resourceNative(m *golfv1.SubmitDiscussionResourceOperationRequest) (method, suffix string, payload any) {
 	k := resourceKind(m.Kind)
+	if engagementKind(k) {
+		return engagementNative(m, m.SubscriptionLogin)
+	}
 	collection := "/labels"
 	if strings.HasSuffix(k, "_MILESTONE") {
 		collection = "/milestones"
@@ -459,7 +482,7 @@ func (s *Server) SubmitDiscussionResourceOperation(ctx context.Context, req *con
 	targetID, _ := discussionID(m.ResourceId)
 	issueID, _ := discussionID(m.IssueId)
 	k := keyFrom(m.Repository)
-	r := discussionResourceRecord{ActorID: actor.ID, RepositoryID: repoID, Owner: k.Owner, Name: k.Name, Kind: resourceKind(m.Kind), ResourceID: targetID, IssueID: issueID, Number: int64(m.Number), Pull: m.PullRequest, Revision: m.ExpectedRevision, OperationID: m.OperationId, Fingerprint: resourceFingerprint(m), ForgeURL: s.config.GiteaURL}
+	r := discussionResourceRecord{ActorID: actor.ID, RepositoryID: repoID, Owner: k.Owner, Name: k.Name, Kind: resourceKind(m.Kind), ResourceID: targetID, IssueID: issueID, Number: int64(m.Number), Pull: m.PullRequest, EngagementComment: m.ReactionComment, Revision: m.ExpectedRevision, OperationID: m.OperationId, Fingerprint: resourceFingerprint(m), ForgeURL: s.config.GiteaURL}
 	fresh := false
 	var previous discussionResourceRecord
 	exists := false
@@ -526,7 +549,7 @@ func (s *Server) SubmitDiscussionResourceOperation(ctx context.Context, req *con
 		if !errors.Is(e, sql.ErrNoRows) {
 			return errStorageUnavailable
 		}
-		r, e = scanDiscussionResource(tx.QueryRowContext(held, `INSERT INTO golf_discussion_resource_operations(user_id,forge_url,actor_id,operation_id,repository_id,repository_owner,repository_name,kind,resource_id,expected_revision,issue_id,issue_number,pull_request,comment_author_id,input_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING `+discussionResourceColumns, c.UserID, r.ForgeURL, r.ActorID, r.OperationID, r.RepositoryID, r.Owner, r.Name, r.Kind, r.ResourceID, r.Revision, r.IssueID, r.Number, r.Pull, r.CommentAuthorID, r.Fingerprint))
+		r, e = scanDiscussionResource(tx.QueryRowContext(held, `INSERT INTO golf_discussion_resource_operations(user_id,forge_url,actor_id,operation_id,repository_id,repository_owner,repository_name,kind,resource_id,expected_revision,issue_id,issue_number,pull_request,comment_author_id,input_fingerprint,reaction_comment) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING `+discussionResourceColumns, c.UserID, r.ForgeURL, r.ActorID, r.OperationID, r.RepositoryID, r.Owner, r.Name, r.Kind, r.ResourceID, r.Revision, r.IssueID, r.Number, r.Pull, r.CommentAuthorID, r.Fingerprint, r.EngagementComment))
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -538,7 +561,7 @@ func (s *Server) SubmitDiscussionResourceOperation(ctx context.Context, req *con
 	}
 	result := &golfv1.SubmitDiscussionResourceOperationResponse{}
 	if fresh {
-		if e = s.preflightDiscussionResource(ctx, session, token, r); e != nil {
+		if e = s.preflightResourceRequest(ctx, session, token, r, m); e != nil {
 			r, e = s.advanceDiscussionResource(ctx, session, token, r, "REJECTED", 0, nil)
 			if e != nil {
 				return nil, lifecycleRPCError(e)
@@ -558,7 +581,7 @@ func (s *Server) SubmitDiscussionResourceOperation(ctx context.Context, req *con
 				if e != nil {
 					return e
 				}
-				if e = s.preflightDiscussionResource(held, session, token, r); e != nil {
+				if e = s.preflightResourceRequest(held, session, token, r, m); e != nil {
 					return e
 				}
 				held = context.WithValue(held, discussionResourcePermitKey{}, discussionResourcePermit{r, proto.Clone(m).(*golfv1.SubmitDiscussionResourceOperationRequest)})
@@ -594,6 +617,9 @@ func (s *Server) SubmitDiscussionResourceOperation(ctx context.Context, req *con
 }
 func (s *Server) dispatchDiscussionResource(ctx context.Context, session string, token forgeCredential, r discussionResourceRecord, m *golfv1.SubmitDiscussionResourceOperationRequest, out *golfv1.SubmitDiscussionResourceOperationResponse) (id int64, e error) {
 	base, _ := repositoryPath(repositoryKey{r.Owner, r.Name})
+	if engagementKind(r.Kind) {
+		return s.dispatchEngagement(ctx, session, token, r, m)
+	}
 	method, suffix, payload := resourceNative(m)
 	create := strings.HasPrefix(r.Kind, "CREATE_")
 	del := method == http.MethodDelete
@@ -713,6 +739,22 @@ func (s *Server) dispatchDiscussionResource(ctx context.Context, session string,
 // Reobserve the exact target and current source after waiting for the completion
 // transaction too. This is observational; the native APIs have no external CAS.
 func (s *Server) confirmDiscussionResource(ctx context.Context, session string, token forgeCredential, r discussionResourceRecord, m *golfv1.SubmitDiscussionResourceOperationRequest, id int64) error {
+	if engagementKind(r.Kind) {
+		if id != r.ResourceID {
+			return errIssueTargetChanged
+		}
+		if e := s.resourceAuthority(ctx, session, token, r); e != nil {
+			return e
+		}
+		v, e := s.readDiscussionEngagement(ctx, session, token, engagementTarget(m))
+		if e != nil {
+			return e
+		}
+		if !engagementMatches(m, v) {
+			return errIssueRevisionChanged
+		}
+		return nil
+	}
 	if e := s.resourceAuthority(ctx, session, token, r); e != nil {
 		return e
 	}

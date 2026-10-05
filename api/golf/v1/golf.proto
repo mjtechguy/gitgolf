@@ -4323,6 +4323,10 @@ enum DiscussionResourceOperationKind {
   DISCUSSION_RESOURCE_OPERATION_KIND_DELETE_MILESTONE = 6;
   DISCUSSION_RESOURCE_OPERATION_KIND_UPDATE_COMMENT = 7;
   DISCUSSION_RESOURCE_OPERATION_KIND_DELETE_COMMENT = 8;
+  DISCUSSION_RESOURCE_OPERATION_KIND_ADD_REACTION = 9;
+  DISCUSSION_RESOURCE_OPERATION_KIND_REMOVE_REACTION = 10;
+  DISCUSSION_RESOURCE_OPERATION_KIND_SUBSCRIBE = 11;
+  DISCUSSION_RESOURCE_OPERATION_KIND_UNSUBSCRIBE = 12;
 }
 enum DiscussionResourceOperationPhase {
   DISCUSSION_RESOURCE_OPERATION_PHASE_UNSPECIFIED = 0;
@@ -4355,10 +4359,16 @@ message SubmitDiscussionResourceOperationRequest {
   string issue_id = 7;
   uint32 number = 8;
   bool pull_request = 9;
+  // Only own subscriptions; must match the current native actor login.
+  string subscription_login = 14;
+  // Distinguishes issue and comment ID namespaces, even when IDs happen to match.
+  bool reaction_comment = 15;
   oneof change {
     DiscussionLabelDraft label = 10;
     DiscussionMilestoneDraft milestone = 11;
     string comment_body = 12;
+    // Native reaction identifier; only the current actor can be changed.
+    string reaction = 13;
   }
 }
 message DiscussionResourceOperation {
@@ -4450,3 +4460,50 @@ message RepositoryFileMutationOperation {
 }
 message SubmitRepositoryFileMutationResponse { RepositoryFileMutationOperation operation = 1; }
 message GetRepositoryFileMutationOperationResponse { RepositoryFileMutationOperation operation = 1; }
+
+// Native discussion engagement; session-only mutations use the retained resource journal.
+service DiscussionCollaborationService {
+  rpc GetDiscussionEngagement(GetDiscussionEngagementRequest) returns (GetDiscussionEngagementResponse);
+  rpc ListDiscussionTimeline(ListDiscussionTimelineRequest) returns (ListDiscussionTimelineResponse);
+}
+message DiscussionTarget {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string issue_id = 3;
+  uint32 number = 4;
+  bool pull_request = 5;
+  // Empty targets the issue description; otherwise an ordinary comment in this discussion.
+  string comment_id = 6;
+}
+message DiscussionReaction {
+  string content = 1;
+  uint32 count = 2;
+  bool reacted = 3;
+}
+message GetDiscussionEngagementRequest { DiscussionTarget target = 1; }
+message GetDiscussionEngagementResponse {
+  repeated DiscussionReaction reactions = 1;
+  bool subscribed = 2;
+  // Complete current reaction inventory and subscription, bound to actor/immutable target IDs.
+  // This observation is not atomic with a later native change.
+  string revision = 3;
+  bool can_react = 4;
+  bool can_subscribe = 5;
+  string actor_login = 6;
+}
+message ListDiscussionTimelineRequest { DiscussionTarget target = 1; PageRequest page = 2; }
+message DiscussionTimelineEvent {
+  string id = 1;
+  string kind = 2;
+  User actor = 3;
+  string created_at = 4;
+  string body = 5;
+  string old_title = 6;
+  string new_title = 7;
+  DiscussionLabel label = 8;
+  // Only independently authorized same-repository references are returned.
+  uint32 referenced_number = 9;
+  bool referenced_pull_request = 10;
+  string referenced_title = 11;
+}
+message ListDiscussionTimelineResponse { repeated DiscussionTimelineEvent events = 1; PageResponse page = 2; }

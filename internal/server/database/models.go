@@ -319,6 +319,7 @@ type GolfDiscussionResourceOperation struct {
 	FailureCode        string
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+	ReactionComment    bool
 }
 
 type GolfEmailAttempt struct {

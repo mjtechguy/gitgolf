@@ -1270,3 +1270,14 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .discussion-filter-fields input,.discussion-filter-fields select { width:100%; min-width:0; }
 .discussion-filter-fields .field-help,.discussion-filter-fields .credential-actions { grid-column:1/-1; }
 @media(max-width:720px) { .discussion-filter-fields { grid-template-columns:1fr; padding:12px; } }
+
+/* Shared discussion engagement and native activity, used for issue and PR conversations. */
+.discussion-engagement { padding: .45rem .8rem; border-top: 1px solid var(--line); }
+.discussion-engagement .row-actions { flex-wrap: wrap; gap: .3rem; }
+.reaction-button { min-height: 1.65rem; padding: .15rem .45rem; gap: .3rem; font-size: .8rem; }
+.reaction-button.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel)); }
+.reaction-picker { padding-top: .4rem; }
+.discussion-activity-list { list-style: none; padding: .55rem .8rem; margin: 0; }
+.discussion-activity-list > li { display: flex; align-items: baseline; gap: .5rem; padding: .4rem 0; font-size: .85rem; }
+.discussion-activity-list > li > svg { flex-shrink: 0; }
+.discussion-timeline .browser-panel-heading h2 { display: flex; align-items: center; gap: .4rem; }

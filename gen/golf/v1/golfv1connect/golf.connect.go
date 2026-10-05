@@ -127,6 +127,9 @@ const (
 	// RepositoryFileMutationServiceName is the fully-qualified name of the
 	// RepositoryFileMutationService service.
 	RepositoryFileMutationServiceName = "golf.v1.RepositoryFileMutationService"
+	// DiscussionCollaborationServiceName is the fully-qualified name of the
+	// DiscussionCollaborationService service.
+	DiscussionCollaborationServiceName = "golf.v1.DiscussionCollaborationService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -815,6 +818,12 @@ const (
 	// RepositoryFileMutationServiceGetRepositoryFileMutationOperationProcedure is the fully-qualified
 	// name of the RepositoryFileMutationService's GetRepositoryFileMutationOperation RPC.
 	RepositoryFileMutationServiceGetRepositoryFileMutationOperationProcedure = "/golf.v1.RepositoryFileMutationService/GetRepositoryFileMutationOperation"
+	// DiscussionCollaborationServiceGetDiscussionEngagementProcedure is the fully-qualified name of the
+	// DiscussionCollaborationService's GetDiscussionEngagement RPC.
+	DiscussionCollaborationServiceGetDiscussionEngagementProcedure = "/golf.v1.DiscussionCollaborationService/GetDiscussionEngagement"
+	// DiscussionCollaborationServiceListDiscussionTimelineProcedure is the fully-qualified name of the
+	// DiscussionCollaborationService's ListDiscussionTimeline RPC.
+	DiscussionCollaborationServiceListDiscussionTimelineProcedure = "/golf.v1.DiscussionCollaborationService/ListDiscussionTimeline"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -8725,4 +8734,102 @@ func (UnimplementedRepositoryFileMutationServiceHandler) SubmitRepositoryFileMut
 
 func (UnimplementedRepositoryFileMutationServiceHandler) GetRepositoryFileMutationOperation(context.Context, *connect.Request[v1.GetRepositoryFileMutationOperationRequest]) (*connect.Response[v1.GetRepositoryFileMutationOperationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryFileMutationService.GetRepositoryFileMutationOperation is not implemented"))
+}
+
+// DiscussionCollaborationServiceClient is a client for the golf.v1.DiscussionCollaborationService
+// service.
+type DiscussionCollaborationServiceClient interface {
+	GetDiscussionEngagement(context.Context, *connect.Request[v1.GetDiscussionEngagementRequest]) (*connect.Response[v1.GetDiscussionEngagementResponse], error)
+	ListDiscussionTimeline(context.Context, *connect.Request[v1.ListDiscussionTimelineRequest]) (*connect.Response[v1.ListDiscussionTimelineResponse], error)
+}
+
+// NewDiscussionCollaborationServiceClient constructs a client for the
+// golf.v1.DiscussionCollaborationService service. By default, it uses the Connect protocol with the
+// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
+// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewDiscussionCollaborationServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) DiscussionCollaborationServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	discussionCollaborationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("DiscussionCollaborationService").Methods()
+	return &discussionCollaborationServiceClient{
+		getDiscussionEngagement: connect.NewClient[v1.GetDiscussionEngagementRequest, v1.GetDiscussionEngagementResponse](
+			httpClient,
+			baseURL+DiscussionCollaborationServiceGetDiscussionEngagementProcedure,
+			connect.WithSchema(discussionCollaborationServiceMethods.ByName("GetDiscussionEngagement")),
+			connect.WithClientOptions(opts...),
+		),
+		listDiscussionTimeline: connect.NewClient[v1.ListDiscussionTimelineRequest, v1.ListDiscussionTimelineResponse](
+			httpClient,
+			baseURL+DiscussionCollaborationServiceListDiscussionTimelineProcedure,
+			connect.WithSchema(discussionCollaborationServiceMethods.ByName("ListDiscussionTimeline")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// discussionCollaborationServiceClient implements DiscussionCollaborationServiceClient.
+type discussionCollaborationServiceClient struct {
+	getDiscussionEngagement *connect.Client[v1.GetDiscussionEngagementRequest, v1.GetDiscussionEngagementResponse]
+	listDiscussionTimeline  *connect.Client[v1.ListDiscussionTimelineRequest, v1.ListDiscussionTimelineResponse]
+}
+
+// GetDiscussionEngagement calls golf.v1.DiscussionCollaborationService.GetDiscussionEngagement.
+func (c *discussionCollaborationServiceClient) GetDiscussionEngagement(ctx context.Context, req *connect.Request[v1.GetDiscussionEngagementRequest]) (*connect.Response[v1.GetDiscussionEngagementResponse], error) {
+	return c.getDiscussionEngagement.CallUnary(ctx, req)
+}
+
+// ListDiscussionTimeline calls golf.v1.DiscussionCollaborationService.ListDiscussionTimeline.
+func (c *discussionCollaborationServiceClient) ListDiscussionTimeline(ctx context.Context, req *connect.Request[v1.ListDiscussionTimelineRequest]) (*connect.Response[v1.ListDiscussionTimelineResponse], error) {
+	return c.listDiscussionTimeline.CallUnary(ctx, req)
+}
+
+// DiscussionCollaborationServiceHandler is an implementation of the
+// golf.v1.DiscussionCollaborationService service.
+type DiscussionCollaborationServiceHandler interface {
+	GetDiscussionEngagement(context.Context, *connect.Request[v1.GetDiscussionEngagementRequest]) (*connect.Response[v1.GetDiscussionEngagementResponse], error)
+	ListDiscussionTimeline(context.Context, *connect.Request[v1.ListDiscussionTimelineRequest]) (*connect.Response[v1.ListDiscussionTimelineResponse], error)
+}
+
+// NewDiscussionCollaborationServiceHandler builds an HTTP handler from the service implementation.
+// It returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewDiscussionCollaborationServiceHandler(svc DiscussionCollaborationServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	discussionCollaborationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("DiscussionCollaborationService").Methods()
+	discussionCollaborationServiceGetDiscussionEngagementHandler := connect.NewUnaryHandler(
+		DiscussionCollaborationServiceGetDiscussionEngagementProcedure,
+		svc.GetDiscussionEngagement,
+		connect.WithSchema(discussionCollaborationServiceMethods.ByName("GetDiscussionEngagement")),
+		connect.WithHandlerOptions(opts...),
+	)
+	discussionCollaborationServiceListDiscussionTimelineHandler := connect.NewUnaryHandler(
+		DiscussionCollaborationServiceListDiscussionTimelineProcedure,
+		svc.ListDiscussionTimeline,
+		connect.WithSchema(discussionCollaborationServiceMethods.ByName("ListDiscussionTimeline")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.DiscussionCollaborationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case DiscussionCollaborationServiceGetDiscussionEngagementProcedure:
+			discussionCollaborationServiceGetDiscussionEngagementHandler.ServeHTTP(w, r)
+		case DiscussionCollaborationServiceListDiscussionTimelineProcedure:
+			discussionCollaborationServiceListDiscussionTimelineHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedDiscussionCollaborationServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedDiscussionCollaborationServiceHandler struct{}
+
+func (UnimplementedDiscussionCollaborationServiceHandler) GetDiscussionEngagement(context.Context, *connect.Request[v1.GetDiscussionEngagementRequest]) (*connect.Response[v1.GetDiscussionEngagementResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.DiscussionCollaborationService.GetDiscussionEngagement is not implemented"))
+}
+
+func (UnimplementedDiscussionCollaborationServiceHandler) ListDiscussionTimeline(context.Context, *connect.Request[v1.ListDiscussionTimelineRequest]) (*connect.Response[v1.ListDiscussionTimelineResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.DiscussionCollaborationService.ListDiscussionTimeline is not implemented"))
 }
