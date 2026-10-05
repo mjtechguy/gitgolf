@@ -47,6 +47,7 @@ type issueMutationInput struct {
 	EditMilestone      *issueMilestoneChange `json:"edit_milestone,omitempty"`
 	CreateDraft        bool                  `json:"create_draft,omitempty"`
 	EditLabels         *issueLabelsChange    `json:"edit_labels,omitempty"`
+	EditAssignees      *issueAssigneesChange `json:"edit_assignees,omitempty"`
 }
 
 func (input issueMutationInput) validate(key string) error {
@@ -60,7 +61,7 @@ func (input issueMutationInput) validate(key string) error {
 		return invalid("Provide a positive repository ID and UTF-8 body up to 6000 bytes, without controls other than tab or newlines.")
 	}
 	if isPullMutationKind(input.Kind) {
-		if input.EditMilestone != nil || input.EditLabels != nil {
+		if input.EditMilestone != nil || input.EditLabels != nil || input.EditAssignees != nil {
 			return invalid("Metadata edits currently support ordinary issues only.")
 		}
 		return input.validatePull()
@@ -68,7 +69,7 @@ func (input issueMutationInput) validate(key string) error {
 	if input.PullRequestID != 0 || input.EditDraft != nil || input.SourceOwner != "" || input.SourceRepository != "" || input.SourceRepositoryID != 0 || input.BaseBranch != "" || input.HeadBranch != "" || input.BaseCommitID != "" || input.HeadCommitID != "" || input.CreateDraft {
 		return invalid("Pull fields require a pull request mutation.")
 	}
-	if input.Kind != "UPDATE_ISSUE" && (input.EditTitle != nil || input.EditBody != nil || input.EditState != "" || input.EditMilestone != nil || input.EditLabels != nil || input.ExpectedRevision != "") {
+	if input.Kind != "UPDATE_ISSUE" && (input.EditTitle != nil || input.EditBody != nil || input.EditState != "" || input.EditMilestone != nil || input.EditLabels != nil || input.EditAssignees != nil || input.ExpectedRevision != "") {
 		return invalid("Edit fields require an issue update.")
 	}
 	switch input.Kind {
@@ -268,6 +269,8 @@ func (s *Server) createIssueMutation(ctx context.Context, session string, token 
 				preflightErr = errIssueRevisionChanged
 			} else if input.EditLabels != nil {
 				preflightErr = s.preflightIssueLabels(ctx, session, token, input, before)
+			} else if input.EditAssignees != nil {
+				preflightErr = s.preflightIssueAssignees(ctx, session, token, input, before)
 			} else if input.EditMilestone != nil {
 				current, err := issueMilestoneID(*before)
 				if err != nil {
@@ -338,7 +341,7 @@ func (s *Server) createIssueMutation(ctx context.Context, session string, token 
 			if errors.Is(preflightErr, errIssueRevisionChanged) {
 				failure = "revision_changed"
 			}
-			if errors.Is(preflightErr, errIssueMilestoneChanged) || errors.Is(preflightErr, errIssueLabelsChanged) {
+			if errors.Is(preflightErr, errIssueMilestoneChanged) || errors.Is(preflightErr, errIssueLabelsChanged) || errors.Is(preflightErr, errIssueAssigneesChanged) {
 				failure = "revision_changed"
 			}
 			if errors.Is(preflightErr, errIssueUnchanged) {

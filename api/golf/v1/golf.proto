@@ -189,6 +189,7 @@ service RepositoryService {
   rpc GetPullRequestDiscussion(GetPullRequestDiscussionRequest) returns (GetPullRequestDiscussionResponse);
   rpc GetIssue(GetIssueRequest) returns (GetIssueResponse);
   rpc ListRepositoryLabels(ListRepositoryLabelsRequest) returns (ListRepositoryLabelsResponse);
+  rpc ListRepositoryAssignees(ListRepositoryAssigneesRequest) returns (ListRepositoryAssigneesResponse);
   rpc ListRepositoryMilestones(ListRepositoryMilestonesRequest) returns (ListRepositoryMilestonesResponse);
   rpc ListIssueComments(ListIssueCommentsRequest) returns (ListIssueCommentsResponse);
   rpc CreateIssue(CreateIssueRequest) returns (CreateIssueResponse);
@@ -748,6 +749,27 @@ message IssueLabelsChange {
   // limits selected IDs to 9007199254740991 for lossless transport.
   repeated string label_ids = 2;
 }
+message ListRepositoryAssigneesRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+}
+message ListRepositoryAssigneesResponse {
+  // Native inventory is unpaginated; at most 1000 candidates are supported.
+  repeated User assignees = 1;
+  // Initial issue editor admits only current native repository administrators.
+  bool can_edit_assignees = 2;
+}
+message DiscussionAssigneeSelection {
+  string id = 1;
+  string login = 2;
+}
+message IssueAssigneesChange {
+  // Sorted unique canonical positive decimal int64 IDs, at most 100.
+  repeated string expected_assignee_ids = 1;
+  // Full replacement sorted by numeric ID; empty explicitly clears.
+  // Each selected ID/login pair is reobserved before native dispatch.
+  repeated DiscussionAssigneeSelection assignees = 2;
+}
 message ListRepositoryMilestonesRequest {
   RepositoryKey repository = 1;
   string repository_id = 2;
@@ -781,6 +803,7 @@ message UpdateIssueRequest {
   IssueState state = 9;
   IssueMilestoneChange milestone = 10;
   IssueLabelsChange labels = 11;
+  IssueAssigneesChange assignees = 12;
 }
 message UpdateIssueResponse {
   IssueMutation mutation = 1;

@@ -62,6 +62,12 @@ func issueMilestoneID(issue Issue) (int64, error) {
 }
 func (input issueMutationInput) validateUpdate() error {
 	fields := 0
+	if input.EditAssignees != nil {
+		fields++
+		if err := input.EditAssignees.validate(); err != nil {
+			return err
+		}
+	}
 	if input.EditLabels != nil {
 		fields++
 		if err := input.EditLabels.validate(); err != nil {
@@ -81,7 +87,7 @@ func (input issueMutationInput) validateUpdate() error {
 		fields++
 	}
 	if fields != 1 || input.PullRequest || input.IssueID <= 0 || input.Number == 0 || input.Number > 2147483647 || input.Title != "" || input.Body != "" || !issueRevisionPattern.MatchString(input.ExpectedRevision) {
-		return invalid("Issue updates require exact target IDs, the displayed revision and exactly one title, body, state, milestone or labels field.")
+		return invalid("Issue updates require exact target IDs, the displayed revision and exactly one title, body, state, milestone, labels or assignees field.")
 	}
 	if input.EditMilestone != nil && (input.EditMilestone.ExpectedID < 0 || input.EditMilestone.ID < 0) {
 		return invalid("Milestone IDs cannot be negative.")
@@ -98,6 +104,10 @@ func (input issueMutationInput) validateUpdate() error {
 	return nil
 }
 func (input issueMutationInput) matchesUpdate(issue Issue) bool {
+	if input.EditAssignees != nil {
+		ids, err := issueAssigneeIDs(issue)
+		return err == nil && slices.Equal(ids, input.EditAssignees.ids())
+	}
 	if input.EditLabels != nil {
 		ids, err := issueLabelIDs(issue)
 		return err == nil && slices.Equal(ids, input.EditLabels.IDs)
@@ -110,6 +120,13 @@ func (input issueMutationInput) matchesUpdate(issue Issue) bool {
 }
 func (input issueMutationInput) nativeUpdate(before Issue) map[string]any {
 	result := map[string]any{"content_version": *before.ContentVersion}
+	if input.EditAssignees != nil {
+		logins := make([]string, len(input.EditAssignees.Assignees))
+		for i, selected := range input.EditAssignees.Assignees {
+			logins[i] = selected.Login
+		}
+		result["assignees"] = logins
+	}
 	if input.EditMilestone != nil {
 		result["milestone"] = input.EditMilestone.ID
 	}
@@ -172,7 +189,11 @@ func (s *Server) UpdateIssue(ctx context.Context, req *connect.Request[golfv1.Up
 		labels = &issueLabelsChange{ExpectedIDs: expected, IDs: selected}
 	}
 	key := keyFrom(req.Msg.Repository)
-	result, err := s.createIssueMutation(ctx, s.cookieValue(req.Header()), token, req.Msg.IdempotencyKey, issueMutationInput{Kind: "UPDATE_ISSUE", Owner: key.Owner, Repository: key.Name, RepositoryID: repoID, IssueID: issueID, Number: req.Msg.Number, EditTitle: req.Msg.Title, EditBody: req.Msg.Body, EditState: state, ExpectedRevision: req.Msg.ExpectedRevision, EditMilestone: milestone, EditLabels: labels})
+	assignees, err := issueAssigneesInput(req.Msg.Assignees)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	result, err := s.createIssueMutation(ctx, s.cookieValue(req.Header()), token, req.Msg.IdempotencyKey, issueMutationInput{Kind: "UPDATE_ISSUE", Owner: key.Owner, Repository: key.Name, RepositoryID: repoID, IssueID: issueID, Number: req.Msg.Number, EditTitle: req.Msg.Title, EditBody: req.Msg.Body, EditState: state, ExpectedRevision: req.Msg.ExpectedRevision, EditMilestone: milestone, EditLabels: labels, EditAssignees: assignees})
 	if err != nil {
 		return nil, rpcError(err)
 	}

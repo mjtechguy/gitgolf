@@ -256,6 +256,9 @@ const (
 	// RepositoryServiceListRepositoryLabelsProcedure is the fully-qualified name of the
 	// RepositoryService's ListRepositoryLabels RPC.
 	RepositoryServiceListRepositoryLabelsProcedure = "/golf.v1.RepositoryService/ListRepositoryLabels"
+	// RepositoryServiceListRepositoryAssigneesProcedure is the fully-qualified name of the
+	// RepositoryService's ListRepositoryAssignees RPC.
+	RepositoryServiceListRepositoryAssigneesProcedure = "/golf.v1.RepositoryService/ListRepositoryAssignees"
 	// RepositoryServiceListRepositoryMilestonesProcedure is the fully-qualified name of the
 	// RepositoryService's ListRepositoryMilestones RPC.
 	RepositoryServiceListRepositoryMilestonesProcedure = "/golf.v1.RepositoryService/ListRepositoryMilestones"
@@ -1452,6 +1455,7 @@ type RepositoryServiceClient interface {
 	GetPullRequestDiscussion(context.Context, *connect.Request[v1.GetPullRequestDiscussionRequest]) (*connect.Response[v1.GetPullRequestDiscussionResponse], error)
 	GetIssue(context.Context, *connect.Request[v1.GetIssueRequest]) (*connect.Response[v1.GetIssueResponse], error)
 	ListRepositoryLabels(context.Context, *connect.Request[v1.ListRepositoryLabelsRequest]) (*connect.Response[v1.ListRepositoryLabelsResponse], error)
+	ListRepositoryAssignees(context.Context, *connect.Request[v1.ListRepositoryAssigneesRequest]) (*connect.Response[v1.ListRepositoryAssigneesResponse], error)
 	ListRepositoryMilestones(context.Context, *connect.Request[v1.ListRepositoryMilestonesRequest]) (*connect.Response[v1.ListRepositoryMilestonesResponse], error)
 	ListIssueComments(context.Context, *connect.Request[v1.ListIssueCommentsRequest]) (*connect.Response[v1.ListIssueCommentsResponse], error)
 	CreateIssue(context.Context, *connect.Request[v1.CreateIssueRequest]) (*connect.Response[v1.CreateIssueResponse], error)
@@ -1628,6 +1632,12 @@ func NewRepositoryServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(repositoryServiceMethods.ByName("ListRepositoryLabels")),
 			connect.WithClientOptions(opts...),
 		),
+		listRepositoryAssignees: connect.NewClient[v1.ListRepositoryAssigneesRequest, v1.ListRepositoryAssigneesResponse](
+			httpClient,
+			baseURL+RepositoryServiceListRepositoryAssigneesProcedure,
+			connect.WithSchema(repositoryServiceMethods.ByName("ListRepositoryAssignees")),
+			connect.WithClientOptions(opts...),
+		),
 		listRepositoryMilestones: connect.NewClient[v1.ListRepositoryMilestonesRequest, v1.ListRepositoryMilestonesResponse](
 			httpClient,
 			baseURL+RepositoryServiceListRepositoryMilestonesProcedure,
@@ -1771,6 +1781,7 @@ type repositoryServiceClient struct {
 	getPullRequestDiscussion           *connect.Client[v1.GetPullRequestDiscussionRequest, v1.GetPullRequestDiscussionResponse]
 	getIssue                           *connect.Client[v1.GetIssueRequest, v1.GetIssueResponse]
 	listRepositoryLabels               *connect.Client[v1.ListRepositoryLabelsRequest, v1.ListRepositoryLabelsResponse]
+	listRepositoryAssignees            *connect.Client[v1.ListRepositoryAssigneesRequest, v1.ListRepositoryAssigneesResponse]
 	listRepositoryMilestones           *connect.Client[v1.ListRepositoryMilestonesRequest, v1.ListRepositoryMilestonesResponse]
 	listIssueComments                  *connect.Client[v1.ListIssueCommentsRequest, v1.ListIssueCommentsResponse]
 	createIssue                        *connect.Client[v1.CreateIssueRequest, v1.CreateIssueResponse]
@@ -1912,6 +1923,11 @@ func (c *repositoryServiceClient) ListRepositoryLabels(ctx context.Context, req 
 	return c.listRepositoryLabels.CallUnary(ctx, req)
 }
 
+// ListRepositoryAssignees calls golf.v1.RepositoryService.ListRepositoryAssignees.
+func (c *repositoryServiceClient) ListRepositoryAssignees(ctx context.Context, req *connect.Request[v1.ListRepositoryAssigneesRequest]) (*connect.Response[v1.ListRepositoryAssigneesResponse], error) {
+	return c.listRepositoryAssignees.CallUnary(ctx, req)
+}
+
 // ListRepositoryMilestones calls golf.v1.RepositoryService.ListRepositoryMilestones.
 func (c *repositoryServiceClient) ListRepositoryMilestones(ctx context.Context, req *connect.Request[v1.ListRepositoryMilestonesRequest]) (*connect.Response[v1.ListRepositoryMilestonesResponse], error) {
 	return c.listRepositoryMilestones.CallUnary(ctx, req)
@@ -2034,6 +2050,7 @@ type RepositoryServiceHandler interface {
 	GetPullRequestDiscussion(context.Context, *connect.Request[v1.GetPullRequestDiscussionRequest]) (*connect.Response[v1.GetPullRequestDiscussionResponse], error)
 	GetIssue(context.Context, *connect.Request[v1.GetIssueRequest]) (*connect.Response[v1.GetIssueResponse], error)
 	ListRepositoryLabels(context.Context, *connect.Request[v1.ListRepositoryLabelsRequest]) (*connect.Response[v1.ListRepositoryLabelsResponse], error)
+	ListRepositoryAssignees(context.Context, *connect.Request[v1.ListRepositoryAssigneesRequest]) (*connect.Response[v1.ListRepositoryAssigneesResponse], error)
 	ListRepositoryMilestones(context.Context, *connect.Request[v1.ListRepositoryMilestonesRequest]) (*connect.Response[v1.ListRepositoryMilestonesResponse], error)
 	ListIssueComments(context.Context, *connect.Request[v1.ListIssueCommentsRequest]) (*connect.Response[v1.ListIssueCommentsResponse], error)
 	CreateIssue(context.Context, *connect.Request[v1.CreateIssueRequest]) (*connect.Response[v1.CreateIssueResponse], error)
@@ -2206,6 +2223,12 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 		connect.WithSchema(repositoryServiceMethods.ByName("ListRepositoryLabels")),
 		connect.WithHandlerOptions(opts...),
 	)
+	repositoryServiceListRepositoryAssigneesHandler := connect.NewUnaryHandler(
+		RepositoryServiceListRepositoryAssigneesProcedure,
+		svc.ListRepositoryAssignees,
+		connect.WithSchema(repositoryServiceMethods.ByName("ListRepositoryAssignees")),
+		connect.WithHandlerOptions(opts...),
+	)
 	repositoryServiceListRepositoryMilestonesHandler := connect.NewUnaryHandler(
 		RepositoryServiceListRepositoryMilestonesProcedure,
 		svc.ListRepositoryMilestones,
@@ -2370,6 +2393,8 @@ func NewRepositoryServiceHandler(svc RepositoryServiceHandler, opts ...connect.H
 			repositoryServiceGetIssueHandler.ServeHTTP(w, r)
 		case RepositoryServiceListRepositoryLabelsProcedure:
 			repositoryServiceListRepositoryLabelsHandler.ServeHTTP(w, r)
+		case RepositoryServiceListRepositoryAssigneesProcedure:
+			repositoryServiceListRepositoryAssigneesHandler.ServeHTTP(w, r)
 		case RepositoryServiceListRepositoryMilestonesProcedure:
 			repositoryServiceListRepositoryMilestonesHandler.ServeHTTP(w, r)
 		case RepositoryServiceListIssueCommentsProcedure:
@@ -2511,6 +2536,10 @@ func (UnimplementedRepositoryServiceHandler) GetIssue(context.Context, *connect.
 
 func (UnimplementedRepositoryServiceHandler) ListRepositoryLabels(context.Context, *connect.Request[v1.ListRepositoryLabelsRequest]) (*connect.Response[v1.ListRepositoryLabelsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.ListRepositoryLabels is not implemented"))
+}
+
+func (UnimplementedRepositoryServiceHandler) ListRepositoryAssignees(context.Context, *connect.Request[v1.ListRepositoryAssigneesRequest]) (*connect.Response[v1.ListRepositoryAssigneesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryService.ListRepositoryAssignees is not implemented"))
 }
 
 func (UnimplementedRepositoryServiceHandler) ListRepositoryMilestones(context.Context, *connect.Request[v1.ListRepositoryMilestonesRequest]) (*connect.Response[v1.ListRepositoryMilestonesResponse], error) {
