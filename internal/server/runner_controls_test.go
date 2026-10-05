@@ -44,7 +44,7 @@ func TestRunnerControlTransitionAndVersion(t *testing.T) {
 }
 func runnerControlRequest[T any](s *Server, session loginResult, m *T) (*connect.Request[T], context.Context) {
 	req := connect.NewRequest(m)
-	req.Header().Set("Cookie", cookieName+"="+session.Value)
+	req.Header().Set("Cookie", s.sessionCookie(session.Value, session.Expires, 0).Name+"="+session.Value)
 	credential, err := s.sessionCredential(context.Background(), session.Value)
 	if err != nil {
 		return req, context.Background()
