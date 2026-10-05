@@ -6,10 +6,15 @@ const runId='12345678-1234-4234-8234-123456789abc',commit='a'.repeat(40),attempt
 const build='1'.repeat(32),test22='2'.repeat(32),test24='3'.repeat(32),skip='4'.repeat(32),image='alpine:3.23@sha256:'+'5'.repeat(64),path=`/alex/demo/actions/runs/${runId}`;
 const started='2026-10-04T00:01:00Z',finished='2026-10-04T00:01:10Z';
 async function fixture(page:Page){
- const state={publication:'' as ''|'withheld'|'redacted',rawWithheld:false,reads:0,deny:false,logDeny:false,logError:'' as ''|'permission_denied'|'not_found'|'unauthenticated',runBarrier:undefined as Promise<void>|undefined,badGraph:'',badReceipt:'',unrecorded:false,startSecond:false,complete:false,logBarrier:undefined as Promise<void>|undefined,filters:[] as {jobInstanceId:string;stepId:string;stepIndex:number|undefined;after:string}[]};
+ const state={twoJobs:false,dependencySkipped:false,typed:false,typedFault:'',publication:'' as ''|'withheld'|'redacted',rawWithheld:false,reads:0,deny:false,logDeny:false,logError:'' as ''|'permission_denied'|'not_found'|'unauthenticated',runBarrier:undefined as Promise<void>|undefined,badGraph:'',badReceipt:'',unrecorded:false,startSecond:false,complete:false,logBarrier:undefined as Promise<void>|undefined,filters:[] as {jobInstanceId:string;stepId:string;stepIndex:number|undefined;after:string}[]};
  const run=()=>{
   const steps=(pending=false)=>[{id:'0',name:'Inspect source',state:pending?WorkflowStepState.PENDING:WorkflowStepState.SUCCEEDED,startedAt:pending?undefined:started,finishedAt:pending?undefined:finished},{id:'verify-code',name:'Verify source',state:pending?WorkflowStepState.PENDING:state.complete?WorkflowStepState.SUCCEEDED:WorkflowStepState.RUNNING,startedAt:pending?undefined:finished,finishedAt:state.complete&&!pending?'2026-10-04T00:01:30Z':undefined}];
   const jobs=[{instanceId:build,jobId:'build',name:'Build source',matrix:[],needs:[],state:WorkflowStepState.SUCCEEDED,startedAt:started,finishedAt:finished,eventsRecorded:true,imageDigest:image,steps:[{id:'compile',name:'Compile',state:WorkflowStepState.SUCCEEDED,startedAt:started,finishedAt:finished}]},{instanceId:test22,jobId:'test',name:'Test source',matrix:[{name:'node',valueJson:'"22"'}],needs:['build'],state:state.complete?WorkflowStepState.SUCCEEDED:WorkflowStepState.RUNNING,startedAt:finished,finishedAt:state.complete?'2026-10-04T00:01:30Z':undefined,eventsRecorded:true,imageDigest:image,steps:steps()},{instanceId:test24,jobId:'test',name:'Test source',matrix:[{name:'node',valueJson:'"24"'}],needs:['build'],state:state.startSecond?WorkflowStepState.RUNNING:WorkflowStepState.PENDING,startedAt:state.startSecond?started:undefined,eventsRecorded:state.startSecond,imageDigest:image,steps:steps(!state.startSecond)},{instanceId:skip,jobId:'optional',name:'Optional check',matrix:[],needs:['build'],state:WorkflowStepState.SKIPPED,finishedAt:finished,eventsRecorded:true,imageDigest:image,steps:[{id:'optional',name:'Optional source check',state:WorkflowStepState.SKIPPED,startedAt:undefined,finishedAt:undefined}]}];
+  if(state.twoJobs){
+   jobs.splice(2);jobs[0]!.steps=[{id:'0',name:'Inspect source',state:WorkflowStepState.SUCCEEDED,startedAt:started,finishedAt:finished}];
+   const second=jobs[1]!;second.jobId='verify';second.name='Verify job';second.matrix=[];second.state=state.startSecond?state.complete?WorkflowStepState.SUCCEEDED:WorkflowStepState.RUNNING:WorkflowStepState.PENDING;second.startedAt=state.startSecond?finished:undefined;second.finishedAt=state.complete&&state.startSecond?'2026-10-04T00:01:30Z':undefined;second.eventsRecorded=state.startSecond;second.steps=steps(!state.startSecond);if(state.startSecond){second.steps[0]!.startedAt=finished;second.steps[0]!.finishedAt='2026-10-04T00:01:20Z';second.steps[1]!.startedAt='2026-10-04T00:01:20Z';}
+   if(state.dependencySkipped){jobs[0]!.state=WorkflowStepState.FAILED;jobs[0]!.steps[0]!.state=WorkflowStepState.FAILED;second.state=WorkflowStepState.SKIPPED;second.startedAt=undefined;second.finishedAt=finished;second.eventsRecorded=true;for(const step of second.steps){step.state=WorkflowStepState.SKIPPED;step.startedAt=undefined;step.finishedAt=undefined;}}
+  }
   if(state.unrecorded)for(const job of jobs){job.state=WorkflowStepState.UNRECORDED;job.eventsRecorded=false;job.startedAt=undefined;job.finishedAt=undefined;for(const step of job.steps){step.state=WorkflowStepState.UNRECORDED;step.startedAt=undefined;step.finishedAt=undefined;}}
   if(state.badGraph==='duplicate')jobs[2]!.instanceId=test22;
   if(state.badGraph==='invalid-step')jobs[1]!.steps[0]!.id='not/a/step';
@@ -19,7 +24,7 @@ async function fixture(page:Page){
   if(state.badGraph==='image')jobs[1]!.imageDigest='alpine:latest';
   if(state.badGraph==='state')jobs[1]!.state=999 as WorkflowStepState;
   if(state.publication==='redacted')for(const job of jobs){if(job.state!==WorkflowStepState.SKIPPED){job.state=WorkflowStepState.SUCCEEDED;job.startedAt=started;job.finishedAt=finished;for(const step of job.steps){step.state=WorkflowStepState.SUCCEEDED;step.startedAt=started;step.finishedAt=finished;}}}
-  return {outputState:state.publication==='withheld'?WorkflowOutputState.WITHHELD:state.publication==='redacted'?WorkflowOutputState.REDACTED:WorkflowOutputState.UNSPECIFIED,executionBindingId:state.publication?'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa':'',executionBindingVersion:state.publication?'3':'',id:runId,repositoryId:'11',ownerId:'42',version:'9',workflowPath:'.github/workflows/graph.yml',workflowBlobId:'b'.repeat(40),sourceSha256:'c'.repeat(64),commitId:commit,attemptId:state.badGraph==='attempt'?'wrong':attempt,engineCatalog:state.badGraph==='catalog'?'unqualified.engine':catalog,engineCommit:state.badGraph==='pin'?'6'.repeat(40):engineCommit,createdAt:'2026-10-04T00:00:00Z',startedAt:started,state:state.publication==='redacted'?WorkflowRunState.SUCCEEDED:state.unrecorded?WorkflowRunState.FAILED:WorkflowRunState.RUNNING,origin:WorkflowRunOrigin.MANUAL,runnerId:'owned-source-fixture',canCancel:false,jobs};
+  return {outputState:state.publication==='withheld'?WorkflowOutputState.WITHHELD:state.publication==='redacted'?WorkflowOutputState.REDACTED:WorkflowOutputState.UNSPECIFIED,executionBindingId:state.publication&&state.typedFault!=='binding'?'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa':'',executionBindingVersion:state.publication&&state.typedFault!=='binding-version'?'3':'',id:runId,repositoryId:'11',ownerId:'42',version:'9',workflowPath:'.github/workflows/graph.yml',workflowBlobId:'b'.repeat(40),sourceSha256:'c'.repeat(64),commitId:commit,attemptId:state.badGraph==='attempt'?'wrong':attempt,engineCatalog:state.badGraph==='catalog'?'unqualified.engine':state.typed?'golf.workflow.act.v0.2.89.linux.v2':catalog,inputContract:state.typed?state.typedFault==='contract'?'':'golf.workflow.dispatch.inputs.v1':'',schemaSha256:state.typed?state.typedFault==='schema'?'invalid':'6'.repeat(64):'',submittedSha256:state.typed?'7'.repeat(64):'',effectiveSha256:state.typed?'8'.repeat(64):'',engineCommit:state.badGraph==='pin'?'6'.repeat(40):engineCommit,createdAt:'2026-10-04T00:00:00Z',startedAt:started,finishedAt:state.publication==='redacted'||state.twoJobs&&state.complete||state.dependencySkipped?'2026-10-04T00:01:30Z':undefined,state:state.dependencySkipped?WorkflowRunState.FAILED:state.twoJobs&&state.complete?WorkflowRunState.SUCCEEDED:state.publication==='redacted'?WorkflowRunState.SUCCEEDED:state.unrecorded?WorkflowRunState.FAILED:WorkflowRunState.RUNNING,origin:state.typedFault==='origin'?WorkflowRunOrigin.PUSH:WorkflowRunOrigin.MANUAL,runnerId:'owned-source-fixture',canCancel:false,jobs};
  };
  await page.route('**/rpc/**',async(route:Route)=>{
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
@@ -28,6 +33,7 @@ async function fixture(page:Page){
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{});
   if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository:{id:'11',name:'demo',fullName:'alex/demo',defaultBranch:'main',private:true}});
   if(method==='ListAgentTasks')return disabledAgentTasks(route);
+  if(method==='GetRepositoryStar')return reject(route,'unimplemented','Star preferences are outside this graph fixture.');
   if(method==='WatchRepository')return reject(route,'unimplemented','No stream in this source fixture.');
   if(method==='GetWorkflowRun'){
    state.reads++;expect(request(route,GetWorkflowRunRequestSchema).runId).toBe(runId);
@@ -49,7 +55,7 @@ async function fixture(page:Page){
    if(state.badReceipt==='job')receipt.jobInstanceId=test24;
    if(state.badReceipt==='step')receipt.stepId='wrong-step';
    if(state.publication==='withheld')return respond(route,GetWorkflowRunLogsResponseSchema,{...receipt,logs:state.rawWithheld?[{sequence:1n,text:'forbidden-private-output'}]:[],hasMore:false});
-   const scope=input.jobInstanceId===test22?'Node22':input.jobInstanceId===test24?'Node24':input.jobInstanceId===build?'Build':'All jobs';
+   const scope=input.jobInstanceId===test22?state.twoJobs?'Verify job':'Node22':input.jobInstanceId===test24?'Node24':input.jobInstanceId===build?'Build':'All jobs';
    const text=`${scope} ${input.stepId||'job output'}\n`;
    // A global log sequence may have gaps when filtered by exact attribution.
    const sequence=input.afterSequence===0n?7n:29n;
@@ -178,4 +184,44 @@ test('withheld execution output is explicit and cannot be downloaded as an empty
 test('a malformed withheld receipt never renders or downloads private bytes',async({page})=>{
  const state=await fixture(page);state.publication='withheld';state.rawWithheld=true;await page.goto(path);
  await expect(page.getByRole('alert')).toContainText('Withheld execution output cannot contain readable chunks');await expect(page.locator('body')).not.toContainText('forbidden-private-output');await expect(page.getByRole('button',{name:'Download loaded log',exact:true})).toBeDisabled();
+});
+
+test('two completed nonmatrix jobs keep equal step IDs in separate immutable log scopes',async({page})=>{
+ const state=await fixture(page);state.twoJobs=true;state.startSecond=true;state.complete=true;
+ await page.goto(path+`?jobInstanceId=${build}&stepId=0`);await expect(page.getByLabel('Workflow run log',{exact:true})).toContainText('Build 0');
+ await expect(page.getByRole('link',{name:'succeeded Build source build · 10s',exact:true})).toBeVisible();await expect(page.getByRole('link',{name:'succeeded Verify job verify · 20s',exact:true})).toBeVisible();await expect(page.getByLabel('Jobs and steps')).not.toContainText('node:');
+ await page.getByRole('link',{name:'succeeded Verify job verify · 20s',exact:true}).click();await page.getByRole('link',{name:'succeeded Inspect source 10s',exact:true}).click();
+ await expect(page).toHaveURL(new RegExp(`jobInstanceId=${test22}`));await expect(page).toHaveURL(/stepId=0/);await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveText('Verify job 0');
+ await page.reload();await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveText('Verify job 0');await expect(page.getByRole('link',{name:'succeeded Inspect source 10s',exact:true})).toHaveAttribute('aria-current','page');
+ await page.getByText('Execution receipt',{exact:true}).click();const receipt=page.getByRole('region',{name:'Run summary',exact:true});await expect(receipt).toContainText(attempt);await expect(receipt).toContainText(catalog);await expect(receipt).toContainText(test22);await expect(receipt).toContainText('build');
+ expect(state.filters.some(v=>v.jobInstanceId===build&&v.stepId==='0')).toBe(true);expect(state.filters.some(v=>v.jobInstanceId===test22&&v.stepId==='0')).toBe(true);expect(state.filters.every(v=>[build,test22].includes(v.jobInstanceId)&&v.stepIndex===undefined)).toBe(true);
+});
+
+test('recorded failed prerequisite and skipped dependent never synthesize job or step logs',async({page})=>{
+ const state=await fixture(page);state.twoJobs=true;state.dependencySkipped=true;
+ await page.goto(path+`?jobInstanceId=${test22}`);const notice=page.getByRole('status').filter({hasText:'has no recorded start or output'});await expect(notice).toContainText('This job was skipped.');await expect(notice).toContainText('Declared dependencies: build.');await expect(notice).not.toContainText('because');expect(state.filters).toEqual([]);
+ await expect(page.getByRole('link',{name:'failed Build source build · 10s',exact:true})).toBeVisible();await expect(page.getByRole('link',{name:'skipped Verify job verify · skipped',exact:true})).toBeVisible();
+ await page.getByRole('link',{name:'skipped Inspect source skipped',exact:true}).click();await expect(notice).toContainText('This step was skipped.');await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);expect(state.filters).toEqual([]);
+ await page.reload();await expect(notice).toContainText('This step was skipped.');expect(state.filters).toEqual([]);
+ await page.getByRole('link',{name:'failed Build source build · 10s',exact:true}).click();await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveText('Build job output');expect(state.filters.every(v=>v.jobInstanceId===build)).toBe(true);
+});
+
+test('pending and unrecorded dependent descriptions wait for a real scoped start',async({page})=>{
+ const state=await fixture(page);state.twoJobs=true;await page.goto(path+`?jobInstanceId=${test22}`);const notice=page.getByRole('status').filter({hasText:'has no recorded start or output'});
+ await expect(notice).toContainText('This job is pending.');expect(state.filters).toEqual([]);await page.getByRole('link',{name:'pending Inspect source pending',exact:true}).click();await expect(notice).toContainText('This step is pending.');await expect(notice).toContainText('Declared dependencies: build.');await expect(notice).not.toContainText('queued');expect(state.filters).toEqual([]);
+ state.startSecond=true;await page.getByRole('button',{name:'Refresh selected run',exact:true}).click();await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveText('Verify job 0');expect(state.filters.every(v=>v.jobInstanceId===test22&&v.stepId==='0'&&v.stepIndex===undefined)).toBe(true);
+ state.unrecorded=true;const prior=state.filters.length;await page.getByRole('button',{name:'Refresh selected run',exact:true}).click();await expect(notice).toContainText('No outcome was recorded for this step.');await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);expect(state.filters).toHaveLength(prior);
+});
+
+test('v2 typed secret output retains withholding then exact redacted two-job scope',async({page})=>{
+ const state=await fixture(page);state.twoJobs=true;state.startSecond=true;state.typed=true;state.publication='withheld';await page.goto(path+`?jobInstanceId=${test22}&stepId=0`);
+ await expect(page.getByText('Output is withheld pending a verified execution result and current authorization.',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Download loaded log',exact:true})).toBeDisabled();await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);
+ await page.getByText('Execution receipt',{exact:true}).click();const receipt=page.getByRole('region',{name:'Run summary',exact:true});await expect(receipt).toContainText('golf.workflow.act.v0.2.89.linux.v2');await expect(receipt).toContainText('golf.workflow.dispatch.inputs.v1');await expect(receipt).toContainText('6'.repeat(64));await expect(receipt).toContainText('7'.repeat(64));await expect(receipt).toContainText('8'.repeat(64));
+ state.publication='redacted';await page.getByRole('button',{name:'Refresh selected run',exact:true}).click();await expect(page.getByText('Configured secret values were masked before this log was published.',{exact:true})).toBeVisible();await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveText('Verify job 0');expect(state.filters.every(v=>v.jobInstanceId===test22&&v.stepId==='0'&&v.stepIndex===undefined)).toBe(true);
+});
+for(const fault of ['schema','contract','binding','binding-version','origin'])test(`v2 secret ${fault} receipt is still refused before output`,async({page})=>{
+ const state=await fixture(page);state.typed=true;state.publication='withheld';state.typedFault=fault;await page.goto(path);await expect(page.getByRole('alert')).toContainText('recorded job graph');await expect(page.getByLabel('Jobs and steps')).toHaveCount(0);expect(state.filters).toEqual([]);
+});
+test('v2 withheld receipt with raw bytes cannot publish or download output',async({page})=>{
+ const state=await fixture(page);state.typed=true;state.publication='withheld';state.rawWithheld=true;await page.goto(path);await expect(page.getByRole('alert')).toContainText('Withheld execution output cannot contain readable chunks');await expect(page.locator('body')).not.toContainText('forbidden-private-output');await expect(page.getByRole('button',{name:'Download loaded log',exact:true})).toBeDisabled();
 });
