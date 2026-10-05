@@ -1,5 +1,5 @@
 export type RepositorySearch = {
-  view: 'source' | 'commits' | 'issues' | 'pulls' | 'actions' | 'compare';
+  view: 'source' | 'commits' | 'issues' | 'pulls' | 'actions' | 'compare' | 'releases';
   ref: string;
   path: string;
   branch: string;
@@ -24,6 +24,7 @@ export type RepositorySearch = {
   sourceOwner?: string;
   sourceName?: string;
   historyPath?: string;
+  releaseId?: string;
 };
 export const defaultRepositorySearch: RepositorySearch = { view: 'source', ref: '', path: '', branch: '', state: 'open' };
 export type RepositoryLocation = RepositorySearch & { kind: 'repository'; owner: string; name: string; sourceSuffix?: string; sourceRoute?: 'tree' | 'blob' };
@@ -60,10 +61,12 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
     base:next.view==='compare'?next.base:undefined,head:next.view==='compare'?next.head:undefined,
     sourceOwner:next.view==='compare'?next.sourceOwner:undefined,sourceName:next.view==='compare'?next.sourceName:undefined,
     historyPath:next.view==='commits'&&!next.commit?next.historyPath:undefined,
+    releaseId:next.view==='releases'?next.releaseId:undefined,
   };
   const params = {owner:next.owner,name:next.name};
   let path = '';
-  if(next.view==='compare')path='compare';
+  if(next.view==='releases')path=next.releaseId?`releases/${next.releaseId}`:'releases';
+  else if(next.view==='compare')path='compare';
   else if(next.view==='issues') path=next.issueNew&&!next.issue?'issues/new':next.issue?`issues/${next.issue}`:'issues';
   else if(next.view==='pulls') path=next.pull?`pull/${next.pull}${next.pullView&&next.pullView!=='conversation'?'/'+next.pullView:''}`:'pulls';
   else if(next.view==='actions') path=next.run?`actions/${next.runKind==='coding-task'?'tasks':next.runKind==='review'?'reviews':'runs'}/${next.run}`:'actions';
@@ -74,7 +77,7 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
   // deliberate source/history return context and relevant list filters.
   search.view = 'source'; search.path = '';
   if(next.view==='source'&&next.refKind){search.branch='';search.tag=undefined;}
-  search.issue = undefined; search.issueNew = undefined; search.pull = undefined; search.pullView = undefined; search.commit = undefined; search.run = undefined; search.runKind=undefined;
+  search.issue = undefined; search.issueNew = undefined; search.pull = undefined; search.pullView = undefined; search.commit = undefined; search.run = undefined; search.runKind=undefined; search.releaseId=undefined;
   if (next.view === 'commits' && next.historyPath && isCommitID(next.ref)) search.historyPath = undefined;
   // The path is authoritative for source and path-history snapshots.
   if ((next.view === 'source' && (isCommitID(next.ref) || Boolean(next.refKind))) || (next.view === 'commits' && !next.commit && next.historyPath && isCommitID(next.ref))) search.ref = '';

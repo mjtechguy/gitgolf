@@ -12,11 +12,14 @@ const snapshot = 'a'.repeat(40), other = 'b'.repeat(40);
 const user = { id: '17', login: 'alex', fullName: 'Alex' };
 const repository = { id: '19', owner: user, name: 'demo', fullName: 'alex/demo', defaultBranch: 'main' };
 async function fixture(page: Page) {
-  const state = { denied: false, signedIn: true, methods: [] as string[], authorityURLs: [] as string[], refs: [] as string[], selections: [] as ReturnType<typeof request<typeof ResolveRepositorySourceRequestSchema>>[] };
+  const state = { denied: false, signedIn: true, methods: [] as string[], authorityURLs: [] as string[], canonicalBodies: [] as {method:string;repository:unknown}[], refs: [] as string[], selections: [] as ReturnType<typeof request<typeof ResolveRepositorySourceRequestSchema>>[] };
   await page.route('**/rpc/**', async route => {
     const method = route.request().url().split('/').at(-1)!;
     state.methods.push(method);
-    if (['GetRepository', 'GetRepositorySettings', 'GetRepositoryAccess', 'InspectWorkflows'].includes(method)) state.authorityURLs.push(page.url());
+    if(method==='GetRepository')state.canonicalBodies.push({method,repository:{...route.request().postDataJSON().repository}});
+    if(method==='GetRepositorySettings')state.canonicalBodies.push({method,repository:{...route.request().postDataJSON().repository}});
+    if(method==='GetRepositoryLifecycle')state.canonicalBodies.push({method,repository:{...route.request().postDataJSON().repository}});
+    if (['GetRepository', 'GetRepositorySettings', 'GetRepositoryLifecycle', 'GetRepositoryAccess', 'InspectWorkflows'].includes(method)) state.authorityURLs.push(page.url());
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, { localPasswordEnabled: true });
     if (method === 'GetSession') return state.signedIn ? respond(route, GetSessionResponseSchema, { user }) : reject(route, 'unauthenticated', 'Signed out.');
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
@@ -62,7 +65,7 @@ for (const [tail, heading, method] of settingsPages) test(`legacy ${tail} normal
   await expect.poll(() => state.methods.filter(value => value === method).length).toBeGreaterThan(0);
   const reads = state.methods.filter(value => value === method).length;
   expect(state.authorityURLs.every(url => new URL(url).pathname === `/alex/demo/${tail}`)).toBe(true);
-  if(tail==='settings/workflows') { expect(state.methods).toContain('GetRepository'); expect(state.methods.indexOf('GetRepository')).toBeLessThan(state.methods.indexOf('InspectWorkflows')); } else expect(state.methods).not.toContain('GetRepository');
+  if(tail==='settings/workflows') { expect(state.methods).toContain('GetRepository'); expect(state.methods.indexOf('GetRepository')).toBeLessThan(state.methods.indexOf('InspectWorkflows')); } else if(tail==='settings') { expect(state.methods).toContain('GetRepository'); await expect.poll(()=>state.canonicalBodies.some(value=>value.method==='GetRepositoryLifecycle')).toBe(true); expect(state.canonicalBodies.some(value=>value.method==='GetRepositorySettings')).toBe(true); for(const value of state.canonicalBodies)expect(value.repository).toEqual({owner:'alex',name:'demo'});expect(state.authorityURLs.every(url=>new URL(url).pathname==='/alex/demo/settings')).toBe(true); } else expect(state.methods).not.toContain('GetRepository');
   await page.reload();
   await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
   await expect.poll(() => state.methods.filter(value => value === method).length).toBeGreaterThan(reads);

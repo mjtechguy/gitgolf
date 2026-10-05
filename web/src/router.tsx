@@ -1,7 +1,7 @@
 import { createRootRoute, createRoute, createRouter, notFound, redirect, Outlet, stripSearchParams } from '@tanstack/react-router';
 import { App } from './App';
 import { defaultRepositorySearch, isCommitID, isRunID, isWorkflowJobInstanceID, isWorkflowStepID } from './navigation';
-import { sourcePath, sourceRef } from './sourceReads';
+import { sourcePath, sourceRef, sourceRepositoryID } from './sourceReads';
 import type { RepositorySearch } from './navigation';
 
 const rootRoute = createRootRoute({
@@ -134,7 +134,7 @@ const validateRepositorySearch = (search: Record<string, unknown>): RepositorySe
     const issue = search.issue === undefined ? undefined : typeof search.issue === 'number' ? search.issue : typeof search.issue === 'string' && /^[1-9][0-9]*$/.test(search.issue) ? Number(search.issue) : NaN;
     const pull = search.pull === undefined ? undefined : typeof search.pull === 'number' ? search.pull : typeof search.pull === 'string' && /^[1-9][0-9]*$/.test(search.pull) ? Number(search.pull) : NaN;
     return {
-      view: search.view === 'commits' || search.view === 'issues' || search.view === 'pulls' || search.view === 'actions' || search.view === 'compare' ? search.view : 'source',
+      view: search.view === 'commits' || search.view === 'issues' || search.view === 'pulls' || search.view === 'actions' || search.view === 'compare' || search.view === 'releases' ? search.view : 'source',
       ref: typeof search.ref === 'string' ? search.ref : '', path: typeof search.path === 'string' ? search.path : '',
       base:typeof search.base==='string'?search.base:undefined,head:typeof search.head==='string'?search.head:undefined,sourceOwner:typeof search.sourceOwner==='string'?search.sourceOwner:undefined,sourceName:typeof search.sourceName==='string'?search.sourceName:undefined,
       branch: typeof search.branch === 'string' ? search.branch : '',
@@ -144,6 +144,7 @@ const validateRepositorySearch = (search: Record<string, unknown>): RepositorySe
       issueNew:search.issueNew===true?true:undefined,
       state: search.state === 'closed' || search.state === 'all' ? search.state : 'open', issue, pull,
       pullView: search.pullView === 'files' || search.pullView === 'commits' || search.pullView === 'checks' ? search.pullView : undefined,
+      releaseId:search.releaseId===undefined?undefined:typeof search.releaseId==='string'?search.releaseId:'',
       commit: search.commit === undefined ? undefined : typeof search.commit === 'string' ? search.commit : '',
       runKind:search.runKind as RepositorySearch['runKind'],actionKind:search.actionKind as RepositorySearch['actionKind'],workflowPath:search.workflowPath as string|undefined,
       run: search.run === undefined ? undefined : typeof search.run === 'string' ? search.run : '',
@@ -153,6 +154,7 @@ const validateRepositorySearch = (search: Record<string, unknown>): RepositorySe
     };
   };
 function validateRepositorySelectors(search: RepositorySearch) {
+  if (search.releaseId !== undefined && (search.view !== 'releases' || !sourceRepositoryID(search.releaseId))) throw notFound();
   if (search.pull !== undefined && (!Number.isSafeInteger(search.pull) || search.pull <= 0 || search.pull > 0x7fffffff)) throw notFound();
   if (search.issue !== undefined && (!Number.isSafeInteger(search.issue) || search.issue <= 0 || search.issue > 0xffffffff)) throw notFound();
   if (search.commit !== undefined && !isCommitID(search.commit)) throw notFound();
@@ -198,6 +200,11 @@ function canonicalLocation(owner:string,name:string,tail:string,search:Repositor
     if(isCommitID(item)) return {...location,view:'source' as const,ref:item,path:parts.slice(2).join('/'),sourceRoute:parts[0] as 'tree'|'blob'};
     return {...location,view:'source' as const,ref:'',path:'',sourceSuffix:suffix,sourceRoute:parts[0] as 'tree'|'blob'};
   }
+  if(parts[0]==='releases') {
+    if(parts.length===1 && search.releaseId===undefined)return {...location,view:'releases' as const,releaseId:undefined};
+    if(parts.length===2 && sourceRepositoryID(item) && (search.releaseId===undefined || search.releaseId===item))return {...location,view:'releases' as const,releaseId:item};
+    throw notFound();
+  }
   if(tail==='compare')return {...location,view:'compare' as const};
   if(parts[0]==='commits'&&parts.length>=3&&isCommitID(item)) {
     const historyPath=parts.slice(2).join('/');
@@ -224,7 +231,7 @@ const canonicalRepositoryPageRoute=createRoute({getParentRoute:()=>rootRoute,pat
     // The installed search middleware has no route params. Normalize only
     // after validating the incoming selectors, keeping empty-tail aliases and
     // deliberate source return-context on issue, pull and commit pages.
-    const owned=['view','path','issue','pull','pullView','commit','run','runKind','historyPath','issueNew'];
+    const owned=['view','path','issue','pull','pullView','commit','run','runKind','historyPath','issueNew','releaseId'];
     if(tail && (owned.some(key=>key in location.search) || ownsRef && 'ref' in location.search)) {
       const clean={...search};
       for(const key of owned) delete clean[key as keyof RepositorySearch];
@@ -272,7 +279,7 @@ export const router = createRouter({
   parseSearch: (search) => {
     try { for (const part of search.replace(/^\?/, '').split('&')) for(const value of part.split('=')) decodeURIComponent(value.replace(/\+/g,' ')); } catch { return {refKind:'invalid'}; }
     const query=new URLSearchParams(search);
-    if (['refKind','refName','ref','path','branch','tag','runKind','actionKind','workflowPath','run','step','jobInstanceId','stepId','repositoryId'].some(key=>query.getAll(key).length>1)) return {refKind:'invalid'};
+    if (['refKind','refName','ref','path','branch','tag','runKind','actionKind','workflowPath','run','step','jobInstanceId','stepId','repositoryId','releaseId'].some(key=>query.getAll(key).length>1)) return {refKind:'invalid'};
     return Object.fromEntries(query);
   },
   stringifySearch: (search) => {
