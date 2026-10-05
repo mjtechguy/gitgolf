@@ -69,6 +69,7 @@ type ActionPlan struct {
 	LocalActions             []ActionDependency `json:"localActions"`
 }
 type ActionExecutionInput struct {
+	GitSource            *GitSourceManifest    `json:"gitSource,omitempty"`
 	ManualInputs         *ActionManualInputs   `json:"manualInputs,omitempty"`
 	JobResources         *JobResourceBinding   `json:"jobResources,omitempty"`
 	Input                ActionPlanInput       `json:"input"`

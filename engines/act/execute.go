@@ -90,6 +90,10 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 	if !validatedManualInputs(input, files) {
 		return ErrExecution
 	}
+	gitSource, err := loadEngineGitSource(input)
+	if err != nil {
+		return ErrExecution
+	}
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(input.TimeoutSeconds)*time.Second)
 	defer cancel()
 	phase = "engine_daemon_empty"
@@ -210,7 +214,7 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 	if err = os.WriteFile("/golf/event.json", input.EventJSON, 0600); err != nil {
 		return ErrExecution
 	}
-	observer := &engineObserver{ctx: ctx, cancel: cancel, send: observe, plan: plan, resolved: resolved, prepared: map[string]bool{}, volumes: map[string]bool{}, started: map[string]bool{}, finished: map[string]bool{}, nativeResults: map[string]string{}, limits: limits}
+	observer := &engineObserver{ctx: ctx, cancel: cancel, send: observe, plan: plan, resolved: resolved, prepared: map[string]bool{}, volumes: map[string]bool{}, started: map[string]bool{}, finished: map[string]bool{}, nativeResults: map[string]string{}, limits: limits, gitSource: gitSource}
 	logrus.SetOutput(io.Discard)
 	logrus.SetLevel(logrus.DebugLevel)
 	config := &act.Config{Actor: "unavailable", Workdir: workspace, EventName: input.Input.Event, EventPath: "/golf/event.json", Env: map[string]string{"SHA_REF": input.CommitID, "GITHUB_REF": input.Input.Ref, "GITHUB_RUN_ID": "unavailable", "GITHUB_RUN_NUMBER": "unavailable", "GITHUB_SERVER_URL": "urn:golf:platform-context-unavailable", "GITHUB_API_URL": "urn:golf:github-rest-unavailable", "GITHUB_GRAPHQL_URL": "urn:golf:github-graphql-unavailable"}, Platforms: resolved, GitHubInstance: "golf.invalid", ContainerDaemonSocket: "-", ContainerNetworkMode: "none", BindWorkdir: false, ActionOfflineMode: true, ForcePull: false, Privileged: false, AutoRemove: true, ConcurrentJobs: 2, ContainerCapDrop: []string{"ALL"}, ContainerOptions: options}
@@ -320,6 +324,7 @@ func dispatchEventInputs(body []byte, commitID string) (map[string]string, bool)
 }
 
 type engineObserver struct {
+	gitSource                                  *engineGitSource
 	limits                                     protocol.JobLimits
 	mu                                         sync.Mutex
 	ctx                                        context.Context
@@ -588,6 +593,9 @@ func (o *engineObserver) prepare() (err error) {
 		if _, err = docker(o.ctx, nil, "cp", jobSource+"/.", id+":"+workspace); err != nil {
 			return ErrExecution
 		}
+		if o.gitSource != nil && o.gitSource.transfer(o.ctx, id) != nil {
+			return ErrExecution
+		}
 		for _, mount := range r.Mounts {
 			if mount.Type != "volume" {
 				continue
@@ -606,6 +614,9 @@ func (o *engineObserver) prepare() (err error) {
 			o.volumes[mount.Source] = true
 		}
 		phase = "engine_job_source_readback"
+		if o.gitSource != nil && o.gitSource.verifyJob(o.ctx, id) != nil {
+			return ErrExecution
+		}
 		// Independent source readback occurs before ACK releases any source step.
 		sourcePaths := []string{o.plan.WorkflowPath}
 		for _, dependency := range o.plan.LocalActions {
