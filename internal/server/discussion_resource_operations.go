@@ -99,8 +99,8 @@ func validateResourceRequest(m *golfv1.SubmitDiscussionResourceOperationRequest)
 			return invalid("Provide a complete label draft.")
 		}
 		d := v.Label
-		if !discussionMetadataName(d.Name) || !discussionText(d.Description, 4096) || len(d.Color) != 6 || strings.IndexFunc(d.Color, func(r rune) bool { return !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f') }) >= 0 {
-			return invalid("Provide a name, six lowercase hexadecimal color digits and bounded description.")
+		if !discussionMetadataName(d.Name) || len(d.Name) > 255 || strings.TrimSpace(d.Name) != d.Name || !discussionText(d.Description, 4096) || len(d.Color) != 6 || strings.IndexFunc(d.Color, func(r rune) bool { return !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f') }) >= 0 {
+			return invalid("Use a trimmed name of 1–255 UTF-8 bytes, six lowercase hexadecimal color digits and a bounded description.")
 		}
 	case "CREATE_MILESTONE", "UPDATE_MILESTONE":
 		v, ok := m.Change.(*golfv1.SubmitDiscussionResourceOperationRequest_Milestone)
@@ -108,8 +108,8 @@ func validateResourceRequest(m *golfv1.SubmitDiscussionResourceOperationRequest)
 			return invalid("Provide a complete milestone draft.")
 		}
 		d := v.Milestone
-		if !discussionMetadataName(d.Title) || !discussionText(d.Description, 64<<10) || (d.State != golfv1.IssueState_ISSUE_STATE_OPEN && d.State != golfv1.IssueState_ISSUE_STATE_CLOSED) {
-			return invalid("Provide an open or closed milestone with a bounded title and description.")
+		if !discussionMetadataName(d.Title) || len(d.Title) > 255 || strings.TrimSpace(d.Title) != d.Title || !discussionText(d.Description, 64<<10) || (d.State != golfv1.IssueState_ISSUE_STATE_OPEN && d.State != golfv1.IssueState_ISSUE_STATE_CLOSED) {
+			return invalid("Use an open or closed milestone with a trimmed title of 1–255 UTF-8 bytes and a bounded description.")
 		}
 		if d.DueDate != "" {
 			t, e := time.Parse("2006-01-02", d.DueDate)

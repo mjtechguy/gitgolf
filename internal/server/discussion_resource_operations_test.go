@@ -252,7 +252,7 @@ func TestDiscussionResourceValidation(t *testing.T) {
 	}
 	for name, change := range map[string]func(*golfv1.SubmitDiscussionResourceOperationRequest){"invalid-kind": func(m *golfv1.SubmitDiscussionResourceOperationRequest) { m.Kind = 0 }, "mixed": func(m *golfv1.SubmitDiscussionResourceOperationRequest) {
 		m.Change = &golfv1.SubmitDiscussionResourceOperationRequest_CommentBody{CommentBody: "secret"}
-	}, "adopt-create": func(m *golfv1.SubmitDiscussionResourceOperationRequest) { m.ResourceId = "17" }, "comment-target": func(m *golfv1.SubmitDiscussionResourceOperationRequest) { m.IssueId = "77" }, "bad-color": func(m *golfv1.SubmitDiscussionResourceOperationRequest) { m.GetLabel().Color = "ABCDEF" }, "oversized": func(m *golfv1.SubmitDiscussionResourceOperationRequest) {
+	}, "adopt-create": func(m *golfv1.SubmitDiscussionResourceOperationRequest) { m.ResourceId = "17" }, "comment-target": func(m *golfv1.SubmitDiscussionResourceOperationRequest) { m.IssueId = "77" }, "oversized-name": func(m *golfv1.SubmitDiscussionResourceOperationRequest) { m.GetLabel().Name = strings.Repeat("x", 256) }, "spaced-name": func(m *golfv1.SubmitDiscussionResourceOperationRequest) { m.GetLabel().Name = " spaced " }, "bad-color": func(m *golfv1.SubmitDiscussionResourceOperationRequest) { m.GetLabel().Color = "ABCDEF" }, "oversized": func(m *golfv1.SubmitDiscussionResourceOperationRequest) {
 		m.GetLabel().Description = strings.Repeat("x", 4097)
 	}} {
 		t.Run(name, func(t *testing.T) {
@@ -359,3 +359,19 @@ func TestDiscussionResourceStaleAndAuthorPostgres(t *testing.T) {
 }
 
 var _ golfv1connect.RepositoryServiceClient
+
+func TestDiscussionResourceMilestoneDraftBoundaries(t *testing.T) {
+	m := &golfv1.SubmitDiscussionResourceOperationRequest{Repository: &golfv1.RepositoryKey{Owner: "alice", Name: "private"}, RepositoryId: "11", OperationId: randomUUID(), Kind: golfv1.DiscussionResourceOperationKind_DISCUSSION_RESOURCE_OPERATION_KIND_CREATE_MILESTONE, Change: &golfv1.SubmitDiscussionResourceOperationRequest_Milestone{Milestone: &golfv1.DiscussionMilestoneDraft{Title: strings.Repeat("x", 255), State: golfv1.IssueState_ISSUE_STATE_OPEN, DueDate: "1970-01-01"}}}
+	if e := validateResourceRequest(m); e != nil {
+		t.Fatal(e)
+	}
+	for name, change := range map[string]func(*golfv1.DiscussionMilestoneDraft){"spaces": func(d *golfv1.DiscussionMilestoneDraft) { d.Title = " milestone " }, "long": func(d *golfv1.DiscussionMilestoneDraft) { d.Title = strings.Repeat("x", 256) }, "impossible-day": func(d *golfv1.DiscussionMilestoneDraft) { d.DueDate = "2026-02-30" }, "before-native-epoch": func(d *golfv1.DiscussionMilestoneDraft) { d.DueDate = "1969-12-31" }, "unknown-state": func(d *golfv1.DiscussionMilestoneDraft) { d.State = golfv1.IssueState_ISSUE_STATE_UNSPECIFIED }} {
+		t.Run(name, func(t *testing.T) {
+			c := proto.Clone(m).(*golfv1.SubmitDiscussionResourceOperationRequest)
+			change(c.GetMilestone())
+			if validateResourceRequest(c) == nil {
+				t.Fatal("native-normalized or invalid milestone draft accepted")
+			}
+		})
+	}
+}
