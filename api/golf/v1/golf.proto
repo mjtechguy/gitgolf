@@ -170,6 +170,8 @@ service RepositoryService {
   rpc GetRepositoryCreation(GetRepositoryCreationRequest) returns (GetRepositoryCreationResponse);
   rpc GetRepository(GetRepositoryRequest) returns (GetRepositoryResponse);
   rpc GetRepositoryOverview(GetRepositoryOverviewRequest) returns (GetRepositoryOverviewResponse);
+  rpc ListRepositoryReleases(ListRepositoryReleasesRequest) returns (ListRepositoryReleasesResponse);
+  rpc GetRepositoryRelease(GetRepositoryReleaseRequest) returns (GetRepositoryReleaseResponse);
   rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse);
   rpc ListTags(ListTagsRequest) returns (ListTagsResponse);
   rpc ListCommits(ListCommitsRequest) returns (ListCommitsResponse);
@@ -3890,3 +3892,50 @@ message WorkflowArtifact {
  string download_path = 14;
 }
 message GetWorkflowArtifactResponse { optional WorkflowArtifact artifact = 1; }
+
+// Current native metadata; tag/target names and timestamps are not snapshot or
+// publication receipts. Assets confer no download authority or URL grant.
+message RepositoryReleaseAsset {
+  string id = 1;
+  string name = 2;
+  string size_bytes = 3;
+  string download_count = 4;
+  string created_at = 5;
+}
+message RepositoryRelease {
+  string id = 1;
+  string title = 2;
+  string tag_name = 3;
+  string target_commitish = 4;
+  string body_markdown = 5;
+  bool draft = 6;
+  bool prerelease = 7;
+  string created_at = 8;
+  string published_at = 9;
+  User author = 10;
+  repeated RepositoryReleaseAsset assets = 11;
+  string asset_count = 12;
+}
+message ListRepositoryReleasesRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  // Release pages allow at most 50 rows; zero uses the usual default of 20.
+  PageRequest page = 3;
+}
+message ListRepositoryReleasesResponse {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  repeated RepositoryRelease releases = 3;
+  PageResponse page = 4;
+  string total_count = 5;
+}
+message GetRepositoryReleaseRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string release_id = 3;
+}
+message GetRepositoryReleaseResponse {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  RepositoryRelease release = 3;
+}
