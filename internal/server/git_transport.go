@@ -346,7 +346,7 @@ func (s *Server) forwardGit(ctx context.Context, incoming *http.Request, credent
 	if route.Advertisement {
 		expected = "application/x-" + route.Service + "-advertisement"
 	}
-	if response.StatusCode != 200 || response.Header.Get("Content-Type") != expected || response.Header.Get("Content-Encoding") != "" {
+	if response.StatusCode != 200 || response.Header.Get("Content-Type") != expected || response.Uncompressed || response.Header.Get("Content-Encoding") != "" {
 		return nil, errGitProtocol
 	}
 	if response.ContentLength > limit {
