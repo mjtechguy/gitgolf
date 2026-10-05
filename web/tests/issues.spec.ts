@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import {
-  UpdateIssueRequestSchema, UpdateIssueResponseSchema, CreateIssueRequestSchema, CreateIssueResponseSchema, CreateIssueCommentRequestSchema, CreateIssueCommentResponseSchema,
+  DiscussionMetadataSchema, DiscussionMilestoneSchema, DiscussionLabelSchema, UpdateIssueRequestSchema, UpdateIssueResponseSchema, CreateIssueRequestSchema, CreateIssueResponseSchema, CreateIssueCommentRequestSchema, CreateIssueCommentResponseSchema,
   GetAuthenticationOptionsResponseSchema, GetIssueMutationRequestSchema, GetIssueMutationResponseSchema, GetIssueResponseSchema,
   GetRepositoryResponseSchema, GetSessionResponseSchema, IssueCommentSchema, IssueMutationKind, IssueMutationSchema, IssueMutationState,
   IssueSchema, IssueState, ListCapabilitiesResponseSchema, ListIssueCommentsRequestSchema, ListIssueCommentsResponseSchema,
@@ -23,7 +23,7 @@ type Failure = 'permission_denied' | 'not_found' | 'unauthenticated' | 'unavaila
 async function backend(page: Page) {
   const state = {
     user, signedIn: true, repoId: repository.id, issueId: issue.id, issue: { ...issue }, comments: [comment],
-    issueRows: undefined as Issue[] | undefined, listPages: [] as number[], emptyFirst: false, unknown: false, drop: false, rejected: false, missingObject: false, mismatch: false,
+    issueReadWait: undefined as Promise<void> | undefined, issueRows: undefined as Issue[] | undefined, listPages: [] as number[], emptyFirst: false, unknown: false, drop: false, rejected: false, missingObject: false, mismatch: false,
     updates: [] as UpdateIssueRequest[], updateFailure: '', creates: [] as CreateIssueRequest[], posts: [] as CreateIssueCommentRequest[], inspections: [] as string[], pages: [] as number[],
     records: new Map<string, IssueMutation>(), errors: {} as Record<string, Failure>, barrier: undefined as Promise<void> | undefined,
   };
@@ -43,7 +43,7 @@ async function backend(page: Page) {
       const input = request(route, ListIssuesRequestSchema), number = input.page?.page || 1; state.listPages.push(number);
       return respond(route, ListIssuesResponseSchema, state.issueRows ? { issues: state.issueRows.slice((number - 1) * 2, number * 2), page: number === 1 ? { nextPage: 2 } : undefined } : { issues: [state.issue] });
     }
-    if (method === 'GetIssue') return respond(route, GetIssueResponseSchema, { issue: { ...state.issue, id: state.issueId } });
+    if (method === 'GetIssue') { if (state.issueReadWait) await state.issueReadWait; return respond(route, GetIssueResponseSchema, { issue: { ...state.issue, id: state.issueId } }); }
     if (method === 'ListIssueComments') {
       const input = request(route, ListIssueCommentsRequestSchema);
       expect(input.repository).toMatchObject(repoKey); expect(input.repositoryId).toBe(state.repoId);
@@ -497,4 +497,29 @@ for (const theme of ['dark', 'light']) for (const width of [1440, 390]) test(`lo
   await page.getByRole('searchbox', { name: 'Search loaded issues', exact: true }).clear(); await expect(names).toHaveCount(4); expect(state.listPages).toContain(2);
   await page.evaluate(() => document.fonts.ready); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true); await page.screenshot({ path: test.info().outputPath(`issue-activity-${theme}-${width}.png`), fullPage: true });
   state.errors.ListIssues = 'permission_denied'; await page.getByRole('button', { name: 'Refresh issues', exact: true }).click(); await expect(page.getByRole('alert')).toBeVisible(); await expect(rows).toHaveCount(0); expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toContain('Offset activity'); expect(state.creates).toHaveLength(0); expect(state.posts).toHaveLength(0); expect(state.updates).toHaveLength(0);
+});
+
+for (const theme of ['dark', 'light']) for (const width of [1440, 390]) test(`known native issue metadata is compact, inert and access-bound in ${theme} ${width}px`, async ({ page }) => {
+  const state = await backend(page), largeCount = 9007199254740995n;
+  state.issue.metadata = create(DiscussionMetadataSchema, { labelsKnown: true, assigneesKnown: true, milestoneKnown: true,
+    labels: [create(DiscussionLabelSchema, { id: '41', name: 'PRIVATE_LABEL bug', color: 'ffffff', description: 'PRIVATE_LABEL_DESCRIPTION <img src=x>', exclusive: true }), create(DiscussionLabelSchema, { id: '42', name: 'archived work', color: '000000', archived: true }), create(DiscussionLabelSchema, { id: '43', name: 'safe fallback', color: 'url(https://tracking.example/color)' })],
+    assignees: [user, create(UserSchema, { id: '100', login: 'PRIVATE_ASSIGNEE', fullName: 'A teammate', avatarUrl: 'https://tracking.example/avatar.png' })],
+    milestone: create(DiscussionMilestoneSchema, { id: '51', title: 'PRIVATE_MILESTONE next release', state: IssueState.OPEN, openIssues: largeCount, closedIssues: 12n, dueOn: '2026-11-01T12:00:00Z', description: 'PRIVATE_MILESTONE_DESCRIPTION <script>window.executed=true</script>' }) });
+  await page.setViewportSize({ width, height: 900 }); await page.addInitScript(theme => localStorage.setItem('golf.theme', theme), theme); await page.goto('/alex/project/issues/12');
+  const sidebar = page.getByRole('complementary', { name: 'Issue metadata', exact: true }), metadata = sidebar.locator('.discussion-metadata'), labels = metadata.getByRole('region', { name: 'Labels', exact: true }), milestone = metadata.getByRole('region', { name: 'Milestone', exact: true });
+  await expect(labels).toContainText('PRIVATE_LABEL bug'); await expect(labels).toContainText('Exclusive label'); await expect(labels).toContainText('Archived label'); await expect(labels.locator('.discussion-label-swatch circle').nth(0)).toHaveAttribute('fill', '#ffffff'); await expect(labels.locator('.discussion-label-swatch circle').nth(1)).toHaveAttribute('fill', '#000000'); await expect(labels.locator('.discussion-label-swatch circle').nth(2)).toHaveAttribute('fill', 'currentColor');
+  await expect(metadata.getByRole('region', { name: 'Assignees', exact: true })).toContainText('PRIVATE_ASSIGNEE'); await expect(milestone.locator('dd')).toHaveText([largeCount.toLocaleString(), '12']); await expect(milestone.locator('time')).toHaveAttribute('datetime', '2026-11-01T12:00:00Z'); await expect(milestone.locator('.discussion-milestone-state')).toHaveText('Open');
+  const description = milestone.locator('details'); await expect(description.locator('p')).toBeHidden(); await description.locator('summary').focus(); await page.keyboard.press('Enter'); await expect(description.locator('p')).toHaveText('PRIVATE_MILESTONE_DESCRIPTION <script>window.executed=true</script>'); await expect(metadata.locator('button,input,select,form,[style],img,script,a')).toHaveCount(0); await expect(page.getByRole('button', { name: 'Edit issue title', exact: true })).toBeVisible(); await expect(page.getByRole('button', { name: 'Add a comment', exact: true })).toBeVisible(); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.evaluate(() => document.fonts.ready); await page.evaluate(() => scrollTo(0, 0)); await page.screenshot({ path: test.info().outputPath(`issue-metadata-${theme}-${width}.png`), fullPage: true });
+  let release!: () => void; state.issueReadWait = new Promise<void>(resolve => { release = resolve; }); await page.getByRole('button', { name: 'Refresh issue', exact: true }).click(); await expect(metadata).toBeHidden(); release(); state.issueReadWait = undefined; await expect(metadata).toBeVisible();
+  state.errors.GetIssue = 'permission_denied'; await page.getByRole('button', { name: 'Refresh issue', exact: true }).click(); await expect(page.getByRole('alert')).toBeVisible(); await expect(metadata).toHaveCount(0); await expect(page.getByText('PRIVATE_ASSIGNEE', { exact: true })).toHaveCount(0); expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toMatch(/PRIVATE_LABEL|PRIVATE_ASSIGNEE|PRIVATE_MILESTONE/); expect(state.posts).toHaveLength(0); expect(state.updates).toHaveLength(0);
+});
+
+test('issue metadata preserves unknown sections and explicitly known empty inventories', async ({ page }) => {
+  const state = await backend(page); await page.goto('/alex/project/issues/12'); const sidebar = page.getByRole('complementary', { name: 'Issue metadata', exact: true });
+  await expect(sidebar.locator('.discussion-metadata')).toHaveCount(0);
+  state.issue.metadata = create(DiscussionMetadataSchema, { labels: [{ id: '41', name: 'UNVERIFIED_LABEL', color: 'ffffff' }] }); await page.getByRole('button', { name: 'Refresh issue', exact: true }).click(); await expect(sidebar.locator('.discussion-metadata')).toHaveCount(0);
+  state.issue.metadata = create(DiscussionMetadataSchema, { assigneesKnown: true, labels: [{ id: '41', name: 'UNVERIFIED_LABEL', color: 'ffffff' }] }); await page.getByRole('button', { name: 'Refresh issue', exact: true }).click(); await expect(sidebar.getByRole('region', { name: 'Assignees', exact: true })).toHaveText('AssigneesNone'); await expect(sidebar.getByRole('region', { name: 'Labels', exact: true })).toHaveCount(0); await expect(sidebar.getByRole('region', { name: 'Milestone', exact: true })).toHaveCount(0); await expect(sidebar).not.toContainText('UNVERIFIED_LABEL');
+  state.issue.metadata = create(DiscussionMetadataSchema, { labelsKnown: true, assigneesKnown: true, milestoneKnown: true }); await page.getByRole('button', { name: 'Refresh issue', exact: true }).click(); await expect(sidebar.locator('.discussion-metadata>section')).toHaveText(['AssigneesNone', 'LabelsNone', 'MilestoneNone']);
+  state.issue.metadata = create(DiscussionMetadataSchema, { milestoneKnown: true, milestone: { id: '51', title: 'Finished milestone', state: IssueState.CLOSED, openIssues: 0n, closedIssues: 4n } }); await page.getByRole('button', { name: 'Refresh issue', exact: true }).click(); await expect(sidebar.locator('.discussion-milestone-state')).toHaveText('Closed'); await expect(sidebar.locator('.discussion-milestone-state svg')).toHaveClass(/lucide-circle-check/); await expect(sidebar.locator('.discussion-milestone-due')).toHaveCount(0);
 });

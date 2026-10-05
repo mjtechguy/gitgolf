@@ -1221,3 +1221,30 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .repository-browser { position:relative; }
 .repository-authorized-content[data-revalidating] { visibility:hidden; }
 .repository-access-check { position:absolute; top:0; left:0; right:0; z-index:1; }
+
+/* Shared, read-only native issue and pull request metadata. */
+.discussion-metadata { display:flex; flex-direction:column; gap:14px; margin-bottom:16px; }
+.discussion-metadata>section { padding-bottom:14px; border-bottom:1px solid var(--line); min-width:0; }
+.discussion-metadata h3 { font-size:.8125rem; margin:0 0 8px; }
+.discussion-labels,.discussion-assignees { list-style:none; padding:0; margin:0; }
+.discussion-labels { display:flex; flex-wrap:wrap; gap:6px; }
+.discussion-label-chip { display:inline-flex; align-items:center; gap:5px; max-width:100%; padding:2px 7px; border:1px solid var(--line-strong); border-radius:12px; background:var(--raised); color:var(--text); font-size:.8125rem; line-height:1.4; }
+.discussion-label-chip>span:first-of-type { min-width:0; overflow-wrap:anywhere; }
+.discussion-label-swatch,.discussion-label-flag { flex-shrink:0; }
+.discussion-label-swatch circle { stroke:var(--muted); stroke-width:1; }
+.discussion-label-flag { display:inline-flex; color:var(--muted); }
+.discussion-assignees { display:flex; flex-direction:column; gap:6px; }
+.discussion-assignees>li { display:flex; align-items:flex-start; gap:7px; min-width:0; }
+.discussion-assignees>li>svg { margin-top:2px; color:var(--muted); }
+.discussion-assignees>li>span { display:flex; flex-wrap:wrap; gap:4px 7px; min-width:0; }
+.discussion-milestone-title { display:flex; align-items:flex-start; gap:7px; }
+.discussion-milestone-title>svg { margin-top:2px; color:var(--muted); }
+.discussion-milestone-state { display:inline-flex; align-items:center; gap:5px; margin-top:7px; color:var(--accent); }
+.discussion-milestone-state.muted { color:var(--muted); }
+.discussion-milestone-counts { display:flex; flex-wrap:wrap; gap:4px 16px; margin:7px 0 0; }
+.discussion-milestone-counts>div { display:flex; flex-wrap:wrap; gap:5px; }
+.discussion-milestone-counts dt { color:var(--muted); }
+.discussion-milestone-counts dd { margin:0; font-variant-numeric:tabular-nums; }
+.discussion-milestone-due { display:flex; align-items:center; flex-wrap:wrap; gap:5px; margin-top:7px; color:var(--muted); }
+.discussion-milestone-details { margin-top:7px; }
+.discussion-milestone-details>p { margin-top:6px; white-space:pre-wrap; }
