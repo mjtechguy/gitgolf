@@ -6,6 +6,7 @@ and isolated labeled runner resources. No external publication/pull, credential
 forwarding, host mounts or broad cleanup. Job volumes have no hard disk quota.
 """
 import argparse
+import gzip
 import hashlib
 import io
 import json
@@ -84,16 +85,35 @@ def main():
         # Do not infer registry provenance from an image-ID-shaped RepoDigest.
         saved = run(['docker', 'image', 'save', SCRATCH], limit=16 << 20, timeout=60)
         with tarfile.open(fileobj=io.BytesIO(saved)) as archive:
+            phase = 'cached OCI index/config/layer linkage'
+            def cached_blob(digest):
+                assert DIGEST.fullmatch(digest)
+                data = archive.extractfile('blobs/sha256/'+digest.split(':')[1]).read((16 << 20)+1)
+                assert len(data) <= 16 << 20 and digest == 'sha256:'+hashlib.sha256(data).hexdigest()
+                return data
+            index = json.loads(cached_blob(SCRATCH))
+            assert index['schemaVersion'] == 2 and len(index['manifests']) <= 4
+            platforms = [row for row in index['manifests'] if row.get('platform') == {'architecture': architecture, 'os': 'linux'}]
+            assert len(platforms) == 1
+            platform_digest = platforms[0]['digest']
+            platform_bytes = cached_blob(platform_digest)
+            platform_manifest = json.loads(platform_bytes)
             rows = json.load(archive.extractfile('manifest.json'))
             assert len(rows) == 1 and len(rows[0]['Layers']) <= 16
             configuration = archive.extractfile(rows[0]['Config']).read()
             configuration_sha = 'sha256:'+hashlib.sha256(configuration).hexdigest()
-            assert configuration_sha == SCRATCH, 'Cached image config does not match original image ID'
+            assert configuration_sha == platform_manifest['config']['digest'], 'Cached image config does not match original OCI manifest'
             expected_layers = json.loads(configuration)['rootfs']['diff_ids']
-            assert len(expected_layers) == len(rows[0]['Layers'])
-            for name, digest in zip(rows[0]['Layers'], expected_layers):
-                layer = archive.extractfile(name).read()
-                assert digest == 'sha256:'+hashlib.sha256(layer).hexdigest()
+            assert expected_layers == source['RootFS']['Layers'] and len(expected_layers) == len(platform_manifest['layers']) == len(rows[0]['Layers'])
+            for descriptor, diff_id in zip(platform_manifest['layers'], expected_layers):
+                assert descriptor['mediaType'] == 'application/vnd.oci.image.layer.v1.tar+gzip'
+                layer = cached_blob(descriptor['digest'])
+                assert len(layer) == descriptor['size']
+                with gzip.GzipFile(fileobj=io.BytesIO(layer)) as stream:
+                    plain = stream.read((16 << 20)+1)
+                assert len(plain) <= 16 << 20 and diff_id == 'sha256:'+hashlib.sha256(plain).hexdigest()
+        receipt['cachedPlatformManifestSHA256'] = platform_digest
+        receipt['cachedConfigurationSHA256'] = configuration_sha
         receipt['cachedImageArchiveSHA256'] = hashlib.sha256(saved).hexdigest()
         del saved
 
@@ -137,9 +157,9 @@ def main():
         run(['docker', 'image', 'tag', SCRATCH, tag])
         tagged.append(tag)
         run(['docker', 'image', 'push', tag], timeout=90)
-        headers, body = http(origin+'/v2/golf/git-source-job-proof/manifests/'+worker, 'application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json')
+        headers, body = http(origin+'/v2/golf/git-source-job-proof/manifests/'+platform_digest, 'application/vnd.oci.image.manifest.v1+json')
         digest = 'sha256:'+hashlib.sha256(body).hexdigest()
-        assert headers.get('Docker-Content-Digest') == digest
+        assert headers.get('Docker-Content-Digest') == digest == platform_digest and body == platform_bytes
         manifest = json.loads(body)
         assert manifest['schemaVersion'] == 2 and manifest['config']['digest'] == configuration_sha and len(manifest['layers']) == len(expected_layers)
         _, received_config = http(origin+'/v2/golf/git-source-job-proof/blobs/'+configuration_sha)
@@ -152,7 +172,7 @@ def main():
         run(['docker', 'image', 'pull', approved], timeout=60)
         tagged.append(approved)
         pulled = inspect(approved)
-        assert pulled['Id'] == SCRATCH and approved in pulled['RepoDigests']
+        assert pulled['Id'] in (SCRATCH, platform_digest, configuration_sha) and pulled['RootFS']['Layers'] == expected_layers and approved in pulled['RepoDigests']
         receipt.update(qualifiedJobImage=approved, registryManifestSHA256=digest, registryConfigSHA256=configuration_sha, registryContainer=registry, registryTmpfsBytes=134217728)
 
         phase = 'actual ExecuteGit engine/job qualification'
@@ -167,7 +187,7 @@ def main():
         assert not run(['docker', 'volume', 'ls', '-q', '--filter', 'label=io.golf.runner.worker='+worker]).strip()
         receipt['passed'] = True
     except Exception as error:
-        receipt['failures'].append({'phase': phase, 'type': type(error).__name__, 'reason': 'Qualification refused; inspect private retained evidence'})
+        receipt['failures'].append({'phase': phase, 'type': type(error).__name__, 'reason': str(error)[:512]})
     finally:
         cleanup_ok = True
         if registry:
