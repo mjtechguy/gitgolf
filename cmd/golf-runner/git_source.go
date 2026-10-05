@@ -152,7 +152,7 @@ func (c *coordinator) prepareGitSource(ctx context.Context, a assignment, parent
 			request.Header.Set("Content-Type", "application/x-git-upload-pack-request")
 		}
 		client := *c.client
-		if client.Timeout == 0 || client.Timeout > 15*time.Second {
+		if client.Timeout <= 0 || client.Timeout > 15*time.Second {
 			client.Timeout = 15 * time.Second
 		}
 		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
