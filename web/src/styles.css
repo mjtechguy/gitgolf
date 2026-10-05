@@ -887,8 +887,8 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .execution-log mark { background:var(--accent-bg); color:var(--accent-text); }
 /* The execution surface remains charcoal in both application themes. */
 .execution-console { --console-bg:var(--terminal-bg); --console-text:var(--terminal-fg); --console-muted:var(--terminal-bright-black); min-width:0; }
-.execution-terminal-host { width:100%; min-width:0; height:520px; min-height:320px; padding:12px; overflow:hidden; background:var(--terminal-bg); color:var(--terminal-fg); border-top:1px solid var(--line); overscroll-behavior:contain; }
-.execution-terminal-host .xterm { height:100%; }
+.execution-terminal-host { width:100%; min-width:0; height:520px; min-height:320px; padding:0; overflow:hidden; background:var(--terminal-bg); color:var(--terminal-fg); border-top:1px solid var(--line); overscroll-behavior:contain; }
+.execution-terminal-host .xterm { height:100%; padding:12px; }
 .execution-terminal-host:focus-within { outline:2px solid var(--accent); outline-offset:-2px; }
 .execution-console:fullscreen { display:flex; flex-direction:column; width:100%; height:100dvh; background:var(--panel); }
 .execution-console:fullscreen .execution-console-toolbar,.execution-console:fullscreen .execution-console-status { flex-shrink:0; }
