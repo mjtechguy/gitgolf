@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"database/sql"
@@ -12,9 +13,13 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
+	"github.com/google/uuid"
+	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 	"github.com/mjtechguy/golf-git/internal/runner"
 )
 
@@ -26,6 +31,155 @@ func jobGitFixture(t *testing.T) (*Server, workflowRunRecord, string, time.Time)
 	s := &Server{config: Config{PublicURL: "https://golf.invalid", GiteaURL: "https://forge.invalid"}, keyring: parseTestKeys(t, "", map[string]string{"job": keyFixture(9)}, "job"), runnerKeys: map[string][32]byte{"worker": worker}}
 	run := workflowRunRecord{ID: originalDispatchKey, AttemptID: strings.Repeat("a", 32), RunnerID: "worker", LeaseTokenHash: lease[:], LeaseExpiresAt: sql.NullTime{Time: now.Add(45 * time.Second), Valid: true}, RepositoryID: 17, OwnerID: 18, RepositoryOwner: "alice", RepositoryName: "example", CommitID: strings.Repeat("b", 40), BlobID: strings.Repeat("c", 40), WorkflowPath: ".github/workflows/lint.yml", SourceSHA256: strings.Repeat("d", 64), EngineCatalog: runner.ActionsCatalog, State: "running"}
 	return s, run, strings.Repeat("e", 32), now
+}
+
+// Two real managed identities and a supported source approval distinguish the
+// dispatcher from the administrator approving execution values. Native API/Git
+// responses remain controlled fixtures; this does not qualify an actual forge.
+func TestJobGitIndependentApproverLateRevocationPostgres(t *testing.T) {
+	for _, revoke := range []bool{false, true} {
+		t.Run(map[bool]string{false: "unchanged", true: "approver-lost"}[revoke], func(t *testing.T) {
+			f, target := executionEngineFixture(t)
+			valueID, bindingID := executionEngineApproval(t, f, target)
+			bob := User{ID: 43, Login: "bob"}
+			bobSession, err := f.server.createSession(t.Context(), bob, "pat", "approver-fixture", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			bobCtx := context.WithValue(t.Context(), sessionTokenKey{}, forgeCredential{Kind: "pat", Token: "approver-fixture"})
+			bobRequest := func(m *golfv1.SaveRepositoryExecutionBindingRequest) *connect.Request[golfv1.SaveRepositoryExecutionBindingRequest] {
+				r := connect.NewRequest(m)
+				r.Header().Set("Cookie", cookieName+"="+bobSession.Value)
+				return r
+			}
+			var bobAdmin atomic.Bool
+			bobAdmin.Store(true)
+			var forwards atomic.Int64
+			base := f.server.client.Transport
+			f.server.client.Transport = creationRoundTripper(func(r *http.Request) (*http.Response, error) {
+				isBob := r.Header.Get("Authorization") == "token approver-fixture" || r.Header.Get("Authorization") == "Bearer approver-fixture"
+				if r.URL.Path == "/alice/example.git/git-upload-pack" {
+					deadline, ok := r.Context().Deadline()
+					if !ok || deadline.After(time.Now().Add(15*time.Second)) {
+						t.Fatal("ordinary router deadline was extended")
+					}
+					forwards.Add(1)
+					username, password, ok := r.BasicAuth()
+					if !ok || username != "alice" || password != "run-fixture" || isBob {
+						t.Fatal("Git read did not use original dispatcher")
+					}
+					if revoke {
+						bobAdmin.Store(false)
+					}
+					return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/x-git-upload-pack-result"}}, Body: io.NopCloser(strings.NewReader("private independently-approved pack")), Request: r}, nil
+				}
+				if isBob && r.URL.Path == "/api/v1/repos/alice/example/collaborators/bob/permission" {
+					permission := "admin"
+					if !bobAdmin.Load() {
+						permission = "read"
+					}
+					data, _ := json.Marshal(map[string]any{"permission": permission, "user": bob})
+					return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(bytes.NewReader(data)), Request: r}, nil
+				}
+				if isBob && r.URL.Path == "/api/v1/repos/alice/example/collaborators/bob" {
+					return &http.Response{StatusCode: 204, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("")), Request: r}, nil
+				}
+				request := r.Clone(r.Context())
+				request.Header = r.Header.Clone()
+				if isBob {
+					request.Header.Set("Authorization", "token run-fixture")
+				}
+				response, err := base.RoundTrip(request)
+				if err != nil || response.StatusCode != 200 || (r.URL.Path != "/api/v1/user" && r.URL.Path != "/api/v1/repos/alice/example" && !strings.HasPrefix(r.URL.Path, "/api/v1/repositories/")) {
+					return response, err
+				}
+				var row map[string]any
+				decoder := json.NewDecoder(response.Body)
+				decoder.UseNumber()
+				if decoder.Decode(&row) != nil {
+					t.Fatal("independent native fixture JSON")
+				}
+				response.Body.Close()
+				if r.URL.Path == "/api/v1/user" {
+					row["is_admin"] = false
+					if isBob {
+						row["id"] = bob.ID
+						row["login"] = bob.Login
+					}
+				} else {
+					row["has_actions"] = false
+					row["permissions"] = map[string]bool{"pull": true, "push": true, "admin": !isBob || bobAdmin.Load()}
+				}
+				data, _ := json.Marshal(row)
+				response.Body = io.NopCloser(bytes.NewReader(data))
+				response.ContentLength = int64(len(data))
+				return response, nil
+			})
+			// Supported replacement binds the second approver's genuine managed
+			// session while retaining the original source/value identities.
+			approved, err := f.server.SaveRepositoryExecutionBinding(bobCtx, bobRequest(&golfv1.SaveRepositoryExecutionBindingRequest{Target: target, Id: bindingID, ExpectedVersion: "1", ExpectedBrokerRevision: "2", OperationId: uuid.NewString(), WorkflowPath: runWorkflowPath, CommitId: f.commit, Event: golfv1.WorkflowRunOrigin_WORKFLOW_RUN_ORIGIN_MANUAL, ExpiresAt: time.Now().Add(10 * time.Minute).UTC().Format(time.RFC3339Nano), Values: []*golfv1.RepositoryExecutionValueReference{{Id: valueID, Version: "1"}}}))
+			if err != nil || approved.Msg.Operation.AcceptedVersion != "2" {
+				t.Fatal("independent supported approval", err)
+			}
+			executionDispatch(t, f)
+			lease := executionLease(t, f)
+			f.server.config.PublicURL = "https://golf.invalid"
+			job := lease.ActionsPlan.Jobs[0]
+			started := executionWorkerCall(f, lease, "graph", map[string]any{"sequence": 1, "jobInstanceId": job.InstanceID, "kind": "job_started"}, tls.VersionTLS13)
+			if started.Code != 204 {
+				t.Fatal("genuine approved job", started.Code)
+			}
+			issued := jobGitIssue(t, f, lease, job.InstanceID)
+			var credential jobGitCredentialResponse
+			if issued.Code != 200 || json.Unmarshal(issued.Body.Bytes(), &credential) != nil {
+				t.Fatal("approved job credential", issued.Code)
+			}
+			claims, err := f.server.openJobGitCredential(credential.GitToken)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response := httptest.NewRecorder()
+			f.server.ServeHTTP(response, jobGitRequest(credential.GitToken, "git-upload-pack", runnerGitFetch(f.commit)))
+			if forwards.Load() != 1 {
+				t.Fatal("expected genuine upstream read", forwards.Load(), response.Code)
+			}
+			run, err := scanWorkflowRun(f.server.db.QueryRowContext(t.Context(), "SELECT "+workflowRunColumns+" FROM golf_workflow_runs WHERE id=$1", lease.RunID))
+			if err != nil {
+				t.Fatal(err)
+			}
+			binding, err := storedExecutionRunBinding(t.Context(), f.server.db, run)
+			if err != nil || binding == nil || binding.approverNative != bob.ID || run.UserID == binding.approverUser {
+				t.Fatal("fixture did not retain independent identities", err)
+			}
+			if err := f.server.runnerRunAuthority(t.Context(), run); err != nil {
+				t.Fatal("original dispatcher lost write authority", err)
+			}
+			// All Golf rows and current job/attempt resources still pass. Native
+			// administrator revocation must be observed independently after reads.
+			tx, err := f.server.db.BeginTx(t.Context(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = f.server.jobGitFinalFence(t.Context(), tx, run, claims)
+			tx.Rollback()
+			if err != nil {
+				t.Fatal("SQL lifecycle changed in native-only scenario", err)
+			}
+			if revoke {
+				if f.server.executionApprovalAuthority(t.Context(), run, binding) == nil {
+					t.Fatal("native approver still had admin rights")
+				}
+				if response.Code == 200 || strings.Contains(response.Body.String(), "private independently-approved pack") || response.Header().Get("Golf-Source-Commit") != "" || response.Header().Get("Golf-Job-Instance") != "" {
+					t.Fatal("independent approver revocation released buffered private bytes", response.Code)
+				}
+			} else if response.Code != 200 || response.Body.String() != "private independently-approved pack" {
+				t.Fatal("unchanged independent approval denied", response.Code)
+			}
+			if response.Header().Get("Cache-Control") != "no-store" {
+				t.Fatal("approval result caching")
+			}
+		})
+	}
 }
 
 func TestJobGitSealedScopeAndLifecycle(t *testing.T) {
@@ -215,6 +369,57 @@ func TestJobGitCanonicalReadOnlyRoute(t *testing.T) {
 		if _, err := s.jobGitOrigin(); err == nil {
 			t.Fatal("noncanonical origin accepted", origin)
 		}
+	}
+}
+
+func TestJobGitIssuerCanonicalBoundary(t *testing.T) {
+	s, run, _, _ := jobGitFixture(t)
+	makeRequest := func() *http.Request {
+		r := httptest.NewRequest(http.MethodPost, "https://golf.invalid/internal/ci/attempt/"+run.AttemptID+"/job-git-credential", strings.NewReader("{}"))
+		r.TLS = &tls.ConnectionState{Version: tls.VersionTLS13}
+		r.Header.Set("Authorization", "Bearer control-fixture")
+		r.Header.Set("Golf-Runner-ID", run.RunnerID)
+		r.Header.Set("Golf-Attempt-Token", "attempt-fixture")
+		return r
+	}
+	if !s.jobGitIssuerRoute(makeRequest(), run.AttemptID) {
+		t.Fatal("canonical issuer rejected")
+	}
+	for _, name := range []string{"userinfo", "opaque", "tls", "host", "method", "rawpath", "query", "forced-query", "cookie", "origin", "duplicate-worker", "duplicate-attempt", "duplicate-auth"} {
+		t.Run(name, func(t *testing.T) {
+			r := makeRequest()
+			switch name {
+			case "userinfo":
+				r.URL.User = url.User("injected")
+			case "opaque":
+				r.URL.Opaque = "opaque"
+			case "tls":
+				r.TLS.Version = tls.VersionTLS12
+			case "host":
+				r.Host = "other.invalid"
+			case "method":
+				r.Method = http.MethodGet
+			case "rawpath":
+				r.URL.RawPath = r.URL.Path
+			case "query":
+				r.URL.RawQuery = "jobInstanceId=forged"
+			case "forced-query":
+				r.URL.ForceQuery = true
+			case "cookie":
+				r.Header["Cookie"] = []string{""}
+			case "origin":
+				r.Header.Set("Origin", s.config.PublicURL)
+			case "duplicate-worker":
+				r.Header.Add("Golf-Runner-ID", run.RunnerID)
+			case "duplicate-attempt":
+				r.Header.Add("Golf-Attempt-Token", "attempt-fixture")
+			case "duplicate-auth":
+				r.Header.Add("Authorization", "Bearer control-fixture")
+			}
+			if s.jobGitIssuerRoute(r, run.AttemptID) {
+				t.Fatal("issuer transport alias accepted")
+			}
+		})
 	}
 }
 

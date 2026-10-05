@@ -176,7 +176,7 @@ func jobGitRunningJob(ctx context.Context, tx *sql.Tx, run workflowRunRecord, jo
 func (s *Server) jobGitIssuerRoute(r *http.Request, attempt string) bool {
 	origin, err := s.jobGitOrigin()
 	u, _ := url.Parse(origin)
-	if err != nil || r.Method != http.MethodPost || r.TLS == nil || r.TLS.Version < tls.VersionTLS13 || r.Host != u.Host || r.URL.Host != "" && r.URL.Host != u.Host || r.URL.Scheme != "" && r.URL.Scheme != "https" || r.URL.Path != "/internal/ci/attempt/"+attempt+"/job-git-credential" || r.URL.RawPath != "" || r.URL.RawQuery != "" || r.URL.Fragment != "" || r.URL.ForceQuery {
+	if err != nil || r.Method != http.MethodPost || r.TLS == nil || r.TLS.Version < tls.VersionTLS13 || r.Host != u.Host || r.URL.Host != "" && r.URL.Host != u.Host || r.URL.Scheme != "" && r.URL.Scheme != "https" || r.URL.Path != "/internal/ci/attempt/"+attempt+"/job-git-credential" || r.URL.RawPath != "" || r.URL.RawQuery != "" || r.URL.Fragment != "" || r.URL.ForceQuery || r.URL.User != nil || r.URL.Opaque != "" {
 		return false
 	}
 	for _, name := range []string{"Cookie", "Origin", "Git-Protocol", "Content-Encoding"} {
@@ -312,7 +312,9 @@ func (s *Server) jobGitTransport(w http.ResponseWriter, r *http.Request) {
 		jobGitFailure(w, errStorageUnavailable)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	// The ordinary router's inherited 15s deadline remains authoritative;
+	// this explicit cap also bounds direct calls without that middleware.
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	run, err := scanWorkflowRun(s.db.QueryRowContext(ctx, `SELECT `+workflowRunColumns+` FROM golf_workflow_runs WHERE id=$1 AND forge_url=$2 AND state='running' AND lease_expires_at>clock_timestamp()`, claims.Run, s.config.GiteaURL))
 	if err != nil {
@@ -365,6 +367,13 @@ func (s *Server) jobGitTransport(w http.ResponseWriter, r *http.Request) {
 	}
 	response, err := s.runnerGitRead(ctx, r, run, route)
 	if err != nil {
+		jobGitFailure(w, err)
+		return
+	}
+	// The approver may be a different native administrator from the dispatcher.
+	// SQL lifecycle/version checks cannot observe that actor losing native admin
+	// rights during the read. Recheck supported native authority before SQL locks.
+	if err = s.executionApprovalAuthority(ctx, run, approval); err != nil {
 		jobGitFailure(w, err)
 		return
 	}
