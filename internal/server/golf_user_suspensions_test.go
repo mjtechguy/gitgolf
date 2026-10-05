@@ -484,3 +484,32 @@ func TestGolfUserAccessCommitUncertaintyPostgres(t *testing.T) {
 		t.Fatal("failed commit changed current access", e, count)
 	}
 }
+
+func TestGolfUserAccessInactiveAdministratorPostgres(t *testing.T) {
+	f := newManagementFixture(t)
+	enrollLocal(t, f, "alice", true)
+	bob := enrollLocal(t, f, "bob", true)
+	admin := localLogin(t, f, "alice")
+	pat := f.session(t, "bob", "pat")
+	disabled, e := ManageLocalAccount(t.Context(), f.db, f.s.keyring, f.s.config.GiteaURL, "disable", LocalAccountInput{Username: "bob"})
+	if e != nil || !disabled.Disabled {
+		t.Fatal("supported operator local disable", e)
+	}
+	if _, e := f.s.sessionCredential(t.Context(), pat.Value); e != nil {
+		t.Fatal("local enrollment disable unexpectedly revoked independent PAT", e)
+	}
+	w := accessRequest(f.s, admin, golfv1connect.InstanceAdminServiceChangeGolfUserAccessProcedure, accessInput(bob, "0", true))
+	if w.Code != 200 {
+		t.Fatal("inactive other administrator unnecessarily protected", w.Code, w.Body.String())
+	}
+	response := &golfv1.ChangeGolfUserAccessResponse{}
+	if e := protojson.Unmarshal(w.Body.Bytes(), response); e != nil || !response.User.IsInstanceAdmin || !response.User.Suspended || response.Operation.SessionsRevoked != 1 {
+		t.Fatal("inactive admin receipt", e)
+	}
+	if _, e := f.s.sessionCredential(t.Context(), pat.Value); !errors.Is(e, errUnauthenticated) {
+		t.Fatal("inactive admin independent source survived", e)
+	}
+	if _, e := f.s.sessionCredential(t.Context(), admin.Value); e != nil {
+		t.Fatal("remaining active administrator lost access", e)
+	}
+}

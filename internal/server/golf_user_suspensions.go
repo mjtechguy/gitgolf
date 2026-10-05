@@ -273,12 +273,12 @@ func (s *Server) ChangeGolfUserAccess(ctx context.Context, req *connect.Request[
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("Golf access already has the requested state."))
 	}
 	if i.Suspended && user.IsInstanceAdmin {
-		var active int64
-		e = tx.QueryRowContext(ctx, `SELECT count(*) FROM golf_users u WHERE u.forge_url=$1 AND EXISTS(SELECT 1 FROM golf_local_accounts l WHERE l.user_id=u.id AND l.is_instance_admin AND l.disabled_at IS NULL) AND NOT EXISTS(SELECT 1 FROM golf_user_access a WHERE a.user_id=u.id AND a.suspended)`, s.config.GiteaURL).Scan(&active)
+		var active, targetActive int64
+		e = tx.QueryRowContext(ctx, `SELECT count(*),count(*) FILTER(WHERE u.id=$2) FROM golf_users u WHERE u.forge_url=$1 AND EXISTS(SELECT 1 FROM golf_local_accounts l WHERE l.user_id=u.id AND l.is_instance_admin AND l.disabled_at IS NULL) AND NOT EXISTS(SELECT 1 FROM golf_user_access a WHERE a.user_id=u.id AND a.suspended)`, s.config.GiteaURL, i.UserID).Scan(&active, &targetActive)
 		if e != nil {
 			return nil, rpcError(errStorageUnavailable)
 		}
-		if active <= 1 {
+		if targetActive > 0 && active <= 1 {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("The last active instance administrator cannot be suspended."))
 		}
 	}
