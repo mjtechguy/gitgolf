@@ -1490,20 +1490,26 @@ type GolfWebhookSubscription struct {
 }
 
 type GolfWorkflowArtifact struct {
-	RunID         uuid.UUID
-	AttemptID     string
-	ForgeURL      string
-	RepositoryID  int64
-	OwnerID       int64
-	CommitID      string
-	WorkflowPath  string
-	BlobID        string
-	SourceSha256  string
-	ArchiveSha256 string
-	FileCount     int32
-	FileBytes     int64
-	Archive       []byte
-	CreatedAt     time.Time
+	RunID                uuid.UUID
+	AttemptID            string
+	ForgeURL             string
+	RepositoryID         int64
+	OwnerID              int64
+	CommitID             string
+	WorkflowPath         string
+	BlobID               string
+	SourceSha256         string
+	ArchiveSha256        string
+	FileCount            int32
+	FileBytes            int64
+	Archive              []byte
+	CreatedAt            time.Time
+	Storage              string
+	ObjectKey            string
+	ObjectFingerprint    string
+	ObjectProfileID      uuid.NullUUID
+	ObjectProfileVersion sql.NullInt64
+	ArchiveBytes         int64
 }
 
 type GolfWorkflowDispatchInput struct {
