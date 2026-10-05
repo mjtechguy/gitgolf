@@ -281,6 +281,7 @@ func (s *Server) readContentsAtCommit(ctx context.Context, base string, token fo
 }
 
 type Issue struct {
+	forgeDiscussionMetadata
 	ContentVersion *int64 `json:"content_version"`
 	ID             int64  `json:"id"`
 	Number         int64  `json:"number"`
@@ -302,7 +303,8 @@ func (issue forgeIssue) isPullRequest() bool {
 	return len(issue.PullRequest) != 0 && string(issue.PullRequest) != "null"
 }
 func validIssue(issue Issue) bool {
-	return issue.ID > 0 && issue.Number > 0 && issue.Number <= 2147483647 && (issue.State == "open" || issue.State == "closed") && issue.Comments >= 0 && issue.Comments <= 4294967295 && (issue.ContentVersion == nil || *issue.ContentVersion >= 0)
+	_, metadataErr := discussionMetadata(issue.forgeDiscussionMetadata)
+	return metadataErr == nil && issue.ID > 0 && issue.Number > 0 && issue.Number <= 2147483647 && (issue.State == "open" || issue.State == "closed") && issue.Comments >= 0 && issue.Comments <= 4294967295 && (issue.ContentVersion == nil || *issue.ContentVersion >= 0)
 }
 func (s *Server) listIssues(ctx context.Context, token forgeCredential, key repositoryKey, state string, paging pageRequest) ([]Issue, uint32, error) {
 	base, err := repositoryPath(key)
@@ -347,8 +349,8 @@ func (s *Server) getIssue(ctx context.Context, token forgeCredential, key reposi
 	if err != nil {
 		return Issue{}, err
 	}
-	if number == 0 || number > 2147483647 {
-		return Issue{}, invalid("Issue number must be 1–2147483647.")
+	if err := issueNumber(number); err != nil {
+		return Issue{}, err
 	}
 	var row forgeIssue
 	if _, err := s.forge(ctx, "GET", base+"/issues/"+strconv.FormatUint(uint64(number), 10), token, nil, &row); err != nil {
@@ -361,4 +363,11 @@ func (s *Server) getIssue(ctx context.Context, token forgeCredential, key reposi
 		return Issue{}, errInvalidForgeResponse
 	}
 	return row.Issue, nil
+}
+
+func issueNumber(number uint32) error {
+	if number == 0 || number > 2147483647 {
+		return invalid("Issue number must be 1–2147483647.")
+	}
+	return nil
 }

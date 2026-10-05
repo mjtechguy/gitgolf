@@ -266,7 +266,8 @@ func wireIssue(issue Issue) *golfv1.Issue {
 	if issue.State == "closed" {
 		state = golfv1.IssueState_ISSUE_STATE_CLOSED
 	}
-	return &golfv1.Issue{Id: strconv.FormatInt(issue.ID, 10), Number: uint32(issue.Number), Title: issue.Title, Body: issue.Body, State: state, User: wireUser(issue.User), Comments: uint32(issue.Comments), CreatedAt: issue.CreatedAt, UpdatedAt: issue.UpdatedAt, HtmlUrl: issue.HTMLURL, Revision: issueRevision(issue)}
+	metadata, _ := discussionMetadata(issue.forgeDiscussionMetadata)
+	return &golfv1.Issue{Id: strconv.FormatInt(issue.ID, 10), Number: uint32(issue.Number), Title: issue.Title, Body: issue.Body, State: state, User: wireUser(issue.User), Comments: uint32(issue.Comments), CreatedAt: issue.CreatedAt, UpdatedAt: issue.UpdatedAt, HtmlUrl: issue.HTMLURL, Revision: issueRevision(issue), Metadata: metadata}
 }
 func (s *Server) LoginWithPassword(ctx context.Context, req *connect.Request[golfv1.LoginWithPasswordRequest]) (*connect.Response[golfv1.LoginWithPasswordResponse], error) {
 	result, err := s.loginLocalSession(ctx, req.Msg.Username, req.Msg.Password, s.cookieValue(req.Header()))
@@ -572,7 +573,16 @@ func (s *Server) ListIssues(ctx context.Context, req *connect.Request[golfv1.Lis
 	default:
 		return nil, rpcError(invalid("Issue state is not supported."))
 	}
-	rows, next, err := s.listIssues(ctx, token, keyFrom(req.Msg.Repository), state, pageFrom(req.Msg.Page))
+	if _, _, err := pagination(pageFrom(req.Msg.Page)); err != nil {
+		return nil, rpcError(err)
+	}
+	var rows []Issue
+	var next uint32
+	err = s.withRepositoryRead(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), func(string, Repository) error {
+		var readErr error
+		rows, next, readErr = s.listIssues(ctx, token, keyFrom(req.Msg.Repository), state, pageFrom(req.Msg.Page))
+		return readErr
+	})
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -587,7 +597,15 @@ func (s *Server) GetIssue(ctx context.Context, req *connect.Request[golfv1.GetIs
 	if err != nil {
 		return nil, err
 	}
-	issue, err := s.getIssue(ctx, token, keyFrom(req.Msg.Repository), req.Msg.Number)
+	if err := issueNumber(req.Msg.Number); err != nil {
+		return nil, rpcError(err)
+	}
+	var issue Issue
+	err = s.withRepositoryRead(ctx, s.cookieValue(req.Header()), token, keyFrom(req.Msg.Repository), func(string, Repository) error {
+		var readErr error
+		issue, readErr = s.getIssue(ctx, token, keyFrom(req.Msg.Repository), req.Msg.Number)
+		return readErr
+	})
 	if err != nil {
 		return nil, rpcError(err)
 	}

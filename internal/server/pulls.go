@@ -24,6 +24,7 @@ type forgePullRef struct {
 }
 
 type forgePull struct {
+	forgeDiscussionMetadata
 	ContentVersion *int64        `json:"content_version"`
 	ID             int64         `json:"id"`
 	Number         int64         `json:"number"`
@@ -129,6 +130,9 @@ func validPullRef(ref *forgePullRef) bool {
 }
 
 func validPull(row forgePull, repo Repository) bool {
+	if _, err := discussionMetadata(row.forgeDiscussionMetadata); err != nil {
+		return false
+	}
 	if row.ID <= 0 || row.Number <= 0 || row.Number > 2147483647 || row.Title == "" || len(row.Title) > 1024 ||
 		(row.State != "open" && row.State != "closed") || !validPullUser(row.User) || !validPullTime(row.CreatedAt) || !validPullTime(row.UpdatedAt) ||
 		row.Draft == nil || row.Merged == nil || !validPullRef(row.Head) || !validPullRef(row.Base) {
@@ -169,6 +173,7 @@ func wirePull(row forgePull, listed bool) *golfv1.PullRequest {
 	result := &golfv1.PullRequest{Id: strconv.FormatInt(row.ID, 10), Number: uint32(row.Number), Title: row.Title, Body: row.Body,
 		State: state, User: wirePullUser(row.User), CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, HtmlUrl: row.HTMLURL,
 		Revision: pullRevision(row), MergeBaseCommitId: row.MergeBase, Draft: *row.Draft, Merged: *row.Merged, Head: wirePullRef(row.Head, listed || row.Head.Ref == "refs/pull/"+strconv.FormatInt(row.Number, 10)+"/head"), Base: wirePullRef(row.Base, false)}
+	result.Metadata, _ = discussionMetadata(row.forgeDiscussionMetadata)
 	if row.MergedAt != nil {
 		result.MergedAt = *row.MergedAt
 	}

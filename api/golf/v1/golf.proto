@@ -597,6 +597,36 @@ message Issue {
   string html_url = 10;
   // Revision observation for ordinary issue editing; empty when native content version is unavailable.
   string revision = 11;
+  // Native discussion metadata; absence is not an empty inventory.
+  DiscussionMetadata metadata = 12;
+}
+message DiscussionLabel {
+  string id = 1;
+  string name = 2;
+  // Six hexadecimal digits, without a CSS prefix.
+  string color = 3;
+  string description = 4;
+  bool exclusive = 5;
+  bool archived = 6;
+}
+message DiscussionMilestone {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  IssueState state = 4;
+  uint64 open_issues = 5;
+  uint64 closed_issues = 6;
+  // Empty when the provider supplies no deadline.
+  string due_on = 7;
+}
+message DiscussionMetadata {
+  repeated DiscussionLabel labels = 1;
+  repeated User assignees = 2;
+  DiscussionMilestone milestone = 3;
+  // Missing native fields remain unknown; explicit null/empty fields are known.
+  bool labels_known = 4;
+  bool assignees_known = 5;
+  bool milestone_known = 6;
 }
 message ListIssuesRequest {
   RepositoryKey repository = 1;
@@ -756,6 +786,8 @@ message PullRequest {
   string revision = 16;
   // May be empty while native comparison metadata is unavailable.
   string merge_base_commit_id = 17;
+  // Same native labels, assignees and milestone contract as ordinary issues.
+  DiscussionMetadata metadata = 18;
 }
 message ListPullRequestsRequest {
   RepositoryKey repository = 1;
