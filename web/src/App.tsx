@@ -1,4 +1,5 @@
 import { clearOtherWorkflowDispatchIntents } from './workflowDispatchIntents';
+import { clearOtherStandardMergeIntents } from './standardMergeIntents';
 import { clearOtherAccessIntents } from './accessIntents';
 import { clearOtherRuleIntents } from './ruleIntents';
 import { Breadcrumbs } from './Breadcrumbs';
@@ -333,7 +334,7 @@ function Workspace({ user, location, onSessionEnd }: { user: User; location: Loc
     clearOtherCreationIntents();
     clearOtherAccessIntents();
     clearOtherRuleIntents();
-    clearOtherWorkflowDispatchIntents();
+    clearOtherWorkflowDispatchIntents(); clearOtherStandardMergeIntents();
     await client.cancelQueries();
     client.setQueryData(['session'], null);
     forgetPrivateQueries(client);
@@ -368,6 +369,6 @@ export function App({ location }: { location: Location }) {
     try { const response = await sessionClient.getSession({}, { signal }); if (!response.user) throw new ConnectError('The session response is missing its user.', Code.Internal); return response.user; }
     catch (error) { if (error instanceof ConnectError && error.code === Code.Unauthenticated) { forgetPrivateQueries(client); return null; } throw error; }
   } });
-  useEffect(() => { if (session.isSuccess) { clearOtherCreationIntents(session.data?.id); clearOtherAccessIntents(session.data?.id); clearOtherRuleIntents(session.data?.id); clearOtherWorkflowDispatchIntents(session.data?.id); if (session.data) setLoginNotice(undefined); } }, [session.isSuccess, session.data?.id]);
+  useEffect(() => { if (session.isSuccess) { clearOtherCreationIntents(session.data?.id); clearOtherAccessIntents(session.data?.id); clearOtherRuleIntents(session.data?.id); clearOtherWorkflowDispatchIntents(session.data?.id); clearOtherStandardMergeIntents(session.data?.id); if (session.data) setLoginNotice(undefined); } }, [session.isSuccess, session.data?.id]);
   return <><a className="skip-link" href="#main-content">Skip to content</a>{session.isPending ? <main className="loading-screen" id="main-content"><Brand /><p role="status"><LoaderCircle size={18} className="spin" />Opening your workspace…</p></main> : session.error ? <main className="loading-screen" id="main-content"><Brand /><ErrorMessage error={session.error} /><button className="button secondary" onClick={() => void session.refetch()}>Try again</button></main> : session.data ? <Workspace key={session.data.id} user={session.data} location={location} onSessionEnd={setLoginNotice} /> : <Login oauthFailed={location.kind === 'home' && Boolean(location.oauthFailed)} notice={loginNotice} />}</>;
 }
