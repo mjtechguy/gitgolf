@@ -31,7 +31,7 @@ function Console({text,status,fileName,hasMore=false,refreshing=false}:WorkflowL
   alive.current=true;
   const style=getComputedStyle(host.current!);
   const color=(name:string,fallback:string)=>style.getPropertyValue('--terminal-'+name).trim()||fallback;
-  const term=new Terminal({disableStdin:true,convertEol:true,scrollback,fontFamily:'"Geist Mono", monospace',fontSize:14,lineHeight:1.3,cursorBlink:false,screenReaderMode:true,scrollOnUserInput:false,allowProposedApi:true,
+  const term=new Terminal({disableStdin:true,convertEol:true,scrollback,fontFamily:'"Geist Mono", monospace',fontSize:14,lineHeight:1,cursorBlink:false,screenReaderMode:true,scrollOnUserInput:false,allowProposedApi:true,
    theme:{background:color('bg','#080808'),foreground:color('fg','#ececec'),cursor:color('fg','#ececec'),selectionBackground:color('selection','#454545'),selectionForeground:color('fg','#ececec'),black:color('black','#808080'),red:color('red','#ff9b9b'),green:color('green','#8cdb9f'),yellow:color('yellow','#efd37b'),blue:color('blue','#99caff'),magenta:color('magenta','#d6a9ed'),cyan:color('cyan','#8cddd8'),white:color('white','#ececec'),brightBlack:color('bright-black','#a3a3a3'),brightRed:color('bright-red','#ffb5b5'),brightGreen:color('bright-green','#a4e5b4'),brightYellow:color('bright-yellow','#f7e39c'),brightBlue:color('bright-blue','#b4d9ff'),brightMagenta:color('bright-magenta','#e4c4f3'),brightCyan:color('bright-cyan','#a5e9e5'),brightWhite:color('bright-white','#ffffff')},
    linkHandler:{activate:()=>{},hover:()=>{}}});
   // Swallow browser-affecting OSC handlers. Native VT parsing retains partial
