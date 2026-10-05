@@ -1,0 +1,2 @@
+export const fileMutationIntentPrefix='golf.file-mutation.v1:';
+export function clearOtherFileMutationIntents(actor?:string){try{const keep=actor?`${fileMutationIntentPrefix}${actor}:`:'';for(const key of Object.keys(sessionStorage))if(key.startsWith(fileMutationIntentPrefix)&&(!keep||!key.startsWith(keep)))sessionStorage.removeItem(key);}catch{/* Native admission independently binds the original journal. */}}

@@ -193,6 +193,16 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 				cancel()
 				return nil, e
 			}
+		} else if resource, ok := ctx.Value(discussionResourcePermitKey{}).(discussionResourcePermit); ok {
+			if e := s.validateDiscussionResourcePermit(ctx, held.tx, resource, repo, key, method, path, input); e != nil {
+				cancel()
+				return nil, e
+			}
+		} else if file, ok := ctx.Value(fileMutationPermitKey{}).(fileMutationPermit); ok {
+			if e := s.validateFileMutationPermit(ctx, held.tx, file, repo, key, method, path, input); e != nil {
+				cancel()
+				return nil, e
+			}
 		} else if blocked {
 			cancel()
 			return nil, errLifecycleBlocked
