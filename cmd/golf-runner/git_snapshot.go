@@ -41,7 +41,7 @@ func verifyGitSnapshot(archive, listing []byte, archiveSHA, commit, workflowPath
 	for _, row := range bytes.Split(listing[:len(listing)-1], []byte{0}) {
 		meta, name, ok := bytes.Cut(row, []byte{'\t'})
 		fields := strings.Split(string(meta), " ")
-		if !ok || len(fields) != 3 || fields[1] != "blob" || fields[0] != "100644" && fields[0] != "100755" || !commitID.MatchString(fields[2]) || len(fields[2]) != len(commit) || !gitSnapshotPath(string(name)) || len(files) >= 4096 {
+		if !ok || len(fields) != 3 || fields[1] != "blob" || fields[0] != "100644" && fields[0] != "100755" || !commitID.MatchString(fields[2]) || len(fields[2]) != len(commit) || !gitSnapshotPath(string(name)) || len(files)+len(directories) >= 4096 {
 			return errTransport
 		}
 		if _, duplicate := files[string(name)]; duplicate {
