@@ -45,6 +45,7 @@ IMAGE = act.IMAGE
 DIND = 'docker:29.8.1-dind@sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0'
 NATIVE, PG = 'gitea/gitea:1.27.3-rootless', 'postgres:18.4-alpine3.24'
 PATH = '.gitlab-ci.yml'
+PROJECT_PREFIX = 'golf-rules49-'
 EXPECTED = {'dist/index.html': b'<html>owned artifact</html>\n', 'dist/report.txt': b'owned build report\n'}
 STAGE = 'arguments'
 REPORT_FAILURE = None
@@ -87,6 +88,7 @@ def archive_receipt(data,row):
     return {'archiveSha256':row['archiveSha256'],'fileCount':2,'fileBytes':row['fileBytes'],'exactOwnedContent':True,'attachmentNotPreview':True}
 
 def self_check():
+    assert native_proxy.PROJECT.fullmatch(PROJECT_PREFIX+'0123456789')
     source=source_files()[PATH];assert b'artifacts:' in source and b'paths: [dist]' in source and IMAGE.encode() in source
     tree=ast.parse(Path(__file__).read_text())
     for node in ast.walk(tree):
@@ -166,7 +168,7 @@ def main():
     assert int(execute('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/bin/df',images['golf'],'-Pk','/').splitlines()[-1].split()[3])>=2*1024*1024
     binary,binary_sha=rules.proxy_binary_receipt(args.proxy_binary)
     before=snapshot();helpers.private_write(output/'foreign-before.json',json.dumps(before,indent=2))
-    project='golf-artifacts62-'+secrets.token_hex(5);ports=helpers.free_ports(4)
+    project=PROJECT_PREFIX+secrets.token_hex(5);ports=helpers.free_ports(4)
     for argv in (('ps','-aq'),('volume','ls','-q'),('network','ls','-q')):assert not execute('docker',*argv,'--filter','label=com.docker.compose.project='+project)
     previous=smoke.GOLF,smoke.GITEA;smoke.GOLF=f'http://127.0.0.1:{ports[0]}';smoke.GITEA=f'http://127.0.0.1:{ports[1]}';secure=f'https://127.0.0.1:{ports[2]}'
     record(images=images,binarySha256=binaries,project=project,helperRevision=execute('git','rev-parse','HEAD'),proxyBinarySha256=binary_sha)
