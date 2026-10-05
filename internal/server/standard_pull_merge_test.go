@@ -131,11 +131,13 @@ type standardMergeFixture struct {
 	calls      atomic.Int32
 	mode       atomic.Value
 	actualBase string
+	method     atomic.Value
 }
 
 func newStandardMergeFixture(t *testing.T) *standardMergeFixture {
 	t.Helper()
 	f := &standardMergeFixture{pullFixture: &pullFixture{db: testDatabase(t)}, actualBase: strings.Repeat("b", 40)}
+	f.method.Store("merge")
 	f.mode.Store("")
 	f.pullFixture.mode.Store("")
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -151,6 +153,14 @@ func newStandardMergeFixture(t *testing.T) *standardMergeFixture {
 			row.Name = "private"
 			row.FullName = "alice/private"
 			row.HTMLURL = "https://forge.invalid/alice/private"
+			if mode == "no-squash" {
+				no := false
+				row.AllowSquashMerge = &no
+			}
+			if mode == "squash-only" {
+				no := false
+				row.AllowMergeCommits = &no
+			}
 			if mode == "replacement" {
 				row.ID = 12
 			}
@@ -204,7 +214,7 @@ func newStandardMergeFixture(t *testing.T) *standardMergeFixture {
 				w.WriteHeader(400)
 				return
 			}
-			if payload["do"] != "merge" || payload["head_commit_id"] != strings.Repeat("a", 40) || payload["force_merge"] != false || payload["merge_when_checks_succeed"] != false || payload["delete_branch_after_merge"] != false {
+			if payload["do"] != f.method.Load().(string) || payload["head_commit_id"] != strings.Repeat("a", 40) || payload["force_merge"] != false || payload["merge_when_checks_succeed"] != false || payload["delete_branch_after_merge"] != false {
 				t.Error("native expected-H/nonforce/nonscheduled/nondestructive flags lost")
 				w.WriteHeader(400)
 				return
@@ -228,7 +238,11 @@ func newStandardMergeFixture(t *testing.T) *standardMergeFixture {
 			if mode == "bad-receipt" {
 				h = strings.Repeat("d", 40)
 			}
-			json.NewEncoder(w).Encode(map[string]any{"sha": strings.Repeat("c", 40), "parents": []map[string]string{{"sha": f.actualBase}, {"sha": h}}})
+			parents := []map[string]string{{"sha": f.actualBase}, {"sha": h}}
+			if f.method.Load().(string) == "squash" && mode != "bad-receipt" {
+				parents = parents[:1]
+			}
+			json.NewEncoder(w).Encode(map[string]any{"sha": strings.Repeat("c", 40), "parents": parents})
 			return
 		}
 		f.serveProvider(w, r)

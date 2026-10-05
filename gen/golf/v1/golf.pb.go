@@ -40610,8 +40610,10 @@ type SubmitStandardPullMergeRequest struct {
 	SourceRepository   *RepositoryKey `protobuf:"bytes,9,opt,name=source_repository,json=sourceRepository,proto3" json:"source_repository,omitempty"`
 	SourceRepositoryId string         `protobuf:"bytes,10,opt,name=source_repository_id,json=sourceRepositoryId,proto3" json:"source_repository_id,omitempty"`
 	SourceOwnerId      string         `protobuf:"bytes,11,opt,name=source_owner_id,json=sourceOwnerId,proto3" json:"source_owner_id,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Omitted/empty means historical merge; only merge and squash are supported.
+	Method        string `protobuf:"bytes,12,opt,name=method,proto3" json:"method,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubmitStandardPullMergeRequest) Reset() {
@@ -40717,6 +40719,13 @@ func (x *SubmitStandardPullMergeRequest) GetSourceRepositoryId() string {
 func (x *SubmitStandardPullMergeRequest) GetSourceOwnerId() string {
 	if x != nil {
 		return x.SourceOwnerId
+	}
+	return ""
+}
+
+func (x *SubmitStandardPullMergeRequest) GetMethod() string {
+	if x != nil {
+		return x.Method
 	}
 	return ""
 }
@@ -45687,7 +45696,7 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x10current_password\x18\x04 \x01(\tR\x0fcurrentPassword\"\x8e\x01\n" +
 	" DeactivateEmailTransportResponse\x125\n" +
 	"\ttransport\x18\x01 \x01(\v2\x17.golf.v1.EmailTransportR\ttransport\x123\n" +
-	"\x15activation_generation\x18\x02 \x01(\tR\x14activationGeneration\"\xf8\x03\n" +
+	"\x15activation_generation\x18\x02 \x01(\tR\x14activationGeneration\"\x90\x04\n" +
 	"\x1eSubmitStandardPullMergeRequest\x12;\n" +
 	"\tselection\x18\x01 \x01(\v2\x1d.golf.v1.PullRequestSelectionR\tselection\x12\x19\n" +
 	"\bowner_id\x18\x02 \x01(\tR\aownerId\x124\n" +
@@ -45702,7 +45711,8 @@ const file_golf_v1_golf_proto_rawDesc = "" +
 	"\x11source_repository\x18\t \x01(\v2\x16.golf.v1.RepositoryKeyR\x10sourceRepository\x120\n" +
 	"\x14source_repository_id\x18\n" +
 	" \x01(\tR\x12sourceRepositoryId\x12&\n" +
-	"\x0fsource_owner_id\x18\v \x01(\tR\rsourceOwnerId\"\x81\x02\n" +
+	"\x0fsource_owner_id\x18\v \x01(\tR\rsourceOwnerId\x12\x16\n" +
+	"\x06method\x18\f \x01(\tR\x06method\"\x81\x02\n" +
 	"$GetStandardPullMergeOperationRequest\x126\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x16.golf.v1.RepositoryKeyR\n" +

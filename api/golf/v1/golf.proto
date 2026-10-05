@@ -3833,6 +3833,8 @@ message SubmitStandardPullMergeRequest {
  RepositoryKey source_repository = 9;
  string source_repository_id = 10;
  string source_owner_id = 11;
+ // Omitted/empty means historical merge; only merge and squash are supported.
+ string method = 12;
 }
 message GetStandardPullMergeOperationRequest {
  RepositoryKey repository = 1;
