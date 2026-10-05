@@ -1,5 +1,6 @@
 name: Two isolated jobs
 on: workflow_dispatch
+defaults: {run: {shell: sh}}
 jobs:
   first:
     runs-on: linux
