@@ -19,7 +19,7 @@ import (
 
 // Called only under runnerAttempt's current authority/policy/resource/placement,
 // worker and exact running lease locks. Upload alone never publishes an output.
-func storeWorkflowArtifact(ctx context.Context, tx *sql.Tx, run workflowRunRecord, data []byte) error {
+func (s *Server) storeWorkflowArtifact(ctx context.Context, tx *sql.Tx, run workflowRunRecord, data []byte) error {
 	plan, err := workflowStoredPlan(ctx, tx, run.ID)
 	if err != nil {
 		return err
@@ -27,11 +27,11 @@ func storeWorkflowArtifact(ctx context.Context, tx *sql.Tx, run workflowRunRecor
 	if run.EngineCatalog != workflowExecutionCatalog || run.Format != int32(golfv1.WorkflowFormat_WORKFLOW_FORMAT_GITLAB_CI) || run.InputContract != "" || runner.ValidateArtifactPaths(plan.ArtifactPaths) != nil {
 		return runner.ErrArtifacts
 	}
-	var binding bool
-	if tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_workflow_execution_bindings WHERE run_id=$1)`, run.ID).Scan(&binding) != nil {
+	var executionBinding bool
+	if tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_workflow_execution_bindings WHERE run_id=$1)`, run.ID).Scan(&executionBinding) != nil {
 		return errStorageUnavailable
 	}
-	if binding {
+	if executionBinding {
 		return runner.ErrArtifacts
 	}
 	canonical, files, fileBytes, err := runner.NormalizeArtifactArchive(data, plan.ArtifactPaths)
@@ -51,10 +51,16 @@ func storeWorkflowArtifact(ctx context.Context, tx *sql.Tx, run workflowRunRecor
 	}
 	sum := sha256.Sum256(data)
 	digest := hex.EncodeToString(sum[:])
-	var existing []byte
-	err = tx.QueryRowContext(ctx, `SELECT archive FROM golf_workflow_artifacts WHERE run_id=$1 AND attempt_id=$2`, run.ID, run.AttemptID).Scan(&existing)
+	existing, existingDigest, existingSize, err := existingArtifact(ctx, tx, run)
 	if err == nil {
-		if !bytes.Equal(existing, data) {
+		if existingDigest != digest || existingSize != int64(len(data)) {
+			return errWorkflowRunConflict
+		}
+		original, err := s.artifactObjectBytes(ctx, existing, existingDigest, existingSize)
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(original, data) {
 			return errWorkflowRunConflict
 		}
 		return nil
@@ -62,6 +68,29 @@ func storeWorkflowArtifact(ctx context.Context, tx *sql.Tx, run workflowRunRecor
 	if !errors.Is(err, sql.ErrNoRows) {
 		return errStorageUnavailable
 	}
+	binding, err := artifactStorageBinding(run, digest, data)
+	if err != nil {
+		return err
+	}
+	if binding.Storage != "postgres" {
+		store, err := s.objectStoreForBinding(ctx, run)
+		if err != nil {
+			return err
+		}
+		if err = store.PutArtifactImmutable(ctx, binding.Key, data, digest); err != nil {
+			return err
+		}
+	}
+	// A bounded provider wait must not extend an expired original lease.
+	var live bool
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_workflow_runs WHERE id=$1 AND attempt_id=$2 AND state='running' AND lease_expires_at>clock_timestamp())`, run.ID, run.AttemptID).Scan(&live); err != nil {
+		return errStorageUnavailable
+	}
+	if !live {
+		return errWorkflowRunConflict
+	}
+	// Provider I/O finishes before the short shared count/insert lock. A later
+	// refusal/rollback may retain an orphan private object, never a published row.
 	// This explicitly small PG profile has a bounded retained budget. The short
 	// admission lock covers counts+INSERT only, never a provider or object read.
 	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('golf.artifacts.pg.v1',0))`); err != nil {
@@ -74,7 +103,7 @@ func storeWorkflowArtifact(ctx context.Context, tx *sql.Tx, run workflowRunRecor
 	if total >= 200 || repository >= 20 {
 		return runner.ErrArtifacts
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO golf_workflow_artifacts(run_id,attempt_id,forge_url,repository_id,owner_id,commit_id,workflow_path,blob_id,source_sha256,archive_sha256,file_count,file_bytes,archive) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, run.ID, run.AttemptID, run.ForgeURL, run.RepositoryID, run.OwnerID, run.CommitID, run.WorkflowPath, run.BlobID, run.SourceSHA256, digest, files, fileBytes, data)
+	_, err = tx.ExecContext(ctx, `INSERT INTO golf_workflow_artifacts(run_id,attempt_id,forge_url,repository_id,owner_id,commit_id,workflow_path,blob_id,source_sha256,archive_sha256,file_count,file_bytes,archive,storage,object_key,object_fingerprint,object_profile_id,object_profile_version,archive_bytes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`, run.ID, run.AttemptID, run.ForgeURL, run.RepositoryID, run.OwnerID, run.CommitID, run.WorkflowPath, run.BlobID, run.SourceSHA256, digest, files, fileBytes, binding.Archive, binding.Storage, binding.Key, binding.Fingerprint, binding.ProfileID, binding.ProfileVersion, len(data))
 	if err != nil {
 		return errStorageUnavailable
 	}
@@ -110,19 +139,21 @@ func (s *Server) readWorkflowArtifact(ctx context.Context, cookie string, creden
 		// Terminal status is joined at each read; unconfirmed/lost/cancelled uploads
 		// are retained privately but never made downloadable.
 		var digest, attempt string
+		var binding objectStorageBinding
+		var archiveBytes int64
 		var files uint32
 		var fileBytes int64
 		var at time.Time
-		e := s.db.QueryRowContext(ctx, `SELECT a.archive,a.archive_sha256,a.file_count,a.file_bytes,a.created_at,a.attempt_id FROM golf_workflow_artifacts a JOIN golf_workflow_runs r ON r.id=a.run_id AND r.attempt_id=a.attempt_id AND r.forge_url=a.forge_url AND r.repository_id=a.repository_id AND r.owner_id=a.owner_id AND r.commit_id=a.commit_id AND r.source_sha256=a.source_sha256 AND r.workflow_path=a.workflow_path AND r.blob_id=a.blob_id WHERE a.run_id=$1 AND r.state='succeeded' AND r.input_contract='' AND NOT EXISTS(SELECT 1 FROM golf_workflow_execution_bindings WHERE run_id=r.id)`, id).Scan(&archive, &digest, &files, &fileBytes, &at, &attempt)
+		e := s.db.QueryRowContext(ctx, `SELECT a.archive,a.storage,a.object_key,a.object_fingerprint,a.object_profile_id::text,a.object_profile_version,a.archive_sha256,a.archive_bytes,a.file_count,a.file_bytes,a.created_at,a.attempt_id FROM golf_workflow_artifacts a JOIN golf_workflow_runs r ON r.id=a.run_id AND r.attempt_id=a.attempt_id AND r.forge_url=a.forge_url AND r.repository_id=a.repository_id AND r.owner_id=a.owner_id AND r.commit_id=a.commit_id AND r.source_sha256=a.source_sha256 AND r.workflow_path=a.workflow_path AND r.blob_id=a.blob_id WHERE a.run_id=$1 AND r.state='succeeded' AND r.input_contract='' AND NOT EXISTS(SELECT 1 FROM golf_workflow_execution_bindings WHERE run_id=r.id)`, id).Scan(&binding.Archive, &binding.Storage, &binding.Key, &binding.Fingerprint, &binding.ProfileID, &binding.ProfileVersion, &digest, &archiveBytes, &files, &fileBytes, &at, &attempt)
 		if errors.Is(e, sql.ErrNoRows) {
 			return nil
 		}
 		if e != nil {
 			return errStorageUnavailable
 		}
-		sum := sha256.Sum256(archive)
-		if len(archive) > runner.MaxArtifactArchive || hex.EncodeToString(sum[:]) != digest {
-			return errStorageUnavailable
+		archive, e = s.artifactObjectBytes(ctx, binding, digest, archiveBytes)
+		if e != nil {
+			return e
 		}
 		result = &golfv1.WorkflowArtifact{RunId: id, AttemptId: attempt, RepositoryId: strconv.FormatInt(run.RepositoryID, 10), OwnerId: strconv.FormatInt(run.OwnerID, 10), CommitId: run.CommitID, WorkflowPath: run.WorkflowPath, BlobId: run.BlobID, SourceSha256: run.SourceSHA256, ArchiveSha256: digest, FileCount: files, FileBytes: strconv.FormatInt(fileBytes, 10), ArchiveBytes: strconv.Itoa(len(archive)), CreatedAt: at.UTC().Format(time.RFC3339Nano), DownloadPath: "/api/workflow-runs/" + id + "/artifact"}
 		return nil

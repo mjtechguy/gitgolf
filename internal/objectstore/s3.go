@@ -26,21 +26,23 @@ import (
 )
 
 const MaxSourceBytes int64 = 16 << 20
+const MaxArtifactBytes int64 = 10 << 20
 const operationTimeout = 30 * time.Second
 
 var (
-	ErrConfiguration = errors.New("object storage configuration is invalid")
-	ErrUnavailable   = errors.New("object storage is unavailable")
-	ErrDenied        = errors.New("object storage access denied")
-	ErrNotFound      = errors.New("object storage object or bucket not found")
-	ErrIntegrity     = errors.New("object storage content verification failed")
-	ErrTooLarge      = errors.New("object storage content exceeds the size limit")
-	ErrConflict      = errors.New("object storage key already contains different content")
-	keyPattern       = regexp.MustCompile(`^ci-sources/[a-f0-9]{64}\.tar$`)
-	shaPattern       = regexp.MustCompile(`^[a-f0-9]{64}$`)
-	prefixPattern    = regexp.MustCompile(`^[a-z0-9][a-z0-9._/-]*$`)
-	bucketPattern    = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`)
-	regionPattern    = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
+	ErrConfiguration   = errors.New("object storage configuration is invalid")
+	ErrUnavailable     = errors.New("object storage is unavailable")
+	ErrDenied          = errors.New("object storage access denied")
+	ErrNotFound        = errors.New("object storage object or bucket not found")
+	ErrIntegrity       = errors.New("object storage content verification failed")
+	ErrTooLarge        = errors.New("object storage content exceeds the size limit")
+	ErrConflict        = errors.New("object storage key already contains different content")
+	keyPattern         = regexp.MustCompile(`^ci-sources/[a-f0-9]{64}\.tar$`)
+	artifactKeyPattern = regexp.MustCompile(`^ci-artifacts/[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}/[a-f0-9]{32}/[a-f0-9]{64}\.tar$`)
+	shaPattern         = regexp.MustCompile(`^[a-f0-9]{64}$`)
+	prefixPattern      = regexp.MustCompile(`^[a-z0-9][a-z0-9._/-]*$`)
+	bucketPattern      = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`)
+	regionPattern      = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
 )
 
 type Config struct {
@@ -160,7 +162,39 @@ func (s *Store) PutImmutable(ctx context.Context, key string, source []byte, exp
 	if err != nil {
 		return err
 	}
-	if int64(len(source)) > MaxSourceBytes {
+	return s.putImmutableObject(ctx, objectKey, source, expectedSHA, MaxSourceBytes)
+}
+
+// Artifact methods admit only an exact run/attempt/content key; ordinary source
+// methods retain their original namespace. No public URLs or worker credentials.
+func (s *Store) artifactObjectKey(key, expectedSHA string) (string, error) {
+	if !shaPattern.MatchString(expectedSHA) || !artifactKeyPattern.MatchString(key) || !strings.HasSuffix(key, "/"+expectedSHA+".tar") {
+		return "", ErrConfiguration
+	}
+	if s.prefix != "" {
+		return s.prefix + "/" + key, nil
+	}
+	return key, nil
+}
+func (s *Store) PutArtifactImmutable(ctx context.Context, key string, archive []byte, expectedSHA string) error {
+	objectKey, err := s.artifactObjectKey(key, expectedSHA)
+	if err != nil {
+		return err
+	}
+	return s.putImmutableObject(ctx, objectKey, archive, expectedSHA, MaxArtifactBytes)
+}
+func (s *Store) GetArtifactVerified(ctx context.Context, key, expectedSHA string, maxBytes int64) ([]byte, error) {
+	objectKey, err := s.artifactObjectKey(key, expectedSHA)
+	if err != nil {
+		return nil, err
+	}
+	if maxBytes < 1 || maxBytes > MaxArtifactBytes {
+		return nil, ErrConfiguration
+	}
+	return s.getVerifiedObject(ctx, objectKey, expectedSHA, maxBytes)
+}
+func (s *Store) putImmutableObject(ctx context.Context, objectKey string, source []byte, expectedSHA string, maxBytes int64) error {
+	if int64(len(source)) > maxBytes {
 		return ErrTooLarge
 	}
 	if digest(source) != expectedSHA {
@@ -173,7 +207,7 @@ func (s *Store) PutImmutable(ctx context.Context, key string, source []byte, exp
 		return ctx.Err()
 	}
 	// Even a successful provider response is not evidence of the object's contents.
-	_, readErr := s.GetVerified(ctx, key, expectedSHA, MaxSourceBytes)
+	_, readErr := s.getVerifiedObject(ctx, objectKey, expectedSHA, maxBytes)
 	if readErr == nil {
 		return nil
 	}
@@ -194,6 +228,9 @@ func (s *Store) GetVerified(ctx context.Context, key, expectedSHA string, maxByt
 	if maxBytes < 1 || maxBytes > MaxSourceBytes {
 		return nil, ErrConfiguration
 	}
+	return s.getVerifiedObject(ctx, objectKey, expectedSHA, maxBytes)
+}
+func (s *Store) getVerifiedObject(ctx context.Context, objectKey, expectedSHA string, maxBytes int64) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, operationTimeout)
 	defer cancel()
 	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(objectKey)})

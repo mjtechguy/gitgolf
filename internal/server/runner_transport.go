@@ -724,7 +724,7 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 	}
 	switch action {
 	case "artifact":
-		err = storeWorkflowArtifact(ctx, tx, run, artifact)
+		err = s.storeWorkflowArtifact(ctx, tx, run, artifact)
 		if errors.Is(err, runner.ErrArtifacts) {
 			runnerFail(w, 400)
 			return
