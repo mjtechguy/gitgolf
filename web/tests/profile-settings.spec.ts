@@ -86,3 +86,16 @@ test('a changed accepted actor clears old dispatch identity and keeps only the n
 test('expired global session forgets dispatch metadata without mounting workflow UI',async({page})=>{
  const state=await backend(page);await page.goto('/account/settings');await expect(page.getByRole('region',{name:'Account profile',exact:true})).toBeVisible();await page.evaluate(value=>sessionStorage.setItem(`golf.workflow-dispatch.v1:${location.origin}:42:8`,JSON.stringify(value)),originalDispatchMetadata('42'));state.signedIn=false;await page.reload();await expect(page.getByRole('heading',{name:'Welcome to Golf',exact:true})).toBeVisible();await expect.poll(()=>storedDispatches(page)).toEqual([]);expect(state.methods.some(method=>['DispatchWorkflow','GetWorkflowDispatch','InspectWorkflows'].includes(method))).toBe(false);
 });
+
+for (const transition of ['logout', 'expiry', 'account-switch'] as const) {
+ test(`global ${transition} clears other release publication identity without mounting Releases`, async ({page}) => {
+  const state=await backend(page);await page.goto('/account/settings');await expect(page.getByRole('region',{name:'Account profile',exact:true})).toBeVisible();
+  await page.evaluate(()=>{sessionStorage.setItem('golf.release-publication.v1:42:8','{"operationId":"original-own"}');sessionStorage.setItem('golf.release-publication.v1:420:8','{"operationId":"other-prefix"}');sessionStorage.setItem('unrelated.fixture','preserved');});
+  if(transition==='logout'){await page.getByLabel('Your account',{exact:true}).click();await page.getByRole('button',{name:'Sign out',exact:true}).click();await expect(page.getByRole('heading',{name:'Welcome to Golf',exact:true})).toBeVisible();}
+  else if(transition==='expiry'){state.signedIn=false;await page.reload();await expect(page.getByRole('heading',{name:'Welcome to Golf',exact:true})).toBeVisible();}
+  else{state.actor='420';state.profile.userId='420';await page.reload();await expect(page.getByRole('region',{name:'Account profile',exact:true})).toBeVisible();}
+  await expect.poll(()=>page.evaluate(()=>Object.keys(sessionStorage).filter(key=>key.startsWith('golf.release-publication.v1:')).sort())).toEqual(transition==='account-switch'?['golf.release-publication.v1:420:8']:[]);
+  expect(await page.evaluate(()=>sessionStorage.getItem('unrelated.fixture'))).toBe('preserved');
+  expect(state.methods.some(method=>['SubmitRepositoryReleasePublication','GetRepositoryReleasePublicationOperation','ListRepositoryReleases'].includes(method))).toBe(false);
+ });
+}
