@@ -1,6 +1,6 @@
 # Current native release metadata
 
-The integrated release slice is read-only: backend `41e26fa`, shared reader `fa64873`, registration/generated clients `41cb8ed` and canonical mounts `8e44fc0`. Bounded actual native/served qualification passes below; retained deployment is **pending**. It does not create/edit/delete releases, upload/download assets, promote artifacts or verify a tag's immutable source snapshot.
+The integrated release slice is read-only: backend `41e26fa`, shared reader `fa64873`, registration/generated clients `41cb8ed` and canonical mounts `8e44fc0`. Bounded actual native/served qualification passes below; retained schema063 deployment and independent running verification pass (see the implementation ledger). It does not create/edit/delete releases, upload/download assets, promote artifacts or verify a tag's immutable source snapshot.
 
 ## API and authority
 
@@ -35,4 +35,4 @@ The operator first provisions the exact fresh stack and tokenless native bootstr
 
 [Actual attempt1](../.tmp/repository-releases063-served-attempt1/qualification/manifest.json) passes on frozen source `b3f9e86c0612b469f320b79e215ea591bef79aac`: two actual native published/prerelease fixtures, owner/reader exact list/detail IDs, tag, body, author and times; wrong repository-ID refusal and current reader-removal404. Eight actual read-only dark/light1440/390 [list/detail captures](../.tmp/repository-releases063-served-attempt1/qualification/browser/manifest.json) pass; root inspected the dark desktop detail. The [parent receipt](../.tmp/repository-releases063-served-attempt1/parent-manifest.json) records runtime identity, owned cleanup and unchanged foreign identities. This proves the current metadata reader only, not asset downloads, release writes or a publication snapshot.
 
-Acceptance still requires a separately recorded retained deployment. Release write intents, assets with authorized byte reads, artifact-to-release publication, protected policy enforcement and recovery are subsequent functional gates, not implied by this metadata reader. See [local completion order](LOCAL_COMPLETION_NEXT.md) and the [implementation ledger](IMPLEMENTATION_STATUS.md).
+The [retained deployment](../.tmp/settings-063-final-retained-backup/receipt.json) and [independent running proof](../.tmp/settings-063-final-running-proof/manifest.json) pass on that exact component. Release write intents, assets with authorized byte reads, artifact-to-release publication, protected policy enforcement and recovery are subsequent functional gates, not implied by this metadata reader. See [local completion order](LOCAL_COMPLETION_NEXT.md) and the [implementation ledger](IMPLEMENTATION_STATUS.md).
