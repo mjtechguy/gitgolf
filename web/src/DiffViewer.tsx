@@ -1,11 +1,12 @@
-import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight, Columns2, List, ListFilter, PanelLeftClose, PanelLeftOpen, Search, Settings2 } from 'lucide-react';
 import { parseDiff } from './diff';
 import type { DiffFile } from './diff';
-import { Hunk, type DiffLineActions } from './DiffHunk';
+import { Hunk, type DiffCoordinate, type DiffLineActions } from './DiffHunk';
 import { DiffNavigation } from './DiffNavigation';
+import { diffSelection } from './diffSelection';
 import { sourceLanguage } from './sourceLanguage';
-import { CopyButton, disclosureDismiss, fitDisclosure } from './RepositoryUI';
+import { CopyButton, disclosureDismiss, fitDisclosure, useFragment } from './RepositoryUI';
 
 const SyntaxHunk=lazy(()=>import('./DiffSyntax'));
 const preferenceKey='golf.diff-display.v1';
@@ -46,12 +47,28 @@ export function DiffViewer({text,snapshotId,toolbarAction,...actions}:{text:stri
  const [viewed,setViewed]=useState<Set<number>>(()=>new Set());
  const [collapsed,setCollapsed]=useState<Set<number>>(()=>new Set());
  const collapseFile=(index:number,value:boolean)=>setCollapsed(before=>{const next=new Set(before);if(value)next.add(index);else next.delete(index);return next;});
- const [selected,setSelected]=useState<number>();
+ const fragment=useFragment();const selection=useMemo(()=>diffSelection(fragment,prefix,files),[fragment,prefix,files]);
+ const anchor=useRef<{prefix:string;text:string;fragment:string;coordinate:DiffCoordinate}|undefined>(undefined);
+ useLayoutEffect(()=>{anchor.current=undefined;},[prefix,text]);
+ const selected=selection?.fileIndex;
+ const lineActions={...actions,lineSelection:selection,onLineSelect:(coordinate:DiffCoordinate,extend:boolean)=>{
+  // A Shift pivot belongs only to this exact snapshot and displayed fragment.
+  const saved=anchor.current;const previous=saved?.prefix===prefix&&saved.text===text&&saved.fragment===fragment?saved.coordinate:undefined;
+  const same=previous?.fileIndex===coordinate.fileIndex&&previous.side===coordinate.side;
+  const origin=extend?(same?previous.line:selection?.fileIndex===coordinate.fileIndex&&selection.side===coordinate.side?selection.first??coordinate.line:coordinate.line):coordinate.line;
+  const side=coordinate.side==='old'?'L':'R',first=Math.min(origin,coordinate.line),last=Math.max(origin,coordinate.line);
+  const range=`#${prefix}-file-${coordinate.fileIndex}-${side}${first}${last===first?'':'-'+side+last}`;
+  const valid=diffSelection(range,prefix,files),next=valid?range:`#${prefix}-file-${coordinate.fileIndex}-${side}${coordinate.line}`;
+  anchor.current={prefix,text,fragment:next,coordinate:extend&&valid?{...coordinate,line:origin}:coordinate};
+  window.location.hash=next;
+ }};
  useEffect(()=>{try {localStorage.setItem(preferenceKey,JSON.stringify(display));}catch{/* Private content never enters preference storage. */}},[display]);
  useEffect(()=>{
-  const read=()=>{const marker=`#${prefix}-file-`,hash=window.location.hash;const match=hash.startsWith(marker)?/^(0|[1-9]\d*)(?:-|$)/.exec(hash.slice(marker.length)):null;const index=match?Number(match[1]):NaN;setSelected(Number.isSafeInteger(index)&&index<files.length?index:undefined);};
-  read();window.addEventListener('hashchange',read);return()=>window.removeEventListener('hashchange',read);
- },[prefix,files.length]);
+  if(selection?.side===undefined||selection.first===undefined)return;
+  setCollapsed(before=>{if(!before.has(selection.fileIndex))return before;const next=new Set(before);next.delete(selection.fileIndex);return next;});
+  const frame=requestAnimationFrame(()=>document.getElementById(`${prefix}-file-${selection.fileIndex}-${selection.side==='old'?'L':'R'}${selection.first}`)?.scrollIntoView({block:'nearest'}));
+  return()=>cancelAnimationFrame(frame);
+ },[fragment,prefix,selection]);
  useEffect(()=>{
   const close=()=>document.querySelectorAll<HTMLDetailsElement>(`details[name="${prefix}-options"]`).forEach(menu=>{if(menu.open){menu.open=false;if(menu.contains(document.activeElement))menu.querySelector('summary')?.focus();}});
   window.addEventListener('resize',close);return()=>window.removeEventListener('resize',close);
@@ -71,9 +88,9 @@ export function DiffViewer({text,snapshotId,toolbarAction,...actions}:{text:stri
    <details className="diff-options" name={prefix+'-options'} {...disclosureDismiss} onToggle={event=>fitDisclosure(event.currentTarget,'.diff-options-content')}><summary aria-label="Diff settings" title="Diff settings"><Settings2 size={16}/><ChevronDown size={13}/></summary><div className="diff-options-content"><strong>Display preferences</strong><label><input type="checkbox" checked={display.wrap} onChange={event=>setPreference('wrap',event.target.checked)}/>Wrap lines</label><label><input type="checkbox" checked={display.syntax} onChange={event=>setPreference('syntax',event.target.checked)}/>Syntax colours</label></div></details>
    <span className={filtered?"muted":"sr-only"} role="status">{filtered?`Showing ${shown.length} of ${files.length} changed files`:'Loaded comparison'}</span>{filtered?<button className="text-button" onClick={clearFilters}>Clear filters</button>:null}
   </div></div>
-  <div className={`diff-layout ${!display.tree?'without-tree':''}`}>{display.tree?<aside className="diff-files"><label className="diff-search"><Search size={15}/><input aria-label="Filter changed files" placeholder="Filter changed files…" value={filter} onChange={event=>setFilter(event.target.value)}/></label><DiffNavigation entries={shown} prefix={prefix} viewed={viewed} selected={selected} onSelect={index=>{setSelected(index);collapseFile(index,false);}}/></aside>:null}<div className="diff-patches">
+  <div className={`diff-layout ${!display.tree?'without-tree':''}`}>{display.tree?<aside className="diff-files"><label className="diff-search"><Search size={15}/><input aria-label="Filter changed files" placeholder="Filter changed files…" value={filter} onChange={event=>setFilter(event.target.value)}/></label><DiffNavigation entries={shown} prefix={prefix} viewed={viewed} selected={selected} onSelect={index=>collapseFile(index,false)}/></aside>:null}<div className="diff-patches">
    {preamble?<details className="diff-preamble"><summary>Native commit header</summary><pre>{preamble}</pre></details>:null}
-   {shown.map(({file,index})=><ChangedFile key={index} file={file} fileIndex={index} {...actions} id={`${prefix}-file-${index}`} split={display.split} syntax={display.syntax} viewed={viewed.has(index)} collapsed={collapsed.has(index)} onCollapsed={value=>collapseFile(index,value)} onViewed={value=>setViewed(before=>{const next=new Set(before);if(value)next.add(index);else next.delete(index);return next;})}/>)}
+   {shown.map(({file,index})=><ChangedFile key={index} file={file} fileIndex={index} {...lineActions} id={`${prefix}-file-${index}`} split={display.split} syntax={display.syntax} viewed={viewed.has(index)} collapsed={collapsed.has(index)} onCollapsed={value=>collapseFile(index,value)} onViewed={value=>setViewed(before=>{const next=new Set(before);if(value)next.add(index);else next.delete(index);return next;})}/>)}
    {!shown.length?<p className="empty-state">{files.length?'No files match this filter.':'No structured file changes in this output.'}</p>:null}
   </div></div>
   <details className="diff-raw" open={!files.length}><summary>Native diff text</summary><pre className="source-preview" tabIndex={0} aria-label="Unified diff, plain text"><code>{text}</code></pre></details>

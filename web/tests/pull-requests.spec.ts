@@ -332,6 +332,9 @@ test('PR changed-files workspace binds comparison, toggles split, filters, marks
  await expect(page.locator('.diff-lines')).toBeVisible();await expect(page.getByLabel('Viewed',{exact:true})).toBeChecked();await expect(page.getByText('1/1 viewed this session',{exact:true})).toBeVisible();
  expect(state.methods.some(method=>/^(Create|Save|Update|Delete|Merge|Submit)/.test(method))).toBe(false);
  await page.getByLabel('Viewed',{exact:true}).uncheck();
+ await page.locator(`#diff-${base}-${head}-file-0-R1`).click();await page.locator(`#diff-${base}-${head}-file-0-R2`).click({modifiers:['Shift']});
+ await expect(page).toHaveURL(new RegExp(`#diff-${base}-${head}-file-0-R1-R2$`));await expect(page.locator('.diff-code.diff-line-selected')).toHaveCount(2);
+ expect(state.methods.some(method=>/^(Create|Save|Update|Delete|Merge|Submit)/.test(method))).toBe(false);
  await page.getByLabel('Filter changed files').fill('missing');
  await expect(page.getByText('No files match this filter.',{exact:true})).toBeVisible();
  await page.getByLabel('Filter changed files').fill('control');

@@ -270,6 +270,57 @@ test('reopening a Viewed or collapsed patch from its header or file tree retains
  await expect(page.getByLabel('Unified diff, plain text')).toHaveText(state.raw);expect(new Set(state.commits)).toEqual(new Set([head]));
 });
 
+const rangePatch='diff --git a/src/range.ts b/src/range.ts\n--- a/src/range.ts\n+++ b/src/range.ts\n@@ -1,4 +1,4 @@\n first\n-old second\n+new second\n third\n fourth\n@@ -10 +10 @@\n-old tenth\n+new tenth\n';
+
+test('diff line ranges retain exact side, file and comparison through shift clicks and history',async({page})=>{
+ const state=await backend(page);state.raw=rangePatch+filePatch('src/other.ts');await page.goto(diffURL(head));
+ const file=page.locator(`#diff-${head}-file-0`),line=(side:string,number:number)=>file.locator(`#diff-${head}-file-0-${side}${number}`);
+ await line('R',1).click();await line('R',3).click({modifiers:['Shift']});await expect(page).toHaveURL(new RegExp(`#diff-${head}-file-0-R1-R3$`));
+ await expect(file.locator('.diff-row-selected')).toHaveCount(3);await expect(file.locator('.diff-row-selected .diff-code code')).toHaveText(['first','new second','third']);
+ await expect(file.locator('.diff-line-selected a')).toHaveCount(3);await expect(file.locator('.diff-line-selected a[aria-current="location"]')).toHaveCount(3);
+ await page.getByRole('button',{name:'Split',exact:true}).click();await expect(file.locator('.diff-code.diff-line-selected')).toHaveCount(3);await expect(file.locator('.diff-code.diff-line-selected')).toHaveText(['first','new second','third']);
+ const addedColors=await file.locator('.diff-code.diff-line-selected').evaluateAll(cells=>cells.map(cell=>getComputedStyle(cell).backgroundColor));expect(new Set(addedColors).size).toBe(1);expect(await file.locator('.diff-code.add:not(.diff-line-selected)').evaluate(cell=>getComputedStyle(cell).backgroundColor)).not.toBe(addedColors[0]);
+ await line('L',4).click();await line('L',2).click({modifiers:['Shift']});await expect(page).toHaveURL(new RegExp(`#diff-${head}-file-0-L2-L4$`));await expect(file.locator('.diff-code.diff-line-selected')).toHaveText(['old second','third','fourth']);
+ const deletedColors=await file.locator('.diff-code.diff-line-selected').evaluateAll(cells=>cells.map(cell=>getComputedStyle(cell).backgroundColor));expect(new Set(deletedColors).size).toBe(1);expect(await file.locator('.diff-code.delete:not(.diff-line-selected)').evaluate(cell=>getComputedStyle(cell).backgroundColor)).not.toBe(deletedColors[0]);
+ await page.goBack();await expect(page).toHaveURL(new RegExp(`#diff-${head}-file-0-L4$`));await expect(file.locator('.diff-code.diff-line-selected')).toHaveText('fourth');
+ await page.evaluate(hash=>window.location.hash=hash,`#diff-${head}-file-0-L1`);await line('L',3).click({modifiers:['Shift']});await expect(page).toHaveURL(new RegExp(`#diff-${head}-file-0-L1-L3$`));await expect(file.locator('.diff-code.diff-line-selected')).toHaveText(['first','old second','third']);
+ await line('R',4).click({modifiers:['Shift']});await expect(page).toHaveURL(new RegExp(`#diff-${head}-file-0-R4$`));
+ await line('R',10).click({modifiers:['Shift']});await expect(page).toHaveURL(new RegExp(`#diff-${head}-file-0-R10$`));await expect(file.locator('.diff-code.diff-line-selected')).toHaveText('new tenth');
+ await page.locator(`#diff-${head}-file-1-R1`).click({modifiers:['Shift']});await expect(page).toHaveURL(new RegExp(`#diff-${head}-file-1-R1$`));await expect(file.locator('.diff-code.diff-line-selected')).toHaveCount(0);
+ await expect(page.getByLabel('Unified diff, plain text')).toHaveText(state.raw);expect(new Set(state.commits)).toEqual(new Set([head]));expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain('src/range.ts');
+});
+
+test('a reused diff component never carries a Shift pivot across snapshot or native text changes',async({page})=>{
+ await backend(page);await page.goto(diffURL(head));
+ await page.evaluate(async patch=>{
+  const urls=['/node_modules/.vite/deps/react.js','/node_modules/.vite/deps/react-dom_client.js','/src/DiffViewer.tsx'];
+  const [react,dom,workspace]=await Promise.all(urls.map(url=>import(url)));const host=document.createElement('div');host.setAttribute('data-diff-harness','');document.body.append(host);const root=dom.default.createRoot(host);
+  const render=(snapshotId:string,text:string)=>root.render(react.default.createElement(workspace.DiffViewer,{snapshotId,text}));(window as unknown as {renderDiff:typeof render}).renderDiff=render;render('harness-a',patch);
+ },rangePatch);
+ const harness=page.locator('[data-diff-harness]'),line=(prefix:string,number:number)=>harness.locator(`#diff-${prefix}-file-0-L${number}`);
+ await line('harness-a',4).click();await line('harness-a',2).click({modifiers:['Shift']});await expect(page).toHaveURL(/#diff-harness-a-file-0-L2-L4$/);
+ await page.evaluate(patch=>(window as unknown as {renderDiff:(id:string,text:string)=>void}).renderDiff('harness-b',patch),rangePatch);
+ await line('harness-b',1).click({modifiers:['Shift']});await expect(page).toHaveURL(/#diff-harness-b-file-0-L1$/);
+ await line('harness-b',4).click();await line('harness-b',2).click({modifiers:['Shift']});await expect(page).toHaveURL(/#diff-harness-b-file-0-L2-L4$/);
+ await page.evaluate(patch=>(window as unknown as {renderDiff:(id:string,text:string)=>void}).renderDiff('harness-b',patch),rangePatch.replace('old second','different native bytes'));
+ await expect(harness).toContainText('different native bytes');await line('harness-b',1).click({modifiers:['Shift']});await expect(page).toHaveURL(/#diff-harness-b-file-0-L1-L2$/);await expect(harness.locator('.diff-row-selected')).toHaveCount(2);
+});
+
+for(const theme of ['dark','light'])for(const width of [1440,320])test(`direct diff range links highlight whole displayed rows in ${theme} ${width}px`,async({page})=>{
+ const state=await backend(page);state.raw=rangePatch;await page.setViewportSize({width,height:900});await page.addInitScript(theme=>localStorage.setItem('golf.theme',theme),theme);
+ await page.goto(diffURL(head)+`#diff-${head}-file-0-R2-R4`);const file=page.locator(`#diff-${head}-file-0`);
+ await expect(file.locator('.diff-row-selected')).toHaveCount(3);await expect(file.locator('.diff-line-selected a')).toHaveText(['2','3','4']);
+ const colors=await file.locator('.diff-row-selected > .diff-code').evaluateAll(rows=>rows.map(row=>getComputedStyle(row).backgroundColor));expect(new Set(colors).size).toBe(1);expect(colors[0]).not.toBe('rgba(0, 0, 0, 0)');
+ for(const bad of [`#diff-${parent}-file-0-R2-R4`,`#diff-${head}-file-0-L2-R4`,`#diff-${head}-file-0-R3-R10`,`#diff-${head}-file-0-R0`,`#diff-${head}-file-99-R1`]){
+  await page.evaluate(hash=>window.location.hash=hash,bad);await expect(file.locator('.diff-line-selected,.diff-row-selected')).toHaveCount(0);
+ }
+ await page.evaluate(hash=>window.location.hash=hash,`#diff-${head}-file-0-L1-L3`);await expect(file.locator('.diff-row-selected')).toHaveCount(3);await expect(file.locator('.diff-line-selected a')).toHaveText(['1','2','3']);
+ await page.getByRole('button',{name:'Split',exact:true}).click();const splitColors=await file.locator('.diff-code.diff-line-selected').evaluateAll(cells=>cells.map(cell=>getComputedStyle(cell).backgroundColor));expect(new Set(splitColors).size).toBe(1);
+ expect(await file.locator('.diff-code.delete:not(.diff-line-selected)').evaluate(cell=>getComputedStyle(cell).backgroundColor)).not.toBe(splitColors[0]);
+ await page.evaluate(hash=>window.location.hash=hash,`#diff-${head}-file-0-R1-R3`);const newColors=await file.locator('.diff-code.diff-line-selected').evaluateAll(cells=>cells.map(cell=>getComputedStyle(cell).backgroundColor));expect(new Set(newColors).size).toBe(1);expect(await file.locator('.diff-code.add:not(.diff-line-selected)').evaluate(cell=>getComputedStyle(cell).backgroundColor)).not.toBe(newColors[0]);
+ await page.getByRole('button',{name:'Unified',exact:true}).click();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:test.info().outputPath(`diff-range-${theme}-${width}.png`),fullPage:true});
+});
+
 test('display preferences persist only booleans while private filters and Viewed reset on a new comparison',async({page})=>{
  const state=await backend(page);state.raw=filePatch('private/customer-secret.ts');await page.goto(diffURL(head));
  await page.getByRole('button',{name:'Split',exact:true}).click();await page.getByLabel('Diff settings',{exact:true}).click();

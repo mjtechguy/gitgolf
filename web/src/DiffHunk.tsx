@@ -1,20 +1,24 @@
 import { Fragment, type ReactNode } from 'react';
 import { Plus } from 'lucide-react';
 import { splitLines, type DiffLine } from './diff';
+import type { DiffSelection } from './diffSelection';
 
 export type DiffCoordinate={fileIndex:number;hunkIndex:number;side:'old'|'new';line:number;path:string};
-export type DiffLineActions={onLineAction?:(coordinate:DiffCoordinate)=>void;lineActionLabel?:(coordinate:DiffCoordinate)=>string;lineActionAllowed?:(coordinate:DiffCoordinate)=>boolean;renderLineAnnotation?:(coordinate:DiffCoordinate)=>ReactNode};
+export type DiffLineActions={lineSelection?:DiffSelection;onLineSelect?:(coordinate:DiffCoordinate,extend:boolean)=>void;onLineAction?:(coordinate:DiffCoordinate)=>void;lineActionLabel?:(coordinate:DiffCoordinate)=>string;lineActionAllowed?:(coordinate:DiffCoordinate)=>boolean;renderLineAnnotation?:(coordinate:DiffCoordinate)=>ReactNode};
 function coordinate(line:DiffLine|undefined,side:'old'|'new',props:HunkProps):DiffCoordinate|undefined {
  const number=side==='old'?line?.old:line?.next;
  const path=side==='old'?props.oldPath:props.path;
  return number!==undefined&&Number.isInteger(number)&&number>0&&number<=2147483647&&path&&props.fileIndex!==undefined&&props.hunkIndex!==undefined?{fileIndex:props.fileIndex,hunkIndex:props.hunkIndex,side,line:number,path}:undefined;
 }
+function selected(coordinate:DiffCoordinate|undefined,actions:DiffLineActions) {
+ const range=actions.lineSelection;return Boolean(coordinate&&range&&range.fileIndex===coordinate.fileIndex&&range.side===coordinate.side&&range.first!==undefined&&range.last!==undefined&&coordinate.line>=range.first&&coordinate.line<=range.last);
+}
 function LineNumber({number,id,selection,actions}:{number?:number;id:string;selection?:DiffCoordinate;actions:DiffLineActions}) {
  const actionable=selection&&actions.onLineAction&&(!actions.lineActionAllowed||actions.lineActionAllowed(selection));
- return <td className={`diff-line-number ${actionable?'with-line-action':''}`}>{number!==undefined?<><a id={id} href={`#${id}`} aria-label={`Line ${number}`}>{number}</a>{actionable?<button type="button" className="diff-line-action" aria-label={actions.lineActionLabel?.(selection)||`Add comment on ${selection.side} line ${number} in ${selection.path}`} title={actions.lineActionLabel?.(selection)||`Add comment · ${selection.side} line ${number}`} onClick={()=>actions.onLineAction?.(selection)}><Plus size={13} aria-hidden="true"/></button>:null}</>:null}</td>;
+ return <td className={`diff-line-number ${actionable?'with-line-action':''} ${selected(selection,actions)?'diff-line-selected':''}`}>{number!==undefined?<><a id={id} href={`#${id}`} aria-label={`Line ${number}`} aria-current={selected(selection,actions)?'location':undefined} onClick={event=>{if(!selection||!actions.onLineSelect||event.metaKey||event.ctrlKey||event.altKey||event.button!==0)return;event.preventDefault();actions.onLineSelect(selection,event.shiftKey);}}>{number}</a>{actionable?<button type="button" className="diff-line-action" aria-label={actions.lineActionLabel?.(selection)||`Add comment on ${selection.side} line ${number} in ${selection.path}`} title={actions.lineActionLabel?.(selection)||`Add comment · ${selection.side} line ${number}`} onClick={()=>actions.onLineAction?.(selection)}><Plus size={13} aria-hidden="true"/></button>:null}</>:null}</td>;
 }
 function SplitCell({line,id,side,tokens,props}:{line?:DiffLine;id:string;side:'old'|'new';tokens?:Map<DiffLine,ReactNode>;props:HunkProps}) {
- return <><LineNumber number={side==='old'?line?.old:line?.next} id={id} selection={coordinate(line,side,props)} actions={props}/><td className={`diff-code ${line?.kind||'empty'}`}><code>{line?(tokens?.get(line)??line.text):''}</code></td></>;
+ return <><LineNumber number={side==='old'?line?.old:line?.next} id={id} selection={coordinate(line,side,props)} actions={props}/><td className={`diff-code ${line?.kind||'empty'} ${selected(coordinate(line,side,props),props)?'diff-line-selected':''}`}><code>{line?(tokens?.get(line)??line.text):''}</code></td></>;
 }
 function Annotations({oldLine,newLine,props}:{oldLine?:DiffLine;newLine?:DiffLine;props:HunkProps}) {
  if(!props.renderLineAnnotation)return null;
@@ -26,5 +30,5 @@ export type DiffTokens={old:Map<DiffLine,ReactNode>;new:Map<DiffLine,ReactNode>}
 export type HunkProps={lines:DiffLine[];header:string;id:string;split:boolean;fileIndex?:number;hunkIndex?:number;path?:string;oldPath?:string}&DiffLineActions;
 export function Hunk(props:HunkProps&{tokens?:DiffTokens}) {
  const {lines,header,id,split,tokens}=props;
- return <><tr className="diff-hunk"><td colSpan={split?4:3}><code>{header}</code></td></tr>{split?splitLines(lines).map((row,index)=><Fragment key={index}><tr><SplitCell line={row.left} side="old" id={`${id}-L${row.left?.old??`note${index}`}`} tokens={tokens?.old} props={props}/><SplitCell line={row.right} side="new" id={`${id}-R${row.right?.next??`note${index}`}`} tokens={tokens?.new} props={props}/></tr><Annotations oldLine={row.left} newLine={row.right} props={props}/></Fragment>):lines.map((line,index)=><Fragment key={index}><tr className={line.kind}><LineNumber number={line.old} id={`${id}-L${line.old}`} selection={coordinate(line,'old',props)} actions={props}/><LineNumber number={line.next} id={`${id}-R${line.next}`} selection={coordinate(line,'new',props)} actions={props}/><td className="diff-code"><span className="diff-sign" aria-hidden="true">{line.kind==='add'?'+':line.kind==='delete'?'−':' '}</span><code>{(line.kind==='delete'?tokens?.old:tokens?.new)?.get(line)??line.text}</code></td></tr><Annotations oldLine={line} newLine={line} props={props}/></Fragment>)}</>;
+ return <><tr className="diff-hunk"><td colSpan={split?4:3}><code>{header}</code></td></tr>{split?splitLines(lines).map((row,index)=><Fragment key={index}><tr><SplitCell line={row.left} side="old" id={`${id}-L${row.left?.old??`note${index}`}`} tokens={tokens?.old} props={props}/><SplitCell line={row.right} side="new" id={`${id}-R${row.right?.next??`note${index}`}`} tokens={tokens?.new} props={props}/></tr><Annotations oldLine={row.left} newLine={row.right} props={props}/></Fragment>):lines.map((line,index)=><Fragment key={index}><tr className={`${line.kind} ${selected(coordinate(line,'old',props),props)||selected(coordinate(line,'new',props),props)?'diff-row-selected':''}`}><LineNumber number={line.old} id={`${id}-L${line.old}`} selection={coordinate(line,'old',props)} actions={props}/><LineNumber number={line.next} id={`${id}-R${line.next}`} selection={coordinate(line,'new',props)} actions={props}/><td className="diff-code"><span className="diff-sign" aria-hidden="true">{line.kind==='add'?'+':line.kind==='delete'?'−':' '}</span><code>{(line.kind==='delete'?tokens?.old:tokens?.new)?.get(line)??line.text}</code></td></tr><Annotations oldLine={line} newLine={line} props={props}/></Fragment>)}</>;
 }
