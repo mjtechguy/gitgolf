@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 	"github.com/mjtechguy/golf-git/gen/golf/v1/golfv1connect"
+	"github.com/mjtechguy/golf-git/internal/server/database"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -164,10 +166,11 @@ func TestReleasePublicationManagedOuterBoundary(t *testing.T) {
 
 type releasePublicationFixture struct {
 	*pullFixture
-	calls     atomic.Int32
-	state     sync.Mutex
-	mode      atomic.Value
-	published *forgeRepositoryRelease
+	calls      atomic.Int32
+	state      sync.Mutex
+	mode       atomic.Value
+	published  *forgeRepositoryRelease
+	mergeCalls atomic.Int32
 }
 
 func newReleasePublicationFixture(t *testing.T) *releasePublicationFixture {
@@ -193,7 +196,7 @@ func newReleasePublicationFixture(t *testing.T) *releasePublicationFixture {
 			if mode == "actor" {
 				id++
 			}
-			json.NewEncoder(w).Encode(User{ID: id, Login: login})
+			json.NewEncoder(w).Encode(map[string]any{"id": id, "login": login, "is_admin": false})
 			return
 		case "/api/v1/users/search":
 			json.NewEncoder(w).Encode(map[string]any{"ok": true, "data": []User{{ID: 42, Login: "alice"}}})
@@ -230,10 +233,15 @@ func newReleasePublicationFixture(t *testing.T) *releasePublicationFixture {
 			if mode == "unknown-unit" {
 				releases = nil
 			}
-			json.NewEncoder(w).Encode(struct {
-				forgeRepositorySettings
-				HasReleases *bool `json:"has_releases"`
-			}{row, releases})
+			config := rulesRepositoryFixture()
+			config.forgeRepositorySettings = row
+			raw, _ := json.Marshal(config)
+			var observed map[string]any
+			json.Unmarshal(raw, &observed)
+			observed["has_releases"] = releases
+			observed["has_actions"] = false
+			observed["permissions"] = map[string]bool{"admin": row.Permissions.Admin, "push": mode != "reader", "pull": true}
+			json.NewEncoder(w).Encode(observed)
 			return
 		case "/api/v1/repos/alice/private/collaborators/alice/permission":
 			permission := "owner"
@@ -254,6 +262,31 @@ func newReleasePublicationFixture(t *testing.T) *releasePublicationFixture {
 				return
 			}
 			w.WriteHeader(204)
+			return
+		case "/api/v1/repos/alice/private/pulls/7":
+			json.NewEncoder(w).Encode(standardMergeFixturePull(false))
+			return
+		case "/api/v1/repos/alice/private/commits":
+			json.NewEncoder(w).Encode([]any{workspaceCommit(strings.Repeat("a", 40))})
+			return
+		case "/api/v1/repos/alice/private/branches/main":
+			json.NewEncoder(w).Encode(map[string]any{"name": "main", "commit": map[string]string{"id": strings.Repeat("b", 40)}, "protected": false, "user_can_merge": true})
+			return
+		case "/api/v1/repos/alice/private/git/refs/heads/feature/slash", "/api/v1/repos/alice/private/git/refs/heads/main":
+			name := strings.TrimPrefix(r.URL.Path, "/api/v1/repos/alice/private/git/refs/heads/")
+			sha := strings.Repeat("a", 40)
+			if name == "main" {
+				sha = strings.Repeat("b", 40)
+			}
+			json.NewEncoder(w).Encode([]any{map[string]any{"ref": "refs/heads/" + name, "object": map[string]string{"type": "commit", "sha": sha}}})
+			return
+		case "/api/v1/repos/alice/private/pulls/7/merge":
+			if r.Method != http.MethodPost {
+				w.WriteHeader(405)
+				return
+			}
+			f.mergeCalls.Add(1)
+			w.WriteHeader(500)
 			return
 		case "/api/v1/repos/alice/private/tag_protections":
 			rows := []forgeTagProtection{}
@@ -623,5 +656,149 @@ func TestReleasePublicationOrdinaryDirectAdminPostgres(t *testing.T) {
 				t.Fatal("current direct admin publication", e)
 			}
 		})
+	}
+}
+
+// These source-PG fixtures reserve the existing Golf journal, never mutate the
+// native database/refs. Fork-source cases exercise the SQL admission boundary.
+func (f *releasePublicationFixture) seedPendingMerge(t *testing.T, session loginResult, m *golfv1.SubmitStandardPullMergeRequest, phase string) error {
+	t.Helper()
+	target, _ := discussionID(m.Selection.RepositoryId)
+	owner, _ := discussionID(m.OwnerId)
+	source, _ := discussionID(m.SourceRepositoryId)
+	sourceOwner, _ := discussionID(m.SourceOwnerId)
+	sourceKey := keyFrom(m.SourceRepository)
+	return f.s.workflowTransaction(context.Background(), session.Value, 42, func(tx *sql.Tx, c database.LockManagedSessionRow, _ []byte) error {
+		held, e := f.s.lockStandardMergeLifecycles(context.Background(), tx, target, source, true)
+		if e != nil {
+			return e
+		}
+		var id int64
+		e = tx.QueryRowContext(held, `INSERT INTO golf_standard_pull_merges(user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,pull_request_id,number,expected_pull_revision,head_commit_id,observed_base_commit_id,source_ref,target_ref,input_fingerprint,source_repository_id,source_owner_id,source_repository_owner,source_repository_name) VALUES($1,$2,42,$3,$4,$5,$6,$7,9007199254740993,7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`, c.UserID, f.s.config.GiteaURL, m.OperationId, target, owner, m.Selection.Repository.Owner, m.Selection.Repository.Name, m.ExpectedPullRevision, m.Selection.HeadCommitId, m.Selection.BaseCommitId, m.SourceRef, m.TargetRef, standardMergeFingerprint(m), source, sourceOwner, sourceKey.Owner, sourceKey.Name).Scan(&id)
+		if e != nil {
+			return e
+		}
+		if phase == "DISPATCH_UNKNOWN" {
+			_, e = tx.ExecContext(held, `UPDATE golf_standard_pull_merges SET phase='DISPATCH_UNKNOWN' WHERE id=$1`, id)
+		}
+		return e
+	})
+}
+func (f *releasePublicationFixture) submitMerge(t *testing.T, session loginResult, m *golfv1.SubmitStandardPullMergeRequest) (*golfv1.StandardPullMergeOperation, error) {
+	t.Helper()
+	_, _, _, client, origin := testRPCClients(t, f.s)
+	client.Jar.SetCookies(origin, []*http.Cookie{f.s.sessionCookie(session.Value, session.Expires, 3600)})
+	req := connect.NewRequest(m)
+	req.Header().Set("Origin", f.s.config.PublicURL)
+	r, e := golfv1connect.NewStandardPullMergeServiceClient(client, origin.String()+"/rpc").SubmitStandardPullMerge(context.Background(), req)
+	if e != nil {
+		return nil, e
+	}
+	return r.Msg.Operation, nil
+}
+func TestReleasePublicationMergeExclusionPostgres(t *testing.T) {
+	for _, phase := range []string{"RESERVED", "DISPATCH_UNKNOWN"} {
+		for _, coordinate := range []string{"target", "fork-source"} {
+			t.Run(phase+"/"+coordinate, func(t *testing.T) {
+				f := newReleasePublicationFixture(t)
+				session := f.session(t, "pat")
+				publication := f.request(t, session)
+				merge := standardMergeFixtureRequest()
+				if coordinate == "fork-source" {
+					merge.Selection.Repository = &golfv1.RepositoryKey{Owner: "alice", Name: "other"}
+					merge.Selection.RepositoryId = "12"
+					merge.SourceRepository = &golfv1.RepositoryKey{Owner: "alice", Name: "private"}
+					merge.SourceRepositoryId = "11"
+					merge.SourceOwnerId = "42"
+				}
+				if e := f.seedPendingMerge(t, session, merge, phase); e != nil {
+					t.Fatal(e)
+				}
+				if _, e := f.submit(t, session, publication); connect.CodeOf(e) != connect.CodeFailedPrecondition || f.calls.Load() != 0 {
+					t.Fatal("publication bypassed unresolved merge", e)
+				}
+				var stored string
+				if e := f.db.QueryRow(`SELECT phase FROM golf_standard_pull_merges WHERE operation_id=$1`, merge.OperationId).Scan(&stored); e != nil || stored != phase {
+					t.Fatal("competing admission changed original", e)
+				}
+				var n int
+				if e := f.db.QueryRow(`SELECT count(*) FROM golf_repository_release_publications`).Scan(&n); e != nil || n != 0 {
+					t.Fatal("competing publication admitted", e)
+				}
+				if coordinate == "target" {
+					original, e := f.submitMerge(t, session, merge)
+					if e != nil || original.Phase.String() != "STANDARD_PULL_MERGE_PHASE_"+phase || f.mergeCalls.Load() != 0 {
+						t.Fatal("original merge status/replay dispatched", e)
+					}
+				}
+			})
+		}
+	}
+	t.Run("publication-first", func(t *testing.T) {
+		f := newReleasePublicationFixture(t)
+		owner := f.session(t, "pat")
+		publication := f.request(t, owner)
+		f.mode.Store("lost-response")
+		r, e := f.submit(t, owner, publication)
+		if e != nil || r.Phase != golfv1.RepositoryReleasePublicationPhase_REPOSITORY_RELEASE_PUBLICATION_PHASE_DISPATCH_UNKNOWN {
+			t.Fatal(e)
+		}
+		bob, e := f.s.createSession(context.Background(), User{ID: 43, Login: "bob"}, "pat", "other-pat", "")
+		if e != nil {
+			t.Fatal(e)
+		}
+		if _, e = f.submitMerge(t, bob, standardMergeFixtureRequest()); connect.CodeOf(e) != connect.CodeFailedPrecondition || f.mergeCalls.Load() != 0 {
+			t.Fatal("merge bypassed publication exclusion", e)
+		}
+		original, e := f.status(t, owner, publication)
+		if e != nil || !proto.Equal(r, original) || f.calls.Load() != 1 {
+			t.Fatal("original publication changed/dispatched", e)
+		}
+		var n int
+		if e = f.db.QueryRow(`SELECT count(*) FROM golf_standard_pull_merges`).Scan(&n); e != nil || n != 0 {
+			t.Fatal("competing merge admitted", e)
+		}
+	})
+}
+func TestReleasePublicationDistinctActorMergeContentionPostgres(t *testing.T) {
+	f := newReleasePublicationFixture(t)
+	owner := f.session(t, "pat")
+	publication := f.request(t, owner)
+	bob, e := f.s.createSession(context.Background(), User{ID: 43, Login: "bob"}, "pat", "other-pat", "")
+	if e != nil {
+		t.Fatal(e)
+	}
+	f.mode.Store("lost-response")
+	begin := make(chan struct{})
+	var wg sync.WaitGroup
+	var pub *golfv1.RepositoryReleasePublicationOperation
+	var merge *golfv1.StandardPullMergeOperation
+	var pubErr, mergeErr error
+	wg.Add(2)
+	go func() { defer wg.Done(); <-begin; pub, pubErr = f.submit(t, owner, publication) }()
+	go func() {
+		defer wg.Done()
+		<-begin
+		merge, mergeErr = f.submitMerge(t, bob, standardMergeFixtureRequest())
+	}()
+	close(begin)
+	wg.Wait()
+	if pubErr == nil {
+		if pub.Phase != golfv1.RepositoryReleasePublicationPhase_REPOSITORY_RELEASE_PUBLICATION_PHASE_DISPATCH_UNKNOWN || connect.CodeOf(mergeErr) != connect.CodeFailedPrecondition {
+			t.Fatal("publication winner did not exclude merge", mergeErr)
+		}
+	} else if mergeErr == nil {
+		if merge.Phase != golfv1.StandardPullMergePhase_STANDARD_PULL_MERGE_PHASE_DISPATCH_UNKNOWN || connect.CodeOf(pubErr) != connect.CodeFailedPrecondition {
+			t.Fatal("merge winner did not exclude publication", pubErr)
+		}
+	} else {
+		t.Fatal("neither independent current actor admitted", pubErr, mergeErr)
+	}
+	if f.calls.Load()+f.mergeCalls.Load() != 1 {
+		t.Fatal("competing native writes forwarded", f.calls.Load(), f.mergeCalls.Load())
+	}
+	var n int
+	if e = f.db.QueryRow(`SELECT (SELECT count(*) FROM golf_repository_release_publications WHERE phase IN ('RESERVED','DISPATCH_UNKNOWN'))+(SELECT count(*) FROM golf_standard_pull_merges WHERE phase IN ('RESERVED','DISPATCH_UNKNOWN'))`).Scan(&n); e != nil || n != 1 {
+		t.Fatal("mutual admission exclusion", e, n)
 	}
 }

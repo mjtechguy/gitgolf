@@ -269,6 +269,9 @@ func (s *Server) advanceReleasePublication(ctx context.Context, session string, 
 	return
 }
 
+// The per-repository exclusive lifecycle gate serializes publication admission
+// and forwarding with standard merge shared gates, including fork sources.
+// It does not mediate native/external writers or add an atomic tag CAS.
 // This permit is private and only constructed inside the original actor's
 // workflowTransaction after UNKNOWN is committed. It cannot admit generic API
 // writes while this publication excludes managed repository mutations.
@@ -308,7 +311,7 @@ func (s *Server) validateReleasePublicationPermit(ctx context.Context, tx *sql.T
 		return errLifecycleBlocked
 	}
 	var blocked bool
-	if e = tx.QueryRowContext(ctx, `SELECT golf_repository_lifecycle_blocked_before_release_publication($1,$2)`, r.ForgeURL, r.RepositoryID).Scan(&blocked); e != nil {
+	if e = tx.QueryRowContext(ctx, `SELECT golf_repository_lifecycle_blocked_before_release_publication($1,$2) OR EXISTS(SELECT 1 FROM golf_standard_pull_merges WHERE forge_url=$1 AND (repository_id=$2 OR source_repository_id=$2) AND phase IN ('RESERVED','DISPATCH_UNKNOWN'))`, r.ForgeURL, r.RepositoryID).Scan(&blocked); e != nil {
 		return errStorageUnavailable
 	}
 	if blocked {

@@ -36,7 +36,8 @@ CREATE TRIGGER golf_release_publications_no_delete BEFORE DELETE OR TRUNCATE ON 
 CREATE TRIGGER golf_release_publication_events_immutable BEFORE UPDATE OR DELETE OR TRUNCATE ON golf_repository_release_publication_events FOR EACH STATEMENT EXECUTE FUNCTION golf_audit_reject_mutation();
 -- +goose StatementBegin
 CREATE FUNCTION golf_release_publication_lock(f text,r bigint) RETURNS void LANGUAGE plpgsql AS $$ BEGIN
- PERFORM golf_repository_lifecycle_lock(f,r,false);
+ -- A publication admission/forward transaction excludes merge shared gates.
+ PERFORM golf_repository_lifecycle_lock(f,r,true);
  PERFORM pg_advisory_xact_lock(hashtextextended(f||'/release-publication/'||r::text,0));
 END; $$;
 CREATE FUNCTION golf_release_publication_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
@@ -44,7 +45,7 @@ CREATE FUNCTION golf_release_publication_guard() RETURNS trigger LANGUAGE plpgsq
  IF TG_OP='INSERT' THEN
   IF NEW.phase<>'RESERVED' OR NOT EXISTS(SELECT 1 FROM golf_users WHERE id=NEW.user_id AND forge_url=NEW.forge_url AND forge_user_id=NEW.actor_id) THEN RAISE EXCEPTION 'Invalid release publication reservation'; END IF;
   IF EXISTS(SELECT 1 FROM golf_repository_release_publications WHERE user_id=NEW.user_id AND forge_url=NEW.forge_url AND operation_id=NEW.operation_id) THEN RETURN NEW; END IF;
-  IF golf_repository_lifecycle_blocked(NEW.forge_url,NEW.repository_id) THEN RAISE EXCEPTION 'Release publication or lifecycle unresolved' USING ERRCODE='55000'; END IF;
+  IF golf_repository_lifecycle_blocked(NEW.forge_url,NEW.repository_id) OR EXISTS(SELECT 1 FROM golf_standard_pull_merges WHERE forge_url=NEW.forge_url AND (repository_id=NEW.repository_id OR source_repository_id=NEW.repository_id) AND phase IN ('RESERVED','DISPATCH_UNKNOWN')) THEN RAISE EXCEPTION 'Release publication or lifecycle unresolved' USING ERRCODE='55000'; END IF;
  ELSE
   IF (to_jsonb(NEW)-ARRAY['phase','failure_code','release_id','updated_at']) IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['phase','failure_code','release_id','updated_at']) OR NOT(OLD.phase='RESERVED' AND NEW.phase IN ('DISPATCH_UNKNOWN','REJECTED') OR OLD.phase='DISPATCH_UNKNOWN' AND NEW.phase='SUCCEEDED') THEN RAISE EXCEPTION 'Release publication identity/outcome immutable'; END IF;
   NEW.updated_at=greatest(clock_timestamp(),OLD.updated_at);
