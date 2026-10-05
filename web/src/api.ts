@@ -1,6 +1,6 @@
 import { createClient, ConnectError } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
-import { RepositoryReleasePublicationService, WorkflowArtifactService, StandardPullMergeService, PullMergeObservationService, RepositoryEnvironmentService, OrganizationExecutionValueService, GitTransportService, RunnerPoolService, RunnerControlService, RepositoryRulesService, RepositoryInvitationService, RepositoryExecutionValueService, EmailNotificationService, RepositoryLifecycleService, RepositoryTeamAccessService, RepositoryWebhookService, RepositoryDeployKeyService, ActionRunService, RepositoryActivityService, ReviewerService, AgentTaskService, AgentUsageService, CodexAccountService, AutomationGrantService, AccountSecurityService, ProfileService, InfrastructureConnectionService, OrganizationCreationService, ExecutionPolicyService, WorkflowRunService, WorkflowService, RepositoryAccessService, InstanceAdminService, OrganizationAdminService, RepositorySettingsService, GitAccessService, ApiCredentialService, AuditService, CapabilityService, OrganizationService, RepositoryService, SessionService } from './gen/golf/v1/golf_pb';
+import { RepositoryDeploymentService, RepositoryReleasePublicationService, WorkflowArtifactService, StandardPullMergeService, PullMergeObservationService, RepositoryEnvironmentService, OrganizationExecutionValueService, GitTransportService, RunnerPoolService, RunnerControlService, RepositoryRulesService, RepositoryInvitationService, RepositoryExecutionValueService, EmailNotificationService, RepositoryLifecycleService, RepositoryTeamAccessService, RepositoryWebhookService, RepositoryDeployKeyService, ActionRunService, RepositoryActivityService, ReviewerService, AgentTaskService, AgentUsageService, CodexAccountService, AutomationGrantService, AccountSecurityService, ProfileService, InfrastructureConnectionService, OrganizationCreationService, ExecutionPolicyService, WorkflowRunService, WorkflowService, RepositoryAccessService, InstanceAdminService, OrganizationAdminService, RepositorySettingsService, GitAccessService, ApiCredentialService, AuditService, CapabilityService, OrganizationService, RepositoryService, SessionService } from './gen/golf/v1/golf_pb';
 
 const transport = createConnectTransport({
   baseUrl: '/rpc',
@@ -8,6 +8,7 @@ const transport = createConnectTransport({
   fetch: (input, init) => fetch(input, { ...init, credentials: 'same-origin', cache: 'no-store' }),
 });
 
+export const repositoryDeploymentClient=createClient(RepositoryDeploymentService,transport);
 export const releasePublicationClient=createClient(RepositoryReleasePublicationService,transport);
 export const pullMergeObservationClient=createClient(PullMergeObservationService,transport);
 export const standardPullMergeClient=createClient(StandardPullMergeService,transport);

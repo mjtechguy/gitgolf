@@ -13,6 +13,7 @@ async function backend(page:Page){
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{});
   if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository:{id:'11',name:'demo',fullName:'alex/demo',defaultBranch:'main',private:true}});
   if(method==='ListAgentTasks')return disabledAgentTasks(route);
+  if(method==='GetRepositoryStar')return reject(route,'unimplemented','Optional Star fixture unavailable.');
   if(method==='WatchRepository')return reject(route,'unimplemented','No source fixture stream.');
   if(method==='GetWorkflowRun')return respond(route,GetWorkflowRunResponseSchema,{run:{id,attemptId:attempt,repositoryId:'11',ownerId:'42',workflowPath:'.gitlab-ci.yml',workflowBlobId:'b'.repeat(40),sourceSha256:'c'.repeat(64),commitId:commit,format:WorkflowFormat.GITLAB_CI,state:state.status,version:'3',createdAt:'2026-10-04T00:00:00Z',finishedAt:'2026-10-04T00:01:00Z',origin:WorkflowRunOrigin.MANUAL,engineCatalog:'golf.workflow.shell.v1'}});
   if(method==='GetWorkflowRunLogs')return respond(route,GetWorkflowRunLogsResponseSchema,{logs:[],runId:id,attemptId:attempt,repositoryId:'11',sourceCommitId:commit});

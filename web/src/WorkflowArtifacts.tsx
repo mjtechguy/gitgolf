@@ -1,3 +1,4 @@
+import { ArtifactDeployment } from './ArtifactDeployment';
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Code, ConnectError } from '@connectrpc/connect';
@@ -14,7 +15,7 @@ function matches(a:WorkflowArtifact,run:WorkflowRun){
 
 // A successful ordinary GitLab shell run already has current parent authority.
 // This is an additional exact read, never an upload, dispatch or public link.
-export function WorkflowArtifacts({run,userId,enabled,onAuthorityDenied}:{run:WorkflowRun;userId:string;enabled:boolean;onAuthorityDenied:(error:ConnectError,run:WorkflowRun)=>void}){
+export function WorkflowArtifacts({run,userId,enabled,onAuthorityDenied,owner,name}:{run:WorkflowRun;userId:string;enabled:boolean;owner:string;name:string;onAuthorityDenied:(error:ConnectError,run:WorkflowRun)=>void}){
  const eligible=run.state===WorkflowRunState.SUCCEEDED&&run.format===WorkflowFormat.GITLAB_CI&&!run.inputContract&&!run.executionBindingId&&(!run.engineCatalog||run.engineCatalog==='golf.workflow.shell.v1');
  const query=useQuery({...privateQuery,queryKey:['workflow-artifact',userId,run.repositoryId,run.ownerId,run.id,run.attemptId,run.commitId,run.workflowBlobId,run.sourceSha256],enabled:enabled&&eligible,
   queryFn:async({signal})=>{try{const response=await workflowArtifactClient.getWorkflowArtifact({runId:run.id},{signal,timeoutMs:12000});signal.throwIfAborted();if(response.artifact&&!matches(response.artifact,run))throw new ConnectError('The build artifact receipt could not be verified.',Code.Internal);return response.artifact??null;}catch(error){signal.throwIfAborted();throw error;}}});
@@ -25,5 +26,6 @@ export function WorkflowArtifacts({run,userId,enabled,onAuthorityDenied}:{run:Wo
   <div className="browser-panel-heading"><h3><Package size={16} aria-hidden="true"/>Build artifacts</h3><button className="icon-button manual-refresh" aria-label="Refresh build artifact" title="Refresh build artifact" disabled={query.isFetching} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button></div>
   {query.error?<PanelError error={query.error} retry={()=>void query.refetch()}/>:query.isFetching?<Loading label="Checking build artifact access…"/>:query.isSuccess?<DataTable data={artifact?[artifact]:[]} columns={[{id:'name',header:'Artifact',cell:()=> 'Build outputs'},{accessorKey:'fileCount',header:'Files'},{id:'size',header:'Size',cell:({row})=>`${Number(row.original.fileBytes).toLocaleString()} bytes`},{id:'download',header:'',cell:({row})=><a className="icon-button" aria-label="Download artifact" title="Download artifact" href={row.original.downloadPath} download="build-artifacts.tar"><Download size={16}/></a>}]} getRowId={a=>a.archiveSha256} label="Build artifacts" emptyMessage="No build artifact was recorded for this run."/>:null}
   {artifact?<div className="panel-content"><details className="metadata-details"><summary>Artifact receipt</summary><dl className="detail-grid"><div><dt>Archive SHA-256</dt><dd><code>{artifact.archiveSha256}</code></dd></div><div><dt>Attempt</dt><dd><code>{artifact.attemptId}</code></dd></div><div><dt>Delivery</dt><dd>Private attachment; this is not a preview or deployment.</dd></div></dl></details></div>:null}
+ {artifact?<ArtifactDeployment artifact={artifact} userId={userId} owner={owner} name={name} enabled={enabled&&!query.isFetching} onAuthorityDenied={error=>onAuthorityDenied(error,run)}/>:null}
  </section>;
 }
