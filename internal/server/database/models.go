@@ -1368,6 +1368,39 @@ type GolfSession struct {
 	LocalCredentialVersion sql.NullInt64
 }
 
+type GolfStandardPullMerge struct {
+	ID                   int64
+	UserID               int64
+	ForgeURL             string
+	ActorID              int64
+	OperationID          string
+	RepositoryID         int64
+	OwnerID              int64
+	RepositoryOwner      string
+	RepositoryName       string
+	PullRequestID        int64
+	Number               int64
+	ExpectedPullRevision string
+	HeadCommitID         string
+	ObservedBaseCommitID string
+	SourceRef            string
+	TargetRef            string
+	InputFingerprint     []byte
+	Phase                string
+	MergeCommitID        string
+	ActualBaseCommitID   string
+	FailureCode          string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
+type GolfStandardPullMergeEvent struct {
+	ID          int64
+	OperationID int64
+	Phase       string
+	OccurredAt  time.Time
+}
+
 type GolfUser struct {
 	ID          int64
 	ForgeURL    string
