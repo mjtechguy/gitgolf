@@ -28,6 +28,7 @@ export function useRepositoryLive(userId:string,owner:string,name:string,reposit
     if(key[0]==='agent-task-events')return topics.includes('agents');
     if(['action-runs','action-run'].includes(String(key[0])))return topics.some(topic=>['actions','agents','pulls'].includes(topic));
     if(key[0]==='workflow-configurations')return topics.includes('source')||topics.includes('actions');
+    if(key[0]==='repository-deployments')return topics.includes('actions');
     return topics.includes('actions')&&['workflow-runs','workflow-run','workflow-run-logs'].includes(String(key[0]))||topics.includes('agents')&&['agent-tasks','agent-task'].includes(String(key[0]))||topics.includes('pulls')&&key[0]==='reviewer-runs';
    }});
   };

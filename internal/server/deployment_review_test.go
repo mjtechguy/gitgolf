@@ -125,6 +125,7 @@ func TestStaticDeploymentIndependentReviewAndParentExpiryPostgres(t *testing.T) 
 	if _, e = f.server.reviewRepositoryDeployment(c, self); connect.CodeOf(e) != connect.CodePermissionDenied {
 		t.Fatal("selfapproval", e)
 	}
+	activity := deploymentActivityCount(t, f)
 	review, c := environmentRequest(f, reviewer, decision)
 	approved, e := f.server.reviewRepositoryDeployment(c, review)
 	if e != nil || len(approved.Msg.Deployment.Approvals) != 1 || !approved.Msg.Deployment.Approvals[0].Approved {
@@ -138,6 +139,28 @@ func TestStaticDeploymentIndependentReviewAndParentExpiryPostgres(t *testing.T) 
 	request, c := environmentRequest(f, reviewer, changed)
 	if _, e = f.server.reviewRepositoryDeployment(c, request); connect.CodeOf(e) != connect.CodeFailedPrecondition {
 		t.Fatal("changeddecisionkey", e)
+	}
+	if got := deploymentActivityCount(t, f); got != activity+1 {
+		t.Fatalf("review/replay activity = %d, want %d", got, activity+1)
+	}
+	// An invalidation belongs to the decision's transaction, not a precommit
+	// notification. Another connection must never observe a rolled-back review.
+	tx, e := f.server.db.BeginTx(t.Context(), nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer tx.Rollback()
+	if _, e = tx.ExecContext(t.Context(), "INSERT INTO golf_deployment_reviews(deployment_id,user_id,operation_id,native_actor_id,session_hash,approved,expires_at) SELECT deployment_id,user_id,$1,native_actor_id,session_hash,false,expires_at FROM golf_deployment_reviews WHERE operation_id=$2", uuid.NewString(), decision.OperationId); e != nil {
+		t.Fatal(e)
+	}
+	if got := deploymentActivityCount(t, f); got != activity+1 {
+		t.Fatal("uncommitted review leaked activity", got)
+	}
+	if e = tx.Rollback(); e != nil {
+		t.Fatal(e)
+	}
+	if got := deploymentActivityCount(t, f); got != activity+1 {
+		t.Fatal("rolled-back review leaked activity", got)
 	}
 	activate, c = environmentRequest(f, alice, selected)
 	if ready, e := f.server.activateRepositoryDeployment(c, activate); e != nil || !ready.Msg.Deployment.CanOpen {

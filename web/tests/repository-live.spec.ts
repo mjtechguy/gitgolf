@@ -22,6 +22,7 @@ async function fixture(page:Page){
    return route.fulfill({status:200,contentType:'application/connect+json',body:Buffer.concat([envelope(0,message),envelope(0,reconnect),envelope(2,{})])});
   }
   const user={id:'42',login:'alex'};const repository={id:'11',name:'demo',fullName:'alex/demo',defaultBranch:'main',private:true};
+  if(method==='GetRepositoryStar')return reject(route,'unimplemented','Optional Star fixture is unavailable.');
   if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user});
   if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{repositories:[repository]});

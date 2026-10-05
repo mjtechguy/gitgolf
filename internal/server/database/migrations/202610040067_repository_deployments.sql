@@ -61,7 +61,18 @@ END; $$;
 CREATE FUNCTION golf_deployment_event_complete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
  IF NOT EXISTS(SELECT 1 FROM golf_deployment_events WHERE deployment_id=NEW.id AND version=NEW.version AND state=NEW.state) THEN RAISE EXCEPTION 'Deployment event missing'; END IF; RETURN NULL;
 END; $$;
+CREATE FUNCTION golf_deployment_activity() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE d golf_repository_deployments;
+BEGIN
+ SELECT * INTO STRICT d FROM golf_repository_deployments WHERE id=NEW.deployment_id;
+ -- Only a committed invalidation: private receipts and reviewer decisions stay
+ -- behind current-authorized deployment reads, never in the live payload.
+ PERFORM golf_append_repository_activity(d.forge_url,d.repository_id,0,'actions');
+ RETURN NEW;
+END; $$;
 -- +goose StatementEnd
+CREATE TRIGGER golf_deployment_event_activity AFTER INSERT ON golf_deployment_events FOR EACH ROW EXECUTE FUNCTION golf_deployment_activity();
+CREATE TRIGGER golf_deployment_review_activity AFTER INSERT ON golf_deployment_reviews FOR EACH ROW EXECUTE FUNCTION golf_deployment_activity();
 CREATE TRIGGER golf_deployment_review_guard BEFORE INSERT ON golf_deployment_reviews FOR EACH ROW EXECUTE FUNCTION golf_deployment_review_guard();
 CREATE TRIGGER golf_deployment_guard BEFORE INSERT OR UPDATE ON golf_repository_deployments FOR EACH ROW EXECUTE FUNCTION golf_deployment_guard();
 CREATE CONSTRAINT TRIGGER golf_deployment_event_complete AFTER INSERT OR UPDATE ON golf_repository_deployments DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION golf_deployment_event_complete();

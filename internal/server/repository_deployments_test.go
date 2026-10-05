@@ -202,6 +202,14 @@ func previewQualifiedArtifact(t *testing.T, f *workflowRunFixture, l loginResult
 	}
 	return a
 }
+func deploymentActivityCount(t *testing.T, f *workflowRunFixture) int {
+	t.Helper()
+	var count int
+	if e := f.server.db.QueryRow("SELECT count(*) FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=$2 AND recipient_user_id=0 AND topic='actions'", f.server.config.GiteaURL, f.row.ID).Scan(&count); e != nil {
+		t.Fatal(e)
+	}
+	return count
+}
 func TestStaticDeploymentActivationReplayAndRevocationPostgres(t *testing.T) {
 	f := newWorkflowRunFixture(t, ".gitlab-ci.yml")
 	f.row.HTMLURL = "https://forge.invalid/alice/example"
@@ -234,6 +242,7 @@ func TestStaticDeploymentActivationReplayAndRevocationPostgres(t *testing.T) {
 		r, c := environmentRequest(f, l, m)
 		return f.server.createRepositoryDeployment(c, r)
 	}
+	activity := deploymentActivityCount(t, f)
 	first, e := create(input)
 	if e != nil || first.Msg.Deployment.State != "REQUESTED" || !first.Msg.Deployment.CanActivate {
 		t.Fatal("request", e)
@@ -247,6 +256,9 @@ func TestStaticDeploymentActivationReplayAndRevocationPostgres(t *testing.T) {
 	if _, e = create(bad); connect.CodeOf(e) != connect.CodeFailedPrecondition {
 		t.Fatal("originalintentchange", e)
 	}
+	if got := deploymentActivityCount(t, f); got != activity+1 {
+		t.Fatalf("admission/replay activity = %d, want %d", got, activity+1)
+	}
 	get := &golfv1.RepositoryDeploymentRequest{Target: target, DeploymentId: input.DeploymentId}
 	wrong := proto.Clone(get).(*golfv1.RepositoryDeploymentRequest)
 	wrong.Target.Repository.Name = "replacement"
@@ -258,6 +270,9 @@ func TestStaticDeploymentActivationReplayAndRevocationPostgres(t *testing.T) {
 	ready, e := f.server.activateRepositoryDeployment(c, r)
 	if e != nil || ready.Msg.Deployment.State != "READY" || !ready.Msg.Deployment.CanOpen {
 		t.Fatal("realactivation", e)
+	}
+	if got := deploymentActivityCount(t, f); got != activity+2 {
+		t.Fatalf("activation activity = %d, want %d", got, activity+2)
 	}
 	second := proto.Clone(input).(*golfv1.CreateRepositoryDeploymentRequest)
 	second.DeploymentId = uuid.NewString()
@@ -276,6 +291,9 @@ func TestStaticDeploymentActivationReplayAndRevocationPostgres(t *testing.T) {
 	}
 	if _, e = f.server.activateRepositoryDeployment(c, r); e == nil {
 		t.Fatal("revoked revived")
+	}
+	if got := deploymentActivityCount(t, f); got != activity+4 {
+		t.Fatalf("revoke/refusal activity = %d, want %d", got, activity+4)
 	}
 	var count int
 	if f.server.db.QueryRow("SELECT count(*) FROM golf_repository_deployments WHERE id=$1", input.DeploymentId).Scan(&count) != nil || count != 1 {
