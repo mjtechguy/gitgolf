@@ -27,6 +27,7 @@ async function backend(page: Page) {
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Sign in required.');
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user });
+    if (method === 'GetRepositoryStar') return reject(route, 'unimplemented', 'Stars are outside this commit fixture.');
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
     if (method === 'GetRepository') return state.repositoryDenied ? reject(route, 'not_found', 'Repository not found or inaccessible.') : respond(route, GetRepositoryResponseSchema, { repository });
@@ -253,6 +254,20 @@ test('file-type and Viewed filters cover only loaded native entries without chan
  await expect(page.locator('.diff-file')).toHaveCount(7);await expect(selected.getByLabel('Viewed',{exact:true})).toBeChecked();
  await expect(page.getByLabel('Unified diff, plain text')).toHaveText(state.raw);
  await page.reload();await expect(page.getByText('0/7 viewed this session',{exact:true})).toBeVisible();
+});
+
+test('reopening a Viewed or collapsed patch from its header or file tree retains review progress',async({page})=>{
+ const state=await backend(page);state.raw=multiPatch();await page.goto(diffURL(head));
+ const file=page.locator(`#diff-${head}-file-1`),nav=page.getByRole('navigation',{name:'Changed file navigation'}),link=nav.getByRole('link',{name:'src/nested/alpha.ts',exact:true});
+ await file.getByLabel('Viewed',{exact:true}).check();await expect(file.getByLabel('Changes in src/nested/alpha.ts',{exact:true})).toHaveCount(0);
+ await file.getByRole('button',{name:'Expand src/nested/alpha.ts',exact:true}).click();
+ await expect(file.getByLabel('Changes in src/nested/alpha.ts',{exact:true})).toBeVisible();await expect(file.getByLabel('Viewed',{exact:true})).toBeChecked();
+ await file.getByRole('button',{name:'Collapse src/nested/alpha.ts',exact:true}).click();
+ await link.focus();await page.keyboard.press('Enter');await expect(file.getByLabel('Changes in src/nested/alpha.ts',{exact:true})).toBeVisible();await expect(file.getByLabel('Viewed',{exact:true})).toBeChecked();
+ await file.getByRole('button',{name:'Collapse src/nested/alpha.ts',exact:true}).click();
+ await link.click();await expect(file.getByLabel('Changes in src/nested/alpha.ts',{exact:true})).toBeVisible();
+ await expect(page.getByText('1/7 viewed this session',{exact:true})).toBeVisible();await expect(link).toHaveAttribute('aria-current','location');
+ await expect(page.getByLabel('Unified diff, plain text')).toHaveText(state.raw);expect(new Set(state.commits)).toEqual(new Set([head]));
 });
 
 test('display preferences persist only booleans while private filters and Viewed reset on a new comparison',async({page})=>{

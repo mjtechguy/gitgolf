@@ -327,6 +327,10 @@ test('PR changed-files workspace binds comparison, toggles split, filters, marks
  await page.getByLabel('Viewed',{exact:true}).check();
  await expect(page.getByText('1/1 viewed this session',{exact:true})).toBeVisible();
  await expect(page.locator('.diff-lines')).toBeHidden();
+ await page.locator('.diff-file-toggle').click();await expect(page.locator('.diff-lines')).toBeVisible();await expect(page.getByLabel('Viewed',{exact:true})).toBeChecked();
+ await page.locator('.diff-file-toggle').click();const fileLink=page.getByRole('navigation',{name:'Changed file navigation'}).getByRole('link');await fileLink.focus();await page.keyboard.press('Enter');
+ await expect(page.locator('.diff-lines')).toBeVisible();await expect(page.getByLabel('Viewed',{exact:true})).toBeChecked();await expect(page.getByText('1/1 viewed this session',{exact:true})).toBeVisible();
+ expect(state.methods.some(method=>/^(Create|Save|Update|Delete|Merge|Submit)/.test(method))).toBe(false);
  await page.getByLabel('Viewed',{exact:true}).uncheck();
  await page.getByLabel('Filter changed files').fill('missing');
  await expect(page.getByText('No files match this filter.',{exact:true})).toBeVisible();
