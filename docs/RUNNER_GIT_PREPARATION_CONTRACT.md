@@ -6,6 +6,19 @@ network-none Docker containers. Preparation remains unadvertised and outside
 assignments/jobs; neither packet is deployed. Current workers use original source
 archives. The earlier host-Git loopback consumer is historical/source-only.
 
+Source `b34aee2` now supplies a closed credential-free Git manifest/metadata
+archive and the native engine consumer. Source `063776b` adds explicit
+`ExecuteGit` staging before engine startup; `8621bfe` shares the worker/engine
+archive/tree/path validator. [Envelope evidence](../.tmp/git-source-envelope-final-proof/manifest.json),
+[staging evidence](../.tmp/actions-git-source-staging-final-proof/manifest.json) and
+[shared worker evidence](../.tmp/git-snapshot-shared-proof/manifest.json) pass their
+source/native-local checks. No assignment, advertisement or runtime activation
+follows. Actual Docker engine transfer/materialization needs an approved
+registry-digest-pinned Git job image and resource/cleanup qualification. The
+scratch preparation image's content ID without a RepoDigest does not satisfy
+that job-image gate. Existing job volume storage has no hard disk quota;
+preparation tmpfs limits cannot be claimed for that job workspace.
+
 ## Transport and authority
 
 The two endpoints are:
@@ -121,8 +134,8 @@ or source filters, and bounded process/HTTP deadlines. Process groups are killed
 on cancellation; failed workspaces are removed. Buffered response and stdout
 limits are enforced. The historical host consumer bounds do **not** establish native Git memory,
 disk or CPU ceilings. The intended integration now uses the bounded sandbox
-above; activation still requires adversarial/recovery qualification and a
-separate credential-free job metadata envelope.
+above; activation still requires adversarial/recovery qualification and
+actual qualification of the separate credential-free job metadata envelope.
 The tree checker does not authorize arbitrary host extraction, filesystem
 aliases or checkout transformations. Archive export attributes that change or
 omit committed bytes must fail equality; no transformed archive is silently
@@ -148,7 +161,7 @@ Next tasks retain the original compatibility goal:
 
 1. Integrate an explicitly declared trusted-worker preparation capability over
    TLS after adversarial resource-exhaustion/lost-create recovery is qualified
-   against the observed sandbox profile. Add a separate
+   against the observed sandbox profile. Qualify the implemented separate
    verified Git metadata envelope without changing original archive identity or
    exposing controller credentials. Materialize a fresh job Git workspace; verify
    H, its tree and the original workflow blob, with no hooks, implicit LFS or
