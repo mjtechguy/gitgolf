@@ -1,23 +1,26 @@
 import {expect,test,type Page} from '@playwright/test';
-import {create,clone} from '@bufbuild/protobuf';
-import {GetSessionResponseSchema,GetAuthenticationOptionsResponseSchema,ListCapabilitiesResponseSchema,ListRepositoriesResponseSchema,GetRepositoryResponseSchema,GetPullRequestResponseSchema,ListPullRequestReviewsResponseSchema,ListReviewerRunsResponseSchema,GetPullRequestDiscussionResponseSchema,ListIssueCommentsResponseSchema,GetPullRequestMergeObservationRequestSchema,GetPullRequestMergeObservationResponseSchema,PullRequestSchema,PullRequestMergeObservationSchema,RepositorySchema,UserSchema,IssueState,PullMergeTargetProtection,PullMergeSourceState,RepositorySourceRefKind,type PullRequestMergeObservation} from '../src/gen/golf/v1/golf_pb';
+import {create,clone,toJson} from '@bufbuild/protobuf';
+import {GetSessionResponseSchema,GetAuthenticationOptionsResponseSchema,ListCapabilitiesResponseSchema,ListRepositoriesResponseSchema,GetRepositoryResponseSchema,GetPullRequestResponseSchema,ListPullRequestReviewsResponseSchema,ListReviewerRunsResponseSchema,GetPullRequestDiscussionResponseSchema,ListIssueCommentsResponseSchema,GetPullRequestMergeObservationRequestSchema,GetPullRequestMergeObservationResponseSchema,PullRequestSchema,PullRequestMergeObservationSchema,RepositorySchema,UserSchema,IssueState,PullMergeTargetProtection,PullMergeSourceState,RepositorySourceRefKind,WatchRepositoryResponseSchema,type PullRequestMergeObservation} from '../src/gen/golf/v1/golf_pb';
 import {respond,request,reject,disabledAgentTasks} from './rpc';
 
 const key={owner:'alex',name:'private'},H='a'.repeat(40),B='b'.repeat(40),R='e'.repeat(64);
 const user=create(UserSchema,{id:'42',login:'alex'});
 const repository=create(RepositorySchema,{id:'11',name:key.name,fullName:'alex/private',private:true,defaultBranch:'main',htmlUrl:'https://forge.example/alex/private'});
 const original=create(PullRequestSchema,{id:'9007199254740993',number:7,title:'Private comparison title',body:'PRIVATE PR BODY',revision:R,state:IssueState.OPEN,mergeBaseCommitId:B,base:{repositoryId:'11',ref:'main',commitId:B},head:{repositoryId:'23',ref:'feature/topic',commitId:H},user});
+function streamFrame(flag:number,value:unknown){const body=Buffer.from(JSON.stringify(value)),header=Buffer.alloc(5);header[0]=flag;header.writeUInt32BE(body.length,1);return Buffer.concat([header,body]);}
 function observation(p=original){return create(PullRequestMergeObservationSchema,{selection:{repository:key,repositoryId:'11',pullRequestId:p.id,number:p.number,headCommitId:p.head!.commitId,baseCommitId:p.base!.commitId},pullRevision:p.revision,targetOwnerId:'42',sourceRepository:{owner:'contributor',name:'fork'},sourceRepositoryId:'23',source:{kind:RepositorySourceRefKind.BRANCH,name:'feature/topic',commitId:p.head!.commitId},base:{kind:RepositorySourceRefKind.BRANCH,name:'main',commitId:p.base!.commitId},targetProtection:PullMergeTargetProtection.UNPROTECTED,nativeCallerCanMerge:false,currentTargetWriter:false,sourceState:PullMergeSourceState.CURRENT,mergeConfiguration:{allowMergeCommits:true,allowSquashMerge:true,defaultMergeStyle:'merge',defaultUpdateStyle:'merge'},fingerprint:'f'.repeat(64),observedAt:'2026-10-04T18:00:00.123Z',unavailableReason:'protected_integration_unqualified'});}
 async function backend(page:Page){
- const state={pull:clone(PullRequestSchema,original),count:0,methods:[] as string[],denial:0,wait:undefined as Promise<void>|undefined,change:undefined as ((v:PullRequestMergeObservation)=>void)|undefined};
+ const state={liveEnded:false,pullWait:undefined as Promise<void>|undefined,liveWait:undefined as Promise<void>|undefined,pull:clone(PullRequestSchema,original),count:0,methods:[] as string[],denial:0,wait:undefined as Promise<void>|undefined,change:undefined as ((v:PullRequestMergeObservation)=>void)|undefined};
  await page.route('**/rpc/**',async route=>{
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;state.methods.push(method);
+  if(method==='WatchRepository'&&state.liveEnded)return route.fulfill({status:200,contentType:'application/connect+json',body:streamFrame(2,{error:{code:'unimplemented',message:'No more fixture events.'}})});
+  if(method==='WatchRepository'&&state.liveWait){await state.liveWait;state.liveEnded=true;return route.fulfill({status:200,contentType:'application/connect+json',body:Buffer.concat([streamFrame(0,toJson(WatchRepositoryResponseSchema,create(WatchRepositoryResponseSchema,{repositoryId:'11',cursor:'1',kind:'reset',topics:[]}))),streamFrame(0,{repositoryId:'11',cursor:'1',kind:'reconnect'}),streamFrame(2,{})])});}
   if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user});
   if(method==='GetAuthenticationOptions')return respond(route,GetAuthenticationOptionsResponseSchema,{localPasswordEnabled:true});
   if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{repositories:[repository]});
   if(method==='GetRepository')return respond(route,GetRepositoryResponseSchema,{repository});
-  if(method==='GetPullRequest')return respond(route,GetPullRequestResponseSchema,{pullRequest:state.pull});
+  if(method==='GetPullRequest'){if(state.pullWait)await state.pullWait;return respond(route,GetPullRequestResponseSchema,{pullRequest:state.pull});}
   if(method==='ListPullRequestReviews')return respond(route,ListPullRequestReviewsResponseSchema,{});
   if(method==='ListReviewerRuns')return respond(route,ListReviewerRunsResponseSchema,{});
   if(method==='ListAgentTasks')return disabledAgentTasks(route);
@@ -68,6 +71,43 @@ for(const status of [401,403,404])test(`private parent content clears on observa
  await expect(page.getByText('PRIVATE PR BODY',{exact:true})).toHaveCount(0);await expect(page.getByRole('heading',{name:'Private comparison title #7'})).toHaveCount(0);
  if(status===401)await expect(page.getByRole('form',{name:'Golf account sign-in'})).toBeVisible();else await expect(page.getByText('Current private authority is unavailable.',{exact:false})).toBeVisible();
 });
+
+for(const status of [403,404])test(`observation ${status} stays masked through live reset until explicit reauthorization`,async({page})=>{
+ const state=await backend(page);let release!:()=>void;state.liveWait=new Promise<void>(resolve=>release=resolve);state.denial=status;
+ await open(page);await inspect(page);await expect(page.getByRole('alert')).toContainText('Current private authority is unavailable.');
+ const reads=state.methods.filter(method=>method==='GetPullRequest').length,metadataReads=state.methods.filter(method=>method==='GetRepository').length;
+ state.liveWait=new Promise<void>(()=>{});release();
+ await expect.poll(()=>state.methods.filter(method=>method==='GetRepository').length).toBeGreaterThan(metadataReads);
+ await expect(page.getByRole('alert')).toContainText('Current private authority is unavailable.');
+ await expect(page.getByText('PRIVATE PR BODY',{exact:true})).toHaveCount(0);await expect(page.getByRole('heading',{name:'Private comparison title #7'})).toHaveCount(0);
+ expect(state.methods.filter(method=>method==='GetPullRequest')).toHaveLength(reads);
+ state.denial=0;
+ await page.getByRole('button',{name:status===403?'Refresh pull request':'Try again',exact:true}).click();
+ await expect(page.getByText('PRIVATE PR BODY',{exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:'Private comparison title #7'})).toBeVisible();
+ expect(state.methods.filter(method=>method==='GetPullRequest')).toHaveLength(reads+1);expect(state.count).toBe(1);
+ await expect(page.getByRole('button',{name:'Inspect merge observations',exact:true})).toBeVisible();
+ expect(state.methods.filter(method=>/Submit|MergePull|Publish|Dispatch/.test(method))).toEqual([]);
+});
+
+
+test('denial arriving during a held background pull read cancels its private result',async({page})=>{
+ const state=await backend(page);let releaseLive!:()=>void,releasePull!:()=>void,releaseObservation!:()=>void;
+ state.liveWait=new Promise<void>(resolve=>releaseLive=resolve);await open(page);
+ state.wait=new Promise<void>(resolve=>releaseObservation=resolve);state.denial=403;await inspect(page);await expect.poll(()=>state.count).toBe(1);
+ const reads=state.methods.filter(method=>method==='GetPullRequest').length;
+ state.pullWait=new Promise<void>(resolve=>releasePull=resolve);state.liveWait=new Promise<void>(()=>{});releaseLive();
+ await expect.poll(()=>state.methods.filter(method=>method==='GetPullRequest').length).toBe(reads+1);
+ await expect(page.getByText('Checking pull request access…',{exact:true})).toBeVisible();
+ releaseObservation();state.wait=undefined;
+ await expect(page.getByRole('alert')).toContainText('Current private authority is unavailable.');
+ state.pull.body='LATE PRIVATE BODY';state.pullWait=undefined;releasePull();
+ await expect(page.getByText('LATE PRIVATE BODY',{exact:true})).toHaveCount(0);await expect(page.getByText('PRIVATE PR BODY',{exact:true})).toHaveCount(0);
+ await expect(page.getByRole('alert')).toContainText('Current private authority is unavailable.');
+ await page.getByRole('button',{name:'Refresh pull request',exact:true}).click();
+ await expect(page.getByText('LATE PRIVATE BODY',{exact:true})).toBeVisible();
+ expect(state.methods.filter(method=>/Submit|MergePull|Publish|Dispatch/.test(method))).toEqual([]);
+});
+
 test('refresh masks observations and a changed comparison requires new explicit activation',async({page})=>{
  const state=await backend(page);await open(page);await inspect(page);await expect(panel(page)).toContainText('matches the selected head');
  let release!:()=>void;state.wait=new Promise<void>(r=>release=r);await page.getByRole('button',{name:'Refresh merge observation'}).click();await expect(panel(page)).not.toContainText('matches the selected head');

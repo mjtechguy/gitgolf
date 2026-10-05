@@ -1,5 +1,5 @@
 import type {PullRequestMergeObservation} from './gen/golf/v1/golf_pb';
-import { useCallback, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { PullNativeMerge } from './PullNativeMerge';
 import { PullMergeObservation } from './PullMergeObservation';
 import { PullReviewDraftWorkspace } from './PullReviewDraft';
@@ -99,24 +99,34 @@ function PullDetail(props: Props) {
   const reviewTrigger=useRef<HTMLElement|null>(null);
   const openReview=()=>{reviewTrigger.current=document.activeElement as HTMLElement;setDismissedReview(false);setReviewing(true);};
   const closeReview=()=>{setDismissedReview(true);setReviewing(false);requestAnimationFrame(()=>{if(reviewTrigger.current?.isConnected)reviewTrigger.current.focus();else document.querySelector<HTMLButtonElement>('[data-review-trigger]')?.focus();});};
-  const query = useQuery({ ...privateQuery, queryKey: [...queryKey, 'pull', location.pull], queryFn: async ({ signal }) => {
+  const mergeScope=JSON.stringify([props.userId,repositoryKey,props.repositoryId,location.pull]);
+  const authorityEpoch=useRef(0);
+  const currentScope=useRef(mergeScope);
+  if(currentScope.current!==mergeScope){authorityEpoch.current++;currentScope.current=mergeScope;}
+  useEffect(()=>()=>{authorityEpoch.current++;},[]);
+  const [mergeDenial,setMergeDenial]=useState<{scope:string;error:ConnectError}|null>(null);
+  const denied=mergeDenial?.scope===mergeScope?mergeDenial.error:undefined;
+  const query = useQuery({ ...privateQuery, enabled:!denied, queryKey: [...queryKey, 'pull', location.pull], queryFn: async ({ signal }) => {
     const response = await repositoryClient.getPullRequest({ repository: repositoryKey, number: location.pull }, { signal, timeoutMs: 8_000 });
     if (!response.pullRequest) throw new ConnectError('The pull request response is missing its metadata.', Code.Internal);
     return response.pullRequest;
   } });
-  const pull = query.isSuccess ? query.data : undefined;
-  const mergeScope=JSON.stringify([props.userId,repositoryKey,props.repositoryId,location.pull]);
+  const pull = !denied&&query.isSuccess ? query.data : undefined;
+  const refreshPull=()=>{authorityEpoch.current++;setMergeDenial(null);void query.refetch();};
   const [mergeObservation,setMergeObservation]=useState<{scope:string;value:PullRequestMergeObservation|undefined}|null>(null);
   const observeMerge=useCallback((value:PullRequestMergeObservation|undefined)=>setMergeObservation({scope:mergeScope,value}),[mergeScope]);
   const currentMergeObservation=mergeObservation?.scope===mergeScope&&mergeObservation.value?.pullRevision===pull?.revision?mergeObservation.value:undefined;
   const denyMergeObservation=useCallback(async(error:ConnectError,revision:string)=>{
     const key=[...queryKey,'pull',location.pull];
-    const matches=()=>client.getQueryData<{id:string}>(['session'])?.id===props.userId&&client.getQueryData<PullRequest>(key)?.revision===revision;
+    const matches=()=>currentScope.current===mergeScope&&client.getQueryData<{id:string}>(['session'])?.id===props.userId&&client.getQueryData<PullRequest>(key)?.revision===revision;
     if(!matches())return;
+    // Background activity must not silently undo a current authority denial.
+    const epoch=++authorityEpoch.current;
+    setMergeDenial({scope:mergeScope,error});
     await client.cancelQueries({queryKey:key,exact:true});
-    if(!matches())return;
+    if(authorityEpoch.current!==epoch||!matches())return;
     client.getQueryCache().find({queryKey:key,exact:true})?.setState({data:undefined,error,status:'error',fetchStatus:'idle'});
-  },[client,queryKey,location.pull,props.userId]);
+  },[client,queryKey,location.pull,props.userId,mergeScope]);
   const external = pull && repositoryLink(pull.htmlUrl);
   const resumed = pull && readReviewIntent(reviewIntentKey(props.userId,props.repositoryId,pull.id),props.repositoryId,pull.id,pull.number);
   const reviewOpen=reviewing||Boolean(resumed)&&!dismissedReview;
@@ -125,8 +135,8 @@ function PullDetail(props: Props) {
     {query.isFetching && pull ? <Loading label="Checking pull request access…"/> : null}
     <div hidden={query.isFetching && Boolean(pull)}>
     <section className="discussion-summary pull-detail" aria-labelledby="pull-detail-title">
-      <div className="discussion-navigation"><Link className="text-button" {...repositoryOptions(location, { pull: undefined })}><ArrowLeft size={15} />All {location.state === 'all' ? '' : `${location.state} `}pull requests</Link><button className="icon-button manual-refresh" aria-label="Refresh pull request" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} /></button></div>
-      {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : !pull ? <Loading label="Loading pull request…" /> : <>
+      <div className="discussion-navigation"><Link className="text-button" {...repositoryOptions(location, { pull: undefined })}><ArrowLeft size={15} />All {location.state === 'all' ? '' : `${location.state} `}pull requests</Link><button className="icon-button manual-refresh" aria-label="Refresh pull request" disabled={query.isFetching} onClick={refreshPull}><RefreshCw size={16} /></button></div>
+      {denied||query.isError ? <PanelError error={denied||query.error!} retry={refreshPull} /> : !pull ? <Loading label="Loading pull request…" /> : <>
         <h2 id="pull-detail-title">{pull.title} <span className="muted">#{pull.number}</span></h2>
         <div className="discussion-summary-meta"><PullState pull={pull} /><p>{pull.user?.login || 'Deleted or unavailable author'} opened this pull request on <DateLabel value={pull.createdAt} /></p><span className="pull-comparison"><code>{pull.base?.label || pull.base?.ref}</code><span>←</span><code>{pull.head?.label || pull.head?.ref}</code></span></div>
         <PullRequestEditControls key={pull.id} {...props} pull={pull} refresh={()=>{void query.refetch();void client.invalidateQueries({queryKey:[...queryKey,'pulls']});}}/>
