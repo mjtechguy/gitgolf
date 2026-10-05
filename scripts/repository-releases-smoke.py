@@ -2,10 +2,13 @@
 """Prepared bounded releases read proof on an externally owned fresh stack.
 Never starts/builds/pulls/stops services. Two ordinary managed actors, two native
 releases, independent exact list/detail reads, then native reader removal.
-Optional --browser captures eight actual read-only views. No asset/download,
+Optional --browser captures eight actual read-only views. --assets additionally
+qualifies bounded managed native-asset attachments; no Golf asset writes,
 snapshot/publication, provider or full repository readiness claim.
 """
 import argparse
+import hashlib
+from email.message import Message
 from datetime import datetime
 import importlib.util
 import json
@@ -26,7 +29,7 @@ def load_common(stack):
  module.RPC_PROCEDURES=module.RPC_PROCEDURES|frozenset((LIST,GET))
  return module
 
-def allowed(method,path,prefix):
+def allowed(method,path,prefix,assets=False):
  if method=='GET' and path in ('user','version'):return True
  if method=='GET' and re.fullmatch('users/'+re.escape(prefix)+r'-(owner|reader)',path):return True
  if method=='POST' and path=='user/repos':return True
@@ -34,6 +37,8 @@ def allowed(method,path,prefix):
  if re.fullmatch(base,path):return method in ('GET','DELETE')
  if re.fullmatch(base+r'/collaborators/'+re.escape(prefix)+r'-reader',path):return method in ('PUT','DELETE')
  if re.fullmatch(base+r'/releases',path):return method in ('GET','POST')
+ if assets and re.fullmatch(base+r'/releases/[1-9][0-9]*/assets/[1-9][0-9]*',path):return method=='GET'
+ if assets and re.fullmatch(base+r'/releases/[1-9][0-9]*/assets\?name=owned-release-[12]\.bin',path):return method=='POST'
  return method=='GET' and re.fullmatch(base+r'/releases/[1-9][0-9]*',path) is not None
 
 def release_receipt(common,row,native):
@@ -44,12 +49,29 @@ def release_receipt(common,row,native):
  for field in ('createdAt','publishedAt'):datetime.fromisoformat(row[field].replace('Z','+00:00'))
  assert row['author']['id']==str(native['author']['id']) and row['author']['login']==native['author']['login']
  assert row['author'].get('fullName','')==native['author'].get('full_name','') and row['author'].get('avatarUrl','')==native['author'].get('avatar_url','')
- assert native['assets']==[] and row.get('assets',[])==[] and row['assetCount']=='0'
+ assets=native['assets'];observed=row.get('assets',[]);assert len(assets)==len(observed) and row['assetCount']==str(len(assets))
+ for expected,actual in zip(sorted(assets,key=lambda v:v['id']),sorted(observed,key=lambda v:int(v['id']))):
+  assert set(actual)<={'id','name','sizeBytes','downloadCount','createdAt'}
+  assert common.decimal(actual['id']) and actual['id']==str(expected['id']) and actual['name']==expected['name'] and actual['sizeBytes']==str(expected['size']) and actual['downloadCount']==str(expected['download_count']) and actual['createdAt']==expected['created_at']
  return row
 
 def bound_response(row,target):
  assert row['repository']==target['repository'] and row['repositoryId']==target['repositoryId']
  return row
+
+def asset_download_path(repository,repository_id,release_id,asset_id):
+ from urllib.parse import quote
+ assert all(re.fullmatch('[1-9][0-9]{0,18}',v) and int(v)<=9223372036854775807 for v in (repository_id,release_id,asset_id))
+ assert all(re.fullmatch('[a-zA-Z0-9_.-]{1,100}',repository[k]) for k in ('owner','name'))
+ return '/api/repositories/'+quote(repository['owner'],safe='')+'/'+quote(repository['name'],safe='')+'/'+repository_id+'/releases/'+release_id+'/assets/'+asset_id+'/download'
+
+def attachment_receipt(data,headers,asset,expected):
+ assert len(data)<=10<<20 and data==expected and len(data)==asset['size']
+ assert headers['Content-Type']=='application/octet-stream' and headers['Content-Length']==str(len(data))
+ assert headers['Cache-Control']=='no-store' and headers['X-Content-Type-Options']=='nosniff' and headers['Content-Security-Policy']=="sandbox; default-src 'none'"
+ disposition=Message();disposition['Content-Disposition']=headers['Content-Disposition']
+ assert disposition.get_content_disposition()=='attachment' and disposition.get_filename()==asset['name']
+ return hashlib.sha256(data).hexdigest()
 
 def self_check(stack):
  common=load_common(stack);prefix='golf-mergeobs-'+'a'*10
@@ -62,11 +84,32 @@ def self_check(stack):
   try:release_receipt(common,row|change,native)
   except (AssertionError,ValueError):pass
   else:raise AssertionError('Changed release receipt accepted')
- print('PASS: pure native scope and exact release metadata tamper checks; no resources')
+ asset={'id':21,'name':'owned-release-1.bin','size':3,'download_count':0,'created_at':native['created_at']}
+ with_asset=native|{'assets':[asset]};asset_row={'id':'21','name':asset['name'],'sizeBytes':'3','downloadCount':'0','createdAt':asset['created_at']}
+ release_receipt(common,row|{'assetCount':'1','assets':[asset_row]},with_asset)
+ for change in ({'id':'22'},{'sizeBytes':'4'},{'name':'changed'},{'downloadCount':'1'},{'uuid':'private-transport-id'},{'browserDownloadUrl':'https://outside.invalid'}):
+  try:release_receipt(common,row|{'assetCount':'1','assets':[asset_row|change]},with_asset)
+  except (AssertionError,ValueError):pass
+  else:raise AssertionError('Changed asset receipt accepted')
+ upload='repos/'+prefix+'-owner/private/releases/12/assets?name=owned-release-1.bin'
+ assert allowed('POST',upload,prefix,True) and not allowed('POST',upload,prefix)
+ for path in (upload.replace('owned-release-1.bin','private-value.bin'),upload+'&url=https://outside.invalid',upload.replace(prefix,'foreign')):assert not allowed('POST',path,prefix,True)
+ route=asset_download_path({'owner':'owned','name':'private'},'2','12','21');assert route=='/api/repositories/owned/private/2/releases/12/assets/21/download'
+ for ids in (('02','12','21'),('2','0','21'),('2','12','9223372036854775808')):
+  try:asset_download_path({'owner':'owned','name':'private'},*ids)
+  except AssertionError:pass
+  else:raise AssertionError('Unbound attachment path accepted')
+ headers={'Content-Type':'application/octet-stream','Content-Length':'3','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"sandbox; default-src 'none'",'Content-Disposition':'attachment; filename=owned-release-1.bin'}
+ assert attachment_receipt(b'abc',headers,asset,b'abc')==hashlib.sha256(b'abc').hexdigest()
+ for data,h in ((b'abd',headers),(b'abc',headers|{'Content-Type':'text/html'}),(b'abc',headers|{'Content-Disposition':'inline; filename=owned-release-1.bin'}),(b'abc',headers|{'Content-Length':'4'}),(b'abc',headers|{'Cache-Control':'public'}),(b'abc',headers|{'Content-Disposition':'attachment; filename=other.bin'})):
+  try:attachment_receipt(data,h,asset,b'abc')
+  except AssertionError:pass
+  else:raise AssertionError('Unsafe attachment accepted')
+ print('PASS: pure native scope, exact release/asset metadata and attachment tamper checks; no resources')
 
 def main():
  p=argparse.ArgumentParser(description=__doc__)
- p.add_argument('--self-check',action='store_true');p.add_argument('--stack-root',type=Path,default=Path(__file__).resolve().parents[1]);p.add_argument('--project');p.add_argument('--compose-file',type=Path);p.add_argument('--env-file',type=Path);p.add_argument('--image');p.add_argument('--source-revision');p.add_argument('--golf-url');p.add_argument('--native-url');p.add_argument('--output',type=Path);p.add_argument('--browser',action='store_true')
+ p.add_argument('--self-check',action='store_true');p.add_argument('--stack-root',type=Path,default=Path(__file__).resolve().parents[1]);p.add_argument('--project');p.add_argument('--compose-file',type=Path);p.add_argument('--env-file',type=Path);p.add_argument('--image');p.add_argument('--source-revision');p.add_argument('--golf-url');p.add_argument('--native-url');p.add_argument('--output',type=Path);p.add_argument('--browser',action='store_true');p.add_argument('--assets',action='store_true',help='Also qualify current-authorized local native attachments <=10MiB')
  args=p.parse_args();stack=args.stack_root.resolve();common=load_common(stack)
  if args.self_check:return self_check(stack)
  assert all((args.project,args.compose_file,args.env_file,args.image,args.source_revision,args.golf_url,args.native_url,args.output))
@@ -94,11 +137,35 @@ def main():
   return result
  def api(actor,method,path,payload=None,status=200):
   nonlocal native_unknown
-  assert allowed(method,path,prefix)
+  assert allowed(method,path,prefix,args.assets)
   if method not in ('GET','HEAD'):native_unknown=True
   result=common.request(common.client(),method,native+'/api/v1/'+path,payload,{'Content-Type':'application/json',**({'Authorization':'token '+actor['token']} if actor else {})},status)
   if method not in ('GET','HEAD'):native_unknown=False
   return result
+ def exchange(opener,method,url,data,headers,status=200):
+  request=common.urllib.request.Request(url,method=method,data=data,headers=headers)
+  try:reply=opener.open(request,timeout=20)
+  except common.urllib.error.HTTPError as error:reply=error
+  with reply:
+   raw=reply.read((10<<20)+1)
+   if reply.status!=status or len(raw)>10<<20:raise common.HTTPContractFailure(common.http_diagnostic(method,url,reply.status,status,b'', 'response_too_large' if len(raw)>10<<20 else 'unexpected_status'))
+   return raw,reply.headers
+ def native_asset(actor,release,asset):
+  assert asset['id']>0 and re.fullmatch('[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}',asset['uuid'])
+  before=api(actor,'GET',path+'/releases/'+str(release['id'])+'/assets/'+str(asset['id']))
+  assert all(before[k]==asset[k] for k in ('id','uuid','name','size','created_at'))
+  # UUID is verified under the exact release API, never a user URL or public grant.
+  url=native+'/'+repo['full_name']+'/releases/attachments/'+asset['uuid']
+  raw,_=exchange(common.client(),'GET',url,None,{'Authorization':'Bearer '+actor['token']})
+  after=api(actor,'GET',path+'/releases/'+str(release['id'])+'/assets/'+str(asset['id']))
+  assert all(after[k]==before[k] for k in ('id','uuid','name','size','created_at')) and len(raw)==asset['size']
+  return raw
+ def download(actor,release,asset,expected,status=200,extra=None,repository_id=None,release_id=None,asset_id=None):
+  url=golf+asset_download_path(repository,repository_id or target['repositoryId'],release_id or str(release['id']),asset_id or str(asset['id']))
+  raw,headers=exchange(actor['session'],'GET',url,None,{'Origin':golf}|(extra or {}),status)
+  if status==200:attachment_receipt(raw,headers,asset,expected)
+  else:assert raw!=expected and headers['Cache-Control']=='no-store' and headers['X-Content-Type-Options']=='nosniff'
+  return raw
  def runtime_now():
   cid=command(compose+['ps','-q','golf']);assert re.fullmatch('[a-f0-9]{64}',cid)
   fmt='{"id":{{json .Id}},"image":{{json .Image}},"project":{{json (index .Config.Labels "com.docker.compose.project")}},"service":{{json (index .Config.Labels "com.docker.compose.service")}},"running":{{json .State.Running}},"configHash":{{json (index .Config.Labels "com.docker.compose.config-hash")}}}'
@@ -136,15 +203,59 @@ def main():
    for release in releases:detail=bound_response(rpc(actor,GET,target|{'releaseId':str(release['id'])}),target);release_receipt(common,detail['release'],release)
   rpc(reader,LIST,target|{'repositoryId':str(int(target['repositoryId'])+1)},400,'failed_precondition')
   manifest['readProof']={'repositoryId':target['repositoryId'],'releaseIds':list(by_id),'published':1,'prereleases':1,'exactListAndDetail':True,'authorAndTimesMatched':True,'notesMatchedWithoutRetention':True,'assets':0,'assetURLsExposed':False,'totalCount':'2'};persist()
+  if args.assets:
+   stage='supported owned native assets and exact private attachments'
+   manifest['readProof']['checkpoint']='Before optional native asset uploads'
+   manifest['scope']='Two current native release reads plus bounded local asset attachments'
+   manifest['limits']=['No Golf release/asset write or publication qualification','Local <=10MiB buffered attachment only; no redirect/ServeDirect/remote provider support','Observed SHA is fetched bytes, not an immutable publication snapshot','Root owns stack disposal']
+   assets=[]
+   for number,release in enumerate(releases,1):
+    body=('owned release '+str(number)+' asset\n').encode();name='owned-release-'+str(number)+'.bin'
+    upload=path+'/releases/'+str(release['id'])+'/assets?name='+name;assert allowed('POST',upload,prefix,True)
+    native_unknown=True
+    raw,_=exchange(common.client(),'POST',native+'/api/v1/'+upload,body,{'Content-Type':'application/octet-stream','Authorization':'token '+owner['token']},201)
+    asset=json.loads(raw);assert common.decimal(str(asset['id'])) and asset['name']==name and asset['size']==len(body)
+    native_unknown=False;assets.append((release,asset,body))
+    for actor in (owner,reader):
+     assert native_asset(actor,release,asset)==body
+     assert download(actor,release,asset,body)==body
+    download(owner,release,asset,body,403,extra={'Origin':'https://outside.invalid'})
+    download(owner,release,asset,body,403,extra={'Authorization':'Bearer '+owner['token']})
+    download(owner,release,asset,body,403,extra={'Sec-Fetch-Site':'cross-site'})
+    url=golf+asset_download_path(repository,target['repositoryId'],str(release['id']),str(asset['id']))
+    exchange(common.client(),'GET',url,None,{'Origin':golf},401)
+    exchange(owner['session'],'GET',url+'?url=https://outside.invalid',None,{'Origin':golf},403)
+   for release,asset,body in assets:
+    download(reader,release,asset,body,404,repository_id=str(int(target['repositoryId'])+1))
+    other=next(r for r in releases if r['id']!=release['id'])
+    download(reader,release,asset,body,404,release_id=str(other['id']))
+    download(reader,release,asset,body,404,asset_id='9223372036854775807')
+   releases=[api(owner,'GET',path+'/releases/'+str(r['id'])) for r in releases]
+   for actor in (owner,reader):
+    listing=bound_response(rpc(actor,LIST,target),target)
+    for row in listing['releases']:release_receipt(common,row,next(v for v in releases if str(v['id'])==row['id']))
+   manifest['assetProof']={'assets':[{'releaseId':str(r['id']),'assetId':str(a['id']),'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest()} for r,a,b in assets],'independentNativeBytes':True,'ownerAndReaderExactAttachments':True,'wrongAssociationDenied':True,'foreignOriginAndBearerDenied':True,'crossSiteQueryAndMissingSessionDenied':True,'uuidAndNativeURLsNotExposed':True};persist()
+   stage='asset restart preserves current private bytes'
+   command(compose+['restart','golf']);deadline=time.monotonic()+60
+   while True:
+    try:common.request(common.client(),'GET',golf+'/readyz',None,{},200);break
+    except Exception:assert time.monotonic()<deadline;time.sleep(.25)
+   assert runtime_now()==runtime
+   for release,asset,body in assets:assert download(owner,release,asset,body)==body
+   manifest['assetProof']['restartExactBytes']=True;persist()
   if args.browser:
    stage='actual read-only release list and detail captures'
+   if args.assets:releases=[api(owner,'GET',path+'/releases/'+str(r['id'])) for r in releases]
    cookies=[{'name':cookie.name,'value':cookie.value,'url':golf,'httpOnly':True,'sameSite':'Strict'} for handler in owner['session'].handlers if isinstance(handler,common.urllib.request.HTTPCookieProcessor) for cookie in handler.cookiejar];assert len(cookies)==1;forbidden.extend(c['value'] for c in cookies)
-   command(['node',str(stack/'scripts/repository-releases-browser.mjs')],{'golf':golf,'cookies':cookies,'repository':repository,'target':target,'releases':[release_receipt(common,rpc(owner,GET,target|{'releaseId':str(r['id'])})['release'],r) for r in releases],'sourceRevision':args.source_revision,'stackRoot':str(stack),'output':str(output/'browser'),'forbidden':forbidden},timeout=180)
+   command(['node',str(stack/'scripts/repository-releases-browser.mjs')],{'golf':golf,'cookies':cookies,'repository':repository,'target':target,'releases':[release_receipt(common,rpc(owner,GET,target|{'releaseId':str(r['id'])})['release'],r) for r in releases],'sourceRevision':args.source_revision,'stackRoot':str(stack),'output':str(output/'browser'),'forbidden':forbidden,'assetMode':args.assets,'assetProof':manifest.get('assetProof')},timeout=180)
    browser=json.loads((output/'browser/manifest.json').read_text());assert browser['passed'] and browser['complete'] and len(browser['captures'])==8
-   manifest['browser']={'manifest':'browser/manifest.json','captures':8,'readOnly':True};persist()
+   manifest['browser']={'manifest':'browser/manifest.json','captures':8,'readOnly':True,'assetDownloads':1 if args.assets else 0};persist()
   stage='native reader removal and current denial'
   api(owner,'DELETE',path+'/collaborators/'+reader['name'],status=204)
   rpc(reader,LIST,target,404,'not_found');rpc(reader,GET,target|{'releaseId':str(releases[0]['id'])},404,'not_found')
+  if args.assets:
+   for release,asset,body in assets:download(reader,release,asset,body,404);assert download(owner,release,asset,body)==body
+   manifest['assetProof']['readerRevocationDenied']=True
   assert rpc(owner,LIST,target)['totalCount']=='2' and runtime_now()==runtime
   manifest['readerRevocationDenied']=True;manifest['runtimeAfter']=runtime_now();persist()
  except Exception as error:
@@ -175,10 +286,10 @@ def main():
      except Exception:cleanup.append('owned_native_actor_cleanup')
   manifest['cleanup']={'failures':cleanup,'nativeScopePurged':not cleanup,'stackDisposal':'Root owns stack teardown','retainedGolfMetadata':'Own accounts disabled, no Golf history purge'}
   if cleanup:manifest['status']='failed'
-  elif failure is None:manifest['status']='qualified_bounded_release_reads'
+  elif failure is None:manifest['status']='qualified_bounded_release_assets' if args.assets else 'qualified_bounded_release_reads'
   persist()
  if failure or cleanup:print('FAIL: release qualifier; fixed private-safe receipt preserved',file=sys.stderr);return 1
- print('PASS: two current native release reads; assets/publication/snapshot readiness remains separate');return 0
+ print('PASS: current native release reads'+(' and bounded local attachments' if args.assets else '')+'; publication/snapshot readiness remains separate');return 0
 
 if __name__=='__main__':
  try:sys.exit(main() or 0)
