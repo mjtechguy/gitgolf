@@ -4398,6 +4398,7 @@ message GetDiscussionResourceOperationRequest { string operation_id = 1; }
 message GetDiscussionResourceOperationResponse { DiscussionResourceOperation operation = 1; }
 
 service RepositoryFileMutationService {
+  rpc GetRepositoryFileMutationAccess(GetRepositoryFileMutationAccessRequest) returns (GetRepositoryFileMutationAccessResponse);
   rpc SubmitRepositoryFileMutation(SubmitRepositoryFileMutationRequest) returns (SubmitRepositoryFileMutationResponse);
   rpc GetRepositoryFileMutationOperation(GetRepositoryFileMutationOperationRequest) returns (GetRepositoryFileMutationOperationResponse);
 }
@@ -4564,3 +4565,72 @@ message RepositoryReleaseOperation {
 }
 message SubmitRepositoryReleaseOperationResponse { RepositoryReleaseOperation operation = 1; }
 message GetRepositoryReleaseOperationResponse { RepositoryReleaseOperation operation = 1; }
+
+// Current branch-specific observation; never an authorization token or atomic CAS.
+message GetRepositoryFileMutationAccessRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string access_revision = 4;
+  string branch = 5;
+}
+message GetRepositoryFileMutationAccessResponse {
+  string repository_id = 1;
+  string owner_id = 2;
+  string access_revision = 3;
+  string branch = 4;
+  string commit_id = 5;
+  bool protected = 6;
+  bool can_write = 7;
+}
+
+service PullReviewRequestService {
+ rpc GetPullReviewRequests(GetPullReviewRequestsRequest) returns (GetPullReviewRequestsResponse);
+ rpc SubmitPullReviewRequest(SubmitPullReviewRequestRequest) returns (SubmitPullReviewRequestResponse);
+ rpc GetPullReviewRequestOperation(GetPullReviewRequestOperationRequest) returns (GetPullReviewRequestOperationResponse);
+}
+message GetPullReviewRequestsRequest {
+ RepositoryKey repository = 1;
+ string repository_id = 2;
+ string pull_request_id = 3;
+ uint32 number = 4;
+}
+message GetPullReviewRequestsResponse {
+ string repository_id = 1;
+ string pull_request_id = 2;
+ uint32 number = 3;
+ string pull_revision = 4;
+ string requests_revision = 5;
+ repeated User reviewers = 6;
+ bool can_manage = 7;
+}
+message SubmitPullReviewRequestRequest {
+ RepositoryKey repository = 1;
+ string repository_id = 2;
+ string pull_request_id = 3;
+ uint32 number = 4;
+ string expected_pull_revision = 5;
+ string expected_requests_revision = 6;
+ string reviewer_id = 7;
+ string reviewer_login = 8;
+ bool request_review = 9;
+ string operation_id = 10;
+}
+message PullReviewRequestOperation {
+ string contract = 1;
+ SubmitPullReviewRequestRequest original = 2;
+ string actor_id = 3;
+ DiscussionResourceOperationPhase phase = 4;
+ string failure_code = 5;
+ string created_at = 6;
+ string updated_at = 7;
+}
+message SubmitPullReviewRequestResponse { PullReviewRequestOperation operation = 1; }
+message GetPullReviewRequestOperationRequest {
+ RepositoryKey repository = 1;
+ string repository_id = 2;
+ string pull_request_id = 3;
+ uint32 number = 4;
+ string operation_id = 5;
+}
+message GetPullReviewRequestOperationResponse { PullReviewRequestOperation operation = 1; }

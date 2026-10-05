@@ -84,9 +84,10 @@ func (s *Server) lockFileMutation(ctx context.Context, tx *sql.Tx, id int64) (co
 
 // The native API supports expected blob SHA, not last_commit_id or atomic branch
 // HEAD compare-and-swap. HEAD/parent checks are observations; uncertain effects
-// retain DISPATCH_UNKNOWN and are never replayed. All protections are refused.
+// retain DISPATCH_UNKNOWN and are never replayed. The native branch-specific
+// effective protection projection is required; protected/unknown branches refuse.
 func (s *Server) fileMutationPreflight(ctx context.Context, session string, token forgeCredential, m *golfv1.SubmitRepositoryFileMutationRequest) error {
-	actor, e := s.releasePublicationAuthority(ctx, session, token, keyFrom(m.Repository), m.RepositoryId, m.OwnerId)
+	actor, e := s.standardMergeAuthority(ctx, session, token, keyFrom(m.Repository), m.RepositoryId, m.OwnerId)
 	if e != nil {
 		return e
 	}
@@ -95,26 +96,20 @@ func (s *Server) fileMutationPreflight(ctx context.Context, session string, toke
 		if e != nil {
 			return e
 		}
-		if e = accessMatches(access, m.RepositoryId, m.OwnerId, m.AccessRevision); e != nil {
+		if e = fileAccessMatches(access, m.RepositoryId, m.OwnerId, m.AccessRevision); e != nil {
 			return e
 		}
 		if repo.Empty {
 			return errRefMutationUnavailable
 		}
-		var protections []json.RawMessage
-		if _, e = s.forge(ctx, http.MethodGet, base+"/branch_protections", token, nil, &protections); e != nil {
-			return e
-		}
-		if protections == nil {
-			return errInvalidForgeResponse
-		}
-		if len(protections) > 0 {
-			return errRefMutationUnavailable
-		}
-		head, e := s.exactSourceBranch(ctx, base, token, m.Branch)
+		branch, e := s.readMergeBranch(ctx, token, base, m.Branch)
 		if e != nil {
 			return e
 		}
+		if *branch.Protected {
+			return errRefMutationUnavailable
+		}
+		head := branch.Commit.ID
 		if head != m.ExpectedCommitId {
 			return errRepositoryAccessConflict
 		}
@@ -160,7 +155,7 @@ func (s *Server) fileMutationPreflight(ctx context.Context, session string, toke
 	if e != nil {
 		return e
 	}
-	_, e = s.releasePublicationAuthority(ctx, session, token, keyFrom(m.Repository), m.RepositoryId, m.OwnerId)
+	_, e = s.standardMergeAuthority(ctx, session, token, keyFrom(m.Repository), m.RepositoryId, m.OwnerId)
 	return e
 }
 func fileMutationLFS(data []byte) bool {
@@ -226,7 +221,7 @@ func (s *Server) fileMutationAuthority(ctx context.Context, session string, toke
 		return repositoryKey{}, errResourceNotFound
 	}
 	key := repositoryKey{selected.Owner.Login, selected.Name}
-	if _, e = s.releasePublicationAuthority(ctx, session, token, key, strconv.FormatInt(r.RepositoryID, 10), strconv.FormatInt(r.OwnerID, 10)); e != nil {
+	if _, e = s.standardMergeAuthority(ctx, session, token, key, strconv.FormatInt(r.RepositoryID, 10), strconv.FormatInt(r.OwnerID, 10)); e != nil {
 		return repositoryKey{}, errResourceNotFound
 	}
 	return key, nil
@@ -245,7 +240,7 @@ func (s *Server) fileMutationReadback(ctx context.Context, session string, token
 		if e != nil {
 			return e
 		}
-		if e = accessMatches(access, strconv.FormatInt(r.RepositoryID, 10), strconv.FormatInt(r.OwnerID, 10), r.AccessRevision); e != nil {
+		if e = fileAccessMatches(access, strconv.FormatInt(r.RepositoryID, 10), strconv.FormatInt(r.OwnerID, 10), r.AccessRevision); e != nil {
 			return e
 		}
 		head, e := s.exactSourceBranch(ctx, base, token, r.Branch)
@@ -401,7 +396,7 @@ func (s *Server) SubmitRepositoryFileMutation(ctx context.Context, req *connect.
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	key := keyFrom(m.Repository)
-	actor, e := s.releasePublicationAuthority(ctx, session, token, key, m.RepositoryId, m.OwnerId)
+	actor, e := s.standardMergeAuthority(ctx, session, token, key, m.RepositoryId, m.OwnerId)
 	if e != nil {
 		return nil, lifecycleRPCError(e)
 	}
@@ -492,4 +487,55 @@ func (s *Server) SubmitRepositoryFileMutation(ctx context.Context, req *connect.
 		return nil, e
 	}
 	return connect.NewResponse(&golfv1.SubmitRepositoryFileMutationResponse{Operation: result.Msg.Operation}), nil
+}
+
+// Ordinary code writers need not enumerate administration-only protection rules.
+// Resolve the effective native branch projection and exact ref namespace instead.
+func (s *Server) GetRepositoryFileMutationAccess(ctx context.Context, req *connect.Request[golfv1.GetRepositoryFileMutationAccessRequest]) (*connect.Response[golfv1.GetRepositoryFileMutationAccessResponse], error) {
+	token, session, e := s.reviewDraftCaller(ctx, req.Header())
+	if e != nil {
+		return nil, e
+	}
+	m := req.Msg
+	if e = validateRepositoryAccess(keyFrom(m.Repository), m.RepositoryId, m.OwnerId, m.AccessRevision, ""); e != nil {
+		return nil, lifecycleRPCError(e)
+	}
+	if m.Branch == "" || !validRef(m.Branch) || strings.HasPrefix(m.Branch, "refs/") || len(m.Branch) > 100 {
+		return nil, rpcError(invalid("Select an exact branch."))
+	}
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	var result *golfv1.GetRepositoryFileMutationAccessResponse
+	e = s.withRepositoryRead(ctx, session, token, keyFrom(m.Repository), func(base string, repo Repository) error {
+		native, actor, e := s.gitCurrentTarget(ctx, token, keyFrom(m.Repository), m.RepositoryId, m.OwnerId, false)
+		if e != nil {
+			return e
+		}
+		access, e := s.readRepositoryAccess(ctx, token, keyFrom(m.Repository), actor)
+		if e != nil {
+			return e
+		}
+		if e = fileAccessMatches(access, m.RepositoryId, m.OwnerId, m.AccessRevision); e != nil {
+			return e
+		}
+		branch, e := s.readMergeBranch(ctx, token, base, m.Branch)
+		if e != nil {
+			return e
+		}
+		result = &golfv1.GetRepositoryFileMutationAccessResponse{RepositoryId: m.RepositoryId, OwnerId: m.OwnerId, AccessRevision: access.Revision, Branch: branch.Name, CommitId: branch.Commit.ID, Protected: *branch.Protected, CanWrite: native.Permissions.Push != nil && *native.Permissions.Push && !*native.Archived && !*native.Mirror}
+		return nil
+	})
+	if e != nil {
+		return nil, lifecycleRPCError(e)
+	}
+	return connect.NewResponse(result), nil
+}
+
+// Identity/revision fence only; standardMergeAuthority independently proves
+// current ordinary code-write permission. Administrative delegation is separate.
+func fileAccessMatches(access *golfv1.RepositoryAccess, repoID, ownerID, revision string) error {
+	if access.RepositoryId != repoID || access.OwnerId != ownerID || access.Revision != revision {
+		return errRepositoryAccessConflict
+	}
+	return nil
 }

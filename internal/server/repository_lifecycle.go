@@ -193,6 +193,11 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 				cancel()
 				return nil, e
 			}
+		} else if review, ok := ctx.Value(reviewRequestPermitKey{}).(reviewRequestPermit); ok {
+			if e := s.validateReviewRequestPermit(ctx, held.tx, review, repo, key, method, path, input); e != nil {
+				cancel()
+				return nil, e
+			}
 		} else if ref, ok := ctx.Value(refMutationPermitKey{}).(refMutationPermit); ok {
 			if e := s.validateRefMutationPermit(ctx, held.tx, ref, repo, key, method, path, input); e != nil {
 				cancel()

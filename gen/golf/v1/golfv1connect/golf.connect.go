@@ -133,6 +133,8 @@ const (
 	// RepositoryReleaseManagementServiceName is the fully-qualified name of the
 	// RepositoryReleaseManagementService service.
 	RepositoryReleaseManagementServiceName = "golf.v1.RepositoryReleaseManagementService"
+	// PullReviewRequestServiceName is the fully-qualified name of the PullReviewRequestService service.
+	PullReviewRequestServiceName = "golf.v1.PullReviewRequestService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -815,6 +817,9 @@ const (
 	// RepositoryRefMutationServiceGetRepositoryRefMutationOperationProcedure is the fully-qualified
 	// name of the RepositoryRefMutationService's GetRepositoryRefMutationOperation RPC.
 	RepositoryRefMutationServiceGetRepositoryRefMutationOperationProcedure = "/golf.v1.RepositoryRefMutationService/GetRepositoryRefMutationOperation"
+	// RepositoryFileMutationServiceGetRepositoryFileMutationAccessProcedure is the fully-qualified name
+	// of the RepositoryFileMutationService's GetRepositoryFileMutationAccess RPC.
+	RepositoryFileMutationServiceGetRepositoryFileMutationAccessProcedure = "/golf.v1.RepositoryFileMutationService/GetRepositoryFileMutationAccess"
 	// RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure is the fully-qualified name of
 	// the RepositoryFileMutationService's SubmitRepositoryFileMutation RPC.
 	RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure = "/golf.v1.RepositoryFileMutationService/SubmitRepositoryFileMutation"
@@ -834,6 +839,15 @@ const (
 	// RepositoryReleaseManagementServiceGetRepositoryReleaseOperationProcedure is the fully-qualified
 	// name of the RepositoryReleaseManagementService's GetRepositoryReleaseOperation RPC.
 	RepositoryReleaseManagementServiceGetRepositoryReleaseOperationProcedure = "/golf.v1.RepositoryReleaseManagementService/GetRepositoryReleaseOperation"
+	// PullReviewRequestServiceGetPullReviewRequestsProcedure is the fully-qualified name of the
+	// PullReviewRequestService's GetPullReviewRequests RPC.
+	PullReviewRequestServiceGetPullReviewRequestsProcedure = "/golf.v1.PullReviewRequestService/GetPullReviewRequests"
+	// PullReviewRequestServiceSubmitPullReviewRequestProcedure is the fully-qualified name of the
+	// PullReviewRequestService's SubmitPullReviewRequest RPC.
+	PullReviewRequestServiceSubmitPullReviewRequestProcedure = "/golf.v1.PullReviewRequestService/SubmitPullReviewRequest"
+	// PullReviewRequestServiceGetPullReviewRequestOperationProcedure is the fully-qualified name of the
+	// PullReviewRequestService's GetPullReviewRequestOperation RPC.
+	PullReviewRequestServiceGetPullReviewRequestOperationProcedure = "/golf.v1.PullReviewRequestService/GetPullReviewRequestOperation"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -8649,6 +8663,7 @@ func (UnimplementedRepositoryRefMutationServiceHandler) GetRepositoryRefMutation
 // RepositoryFileMutationServiceClient is a client for the golf.v1.RepositoryFileMutationService
 // service.
 type RepositoryFileMutationServiceClient interface {
+	GetRepositoryFileMutationAccess(context.Context, *connect.Request[v1.GetRepositoryFileMutationAccessRequest]) (*connect.Response[v1.GetRepositoryFileMutationAccessResponse], error)
 	SubmitRepositoryFileMutation(context.Context, *connect.Request[v1.SubmitRepositoryFileMutationRequest]) (*connect.Response[v1.SubmitRepositoryFileMutationResponse], error)
 	GetRepositoryFileMutationOperation(context.Context, *connect.Request[v1.GetRepositoryFileMutationOperationRequest]) (*connect.Response[v1.GetRepositoryFileMutationOperationResponse], error)
 }
@@ -8664,6 +8679,12 @@ func NewRepositoryFileMutationServiceClient(httpClient connect.HTTPClient, baseU
 	baseURL = strings.TrimRight(baseURL, "/")
 	repositoryFileMutationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryFileMutationService").Methods()
 	return &repositoryFileMutationServiceClient{
+		getRepositoryFileMutationAccess: connect.NewClient[v1.GetRepositoryFileMutationAccessRequest, v1.GetRepositoryFileMutationAccessResponse](
+			httpClient,
+			baseURL+RepositoryFileMutationServiceGetRepositoryFileMutationAccessProcedure,
+			connect.WithSchema(repositoryFileMutationServiceMethods.ByName("GetRepositoryFileMutationAccess")),
+			connect.WithClientOptions(opts...),
+		),
 		submitRepositoryFileMutation: connect.NewClient[v1.SubmitRepositoryFileMutationRequest, v1.SubmitRepositoryFileMutationResponse](
 			httpClient,
 			baseURL+RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure,
@@ -8681,8 +8702,15 @@ func NewRepositoryFileMutationServiceClient(httpClient connect.HTTPClient, baseU
 
 // repositoryFileMutationServiceClient implements RepositoryFileMutationServiceClient.
 type repositoryFileMutationServiceClient struct {
+	getRepositoryFileMutationAccess    *connect.Client[v1.GetRepositoryFileMutationAccessRequest, v1.GetRepositoryFileMutationAccessResponse]
 	submitRepositoryFileMutation       *connect.Client[v1.SubmitRepositoryFileMutationRequest, v1.SubmitRepositoryFileMutationResponse]
 	getRepositoryFileMutationOperation *connect.Client[v1.GetRepositoryFileMutationOperationRequest, v1.GetRepositoryFileMutationOperationResponse]
+}
+
+// GetRepositoryFileMutationAccess calls
+// golf.v1.RepositoryFileMutationService.GetRepositoryFileMutationAccess.
+func (c *repositoryFileMutationServiceClient) GetRepositoryFileMutationAccess(ctx context.Context, req *connect.Request[v1.GetRepositoryFileMutationAccessRequest]) (*connect.Response[v1.GetRepositoryFileMutationAccessResponse], error) {
+	return c.getRepositoryFileMutationAccess.CallUnary(ctx, req)
 }
 
 // SubmitRepositoryFileMutation calls
@@ -8700,6 +8728,7 @@ func (c *repositoryFileMutationServiceClient) GetRepositoryFileMutationOperation
 // RepositoryFileMutationServiceHandler is an implementation of the
 // golf.v1.RepositoryFileMutationService service.
 type RepositoryFileMutationServiceHandler interface {
+	GetRepositoryFileMutationAccess(context.Context, *connect.Request[v1.GetRepositoryFileMutationAccessRequest]) (*connect.Response[v1.GetRepositoryFileMutationAccessResponse], error)
 	SubmitRepositoryFileMutation(context.Context, *connect.Request[v1.SubmitRepositoryFileMutationRequest]) (*connect.Response[v1.SubmitRepositoryFileMutationResponse], error)
 	GetRepositoryFileMutationOperation(context.Context, *connect.Request[v1.GetRepositoryFileMutationOperationRequest]) (*connect.Response[v1.GetRepositoryFileMutationOperationResponse], error)
 }
@@ -8711,6 +8740,12 @@ type RepositoryFileMutationServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewRepositoryFileMutationServiceHandler(svc RepositoryFileMutationServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	repositoryFileMutationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryFileMutationService").Methods()
+	repositoryFileMutationServiceGetRepositoryFileMutationAccessHandler := connect.NewUnaryHandler(
+		RepositoryFileMutationServiceGetRepositoryFileMutationAccessProcedure,
+		svc.GetRepositoryFileMutationAccess,
+		connect.WithSchema(repositoryFileMutationServiceMethods.ByName("GetRepositoryFileMutationAccess")),
+		connect.WithHandlerOptions(opts...),
+	)
 	repositoryFileMutationServiceSubmitRepositoryFileMutationHandler := connect.NewUnaryHandler(
 		RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure,
 		svc.SubmitRepositoryFileMutation,
@@ -8725,6 +8760,8 @@ func NewRepositoryFileMutationServiceHandler(svc RepositoryFileMutationServiceHa
 	)
 	return "/golf.v1.RepositoryFileMutationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case RepositoryFileMutationServiceGetRepositoryFileMutationAccessProcedure:
+			repositoryFileMutationServiceGetRepositoryFileMutationAccessHandler.ServeHTTP(w, r)
 		case RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure:
 			repositoryFileMutationServiceSubmitRepositoryFileMutationHandler.ServeHTTP(w, r)
 		case RepositoryFileMutationServiceGetRepositoryFileMutationOperationProcedure:
@@ -8737,6 +8774,10 @@ func NewRepositoryFileMutationServiceHandler(svc RepositoryFileMutationServiceHa
 
 // UnimplementedRepositoryFileMutationServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedRepositoryFileMutationServiceHandler struct{}
+
+func (UnimplementedRepositoryFileMutationServiceHandler) GetRepositoryFileMutationAccess(context.Context, *connect.Request[v1.GetRepositoryFileMutationAccessRequest]) (*connect.Response[v1.GetRepositoryFileMutationAccessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryFileMutationService.GetRepositoryFileMutationAccess is not implemented"))
+}
 
 func (UnimplementedRepositoryFileMutationServiceHandler) SubmitRepositoryFileMutation(context.Context, *connect.Request[v1.SubmitRepositoryFileMutationRequest]) (*connect.Response[v1.SubmitRepositoryFileMutationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryFileMutationService.SubmitRepositoryFileMutation is not implemented"))
@@ -8943,4 +8984,128 @@ func (UnimplementedRepositoryReleaseManagementServiceHandler) SubmitRepositoryRe
 
 func (UnimplementedRepositoryReleaseManagementServiceHandler) GetRepositoryReleaseOperation(context.Context, *connect.Request[v1.GetRepositoryReleaseOperationRequest]) (*connect.Response[v1.GetRepositoryReleaseOperationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryReleaseManagementService.GetRepositoryReleaseOperation is not implemented"))
+}
+
+// PullReviewRequestServiceClient is a client for the golf.v1.PullReviewRequestService service.
+type PullReviewRequestServiceClient interface {
+	GetPullReviewRequests(context.Context, *connect.Request[v1.GetPullReviewRequestsRequest]) (*connect.Response[v1.GetPullReviewRequestsResponse], error)
+	SubmitPullReviewRequest(context.Context, *connect.Request[v1.SubmitPullReviewRequestRequest]) (*connect.Response[v1.SubmitPullReviewRequestResponse], error)
+	GetPullReviewRequestOperation(context.Context, *connect.Request[v1.GetPullReviewRequestOperationRequest]) (*connect.Response[v1.GetPullReviewRequestOperationResponse], error)
+}
+
+// NewPullReviewRequestServiceClient constructs a client for the golf.v1.PullReviewRequestService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewPullReviewRequestServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) PullReviewRequestServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	pullReviewRequestServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("PullReviewRequestService").Methods()
+	return &pullReviewRequestServiceClient{
+		getPullReviewRequests: connect.NewClient[v1.GetPullReviewRequestsRequest, v1.GetPullReviewRequestsResponse](
+			httpClient,
+			baseURL+PullReviewRequestServiceGetPullReviewRequestsProcedure,
+			connect.WithSchema(pullReviewRequestServiceMethods.ByName("GetPullReviewRequests")),
+			connect.WithClientOptions(opts...),
+		),
+		submitPullReviewRequest: connect.NewClient[v1.SubmitPullReviewRequestRequest, v1.SubmitPullReviewRequestResponse](
+			httpClient,
+			baseURL+PullReviewRequestServiceSubmitPullReviewRequestProcedure,
+			connect.WithSchema(pullReviewRequestServiceMethods.ByName("SubmitPullReviewRequest")),
+			connect.WithClientOptions(opts...),
+		),
+		getPullReviewRequestOperation: connect.NewClient[v1.GetPullReviewRequestOperationRequest, v1.GetPullReviewRequestOperationResponse](
+			httpClient,
+			baseURL+PullReviewRequestServiceGetPullReviewRequestOperationProcedure,
+			connect.WithSchema(pullReviewRequestServiceMethods.ByName("GetPullReviewRequestOperation")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// pullReviewRequestServiceClient implements PullReviewRequestServiceClient.
+type pullReviewRequestServiceClient struct {
+	getPullReviewRequests         *connect.Client[v1.GetPullReviewRequestsRequest, v1.GetPullReviewRequestsResponse]
+	submitPullReviewRequest       *connect.Client[v1.SubmitPullReviewRequestRequest, v1.SubmitPullReviewRequestResponse]
+	getPullReviewRequestOperation *connect.Client[v1.GetPullReviewRequestOperationRequest, v1.GetPullReviewRequestOperationResponse]
+}
+
+// GetPullReviewRequests calls golf.v1.PullReviewRequestService.GetPullReviewRequests.
+func (c *pullReviewRequestServiceClient) GetPullReviewRequests(ctx context.Context, req *connect.Request[v1.GetPullReviewRequestsRequest]) (*connect.Response[v1.GetPullReviewRequestsResponse], error) {
+	return c.getPullReviewRequests.CallUnary(ctx, req)
+}
+
+// SubmitPullReviewRequest calls golf.v1.PullReviewRequestService.SubmitPullReviewRequest.
+func (c *pullReviewRequestServiceClient) SubmitPullReviewRequest(ctx context.Context, req *connect.Request[v1.SubmitPullReviewRequestRequest]) (*connect.Response[v1.SubmitPullReviewRequestResponse], error) {
+	return c.submitPullReviewRequest.CallUnary(ctx, req)
+}
+
+// GetPullReviewRequestOperation calls
+// golf.v1.PullReviewRequestService.GetPullReviewRequestOperation.
+func (c *pullReviewRequestServiceClient) GetPullReviewRequestOperation(ctx context.Context, req *connect.Request[v1.GetPullReviewRequestOperationRequest]) (*connect.Response[v1.GetPullReviewRequestOperationResponse], error) {
+	return c.getPullReviewRequestOperation.CallUnary(ctx, req)
+}
+
+// PullReviewRequestServiceHandler is an implementation of the golf.v1.PullReviewRequestService
+// service.
+type PullReviewRequestServiceHandler interface {
+	GetPullReviewRequests(context.Context, *connect.Request[v1.GetPullReviewRequestsRequest]) (*connect.Response[v1.GetPullReviewRequestsResponse], error)
+	SubmitPullReviewRequest(context.Context, *connect.Request[v1.SubmitPullReviewRequestRequest]) (*connect.Response[v1.SubmitPullReviewRequestResponse], error)
+	GetPullReviewRequestOperation(context.Context, *connect.Request[v1.GetPullReviewRequestOperationRequest]) (*connect.Response[v1.GetPullReviewRequestOperationResponse], error)
+}
+
+// NewPullReviewRequestServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewPullReviewRequestServiceHandler(svc PullReviewRequestServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	pullReviewRequestServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("PullReviewRequestService").Methods()
+	pullReviewRequestServiceGetPullReviewRequestsHandler := connect.NewUnaryHandler(
+		PullReviewRequestServiceGetPullReviewRequestsProcedure,
+		svc.GetPullReviewRequests,
+		connect.WithSchema(pullReviewRequestServiceMethods.ByName("GetPullReviewRequests")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pullReviewRequestServiceSubmitPullReviewRequestHandler := connect.NewUnaryHandler(
+		PullReviewRequestServiceSubmitPullReviewRequestProcedure,
+		svc.SubmitPullReviewRequest,
+		connect.WithSchema(pullReviewRequestServiceMethods.ByName("SubmitPullReviewRequest")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pullReviewRequestServiceGetPullReviewRequestOperationHandler := connect.NewUnaryHandler(
+		PullReviewRequestServiceGetPullReviewRequestOperationProcedure,
+		svc.GetPullReviewRequestOperation,
+		connect.WithSchema(pullReviewRequestServiceMethods.ByName("GetPullReviewRequestOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.PullReviewRequestService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case PullReviewRequestServiceGetPullReviewRequestsProcedure:
+			pullReviewRequestServiceGetPullReviewRequestsHandler.ServeHTTP(w, r)
+		case PullReviewRequestServiceSubmitPullReviewRequestProcedure:
+			pullReviewRequestServiceSubmitPullReviewRequestHandler.ServeHTTP(w, r)
+		case PullReviewRequestServiceGetPullReviewRequestOperationProcedure:
+			pullReviewRequestServiceGetPullReviewRequestOperationHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedPullReviewRequestServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedPullReviewRequestServiceHandler struct{}
+
+func (UnimplementedPullReviewRequestServiceHandler) GetPullReviewRequests(context.Context, *connect.Request[v1.GetPullReviewRequestsRequest]) (*connect.Response[v1.GetPullReviewRequestsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullReviewRequestService.GetPullReviewRequests is not implemented"))
+}
+
+func (UnimplementedPullReviewRequestServiceHandler) SubmitPullReviewRequest(context.Context, *connect.Request[v1.SubmitPullReviewRequestRequest]) (*connect.Response[v1.SubmitPullReviewRequestResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullReviewRequestService.SubmitPullReviewRequest is not implemented"))
+}
+
+func (UnimplementedPullReviewRequestServiceHandler) GetPullReviewRequestOperation(context.Context, *connect.Request[v1.GetPullReviewRequestOperationRequest]) (*connect.Response[v1.GetPullReviewRequestOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullReviewRequestService.GetPullReviewRequestOperation is not implemented"))
 }

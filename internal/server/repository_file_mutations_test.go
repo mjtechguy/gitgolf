@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"connectrpc.com/connect"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"github.com/google/uuid"
@@ -123,9 +124,31 @@ func newFileMutationFixture(t *testing.T, k golfv1.RepositoryFileMutationKind) *
 			var observed map[string]any
 			json.Unmarshal(data, &observed)
 			observed["permissions"] = map[string]bool{"admin": true, "push": true, "pull": true}
+			observed["has_actions"] = false
 			json.NewEncoder(w).Encode(observed)
 			return
 		}
+		if mode == "writer" && r.URL.Path == base {
+			row := settingsFixtureRow()
+			row.ID = 11
+			row.Name = "private"
+			row.FullName = "alice/private"
+			row.HTMLURL = "https://forge.invalid/alice/private"
+			cfg := rulesRepositoryFixture()
+			cfg.forgeRepositorySettings = row
+			data, _ := json.Marshal(cfg)
+			var observed map[string]any
+			json.Unmarshal(data, &observed)
+			observed["permissions"] = map[string]bool{"admin": false, "push": true, "pull": true}
+			observed["has_actions"] = false
+			json.NewEncoder(w).Encode(observed)
+			return
+		}
+		if mode == "writer" && r.URL.Path == base+"/collaborators/bob/permission" {
+			json.NewEncoder(w).Encode(map[string]any{"permission": "write", "user": User{ID: 43, Login: "bob"}})
+			return
+		}
+
 		if mode == "renamed" && strings.HasPrefix(r.URL.Path, "/api/v1/repos/alice/renamed/") {
 			r.URL.Path = strings.Replace(r.URL.Path, "/api/v1/repos/alice/renamed/", base+"/", 1)
 			proxy.ServeHTTP(w, r)
@@ -137,6 +160,10 @@ func newFileMutationFixture(t *testing.T, k golfv1.RepositoryFileMutationKind) *
 			return
 		}
 		if r.URL.Path == base+"/branch_protections" {
+			if mode == "writer" {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
 			rows := []any{}
 			if mode == "protected" {
 				rows = append(rows, map[string]string{"rule_name": "*"})
@@ -144,6 +171,24 @@ func newFileMutationFixture(t *testing.T, k golfv1.RepositoryFileMutationKind) *
 			json.NewEncoder(w).Encode(rows)
 			return
 		}
+		if r.URL.Path == base+"/branches/main" {
+			row := map[string]any{"name": "main", "commit": map[string]string{"id": f.currentHead()}, "protected": mode == "protected", "user_can_merge": true}
+			if mode == "unknown-protection" {
+				delete(row, "protected")
+			}
+			if mode == "foreign-branch" {
+				row["name"] = "foreign"
+			}
+			if mode == "projection-drift" {
+				row["commit"] = map[string]string{"id": strings.Repeat("f", 40)}
+			}
+			if mode == "head-drift" {
+				row["commit"] = map[string]string{"id": strings.Repeat("e", 40)}
+			}
+			json.NewEncoder(w).Encode(row)
+			return
+		}
+
 		if strings.HasPrefix(r.URL.Path, base+"/git/refs/heads/") {
 			sha := f.currentHead()
 			if mode == "head-drift" {
@@ -239,6 +284,9 @@ func newFileMutationFixture(t *testing.T, k golfv1.RepositoryFileMutationKind) *
 func (f *fileMutationFixture) currentHead() string { f.mu.Lock(); defer f.mu.Unlock(); return f.head }
 func (f *fileMutationFixture) submitFile(t *testing.T, session loginResult, m *golfv1.SubmitRepositoryFileMutationRequest) (*golfv1.RepositoryFileMutationOperation, error) {
 	ctx, _, h := f.scope(session)
+	if session.User.ID == 43 {
+		ctx = context.WithValue(ctx, sessionTokenKey{}, forgeCredential{Kind: "pat", Token: "other-pat"})
+	}
 	req := connect.NewRequest(m)
 	req.Header().Set("Cookie", h.Get("Cookie"))
 	req.Header().Set("Origin", h.Get("Origin"))
@@ -281,7 +329,7 @@ func TestFileMutationOnceAndUnknownPostgres(t *testing.T) {
 			}
 		})
 	}
-	for _, mode := range []string{"protected", "head-drift", "lost", "ignored", "wrong-parent", "late-denied", "reader", "replacement", "archived", "mirror"} {
+	for _, mode := range []string{"protected", "unknown-protection", "foreign-branch", "projection-drift", "head-drift", "lost", "ignored", "wrong-parent", "late-denied", "reader", "replacement", "archived", "mirror"} {
 		t.Run(mode, func(t *testing.T) {
 			k := golfv1.RepositoryFileMutationKind_REPOSITORY_FILE_MUTATION_KIND_CREATE
 			f := newFileMutationFixture(t, k)
@@ -294,7 +342,7 @@ func TestFileMutationOnceAndUnknownPostgres(t *testing.T) {
 				f.fileMode.Store(mode)
 			}
 			r, e := f.submitFile(t, session, m)
-			if mode == "reader" || mode == "replacement" {
+			if mode == "reader" || mode == "replacement" || mode == "archived" || mode == "mirror" {
 				if e == nil || f.writes.Load() != 0 {
 					t.Fatal("authority", e)
 				}
@@ -309,7 +357,7 @@ func TestFileMutationOnceAndUnknownPostgres(t *testing.T) {
 				t.Fatal(e)
 			}
 			want := golfv1.RepositoryFileMutationPhase_REPOSITORY_FILE_MUTATION_PHASE_DISPATCH_UNKNOWN
-			if mode == "protected" || mode == "head-drift" || mode == "archived" || mode == "mirror" {
+			if mode == "protected" || mode == "unknown-protection" || mode == "foreign-branch" || mode == "projection-drift" || mode == "head-drift" {
 				want = golfv1.RepositoryFileMutationPhase_REPOSITORY_FILE_MUTATION_PHASE_REJECTED
 				if f.writes.Load() != 0 {
 					t.Fatal("refused wrote")
@@ -389,4 +437,39 @@ func TestFileMutationBlobAndOriginalAuthorityPostgres(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestFileMutationOrdinaryWriterPostgres(t *testing.T) {
+	f := newFileMutationFixture(t, golfv1.RepositoryFileMutationKind_REPOSITORY_FILE_MUTATION_KIND_CREATE)
+	owner := f.session(t, "pat")
+	m := fileFixtureRequest(golfv1.RepositoryFileMutationKind_REPOSITORY_FILE_MUTATION_KIND_CREATE)
+	m.AccessRevision = f.request(t, owner).AccessRevision
+	writer, e := f.s.createSession(t.Context(), User{ID: 43, Login: "bob"}, "pat", "other-pat", "")
+	if e != nil {
+		t.Fatal(e)
+	}
+	f.fileMode.Store("writer")
+	req := connect.NewRequest(&golfv1.GetRepositoryFileMutationAccessRequest{Repository: m.Repository, RepositoryId: m.RepositoryId, OwnerId: m.OwnerId, AccessRevision: m.AccessRevision, Branch: m.Branch})
+	_, _, headers := f.scope(writer)
+	req.Header().Set("Cookie", headers.Get("Cookie"))
+	req.Header().Set("Origin", headers.Get("Origin"))
+	ctx, _, _ := f.scope(writer)
+	ctx = context.WithValue(ctx, sessionTokenKey{}, forgeCredential{Kind: "pat", Token: "other-pat"})
+	access, e := f.s.GetRepositoryFileMutationAccess(ctx, req)
+	if e != nil || !access.Msg.CanWrite || access.Msg.Protected || access.Msg.CommitId != m.ExpectedCommitId {
+		t.Fatal("writer projection", e, access)
+	}
+	first, e := f.submitFile(t, writer, m)
+	if e != nil || first.Phase != golfv1.RepositoryFileMutationPhase_REPOSITORY_FILE_MUTATION_PHASE_SUCCEEDED || first.ActorId != "43" || f.writes.Load() != 1 {
+		t.Fatal("ordinary writer", e, first)
+	}
+	replay, e := f.submitFile(t, writer, m)
+	if e != nil || !proto.Equal(first, replay) || f.writes.Load() != 1 {
+		t.Fatal("writer replay", e, replay)
+	}
+	f.fileMode.Store("")
+	f.mode.Store("reader")
+	if _, e = f.submitFile(t, writer, m); e == nil {
+		t.Fatal("revoked writer disclosed original")
+	}
 }
