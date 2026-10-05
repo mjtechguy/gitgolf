@@ -885,12 +885,14 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
 .workflow-run-metadata details dl>div { display:grid; grid-template-columns:140px minmax(0,1fr); gap:12px; }
 /* The execution surface remains charcoal in both application themes. */
 .execution-console { min-width:0; }
-.execution-terminal-host { width:100%; min-width:0; height:520px; min-height:320px; padding:0; overflow:hidden; background:var(--terminal-bg); color:var(--terminal-fg); border-top:1px solid var(--line); overscroll-behavior:contain; }
+.execution-terminal-host { width:100%; min-width:0; height:520px; min-height:320px; padding:0; overflow:hidden; background:var(--terminal-bg); color:var(--terminal-fg); border-top:1px solid var(--line); overscroll-behavior:auto; }
 .execution-terminal-host .xterm { height:100%; padding:12px; }
+.execution-terminal-host .xterm-scrollable-element { overscroll-behavior:auto; }
 .execution-terminal-host:focus-within { outline:2px solid var(--accent); outline-offset:-2px; }
 .execution-console:fullscreen { display:flex; flex-direction:column; width:100%; height:100dvh; background:var(--panel); }
 .execution-console:fullscreen .execution-console-toolbar,.execution-console:fullscreen .execution-console-status { flex-shrink:0; }
-.execution-console:fullscreen .execution-terminal-host { flex:1; height:auto; min-height:0; }
+.execution-console:fullscreen .execution-terminal-host { flex:1; height:auto; min-height:0; overscroll-behavior:contain; }
+.execution-console:fullscreen .xterm-scrollable-element { overscroll-behavior:contain; }
 .execution-console-toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:10px var(--panel-padding); }
 .execution-console-toolbar>.search-input { flex:1 1 220px; min-width:0; }
 .execution-console-toolbar input { width:100%; min-width:0; }
