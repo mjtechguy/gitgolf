@@ -4689,3 +4689,33 @@ message ListIssueTemplatesResponse {
   // YAML forms/oversized or invalid templates are observed, not pretended to work.
   uint32 unsupported_templates = 3;
 }
+
+// Latest native wiki observations; no immutable historical checkout or writes.
+service RepositoryWikiService {
+ rpc ListRepositoryWikiPages(ListRepositoryWikiPagesRequest) returns (ListRepositoryWikiPagesResponse);
+ rpc GetRepositoryWikiPage(GetRepositoryWikiPageRequest) returns (GetRepositoryWikiPageResponse);
+}
+message RepositoryWikiPageMetadata {
+ string slug = 1; // Opaque native encoded web segment, not a guessed title.
+ string title = 2;
+ string last_commit_id = 3;
+ string author_name = 4;
+ string updated_at = 5;
+ string commit_message = 6;
+}
+message ListRepositoryWikiPagesRequest { RepositoryKey repository = 1; string repository_id = 2; PageRequest page = 3; }
+message ListRepositoryWikiPagesResponse {
+ string repository_id = 1;
+ repeated RepositoryWikiPageMetadata pages = 2;
+ PageResponse page = 3;
+ // Native total includes non-page Git entries; not a total wiki-page count.
+ string native_entry_count = 4;
+}
+message GetRepositoryWikiPageRequest { RepositoryKey repository = 1; string repository_id = 2; string slug = 3; }
+message GetRepositoryWikiPageResponse {
+ string repository_id = 1;
+ RepositoryWikiPageMetadata page = 2;
+ optional string markdown = 3;
+ string content_unavailable_reason = 4;
+ string commit_count = 5;
+}

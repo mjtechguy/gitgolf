@@ -1,5 +1,5 @@
 export type RepositorySearch = {
-  view: 'source' | 'commits' | 'issues' | 'pulls' | 'actions' | 'compare' | 'releases' | 'deployments' | 'branches' | 'tags';
+  view: 'source' | 'commits' | 'issues' | 'pulls' | 'actions' | 'compare' | 'releases' | 'deployments' | 'branches' | 'tags' | 'wiki';
   q?: string;
   author?: string;
   assignee?: string;
@@ -30,6 +30,7 @@ export type RepositorySearch = {
   sourceOwner?: string;
   sourceName?: string;
   historyPath?: string;
+  wikiPage?: string;
   releaseId?: string;
   deploymentId?: string;
 };
@@ -69,6 +70,7 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
     base:next.view==='compare'||next.view==='pulls'?next.base:undefined,head:next.view==='compare'?next.head:undefined,
     sourceOwner:next.view==='compare'?next.sourceOwner:undefined,sourceName:next.view==='compare'?next.sourceName:undefined,
     historyPath:next.view==='commits'&&!next.commit?next.historyPath:undefined,
+    wikiPage:next.view==='wiki'?next.wikiPage:undefined,
     releaseId:next.view==='releases'?next.releaseId:undefined,
     deploymentId:next.view==='deployments'?next.deploymentId:undefined,
   };
@@ -76,6 +78,7 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
   let path = '';
   if(next.view==='branches'||next.view==='tags')path=next.view;
   else if(next.view==='deployments')path=next.deploymentId?`deployments/${next.deploymentId}`:'deployments';
+  else if(next.view==='wiki')path=next.wikiPage?`wiki/${next.wikiPage}`:'wiki';
   else if(next.view==='releases')path=next.releaseId?`releases/${next.releaseId}`:'releases';
   else if(next.view==='compare')path='compare';
   else if(next.view==='issues') path=next.issueNew&&!next.issue?'issues/new':next.issue?`issues/${next.issue}`:'issues';
@@ -88,7 +91,7 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
   // deliberate source/history return context and relevant list filters.
   search.view = 'source'; search.path = '';
   if(next.view==='source'&&next.refKind){search.branch='';search.tag=undefined;}
-  search.issue = undefined; search.issueNew = undefined; search.pull = undefined; search.pullView = undefined; search.commit = undefined; search.run = undefined; search.runKind=undefined; search.releaseId=undefined; search.deploymentId=undefined;
+  search.issue = undefined; search.issueNew = undefined; search.pull = undefined; search.pullView = undefined; search.commit = undefined; search.run = undefined; search.runKind=undefined; search.releaseId=undefined; search.deploymentId=undefined; search.wikiPage=undefined;
   if (next.view === 'commits' && next.historyPath && isCommitID(next.ref)) search.historyPath = undefined;
   // The path is authoritative for source and path-history snapshots.
   if ((next.view === 'source' && (isCommitID(next.ref) || Boolean(next.refKind))) || (next.view === 'commits' && !next.commit && next.historyPath && isCommitID(next.ref))) search.ref = '';

@@ -142,7 +142,7 @@ const validateRepositorySearch = (search: Record<string, unknown>): RepositorySe
     const issue = search.issue === undefined ? undefined : typeof search.issue === 'number' ? search.issue : typeof search.issue === 'string' && /^[1-9][0-9]*$/.test(search.issue) ? Number(search.issue) : NaN;
     const pull = search.pull === undefined ? undefined : typeof search.pull === 'number' ? search.pull : typeof search.pull === 'string' && /^[1-9][0-9]*$/.test(search.pull) ? Number(search.pull) : NaN;
     return {
-      view: search.view === 'commits' || search.view === 'issues' || search.view === 'pulls' || search.view === 'actions' || search.view === 'compare' || search.view === 'releases' || search.view === 'deployments' || search.view === 'branches' || search.view === 'tags' ? search.view : 'source',
+      view: search.view === 'commits' || search.view === 'issues' || search.view === 'pulls' || search.view === 'actions' || search.view === 'compare' || search.view === 'releases' || search.view === 'deployments' || search.view === 'branches' || search.view === 'tags' || search.view === 'wiki' ? search.view : 'source',
       q:typeof search.q==='string'?search.q:undefined,author:typeof search.author==='string'?search.author:undefined,assignee:typeof search.assignee==='string'?search.assignee:undefined,labels:typeof search.labels==='string'?search.labels:undefined,milestone:typeof search.milestone==='string'?search.milestone:undefined,sort:search.sort as RepositorySearch['sort'],
       ref: typeof search.ref === 'string' ? search.ref : '', path: typeof search.path === 'string' ? search.path : '',
       base:typeof search.base==='string'?search.base:undefined,head:typeof search.head==='string'?search.head:undefined,sourceOwner:typeof search.sourceOwner==='string'?search.sourceOwner:undefined,sourceName:typeof search.sourceName==='string'?search.sourceName:undefined,
@@ -154,6 +154,7 @@ const validateRepositorySearch = (search: Record<string, unknown>): RepositorySe
       state: search.state === 'closed' || search.state === 'all' ? search.state : 'open', issue, pull,
       pullView: search.pullView === 'files' || search.pullView === 'commits' || search.pullView === 'checks' ? search.pullView : undefined,
       deploymentId:search.deploymentId===undefined?undefined:typeof search.deploymentId==='string'?search.deploymentId:'',
+      wikiPage:search.wikiPage===undefined?undefined:typeof search.wikiPage==='string'?search.wikiPage:'',
       releaseId:search.releaseId===undefined?undefined:typeof search.releaseId==='string'?search.releaseId:'',
       commit: search.commit === undefined ? undefined : typeof search.commit === 'string' ? search.commit : '',
       runKind:search.runKind as RepositorySearch['runKind'],actionKind:search.actionKind as RepositorySearch['actionKind'],workflowPath:search.workflowPath as string|undefined,
@@ -164,6 +165,8 @@ const validateRepositorySearch = (search: Record<string, unknown>): RepositorySe
     };
   };
 function validateRepositorySelectors(search: RepositorySearch) {
+  if(search.wikiPage!==undefined&&(search.view!=='wiki'||!search.wikiPage||search.wikiPage.length>1024||! /^[A-Za-z0-9_.~+%\-]+$/.test(search.wikiPage)||search.wikiPage==='.'||search.wikiPage==='..'))throw notFound();
+  if(search.wikiPage!==undefined){try{decodeURIComponent(search.wikiPage.replaceAll('+',' '));}catch{throw notFound();}}
   if (search.deploymentId !== undefined && (search.view !== 'deployments' || !isRunID(search.deploymentId))) throw notFound();
   if (search.releaseId !== undefined && (search.view !== 'releases' || !sourceRepositoryID(search.releaseId))) throw notFound();
   if (search.pull !== undefined && (!Number.isSafeInteger(search.pull) || search.pull <= 0 || search.pull > 0x7fffffff)) throw notFound();
@@ -210,6 +213,11 @@ function canonicalLocation(owner:string,name:string,tail:string,search:Repositor
     }
     if(isCommitID(item)) return {...location,view:'source' as const,ref:item,path:parts.slice(2).join('/'),sourceRoute:parts[0] as 'tree'|'blob'};
     return {...location,view:'source' as const,ref:'',path:'',sourceSuffix:suffix,sourceRoute:parts[0] as 'tree'|'blob'};
+  }
+  if(parts[0]==='wiki'){
+    if(parts.length===1&&search.wikiPage===undefined)return {...location,view:'wiki' as const,wikiPage:undefined};
+    if(parts.length===2&&item&&item!=='.'&&item!=='..'&&item.length<=1024&&/^[A-Za-z0-9_.~+%\-]+$/.test(item)){try{decodeURIComponent(item.replaceAll('+',' '));}catch{throw notFound();}if(search.wikiPage!==undefined&&search.wikiPage!==item)throw notFound();return {...location,view:'wiki' as const,wikiPage:item};}
+    throw notFound();
   }
   if(parts[0]==='deployments') {
     if(parts.length===1 && search.deploymentId===undefined)return {...location,view:'deployments' as const,deploymentId:undefined};

@@ -137,6 +137,8 @@ const (
 	PullReviewRequestServiceName = "golf.v1.PullReviewRequestService"
 	// RepositoryMirrorServiceName is the fully-qualified name of the RepositoryMirrorService service.
 	RepositoryMirrorServiceName = "golf.v1.RepositoryMirrorService"
+	// RepositoryWikiServiceName is the fully-qualified name of the RepositoryWikiService service.
+	RepositoryWikiServiceName = "golf.v1.RepositoryWikiService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -859,6 +861,12 @@ const (
 	// RepositoryMirrorServiceGetRepositoryMirrorStatusProcedure is the fully-qualified name of the
 	// RepositoryMirrorService's GetRepositoryMirrorStatus RPC.
 	RepositoryMirrorServiceGetRepositoryMirrorStatusProcedure = "/golf.v1.RepositoryMirrorService/GetRepositoryMirrorStatus"
+	// RepositoryWikiServiceListRepositoryWikiPagesProcedure is the fully-qualified name of the
+	// RepositoryWikiService's ListRepositoryWikiPages RPC.
+	RepositoryWikiServiceListRepositoryWikiPagesProcedure = "/golf.v1.RepositoryWikiService/ListRepositoryWikiPages"
+	// RepositoryWikiServiceGetRepositoryWikiPageProcedure is the fully-qualified name of the
+	// RepositoryWikiService's GetRepositoryWikiPage RPC.
+	RepositoryWikiServiceGetRepositoryWikiPageProcedure = "/golf.v1.RepositoryWikiService/GetRepositoryWikiPage"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -9242,4 +9250,100 @@ type UnimplementedRepositoryMirrorServiceHandler struct{}
 
 func (UnimplementedRepositoryMirrorServiceHandler) GetRepositoryMirrorStatus(context.Context, *connect.Request[v1.GetRepositoryMirrorStatusRequest]) (*connect.Response[v1.GetRepositoryMirrorStatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryMirrorService.GetRepositoryMirrorStatus is not implemented"))
+}
+
+// RepositoryWikiServiceClient is a client for the golf.v1.RepositoryWikiService service.
+type RepositoryWikiServiceClient interface {
+	ListRepositoryWikiPages(context.Context, *connect.Request[v1.ListRepositoryWikiPagesRequest]) (*connect.Response[v1.ListRepositoryWikiPagesResponse], error)
+	GetRepositoryWikiPage(context.Context, *connect.Request[v1.GetRepositoryWikiPageRequest]) (*connect.Response[v1.GetRepositoryWikiPageResponse], error)
+}
+
+// NewRepositoryWikiServiceClient constructs a client for the golf.v1.RepositoryWikiService service.
+// By default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped
+// responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRepositoryWikiServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepositoryWikiServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	repositoryWikiServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryWikiService").Methods()
+	return &repositoryWikiServiceClient{
+		listRepositoryWikiPages: connect.NewClient[v1.ListRepositoryWikiPagesRequest, v1.ListRepositoryWikiPagesResponse](
+			httpClient,
+			baseURL+RepositoryWikiServiceListRepositoryWikiPagesProcedure,
+			connect.WithSchema(repositoryWikiServiceMethods.ByName("ListRepositoryWikiPages")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryWikiPage: connect.NewClient[v1.GetRepositoryWikiPageRequest, v1.GetRepositoryWikiPageResponse](
+			httpClient,
+			baseURL+RepositoryWikiServiceGetRepositoryWikiPageProcedure,
+			connect.WithSchema(repositoryWikiServiceMethods.ByName("GetRepositoryWikiPage")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// repositoryWikiServiceClient implements RepositoryWikiServiceClient.
+type repositoryWikiServiceClient struct {
+	listRepositoryWikiPages *connect.Client[v1.ListRepositoryWikiPagesRequest, v1.ListRepositoryWikiPagesResponse]
+	getRepositoryWikiPage   *connect.Client[v1.GetRepositoryWikiPageRequest, v1.GetRepositoryWikiPageResponse]
+}
+
+// ListRepositoryWikiPages calls golf.v1.RepositoryWikiService.ListRepositoryWikiPages.
+func (c *repositoryWikiServiceClient) ListRepositoryWikiPages(ctx context.Context, req *connect.Request[v1.ListRepositoryWikiPagesRequest]) (*connect.Response[v1.ListRepositoryWikiPagesResponse], error) {
+	return c.listRepositoryWikiPages.CallUnary(ctx, req)
+}
+
+// GetRepositoryWikiPage calls golf.v1.RepositoryWikiService.GetRepositoryWikiPage.
+func (c *repositoryWikiServiceClient) GetRepositoryWikiPage(ctx context.Context, req *connect.Request[v1.GetRepositoryWikiPageRequest]) (*connect.Response[v1.GetRepositoryWikiPageResponse], error) {
+	return c.getRepositoryWikiPage.CallUnary(ctx, req)
+}
+
+// RepositoryWikiServiceHandler is an implementation of the golf.v1.RepositoryWikiService service.
+type RepositoryWikiServiceHandler interface {
+	ListRepositoryWikiPages(context.Context, *connect.Request[v1.ListRepositoryWikiPagesRequest]) (*connect.Response[v1.ListRepositoryWikiPagesResponse], error)
+	GetRepositoryWikiPage(context.Context, *connect.Request[v1.GetRepositoryWikiPageRequest]) (*connect.Response[v1.GetRepositoryWikiPageResponse], error)
+}
+
+// NewRepositoryWikiServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRepositoryWikiServiceHandler(svc RepositoryWikiServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	repositoryWikiServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryWikiService").Methods()
+	repositoryWikiServiceListRepositoryWikiPagesHandler := connect.NewUnaryHandler(
+		RepositoryWikiServiceListRepositoryWikiPagesProcedure,
+		svc.ListRepositoryWikiPages,
+		connect.WithSchema(repositoryWikiServiceMethods.ByName("ListRepositoryWikiPages")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryWikiServiceGetRepositoryWikiPageHandler := connect.NewUnaryHandler(
+		RepositoryWikiServiceGetRepositoryWikiPageProcedure,
+		svc.GetRepositoryWikiPage,
+		connect.WithSchema(repositoryWikiServiceMethods.ByName("GetRepositoryWikiPage")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RepositoryWikiService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RepositoryWikiServiceListRepositoryWikiPagesProcedure:
+			repositoryWikiServiceListRepositoryWikiPagesHandler.ServeHTTP(w, r)
+		case RepositoryWikiServiceGetRepositoryWikiPageProcedure:
+			repositoryWikiServiceGetRepositoryWikiPageHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRepositoryWikiServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRepositoryWikiServiceHandler struct{}
+
+func (UnimplementedRepositoryWikiServiceHandler) ListRepositoryWikiPages(context.Context, *connect.Request[v1.ListRepositoryWikiPagesRequest]) (*connect.Response[v1.ListRepositoryWikiPagesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryWikiService.ListRepositoryWikiPages is not implemented"))
+}
+
+func (UnimplementedRepositoryWikiServiceHandler) GetRepositoryWikiPage(context.Context, *connect.Request[v1.GetRepositoryWikiPageRequest]) (*connect.Response[v1.GetRepositoryWikiPageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryWikiService.GetRepositoryWikiPage is not implemented"))
 }

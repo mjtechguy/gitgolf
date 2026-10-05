@@ -105,6 +105,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewRepositoryMirrorServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryRefMutationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryFileMutationServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewRepositoryWikiServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewPullReviewRequestServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryDeploymentServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRunnerControlServiceHandler(s, options...))
@@ -179,6 +180,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.RepositoryMirrorServiceGetRepositoryMirrorStatusProcedure,
 			golfv1connect.RepositoryRefMutationServiceSubmitRepositoryRefMutationProcedure, golfv1connect.RepositoryRefMutationServiceGetRepositoryRefMutationOperationProcedure,
 			golfv1connect.PullReviewRequestServiceGetPullReviewRequestsProcedure, golfv1connect.PullReviewRequestServiceSubmitPullReviewRequestProcedure, golfv1connect.PullReviewRequestServiceGetPullReviewRequestOperationProcedure,
+			golfv1connect.RepositoryWikiServiceListRepositoryWikiPagesProcedure, golfv1connect.RepositoryWikiServiceGetRepositoryWikiPageProcedure,
 			golfv1connect.RepositoryFileMutationServiceGetRepositoryFileMutationAccessProcedure, golfv1connect.RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure, golfv1connect.RepositoryFileMutationServiceGetRepositoryFileMutationOperationProcedure,
 			golfv1connect.RepositoryServiceSubmitDiscussionResourceOperationProcedure, golfv1connect.RepositoryServiceGetDiscussionResourceOperationProcedure,
 			golfv1connect.InstanceAdminServiceListGolfUserAccessProcedure, golfv1connect.InstanceAdminServiceChangeGolfUserAccessProcedure, golfv1connect.InstanceAdminServiceGetGolfUserAccessOperationProcedure,

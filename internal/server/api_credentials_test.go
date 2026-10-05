@@ -107,6 +107,8 @@ func TestApiCredentialBoundary(t *testing.T) {
 	// Exact reviewed read-only delegation surface, including bounded tags.
 	// Every new generated procedure remains denied unless named here.
 	expected := map[string]bool{
+		golfv1connect.RepositoryWikiServiceListRepositoryWikiPagesProcedure:  true,
+		golfv1connect.RepositoryWikiServiceGetRepositoryWikiPageProcedure:    true,
 		golfv1connect.RepositoryActivityServiceWatchRepositoryProcedure:      true,
 		golfv1connect.SessionServiceGetSessionProcedure:                      true,
 		golfv1connect.AuditServiceListAuditEventsProcedure:                   true,
