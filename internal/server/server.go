@@ -157,6 +157,8 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	r.Post("/internal/ci/attempt/{id}/finish", s.runnerAttempt)
 	r.Post("/internal/ci/attempt/{id}/artifact", s.runnerAttempt)
 	r.Get("/internal/ci/attempt/{id}/source", s.runnerAttempt)
+	r.Get("/internal/ci/attempt/{id}/git/info/refs", s.runnerAttempt)
+	r.Post("/internal/ci/attempt/{id}/git/git-upload-pack", s.runnerAttempt)
 	rpc := s.rpcBoundary(http.StripPrefix("/rpc", s.rpcHandler()))
 	r.Handle("/rpc", rpc)
 	r.Handle("/rpc/*", rpc)

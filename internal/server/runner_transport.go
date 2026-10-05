@@ -17,6 +17,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/mjtechguy/golf-git/internal/runner"
@@ -557,6 +558,7 @@ func (s *Server) rejectQueuedRun(ctx context.Context, id, reason string) {
 }
 
 func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	id, ok := s.enrolledRunner(r)
 	attempt := chi.URLParam(r, "id")
 	capability := r.Header.Get("Golf-Attempt-Token")
@@ -621,6 +623,38 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		LogsTruncated       bool   `json:"logsTruncated"`
 	}
 	action := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+	var gitRoute gitTransportRoute
+	var gitResponse []byte
+	if strings.HasPrefix(r.URL.Path, "/internal/ci/attempt/"+attempt+"/git/") {
+		action = "git"
+		gitRoute, err = runnerGitRoute(r, attempt, run)
+		if err != nil {
+			runnerFail(w, 400)
+			return
+		}
+		select {
+		case managedGitBuffers <- struct{}{}:
+			defer func() { <-managedGitBuffers }()
+		default:
+			runnerFail(w, 503)
+			return
+		}
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+		gitResponse, err = s.runnerGitRead(ctx, r, run, gitRoute)
+		if err != nil {
+			status := 503
+			if errors.Is(err, errGitProtocol) {
+				status = 400
+			} else if isRunnerAuthorityDenied(err) || errors.Is(err, errUnauthenticated) || errors.Is(err, errResourceNotFound) {
+				s.cancelRunnerAttempt(ctx, run.ID, "Dispatch authority was revoked.")
+				status = 403
+			}
+			runnerFail(w, status)
+			return
+		}
+	}
 	var artifact []byte
 	if action == "artifact" {
 		if r.TLS == nil || r.TLS.Version < tls.VersionTLS13 || approval != nil || run.InputContract != "" {
@@ -634,7 +668,7 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if action != "source" && action != "artifact" && !runnerDecode(w, r, &input, 128<<10) {
+	if action != "source" && action != "artifact" && action != "git" && !runnerDecode(w, r, &input, 128<<10) {
 		return
 	}
 	if action == "source" {
@@ -723,6 +757,21 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch action {
+	case "git":
+		if err = tx.Commit(); err != nil {
+			runnerFail(w, 503)
+			return
+		}
+		content := "application/x-git-upload-pack-result"
+		if gitRoute.Advertisement {
+			content = "application/x-git-upload-pack-advertisement"
+		}
+		w.Header().Set("Content-Type", content)
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Golf-Source-Commit", run.CommitID)
+		w.Header().Set("Golf-Workflow-Blob", run.BlobID)
+		_, _ = w.Write(gitResponse)
+		return
 	case "artifact":
 		err = s.storeWorkflowArtifact(ctx, tx, run, artifact)
 		if errors.Is(err, runner.ErrArtifacts) {
