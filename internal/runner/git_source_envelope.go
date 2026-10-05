@@ -15,7 +15,8 @@ import (
 	"unicode/utf8"
 )
 
-func gitSourceSnapshotPath(name string) bool {
+// ValidGitSourcePath rejects paths unsafe for native Git metadata and checkout.
+func ValidGitSourcePath(name string) bool {
 	if name == "" || name == "." || len(name) > 4096 || strings.HasPrefix(name, "/") || path.Clean(name) != name || strings.Contains(name, "\\") || !utf8.ValidString(name) || strings.IndexFunc(name, func(value rune) bool { return unicode.IsControl(value) || unicode.Is(unicode.Cf, value) }) >= 0 {
 		return false
 	}
@@ -35,7 +36,7 @@ func VerifyGitSourceSnapshot(archive, listing []byte, archiveSHA, commit, workfl
 		return ErrSource
 	}
 	digest := sha256.Sum256(archive)
-	if len(archive) > (16<<20) || !(commitPattern.MatchString(archiveSHA) && len(archiveSHA) == 64) || hex.EncodeToString(digest[:]) != archiveSHA || !commitPattern.MatchString(commit) || len(listing) > 4<<20 || len(listing) == 0 || listing[len(listing)-1] != 0 || !gitSourceSnapshotPath(workflowPath) || !commitPattern.MatchString(workflowBlob) || len(workflowBlob) != len(commit) {
+	if len(archive) > (16<<20) || !(commitPattern.MatchString(archiveSHA) && len(archiveSHA) == 64) || hex.EncodeToString(digest[:]) != archiveSHA || !commitPattern.MatchString(commit) || len(listing) > 4<<20 || len(listing) == 0 || listing[len(listing)-1] != 0 || !ValidGitSourcePath(workflowPath) || !commitPattern.MatchString(workflowBlob) || len(workflowBlob) != len(commit) {
 		return ErrSource
 	}
 	type object struct{ mode, id string }
@@ -53,7 +54,7 @@ func VerifyGitSourceSnapshot(archive, listing []byte, archiveSHA, commit, workfl
 	for _, row := range bytes.Split(listing[:len(listing)-1], []byte{0}) {
 		meta, name, ok := bytes.Cut(row, []byte{'\t'})
 		fields := strings.Split(string(meta), " ")
-		if !ok || len(fields) != 3 || fields[1] != "blob" || fields[0] != "100644" && fields[0] != "100755" || !commitPattern.MatchString(fields[2]) || len(fields[2]) != len(commit) || (!gitSourceSnapshotPath(string(name)) || !canonical(string(name))) || len(files)+len(directories) >= 4096 {
+		if !ok || len(fields) != 3 || fields[1] != "blob" || fields[0] != "100644" && fields[0] != "100755" || !commitPattern.MatchString(fields[2]) || len(fields[2]) != len(commit) || (!ValidGitSourcePath(string(name)) || !canonical(string(name))) || len(files)+len(directories) >= 4096 {
 			return ErrSource
 		}
 		if _, duplicate := files[string(name)]; duplicate {
@@ -94,7 +95,7 @@ func VerifyGitSourceSnapshot(archive, listing []byte, archiveSHA, commit, workfl
 			return ErrSource
 		}
 		name := header.Name
-		if !gitSourceSnapshotPath(name) || seen[name] || len(seen) >= 4096 || header.Linkname != "" || header.Size < 0 || header.Size > 8<<20 {
+		if !ValidGitSourcePath(name) || seen[name] || len(seen) >= 4096 || header.Linkname != "" || header.Size < 0 || header.Size > 8<<20 {
 			return ErrSource
 		}
 		seen[name] = true
@@ -164,7 +165,7 @@ func NewGitSourceManifest(prepared GitPreparationResult, archive []byte, archive
 // grammar. Native job Git must additionally prove the H/tree/workflow identities
 // and compare its real ls-tree to the original archive before source steps run.
 func ValidateGitSource(manifest *GitSourceManifest, metadata, archive []byte, commit, workflowPath, workflowBlob string) error {
-	if manifest == nil || manifest.Profile != GitSourceProfile || !commitPattern.MatchString(commit) || manifest.CommitID != commit || !commitPattern.MatchString(manifest.TreeID) || len(manifest.TreeID) != len(commit) || manifest.WorkflowPath != workflowPath || !gitSourceSnapshotPath(workflowPath) || manifest.WorkflowBlobID != workflowBlob || !commitPattern.MatchString(workflowBlob) || len(workflowBlob) != len(commit) || !commitPattern.MatchString(manifest.ArchiveSHA256) || len(manifest.ArchiveSHA256) != 64 || !commitPattern.MatchString(manifest.MetadataSHA256) || len(manifest.MetadataSHA256) != 64 || len(archive) == 0 || len(archive) > 16<<20 || len(metadata) == 0 || len(metadata) > GitSourceMetadataLimit {
+	if manifest == nil || manifest.Profile != GitSourceProfile || !commitPattern.MatchString(commit) || manifest.CommitID != commit || !commitPattern.MatchString(manifest.TreeID) || len(manifest.TreeID) != len(commit) || manifest.WorkflowPath != workflowPath || !ValidGitSourcePath(workflowPath) || manifest.WorkflowBlobID != workflowBlob || !commitPattern.MatchString(workflowBlob) || len(workflowBlob) != len(commit) || !commitPattern.MatchString(manifest.ArchiveSHA256) || len(manifest.ArchiveSHA256) != 64 || !commitPattern.MatchString(manifest.MetadataSHA256) || len(manifest.MetadataSHA256) != 64 || len(archive) == 0 || len(archive) > 16<<20 || len(metadata) == 0 || len(metadata) > GitSourceMetadataLimit {
 		return ErrSource
 	}
 	if validateGitSourceArchivePaths(archive) != nil {
@@ -220,7 +221,7 @@ func validateGitSourceArchivePaths(archive []byte) error {
 		if err == io.EOF {
 			return nil
 		}
-		if err != nil || !gitSourceSnapshotPath(h.Name) || seen[h.Name] || h.Linkname != "" || h.Size < 0 || h.Size > 8<<20 || (h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeDir) || h.Typeflag == tar.TypeDir && h.Size != 0 || len(h.PAXRecords) > 1 || len(h.PAXRecords) == 1 && h.PAXRecords["path"] != h.Name {
+		if err != nil || !ValidGitSourcePath(h.Name) || seen[h.Name] || h.Linkname != "" || h.Size < 0 || h.Size > 8<<20 || (h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeDir) || h.Typeflag == tar.TypeDir && h.Size != 0 || len(h.PAXRecords) > 1 || len(h.PAXRecords) == 1 && h.PAXRecords["path"] != h.Name {
 			return ErrSource
 		}
 		seen[h.Name] = true

@@ -92,7 +92,7 @@ func TestGitSnapshotBindsRealGitTree(t *testing.T) {
 				}
 				return result
 			}
-			for _, change := range []string{"", "missing", "content", "mode", "duplicate", "extra", "directory", "symlink", "trailing", "digest", "workflow", "tree-symlink", "tree-git", "tree-object-format", "tree-directories"} {
+			for _, change := range []string{"", "missing", "content", "mode", "duplicate", "extra", "directory", "symlink", "trailing", "digest", "workflow", "tree-symlink", "tree-git", "tree-git-case", "tree-git-space", "tree-control-format", "tree-case-collision", "tree-object-format", "tree-directories"} {
 				t.Run(change, func(t *testing.T) {
 					data, tree, expectedBlob := archive(change), listing, blob
 					sum := sha256.Sum256(data)
@@ -106,6 +106,14 @@ func TestGitSnapshotBindsRealGitTree(t *testing.T) {
 						tree = append(append([]byte{}, listing...), []byte("120000 blob "+blob+"\tlink\x00")...)
 					case "tree-git":
 						tree = append(append([]byte{}, listing...), []byte("100644 blob "+blob+"\t.git/config\x00")...)
+					case "tree-git-case":
+						tree = append(append([]byte{}, listing...), []byte("100644 blob "+blob+"\t.GIT/config\x00")...)
+					case "tree-git-space":
+						tree = append(append([]byte{}, listing...), []byte("100644 blob "+blob+"\t.git /config\x00")...)
+					case "tree-control-format":
+						tree = append(append([]byte{}, listing...), []byte("100644 blob "+blob+"\tzero\u200bwidth\x00")...)
+					case "tree-case-collision":
+						tree = append(append([]byte{}, listing...), []byte("100644 blob "+blob+"\tBIN/other\x00")...)
 					case "tree-object-format":
 						tree = bytes.ReplaceAll(listing, []byte(blob), []byte(blob+"f"))
 					case "tree-directories":

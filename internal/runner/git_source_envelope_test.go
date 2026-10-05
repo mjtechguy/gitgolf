@@ -162,7 +162,7 @@ func TestGitSourceSnapshotMaterializationBoundary(t *testing.T) {
 	m, p, archive := sourceEnvelopeFixture(t, "sha1")
 	for _, name := range []string{".git", ".GIT/config", "nested/.git /config", "nested/.git./config", "nested/.g\u200cit/config", "README.md.", "README.md "} {
 		t.Run(name, func(t *testing.T) {
-			if gitSourceSnapshotPath(name) {
+			if ValidGitSourcePath(name) {
 				t.Fatal("metadata alias admitted")
 			}
 		})

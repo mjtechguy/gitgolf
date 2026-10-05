@@ -14,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/mjtechguy/golf-git/internal/runner"
 )
 
 type preparedGitOutput struct {
@@ -71,7 +73,7 @@ func preparedGitCommand(ctx context.Context, directory string, limit int, args .
 // A fresh unmaterialized repository: no checkout, submodules, LFS, source
 // filters or job execution. The caller owns successful workspace removal.
 func (c *coordinator) prepareGitSource(ctx context.Context, a assignment, parent, workflowPath, workflowBlobID string) (workspace string, err error) {
-	if !c.verifyingHTTPS() || !safeID.MatchString(c.id) || !tokenOK(c.key) || !attemptID.MatchString(a.AttemptID) || !tokenOK(a.AttemptToken) || !commitID.MatchString(a.CommitID) || !gitSnapshotPath(workflowPath) || !commitID.MatchString(workflowBlobID) || len(a.CommitID) != len(workflowBlobID) || !filepath.IsAbs(parent) {
+	if !c.verifyingHTTPS() || !safeID.MatchString(c.id) || !tokenOK(c.key) || !attemptID.MatchString(a.AttemptID) || !tokenOK(a.AttemptToken) || !commitID.MatchString(a.CommitID) || !runner.ValidGitSourcePath(workflowPath) || !commitID.MatchString(workflowBlobID) || len(a.CommitID) != len(workflowBlobID) || !filepath.IsAbs(parent) {
 		return "", errTransport
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
