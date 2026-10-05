@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Code, ConnectError } from '@connectrpc/connect';
-import { ArrowLeft, ArrowDownToLine, CheckCircle2, CircleDashed, CircleSlash, Clock3, Download, GitCommitHorizontal, LoaderCircle, RefreshCw, Search, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, CircleDashed, CircleSlash, Clock3, GitCommitHorizontal, LoaderCircle, RefreshCw, XCircle } from 'lucide-react';
 import { forgetPrivateQueries } from './queryClient';
 import { workflowRunClient, errorMessage } from './api';
 import { WorkflowOutputState, WorkflowRunOrigin, WorkflowRunState, WorkflowStepState, type WorkflowStepProgress, type WorkflowRun, type WorkflowJobInstance } from './gen/golf/v1/golf_pb';
@@ -12,6 +12,7 @@ import { isRunID, isCommitID, isWorkflowJobInstanceID, isWorkflowStepID, reposit
 import { sourcePath, sourceRepositoryID } from './sourceReads';
 import { WorkflowArtifacts } from './WorkflowArtifacts';
 import { useLiveStatus } from './RepositoryLive';
+import { WorkflowLogConsole } from './WorkflowLogConsole';
 
 function useWideWorkflowLayout() {
  const [wide,setWide]=useState(()=>window.matchMedia('(min-width:701px)').matches);
@@ -102,19 +103,7 @@ function JobGraphNavigation({run,location,selectedJobInstanceId,selectedStepId}:
  return <><h3>Jobs</h3><Link className="automation-step-link" aria-current={!selectedJobInstanceId?'page':undefined} {...graphOptions(location,run.id)}>All run output</Link><ol>{run.jobs.map(job=><li key={job.instanceId}><Link className="automation-step-link" aria-current={selectedJobInstanceId===job.instanceId&&!selectedStepId?'page':undefined} title={`${job.jobId} · ${job.instanceId}`} {...graphOptions(location,run.id,job.instanceId)}><StepState step={job}/><span>{job.name}<small>{matrixLabel(job)||job.jobId} · {stepDuration(job)}</small></span></Link>{selectedJobInstanceId===job.instanceId?<><small className="muted">{job.needs.length?`Needs: ${job.needs.join(', ')}`:'No dependencies'}</small><ol>{job.steps.map(step=><li key={step.id}><Link className="automation-step-link" aria-current={selectedStepId===step.id?'page':undefined} {...graphOptions(location,run.id,job.instanceId,step.id)}><StepState step={step}/><span>{step.name}<small>{stepDuration(step)}</small></span></Link></li>)}</ol></>:null}</li>)}</ol></>;
 }
 
-function LogHighlight({text,search}:{text:string;search:string}) {
- if(!search)return text;
- // Bound DOM work without dropping log text; browser Find can reach further matches.
- const lower=text.toLowerCase(),needle=search.toLowerCase(),parts=[];let cursor=0;
- for(let matches=0;matches<200;matches++) {
-  const start=lower.indexOf(needle,cursor);if(start<0)break;
-  parts.push(text.slice(cursor,start),<mark key={start}>{text.slice(start,start+search.length)}</mark>);cursor=start+search.length;
- }
- parts.push(text.slice(cursor));return parts;
-}
 function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex,run,jobInstanceId,stepId,onAuthorityDenied}:{userId:string;owner:string;name:string;runId:string;truncated:boolean;enabled:boolean;stepIndex?:number;run:WorkflowRun;jobInstanceId?:string;stepId?:string;onAuthorityDenied:(error:ConnectError,observed:WorkflowRun)=>void}) {
- const [search,setSearch]=useState('');const searchId=useId();
- const wide=useWideWorkflowLayout(),[searchOpen,setSearchOpen]=useState(false);const end=useRef<HTMLSpanElement>(null);
  const query=useInfiniteQuery({...privateQuery,queryKey:['workflow-run-logs',userId,owner,name,runId,run.repositoryId,run.attemptId,run.commitId,jobInstanceId??'all',stepId??'all',stepIndex??'all',run.outputState,run.engineCatalog,run.inputContract,run.schemaSha256,run.submittedSha256,run.effectiveSha256],enabled,initialPageParam:0n,
   queryFn:async({signal,pageParam})=>{
    const page=await workflowRunClient.getWorkflowRunLogs({runId,afterSequence:pageParam,stepIndex,jobInstanceId,stepId},{signal,timeoutMs:12_000});
@@ -135,19 +124,14 @@ function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex,ru
  const text=query.data?.pages.flatMap(page=>page.logs).map(chunk=>chunk.text).join('')||'';
  const denied=Boolean(query.error)||!enabled;
  useEffect(()=>{if(active&&liveStatus==='live'&&enabled&&!withheld&&!query.error&&query.hasNextPage&&!query.isFetching)void query.fetchNextPage();},[active,liveStatus,enabled,withheld,query.error,query.hasNextPage,query.isFetching,query.fetchNextPage]);
- const matches=search?text.toLowerCase().split(search.toLowerCase()).length-1:0;
- function download(){
-  if(denied||loading||!text)return;
-  const url=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));
-  const link=document.createElement('a');link.href=url;link.download=`golf-run-${runId}${jobInstanceId?'-job-'+jobInstanceId:''}${stepId?'-step-'+stepId:stepIndex!==undefined?'-step-'+(stepIndex+1):''}${query.hasNextPage?'-loaded':''}.log`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
- }
+ const fileName=`golf-run-${runId}${jobInstanceId?'-job-'+jobInstanceId:''}${stepId?'-step-'+stepId:stepIndex!==undefined?'-step-'+(stepIndex+1):''}${query.hasNextPage?'-loaded':''}.log`;
+ const scopeKey=JSON.stringify([userId,owner,name,runId,run.repositoryId,run.attemptId,run.commitId,jobInstanceId,stepId,stepIndex,run.outputState,run.engineCatalog,run.inputContract,run.schemaSha256,run.submittedSha256,run.effectiveSha256]);
  return <section className="browser-panel workflow-log-panel" aria-labelledby="workflow-log-title">
-  <div className="browser-panel-heading"><h2 id="workflow-log-title">Run log</h2><div className="row-actions"><button className="icon-button workflow-log-search-toggle" aria-label="Search loaded run log" title="Search loaded run log" aria-expanded={searchOpen} aria-controls={searchId+'-controls'} disabled={denied} onClick={()=>setSearchOpen(value=>!value)}><Search size={16}/></button><button className="icon-button manual-refresh" aria-label="Refresh run log" title="Refresh run log" disabled={query.isFetching||!enabled} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button><button className="icon-button" aria-label="Download loaded log" title="Download loaded log" disabled={denied||loading||!text} onClick={download}><Download size={16}/></button><button className="icon-button" aria-label="Go to end of loaded log" title="Go to end of loaded log" disabled={denied||loading||!text} onClick={()=>end.current?.scrollIntoView({block:'end'})}><ArrowDownToLine size={16}/></button></div></div>
-  <div id={searchId+'-controls'} className="workflow-log-search" hidden={!wide&&!searchOpen}><div className="repository-list-controls"><div className="search-input"><label className="sr-only" htmlFor={searchId}>Search loaded run log</label><Search size={16} aria-hidden="true"/><input id={searchId} type="search" aria-label="Search loaded run log" placeholder="Search loaded log…" value={search} onChange={event=>setSearch(event.target.value)} disabled={denied}/></div><span className="loaded-list-count" role="status">{search?`${matches} match${matches===1?'':'es'}${matches>200?' · first 200 highlighted':''}`:query.hasNextPage?'More output available':'Loaded output'}</span></div></div>
+  <div className="browser-panel-heading"><h2 id="workflow-log-title">Run log</h2><button className="icon-button manual-refresh" aria-label="Refresh run log" title="Refresh run log" disabled={query.isFetching||!enabled} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button></div>
   {query.error?<PanelError error={query.error} retry={()=>void query.refetch()}/>:loading?<Loading label="Loading run log…"/>:null}
   {!denied&&withheld?<p className="panel-footnote" role="status">Output is withheld pending a verified execution result and current authorization.</p>:null}
   {!denied&&run.outputState===WorkflowOutputState.REDACTED?<p className="panel-footnote">Configured secret values were masked before this log was published.</p>:null}
-  {!denied&&!withheld&&query.isSuccess?<div hidden={loading}><pre className="source-code execution-log" tabIndex={0} aria-label="Workflow run log"><LogHighlight text={text||'No log output yet.'} search={search}/><span ref={end}/></pre></div>:null}
+  {query.data?<WorkflowLogConsole scopeKey={scopeKey} text={text} authorized={!denied&&!withheld} status={active?liveStatus==='live'?'streaming':'reconnecting':'idle'} fileName={fileName} hasMore={Boolean(query.hasNextPage)} refreshing={query.isFetching}/>:null}
   {!denied&&!loading?<More hasMore={Boolean(query.hasNextPage)} loading={query.isFetchingNextPage} load={()=>void query.fetchNextPage()} label="log output"/>:null}
   {!denied&&!loading&&(truncated||query.data?.pages.some(page=>page.truncated))?<p className="panel-footnote" role="status">Output reached the worker limit. The stored log is truncated; loading more cannot recover omitted output.</p>:null}
   <p className="panel-footnote">Search and download cover loaded chunks only.</p>

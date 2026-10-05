@@ -1171,7 +1171,8 @@ summary:focus-visible,pre[tabindex]:focus-visible { outline:2px solid var(--acce
  .workflow-run-metadata details { padding-top:8px; }
  .workflow-jobs-disclosure>summary { display:list-item; padding:10px 12px; border:1px solid var(--line); border-radius:4px; font-size:.875rem; cursor:pointer; overflow-wrap:anywhere; }
  .workflow-jobs-content { padding-top:12px; }
- .workflow-run-workspace,.workflow-run-workspace>.page-stack { gap:14px; }
+ .workflow-run-workspace,.workflow-run-workspace>.page-stack { gap:10px; }
+ .workflow-log-panel>.browser-panel-heading { display:none; }
  .workflow-run-summary { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; }
  .workflow-run-summary h2 { font-size:1.25rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
  .automation-run-output>h3 { display:none; }
