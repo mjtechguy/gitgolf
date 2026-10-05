@@ -28,6 +28,10 @@ function configuration(value) {
   }
   return { ...value, baseUrl: base.origin, output };
 }
+function bindRepository(read, access, repo) {
+  assert(read?.id === repo.id && read.fullName === `${repo.owner}/${repo.name}` && read.name === repo.name && read.private, 'Owned private repository binding mismatch.');
+  assert(access?.repositoryId === repo.id && access.ownerId === repo.ownerId && access.owner?.id === repo.ownerId && access.owner.login === repo.owner && !access.organizationOwned && access.currentPermission === 'owner', 'Owned immutable repository access binding mismatch.');
+}
 function privateFree(report, forbidden) {
   const text = JSON.stringify(report, null, 2);
   assert(!forbidden.some(secret => text.includes(secret)), 'Receipt privacy validation failed.');
@@ -36,6 +40,7 @@ function privateFree(report, forbidden) {
 if (process.argv.includes('--self-check')) {
   const good = { baseUrl: 'http://127.0.0.1:8080', adminCookie: { name: 'golf_session', value: 'A'.repeat(43) }, adminPassword: 'synthetic-password-confirmation', target: { nativeUserId: '84', login: 'golf-access-owned', email: 'owned@example.invalid', token: 'synthetic-native-token' }, source: 'a'.repeat(40), output: '.tmp/self-check-access' };
   configuration(good);
+  const repo = {owner:good.target.login,name:'golf-access-project',id:'7',ownerId:'84'}; const read={id:'7',name:repo.name,fullName:`${repo.owner}/${repo.name}`,private:true}; const access={repositoryId:'7',ownerId:'84',owner:{id:'84',login:repo.owner},currentPermission:'owner'}; bindRepository(read,access,repo); assert.throws(()=>bindRepository(read,{...access,owner:{id:'42',login:repo.owner}},repo));
   for (const update of [{ baseUrl: 'http://external.invalid' }, { output: '/tmp/public' }, { target: { ...good.target, login: 'admin' } }, { target: { ...good.target, nativeUserId: '084' } }, { repository: { owner: 'admin', name: 'golf-access-owned', id: '1', ownerId: '84' } }]) assert.throws(() => configuration({ ...good, ...update }));
   assert.throws(() => privateFree({ note: good.target.token }, [good.target.token]));
   assert.doesNotThrow(() => privateFree({ passed: true, ownSessionsLoggedOut: true }, [good.target.token]));
@@ -111,9 +116,8 @@ try {
   if (config.repository) {
     step = 'managed Git baseline'; const repo = config.repository;
     const read = success(await request('RepositoryService/GetRepository', { repository: { owner: repo.owner, name: repo.name } }, pat)).repository;
-    assert(read?.id === repo.id && read.fullName === `${repo.owner}/${repo.name}` && read.name === repo.name && read.private, 'Owned private repository binding mismatch.');
     const access = success(await request('RepositoryAccessService/GetRepositoryAccess', { repository: { owner: repo.owner, name: repo.name } }, pat)).access;
-    assert(access?.repositoryId === repo.id && access.ownerId === repo.ownerId && access.repository?.owner === repo.owner && access.repository?.name === repo.name && access.currentPermission === 'owner', 'Owned immutable repository access binding mismatch.');
+    bindRepository(read, access, repo);
     git = success(await request('GitTransportService/CreateGitCredential', { repository: { owner: repo.owner, name: repo.name }, repositoryId: repo.id, ownerId: repo.ownerId, label: 'owned suspension proof', mode: 'GIT_CREDENTIAL_MODE_READ', lifetimeSeconds: 3600 }, pat)).secret;
     assert(typeof git === 'string' && git.startsWith('golf_git_')); secrets.push(git); await gitRead(git, 200); checked('owned private repository managed Git advertisement baseline');
   }
