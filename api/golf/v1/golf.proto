@@ -3968,3 +3968,58 @@ message SetRepositoryStarRequest {
   optional bool starred = 5;
 }
 message SetRepositoryStarResponse { RepositoryStarPreference preference = 1; }
+
+// One explicit native publication for an existing unprotected tag. Current
+// tag observations are not a native atomic source/publication compare-and-swap.
+service RepositoryReleasePublicationService {
+  rpc SubmitRepositoryReleasePublication(SubmitRepositoryReleasePublicationRequest) returns (SubmitRepositoryReleasePublicationResponse);
+  rpc GetRepositoryReleasePublicationOperation(GetRepositoryReleasePublicationOperationRequest) returns (GetRepositoryReleasePublicationOperationResponse);
+}
+enum RepositoryReleasePublicationPhase {
+  REPOSITORY_RELEASE_PUBLICATION_PHASE_UNSPECIFIED = 0;
+  REPOSITORY_RELEASE_PUBLICATION_PHASE_RESERVED = 1;
+  REPOSITORY_RELEASE_PUBLICATION_PHASE_DISPATCH_UNKNOWN = 2;
+  REPOSITORY_RELEASE_PUBLICATION_PHASE_SUCCEEDED = 3;
+  REPOSITORY_RELEASE_PUBLICATION_PHASE_REJECTED = 4;
+}
+message SubmitRepositoryReleasePublicationRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string access_revision = 4;
+  string operation_id = 5;
+  string tag_name = 6;
+  string tag_object_id = 7;
+  string commit_id = 8;
+  string title = 9;
+  string body_markdown = 10;
+  bool prerelease = 11;
+}
+message GetRepositoryReleasePublicationOperationRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  string owner_id = 3;
+  string operation_id = 4;
+}
+message RepositoryReleasePublicationOperation {
+  string contract = 1;
+  string operation_id = 2;
+  string actor_id = 3;
+  RepositoryKey repository = 4;
+  string repository_id = 5;
+  string owner_id = 6;
+  string access_revision = 7;
+  string tag_name = 8;
+  string tag_object_id = 9;
+  string commit_id = 10;
+  string title_sha256 = 11;
+  string body_sha256 = 12;
+  bool prerelease = 13;
+  RepositoryReleasePublicationPhase phase = 14;
+  string release_id = 15;
+  string created_at = 16;
+  string updated_at = 17;
+  string failure_code = 18;
+}
+message SubmitRepositoryReleasePublicationResponse { RepositoryReleasePublicationOperation operation = 1; }
+message GetRepositoryReleasePublicationOperationResponse { RepositoryReleasePublicationOperation operation = 1; }

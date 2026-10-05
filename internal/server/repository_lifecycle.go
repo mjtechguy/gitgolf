@@ -183,6 +183,11 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 				cancel()
 				return nil, e
 			}
+		} else if publication, ok := ctx.Value(releasePublicationPermitKey{}).(releasePublicationPermit); ok {
+			if e := s.validateReleasePublicationPermit(ctx, held.tx, publication, repo, key, method, path, input); e != nil {
+				cancel()
+				return nil, e
+			}
 		} else if blocked {
 			cancel()
 			return nil, errLifecycleBlocked

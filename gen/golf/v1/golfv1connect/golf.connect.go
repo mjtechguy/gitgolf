@@ -115,6 +115,9 @@ const (
 	StandardPullMergeServiceName = "golf.v1.StandardPullMergeService"
 	// WorkflowArtifactServiceName is the fully-qualified name of the WorkflowArtifactService service.
 	WorkflowArtifactServiceName = "golf.v1.WorkflowArtifactService"
+	// RepositoryReleasePublicationServiceName is the fully-qualified name of the
+	// RepositoryReleasePublicationService service.
+	RepositoryReleasePublicationServiceName = "golf.v1.RepositoryReleasePublicationService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -738,6 +741,14 @@ const (
 	// WorkflowArtifactServiceGetWorkflowArtifactProcedure is the fully-qualified name of the
 	// WorkflowArtifactService's GetWorkflowArtifact RPC.
 	WorkflowArtifactServiceGetWorkflowArtifactProcedure = "/golf.v1.WorkflowArtifactService/GetWorkflowArtifact"
+	// RepositoryReleasePublicationServiceSubmitRepositoryReleasePublicationProcedure is the
+	// fully-qualified name of the RepositoryReleasePublicationService's
+	// SubmitRepositoryReleasePublication RPC.
+	RepositoryReleasePublicationServiceSubmitRepositoryReleasePublicationProcedure = "/golf.v1.RepositoryReleasePublicationService/SubmitRepositoryReleasePublication"
+	// RepositoryReleasePublicationServiceGetRepositoryReleasePublicationOperationProcedure is the
+	// fully-qualified name of the RepositoryReleasePublicationService's
+	// GetRepositoryReleasePublicationOperation RPC.
+	RepositoryReleasePublicationServiceGetRepositoryReleasePublicationOperationProcedure = "/golf.v1.RepositoryReleasePublicationService/GetRepositoryReleasePublicationOperation"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -7908,4 +7919,106 @@ type UnimplementedWorkflowArtifactServiceHandler struct{}
 
 func (UnimplementedWorkflowArtifactServiceHandler) GetWorkflowArtifact(context.Context, *connect.Request[v1.GetWorkflowArtifactRequest]) (*connect.Response[v1.GetWorkflowArtifactResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.WorkflowArtifactService.GetWorkflowArtifact is not implemented"))
+}
+
+// RepositoryReleasePublicationServiceClient is a client for the
+// golf.v1.RepositoryReleasePublicationService service.
+type RepositoryReleasePublicationServiceClient interface {
+	SubmitRepositoryReleasePublication(context.Context, *connect.Request[v1.SubmitRepositoryReleasePublicationRequest]) (*connect.Response[v1.SubmitRepositoryReleasePublicationResponse], error)
+	GetRepositoryReleasePublicationOperation(context.Context, *connect.Request[v1.GetRepositoryReleasePublicationOperationRequest]) (*connect.Response[v1.GetRepositoryReleasePublicationOperationResponse], error)
+}
+
+// NewRepositoryReleasePublicationServiceClient constructs a client for the
+// golf.v1.RepositoryReleasePublicationService service. By default, it uses the Connect protocol
+// with the binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To
+// use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb()
+// options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRepositoryReleasePublicationServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepositoryReleasePublicationServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	repositoryReleasePublicationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryReleasePublicationService").Methods()
+	return &repositoryReleasePublicationServiceClient{
+		submitRepositoryReleasePublication: connect.NewClient[v1.SubmitRepositoryReleasePublicationRequest, v1.SubmitRepositoryReleasePublicationResponse](
+			httpClient,
+			baseURL+RepositoryReleasePublicationServiceSubmitRepositoryReleasePublicationProcedure,
+			connect.WithSchema(repositoryReleasePublicationServiceMethods.ByName("SubmitRepositoryReleasePublication")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryReleasePublicationOperation: connect.NewClient[v1.GetRepositoryReleasePublicationOperationRequest, v1.GetRepositoryReleasePublicationOperationResponse](
+			httpClient,
+			baseURL+RepositoryReleasePublicationServiceGetRepositoryReleasePublicationOperationProcedure,
+			connect.WithSchema(repositoryReleasePublicationServiceMethods.ByName("GetRepositoryReleasePublicationOperation")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// repositoryReleasePublicationServiceClient implements RepositoryReleasePublicationServiceClient.
+type repositoryReleasePublicationServiceClient struct {
+	submitRepositoryReleasePublication       *connect.Client[v1.SubmitRepositoryReleasePublicationRequest, v1.SubmitRepositoryReleasePublicationResponse]
+	getRepositoryReleasePublicationOperation *connect.Client[v1.GetRepositoryReleasePublicationOperationRequest, v1.GetRepositoryReleasePublicationOperationResponse]
+}
+
+// SubmitRepositoryReleasePublication calls
+// golf.v1.RepositoryReleasePublicationService.SubmitRepositoryReleasePublication.
+func (c *repositoryReleasePublicationServiceClient) SubmitRepositoryReleasePublication(ctx context.Context, req *connect.Request[v1.SubmitRepositoryReleasePublicationRequest]) (*connect.Response[v1.SubmitRepositoryReleasePublicationResponse], error) {
+	return c.submitRepositoryReleasePublication.CallUnary(ctx, req)
+}
+
+// GetRepositoryReleasePublicationOperation calls
+// golf.v1.RepositoryReleasePublicationService.GetRepositoryReleasePublicationOperation.
+func (c *repositoryReleasePublicationServiceClient) GetRepositoryReleasePublicationOperation(ctx context.Context, req *connect.Request[v1.GetRepositoryReleasePublicationOperationRequest]) (*connect.Response[v1.GetRepositoryReleasePublicationOperationResponse], error) {
+	return c.getRepositoryReleasePublicationOperation.CallUnary(ctx, req)
+}
+
+// RepositoryReleasePublicationServiceHandler is an implementation of the
+// golf.v1.RepositoryReleasePublicationService service.
+type RepositoryReleasePublicationServiceHandler interface {
+	SubmitRepositoryReleasePublication(context.Context, *connect.Request[v1.SubmitRepositoryReleasePublicationRequest]) (*connect.Response[v1.SubmitRepositoryReleasePublicationResponse], error)
+	GetRepositoryReleasePublicationOperation(context.Context, *connect.Request[v1.GetRepositoryReleasePublicationOperationRequest]) (*connect.Response[v1.GetRepositoryReleasePublicationOperationResponse], error)
+}
+
+// NewRepositoryReleasePublicationServiceHandler builds an HTTP handler from the service
+// implementation. It returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRepositoryReleasePublicationServiceHandler(svc RepositoryReleasePublicationServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	repositoryReleasePublicationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryReleasePublicationService").Methods()
+	repositoryReleasePublicationServiceSubmitRepositoryReleasePublicationHandler := connect.NewUnaryHandler(
+		RepositoryReleasePublicationServiceSubmitRepositoryReleasePublicationProcedure,
+		svc.SubmitRepositoryReleasePublication,
+		connect.WithSchema(repositoryReleasePublicationServiceMethods.ByName("SubmitRepositoryReleasePublication")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryReleasePublicationServiceGetRepositoryReleasePublicationOperationHandler := connect.NewUnaryHandler(
+		RepositoryReleasePublicationServiceGetRepositoryReleasePublicationOperationProcedure,
+		svc.GetRepositoryReleasePublicationOperation,
+		connect.WithSchema(repositoryReleasePublicationServiceMethods.ByName("GetRepositoryReleasePublicationOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RepositoryReleasePublicationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RepositoryReleasePublicationServiceSubmitRepositoryReleasePublicationProcedure:
+			repositoryReleasePublicationServiceSubmitRepositoryReleasePublicationHandler.ServeHTTP(w, r)
+		case RepositoryReleasePublicationServiceGetRepositoryReleasePublicationOperationProcedure:
+			repositoryReleasePublicationServiceGetRepositoryReleasePublicationOperationHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRepositoryReleasePublicationServiceHandler returns CodeUnimplemented from all
+// methods.
+type UnimplementedRepositoryReleasePublicationServiceHandler struct{}
+
+func (UnimplementedRepositoryReleasePublicationServiceHandler) SubmitRepositoryReleasePublication(context.Context, *connect.Request[v1.SubmitRepositoryReleasePublicationRequest]) (*connect.Response[v1.SubmitRepositoryReleasePublicationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryReleasePublicationService.SubmitRepositoryReleasePublication is not implemented"))
+}
+
+func (UnimplementedRepositoryReleasePublicationServiceHandler) GetRepositoryReleasePublicationOperation(context.Context, *connect.Request[v1.GetRepositoryReleasePublicationOperationRequest]) (*connect.Response[v1.GetRepositoryReleasePublicationOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryReleasePublicationService.GetRepositoryReleasePublicationOperation is not implemented"))
 }

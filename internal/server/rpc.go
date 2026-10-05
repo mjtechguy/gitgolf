@@ -47,7 +47,7 @@ func (s *Server) rpcHandler() http.Handler {
 		connect.WithReadMaxBytes(16 << 10), connect.WithSendMaxBytes(16 << 20), connect.WithRequireConnectProtocolHeader(),
 		connect.WithConditionalHandlerOptions(func(spec connect.Spec) []connect.HandlerOption {
 			switch spec.Procedure {
-			case golfv1connect.RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure, golfv1connect.OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionBindingProcedure:
+			case golfv1connect.RepositoryReleasePublicationServiceSubmitRepositoryReleasePublicationProcedure, golfv1connect.RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure, golfv1connect.OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionBindingProcedure:
 				// Eight-KiB values can double under JSON escaping; organization
 				// requests also carry bounded selected-repository identities.
 				// Typed binding approvals include escaped inputs and scoped value IDs.
@@ -94,6 +94,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewRepositoryRulesServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewPullMergeObservationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewStandardPullMergeServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewRepositoryReleasePublicationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRunnerControlServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRunnerPoolServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewWorkflowServiceHandler(s, options...))
@@ -160,6 +161,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.InstanceAdminServiceDisableLocalAccountProcedure, golfv1connect.WorkflowServiceInspectWorkflowsProcedure,
 			golfv1connect.RepositoryWebhookServiceListRepositoryWebhooksProcedure, golfv1connect.RepositoryWebhookServiceSaveRepositoryWebhookProcedure, golfv1connect.RepositoryWebhookServiceListRepositoryWebhookDeliveriesProcedure, golfv1connect.RepositoryWebhookServiceTestRepositoryWebhookProcedure, golfv1connect.RepositoryWebhookServiceRedeliverRepositoryWebhookProcedure,
 			golfv1connect.StandardPullMergeServiceSubmitStandardPullMergeProcedure, golfv1connect.StandardPullMergeServiceGetStandardPullMergeOperationProcedure,
+			golfv1connect.RepositoryReleasePublicationServiceSubmitRepositoryReleasePublicationProcedure, golfv1connect.RepositoryReleasePublicationServiceGetRepositoryReleasePublicationOperationProcedure,
 			golfv1connect.PullMergeObservationServiceGetPullRequestMergeObservationProcedure, golfv1connect.RepositoryRulesServiceGetRepositoryRulesProcedure, golfv1connect.RepositoryRulesServiceMutateRepositoryRulesProcedure, golfv1connect.RepositoryRulesServiceGetRepositoryRuleMutationProcedure,
 			golfv1connect.RunnerControlServiceGetInstanceRunnerLimitsProcedure, golfv1connect.RunnerControlServiceSetInstanceRunnerLimitsProcedure, golfv1connect.RunnerControlServiceGetInstanceRunnersProcedure, golfv1connect.RunnerControlServiceUpdateRunnerControlProcedure, golfv1connect.RunnerControlServiceGetRepositoryRunnersProcedure,
 			golfv1connect.RunnerPoolServiceListRunnerPoolsProcedure, golfv1connect.RunnerPoolServiceSaveRunnerPoolProcedure, golfv1connect.RunnerPoolServiceGetRepositoryRunnerPlacementProcedure, golfv1connect.RunnerPoolServiceSetRepositoryRunnerPlacementProcedure,
@@ -210,7 +212,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		}
 		limit := int64(16 << 10)
 		switch procedure {
-		case golfv1connect.RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure, golfv1connect.OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionBindingProcedure:
+		case golfv1connect.RepositoryReleasePublicationServiceSubmitRepositoryReleasePublicationProcedure, golfv1connect.RepositoryEnvironmentServiceSaveRepositoryEnvironmentProcedure, golfv1connect.OrganizationExecutionValueServiceSaveOrganizationExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionValueProcedure, golfv1connect.RepositoryExecutionValueServiceSaveRepositoryExecutionBindingProcedure:
 			limit = 64 << 10
 		case golfv1connect.RepositoryServiceSavePullRequestReviewDraftProcedure:
 			limit = 2 << 20
