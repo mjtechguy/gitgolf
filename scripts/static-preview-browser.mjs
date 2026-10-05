@@ -3,31 +3,56 @@
 import {mkdir, writeFile, chmod} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 import {join} from 'node:path';
+import {isDeepStrictEqual} from 'node:util';
 const check=(value,category)=>{if(!value)throw Error(category);};
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
-function validate(c){
+const observe=process.argv.includes('--observe-live');
+function validate(c,live=false){
   const golf=new URL(c.golf),preview=new URL(c.previewBase),d=c.deployment;
   check(golf.protocol==='https:'&&golf.hostname==='localhost'&&golf.port&&golf.pathname==='/'&&!golf.search&&!golf.hash,'owned-golf-origin');
   check(preview.protocol==='https:'&&preview.hostname==='preview.localhost'&&preview.port&&preview.pathname==='/'&&!preview.search&&!preview.hash,'owned-preview-origin');
   check(/^[a-f0-9]{40}$/.test(c.sourceRevision)&&/^[A-Za-z0-9+/]{43}=$/.test(c.spki),'frozen-source-leaf');
-  check(d.contract==='golf.repository.local-static.v1'&&uuid.test(d.id)&&uuid.test(c.secondDeploymentId)&&d.id!==c.secondDeploymentId&&d.state==='READY'&&d.canOpen,'actual-active-original');
-  check(d.openPath===`/api/deployments/${d.id}/open`&&d.target?.repository?.owner===c.repository.owner&&d.target?.repository?.name===c.repository.name,'original-origin-repository');
+  check(d.contract==='golf.repository.local-static.v1'&&uuid.test(d.id)&&uuid.test(c.secondDeploymentId)&&d.id!==c.secondDeploymentId&&(live?d.state==='REQUESTED'&&!d.canOpen:d.state==='READY'&&d.canOpen),'actual-original-state');
+  check((live?!(d.openPath??''):d.openPath===`/api/deployments/${d.id}/open`)&&d.target?.repository?.owner===c.repository.owner&&d.target?.repository?.name===c.repository.name,'original-origin-repository');
   check(d.artifact?.workflowPath==='.gitlab-ci.yml'&&/^[a-f0-9]{64}$/.test(d.artifact.archiveSha256)&&d.staticRoot==='dist','qualified-shell-static-root');
-  for(const rows of [c.cookies,c.readerCookies])check(rows.length===1&&rows[0].name==='__Host-golf_session'&&rows[0].url===c.golf&&rows[0].secure&&rows[0].httpOnly&&!rows[0].domain,'secure-host-session');
+  for(const rows of [c.cookies,c.readerCookies])check(rows.length===1&&rows[0].name==='__Host-golf_session'&&rows[0].url===c.golf&&rows[0].secure&&rows[0].httpOnly&&rows[0].sameSite==='Lax'&&!rows[0].domain,'secure-host-session');
   check(Object.keys(c.expectedFiles).sort().join(',')==='index.html,report.txt'&&c.forbidden.length<=100,'bounded-fixture');
+}
+function immutableReceipt(d,original){
+  for(const field of ['id','contract','actorId','environmentId','environmentVersion','environmentName','manifestSha256','targetFingerprint','staticRoot','createdAt','eligibleAt','artifactStorage','artifactProfileId','artifactProfileVersion','artifactStorageFingerprint'])check(d?.[field]===original[field],'original-'+field);
+  for(const field of ['artifact','target','source','policy'])check(isDeepStrictEqual(d?.[field],original[field]),'original-'+field);
+}
+function streamEvents(raw,repositoryId){
+  check(raw.length<=65536,'bounded-live-stream');const events=[];let offset=0;
+  while(offset<raw.length){
+    check(offset+5<=raw.length,'live-frame-header');const flag=raw[offset],size=raw.readUInt32BE(offset+1);offset+=5;
+    check([0,2].includes(flag)&&size<=16384&&offset+size<=raw.length,'live-frame-bound');const value=JSON.parse(raw.subarray(offset,offset+size).toString());offset+=size;
+    if(flag===2){check(!value.error&&offset===raw.length,'live-end');continue;}
+    const topics=value.topics??[];
+    check(value.repositoryId===repositoryId&&['reset','change','heartbeat','reconnect'].includes(value.kind)&&/^(0|[1-9][0-9]{0,18})$/.test(value.cursor)&&BigInt(value.cursor)<=9223372036854775807n&&Array.isArray(topics)&&topics.every(t=>['source','issues','pulls','actions','agents'].includes(t)),'exact-live-event');
+    check(!events.length||BigInt(value.cursor)>=BigInt(events.at(-1).cursor),'ordered-live-cursor');events.push({...value,topics});
+  }
+  check(events.length>0,'nonempty-live-stream');return events;
 }
 if(process.argv.includes('--self-check')){
   const id='00000000-0000-4000-8000-000000000001',other='00000000-0000-4000-8000-000000000002';
-  const golf='https://localhost:12345',cookie={name:'__Host-golf_session',url:golf,secure:true,httpOnly:true};
+  const golf='https://localhost:12345',cookie={name:'__Host-golf_session',url:golf,secure:true,httpOnly:true,sameSite:'Lax'};
   const c={golf,previewBase:'https://preview.localhost:12346',sourceRevision:'a'.repeat(40),spki:'a'.repeat(43)+'=',cookies:[cookie],readerCookies:[cookie],repository:{owner:'owned',name:'static'},secondDeploymentId:other,expectedFiles:{'index.html':'owned','report.txt':'report'},forbidden:[],deployment:{contract:'golf.repository.local-static.v1',id,state:'READY',canOpen:true,openPath:`/api/deployments/${id}/open`,target:{repository:{owner:'owned',name:'static'}},staticRoot:'dist',artifact:{workflowPath:'.gitlab-ci.yml',archiveSha256:'b'.repeat(64)}}};
   validate(c);
+  const requested={...c,deployment:{...c.deployment,state:'REQUESTED',canOpen:false,openPath:''}};validate(requested,true);
+  for(const deployment of [c.deployment,{...requested.deployment,canOpen:true},{...requested.deployment,openPath:`/api/deployments/${id}/open`}]){let refused=false;try{validate({...requested,deployment},true);}catch{refused=true;}check(refused,'active-or-open-observer-fixture-admitted');}
   for(const patch of [{golf:'http://localhost:12345'},{previewBase:'https://outside.invalid:12345'},{spki:'*'},{secondDeploymentId:id},{cookies:[{...cookie,domain:'.localhost'}]},{deployment:{...c.deployment,state:'REQUESTED'}}]){
     let refused=false;try{validate({...c,...patch});}catch{refused=true;}check(refused,'foreign-browser-fixture-admitted');
   }
+  immutableReceipt(requested.deployment,requested.deployment);
+  for(const patch of [{artifact:{...requested.deployment.artifact,archiveSha256:'c'.repeat(64)}},{target:{repository:{owner:'foreign',name:'static'}}}]){let refused=false;try{immutableReceipt({...requested.deployment,...patch},requested.deployment);}catch{refused=true;}check(refused,'foreign-live-receipt-admitted');}
+  const frame=value=>{const body=Buffer.from(JSON.stringify(value)),head=Buffer.alloc(5);head.writeUInt32BE(body.length,1);return Buffer.concat([head,body]);};
+  const good=frame({repositoryId:'12',kind:'change',cursor:'3',topics:['actions']});check(streamEvents(good,'12')[0].topics[0]==='actions','live-frame-self-check');
+  for(const bad of [good.subarray(0,good.length-1),frame({repositoryId:'13',kind:'change',cursor:'3',topics:['actions']}),Buffer.concat([good,frame({repositoryId:'12',kind:'change',cursor:'2',topics:['actions']})])]){let refused=false;try{streamEvents(bad,'12');}catch{refused=true;}check(refused,'foreign-live-stream-admitted');}
   console.log('PASS: pure original/browser/host-only TLS fixture checks; no resources.');process.exit(0);
 }
 let text='';for await(const piece of process.stdin){text+=piece;check(text.length<=262144,'private-stdin-bound');}
-const c=JSON.parse(text);validate(c);
+const c=JSON.parse(text);validate(c,observe);
 const {chromium}=await import(pathToFileURL(join(c.stackRoot,'web/node_modules/playwright/index.mjs')).href);
 await mkdir(c.output,{mode:0o700});await chmod(c.output,0o700);
 const browser=await chromium.launch({args:[`--ignore-certificate-errors-spki-list=${c.spki}`,'--host-resolver-rules=MAP *.preview.localhost 127.0.0.1, MAP localhost 127.0.0.1']});
@@ -36,13 +61,19 @@ const reader=await browser.newContext({acceptDownloads:false});
 await context.addCookies(c.cookies);await reader.addCookies(c.readerCookies);
 const page=await context.newPage();
 const manifest={passed:false,complete:false,kind:'actual-protected-static-preview',sourceRevision:c.sourceRevision,deploymentId:c.deployment.id,captures:[],checks:{},limits:['One bounded secretless static fixture. Leaf SPKI is trusted in this disposable browser only; parent independently verifies CA/name/TLS1.3.','Reads/POST open only; parent independently qualifies deployment transitions/current authority.']};
-const requests=[],receipts=[],pending=[];let stage='configuration';
+const requests=[],receipts=[],pending=[],observed=[],streams=[];let stage='configuration',observationFailure;
 page.on('request',r=>{if(r.url().startsWith(c.golf+'/rpc/'))requests.push(r.url().split('/').at(-1));});
 page.on('response',r=>{if(r.url().endsWith('/GetRepositoryDeployment'))pending.push((async()=>{
   check(r.status()===200,'actual-deployment-rpc');const d=(await r.json()).deployment;
-  for(const field of ['id','contract','actorId','environmentId','environmentVersion','manifestSha256','targetFingerprint','staticRoot'])check(d?.[field]===c.deployment[field],'original-'+field);
-  check(d.artifact?.archiveSha256===c.deployment.artifact.archiveSha256&&d.artifact?.commitId===c.deployment.artifact.commitId&&d.state==='READY'&&d.canOpen,'current-exact-artifact');receipts.push(d.id);
-})());});
+  immutableReceipt(d,c.deployment);
+  check(observe||d.state==='READY'&&d.canOpen,'current-exact-artifact');receipts.push(d.id);observed.push(d);
+})().catch(error=>{observationFailure??=error;}));
+  if(observe&&r.url().endsWith('/WatchRepository'))pending.push((async()=>{
+    check(r.status()===200&&r.headers()['cache-control']==='no-store'&&r.headers()['content-type']?.startsWith('application/connect+json'),'actual-live-stream');
+    const request=r.request().postDataJSON();check(request.repositoryId===c.deployment.target.repositoryId&&isDeepStrictEqual(request.repository,c.repository),'original-live-request');
+    streams.push(streamEvents(await r.body(),request.repositoryId));
+  })().catch(error=>{observationFailure??=error;}));
+});
 const previewOrigin=`https://${c.deployment.id}.preview.localhost:${new URL(c.previewBase).port}`;
 const path=`/${encodeURIComponent(c.repository.owner)}/${encodeURIComponent(c.repository.name)}/deployments/${c.deployment.id}`;
 function headers(h){check(h['cache-control']==='no-store'&&h['x-content-type-options']==='nosniff'&&h['referrer-policy']==='no-referrer'&&h['x-frame-options']==='DENY','private-file-headers');check(h['content-security-policy']?.includes("worker-src 'none'")&&h['content-security-policy']?.includes("connect-src 'self'")&&h['content-security-policy']?.includes("form-action 'none'"),'project-isolation-csp');}
@@ -54,7 +85,36 @@ async function projectRead(p,url){
   // frozen leaf trust. Playwright's Node APIRequest transport does neither.
   return p.evaluate(async url=>{const response=await fetch(url,{credentials:'same-origin'});return {status:response.status,text:await response.text(),headers:Object.fromEntries(response.headers)};},url);
 }
+async function observeLive(){
+  manifest.kind='actual-live-deployment-observer';manifest.phases=[];
+  const navigations=[];page.on('framenavigated',frame=>{if(frame===page.mainFrame())navigations.push(frame.url());});
+  await page.addInitScript(()=>localStorage.setItem('golf.theme','dark'));
+  await page.setViewportSize({width:1440,height:1000});await page.goto(c.golf+path,{waitUntil:'domcontentloaded'});
+  const state=page.locator('.browser-panel').filter({has:page.getByRole('heading',{name:'Deployment state',exact:true})});
+  const approvals=page.getByRole('table',{name:'Deployment approvals',exact:true}),open=page.getByRole('button',{name:'Open protected preview',exact:true});
+  async function phase(name,predicate,visual,capture){
+    stage='observe-'+name;const deadline=Date.now()+30000;
+    while(!predicate(observed.at(-1))){check(!observationFailure,'live-receipt-observation');check(Date.now()<deadline,'live-phase-deadline');await page.waitForTimeout(50);}
+    await visual();check(!observationFailure,'live-receipt-observation');
+    check(navigations.length===1&&page.url()===c.golf+path&&requests.every(name=>/^(Get|List|Inspect|Watch|Resolve)/.test(name)),'live-read-only-no-navigation');
+    await privateState(page);await page.evaluate(()=>document.fonts.ready);
+    if(capture){const file=`live-${name}-dark-1440.png`;await page.screenshot({path:join(c.output,file),fullPage:true});await chmod(join(c.output,file),0o600);manifest.captures.push({file,width:1440,theme:'dark',phase:name});}
+    const d=observed.at(-1);manifest.phases.push({phase:name,state:d.state,version:d.version,canOpen:!!d.canOpen,approvalCount:(d.approvals??[]).length,receiptCount:receipts.length});
+    await writeFile(join(c.output,name+'.ready'),'ready\n',{mode:0o600,flag:'wx'});
+  }
+  await phase('requested',d=>d?.state==='REQUESTED'&&!d.canOpen&&!(d.approvals??[]).length,async()=>{
+    await state.getByText('requested',{exact:true}).waitFor();await approvals.getByText('No reviewer decisions recorded.',{exact:true}).waitFor();await page.locator('.live-status-live').waitFor();check(await open.count()===0&&requests.includes('WatchRepository'),'requested-live-no-open');
+  },true);
+  await phase('approved',d=>d?.state==='REQUESTED'&&(d.approvals??[]).some(a=>a.approved),async()=>{await approvals.getByText('Approved',{exact:true}).waitFor();check(await open.count()===0,'approved-not-active');},false);
+  await phase('active',d=>d?.state==='READY'&&d.canOpen&&d.openPath===`/api/deployments/${c.deployment.id}/open`,async()=>{await state.getByText('Active protected preview',{exact:true}).waitFor();await open.waitFor();check(await open.isEnabled(),'active-open-enabled');},true);
+  await phase('revoked',d=>d?.state==='REVOKED'&&!d.canOpen&&!d.openPath,async()=>{await state.getByText('revoked',{exact:true}).waitFor();check(await open.count()===0,'revoked-no-open');},true);
+  await Promise.all([...pending]);check(!observationFailure,'live-receipt-observation');
+  const events=streams.flat(),changes=events.filter(e=>e.kind==='change'&&e.topics.includes('actions'));
+  check(changes.length>=3&&new Set(changes.map(e=>e.cursor)).size>=3,'actual-review-activation-revoke-events');
+  manifest.checks={readOnlyDeploymentViews:true,noReloadOrRefresh:true,mainNavigations:navigations.length,actualImmutableReceipts:receipts.length,watchRequests:requests.filter(name=>name==='WatchRepository').length,actualActionsChanges:changes.map(e=>({kind:e.kind,cursor:e.cursor,topics:e.topics})),externalApprovalVisible:true,externalActivationVisible:true,externalRevocationVisible:true};
+}
 try{
+  if(observe){await observeLive();}else{
   for(const width of [1440,390])for(const theme of ['dark','light']){
     stage='capture-'+theme+'-'+width;await page.setViewportSize({width,height:1000});
     await page.goto(c.golf,{waitUntil:'domcontentloaded'});await page.evaluate(value=>localStorage.setItem('golf.theme',value),theme);
@@ -67,7 +127,7 @@ try{
     check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'mobile-overflow');await privateState(page);
     const file=`deployment-${theme}-${width}.png`;await page.screenshot({path:join(c.output,file),fullPage:true});await chmod(join(c.output,file),0o600);manifest.captures.push({file,width,theme});
   }
-  await Promise.all(pending);check(receipts.length>=4&&requests.every(name=>/^(Get|List|Inspect|Watch|Resolve)/.test(name)),'read-only-views');
+  await Promise.all(pending);check(!observationFailure&&receipts.length>=4&&requests.every(name=>/^(Get|List|Inspect|Watch|Resolve)/.test(name)),'read-only-views');
   stage='actual-native-protected-form-open';
   const popupPromise=page.waitForEvent('popup');await page.getByRole('button',{name:'Open protected preview',exact:true}).click();const project=await popupPromise;
   await project.waitForURL(previewOrigin+'/',{timeout:30000});await project.waitForLoadState('domcontentloaded');
@@ -93,9 +153,10 @@ try{
   },c.golf);
   check(restrictions.fetchDenied&&restrictions.workerDenied&&restrictions.registrations===0&&restrictions.violations.includes('connect-src')&&restrictions.violations.includes('worker-src'),'csp-origin-worker-isolation');
   manifest.checks={actualNativeFormOpen:true,exactProjectAndAssetBytes:true,secureHttpOnlyHostCookies:true,noGrantInURL:true,noGolfCookieOnProject:true,noPreviewCookieOnGolf:true,projectJSCannotReadCookie:true,foreignDeploymentAndNoLaunchDenied:true,golfRoutesUnavailable:true,serviceWorkerDenied:true,crossOriginFetchDenied:true,actualImmutableReceipts:receipts.length,readOnlyDeploymentViews:true};
+  }
   manifest.passed=true;manifest.complete=true;
 }catch(error){manifest.originalFailure={stage,type:error.name};throw error;}
 finally{
   await browser.close();await writeFile(join(c.output,'manifest.json'),JSON.stringify(manifest,null,2)+'\n',{mode:0o600});
 }
-console.log('PASS: four served original deployment views and real protected browser open; parent owns transition/authority proof.');
+console.log(observe?'PASS: actual read-only live review, activation and revoke observations.':'PASS: four served original deployment views and real protected browser open; parent owns transition/authority proof.');
