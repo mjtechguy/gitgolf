@@ -28,6 +28,14 @@ func (s *Server) PreviewHandler() http.Handler {
 			previewDenied(w)
 			return
 		}
+		// Reject control-plane cookies before every project route, including the
+		// launch redemption path. Only the isolated preview cookie is accepted.
+		for _, c := range r.Cookies() {
+			if c.Name == "__Host-golf_session" || c.Name == cookieName {
+				previewDenied(w)
+				return
+			}
+		}
 		base, _ := url.Parse(s.preview.origin)
 		suffix := "." + base.Host
 		host := strings.ToLower(r.Host)
@@ -58,10 +66,6 @@ func (s *Server) PreviewHandler() http.Handler {
 			if c.Name == previewCookie {
 				value = c.Value
 				n++
-			}
-			if c.Name == "__Host-golf_session" || c.Name == cookieName {
-				previewDenied(w)
-				return
 			}
 		}
 		if n != 1 {

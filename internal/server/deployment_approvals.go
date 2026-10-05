@@ -212,6 +212,15 @@ func (s *Server) deploymentFence(ctx context.Context, d *deploymentRecord, viewe
 	}
 	// Compare each preobserved latest decision after all waits. No unchecked new
 	// approval is used and a concurrently withdrawn approval cannot be reused.
+	var currentApprovals int
+	if tx.QueryRowContext(ctx, "SELECT count(*) FROM (SELECT DISTINCT ON(native_actor_id) approved FROM golf_deployment_reviews WHERE deployment_id=$1 ORDER BY native_actor_id,sequence DESC) r WHERE approved", d.wire.Id).Scan(&currentApprovals) != nil {
+		return errStorageUnavailable
+	}
+	// The individual comparisons below reject replacements/withdrawals. Equal
+	// cardinality also excludes newly affirmative sessions absent from people.
+	if currentApprovals != count {
+		return errDeployment
+	}
 	for _, r := range reviews {
 		if r.approved {
 			var approved bool
