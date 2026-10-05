@@ -3,7 +3,7 @@ import {expect,test,type Page,type Route} from '@playwright/test';
 import {create,toJson} from '@bufbuild/protobuf';
 import {resolveSourceFixture,respond,reject,request} from './rpc';
 import {GetPullRequestResponseSchema,ListPullRequestCommitsRequestSchema,ListPullRequestCommitsResponseSchema,ListPullRequestChecksRequestSchema,ListPullRequestChecksResponseSchema,ReportedCheckState} from '../src/gen/golf/v1/golf_pb';
-import {GetSessionResponseSchema,GetRepositoryResponseSchema,ListRepositoriesResponseSchema,ListCapabilitiesResponseSchema,GetContentsResponseSchema,ListBranchesResponseSchema,ListIssuesResponseSchema,GetIssueResponseSchema,ListIssueCommentsResponseSchema,WatchRepositoryResponseSchema,IssueState,SourceEntryType} from '../src/gen/golf/v1/golf_pb';
+import {GetRepositoryAccessResponseSchema,GetSessionResponseSchema,GetRepositoryResponseSchema,ListRepositoriesResponseSchema,ListCapabilitiesResponseSchema,GetContentsResponseSchema,ListBranchesResponseSchema,ListIssuesResponseSchema,GetIssueResponseSchema,ListIssueCommentsResponseSchema,WatchRepositoryResponseSchema,IssueState,SourceEntryType} from '../src/gen/golf/v1/golf_pb';
 
 const head='a'.repeat(40);
 function envelope(flag:number,body:unknown){const text=Buffer.from(JSON.stringify(body));const size=Buffer.alloc(5);size[0]=flag;size.writeUInt32BE(text.length,1);return Buffer.concat([size,text]);}
@@ -23,6 +23,7 @@ async function fixture(page:Page){
   }
   const user={id:'42',login:'alex'};const repository={id:'11',name:'demo',fullName:'alex/demo',defaultBranch:'main',private:true};
   if(method==='GetRepositoryStar')return reject(route,'unimplemented','Optional Star fixture is unavailable.');
+  if(method==='GetRepositoryAccess')return respond(route,GetRepositoryAccessResponseSchema,{access:{repositoryId:'11',ownerId:'42',currentPermission:'write'}});
   if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user});
   if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{repositories:[repository]});

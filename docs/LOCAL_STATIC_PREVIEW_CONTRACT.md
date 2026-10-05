@@ -59,6 +59,14 @@ native identities authorize inspection. Reviewer detail uses current read rather
 than the admin-only environment configuration inventory. Eligibility is a current
 observation, not an executable authority token.
 
+State events and independent reviewer decisions append a repository `actions`
+invalidation in the same PostgreSQL transaction. Replay, refusal and rollback
+produce no extra committed activity. Existing authorized repository streams
+revalidate deployment inventories, detail and current access without browser
+refresh or automatic writes. The live payload contains no deployment receipt,
+review decision, preview grant or artifact bytes. Current denial remains masked
+until an explicit authorized read; immutable source comparisons stay pinned.
+
 ## Isolated origin and access
 
 Disabled by default. All four operator variables must be supplied together:
