@@ -93,6 +93,6 @@ export function DiffViewer({text,snapshotId,toolbarAction,...actions}:{text:stri
    {shown.map(({file,index})=><ChangedFile key={index} file={file} fileIndex={index} {...lineActions} id={`${prefix}-file-${index}`} split={display.split} syntax={display.syntax} viewed={viewed.has(index)} collapsed={collapsed.has(index)} onCollapsed={value=>collapseFile(index,value)} onViewed={value=>setViewed(before=>{const next=new Set(before);if(value)next.add(index);else next.delete(index);return next;})}/>)}
    {!shown.length?<p className="empty-state">{files.length?'No files match this filter.':'No structured file changes in this output.'}</p>:null}
   </div></div>
-  <details className="diff-raw" open={!files.length}><summary>Native diff text</summary><pre className="source-preview" tabIndex={0} aria-label="Unified diff, plain text"><code>{text}</code></pre></details>
+  <details className="diff-raw" open={!files.length}><summary>Raw diff</summary><pre className="source-preview" tabIndex={0} aria-label="Unified diff, plain text"><code>{text}</code></pre></details>
  </section>;
 }

@@ -199,7 +199,7 @@ test('plain text diff stays keyboard-scrollable and fits charcoal and light mobi
   await expect(page.getByLabel('Commit message, plain text')).toHaveText(message);
   await expect(page.locator('.commit-diff-preview img,.commit-diff-preview a,.commit-diff-message script')).toHaveCount(0);
   if (await page.locator('html').getAttribute('data-theme') !== 'dark') await page.getByRole('button', { name: 'Switch to dark theme', exact: true }).click();
-  await page.getByText('Native diff text', {exact:true}).click();
+  await page.getByText('Raw diff', {exact:true}).click();
   await page.getByLabel('Unified diff, plain text').focus();
   await expect(page.getByLabel('Unified diff, plain text')).toBeFocused();
   await page.keyboard.press('ArrowRight');
