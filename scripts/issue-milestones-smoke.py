@@ -25,6 +25,14 @@ def ids(values, limit=100):
     return result
 
 
+def native_assignee_ids(issue):
+    rows = issue.get('assignees')
+    if rows is None:
+        rows = []
+    assert isinstance(rows, list) and all(isinstance(row, dict) and 'id' in row for row in rows)
+    return ids([row['id'] for row in rows])
+
+
 def metadata_change(field, expected, selected):
     if field == 'labels':
         return {'labels': {'expectedLabelIds': ids(expected, 256), 'labelIds': ids(selected, 256)}}
@@ -45,6 +53,16 @@ def self_check():
     assert list(payload) == ['assignees'] and payload['assignees']['expectedAssigneeIds'] == ['2', '9007199254740995']
     assert [row['id'] for row in payload['assignees']['assignees']] == ['2', '9007199254740995']
     assert metadata_change('assignees', [], []) == {'assignees': {'expectedAssigneeIds': [], 'assignees': []}}
+    for empty in ({}, {'assignees': None}, {'assignees': []}):
+        assert native_assignee_ids(empty) == []
+    assert native_assignee_ids({'assignees': [{'id': 9007199254740995}, {'id': 2}]}) == ['2', '9007199254740995']
+    for malformed in (False, {}, 'invalid', [None], [{}], [{'id': 1}, {'id': 1}]):
+        refused = False
+        try:
+            native_assignee_ids({'assignees': malformed})
+        except AssertionError:
+            refused = True
+        assert refused
     for invalid in [['0'], ['01'], ['1', '1'], ['9223372036854775808'], list(map(str, range(1, 102)))]:
         refused = False
         try:
@@ -60,7 +78,7 @@ def self_check():
         except AssertionError:
             refused = True
         assert refused
-    print('PASS pure assignee envelopes, empty clear and exact sorted int64 bounds; no runtime operations')
+    print('PASS pure assignee envelopes, nullable native clear and exact sorted int64 bounds; no runtime operations')
 
 
 def main():
@@ -139,7 +157,7 @@ def main():
         if args.assignees:
             def verify_native(expected_ids):
                 actual = smoke.provider(token, 'GET', base+'/issues/'+str(issue['number']))
-                assert ids([row['id'] for row in actual.get('assignees', [])]) == ids(expected_ids), 'Native assignee IDs differ'
+                assert native_assignee_ids(actual) == ids(expected_ids), 'Native assignee IDs differ'
                 assert all(actual[k] == baseline[k] for k in ('id', 'title', 'body', 'state')), 'Assignee mutation changed issue fields'
                 assert ids([row['id'] for row in actual.get('labels', [])], 256) == ids([row['id'] for row in baseline.get('labels', [])], 256), 'Assignee mutation changed labels'
                 assert (actual.get('milestone') or {}).get('id') == (baseline.get('milestone') or {}).get('id'), 'Assignee mutation changed milestone'
@@ -164,7 +182,7 @@ def main():
             assert pair(actors[1])['id'] not in {str(row['id']) for row in native_inventory}, 'Removed writer remains assignable'
             smoke.provider(token, 'GET', base+'/assignees/'+actors[1][0], expected=404)
             retained = smoke.provider(token, 'GET', base+'/issues/'+str(issue['number']))
-            report['retainedNonassignableUserObserved'] = pair(actors[1])['id'] in ids([row['id'] for row in retained.get('assignees', [])])
+            report['retainedNonassignableUserObserved'] = pair(actors[1])['id'] in native_assignee_ids(retained)
             if report['retainedNonassignableUserObserved']:
                 refused = change(owner, read(), [pair(actors[1])['id']], [pair(actors[1])])
                 assert refused['mutation']['state'] == 'ISSUE_MUTATION_STATE_REJECTED' and refused['mutation']['failureCode'] == 'preflight_unavailable', 'Nonassignable retained user was retained'
