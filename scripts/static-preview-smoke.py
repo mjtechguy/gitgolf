@@ -203,7 +203,9 @@ def main():
     for role, name, sha in [('golf','golf',args.expected_core_sha256),('runner','golf-runner',args.expected_runner_sha256),('golf','golf-actions-engine',args.expected_engine_sha256),('runner','golf-actions-engine',args.expected_engine_sha256)]:
         result = execute('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/usr/bin/sha256sum',images[role],'/usr/local/bin/'+name)
         assert result.split()==[sha,'/usr/local/bin/'+name]; binaries[role+'/'+name]=sha
-    assert int(execute('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/bin/df',images['golf'],'-Pk','/').splitlines()[-1].split()[3])>=2*1024*1024
+    free_kib=int(execute('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/bin/df',images['golf'],'-Pk','/').splitlines()[-1].split()[3])
+    record(diskReserve={'availableKiB':free_kib,'requiredKiB':2*1024*1024},images=images,binarySha256=binaries)
+    assert free_kib>=2*1024*1024, 'Two-GiB qualification reserve unavailable; no stack started'
     binary, binary_sha = rules.proxy_binary_receipt(args.proxy_binary)
     before = snapshot(); helpers.private_write(output/'foreign-before.json',json.dumps(before,indent=2))
     project = artifact.PROJECT_PREFIX+secrets.token_hex(5)
@@ -343,6 +345,46 @@ def main():
                 token=cookie.split(';',1)[0]; forbidden.append(token.partition('=')[2])
                 preview(d,'/__golf/auth',method='POST',body=form,extra={'Origin':smoke.GOLF,'Content-Type':'application/x-www-form-urlencoded'},expected=404)
                 return token
+        def browser_cookies(role):
+            return [browser_session_cookie(c,smoke.GOLF) for h in actors[role]['session'].handlers if isinstance(h,urllib.request.HTTPCookieProcessor) for c in h.cookiejar]
+        def browser_payload(d, second_id, path):
+            return dict(golf=smoke.GOLF,previewBase=preview_base,spki=spki,sourceRevision=args.source_revision,
+                        repository=repository,deployment=d,secondDeploymentId=second_id,
+                        expectedFiles={k.removeprefix('dist/'):v.decode() for k,v in artifact.EXPECTED.items()},
+                        cookies=browser_cookies('owner'),readerCookies=browser_cookies('reader'),forbidden=forbidden,
+                        stackRoot=str(stack),output=str(path))
+        def live_browser(policy):
+            env=save_environment('Live deployment qualification',policy)
+            d,_,_=create(env); directory=output/'live-browser'
+            # Phase files carry no credential or body. They synchronize actual
+            # external writes with one already-open browser's authorized stream.
+            with (output/'private-live-browser.log').open('wb') as log:
+                process=subprocess.Popen(['node',str(ROOT/'scripts/static-preview-browser.mjs'),'--observe-live'],
+                                         cwd=stack,env=environment,stdin=subprocess.PIPE,stdout=log,stderr=subprocess.STDOUT)
+                try:
+                    process.stdin.write(json.dumps(browser_payload(d,uuid4(),directory)).encode()); process.stdin.close()
+                    def phase(name):
+                        def ready():
+                            assert process.poll() is None, 'Live browser ended before requested phase; private diagnostics retained'
+                            return (directory/(name+'.ready')).is_file()
+                        helpers.until(ready,45)
+                    phase('requested'); approve(d); phase('approved')
+                    eligible=datetime.datetime.fromisoformat(d['eligibleAt'].replace('Z','+00:00')).timestamp()
+                    helpers.until(lambda:time.time()>=eligible,15)
+                    d=activate(d); phase('active'); d=revoke(d)
+                    # The final marker and process exit may coincide.
+                    helpers.until(lambda:(directory/'revoked.ready').is_file() or process.poll() is not None,45)
+                    assert (directory/'revoked.ready').is_file()
+                    assert process.wait(timeout=20)==0
+                    proof=json.loads((directory/'manifest.json').read_text())
+                    assert proof['passed'] and proof['complete'] and proof['deploymentId']==d['id']
+                    record(liveBrowser={'manifest':'live-browser/manifest.json','deploymentId':d['id'],'actualExternalReviewActivationRevocation':True})
+                    check('liveDeployment',sameOpenPage=True,currentAuthorizedReads=True,noBrowserWrites=True)
+                finally:
+                    if process.poll() is None:
+                        process.terminate()
+                        try: process.wait(timeout=5)
+                        except subprocess.TimeoutExpired: process.kill(); process.wait(timeout=5)
         def login(role):
             actor=actors[role]; actor['session']=client(); rpc(role,'SessionService/LoginWithPassword',{'username':actor['email'],'password':actor['password']})
         def profile(prefix, prior=None):
@@ -469,6 +511,9 @@ def main():
             check('producedArtifact',realDocker=True,qualifiedShellGitLab=True,exactArchive=True,independentOriginalBytes=True,workerObjectCredentialsAbsent=True)
             stage('original Create, independent review, wait and capacity')
             policy=dict(allowAllSources=True,reviewers=[{'id':actors['reviewer']['id'],'login':actors['reviewer']['name']}],requiredApprovals=1,preventSelfApproval=True,protectedPreviews=True,waitSeconds=8,maxConcurrency=1,previewTtlSeconds=1800)
+            stage('one actual open browser observes external review, activation and revocation')
+            live_browser(policy)
+            stage('original Create, independent review, wait and capacity')
             env=save_environment('Preview qualification',policy)
             first,request,prepared=create(env)
             rpc('owner',SERVICE+'ActivateRepositoryDeployment',selected(first),400,'failed_precondition')
@@ -504,9 +549,7 @@ def main():
             preview(first,cookie=cookie,host='00000000-0000-4000-8000-000000000000.preview.localhost',expected=404)
             check('isolatedAccess',singleUseLaunch=True,cookieSecureHttpOnlyHostOnly=True,wrongDeploymentCookieDenied=True,golfCookieDenied=True,bearerDenied=True,wrongOriginDenied=True,unknownPathDenied=True)
             stage('served browser UI, protected form open and origin isolation')
-            def browser_cookies(role):
-                return [browser_session_cookie(c,smoke.GOLF) for h in actors[role]['session'].handlers if isinstance(h,urllib.request.HTTPCookieProcessor) for c in h.cookiejar]
-            execute('node',str(ROOT/'scripts/static-preview-browser.mjs'),payload=dict(golf=smoke.GOLF,previewBase=preview_base,spki=spki,sourceRevision=args.source_revision,repository=repository,deployment=first,secondDeploymentId=second['id'],expectedFiles={k.removeprefix('dist/'):v.decode() for k,v in artifact.EXPECTED.items()},cookies=browser_cookies('owner'),readerCookies=browser_cookies('reader'),forbidden=forbidden,stackRoot=str(stack),output=str(output/'browser')),timeout=180)
+            execute('node',str(ROOT/'scripts/static-preview-browser.mjs'),payload=browser_payload(first,second['id'],output/'browser'),timeout=180)
             browser=json.loads((output/'browser/manifest.json').read_text()); assert browser['passed'] and browser['complete'] and len(browser['captures'])==4
             record(browser={'manifest':'browser/manifest.json','captures':4,'actualProtectedOpen':True})
             stage('restart and original inspection without redispatch')
