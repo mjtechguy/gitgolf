@@ -19,6 +19,8 @@ The earlier [fork attempt1](../.tmp/standard-fork063-served-attempt1/parent-mani
 
 ## Prioritized remaining local work
 
+The next source-only packet already includes Actions filter-preserving drilldown and visible Checks search (`9e5ab65`): 99 affected source-browser cases and combined checks pass, but retained deployment is still d03/schema065. Existing-tag release publication has a prepared optional qualifier (`8458d96`); backend/UI, actual native/browser publication and latest-schema recovery remain pending. Keep these source receipts separate from deployed capability claims.
+
 | Order | Functional packet | Concrete consumer and acceptance |
 | --- | --- | --- |
 | 1 | Close artifact producer, then private object-backed retention | The bounded producer/upload/finish/download proof passes; retain its exact scope and passing schema063 deployment. The064 adapter and original-lease wait fix are integrated, with bounded native/run functional evidence above; preserve the original overall foreign-status failure and narrower supplement. Deployment passes; next extend retained-profile/orphan/recovery acceptance: original `SourceStorage` profile/version, artifact-only key namespace, verified Put/Get digest, no fallback after object failure, current-reader revocation and orphan/recovery accounting. Existing062 bytes remain unchanged. |

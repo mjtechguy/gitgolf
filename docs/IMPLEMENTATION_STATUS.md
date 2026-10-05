@@ -1,5 +1,10 @@
 # Golf implementation status
 
+
+## Source-only follow-on packet (2026-10-04)
+
+Integrated source `9e5ab65` preserves Actions server workflow/kind filters through run/job/step/reload and return navigation, and makes loaded Checks search match displayed result labels and descriptions. The [99-case affected source-browser suite](../.tmp/actions-filter-ui-worktree/.tmp/filter-evidence/affected.log), TypeScript and [combined main checks](../.tmp/actions-checks-next-main-check-attempt1.log) pass. These changes are not in the retained d03/schema065 runtime yet. The optional existing-tag release publication helper at `8458d96` passes pure receipt/phase/scope/hash checks, preserving default read/asset modes; publication backend/UI, actual publication and recovery remain separate next-packet acceptance. Shared density work is also isolated/source-only. No incomplete Settings row becomes Ready.
+
 ## Local native squash and PR authority refresh deploy (2026-10-04)
 
 Localhost:8080 now runs frozen component `d03feff595f9e79cf8af01952eda94bda057c778` at schema065: core/webhook `94a483566322`, runner `d4bcf9e28e47`, agent worker `250102a8c1f1`. The [stopped-writer backup/deployment](../.tmp/settings-squash65-final-retained-backup/receipt.json) and [independent running-binary/boundary verification](../.tmp/settings-squash65-final-running-proof/manifest.json) pass. All 128 accounts, the original session, seven agent connections, three Codex authentication records and retained operation history retain their exact records; foreign containers remain unchanged. [Combined checks](../.tmp/standard-squash65-final-main-check-attempt1.log), canonical generation and the final frozen host build pass. Earlier release downloads, artifact storage, Stars and maintained Actions features remain integrated.
