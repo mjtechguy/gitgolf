@@ -20,15 +20,16 @@ var errWorkflowTriggerNotMatched = errors.New("Workflow does not match the selec
 // Commands are private execution input, never an inspection response. Compilation
 // does not admit a run, approve an image, or execute anything on the server host.
 type workflowExecutionPlan struct {
-	Actions     *runner.ActionPlan `json:",omitempty"`
-	Format      golfv1.WorkflowFormat
-	Name        string
-	JobID       string
-	JobName     string
-	Stage       string
-	RunnerLabel string
-	ImageDigest string
-	Steps       []workflowExecutionStep
+	ArtifactPaths []string           `json:"artifactPaths,omitempty"`
+	Actions       *runner.ActionPlan `json:",omitempty"`
+	Format        golfv1.WorkflowFormat
+	Name          string
+	JobID         string
+	JobName       string
+	Stage         string
+	RunnerLabel   string
+	ImageDigest   string
+	Steps         []workflowExecutionStep
 }
 
 type workflowExecutionStep struct {
@@ -127,6 +128,13 @@ func compileWorkflowForTrigger(format golfv1.WorkflowFormat, data []byte, push b
 		}
 	} else {
 		value := workflowField(root, job.Id)
+		if node := workflowField(value, "artifacts"); node != nil {
+			var e error
+			plan.ArtifactPaths, e = workflowArtifactPaths(node)
+			if e != nil {
+				return nil, connect.NewError(connect.CodeFailedPrecondition, errWorkflowExecutionUnsupported)
+			}
+		}
 		plan.ImageDigest = workflowField(value, "image").Value
 		script := workflowField(value, "script")
 		commands := []string{script.Value}

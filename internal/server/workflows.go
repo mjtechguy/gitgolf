@@ -334,7 +334,12 @@ func (v workflowInspector) gitlab(root *yaml.Node) {
 			summary.Stage = v.label(stage)
 		}
 		v.config.Jobs = append(v.config.Jobs, summary)
-		v.fields(job, "stage", "image", "script")
+		v.fields(job, "stage", "image", "script", "artifacts")
+		if node := workflowField(job, "artifacts"); node != nil {
+			if _, e := workflowArtifactPaths(node); e != nil {
+				v.unsupported("artifacts_shape", "Artifacts require only one to eight distinct literal relative paths; globs, links, reports, expiry and other modes are unavailable.", node)
+			}
+		}
 		found := false
 		for _, stage := range stages {
 			found = found || stage == summary.Stage

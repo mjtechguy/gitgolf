@@ -231,8 +231,8 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 	if !runnerDecode(w, r, &input, 512) {
 		return
 	}
-	secureBroker, resourceConsumer, manualConsumer := false, false, false
-	if len(input.Capabilities) > 3 {
+	secureBroker, resourceConsumer, manualConsumer, artifactConsumer := false, false, false, false
+	if len(input.Capabilities) > 4 {
 		runnerFail(w, 400)
 		return
 	}
@@ -250,6 +250,8 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 			secureBroker = r.TLS != nil && r.TLS.Version >= tls.VersionTLS13
 		case runner.ManualInputsCapability:
 			manualConsumer = r.TLS != nil && r.TLS.Version >= tls.VersionTLS13
+		case runner.ArtifactCapability:
+			artifactConsumer = r.TLS != nil && r.TLS.Version >= tls.VersionTLS13
 		default:
 			runnerFail(w, 400)
 			return
@@ -292,7 +294,7 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		runnerFail(w, 503)
 		return
 	}
-	run, err := scanWorkflowRun(s.db.QueryRowContext(ctx, `SELECT `+workflowRunColumns+` FROM golf_workflow_runs WHERE forge_url=$1 AND state='queued' AND engine_catalog=ANY($2) AND ($3 OR NOT EXISTS(SELECT 1 FROM golf_workflow_execution_bindings WHERE run_id=golf_workflow_runs.id)) AND golf_runner_pool_candidate(forge_url,id,$4) ORDER BY created_at,id LIMIT 1`, s.config.GiteaURL, catalogs, secureBroker, id))
+	run, err := scanWorkflowRun(s.db.QueryRowContext(ctx, `SELECT `+workflowRunColumns+` FROM golf_workflow_runs WHERE forge_url=$1 AND state='queued' AND engine_catalog=ANY($2) AND ($3 OR NOT EXISTS(SELECT 1 FROM golf_workflow_execution_bindings WHERE run_id=golf_workflow_runs.id)) AND ($5 OR NOT(plan ? 'artifactPaths')) AND golf_runner_pool_candidate(forge_url,id,$4) ORDER BY created_at,id LIMIT 1`, s.config.GiteaURL, catalogs, secureBroker, id, artifactConsumer))
 	if errors.Is(err, sql.ErrNoRows) {
 		w.WriteHeader(204)
 		return
@@ -331,6 +333,19 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		manualSchema = &schema
 	}
 	approval, err := storedExecutionRunBinding(ctx, s.db, run)
+	if err == nil && approval != nil {
+		var artifactPlan workflowExecutionPlan
+		var encoded []byte
+		if s.db.QueryRowContext(ctx, `SELECT plan FROM golf_workflow_runs WHERE id=$1`, run.ID).Scan(&encoded) != nil || json.Unmarshal(encoded, &artifactPlan) != nil {
+			runnerFail(w, 503)
+			return
+		}
+		if len(artifactPlan.ArtifactPaths) > 0 {
+			s.rejectQueuedRun(ctx, run.ID, "Build artifacts do not support private execution inputs.")
+			w.WriteHeader(204)
+			return
+		}
+	}
 	if err == nil {
 		err = s.executionApprovalAuthority(ctx, run, approval)
 	}
@@ -510,7 +525,17 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 		respond(w, 200, assignment)
 		return
 	}
-	respond(w, 200, map[string]any{"runId": run.ID, "attemptId": attempt, "attemptToken": token, "imageDigest": plan.ImageDigest, "commitId": run.CommitID, "sourceSha256": run.SourceSHA256, "steps": plan.Steps, "jobId": plan.JobID, "timeoutSeconds": run.Resources.TimeoutSeconds, "jobResources": resourceBinding(run), "leaseSeconds": runnerLeaseSeconds})
+	assignment := map[string]any{"runId": run.ID, "attemptId": attempt, "attemptToken": token, "imageDigest": plan.ImageDigest, "commitId": run.CommitID, "sourceSha256": run.SourceSHA256, "steps": plan.Steps, "jobId": plan.JobID, "timeoutSeconds": run.Resources.TimeoutSeconds, "jobResources": resourceBinding(run), "leaseSeconds": runnerLeaseSeconds}
+	if len(plan.ArtifactPaths) > 0 {
+		if !artifactConsumer || runner.ValidateArtifactPaths(plan.ArtifactPaths) != nil || plan.Actions != nil || run.InputContract != "" || environment != nil {
+			s.cancelRunnerAttempt(ctx, run.ID, "Artifact consumer binding unavailable.")
+			runnerFail(w, 403)
+			return
+		}
+		assignment["artifactPaths"] = plan.ArtifactPaths
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	respond(w, 200, assignment)
 }
 func isRunnerAuthorityDenied(err error) bool {
 	var upstream forgeError
@@ -596,7 +621,20 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		LogsTruncated       bool   `json:"logsTruncated"`
 	}
 	action := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
-	if action != "source" && !runnerDecode(w, r, &input, 128<<10) {
+	var artifact []byte
+	if action == "artifact" {
+		if r.TLS == nil || r.TLS.Version < tls.VersionTLS13 || approval != nil || run.InputContract != "" {
+			runnerFail(w, 403)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, runner.MaxArtifactArchive)
+		artifact, err = io.ReadAll(r.Body)
+		if err != nil || len(artifact) == 0 {
+			runnerFail(w, 400)
+			return
+		}
+	}
+	if action != "source" && action != "artifact" && !runnerDecode(w, r, &input, 128<<10) {
 		return
 	}
 	if action == "source" {
@@ -685,6 +723,16 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch action {
+	case "artifact":
+		err = storeWorkflowArtifact(ctx, tx, run, artifact)
+		if errors.Is(err, runner.ErrArtifacts) {
+			runnerFail(w, 400)
+			return
+		}
+		if errors.Is(err, errWorkflowRunConflict) {
+			runnerFail(w, 409)
+			return
+		}
 	case "source":
 		if err = tx.Commit(); err != nil {
 			runnerFail(w, 503)
@@ -836,6 +884,12 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		if input.LogsTruncated {
 			state = "failed"
 			reason = "Log limit exceeded."
+		}
+		if state == "succeeded" && finishCatalog == workflowExecutionCatalog {
+			if err = requireWorkflowArtifact(ctx, tx, run); err != nil {
+				runnerFail(w, 409)
+				return
+			}
 		}
 		if environment != nil && !input.TimedOut && !input.Cancelled && !input.InfrastructureError && !input.LogsTruncated {
 			if err = s.releaseQuarantinedOutput(ctx, tx, run, attempt, environment); err != nil {

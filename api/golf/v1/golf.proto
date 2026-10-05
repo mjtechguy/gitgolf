@@ -3867,3 +3867,26 @@ message StandardPullMergeOperation {
 }
 message SubmitStandardPullMergeResponse { StandardPullMergeOperation operation = 1; }
 message GetStandardPullMergeOperationResponse { StandardPullMergeOperation operation = 1; }
+
+// Private bounded build outputs, separate from the admission source archive.
+service WorkflowArtifactService {
+ rpc GetWorkflowArtifact(GetWorkflowArtifactRequest) returns (GetWorkflowArtifactResponse);
+}
+message GetWorkflowArtifactRequest { string run_id = 1; }
+message WorkflowArtifact {
+ string run_id = 1;
+ string attempt_id = 2;
+ string repository_id = 3;
+ string owner_id = 4;
+ string commit_id = 5;
+ string workflow_path = 6;
+ string blob_id = 7;
+ string source_sha256 = 8;
+ string archive_sha256 = 9;
+ uint32 file_count = 10;
+ string file_bytes = 11;
+ string archive_bytes = 12;
+ string created_at = 13;
+ string download_path = 14;
+}
+message GetWorkflowArtifactResponse { optional WorkflowArtifact artifact = 1; }

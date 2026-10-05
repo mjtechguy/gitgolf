@@ -164,8 +164,12 @@ type workflowRunFixture struct {
 	redirectReads      int
 }
 
-func newWorkflowRunFixture(t *testing.T) *workflowRunFixture {
+func newWorkflowRunFixture(t *testing.T, paths ...string) *workflowRunFixture {
 	t.Helper()
+	workflowPath := runWorkflowPath
+	if len(paths) > 0 {
+		workflowPath = paths[0]
+	}
 	db := testDatabase(t)
 	f := &workflowRunFixture{row: settingsFixtureRow(), user: User{ID: 42, Login: "alice"}, permission: "owner", commit: strings.Repeat("a", 40), workflow: []byte(workflowActionsFixture)}
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -218,7 +222,7 @@ func newWorkflowRunFixture(t *testing.T) *workflowRunFixture {
 			if strings.HasPrefix(r.URL.Path, base+"/git/commits/") {
 				commit = strings.TrimPrefix(r.URL.Path, base+"/git/commits/")
 			}
-			objects := workflowSourceObjects(commit, map[string]string{runWorkflowPath: string(f.workflow)}, nil)
+			objects := workflowSourceObjects(commit, map[string]string{workflowPath: string(f.workflow)}, nil)
 			if objects.serve(w, r, base) {
 				return
 			}
@@ -227,7 +231,7 @@ func newWorkflowRunFixture(t *testing.T) *workflowRunFixture {
 				if f.onArchive != nil {
 					f.onArchive()
 				}
-				source := workflowRunTar(t, []*tar.Header{{Name: "example/" + runWorkflowPath, Typeflag: tar.TypeReg, Mode: 0644}, {Name: "example/README.md", Typeflag: tar.TypeReg, Mode: 0644}}, [][]byte{f.workflow, []byte("ordinary source")})
+				source := workflowRunTar(t, []*tar.Header{{Name: "example/" + workflowPath, Typeflag: tar.TypeReg, Mode: 0644}, {Name: "example/README.md", Typeflag: tar.TypeReg, Mode: 0644}}, [][]byte{f.workflow, []byte("ordinary source")})
 				var compressed bytes.Buffer
 				gz := gzip.NewWriter(&compressed)
 				gz.Write(source)

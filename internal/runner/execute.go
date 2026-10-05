@@ -60,6 +60,8 @@ type StepEvent struct {
 	ExitCode int
 }
 type Job struct {
+	ArtifactPaths     []string                               `json:"artifact_paths,omitempty"`
+	OnArtifacts       func(context.Context, []byte) error    `json:"-"`
 	Resources         *JobLimits                             `json:"job_resources,omitempty"`
 	AttemptID         string                                 `json:"attempt_id"`
 	JobID             string                                 `json:"job_id"`
@@ -117,6 +119,9 @@ func jobLimits(job Job) JobLimits {
 	return DefaultJobLimits()
 }
 func (e *Executor) validate(job Job) error {
+	if len(job.ArtifactPaths) > 0 && (ValidateArtifactPaths(job.ArtifactPaths) != nil || job.OnArtifacts == nil) {
+		return ErrInvalidJob
+	}
 	if jobLimits(job).Validate() != nil || job.Timeout > time.Duration(jobLimits(job).TimeoutSeconds)*time.Second {
 		return ErrInvalidJob
 	}
@@ -499,6 +504,15 @@ func (e *Executor) Execute(ctx context.Context, job Job, onLog func(context.Cont
 		}
 	}
 
+	if len(job.ArtifactPaths) > 0 {
+		archive, collectErr := e.collectArtifacts(runCtx, container, job.AttemptID, owner, job.ArtifactPaths)
+		if collectErr != nil {
+			return result, collectErr
+		}
+		if job.OnArtifacts(runCtx, archive) != nil {
+			return result, ErrInfrastructure
+		}
+	}
 	return result, nil
 }
 

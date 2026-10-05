@@ -47,6 +47,7 @@ type coordinator struct {
 	verifiedTLS     atomic.Bool
 }
 type assignment struct {
+	ArtifactPaths        []string                     `json:"artifactPaths,omitempty"`
 	JobResources         *runner.JobResourceBinding   `json:"jobResources"`
 	RunID                string                       `json:"runId"`
 	AttemptID            string                       `json:"attemptId"`
@@ -175,6 +176,9 @@ func (c *coordinator) source(ctx context.Context, a assignment, directory string
 	if response.StatusCode != http.StatusOK || response.ContentLength > sourceLimit {
 		return "", errTransport
 	}
+	if len(a.ArtifactPaths) > 0 && !c.verifiedResponseTLS(response) {
+		return "", errTransport
+	}
 	file, err := os.OpenFile(filepath.Join(directory, "source.tar"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
 		return "", errTransport
@@ -297,7 +301,10 @@ func (c *coordinator) execute(parent context.Context, e *runner.Executor, a assi
 			}
 		}
 	} else if err == nil {
-		job := runner.Job{AttemptID: a.AttemptID, JobID: a.JobID, SourceCommit: a.CommitID, ImageDigest: a.ImageDigest, Timeout: time.Duration(a.TimeoutSeconds) * time.Second, SourceArchivePath: source, Resources: &a.JobResources.Limits}
+		job := runner.Job{AttemptID: a.AttemptID, JobID: a.JobID, SourceCommit: a.CommitID, ImageDigest: a.ImageDigest, Timeout: time.Duration(a.TimeoutSeconds) * time.Second, SourceArchivePath: source, Resources: &a.JobResources.Limits, ArtifactPaths: a.ArtifactPaths}
+		if len(a.ArtifactPaths) > 0 {
+			job.OnArtifacts = func(ctx context.Context, data []byte) error { return c.uploadArtifact(ctx, a, data) }
+		}
 		for _, step := range a.Steps {
 			job.Steps = append(job.Steps, runner.Step{Script: step.Run, Shell: step.Shell})
 		}
@@ -480,9 +487,15 @@ func (c *coordinator) pollCapabilities() any {
 		out.Catalogs = append(out.Catalogs, runner.ActionsInputsCatalog)
 		out.Capabilities = append(out.Capabilities, runner.ManualInputsCapability)
 	}
+	if c.manualInputsReady() {
+		out.Capabilities = append(out.Capabilities, runner.ArtifactCapability)
+	}
 	return out
 }
 func (c *coordinator) validAssignment(a assignment) bool {
+	if len(a.ArtifactPaths) > 0 && (!c.manualInputsReady() || runner.ValidateArtifactPaths(a.ArtifactPaths) != nil || a.ActionsPlan != nil || a.ManualInputs != nil || a.ExecutionEnvironment != nil || a.EngineCatalog != "") {
+		return false
+	}
 	if a.JobResources == nil || a.JobResources.Validate() != nil || a.TimeoutSeconds != int(a.JobResources.Limits.TimeoutSeconds) {
 		return false
 	}
