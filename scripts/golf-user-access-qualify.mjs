@@ -4,6 +4,7 @@
 // never creates/purges native users, changes policies, or logs out its operator.
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { request as httpsRequest } from 'node:https';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve, relative, sep } from 'node:path';
 
@@ -14,6 +15,12 @@ function configuration(value) {
   assert(base.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(base.hostname) && !base.username && !base.password && !base.search && !base.hash && base.pathname === '/', 'Only an explicit loopback Golf origin is supported.');
   assert(value.adminCookie && /^(?:__Host-)?golf_session$/.test(value.adminCookie.name) && /^[A-Za-z0-9_-]{43}$/.test(value.adminCookie.value), 'Current operator Golf cookie required.');
   assert(typeof value.adminPassword === 'string' && [...value.adminPassword].length >= 15 && Buffer.byteLength(value.adminPassword) <= 1024, 'Operator password confirmation required.');
+  let gitBase;
+  if (value.gitBaseUrl !== undefined) {
+    gitBase = new URL(value.gitBaseUrl);
+    assert(gitBase.protocol === 'https:' && ['localhost', '127.0.0.1', '[::1]'].includes(gitBase.hostname) && !gitBase.username && !gitBase.password && !gitBase.search && !gitBase.hash && gitBase.pathname === '/', 'Git TLS origin must be explicit loopback HTTPS.');
+    assert(typeof value.trustedCa === 'string' && Buffer.byteLength(value.trustedCa) <= 16384 && /^-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]{32,}-----END CERTIFICATE-----\r?\n?$/.test(value.trustedCa), 'One bounded public trusted CA certificate is required for Git TLS.');
+  } else assert(value.trustedCa === undefined, 'Git CA requires an explicit Git TLS origin.');
   const target = value.target;
   assert(target && id(target.nativeUserId) && /^golf-access-[a-z0-9][a-z0-9._-]{0,48}$/.test(target.login), 'One immutable disposable golf-access-* fixture is required.');
   assert(typeof target.email === 'string' && /^[a-z0-9._+-]+@[a-z0-9.-]+\.invalid$/.test(target.email), 'Disposable fixture email must use .invalid.');
@@ -26,15 +33,16 @@ function configuration(value) {
     const repo = value.repository;
     assert(repo.owner === target.login && /^golf-access-[a-z0-9][a-z0-9._-]{0,48}$/.test(repo.name) && id(repo.id) && repo.ownerId === target.nativeUserId, 'Managed Git repository must belong to the same disposable fixture.');
   }
-  return { ...value, baseUrl: base.origin, output };
+  return { ...value, baseUrl: base.origin, gitBaseUrl: gitBase?.origin || base.origin, output };
 }
 function bindRepository(read, access, repo) {
   assert(read?.id === repo.id && read.fullName === `${repo.owner}/${repo.name}` && read.name === repo.name && read.private, 'Owned private repository binding mismatch.');
   assert(access?.repositoryId === repo.id && access.ownerId === repo.ownerId && access.owner?.id === repo.ownerId && access.owner.login === repo.owner && !access.organizationOwned && access.currentPermission === 'owner', 'Owned immutable repository access binding mismatch.');
 }
-function bindGitTransport(transport, repo) {
+function bindGitTransport(transport, repo, origin) {
   assert(transport?.repositoryId === repo.id && transport.ownerId === repo.ownerId && transport.repository?.owner === repo.owner && transport.repository.name === repo.name, 'Managed Git immutable transport target mismatch.');
   assert(transport.enabled === true && transport.readCredentialAvailable === true, 'Managed READ Git must actually be enabled and available.');
+  assert(transport.cloneUrl === `${origin}/git/${repo.owner}/${repo.name}.git`, 'Managed Git advertised clone URL must match the exact configured origin and repository.');
 }
 function privateFree(report, forbidden) {
   const text = JSON.stringify(report, null, 2);
@@ -45,9 +53,11 @@ if (process.argv.includes('--self-check')) {
   const good = { baseUrl: 'http://127.0.0.1:8080', adminCookie: { name: 'golf_session', value: 'A'.repeat(43) }, adminPassword: 'synthetic-password-confirmation', target: { nativeUserId: '84', login: 'golf-access-owned', email: 'owned@example.invalid', token: 'synthetic-native-token' }, source: 'a'.repeat(40), output: '.tmp/self-check-access' };
   configuration(good);
   const repo = {owner:good.target.login,name:'golf-access-project',id:'7',ownerId:'84'}; const read={id:'7',name:repo.name,fullName:`${repo.owner}/${repo.name}`,private:true}; const access={repositoryId:'7',ownerId:'84',owner:{id:'84',login:repo.owner},currentPermission:'owner'}; bindRepository(read,access,repo); assert.throws(()=>bindRepository(read,{...access,owner:{id:'42',login:repo.owner}},repo));
-  const transport = {repository:{owner:repo.owner,name:repo.name},repositoryId:repo.id,ownerId:repo.ownerId,enabled:true,readCredentialAvailable:true}; bindGitTransport(transport,repo);
-  for (const update of [{enabled:false},{readCredentialAvailable:false},{ownerId:'42'},{repositoryId:'8'}]) assert.throws(()=>bindGitTransport({...transport,...update},repo));
-  for (const update of [{ baseUrl: 'http://external.invalid' }, { output: '/tmp/public' }, { target: { ...good.target, login: 'admin' } }, { target: { ...good.target, nativeUserId: '084' } }, { repository: { owner: 'admin', name: 'golf-access-owned', id: '1', ownerId: '84' } }]) assert.throws(() => configuration({ ...good, ...update }));
+  const ca = `-----BEGIN CERTIFICATE-----\n${'A'.repeat(64)}\n-----END CERTIFICATE-----\n`;
+  configuration({...good,gitBaseUrl:'https://127.0.0.1:8443',trustedCa:ca});
+  const transport = {cloneUrl:`${good.baseUrl}/git/${repo.owner}/${repo.name}.git`,repository:{owner:repo.owner,name:repo.name},repositoryId:repo.id,ownerId:repo.ownerId,enabled:true,readCredentialAvailable:true}; bindGitTransport(transport,repo,good.baseUrl);
+  for (const update of [{enabled:false},{readCredentialAvailable:false},{ownerId:'42'},{repositoryId:'8'},{cloneUrl:'https://external.invalid/git/project.git'}]) assert.throws(()=>bindGitTransport({...transport,...update},repo,good.baseUrl));
+  for (const update of [{gitBaseUrl:'http://127.0.0.1:8443',trustedCa:ca},{gitBaseUrl:'https://external.invalid',trustedCa:ca},{gitBaseUrl:'https://127.0.0.1:8443/project',trustedCa:ca},{gitBaseUrl:'https://127.0.0.1:8443',trustedCa:'-----BEGIN PRIVATE KEY-----'},{trustedCa:ca},{ baseUrl: 'http://external.invalid' }, { output: '/tmp/public' }, { target: { ...good.target, login: 'admin' } }, { target: { ...good.target, nativeUserId: '084' } }, { repository: { owner: 'admin', name: 'golf-access-owned', id: '1', ownerId: '84' } }]) assert.throws(() => configuration({ ...good, ...update }));
   assert.throws(() => privateFree({ note: good.target.token }, [good.target.token]));
   assert.doesNotThrow(() => privateFree({ passed: true, ownSessionsLoggedOut: true }, [good.target.token]));
   process.stdout.write('PASS Golf access qualification configuration and privacy boundaries\n');
@@ -103,12 +113,30 @@ function receipt(result, input) {
 }
 function intent(version, suspended, reason) { return { golfUserId: target.golfUserId, nativeUserId: config.target.nativeUserId, expectedVersion: version, suspended, reason, passwordConfirmation: config.adminPassword, operationId: randomUUID() }; }
 async function gitRead(secret, expected) {
-  const repo = config.repository; const endpoint = `${config.baseUrl}/git/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}.git/info/refs?service=git-upload-pack`;
-  const response = await fetch(endpoint, { headers: { Authorization: `Basic ${Buffer.from(`golf:${secret}`).toString('base64')}` }, redirect: 'manual', signal: AbortSignal.timeout(15_000) });
-  report.managedGit = { expectedStatus: expected, actualStatus: response.status };
-  assert.equal(response.status, expected, `${step}: managed Git status mismatch.`);
-  if (expected === 200) { assert(response.headers.get('content-type')?.startsWith('application/x-git-upload-pack-advertisement')); const reader = response.body.getReader(); let count = 0; try { for (;;) { const chunk = await reader.read(); if (chunk.done) break; count += chunk.value.byteLength; assert(count <= 16 * 1024 * 1024, 'Git advertisement exceeds bound.'); } } finally { await reader.cancel().catch(() => {}); } assert(count > 0); } else await response.body.cancel();
+  const repo = config.repository; const endpoint = `${config.gitBaseUrl}/git/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}.git/info/refs?service=git-upload-pack`;
+  const authorization = `Basic ${Buffer.from(`golf:${secret}`).toString('base64')}`;
+  let status, contentType, bytes = 0;
+  if (endpoint.startsWith('https:')) {
+    await new Promise((resolveRequest, reject) => {
+      const req = httpsRequest(endpoint, { method: 'GET', ca: config.trustedCa, rejectUnauthorized: true, minVersion: 'TLSv1.2', signal: AbortSignal.timeout(15_000), headers: { Authorization: authorization } }, response => {
+        status = response.statusCode; contentType = response.headers['content-type'];
+        response.on('data', chunk => { bytes += chunk.byteLength; if (bytes > 16 * 1024 * 1024) response.destroy(new Error('Git response exceeds bound.')); });
+        response.on('end', resolveRequest); response.on('error', reject);
+      });
+      req.setTimeout(15_000, () => req.destroy(new Error('Git response deadline exceeded.')));
+      req.on('error', reject); req.end();
+    });
+  } else {
+    const response = await fetch(endpoint, { headers: { Authorization: authorization }, redirect: 'manual', signal: AbortSignal.timeout(15_000) });
+    status = response.status; contentType = response.headers.get('content-type');
+    const reader = response.body.getReader();
+    try { for (;;) { const chunk = await reader.read(); if (chunk.done) break; bytes += chunk.value.byteLength; assert(bytes <= 16 * 1024 * 1024, 'Git response exceeds bound.'); } } finally { await reader.cancel().catch(() => {}); }
+  }
+  report.managedGit = { expectedStatus: expected, actualStatus: status, tlsWithExplicitTrustedCa: endpoint.startsWith('https:') };
+  assert.equal(status, expected, `${step}: managed Git status mismatch.`);
+  if (expected === 200) { assert(contentType?.startsWith('application/x-git-upload-pack-advertisement')); assert(bytes > 0); }
 }
+
 try {
   const actor = success(await request('SessionService/GetSession', {}, config.adminCookie.value)).user;
   assert(actor?.isInstanceAdmin && actor.id !== config.target.nativeUserId, 'Current separate operator required.');
@@ -132,7 +160,7 @@ try {
     step = 'managed Git transport configuration';
     const transport = success(await request('GitTransportService/GetGitTransport', { repository: { owner: repo.owner, name: repo.name }, repositoryId: repo.id, ownerId: repo.ownerId }, pat));
     report.managedGitConfiguration = { enabled: transport.enabled === true, readCredentialAvailable: transport.readCredentialAvailable === true, writeCredentialAvailable: transport.writeCredentialAvailable === true };
-    bindGitTransport(transport, repo);
+    bindGitTransport(transport, repo, config.gitBaseUrl);
     step = 'managed Git credential creation';
     git = success(await request('GitTransportService/CreateGitCredential', { repository: { owner: repo.owner, name: repo.name }, repositoryId: repo.id, ownerId: repo.ownerId, label: 'owned suspension proof', mode: 'GIT_CREDENTIAL_MODE_READ', lifetimeSeconds: 3600 }, pat)).secret;
     assert(typeof git === 'string' && git.startsWith('golf_git_')); secrets.push(git); step = 'managed Git advertisement'; await gitRead(git, 200); checked('owned private repository managed Git advertisement baseline');
