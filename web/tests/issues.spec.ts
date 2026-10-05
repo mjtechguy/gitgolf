@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import {
-  ListRepositoryLabelsRequestSchema, ListRepositoryLabelsResponseSchema, ListRepositoryMilestonesRequestSchema, ListRepositoryMilestonesResponseSchema, DiscussionMetadataSchema, DiscussionMilestoneSchema, DiscussionLabelSchema, UpdateIssueRequestSchema, UpdateIssueResponseSchema, CreateIssueRequestSchema, CreateIssueResponseSchema, CreateIssueCommentRequestSchema, CreateIssueCommentResponseSchema,
+  ListRepositoryAssigneesRequestSchema, ListRepositoryAssigneesResponseSchema, ListRepositoryLabelsRequestSchema, ListRepositoryLabelsResponseSchema, ListRepositoryMilestonesRequestSchema, ListRepositoryMilestonesResponseSchema, DiscussionMetadataSchema, DiscussionMilestoneSchema, DiscussionLabelSchema, UpdateIssueRequestSchema, UpdateIssueResponseSchema, CreateIssueRequestSchema, CreateIssueResponseSchema, CreateIssueCommentRequestSchema, CreateIssueCommentResponseSchema,
   GetAuthenticationOptionsResponseSchema, GetIssueMutationRequestSchema, GetIssueMutationResponseSchema, GetIssueResponseSchema,
   GetRepositoryResponseSchema, GetSessionResponseSchema, IssueCommentSchema, IssueMutationKind, IssueMutationSchema, IssueMutationState,
   IssueSchema, IssueState, ListCapabilitiesResponseSchema, ListIssueCommentsRequestSchema, ListIssueCommentsResponseSchema,
@@ -25,6 +25,7 @@ async function backend(page: Page) {
     user, signedIn: true, repoId: repository.id, issueId: issue.id, issue: { ...issue }, comments: [comment],
     issueReadWait: undefined as Promise<void> | undefined, issueRows: undefined as Issue[] | undefined, listPages: [] as number[], emptyFirst: false, unknown: false, drop: false, rejected: false, missingObject: false, mismatch: false,
     updates: [] as UpdateIssueRequest[], updateFailure: '', creates: [] as CreateIssueRequest[], posts: [] as CreateIssueCommentRequest[], inspections: [] as string[], pages: [] as number[],
+    canEditAssignees: false, assignees: [create(UserSchema,{id:'9007199254740993',login:'PRIVATE_ASSIGNEE_A',fullName:'Alex Reviewer'}),create(UserSchema,{id:'12',login:'PRIVATE_ASSIGNEE_B'})], assigneeReads: 0, assigneeWait: undefined as Promise<void> | undefined,
     canEditLabels: false, labels: [create(DiscussionLabelSchema,{id:"9",name:"PRIVATE_LABEL_A",color:"aabbcc"}),create(DiscussionLabelSchema,{id:"12",name:"PRIVATE_LABEL_B",color:"aaff00"})], labelPages: [] as number[], labelMore: false,
     canEditMilestone: false, milestones: [create(DiscussionMilestoneSchema, { id:'51', title:'PRIVATE_MILESTONE_A', state:IssueState.OPEN }), create(DiscussionMilestoneSchema, { id:'52', title:'PRIVATE_MILESTONE_B', state:IssueState.CLOSED })], milestonePages: [] as number[], milestoneMore:false,
     records: new Map<string, IssueMutation>(), errors: {} as Record<string, Failure>, barrier: undefined as Promise<void> | undefined,
@@ -41,6 +42,11 @@ async function backend(page: Page) {
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
     if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository: { ...repository, id: state.repoId } });
+    if (method === 'ListRepositoryAssignees') {
+      const input=request(route,ListRepositoryAssigneesRequestSchema);expect(input.repository).toMatchObject(repoKey);expect(input.repositoryId).toBe(state.repoId);expect(Object.keys(input).sort()).toEqual(['$typeName','repository','repositoryId']);state.assigneeReads++;
+      if(state.assigneeWait)await state.assigneeWait;
+      return respond(route,ListRepositoryAssigneesResponseSchema,{assignees:state.assignees,canEditAssignees:state.canEditAssignees});
+    }
     if (method === 'ListRepositoryLabels') {
       const input=request(route,ListRepositoryLabelsRequestSchema);expect(input.repository).toMatchObject(repoKey);expect(input.repositoryId).toBe(state.repoId);const number=input.page?.page||1;state.labelPages.push(number);
       return respond(route,ListRepositoryLabelsResponseSchema,{labels:state.labelMore?state.labels.slice(number-1,number):state.labels,canEditLabels:state.canEditLabels,page:state.labelMore&&number===1?{nextPage:2}:undefined});
@@ -70,7 +76,7 @@ async function backend(page: Page) {
         issueId: state.issueId, number: 12, failureCode: state.updateFailure,
       });
       state.records.set(input.idempotencyKey, mutation);
-      if (!state.updateFailure) state.issue = { ...state.issue, ...(input.title !== undefined ? { title: input.title } : {}), ...(input.body !== undefined ? { body: input.body } : {}), ...(input.state !== IssueState.UNSPECIFIED ? { state: input.state } : {}), ...(input.milestone ? {metadata: create(DiscussionMetadataSchema,{...create(DiscussionMetadataSchema,state.issue.metadata),milestoneKnown:true,milestone:state.milestones.find(row=>row.id===input.milestone!.milestoneId)})}:{}), ...(input.labels ? {metadata: create(DiscussionMetadataSchema,{...create(DiscussionMetadataSchema,state.issue.metadata),labelsKnown:true,labels:state.labels.filter(row=>input.labels!.labelIds.includes(row.id))})}:{}), revision: 'b'.repeat(64) };
+      if (!state.updateFailure) state.issue = { ...state.issue, ...(input.title !== undefined ? { title: input.title } : {}), ...(input.body !== undefined ? { body: input.body } : {}), ...(input.state !== IssueState.UNSPECIFIED ? { state: input.state } : {}), ...(input.milestone ? {metadata: create(DiscussionMetadataSchema,{...create(DiscussionMetadataSchema,state.issue.metadata),milestoneKnown:true,milestone:state.milestones.find(row=>row.id===input.milestone!.milestoneId)})}:{}), ...(input.assignees ? {metadata:create(DiscussionMetadataSchema,{...create(DiscussionMetadataSchema,state.issue.metadata),assigneesKnown:true,assignees:input.assignees.assignees.map(selection=>state.assignees.find(row=>row.id===selection.id)! )})}:{}), ...(input.labels ? {metadata: create(DiscussionMetadataSchema,{...create(DiscussionMetadataSchema,state.issue.metadata),labelsKnown:true,labels:state.labels.filter(row=>input.labels!.labelIds.includes(row.id))})}:{}), revision: 'b'.repeat(64) };
       if (state.barrier) await state.barrier;
       if (state.drop) return route.abort('failed');
       return respond(route, UpdateIssueResponseSchema, { mutation: state.mismatch ? { ...mutation, issueId: '9999' } : mutation, issue: mutation.state === IssueMutationState.SUCCEEDED && !state.missingObject ? state.issue : undefined });
@@ -107,6 +113,10 @@ async function backend(page: Page) {
   return state;
 }
 const stored = (page: Page) => page.evaluate(() => Object.entries(sessionStorage).filter(([key]) => key.startsWith('golf.issue-intent.')));
+function enableAssignees(state: Awaited<ReturnType<typeof backend>>) {
+  state.canEditAssignees = true;
+  state.issue.metadata = create(DiscussionMetadataSchema, { assigneesKnown: true, assignees: [state.assignees[0]!] });
+}
 async function newIssue(page: Page) {
   await page.goto(listURL);
   await page.getByRole('button', { name: 'New issue', exact: true }).click();
@@ -617,4 +627,130 @@ for(const empty of [true,false])test(`label editor keyboard focus enters an enab
 
 for(const field of ['labels','milestone'])test(`open ${field} editor loses readiness when current native metadata becomes unknown`,async({page})=>{
  const state=await backend(page);if(field==='labels')enableLabels(state);else enableMilestones(state);await page.goto('/alex/project/issues/12');const name=field==='labels'?'Edit issue labels':'Edit issue milestone';await page.getByRole('button',{name,exact:true}).click();const editor=page.getByRole('region',{name,exact:true});if(field==='labels')await editor.getByRole('checkbox',{name:'PRIVATE_LABEL_B',exact:true}).check();else await editor.getByRole('combobox',{name:'Issue milestone',exact:true}).selectOption('52');await expect(editor.getByRole('button',{name:'Save changes',exact:true})).toBeEnabled();state.issue.metadata=create(DiscussionMetadataSchema);await page.getByRole('button',{name:'Refresh issue',exact:true}).click();await expect(editor.getByRole('button',{name:'Save changes',exact:true})).toBeDisabled();if(field==='labels')await expect(editor.getByRole('checkbox')).toHaveCount(0);else {await expect(editor.getByRole('combobox',{name:'Issue milestone',exact:true})).toBeDisabled();await expect(editor).not.toContainText('PRIVATE_MILESTONE_A');}await expect(editor).toContainText('could not be verified');expect(state.updates).toHaveLength(0);
+});
+
+test('assignee pencil replaces then clears exact int64 IDs and login pairs without other fields', async ({ page }) => {
+  const state = await backend(page); enableAssignees(state); await page.goto('/alex/project/issues/12');
+  await expect(page.getByRole('checkbox')).toHaveCount(0);
+  for (const clear of [false, true]) {
+    await page.getByRole('button', { name: 'Edit issue assignees', exact: true }).click();
+    const editor = page.getByRole('region', { name: 'Edit issue assignees', exact: true });
+    await expect(editor.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
+    if (clear) { await editor.getByRole('checkbox', { name: 'PRIVATE_ASSIGNEE_A', exact: true }).uncheck(); await editor.getByRole('checkbox', { name: 'PRIVATE_ASSIGNEE_B', exact: true }).uncheck(); }
+    else await editor.getByRole('checkbox', { name: 'PRIVATE_ASSIGNEE_B', exact: true }).check();
+    await expect(page.getByRole('button', { name: 'Edit issue title', exact: true })).toBeDisabled();
+    await editor.getByRole('button', { name: 'Save changes', exact: true }).click(); await expect(editor).toHaveCount(0);
+  }
+  expect(state.updates[0]!.assignees).toMatchObject({ expectedAssigneeIds: ['9007199254740993'], assignees: [{ id: '12', login: 'PRIVATE_ASSIGNEE_B' }, { id: '9007199254740993', login: 'PRIVATE_ASSIGNEE_A' }] });
+  expect(state.updates[1]!.assignees).toMatchObject({ expectedAssigneeIds: ['12', '9007199254740993'], assignees: [] });
+  for (const request of state.updates) { expect(request.title).toBeUndefined(); expect(request.body).toBeUndefined(); expect(request.milestone).toBeUndefined(); expect(request.labels).toBeUndefined(); expect(request.state).toBe(IssueState.UNSPECIFIED); }
+  expect(state.issue.title).toBe(issue.title); expect(state.issue.body).toBe(issue.body); expect(await stored(page)).toEqual([]);
+});
+
+test('revoked current assignees remain removable but cannot be retained or reselected', async ({ page }) => {
+  const state = await backend(page); enableAssignees(state);
+  state.issue.metadata!.assignees.push(create(UserSchema, { id: '9223372036854775807', login: 'REVOKED_CURRENT' }));
+  await page.goto('/alex/project/issues/12'); await page.getByRole('button', { name: 'Edit issue assignees', exact: true }).click();
+  const editor = page.getByRole('region', { name: 'Edit issue assignees', exact: true });
+  await editor.getByRole('checkbox', { name: 'PRIVATE_ASSIGNEE_B', exact: true }).check();
+  await expect(editor).toContainText('not in current candidates; remove only'); await expect(editor.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
+  await editor.getByRole('checkbox', { name: 'REVOKED_CURRENT', exact: true }).uncheck(); await expect(editor.getByRole('checkbox', { name: 'REVOKED_CURRENT', exact: true })).toBeDisabled();
+  await editor.getByRole('button', { name: 'Save changes', exact: true }).click(); await expect(editor).toHaveCount(0);
+  expect(state.updates[0]!.assignees).toMatchObject({ expectedAssigneeIds: ['9007199254740993', '9223372036854775807'], assignees: [{ id: '12', login: 'PRIVATE_ASSIGNEE_B' }, { id: '9007199254740993', login: 'PRIVATE_ASSIGNEE_A' }] });
+});
+
+test('assignee inventory is unpaginated and bounded with loaded search, scrolling and 100-selection cap', async ({ page }) => {
+  const state = await backend(page); enableAssignees(state);
+  state.assignees = Array.from({ length: 1000 }, (_, index) => create(UserSchema, { id: String(index + 1), login: `candidate-${index + 1}` }));
+  state.issue.metadata!.assignees = state.assignees.slice(0, 100);
+  await page.goto('/alex/project/issues/12'); await page.getByRole('button', { name: 'Edit issue assignees', exact: true }).click();
+  const editor = page.getByRole('region', { name: 'Edit issue assignees', exact: true });
+  await expect(editor.getByRole('checkbox')).toHaveCount(1000); await expect(editor.getByRole('button', { name: /Load more/ })).toHaveCount(0); expect(state.assigneeReads).toBeGreaterThan(0); expect(state.assigneeReads).toBeLessThanOrEqual(2);
+  expect(await editor.locator('.metadata-choice-scroll').evaluate(element => element.clientHeight <= 240 && element.scrollHeight > element.clientHeight)).toBe(true);
+  await editor.getByRole('searchbox', { name: 'Search loaded assignees', exact: true }).fill('candidate-1000');
+  await expect(editor.getByRole('checkbox')).toHaveCount(1); await expect(editor.getByRole('checkbox', { name: 'candidate-1000', exact: true })).toBeDisabled();
+  await editor.getByRole('searchbox').fill('candidate-1'); await editor.getByRole('checkbox', { name: 'candidate-1', exact: true }).uncheck();
+  await editor.getByRole('searchbox').fill('candidate-1000'); await editor.getByRole('checkbox', { name: 'candidate-1000', exact: true }).check();
+  await editor.getByRole('button', { name: 'Save changes', exact: true }).click(); await expect(editor).toHaveCount(0);
+  expect(state.updates[0]!.assignees!.expectedAssigneeIds).toHaveLength(100); expect(state.updates[0]!.assignees!.assignees).toHaveLength(100); expect(state.updates[0]!.assignees!.assignees.at(-1)).toMatchObject({ id: '1000', login: 'candidate-1000' });
+});
+
+test('lost assignee acknowledgement resumes original edit key with status checks and no private draft storage', async ({ page }) => {
+  const state = await backend(page); enableAssignees(state); state.drop = true; await page.goto('/alex/project/issues/12');
+  await page.getByRole('button', { name: 'Edit issue assignees', exact: true }).click();
+  let editor = page.getByRole('region', { name: 'Edit issue assignees', exact: true });
+  await editor.getByRole('checkbox', { name: 'PRIVATE_ASSIGNEE_B', exact: true }).check(); await editor.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(editor.getByRole('button', { name: 'Check request status', exact: true })).toBeEnabled();
+  const key = state.updates[0]!.idempotencyKey; const saved = await stored(page);
+  expect(saved).toHaveLength(1); expect(saved[0]![0]).toMatch(/:edit$/); expect(JSON.parse(saved[0]![1])).toEqual({ key, kind: 'update', repositoryId: repository.id, issueId: issue.id, number: 12, editField: 'assignees' }); expect(saved[0]![1]).not.toContain('PRIVATE_ASSIGNEE');
+  await page.reload(); editor = page.getByRole('region', { name: 'Edit issue assignees', exact: true }); await expect(editor.getByRole('button', { name: 'Check request status', exact: true })).toBeFocused();
+  await editor.getByRole('button', { name: 'Check request status', exact: true }).click(); await expect(editor).toHaveCount(0); expect(state.updates).toHaveLength(1); expect(state.inspections).toEqual([key]); expect(await stored(page)).toEqual([]);
+});
+
+for (const failure of ['unknown', 'missing', 'mismatch']) test(`uncertain assignee ${failure} outcome never permits repost or clears the original intent`, async ({ page }) => {
+  const state = await backend(page); enableAssignees(state); state.unknown = failure === 'unknown'; state.missingObject = failure === 'missing'; state.mismatch = failure === 'mismatch'; await page.goto('/alex/project/issues/12');
+  await page.getByRole('button', { name: 'Edit issue assignees', exact: true }).click(); const editor = page.getByRole('region', { name: 'Edit issue assignees', exact: true });
+  await editor.getByRole('checkbox', { name: 'PRIVATE_ASSIGNEE_B', exact: true }).check(); await editor.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(editor.getByRole('button', { name: 'Check request status', exact: true })).toBeEnabled(); await editor.getByRole('button', { name: 'Check request status', exact: true }).click();
+  await expect(editor.getByRole('button', { name: 'Save changes', exact: true })).toHaveCount(0); await expect(editor.getByRole('button', { name: /Review current|Start a new/ })).toHaveCount(0); expect(state.updates).toHaveLength(1); expect(await stored(page)).toHaveLength(1);
+});
+
+for (const unavailable of ['readonly', 'unknown']) test(`assignee ${unavailable} capability exposes no editor or false clear`, async ({ page }) => {
+  const state = await backend(page); enableAssignees(state); if (unavailable === 'readonly') state.canEditAssignees = false; else state.issue.metadata!.assigneesKnown = false;
+  await page.goto('/alex/project/issues/12'); await expect(page.locator('#issue-detail-title')).toBeVisible(); await expect(page.getByRole('button', { name: 'Edit issue assignees', exact: true })).toHaveCount(0); await expect(page.getByRole('checkbox')).toHaveCount(0); expect(state.updates).toHaveLength(0);
+});
+
+test('assignee inventory refresh masks candidates and blocks saving on late capability loss', async ({ page }) => {
+  const state = await backend(page); enableAssignees(state); await page.goto('/alex/project/issues/12'); await page.getByRole('button', { name: 'Edit issue assignees', exact: true }).click();
+  const editor = page.getByRole('region', { name: 'Edit issue assignees', exact: true }); await editor.getByRole('checkbox', { name: 'PRIVATE_ASSIGNEE_B', exact: true }).check();
+  let release!: () => void; state.assigneeWait = new Promise<void>(resolve => { release = resolve; }); state.canEditAssignees = false;
+  const before = state.assigneeReads; await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange', { bubbles: true }))); await expect.poll(() => state.assigneeReads).toBeGreaterThan(before);
+  await expect(editor.getByRole('checkbox')).toHaveCount(0); await expect(editor.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled(); release();
+  await expect(editor).toContainText('repository administrator access'); await expect(editor.getByRole('checkbox')).toHaveCount(0); expect(state.updates).toHaveLength(0);
+});
+
+test('open assignee editor loses readiness when current issue metadata becomes unknown', async ({ page }) => {
+  const state = await backend(page); enableAssignees(state); await page.goto('/alex/project/issues/12'); await page.getByRole('button', { name: 'Edit issue assignees', exact: true }).click();
+  const editor = page.getByRole('region', { name: 'Edit issue assignees', exact: true }); await editor.getByRole('checkbox', { name: 'PRIVATE_ASSIGNEE_B', exact: true }).check();
+  state.issue.metadata = create(DiscussionMetadataSchema); await page.getByRole('button', { name: 'Refresh issue', exact: true }).click();
+  await expect(editor.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled(); await expect(editor.getByRole('checkbox')).toHaveCount(0); await expect(editor).not.toContainText('PRIVATE_ASSIGNEE'); await expect(editor).toContainText('could not be verified'); expect(state.updates).toHaveLength(0);
+});
+
+test('assignee inventory failures expose retry while authorization failures hide private issue content', async ({ page }) => {
+  const state = await backend(page); enableAssignees(state); state.errors.ListRepositoryAssignees = 'unavailable'; await page.goto('/alex/project/issues/12');
+  const sidebar = page.getByRole('complementary', { name: 'Issue metadata', exact: true }); await expect(sidebar.getByRole('alert')).toBeVisible(); await expect(page.locator('#issue-detail-title')).toBeVisible();
+  delete state.errors.ListRepositoryAssignees; await sidebar.getByRole('button', { name: 'Try again', exact: true }).click(); await expect(page.getByRole('button', { name: 'Edit issue assignees', exact: true })).toBeVisible();
+  state.errors.ListRepositoryAssignees = 'permission_denied'; await page.reload(); await expect(page.getByRole('alert')).toBeVisible(); await expect(page.locator('#issue-detail-title')).toHaveCount(0); await expect(page.getByRole('checkbox')).toHaveCount(0); expect(state.updates).toHaveLength(0);
+});
+
+for (const theme of ['dark', 'light']) test(`assignee inline editor keyboard focus and compact ${theme} mobile layout`, async ({ page }) => {
+  const state = await backend(page); enableAssignees(state); await page.setViewportSize({ width: 390, height: 900 }); await page.addInitScript(value => localStorage.setItem('golf.theme', value), theme); await page.goto('/alex/project/issues/12');
+  const pencil = page.getByRole('button', { name: 'Edit issue assignees', exact: true }); await pencil.focus(); await page.keyboard.press('Enter'); const editor = page.getByRole('region', { name: 'Edit issue assignees', exact: true });
+  await expect(editor.getByRole('searchbox', { name: 'Search loaded assignees', exact: true })).toBeFocused(); await page.keyboard.press('Tab'); await expect(editor.getByRole('checkbox', { name: 'PRIVATE_ASSIGNEE_A', exact: true })).toBeFocused();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true); await page.evaluate(() => document.fonts.ready); expect(await editor.evaluate(element => getComputedStyle(element).fontFamily)).toContain('Archivo');
+  await page.screenshot({ path: test.info().outputPath(`assignees-editor-${theme}-390.png`), fullPage: true }); await editor.getByRole('button', { name: 'Close editor', exact: true }).click(); await expect(pencil).toBeFocused(); expect(state.updates).toHaveLength(0);
+});
+
+for (const malformed of ['overflow', 'duplicate', 'noncanonical']) test(`assignee ${malformed} inventory cannot enable writes`, async ({ page }) => {
+  const state = await backend(page); enableAssignees(state);
+  if (malformed === 'overflow') state.assignees = Array.from({ length: 1001 }, (_, index) => create(UserSchema, { id: String(index + 1), login: `candidate-${index + 1}` }));
+  else if (malformed === 'duplicate') state.assignees.push(state.assignees[0]!); else state.assignees[0]!.id = '09223372036854775807';
+  await page.goto('/alex/project/issues/12'); await expect(page.getByRole('complementary', { name: 'Issue metadata', exact: true }).getByRole('alert')).toBeVisible(); await expect(page.getByRole('button', { name: 'Edit issue assignees', exact: true })).toHaveCount(0); await expect(page.getByRole('checkbox')).toHaveCount(0); expect(state.updates).toHaveLength(0);
+});
+
+test('replacement native issue resets assignee editor and binds new expected IDs and revision', async ({ page }) => {
+  const state = await backend(page); enableAssignees(state); await page.goto('/alex/project/issues/12'); await page.getByRole('button', { name: 'Edit issue assignees', exact: true }).click(); await page.getByRole('checkbox', { name: 'PRIVATE_ASSIGNEE_B', exact: true }).check();
+  state.issueId = '9007199254741007'; state.issue = { ...state.issue, id: state.issueId, title: 'Replacement issue', revision: 'c'.repeat(64), metadata: create(DiscussionMetadataSchema, { assigneesKnown: true, assignees: [state.assignees[1]!] }) };
+  await page.getByRole('button', { name: 'Refresh issue', exact: true }).click(); await expect(page.locator('#issue-detail-title')).toContainText('Replacement issue'); await expect(page.getByRole('region', { name: 'Edit issue assignees', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Edit issue assignees', exact: true }).click(); const editor = page.getByRole('region', { name: 'Edit issue assignees', exact: true }); await expect(editor.getByRole('checkbox', { name: 'PRIVATE_ASSIGNEE_A', exact: true })).not.toBeChecked(); await expect(editor.getByRole('checkbox', { name: 'PRIVATE_ASSIGNEE_B', exact: true })).toBeChecked();
+  await editor.getByRole('checkbox', { name: 'PRIVATE_ASSIGNEE_A', exact: true }).check(); await editor.getByRole('button', { name: 'Save changes', exact: true }).click(); await expect(editor).toHaveCount(0);
+  expect(state.updates[0]).toMatchObject({ issueId: state.issueId, expectedRevision: 'c'.repeat(64), assignees: { expectedAssigneeIds: ['12'], assignees: [{ id: '12', login: 'PRIVATE_ASSIGNEE_B' }, { id: '9007199254740993', login: 'PRIVATE_ASSIGNEE_A' }] } });
+});
+
+test('assignee sign-out clears intent and late acknowledged result cannot restore private metadata', async ({ page }) => {
+  const state = await backend(page); enableAssignees(state); await page.goto('/alex/project/issues/12'); await page.getByRole('button', { name: 'Edit issue assignees', exact: true }).click();
+  let release!: () => void; state.barrier = new Promise<void>(resolve => { release = resolve; });
+  await page.getByRole('checkbox', { name: 'PRIVATE_ASSIGNEE_B', exact: true }).check(); await page.getByRole('region', { name: 'Edit issue assignees', exact: true }).getByRole('button', { name: 'Save changes', exact: true }).click(); await expect.poll(() => state.updates.length).toBe(1);
+  await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out', exact: true }).click(); await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible(); release();
+  await expect.poll(() => stored(page)).toEqual([]); await expect(page.getByText('PRIVATE_ASSIGNEE_A', { exact: true })).toHaveCount(0); await expect(page.getByRole('checkbox')).toHaveCount(0); expect(state.updates).toHaveLength(1);
 });

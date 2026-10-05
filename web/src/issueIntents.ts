@@ -1,6 +1,6 @@
 // Tab convenience data only. Private discussion text and credentials never go
 // into storage; the server remains authoritative for every outcome lookup.
-export type IssueIntent = { key: string; kind: 'issue' | 'comment' | 'update' | 'pull-update' | 'pull'; editField?: 'title' | 'body' | 'close' | 'reopen' | 'draft' | 'ready' | 'milestone' | 'labels'; repositoryId: string; issueId: string; pullRequestId?: string; number: number };
+export type IssueIntent = { key: string; kind: 'issue' | 'comment' | 'update' | 'pull-update' | 'pull'; editField?: 'title' | 'body' | 'close' | 'reopen' | 'draft' | 'ready' | 'milestone' | 'labels' | 'assignees'; repositoryId: string; issueId: string; pullRequestId?: string; number: number };
 const prefix = 'golf.issue-intent.';
 const validID = (value: string) => /^[1-9][0-9]{0,18}$/.test(value) && BigInt(value) <= 9223372036854775807n;
 export function issueIntentKey(userId: string, repositoryId: string, issueId = '') {
@@ -19,7 +19,7 @@ export function readIssueIntent(storageKey: string, repositoryId: string, issueI
       'repositoryId' in value && value.repositoryId === repositoryId && validID(repositoryId) &&
       'issueId' in value && value.issueId === issueId && (!issueId || validID(issueId)) &&
       'number' in value && value.number === number && 'kind' in value && value.kind === kind &&
-      (kind !== 'update' || 'editField' in value && ['title','body','close','reopen','milestone','labels'].includes(String(value.editField))) &&
+      (kind !== 'update' || 'editField' in value && ['title','body','close','reopen','milestone','labels','assignees'].includes(String(value.editField))) &&
       (kind !== 'pull-update' || !issueId && validID(pullRequestId) && 'pullRequestId' in value && value.pullRequestId === pullRequestId && 'editField' in value && ['title','body','close','reopen','draft','ready'].includes(String(value.editField)))) {
       return { key: value.key, kind, repositoryId, issueId, number, ...(kind === 'pull-update' ? {pullRequestId} : {}), ...(kind === 'update' || kind === 'pull-update' ? {editField: (value as unknown as {editField: IssueIntent['editField']}).editField} : {}) };
     }
