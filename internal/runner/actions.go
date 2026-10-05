@@ -39,7 +39,7 @@ func ActionsFailureStage(err error) string {
 		return ""
 	}
 	switch classified.stage {
-	case "input_validation", "worker_residue_check", "daemon_image_validation", "job_image_validation", "owner_generation", "volume_creation", "daemon_creation", "daemon_receipt_validation", "daemon_start", "daemon_readiness", "image_transfer", "helper_transfer", "helper_local_hash", "helper_remote_hash", "helper_process_start", "helper_input", "helper_frames", "durable_frame_ack", "helper_ack_write", "helper_completion", "container_cleanup", "volume_cleanup":
+	case "input_validation", "worker_residue_check", "daemon_image_validation", "job_image_validation", "owner_generation", "volume_creation", "daemon_creation", "daemon_receipt_validation", "daemon_start", "daemon_readiness", "image_transfer", "helper_transfer", "helper_local_hash", "helper_remote_hash", "git_source_transfer", "git_source_remote_hash", "helper_process_start", "helper_input", "helper_frames", "durable_frame_ack", "helper_ack_write", "helper_completion", "container_cleanup", "volume_cleanup":
 		return classified.stage
 	default:
 		if ActionsEngineFailureDiagnostic(classified.stage) != "" {
@@ -194,6 +194,22 @@ func NewActions(e *Executor, helper string) (*ActionsExecutor, error) {
 // never restarts source on errors. Explicit existing worker recovery fences old
 // attempts and removes these same enrollment/attempt/owner labeled resources.
 func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input ActionExecutionInput, onFrame func(context.Context, ActionFrame) error) (result Result, err error) {
+	if input.GitSource != nil {
+		return Result{ExitCode: 255}, &actionsStageError{"input_validation", ErrInvalidJob}
+	}
+	return a.execute(ctx, attempt, input, nil, onFrame)
+}
+
+// ExecuteGit is the explicit trusted-worker handoff. The metadata bytes are
+// never serialized into execution JSON or merged into the admitted archive.
+func (a *ActionsExecutor) ExecuteGit(ctx context.Context, attempt string, input ActionExecutionInput, metadata []byte, onFrame func(context.Context, ActionFrame) error) (result Result, err error) {
+	if input.GitSource == nil || input.JobResources == nil || len(metadata) == 0 {
+		return Result{ExitCode: 255}, &actionsStageError{"input_validation", ErrInvalidJob}
+	}
+	return a.execute(ctx, attempt, input, metadata, onFrame)
+}
+
+func (a *ActionsExecutor) execute(ctx context.Context, attempt string, input ActionExecutionInput, metadata []byte, onFrame func(context.Context, ActionFrame) error) (result Result, err error) {
 	result.ExitCode = 255
 	phase := "input_validation"
 	defer func() {
@@ -209,6 +225,9 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 	}
 	archiveSHA := sha256.Sum256(input.Input.Archive)
 	if hex.EncodeToString(archiveSHA[:]) != input.Plan.ArchiveSHA256 {
+		return result, ErrInvalidJob
+	}
+	if input.GitSource != nil && (input.GitSource.ArchiveSHA256 != input.Plan.ArchiveSHA256 || ValidateGitSource(input.GitSource, metadata, input.Input.Archive, input.CommitID, input.Input.WorkflowPath, input.Input.WorkflowBlobID) != nil) {
 		return result, ErrInvalidJob
 	}
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(input.TimeoutSeconds)*time.Second)
@@ -342,6 +361,12 @@ func (a *ActionsExecutor) Execute(ctx context.Context, attempt string, input Act
 	phase, err = a.transferHelper(runCtx, container)
 	if err != nil {
 		return result, err
+	}
+	if input.GitSource != nil {
+		phase, err = a.transferGitSource(runCtx, container, input.GitSource, metadata)
+		if err != nil {
+			return result, err
+		}
 	}
 	input.ResolvedImages = images
 	phase = "helper_process_start"
