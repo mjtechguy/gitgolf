@@ -2,7 +2,8 @@
 """Bounded native standard merge qualifier on an externally owned fresh stack.
 
 Supported native fixture APIs/CLI only. Never builds/pulls/starts stacks. One
-ordinary writer merge, optional browser confirmation and explicit core restart.
+ordinary writer merge (optional --method=squash), browser confirmation and
+explicit core restart. Default historical merge requests remain field-compatible.
 Protected integration, atomic base/checks and fault recovery remain open.
 """
 import argparse
@@ -10,6 +11,7 @@ import ast
 import base64
 import copy
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -47,8 +49,8 @@ def status_request(intent):
 
 
 def validate_receipt(common,row,intent,actor,phase):
-    s=intent['selection'];assert row['phase']==phase and phase in PHASES
-    for key,value in {'operationId':intent['operationId'],'actorId':actor,'repository':s['repository'],'repositoryId':s['repositoryId'],'ownerId':intent['ownerId'],'pullRequestId':s['pullRequestId'],'number':s['number'],'expectedPullRevision':intent['expectedPullRevision'],'headCommitId':s['headCommitId'],'observedBaseCommitId':s['baseCommitId'],'sourceRef':intent['sourceRef'],'targetRef':intent['targetRef'],'method':'merge','contract':FORK_CONTRACT if intent.get('sourceRepository') else CONTRACT}.items():assert row[key]==value
+    s=intent['selection'];assert row['phase']==phase and phase in PHASES and intent.get('method','merge') in ('merge','squash')
+    for key,value in {'operationId':intent['operationId'],'actorId':actor,'repository':s['repository'],'repositoryId':s['repositoryId'],'ownerId':intent['ownerId'],'pullRequestId':s['pullRequestId'],'number':s['number'],'expectedPullRevision':intent['expectedPullRevision'],'headCommitId':s['headCommitId'],'observedBaseCommitId':s['baseCommitId'],'sourceRef':intent['sourceRef'],'targetRef':intent['targetRef'],'method':intent.get('method','merge'),'contract':FORK_CONTRACT if intent.get('sourceRepository') else CONTRACT}.items():assert row[key]==value
     if intent.get('sourceRepository'):
         for key in ('sourceRepository','sourceRepositoryId','sourceOwnerId'):assert row[key]==intent[key]
     else:assert not row.get('sourceRepository') and not row.get('sourceRepositoryId') and not row.get('sourceOwnerId')
@@ -59,6 +61,20 @@ def validate_receipt(common,row,intent,actor,phase):
         assert not row.get('mergeCommitId') and not row.get('actualBaseCommitId')
         assert row.get('failureCode','')==('preflight_refused' if phase.endswith('_REJECTED') else '')
     return row
+
+
+def native_commit_receipt(common,commit,result,head,target,method='merge'):
+    assert method in ('merge','squash') and commit['sha']==result['mergeCommitId'] and common.OID.fullmatch(commit['sha']) and target==commit['sha']
+    parents=[p['sha'] for p in commit['parents']]
+    assert parents==([result['actualBaseCommitId']] if method=='squash' else [result['actualBaseCommitId'],head])
+    if method=='squash':assert commit['sha']!=head and head not in parents
+    return parents
+
+
+def custom_message_receipt(message,title,body):
+    expected=title+'\n\n'+body
+    assert len(message.encode())<=32768 and (message.rstrip('\n')==expected or re.fullmatch(re.escape(expected)+r'\n\nCo-authored-by: [^\r\n]{1,512}',message.rstrip('\n')))
+    return {'customTitleAndBodyMatched':True,'submittedMessageSha256':hashlib.sha256(expected.encode()).hexdigest(),'nativeMessageSha256':hashlib.sha256(message.encode()).hexdigest()}
 
 
 def callable_bindings_safe(source):
@@ -96,14 +112,34 @@ def self_check(stack):
     try:validate_receipt(common,rejected,intent,'4',rejected['phase'])
     except AssertionError:pass
     else:raise AssertionError('Rejection invented native effect')
+    squash_intent={**intent,'method':'squash'};squash_row={**row,'method':'squash'}
+    validate_receipt(common,squash_row,squash_intent,'4',row['phase'])
+    native_commit_receipt(common,{'sha':'d'*40,'parents':[{'sha':'b'*40}]},squash_row,'a'*40,'d'*40,'squash')
+    native_commit_receipt(common,{'sha':'d'*40,'parents':[{'sha':'b'*40},{'sha':'a'*40}]},row,'a'*40,'d'*40)
+    for commit,target in (({'sha':'d'*40,'parents':[{'sha':'b'*40},{'sha':'a'*40}]},'d'*40),({'sha':'d'*40,'parents':[{'sha':'a'*40}]},'d'*40),({'sha':'d'*40,'parents':[{'sha':'b'*40}]},'e'*40)):
+        try:native_commit_receipt(common,commit,squash_row,'a'*40,target,'squash')
+        except AssertionError:pass
+        else:raise AssertionError('Unbound squash ancestry admitted')
+    try:validate_receipt(common,squash_row,intent,'4',row['phase'])
+    except AssertionError:pass
+    else:raise AssertionError('Historical merge intent silently became squash')
+    assert custom_message_receipt('Owned title\n\nOwned body\n','Owned title','Owned body')['customTitleAndBodyMatched']
+    custom_message_receipt('Owned title\n\nOwned body\n\nCo-authored-by: Owned <fixture@example.invalid>\n','Owned title','Owned body')
+    for message in ('Wrong title\n\nOwned body','Owned title\n\nWrong body','Owned title\n\nOwned body\n\nUnexpected private output'):
+        try:custom_message_receipt(message,'Owned title','Owned body')
+        except AssertionError:pass
+        else:raise AssertionError('Changed custom commit text admitted')
     print('PASS: original receipt/tamper, closed native fixture paths and no native merge bypass; no runtime')
 
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--self-check',action='store_true');p.add_argument('--stack-root',type=Path,default=Path(__file__).resolve().parents[1]);p.add_argument('--project');p.add_argument('--compose-file',type=Path);p.add_argument('--env-file',type=Path);p.add_argument('--image');p.add_argument('--source-revision');p.add_argument('--golf-url');p.add_argument('--native-url');p.add_argument('--output',type=Path);p.add_argument('--browser',action='store_true');p.add_argument('--fork',action='store_true',help='Explicit source-bound unprotected fork merge mode');p.add_argument('--restart',action='store_true',help='Explicitly restart only the validated root-owned Golf service after success')
+    p.add_argument('--same-branch-fork',action='store_true',help='With --fork, use native default branch on both distinct repositories')
+    p.add_argument('--method',choices=('merge','squash'),default='merge',help='Explicit native method; omitted merge preserves original requests')
     args=p.parse_args();stack=args.stack_root.resolve();common=load_common(stack)
     if args.self_check:return self_check(stack)
+    if args.same_branch_fork and not args.fork:p.error('--same-branch-fork requires --fork')
     assert all((args.project,args.compose_file,args.env_file,args.image,args.source_revision,args.golf_url,args.native_url,args.output))
     assert common.PROJECT.fullmatch(args.project) and re.fullmatch(r'sha256:[a-f0-9]{64}',args.image) and re.fullmatch(r'[a-f0-9]{40}',args.source_revision)
     golf,native=common.loopback(args.golf_url),common.loopback(args.native_url)
@@ -112,6 +148,7 @@ def main():
     compose=['docker','compose','--project-directory',str(stack),'-p',args.project,'-f',str(args.compose_file.resolve()),'--env-file',str(args.env_file.resolve())]
     prefix='golf-mergeobs-'+secrets.token_hex(5);actors={};repos=[];failure=None;cleanup=[];native_unknown=False;stage='runtime preflight'
     manifest={'status':'running','scope':'Standard native unprotected same-repository merge only','project':args.project,'fixturePrefix':prefix,'limits':['No atomic-base/checks/all-writer fence','No protected or fork publication','No accepted-response-loss recovery qualification','Root owns full stack disposal']}
+    if args.method=='squash':manifest.update(scope='Standard native unprotected same-repository squash only',method='squash')
     def persist():
         manifest['actors']=[{k:a[k] for k in ('name','id','created','enrolled') if k in a} for a in actors.values()]
         temp=output/'manifest.next';temp.write_text(json.dumps(manifest,indent=2)+'\n');temp.chmod(0o600);temp.replace(output/'manifest.json')
@@ -151,7 +188,9 @@ def main():
         row=rpc(actor,'RepositoryService/GetPullRequest',{'repository':target,'number':pull['number']})['pullRequest']
         assert row['id']==str(pull['id']) and common.HASH.fullmatch(row['revision'])
         s={'repository':target,'repositoryId':str(repo['id']),'pullRequestId':row['id'],'number':pull['number'],'headCommitId':row['head']['commitId'],'baseCommitId':row['base']['commitId']}
-        return {'selection':s,'ownerId':str(repo['owner']['id']),'expectedPullRevision':row['revision'],'operationId':str(uuid.uuid4()),'sourceRef':row['head']['ref'],'targetRef':row['base']['ref'],'commitTitle':'','commitMessage':''}
+        result={'selection':s,'ownerId':str(repo['owner']['id']),'expectedPullRevision':row['revision'],'operationId':str(uuid.uuid4()),'sourceRef':row['head']['ref'],'targetRef':row['base']['ref'],'commitTitle':'','commitMessage':''}
+        if args.method=='squash':result['method']='squash'
+        return result
     def bound_source(m):
         return {**m,'sourceRepository':{'owner':author['name'],'name':fork['name']},'sourceRepositoryId':str(fork['id']),'sourceOwnerId':str(fork['owner']['id'])}
     def original(actor,m,phase):return validate_receipt(common,rpc(actor,GET,status_request(m))['operation'],m,actor['id'],phase)
@@ -175,6 +214,10 @@ def main():
         base_ref=repo['default_branch'];B=reference(owner,path,base_ref)
         for branch in ('feature/slash','protected'):api(owner,'POST',path+'/branches',{'new_branch_name':branch,'old_branch_name':base_ref},201)
         content=api(owner,'POST',path+'/contents/fixture.txt',{'branch':'feature/slash','message':'Owned standard merge fixture','content':base64.b64encode(b'owned standard merge\n').decode()},201);H=content['commit']['sha'];assert H==reference(owner,path,'feature/slash') and H!=B
+        first_head=H
+        if args.method=='squash':
+            content=api(owner,'PUT',path+'/contents/fixture.txt',{'branch':'feature/slash','sha':content['content']['sha'],'message':'Second owned squash source commit','content':base64.b64encode(b'owned standard squash second commit\n').decode()})
+            H=content['commit']['sha'];assert H==reference(owner,path,'feature/slash') and H!=first_head and [p['sha'] for p in api(owner,'GET',path+'/git/commits/'+H)['parents']]==[first_head]
         def pull(source,base):return api(owner,'POST',path+'/pulls',{'head':source,'base':base,'title':'Owned standard merge fixture','body':'Owned standard merge fixture'},201)
         candidate=pull('feature/slash',base_ref);protected=pull('feature/slash','protected')
         stage='reader refusal leaves original target unchanged'
@@ -187,12 +230,16 @@ def main():
         if args.fork:assert fork['name']=='private' and fork['owner']['id']==int(author['id']) and fork['id']!=repo['id'] and common.decimal(str(fork['id']))
         deadline=time.monotonic()+45
         while api(author,'GET',fork_path)['empty']:assert time.monotonic()<deadline;time.sleep(.25)
-        api(author,'POST',fork_path+'/branches',{'new_branch_name':'fork-feature','old_branch_name':base_ref},201)
-        fork_content=api(author,'POST',fork_path+'/contents/fixture.txt',{'branch':'fork-feature','message':'Owned fork fixture','content':base64.b64encode(b'owned fork\n').decode()},201)
+        fork_ref=base_ref if args.same_branch_fork else 'fork-feature'
+        if not args.same_branch_fork:api(author,'POST',fork_path+'/branches',{'new_branch_name':fork_ref,'old_branch_name':base_ref},201)
+        fork_content=api(author,'POST',fork_path+'/contents/fixture.txt',{'branch':fork_ref,'message':'Owned fork fixture','content':base64.b64encode(b'owned fork\n').decode()},201)
+        if args.fork and args.method=='squash':
+            first_head=fork_content['commit']['sha'];fork_content=api(author,'PUT',fork_path+'/contents/fixture.txt',{'branch':fork_ref,'sha':fork_content['content']['sha'],'message':'Second owned fork squash source','content':base64.b64encode(b'owned fork squash second commit\n').decode()})
+            assert fork_content['commit']['sha']!=first_head and [p['sha'] for p in api(author,'GET',fork_path+'/git/commits/'+fork_content['commit']['sha'])['parents']]==[first_head]
         for a in (owner,writer):api(author,'PUT',fork_path+'/collaborators/'+a['name'],{'permission':'read'},204)
-        fork_pull=pull(author['name']+':fork-feature',base_ref);fork_intent=intent(owner,path,target,fork_pull);fork_rejected=validate_receipt(common,rpc(owner,SUBMIT,fork_intent)['operation'],fork_intent,owner['id'],'STANDARD_PULL_MERGE_PHASE_REJECTED');assert reference(owner,path,base_ref)==B;manifest['forkRejected']=fork_rejected;persist()
+        fork_pull=pull(author['name']+':'+fork_ref,base_ref);fork_intent=intent(owner,path,target,fork_pull);fork_rejected=validate_receipt(common,rpc(owner,SUBMIT,fork_intent)['operation'],fork_intent,owner['id'],'STANDARD_PULL_MERGE_PHASE_REJECTED');assert reference(owner,path,base_ref)==B;manifest['forkRejected']=fork_rejected;persist()
         if args.fork:
-            manifest['scope']='Standard native unprotected explicitly source-bound fork merge only'
+            manifest['scope']='Standard native unprotected explicitly source-bound fork '+args.method+' only'
             manifest['limits']=[v.replace('No protected or fork publication','No protected publication') for v in manifest['limits']]
             manifest['limits']=['No atomic-base/checks/all-writer fence','No protected publication','No accepted-response-loss recovery qualification','Root owns full stack disposal']
             stage='private fork unreadable source refuses before native merge'
@@ -200,14 +247,17 @@ def main():
             rpc(writer,SUBMIT,denied,404,'not_found');assert reference(owner,path,base_ref)==B
             api(author,'PUT',fork_path+'/collaborators/'+writer['name'],{'permission':'read'},204)
             manifest['unreadableForkRejected']=original(writer,denied,'STANDARD_PULL_MERGE_PHASE_REJECTED');persist()
-            candidate=fork_pull;H=fork_content['commit']['sha'];assert H==reference(author,fork_path,'fork-feature')
+            if args.same_branch_fork:manifest['sameNamedDistinctRepositoryRefs']=True
+            candidate=fork_pull;H=fork_content['commit']['sha'];assert H==reference(author,fork_path,fork_ref)
         stage='one ordinary writer standard native merge'
-        m=intent(writer,path,target,candidate);assert m['selection']['headCommitId']==H and m['selection']['baseCommitId']==B and m['sourceRef']==('fork-feature' if args.fork else 'feature/slash') and m['targetRef']==base_ref
+        m=intent(writer,path,target,candidate);assert m['selection']['headCommitId']==H and m['selection']['baseCommitId']==B and m['sourceRef']==(fork_ref if args.fork else 'feature/slash') and m['targetRef']==base_ref
         if args.fork:m=bound_source(m)
+        if args.method=='squash':m.update(commitTitle='Owned squash integration',commitMessage='Controlled squash body.\n\nNo publication permit.')
         native_unknown=True  # A Golf/native merge may outlive a lost client ACK.
         if args.browser:
             browser_output=output/'browser';browser_output.mkdir(mode=0o700)
             config={'stackRoot':str(stack),'golf':golf,'repository':repo['full_name'],'repositoryId':str(repo['id']),'ownerId':owner['id'],'actorId':writer['id'],'pullRequestId':m['selection']['pullRequestId'],'number':m['selection']['number'],'expectedPullRevision':m['expectedPullRevision'],'headCommitId':H,'baseCommitId':B,'sourceRef':m['sourceRef'],'targetRef':m['targetRef'],'email':writer['email'],'password':writer['password'],'runtime':runtime,'output':str(browser_output)}
+            if args.method=='squash':config.update(method='squash',commitTitle=m['commitTitle'],commitMessage=m['commitMessage'])
             if args.fork:config.update({key:m[key] for key in ('sourceRepository','sourceRepositoryId','sourceOwnerId')})
             r=subprocess.run(['node',str(stack/'scripts/standard-pull-merge-browser.mjs')],input=json.dumps(config),cwd=stack,text=True,capture_output=True,timeout=180)
             manifest['browserCommand']={'exitCode':r.returncode,'stdoutBytes':len(r.stdout.encode()),'stderrBytes':len(r.stderr.encode())};persist();assert all(secret not in r.stdout+r.stderr for a in actors.values() for secret in (a['token'],a['password']));assert r.returncode==0
@@ -215,21 +265,25 @@ def main():
             result=original(writer,m,'STANDARD_PULL_MERGE_PHASE_SUCCEEDED')
         else:
             result=validate_receipt(common,rpc(writer,SUBMIT,m)['operation'],m,writer['id'],'STANDARD_PULL_MERGE_PHASE_SUCCEEDED')
-        manifest['originalIntent']=m;manifest['operation']=result;persist()
+        manifest['originalIntent']={k:v for k,v in m.items() if args.method!='squash' or k not in ('commitTitle','commitMessage')};manifest['operation']=result;persist()
         stage='independent native merge receipt'
         C=result['mergeCommitId'];native_pr=api(owner,'GET',path+'/pulls/'+str(candidate['number']));assert native_pr['merged'] is True and native_pr['merge_commit_sha']==C and native_pr['head']['sha']==H and native_pr['head']['repo_id']==(fork['id'] if args.fork else repo['id'])
-        commit=api(owner,'GET',path+'/git/commits/'+C);assert commit['sha']==C and [p['sha'] for p in commit['parents']]==[result['actualBaseCommitId'],H] and reference(owner,path,base_ref)==C
+        assert native_pr['id']==int(m['selection']['pullRequestId']) and native_pr['number']==m['selection']['number'] and native_pr['head']['ref']==m['sourceRef'] and native_pr['base']['ref']==m['targetRef'] and native_pr['base']['repo_id']==repo['id']
+        commit=api(owner,'GET',path+'/git/commits/'+C);native_commit_receipt(common,commit,result,H,reference(owner,path,base_ref),args.method)
         native_unknown=False  # Independent acknowledged final effect is now recorded.
         manifest['nativeReceipt']={'C':C,'H':H,'observedB':B,'actualB':result['actualBaseCommitId'],'parents':[p['sha'] for p in commit['parents']],'targetCommitId':C};persist()
+        if args.method=='squash':manifest['nativeReceipt'].update(method='squash',sourceFirstCommitId=first_head,twoSourceCommits=True,singleParentVerified=True,**custom_message_receipt(commit['message'],m['commitTitle'],m['commitMessage']))
         stage='original replay and changed intent refusal'
         assert validate_receipt(common,rpc(writer,SUBMIT,m)['operation'],m,writer['id'],result['phase'])==result
         changed=copy.deepcopy(m);changed['commitMessage']='Changed original request';rpc(writer,SUBMIT,changed,400,'failed_precondition');assert original(writer,m,result['phase'])==result and reference(owner,path,base_ref)==C
+        if args.method=='squash':
+            changed_method=copy.deepcopy(m);changed_method['method']='merge';rpc(writer,SUBMIT,changed_method,400,'failed_precondition');assert original(writer,m,result['phase'])==result and reference(owner,path,base_ref)==C;manifest['changedMethodRefused']=True
         missing=status_request(m);missing['operationId']=str(uuid.uuid4());rpc(writer,GET,missing,404,'not_found');rpc(reader,GET,status_request(m),404,'not_found');manifest.update(originalReplayExact=True,changedIntentRefused=True,missingOutcomeNotNoEffect=True)
         if args.fork:
             changed_source=copy.deepcopy(m);changed_source['sourceOwnerId']=str(int(m['sourceOwnerId'])+1);rpc(writer,SUBMIT,changed_source,400,'failed_precondition');assert original(writer,m,result['phase'])==result;manifest['changedSourceIntentRefused']=True
             stage='historical source branch movement preserves original only'
-            advanced=api(author,'PUT',fork_path+'/contents/fixture.txt',{'branch':'fork-feature','sha':fork_content['content']['sha'],'message':'Advance owned source after original merge','content':base64.b64encode(b'advanced owned fork\n').decode()})
-            next_head=advanced['commit']['sha'];assert next_head!=H and reference(author,fork_path,'fork-feature')==next_head
+            advanced=api(author,'PUT',fork_path+'/contents/fixture.txt',{'branch':fork_ref,'sha':fork_content['content']['sha'],'message':'Advance owned source after original merge','content':base64.b64encode(b'advanced owned fork\n').decode()})
+            next_head=advanced['commit']['sha'];assert next_head!=H and reference(author,fork_path,fork_ref)==next_head
             assert original(writer,m,result['phase'])==result and validate_receipt(common,rpc(writer,SUBMIT,m)['operation'],m,writer['id'],result['phase'])==result and reference(owner,path,base_ref)==C
             manifest['historicalSourceMovement']={'oldH':H,'newH':next_head,'originalReceiptUnchanged':True,'targetCommitUnchanged':True}
             stage='historical fork private source revocation masks receipt'
@@ -242,6 +296,7 @@ def main():
                 try:common.request(common.client(),'GET',golf+'/readyz',None,{},200);break
                 except Exception:assert time.monotonic()<deadline;time.sleep(.5)
             assert runtime_now()==runtime and original(writer,m,result['phase'])==result and reference(owner,path,base_ref)==C
+            if args.method=='squash':assert validate_receipt(common,rpc(writer,SUBMIT,m)['operation'],m,writer['id'],result['phase'])==result and reference(owner,path,base_ref)==C
             manifest['restartOriginalExact']=True
         manifest['runtimeAfter']=runtime_now();assert manifest['runtimeAfter']==runtime;manifest['status']='checks_passed_cleanup_pending';persist()
     except Exception as e:
@@ -273,10 +328,10 @@ def main():
                     except Exception:cleanup.append('owned_native_actor_cleanup')
         manifest['cleanup']={'failures':cleanup,'nativeScopePurged':not cleanup,'stackDisposal':'Root owns resources; no helper stack disposal','retainedGolfMetadata':'Disabled own accounts and journals retained; no Golf data purge claim'}
         if cleanup:manifest['status']='failed'
-        elif failure is None:manifest['status']='qualified_bounded_standard_native_merge'
+        elif failure is None:manifest['status']='qualified_bounded_standard_native_squash' if args.method=='squash' else 'qualified_bounded_standard_native_merge'
         persist()
     if failure or cleanup:print('FAIL: standard merge qualifier; closed receipt preserved, private diagnostics withheld',file=sys.stderr);return 1
-    print('PASS: one standard native '+('source-bound fork' if args.fork else 'same-repository')+' merge and original inspection; protected integration remains open');return 0
+    print('PASS: one standard native '+('source-bound fork' if args.fork else 'same-repository')+' '+args.method+' and original inspection; protected integration remains open');return 0
 
 
 if __name__=='__main__':
