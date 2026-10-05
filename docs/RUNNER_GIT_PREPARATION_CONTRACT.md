@@ -1,9 +1,10 @@
 # Trusted runner Git preparation
 
 Source `9867129` adds read-only Git preparation to the existing runner attempt
-boundary. It is a first step toward real Git workspaces and unchanged imported
-CI, not an enabled worker checkout or a job credential. Current workers still
-download the existing ordinary-source archive.
+boundary. Worker preparation source `2545199` and final checks at `0641832` now
+exercise a real installed Git consumer. This is still a step toward real job
+workspaces and unchanged imported CI: preparation is not advertised or integrated
+into assignments. Current deployed workers use the ordinary-source archive.
 
 ## Transport and authority
 
@@ -45,6 +46,33 @@ fence, and already delivered bytes cannot be recalled.
 
 ## Evidence and remaining work
 
+The [final worker source receipt](../.tmp/runner-git-worker-preparation-final-proof/manifest.json)
+binds four committed worker/checker files. All 18 full-package race cases pass
+in2.559s with no skips, and runner vet passes. Nine actual TLS1.3/Git2.39.5
+consumer scenarios include success, malformed/duplicate receipts, MIME and
+compression refusal, native denial, redirects, cancellation and insecure-client
+refusal. The origin uses an owned real `git http-backend`, not actual Gitea or
+the enrolled Golf server. Success fetches exact H at depth1 into a fresh
+unmaterialized repository and independently compares its native tree with the
+original archive SHA, all blob bytes/executable modes and workflow identity.
+Separate actual SHA-1/SHA-256 repositories exercise changed/missing/extra files,
+links, directory-inventory limits and malformed tree/object receipts.
+
+The worker broker retains controller credentials only in Go HTTP headers. Git
+receives a separate random, local, read-only preparation nonce; the broker closes
+before success, and neither nonce nor controller credentials appear in repository
+files. Git uses fixed installed binary paths, a fresh template-free init, hermetic
+configuration/environment, disabled hooks and automatic maintenance, no checkout
+or source filters, and bounded process/HTTP deadlines. Process groups are killed
+on cancellation; failed workspaces are removed. Buffered response and stdout
+limits are enforced. These bounds do **not** establish native Git memory, disk or
+CPU ceilings for adversarial packs. Source-only preparation remains disabled
+pending that qualification and a separate credential-free job metadata envelope.
+The tree checker does not authorize arbitrary host extraction, filesystem
+aliases or checkout transformations. Archive export attributes that change or
+omit committed bytes must fail equality; no transformed archive is silently
+substituted for the original admitted source.
+
 The [source receipt](../.tmp/runner-git-source-proof/manifest.json) binds all four
 tested server files to the committed source. Seventeen top-level real PostgreSQL
 and race cases pass, including nine manual/push scenarios for late native access,
@@ -64,7 +92,9 @@ failure. This source packet is not deployed in localhost8080.
 Next tasks retain the original compatibility goal:
 
 1. Integrate an explicitly declared trusted-worker preparation capability over
-   TLS. Materialize a fresh credential-free Git workspace; independently verify
+   TLS after native process memory/disk/CPU isolation is qualified. Add a separate
+   verified Git metadata envelope without changing original archive identity or
+   exposing controller credentials. Materialize a fresh job Git workspace; verify
    H, its tree and the original workflow blob, with no hooks, implicit LFS or
    submodule hydration. Qualify native Gitea transport, historical H/ref movement,
    cleanup, cancellation and worker loss before enabling it.
