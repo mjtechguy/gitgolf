@@ -3,7 +3,7 @@
 
 Supported native fixture APIs/CLI only. Never builds/pulls/starts stacks. One
 ordinary writer merge, optional browser confirmation and explicit core restart.
-Protected/fork integration, atomic base/checks and fault recovery remain open.
+Protected integration, atomic base/checks and fault recovery remain open.
 """
 import argparse
 import ast
@@ -24,6 +24,7 @@ sys.dont_write_bytecode = True
 SUBMIT='StandardPullMergeService/SubmitStandardPullMerge'
 GET='StandardPullMergeService/GetStandardPullMergeOperation'
 CONTRACT='golf.pull.standard-native-merge.v1'
+FORK_CONTRACT='golf.pull.standard-native-merge.v2'
 PHASES={'STANDARD_PULL_MERGE_PHASE_'+x for x in ('RESERVED','DISPATCH_UNKNOWN','SUCCEEDED','REJECTED')}
 
 
@@ -47,7 +48,10 @@ def status_request(intent):
 
 def validate_receipt(common,row,intent,actor,phase):
     s=intent['selection'];assert row['phase']==phase and phase in PHASES
-    for key,value in {'operationId':intent['operationId'],'actorId':actor,'repository':s['repository'],'repositoryId':s['repositoryId'],'ownerId':intent['ownerId'],'pullRequestId':s['pullRequestId'],'number':s['number'],'expectedPullRevision':intent['expectedPullRevision'],'headCommitId':s['headCommitId'],'observedBaseCommitId':s['baseCommitId'],'sourceRef':intent['sourceRef'],'targetRef':intent['targetRef'],'method':'merge','contract':CONTRACT}.items():assert row[key]==value
+    for key,value in {'operationId':intent['operationId'],'actorId':actor,'repository':s['repository'],'repositoryId':s['repositoryId'],'ownerId':intent['ownerId'],'pullRequestId':s['pullRequestId'],'number':s['number'],'expectedPullRevision':intent['expectedPullRevision'],'headCommitId':s['headCommitId'],'observedBaseCommitId':s['baseCommitId'],'sourceRef':intent['sourceRef'],'targetRef':intent['targetRef'],'method':'merge','contract':FORK_CONTRACT if intent.get('sourceRepository') else CONTRACT}.items():assert row[key]==value
+    if intent.get('sourceRepository'):
+        for key in ('sourceRepository','sourceRepositoryId','sourceOwnerId'):assert row[key]==intent[key]
+    else:assert not row.get('sourceRepository') and not row.get('sourceRepositoryId') and not row.get('sourceOwnerId')
     for key in ('createdAt','updatedAt'):assert re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,9})?Z',row[key])
     if phase.endswith('_SUCCEEDED'):
         assert common.OID.fullmatch(row['mergeCommitId']) and common.OID.fullmatch(row['actualBaseCommitId']) and len(row['mergeCommitId'])==len(s['headCommitId'])==len(row['actualBaseCommitId']) and not row.get('failureCode')
@@ -76,6 +80,17 @@ def self_check(stack):
         try:validate_receipt(common,bad,intent,'4',row['phase'])
         except (AssertionError,KeyError):pass
         else:raise AssertionError('Changed original receipt admitted')
+    fork_intent={**intent,'sourceRepository':{'owner':'author','name':'fork'},'sourceRepositoryId':'5','sourceOwnerId':'6'}
+    fork_row={**row,'contract':FORK_CONTRACT,**{key:fork_intent[key] for key in ('sourceRepository','sourceRepositoryId','sourceOwnerId')}}
+    validate_receipt(common,fork_row,fork_intent,'4',row['phase'])
+    for key in ('sourceRepository','sourceRepositoryId','sourceOwnerId'):
+        bad=copy.deepcopy(fork_row);bad.pop(key)
+        try:validate_receipt(common,bad,fork_intent,'4',row['phase'])
+        except (AssertionError,KeyError):pass
+        else:raise AssertionError('Unbound fork source receipt admitted')
+    try:validate_receipt(common,fork_row,intent,'4',row['phase'])
+    except AssertionError:pass
+    else:raise AssertionError('Legacy original silently upgraded')
     rejected={k:v for k,v in row.items() if k not in ('mergeCommitId','actualBaseCommitId')};rejected.update(phase='STANDARD_PULL_MERGE_PHASE_REJECTED',failureCode='preflight_refused');validate_receipt(common,rejected,intent,'4',rejected['phase'])
     rejected['mergeCommitId']='d'*40
     try:validate_receipt(common,rejected,intent,'4',rejected['phase'])
@@ -86,7 +101,7 @@ def self_check(stack):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--self-check',action='store_true');p.add_argument('--stack-root',type=Path,default=Path(__file__).resolve().parents[1]);p.add_argument('--project');p.add_argument('--compose-file',type=Path);p.add_argument('--env-file',type=Path);p.add_argument('--image');p.add_argument('--source-revision');p.add_argument('--golf-url');p.add_argument('--native-url');p.add_argument('--output',type=Path);p.add_argument('--browser',action='store_true');p.add_argument('--restart',action='store_true',help='Explicitly restart only the validated root-owned Golf service after success')
+    p.add_argument('--self-check',action='store_true');p.add_argument('--stack-root',type=Path,default=Path(__file__).resolve().parents[1]);p.add_argument('--project');p.add_argument('--compose-file',type=Path);p.add_argument('--env-file',type=Path);p.add_argument('--image');p.add_argument('--source-revision');p.add_argument('--golf-url');p.add_argument('--native-url');p.add_argument('--output',type=Path);p.add_argument('--browser',action='store_true');p.add_argument('--fork',action='store_true',help='Explicit source-bound unprotected fork merge mode');p.add_argument('--restart',action='store_true',help='Explicitly restart only the validated root-owned Golf service after success')
     args=p.parse_args();stack=args.stack_root.resolve();common=load_common(stack)
     if args.self_check:return self_check(stack)
     assert all((args.project,args.compose_file,args.env_file,args.image,args.source_revision,args.golf_url,args.native_url,args.output))
@@ -137,6 +152,8 @@ def main():
         assert row['id']==str(pull['id']) and common.HASH.fullmatch(row['revision'])
         s={'repository':target,'repositoryId':str(repo['id']),'pullRequestId':row['id'],'number':pull['number'],'headCommitId':row['head']['commitId'],'baseCommitId':row['base']['commitId']}
         return {'selection':s,'ownerId':str(repo['owner']['id']),'expectedPullRevision':row['revision'],'operationId':str(uuid.uuid4()),'sourceRef':row['head']['ref'],'targetRef':row['base']['ref'],'commitTitle':'','commitMessage':''}
+    def bound_source(m):
+        return {**m,'sourceRepository':{'owner':author['name'],'name':fork['name']},'sourceRepositoryId':str(fork['id']),'sourceOwnerId':str(fork['owner']['id'])}
     def original(actor,m,phase):return validate_receipt(common,rpc(actor,GET,status_request(m))['operation'],m,actor['id'],phase)
     try:
         persist();runtime=runtime_now();manifest['runtimeBefore']=runtime;persist();assert common.request(common.client(),'GET',golf+'/readyz',None,{},200);assert api(None,'GET','version')['version']=='1.27.3'
@@ -167,18 +184,30 @@ def main():
         protected_intent=intent(owner,path,target,protected);rejected=validate_receipt(common,rpc(owner,SUBMIT,protected_intent)['operation'],protected_intent,owner['id'],'STANDARD_PULL_MERGE_PHASE_REJECTED');assert reference(owner,path,'protected')==B;manifest['protectedRejected']=rejected;persist()
         stage='fork refusal leaves target unchanged'
         fork=api(author,'POST',path+'/forks',{},202);repos.append((author,fork));fork_path='repos/'+fork['full_name'];assert fork['full_name']==author['name']+'/private'
+        if args.fork:assert fork['name']=='private' and fork['owner']['id']==int(author['id']) and fork['id']!=repo['id'] and common.decimal(str(fork['id']))
         deadline=time.monotonic()+45
         while api(author,'GET',fork_path)['empty']:assert time.monotonic()<deadline;time.sleep(.25)
         api(author,'POST',fork_path+'/branches',{'new_branch_name':'fork-feature','old_branch_name':base_ref},201)
-        api(author,'POST',fork_path+'/contents/fixture.txt',{'branch':'fork-feature','message':'Owned fork fixture','content':base64.b64encode(b'owned fork\n').decode()},201)
+        fork_content=api(author,'POST',fork_path+'/contents/fixture.txt',{'branch':'fork-feature','message':'Owned fork fixture','content':base64.b64encode(b'owned fork\n').decode()},201)
         for a in (owner,writer):api(author,'PUT',fork_path+'/collaborators/'+a['name'],{'permission':'read'},204)
         fork_pull=pull(author['name']+':fork-feature',base_ref);fork_intent=intent(owner,path,target,fork_pull);fork_rejected=validate_receipt(common,rpc(owner,SUBMIT,fork_intent)['operation'],fork_intent,owner['id'],'STANDARD_PULL_MERGE_PHASE_REJECTED');assert reference(owner,path,base_ref)==B;manifest['forkRejected']=fork_rejected;persist()
+        if args.fork:
+            manifest['scope']='Standard native unprotected explicitly source-bound fork merge only'
+            manifest['limits']=['No atomic-base/checks/all-writer fence','No protected publication','No accepted-response-loss recovery qualification','Root owns full stack disposal']
+            stage='private fork unreadable source refuses before native merge'
+            denied=bound_source(intent(writer,path,target,fork_pull));api(author,'DELETE',fork_path+'/collaborators/'+writer['name'],status=204);api(writer,'GET',fork_path,status=404)
+            rpc(writer,SUBMIT,denied,404,'not_found');assert reference(owner,path,base_ref)==B
+            api(author,'PUT',fork_path+'/collaborators/'+writer['name'],{'permission':'read'},204)
+            manifest['unreadableForkRejected']=original(writer,denied,'STANDARD_PULL_MERGE_PHASE_REJECTED');persist()
+            candidate=fork_pull;H=fork_content['commit']['sha'];assert H==reference(author,fork_path,'fork-feature')
         stage='one ordinary writer standard native merge'
-        m=intent(writer,path,target,candidate);assert m['selection']['headCommitId']==H and m['selection']['baseCommitId']==B and m['sourceRef']=='feature/slash' and m['targetRef']==base_ref
+        m=intent(writer,path,target,candidate);assert m['selection']['headCommitId']==H and m['selection']['baseCommitId']==B and m['sourceRef']==('fork-feature' if args.fork else 'feature/slash') and m['targetRef']==base_ref
+        if args.fork:m=bound_source(m)
         native_unknown=True  # A Golf/native merge may outlive a lost client ACK.
         if args.browser:
             browser_output=output/'browser';browser_output.mkdir(mode=0o700)
             config={'stackRoot':str(stack),'golf':golf,'repository':repo['full_name'],'repositoryId':str(repo['id']),'ownerId':owner['id'],'actorId':writer['id'],'pullRequestId':m['selection']['pullRequestId'],'number':m['selection']['number'],'expectedPullRevision':m['expectedPullRevision'],'headCommitId':H,'baseCommitId':B,'sourceRef':m['sourceRef'],'targetRef':m['targetRef'],'email':writer['email'],'password':writer['password'],'runtime':runtime,'output':str(browser_output)}
+            if args.fork:config.update({key:m[key] for key in ('sourceRepository','sourceRepositoryId','sourceOwnerId')})
             r=subprocess.run(['node',str(stack/'scripts/standard-pull-merge-browser.mjs')],input=json.dumps(config),cwd=stack,text=True,capture_output=True,timeout=180)
             manifest['browserCommand']={'exitCode':r.returncode,'stdoutBytes':len(r.stdout.encode()),'stderrBytes':len(r.stderr.encode())};persist();assert all(secret not in r.stdout+r.stderr for a in actors.values() for secret in (a['token'],a['password']));assert r.returncode==0
             browser=json.loads((browser_output/'browser-manifest.json').read_text());assert browser['status']=='browser_checks_passed_parent_cleanup_pending' and len(browser['captures'])==4;m['operationId']=browser['original']['operationId'];manifest['browser']=browser
@@ -187,7 +216,7 @@ def main():
             result=validate_receipt(common,rpc(writer,SUBMIT,m)['operation'],m,writer['id'],'STANDARD_PULL_MERGE_PHASE_SUCCEEDED')
         manifest['originalIntent']=m;manifest['operation']=result;persist()
         stage='independent native merge receipt'
-        C=result['mergeCommitId'];native_pr=api(owner,'GET',path+'/pulls/'+str(candidate['number']));assert native_pr['merged'] is True and native_pr['merge_commit_sha']==C and native_pr['head']['sha']==H and native_pr['head']['repo_id']==repo['id']
+        C=result['mergeCommitId'];native_pr=api(owner,'GET',path+'/pulls/'+str(candidate['number']));assert native_pr['merged'] is True and native_pr['merge_commit_sha']==C and native_pr['head']['sha']==H and native_pr['head']['repo_id']==(fork['id'] if args.fork else repo['id'])
         commit=api(owner,'GET',path+'/git/commits/'+C);assert commit['sha']==C and [p['sha'] for p in commit['parents']]==[result['actualBaseCommitId'],H] and reference(owner,path,base_ref)==C
         native_unknown=False  # Independent acknowledged final effect is now recorded.
         manifest['nativeReceipt']={'C':C,'H':H,'observedB':B,'actualB':result['actualBaseCommitId'],'parents':[p['sha'] for p in commit['parents']],'targetCommitId':C};persist()
@@ -195,6 +224,16 @@ def main():
         assert validate_receipt(common,rpc(writer,SUBMIT,m)['operation'],m,writer['id'],result['phase'])==result
         changed=copy.deepcopy(m);changed['commitMessage']='Changed original request';rpc(writer,SUBMIT,changed,400,'failed_precondition');assert original(writer,m,result['phase'])==result and reference(owner,path,base_ref)==C
         missing=status_request(m);missing['operationId']=str(uuid.uuid4());rpc(writer,GET,missing,404,'not_found');rpc(reader,GET,status_request(m),404,'not_found');manifest.update(originalReplayExact=True,changedIntentRefused=True,missingOutcomeNotNoEffect=True)
+        if args.fork:
+            changed_source=copy.deepcopy(m);changed_source['sourceOwnerId']=str(int(m['sourceOwnerId'])+1);rpc(writer,SUBMIT,changed_source,400,'failed_precondition');assert original(writer,m,result['phase'])==result;manifest['changedSourceIntentRefused']=True
+            stage='historical source branch movement preserves original only'
+            advanced=api(author,'PUT',fork_path+'/contents/fixture.txt',{'branch':'fork-feature','sha':fork_content['content']['sha'],'message':'Advance owned source after original merge','content':base64.b64encode(b'advanced owned fork\n').decode()})
+            next_head=advanced['commit']['sha'];assert next_head!=H and reference(author,fork_path,'fork-feature')==next_head
+            assert original(writer,m,result['phase'])==result and validate_receipt(common,rpc(writer,SUBMIT,m)['operation'],m,writer['id'],result['phase'])==result and reference(owner,path,base_ref)==C
+            manifest['historicalSourceMovement']={'oldH':H,'newH':next_head,'originalReceiptUnchanged':True,'targetCommitUnchanged':True}
+            stage='historical fork private source revocation masks receipt'
+            api(author,'DELETE',fork_path+'/collaborators/'+writer['name'],status=204);rpc(writer,GET,status_request(m),404,'not_found');assert reference(owner,path,base_ref)==C
+            api(author,'PUT',fork_path+'/collaborators/'+writer['name'],{'permission':'read'},204);assert original(writer,m,result['phase'])==result;manifest['historicalSourceReadDenial']=True;persist()
         if args.restart:
             stage='explicit owned core restart original status'
             assert runtime_now()==runtime;command(compose+['restart','golf']);deadline=time.monotonic()+45
@@ -236,7 +275,7 @@ def main():
         elif failure is None:manifest['status']='qualified_bounded_standard_native_merge'
         persist()
     if failure or cleanup:print('FAIL: standard merge qualifier; closed receipt preserved, private diagnostics withheld',file=sys.stderr);return 1
-    print('PASS: one standard native same-repository merge and original inspection; protected integration remains open');return 0
+    print('PASS: one standard native '+('source-bound fork' if args.fork else 'same-repository')+' merge and original inspection; protected integration remains open');return 0
 
 
 if __name__=='__main__':
