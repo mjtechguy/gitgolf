@@ -109,7 +109,7 @@ test('credential metadata paginates with exact IDs, native source status and lit
   await page.getByRole('navigation', { name: 'Account settings', exact: true }).getByRole('link', { name: 'API credentials', exact: true }).click();
   await expect(page).toHaveURL(/\/account\/api-credentials$/);
   await expect(page.getByRole('table', { name: 'API credentials', exact: true }).locator('tbody tr[data-row-id]')).toHaveCount(2);
-  await expect(page.getByText('Not revoked or expired', { exact: true })).toBeVisible();
+  await expect(page.getByText('Unexpired', { exact: true })).toBeVisible();
   await expect(page.getByText('<img src=x onerror=alert(1)>', { exact: true })).toBeVisible();
   await expect(page.getByRole('table', { name: 'API credentials', exact: true }).locator('img')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Revoke credential 9007199254740994', exact: true })).toHaveCount(0);

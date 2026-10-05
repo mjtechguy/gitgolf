@@ -18,7 +18,7 @@ function credentialStatus(credential: ApiCredential) {
   if (credential.revokedAt) return 'Revoked';
   if (Date.parse(credential.expiresAt) <= Date.now()) return 'Expired';
   if (!credential.sourceSessionActive) return 'Source session ended';
-  return 'Not revoked or expired';
+  return 'Unexpired';
 }
 
 function RevokeCredential({ credential, pending, onCancel, onConfirm }: { credential: ApiCredential; pending: boolean; onCancel: () => void; onConfirm: () => void }) {
@@ -209,7 +209,7 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
 
   return <div className="api-credentials page-stack">
     <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1><KeyRound size={29} />API credentials</h1><p>Short-lived, scoped access for your tools.</p></div><button ref={newButton} className="button primary" disabled={editing || Boolean(visibleSecret) || uncertain || Boolean(listError) || query.isFetching || signingOut} onClick={() => { setEditing(true); setNotice(''); }}><Plus size={16} />New API credential</button></header>
-    <p className="organization-guidance">These credentials can call Golf’s allowed read operations using your source session’s current repository access. Optional issue/PR write scopes bind one exact repository and retain your current repository permissions. They cannot change source, merge, run jobs, create repositories, change your account or manage credentials. Signing out, revoking that source session or reaching its expiry also ends this access. They are not provider tokens or Git credentials.</p>
+    <p className="organization-guidance">Credentials use your current repository access. Optional issue/PR writes are limited to one repository. Access ends when the source session expires, is revoked, or signs out.</p>
     {editing || visibleSecret || uncertain ? <section className="browser-panel credential-create-panel" aria-labelledby="credential-create-title">
       <div className="browser-panel-heading"><h2 id="credential-create-title">Create an API credential</h2><span className="visibility">Explicit scopes</span></div>
       <div className="credential-form-content">
@@ -241,7 +241,7 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
       {listError ? <div className="panel-error"><p className="error" role="alert">{errorMessage(listError)}</p><button className="button secondary" disabled={query.isFetching} onClick={() => void refresh()}>Try again</button></div> : loading ? <Loading label="Loading API credentials…" /> : <>
         <DataTable data={credentials} columns={columns} getRowId={(credential) => credential.id} label="API credentials" emptyMessage="No API credentials" />
         <div className="list-footer credential-list-footer"><span>{credentials.length} loaded {credentials.length === 1 ? 'credential' : 'credentials'}</span><More hasMore={Boolean(query.hasNextPage)} loading={query.isFetching || revoke.isPending || issuance.isPending} load={() => void query.fetchNextPage()} label="credentials" /></div>
-        <p className="panel-footnote">Metadata remains visible after expiry or revocation. An active source session alone does not grant access: the credential must also be unexpired, unrevoked and authorized by the repository service on each call. Lost secrets cannot be recovered.</p>
+        <p className="panel-footnote">Each request checks expiry, revocation and current repository permissions. Secrets are shown only once.</p>
       </>}
     </section>
     {confirmation && !listError ? <RevokeCredential credential={confirmation} pending={revoke.isPending} onCancel={() => { if (!revoke.isPending) setConfirmation(null); }} onConfirm={confirmRevoke} /> : null}
