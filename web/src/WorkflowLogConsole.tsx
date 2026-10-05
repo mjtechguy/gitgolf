@@ -1,6 +1,9 @@
-import {Fragment,useId,useLayoutEffect,useMemo,useRef,useState} from 'react';
-import type {ReactNode} from 'react';
-import {ArrowDownToLine,ArrowUp,Download,Search} from 'lucide-react';
+import {useId,useLayoutEffect,useRef,useState} from 'react';
+import {ArrowDownToLine,ChevronDown,ChevronUp,Download,Maximize,Minimize,Search} from 'lucide-react';
+import {Terminal} from '@xterm/xterm';
+import {FitAddon} from '@xterm/addon-fit';
+import {SearchAddon} from '@xterm/addon-search';
+import '@xterm/xterm/css/xterm.css';
 import {CopyButton,downloadText} from './RepositoryUI';
 
 export interface WorkflowLogConsoleProps {
@@ -12,76 +15,68 @@ export interface WorkflowLogConsoleProps {
  hasMore?:boolean;
  refreshing?:boolean;
 }
-const windowSize=2000;
-type Style={color?:number;bold:boolean};
-type Line={text:string;style:Style};
-const escape=/\x1b\[[0-?]*[ -/]*[@-~]/g;
-function updateStyle(style:Style,sequence:string):Style {
- const codes=sequence.slice(2,-1).split(';').map(value=>Number(value||0));let next={...style};
- for(let i=0;i<codes.length;i++) {
-  const code=codes[i]!;
-  if(code===0)next={bold:false};else if(code===1)next.bold=true;else if(code===22)next.bold=false;else if(code===39)delete next.color;
-  else if(code>=30&&code<=37||code>=90&&code<=97)next.color=code;
-  else if(code===38||code===48)i+=codes[i+1]===2?4:codes[i+1]===5?2:0;
- }
- return next;
-}
-function model(text:string) {
- // OSC links/titles and cursor/control instructions never become HTML, links,
- // DOM attributes or terminal commands. SGR's closed colors are presentational.
- const safe=text.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\|$)/g,'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/[\x00-\x08\x0b-\x1a\x1c-\x1f\x7f]/g,'');
- let style:Style={bold:false};const lines:Line[]=[];
- for(const raw of safe.split('\n')) {
-  const line={text:raw,style:{...style}};
-  for(const match of raw.matchAll(escape))if(match[0].endsWith('m'))style=updateStyle(style,match[0]);
-  lines.push(line);
- }
- const plain=lines.map(line=>line.text.replace(escape,'').replace(/\x1b[^\n]*/g,'')).join('\n');
- return {lines,plain};
-}
+const scrollback=10000;
+const decorations={matchBackground:'#514320',activeMatchBackground:'#755d25',matchOverviewRuler:'#efd37b',activeMatchColorOverviewRuler:'#fff0b0'};
 
-// No queries or persistence: the parent supplies only validated, currently
-// authorized bytes and actual live-transport state. Scope change remounts every
-// private control; background fetching alone must not erase the observation.
+// The parent supplies validated authorized bytes. A scope/authority change
+// disposes the terminal and its pending writes; refresh alone preserves it.
 export function WorkflowLogConsole(props:WorkflowLogConsoleProps) {
  return props.authorized?<Console key={props.scopeKey} {...props}/>:null;
 }
 function Console({text,status,fileName,hasMore=false,refreshing=false}:WorkflowLogConsoleProps) {
- const data=useMemo(()=>model(text),[text]);const viewport=useRef<HTMLPreElement>(null),id=useId();
- const [follow,setFollow]=useState(true),[end,setEnd]=useState(data.lines.length),[search,setSearch]=useState(''),[searchOpen,setSearchOpen]=useState(false);
- const stop=()=>{if(follow){setEnd(data.lines.length);setFollow(false);}};
- const windowEnd=follow?data.lines.length:Math.min(end,data.lines.length),start=Math.max(0,windowEnd-windowSize);
- const needle=search.toLowerCase();
- const matches=useMemo(()=>needle?data.plain.toLowerCase().split(needle).length-1:0,[data.plain,needle]);
- const rows=useMemo(()=>{
-  let spans=0,marks=0;
-  function highlighted(value:string):ReactNode {
-   if(!needle||marks>=200)return value;
-   const parts:ReactNode[]=[];let cursor=0;const lower=value.toLowerCase();
-   while(marks<200){const found=lower.indexOf(needle,cursor);if(found<0)break;parts.push(value.slice(cursor,found),<mark key={found}>{value.slice(found,found+search.length)}</mark>);cursor=found+search.length;marks++;}
-   parts.push(value.slice(cursor));return parts;
-  }
-  return data.lines.slice(start,windowEnd).map((line,index)=>{
-   let cursor=0,style={...line.style};const parts:ReactNode[]=[];
-   function part(value:string){if(!value)return;const className=[style.color?`execution-ansi-${style.color}`:'',style.bold?'execution-ansi-bold':''].filter(Boolean).join(' ');parts.push(<span key={parts.length} className={className||undefined}>{highlighted(value)}</span>);}
-   for(const match of line.text.matchAll(escape)){
-    if(++spans>4000)break;
-    part(line.text.slice(cursor,match.index));cursor=match.index+match[0].length;
-    if(match[0].endsWith('m'))style=updateStyle(style,match[0]);
+ const wrapper=useRef<HTMLDivElement>(null),host=useRef<HTMLDivElement>(null),terminal=useRef<Terminal|null>(null),finder=useRef<SearchAddon|null>(null),lastText=useRef(''),followRef=useRef(true),searchRef=useRef(''),alive=useRef(false);
+ const id=useId();const [follow,setFollow]=useState(true),[search,setSearch]=useState(''),[searchOpen,setSearchOpen]=useState(false),[result,setResult]=useState({resultIndex:-1,resultCount:0}),[fullscreen,setFullscreen]=useState(false),[notice,setNotice]=useState('');
+ function following(value:boolean){followRef.current=value;setFollow(value);}
+ useLayoutEffect(()=>{
+  alive.current=true;
+  const style=getComputedStyle(host.current!);
+  const color=(name:string,fallback:string)=>style.getPropertyValue('--terminal-'+name).trim()||fallback;
+  const term=new Terminal({disableStdin:true,convertEol:true,scrollback,fontFamily:'"Geist Mono", monospace',fontSize:14,lineHeight:1.3,cursorBlink:false,screenReaderMode:true,scrollOnUserInput:false,allowProposedApi:true,
+   theme:{background:color('bg','#080808'),foreground:color('fg','#ececec'),cursor:color('fg','#ececec'),selectionBackground:color('selection','#454545'),selectionForeground:color('fg','#ececec'),black:color('black','#808080'),red:color('red','#ff9b9b'),green:color('green','#8cdb9f'),yellow:color('yellow','#efd37b'),blue:color('blue','#99caff'),magenta:color('magenta','#d6a9ed'),cyan:color('cyan','#8cddd8'),white:color('white','#ececec'),brightBlack:color('bright-black','#a3a3a3'),brightRed:color('bright-red','#ffb5b5'),brightGreen:color('bright-green','#a4e5b4'),brightYellow:color('bright-yellow','#f7e39c'),brightBlue:color('bright-blue','#b4d9ff'),brightMagenta:color('bright-magenta','#e4c4f3'),brightCyan:color('bright-cyan','#a5e9e5'),brightWhite:color('bright-white','#ffffff')},
+   linkHandler:{activate:()=>{},hover:()=>{}}});
+  // Swallow browser-affecting OSC handlers. Native VT parsing retains partial
+  // escape sequences across writes; no ad-hoc ANSI sanitizer or link addon.
+  const guards=[0,1,2,8,52].map(code=>term.parser.registerOscHandler(code,()=>true));
+  const fit=new FitAddon(),addon=new SearchAddon({highlightLimit:200});term.loadAddon(fit);term.loadAddon(addon);terminal.current=term;finder.current=addon;
+  const results=addon.onDidChangeResults(value=>{if(alive.current)setResult(value);});
+  const scrolling=term.onScroll(y=>{if(followRef.current&&y<term.buffer.active.baseY)following(false);});
+  term.attachCustomKeyEventHandler(event=>{
+   if(event.type==='keydown'&&['PageUp','PageDown','Home','End','ArrowUp','ArrowDown'].includes(event.key)){
+    following(false);if(event.key==='Home')term.scrollToTop();else if(event.key==='End')term.scrollToBottom();else if(event.key.startsWith('Page'))term.scrollPages(event.key==='PageUp'?-1:1);else term.scrollLines(event.key==='ArrowUp'?-1:1);event.preventDefault();return false;
    }
-   part(line.text.slice(cursor).replace(escape,'').replace(/\x1b[^\n]*/g,''));
-   return <Fragment key={start+index}><span className="execution-console-line" data-line={start+index+1}>{parts}</span>{start+index<data.lines.length-1?'\n':null}</Fragment>;
+   return true;
   });
- },[data,start,windowEnd,needle,search]);
- useLayoutEffect(()=>{if(follow&&viewport.current)viewport.current.scrollTop=viewport.current.scrollHeight;},[follow,text]);
+  const resize=()=>{if(alive.current&&terminal.current===term&&term.element&&host.current?.clientWidth&&host.current.clientHeight){fit.fit();if(followRef.current)term.scrollToBottom();}};
+  const observer=new ResizeObserver(resize);observer.observe(host.current!);
+  // Measure with the actual font before opening; stale async font completions
+  // cannot open a disposed terminal after an authority/scope transition.
+  void document.fonts.load('14px "Geist Mono"').catch(()=>[]).then(()=>document.fonts.ready).then(()=>{if(!alive.current||terminal.current!==term)return;term.open(host.current!);term.textarea?.setAttribute('aria-label','Read-only workflow terminal');term.textarea?.setAttribute('readonly','');resize();if(searchRef.current)addon.findNext(searchRef.current,{incremental:true,decorations});});
+  const changed=()=>{if(alive.current){setFullscreen(document.fullscreenElement===wrapper.current);resize();}};document.addEventListener('fullscreenchange',changed);
+  return()=>{alive.current=false;observer.disconnect();document.removeEventListener('fullscreenchange',changed);scrolling.dispose();results.dispose();guards.forEach(guard=>guard.dispose());finder.current=null;terminal.current=null;lastText.current='';term.dispose();};
+ },[]);
+ useLayoutEffect(()=>{
+  const term=terminal.current;if(!term)return;
+  const previous=lastText.current,append=text.startsWith(previous),chunk=append?text.slice(previous.length):text;
+  if(append&&!chunk)return;
+  const position=term.buffer.active.viewportY;
+  if(!append){term.reset();finder.current?.clearDecorations();}
+  lastText.current=text;
+  term.write(chunk,()=>{
+   if(!alive.current||terminal.current!==term)return;
+   if(followRef.current)term.scrollToBottom();else term.scrollToLine(position);
+   if(term.element&&searchRef.current)finder.current?.findNext(searchRef.current,{incremental:true,decorations});
+  });
+ },[text]);
+ function find(value:string,previous=false){searchRef.current=value;setSearch(value);if(!value){finder.current?.clearDecorations();terminal.current?.clearSelection();setResult({resultIndex:-1,resultCount:0});return;}following(false);if(!terminal.current?.element)return;if(previous)finder.current?.findPrevious(value,{decorations});else finder.current?.findNext(value,{decorations});}
+ async function expand(){setNotice('');try{if(document.fullscreenElement===wrapper.current)await document.exitFullscreen();else if(wrapper.current?.requestFullscreen)await wrapper.current.requestFullscreen();else setNotice('Fullscreen is unavailable in this browser.');}catch{if(alive.current)setNotice('Fullscreen is unavailable in this browser.');}}
  const name=fileName.replace(/[^A-Za-z0-9._-]/g,'-').slice(0,180)||'golf-run.log';
- return <div className="execution-console">
+ return <div className="execution-console" ref={wrapper}>
   <div className="execution-console-toolbar">
-   <div className="search-input" data-open={searchOpen} id={id+'-controls'}><label className="sr-only" htmlFor={id}>Search loaded run log</label><Search size={16} aria-hidden="true"/><input id={id} type="search" placeholder="Search loaded log…" value={search} onChange={event=>setSearch(event.target.value)} maxLength={256}/></div>
-   <div className="row-actions"><button type="button" className="icon-button workflow-log-search-toggle" aria-label="Search loaded run log" title="Search loaded run log" aria-expanded={searchOpen} aria-controls={id+'-controls'} onClick={()=>setSearchOpen(value=>!value)}><Search size={16}/></button><CopyButton text={data.plain} label="Copy loaded log"/><button type="button" className="icon-button" aria-label="Download loaded log" title="Download loaded log" disabled={!text} onClick={()=>downloadText(data.plain,name)}><Download size={16}/></button><button type="button" className="button secondary" aria-label="Follow output" title="Follow output" aria-pressed={follow} onClick={()=>{setEnd(data.lines.length);setFollow(value=>!value);}}><ArrowDownToLine size={16}/>Follow</button></div>
+   <div className="search-input" data-open={searchOpen} id={id+'-controls'}><label className="sr-only" htmlFor={id}>Search terminal scrollback</label><Search size={16} aria-hidden="true"/><input id={id} type="search" placeholder="Search terminal scrollback…" value={search} onChange={event=>find(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();find(search,event.shiftKey);}}} maxLength={256}/></div>
+   <div className="row-actions"><button type="button" className="icon-button workflow-log-search-toggle" aria-label="Search terminal scrollback" title="Search terminal scrollback" aria-expanded={searchOpen} aria-controls={id+'-controls'} onClick={()=>setSearchOpen(value=>!value)}><Search size={16}/></button>{search?<><button type="button" className="icon-button" aria-label="Previous log match" title="Previous log match" disabled={!search} onClick={()=>find(search,true)}><ChevronUp size={16}/></button><button type="button" className="icon-button" aria-label="Next log match" title="Next log match" disabled={!search} onClick={()=>find(search)}><ChevronDown size={16}/></button></>:null}<CopyButton text={text} label="Copy loaded log"/><button type="button" className="icon-button" aria-label="Download loaded log" title="Download loaded log" disabled={!text} onClick={()=>downloadText(text,name)}><Download size={16}/></button><button type="button" className="icon-button" aria-label={fullscreen?'Exit terminal fullscreen':'Expand terminal'} title={fullscreen?'Exit terminal fullscreen':'Expand terminal'} onClick={()=>void expand()}>{fullscreen?<Minimize size={16}/>:<Maximize size={16}/>}</button><button type="button" className="button secondary" aria-label="Follow output" title="Follow output" aria-pressed={follow} onClick={()=>{const value=!followRef.current;following(value);if(value)terminal.current?.scrollToBottom();}}><ArrowDownToLine size={16}/>Follow</button></div>
   </div>
-  <div className="execution-console-status" role="status"><span>{status==='streaming'?'Live output':status==='reconnecting'?'Reconnecting to live output':'Loaded output'}{refreshing?' · Refreshing':''}</span><span>{search?`${matches} match${matches===1?'':'es'} · up to 200 visible highlights`:hasMore?'More output available':''}</span></div>
-  {data.lines.length>windowSize?<div className="execution-console-window"><span>Lines {start+1}–{windowEnd} of {data.lines.length} loaded</span><button type="button" className="text-button" disabled={start===0} onClick={()=>{setEnd(start);setFollow(false);}}><ArrowUp size={14}/>Earlier lines</button><button type="button" className="text-button" disabled={windowEnd>=data.lines.length} onClick={()=>setEnd(Math.min(data.lines.length,windowEnd+windowSize))}>Newer lines</button></div>:null}
-  <pre className="execution-log execution-console-viewport" aria-label="Workflow run log" tabIndex={0} ref={viewport} onWheel={event=>{if(event.deltaY<0)stop();}} onKeyDown={event=>{if(['ArrowUp','PageUp','Home'].includes(event.key))stop();}} onScroll={event=>{const node=event.currentTarget;if(follow&&node.scrollHeight-node.scrollTop-node.clientHeight>32)stop();}}>{text?rows:<span className="execution-console-empty">No log output yet.</span>}</pre>
+  <div className="execution-console-status" role="status"><span>{status==='streaming'?'Live output':status==='reconnecting'?'Reconnecting to live output':'Loaded output'}{refreshing?' · Refreshing':''}</span><span>{notice|| (search?`${result.resultCount} match${result.resultCount===1?'':'es'} in terminal scrollback${result.resultIndex>=0?' · '+(result.resultIndex+1):''}`:hasMore?'More output available':'Read-only terminal')}</span></div>
+  <div className="execution-terminal-host" aria-label="Workflow run log" ref={host} onWheel={event=>{if(event.deltaY<0)following(false);}}/>
+  <div className="execution-console-status"><span>{text?'Terminal retains up to 10,000 scrollback rows.':'No log output yet.'}</span><span>Copy/download include all loaded bytes.</span></div>
  </div>;
 }
