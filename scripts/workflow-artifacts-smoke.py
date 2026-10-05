@@ -288,6 +288,10 @@ def main():
                 current=rpc('owner','WorkflowRunService/GetWorkflowRun',{'runId':run['id']})['run']
                 return current if current['state'] not in ('WORKFLOW_RUN_STATE_QUEUED','WORKFLOW_RUN_STATE_RUNNING') else None
             observed=helpers.until(terminal,timeout=240)
+            record(terminalRun={k:observed[k] for k in ('id','attemptId','state','engineCatalog','jobs','failureCode') if k in observed}, retainedArtifactCount=int(metadata('SELECT count(*) FROM golf_workflow_artifacts')))
+            if observed['state']!='WORKFLOW_RUN_STATE_SUCCEEDED':
+                helpers.private_write(output/'private-runner-failure.log',redact(command('logs','--no-color','--tail','80','runner')))
+                helpers.private_write(output/'private-run-output.json',redact(json.dumps(rpc('owner','WorkflowRunService/GetWorkflowRunLogs',{'runId':observed['id']}))))
             assert observed['state']=='WORKFLOW_RUN_STATE_SUCCEEDED' and observed['engineCatalog']==CATALOG and not observed.get('inputContract') and not observed.get('executionBindingId')
             assert all(observed[k]==run[k] for k in ('id','repositoryId','ownerId','commitId','workflowPath','workflowBlobId','sourceSha256')) and re.fullmatch('[a-f0-9]{32}',observed['attemptId'])
             log=act.read_logs(lambda method,payload:rpc('owner',method,payload),observed)
