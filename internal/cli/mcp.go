@@ -37,7 +37,7 @@ var mcpReads = []mcpRead{
 	{"golf_repo_tags", "List tags with exact current repository identity and separate tag object/peeled commit IDs.", "repo tags", []string{"repository"}, []string{"page", "limit"}},
 	{"golf_repo_releases", "List current authorized native releases with assets; page sizes up to50. Does not publish or download attachments.", "repo releases", []string{"repository"}, []string{"page", "limit"}},
 	{"golf_repo_release", "Read one exact current authorized release after resolving repository identity.", "repo release", []string{"repository", "release_id"}, nil},
-	{"golf_repo_labels", "Read current repository label inventory; does not administer labels.", "repo labels", []string{"repository"}, []string{"page", "limit"}},
+	{"golf_repo_labels", "Read current repository label inventory; does not administer labels.", "repo labels", []string{"repository"}, []string{"page", "limit", "include_organization_labels"}},
 	{"golf_repo_milestones", "Read current repository milestones with explicit state and pagination; does not administer milestones.", "repo milestones", []string{"repository"}, []string{"state", "page", "limit"}},
 	{"golf_repo_assignees", "Read bounded repository assignee candidates. Discovery is not eligibility; saves require separate native checks. No mutation.", "repo assignees", []string{"repository"}, nil},
 	{"golf_repo_commits", "List native commit history; optional path requires a full immutable ref and returns exact path history pages.", "repo commits", []string{"repository"}, []string{"ref", "path", "page", "limit"}},
@@ -76,6 +76,8 @@ func (tool mcpRead) schema() map[string]any {
 	for _, key := range append(append([]string{}, tool.positions...), tool.flags...) {
 		field := map[string]any{"type": "string", "maxLength": 2048}
 		switch key {
+		case "include_organization_labels":
+			field = map[string]any{"type": "boolean"}
 		case "page", "limit", "number":
 			maximum := int64(100)
 			if key == "page" {
@@ -145,7 +147,13 @@ func (tool mcpRead) parse(raw json.RawMessage) (command, error) {
 		if _, ok := allowed[key]; !ok {
 			return command{}, invalid
 		}
-		if key == "page" || key == "limit" || key == "number" {
+		if key == "include_organization_labels" {
+			var value bool
+			if string(raw) == "null" || json.Unmarshal(raw, &value) != nil {
+				return command{}, invalid
+			}
+			values[key] = strconv.FormatBool(value)
+		} else if key == "page" || key == "limit" || key == "number" {
 			var number uint32
 			if json.Unmarshal(raw, &number) != nil || number == 0 {
 				return command{}, invalid
@@ -187,6 +195,10 @@ func (tool mcpRead) parse(raw json.RawMessage) (command, error) {
 	}
 	for _, key := range tool.flags {
 		if value, ok := values[key]; ok {
+			if key == "include_organization_labels" {
+				args = append(args, "--include-organization="+value)
+				continue
+			}
 			flag := strings.ReplaceAll(key, "_", "-")
 			if tool.command == "pr review-comments" || tool.command == "pr diff" {
 				flag = map[string]string{"repository_id": "repo-id", "pull_request_id": "pull-id", "review_commit_id": "review-commit", "base_commit_id": "base", "head_commit_id": "head"}[key]

@@ -122,3 +122,21 @@ func TestParityReadCommandsUseAuthorizedTypedContracts(t *testing.T) {
 		}
 	}
 }
+
+func TestInheritedLabelInventoryFlag(t *testing.T) {
+	c, e := parseCommand([]string{"repo", "labels", "alice/repo", "--include-organization"})
+	if e != nil || !c.includeOrganizationLabels {
+		t.Fatal("missing inherited inventory flag", e)
+	}
+	for _, tool := range mcpReads {
+		if tool.name == "golf_repo_labels" {
+			c, e = tool.parse(json.RawMessage(`{"repository":"alice/repo","include_organization_labels":true}`))
+			if e != nil || !c.includeOrganizationLabels {
+				t.Fatal("MCP inherited flag lost", e)
+			}
+			if _, e = tool.parse(json.RawMessage(`{"repository":"alice/repo","include_organization_labels":"true"}`)); e == nil {
+				t.Fatal("nonboolean flag accepted")
+			}
+		}
+	}
+}

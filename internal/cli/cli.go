@@ -48,7 +48,7 @@ Usage: golf [--url ORIGIN] [--token-stdin | --api-token-stdin] COMMAND
   repo tags OWNER/REPO [--page N] [--limit N]
   repo releases OWNER/REPO [--page N] [--limit N]
   repo release OWNER/REPO RELEASE_ID
-  repo labels OWNER/REPO [--page N] [--limit N]
+  repo labels OWNER/REPO [--include-organization] [--page N] [--limit N]
   repo milestones OWNER/REPO [--state open|closed|all] [--page N] [--limit N]
   repo assignees OWNER/REPO
   repo commits OWNER/REPO [--ref REF] [--path PATH] [--page N] [--limit N]
@@ -260,33 +260,34 @@ var commitID = regexp.MustCompile(`^(?:[a-f0-9]{40}|[a-f0-9]{64})$`)
 var creationKey = regexp.MustCompile(`^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$`)
 
 type command struct {
-	writeInput      string
-	writeRequest    proto.Message
-	name            string
-	organization    string
-	teamID          string
-	repositoryID    string
-	pullID          string
-	baseCommit      string
-	headCommit      string
-	reviewID        string
-	reviewCommit    string
-	repository      *golfv1.RepositoryKey
-	page            *golfv1.PageRequest
-	ref             string
-	refKind         string
-	commitID        string
-	creationKey     string
-	path            string
-	state           golfv1.IssueState
-	discussionQuery *golfv1.DiscussionQuery
-	sort            string
-	baseBranch      string
-	releaseID       string
-	number          uint32
-	auditLimit      uint32
-	beforeID        string
-	snapshotID      string
+	includeOrganizationLabels bool
+	writeInput                string
+	writeRequest              proto.Message
+	name                      string
+	organization              string
+	teamID                    string
+	repositoryID              string
+	pullID                    string
+	baseCommit                string
+	headCommit                string
+	reviewID                  string
+	reviewCommit              string
+	repository                *golfv1.RepositoryKey
+	page                      *golfv1.PageRequest
+	ref                       string
+	refKind                   string
+	commitID                  string
+	creationKey               string
+	path                      string
+	state                     golfv1.IssueState
+	discussionQuery           *golfv1.DiscussionQuery
+	sort                      string
+	baseBranch                string
+	releaseID                 string
+	number                    uint32
+	auditLimit                uint32
+	beforeID                  string
+	snapshotID                string
 }
 
 func parseCommand(args []string) (command, error) {
@@ -405,6 +406,9 @@ func parseCommand(args []string) (command, error) {
 			flags.StringVar(&result.baseCommit, "base", "", "full selected base tip")
 			flags.StringVar(&result.headCommit, "head", "", "full selected head")
 		}
+	}
+	if result.name == "repo labels" {
+		flags.BoolVar(&result.includeOrganizationLabels, "include-organization", false, "include inherited organization labels")
 	}
 	if result.name == "repo milestones" {
 		flags.StringVar(&state, "state", "open", "open, closed or all")
@@ -755,7 +759,7 @@ func (command command) read(ctx context.Context, client golfv1connect.Repository
 			}
 			return response.Msg, nil
 		case "repo labels":
-			response, err := client.ListRepositoryLabels(ctx, connect.NewRequest(&golfv1.ListRepositoryLabelsRequest{Repository: canonical, RepositoryId: id, Page: command.page}))
+			response, err := client.ListRepositoryLabels(ctx, connect.NewRequest(&golfv1.ListRepositoryLabelsRequest{Repository: canonical, RepositoryId: id, Page: command.page, IncludeOrganizationLabels: command.includeOrganizationLabels}))
 			if err != nil {
 				return nil, err
 			}
