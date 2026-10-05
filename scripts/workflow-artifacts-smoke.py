@@ -44,6 +44,7 @@ CAPABILITY = 'golf.workflow.shell.artifacts.v1'
 IMAGE = act.IMAGE
 DIND = 'docker:29.8.1-dind@sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0'
 NATIVE, PG = 'gitea/gitea:1.27.3-rootless', 'postgres:18.4-alpine3.24'
+RUSTFS = 'rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff'
 PATH = '.gitlab-ci.yml'
 PROJECT_PREFIX = 'golf-rules49-'
 EXPECTED = {'dist/index.html': b'<html>owned artifact</html>\n', 'dist/report.txt': b'owned build report\n'}
@@ -87,6 +88,26 @@ def archive_receipt(data,row):
             assert item.size==len(EXPECTED[item.name]) and archive.extractfile(item).read()==EXPECTED[item.name]
     return {'archiveSha256':row['archiveSha256'],'fileCount':2,'fileBytes':row['fileBytes'],'exactOwnedContent':True,'attachmentNotPreview':True}
 
+def object_receipt(row, run, artifact):
+    # This is an independent SQL read of the original immutable address, not
+    # current active infrastructure or an assertion about loaded row totals.
+    assert str(uuid.UUID(run['id'])) == run['id'] and re.fullmatch('[a-f0-9]{32}',run['attemptId'])
+    expected_key='ci-artifacts/'+run['id']+'/'+run['attemptId']+'/'+artifact['archiveSha256']+'.tar'
+    address={'Endpoint':'http://rustfs:9000','Bucket':'golf-ci','Region':'us-east-1','Prefix':'golf','PathStyle':True}
+    fingerprint=hashlib.sha256(json.dumps(address,separators=(',',':')).encode()).hexdigest()
+    assert row['sourceStorage']==row['artifactStorage']=='env_s3' and row['sourceAbsent'] is True and row['archiveAbsent'] is True
+    assert row['sourceProfileAbsent'] is True and row['artifactProfileAbsent'] is True
+    assert row['sourceKey']=='ci-sources/'+run['sourceSha256']+'.tar' and row['objectKey']==expected_key
+    assert row['sourceFingerprint']==row['objectFingerprint']==fingerprint
+    assert row['archiveSha256']==artifact['archiveSha256'] and str(row['archiveBytes'])==artifact['archiveBytes']
+    return 'golf/'+expected_key
+
+def signed_get_config(endpoint,key,access,secret):
+    assert re.fullmatch(r'http://127\.0\.0\.1:[1-9][0-9]{0,4}',endpoint) and 1<=int(endpoint.rsplit(':',1)[1])<=65535
+    assert re.fullmatch('[a-f0-9]{48}',access) and re.fullmatch('[a-f0-9]{64}',secret)
+    assert re.fullmatch(r'golf/ci-artifacts/[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}/[a-f0-9]{32}/[a-f0-9]{64}\.tar',key)
+    return 'url = "'+endpoint+'/golf-ci/'+key+'"\nuser = "'+access+':'+secret+'"\n'
+
 def self_check():
     assert native_proxy.PROJECT.fullmatch(PROJECT_PREFIX+'0123456789')
     source=source_files()[PATH];assert b'artifacts:' in source and b'paths: [dist]' in source and IMAGE.encode() in source
@@ -101,6 +122,19 @@ def self_check():
             item=tarfile.TarInfo(name);item.mode=0o444;item.size=len(data);archive.addfile(item,io.BytesIO(data))
     data=stream.getvalue();row={'runId':run['id'],'attemptId':run['attemptId'],'repositoryId':run['repositoryId'],'ownerId':run['ownerId'],'commitId':run['commitId'],'workflowPath':PATH,'blobId':run['workflowBlobId'],'sourceSha256':run['sourceSha256'],'archiveSha256':hashlib.sha256(data).hexdigest(),'fileCount':2,'fileBytes':str(sum(map(len,EXPECTED.values()))),'archiveBytes':str(len(data)),'createdAt':'2026-10-04T00:00:00Z','downloadPath':'/api/workflow-runs/'+run['id']+'/artifact'}
     artifact_receipt(row,run);archive_receipt(data,row)
+    address={'Endpoint':'http://rustfs:9000','Bucket':'golf-ci','Region':'us-east-1','Prefix':'golf','PathStyle':True}
+    fp=hashlib.sha256(json.dumps(address,separators=(',',':')).encode()).hexdigest()
+    record={'sourceStorage':'env_s3','artifactStorage':'env_s3','sourceAbsent':True,'archiveAbsent':True,'sourceProfileAbsent':True,'artifactProfileAbsent':True,'sourceKey':'ci-sources/'+run['sourceSha256']+'.tar','objectKey':'ci-artifacts/'+run['id']+'/'+run['attemptId']+'/'+row['archiveSha256']+'.tar','sourceFingerprint':fp,'objectFingerprint':fp,'archiveSha256':row['archiveSha256'],'archiveBytes':len(data)}
+    key=object_receipt(record,run,row);config=signed_get_config('http://127.0.0.1:12345',key,'a'*48,'b'*64)
+    assert 'golf-ci/golf/ci-artifacts/' in config and ('a'*48+':'+ 'b'*64) in config
+    for change in ({'archiveAbsent':False},{'sourceStorage':'postgres'},{'objectKey':'ci-sources/'+row['archiveSha256']+'.tar'},{'objectFingerprint':'0'*64},{'archiveBytes':1}):
+        try:object_receipt(record|change,run,row)
+        except AssertionError:pass
+        else:raise AssertionError('Unbound artifact object admitted')
+    for endpoint,badkey in [('http://outside.invalid:9000',key),('http://127.0.0.1:9000',key.replace('golf/','')),('http://127.0.0.1:9000',key+'/../other')]:
+        try:signed_get_config(endpoint,badkey,'a'*48,'b'*64)
+        except AssertionError:pass
+        else:raise AssertionError('Unowned object read admitted')
     for field in ('attemptId','commitId','sourceSha256','downloadPath'):
         try:artifact_receipt(row|{field:'wrong'},run)
         except AssertionError:pass
@@ -111,7 +145,7 @@ def self_check():
     try:safe_json({'private':'PRIVATE_SENTINEL'},['PRIVATE_SENTINEL'])
     except AssertionError:pass
     else:raise AssertionError('Private value admitted')
-    print('PASS: pure artifact fixture/receipt/archive/privacy checks; no resources.')
+    print('PASS: pure artifact fixture/receipt/archive/private-object guards; no resources.')
 
 def main():
     global REPORT_FAILURE
@@ -122,6 +156,7 @@ def main():
     parser.add_argument('--stack-root',type=Path,default=ROOT)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--seed-wait-seconds',type=int,default=300)
+    parser.add_argument('--rustfs',action='store_true',help='Fresh private pinned RustFS source/artifact storage; PostgreSQL recipe unchanged by default')
     parser.add_argument('--ui',action='store_true',help='Four actual read-only run/attachment captures (dark/light1440/390)')
 
     args=parser.parse_args();stack=args.stack_root.resolve();output=args.output.resolve()
@@ -131,6 +166,9 @@ def main():
     output.mkdir(parents=True,mode=0o700);output.chmod(0o700)
     environment={k:v for k,v in os.environ.items() if not k.startswith(('GOLF_','GITEA_','POSTGRES_','COMPOSE_','OTEL_','AWS_','RUSTFS_')) and k!='DATABASE_URL'}
     forbidden=[];manifest={'complete':False,'passed':False,'proofKind':'gitlab-shell-artifacts062','sourceRevision':args.source_revision,'limitations':['One secretless successful legacy GitLab shell job only; no Actions artifact service, preview or deployment.','PG bounded attachment profile; no object-storage scale or latest-schema recovery proof.','Current native before/after read authority is not an atomic native CAS.']}
+    if args.rustfs:
+        manifest['proofKind']='gitlab-shell-artifacts064-rustfs'
+        manifest['limitations'][1]='One private operator env_s3 RustFS profile; retained20/repository and200/instance caps; no profile activation, scale or latest-schema recovery proof.'
     def redact(text):
         for value in forbidden:
             if value:text=text.replace(value,'[redacted]')
@@ -157,9 +195,11 @@ def main():
         template='{"Id":{{json .Id}},"Image":{{json .Image}},"State":{"Status":{{json .State.Status}},"Running":{{json .State.Running}},"StartedAt":{{json .State.StartedAt}}},"RestartCount":{{json .RestartCount}}}'
         return notifications.filtered_foreign([json.loads(line) for line in execute('docker','inspect','--format',template,*ids).splitlines()])
     stage('cached immutable images/binaries and two-GiB reserve')
+    if args.rustfs:assert '--aws-sigv4' in execute('curl','--disable','--help','all')
     images={}
-    for role,ref in [('golf',args.image),('runner',args.runner_image),('native',NATIVE),('postgres',PG),('daemon',DIND)]:
+    for role,ref in [('golf',args.image),('runner',args.runner_image),('native',NATIVE),('postgres',PG),('daemon',DIND)]+([('rustfs',RUSTFS)] if args.rustfs else []):
         row=json.loads(execute('docker','image','inspect',ref))[0];assert re.fullmatch('sha256:[a-f0-9]{64}',row['Id']);images[role]=row['Id']
+        if role=='rustfs':assert RUSTFS.split('@')[0].split(':')[0]+'@'+RUSTFS.split('@')[1] in row.get('RepoDigests',[])
         if role in ('golf','runner'):assert ref==row['Id'] and (row['Config'].get('Labels') or {}).get('org.opencontainers.image.revision')==args.source_revision
     binaries={}
     for role,binary,digest in [('golf','golf',args.expected_core_sha256),('runner','golf-runner',args.expected_runner_sha256),('golf','golf-actions-engine',args.expected_engine_sha256),('runner','golf-actions-engine',args.expected_engine_sha256)]:
@@ -168,7 +208,7 @@ def main():
     assert int(execute('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','/bin/df',images['golf'],'-Pk','/').splitlines()[-1].split()[3])>=2*1024*1024
     binary,binary_sha=rules.proxy_binary_receipt(args.proxy_binary)
     before=snapshot();helpers.private_write(output/'foreign-before.json',json.dumps(before,indent=2))
-    project=PROJECT_PREFIX+secrets.token_hex(5);ports=helpers.free_ports(4)
+    project=PROJECT_PREFIX+secrets.token_hex(5);ports=helpers.free_ports(5 if args.rustfs else 4)
     for argv in (('ps','-aq'),('volume','ls','-q'),('network','ls','-q')):assert not execute('docker',*argv,'--filter','label=com.docker.compose.project='+project)
     previous=smoke.GOLF,smoke.GITEA;smoke.GOLF=f'http://127.0.0.1:{ports[0]}';smoke.GITEA=f'http://127.0.0.1:{ports[1]}';secure=f'https://127.0.0.1:{ports[2]}'
     record(images=images,binarySha256=binaries,project=project,helperRevision=execute('git','rev-parse','HEAD'),proxyBinarySha256=binary_sha)
@@ -186,8 +226,13 @@ def main():
         values={k:secrets.token_hex(24) for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD')}
         values.update(GOLF_ENCRYPTION_KEY=base64.b64encode(secrets.token_bytes(32)).decode(),GOLF_PUBLIC_URL=smoke.GOLF,GOLF_RUNNER_KEY=worker_key,GOLF_RUNNER_KEYS=json.dumps({'local-docker':worker_key}),GOLF_RUNNER_IMAGES=json.dumps({'linux':IMAGE}),GOLF_RUNNER_JOB_IMAGE=IMAGE,GOLF_RUNNER_APPROVED_IMAGES=json.dumps([IMAGE]),GOLF_INTERNAL_TLS_LISTEN_ADDR=':8443',GOLF_INTERNAL_TLS_CERT_FILE=str(cert),GOLF_INTERNAL_TLS_KEY_FILE=str(key),GOLF_RUNNER_TLS_CA_FILE=str(ca),GOLF_RUNNER_TLS_URL='https://127.0.0.1:8443')
         forbidden.extend(values[k] for k in ('POSTGRES_PASSWORD','GOLF_DB_PASSWORD','GITEA_DB_PASSWORD','GOLF_ENCRYPTION_KEY','GOLF_RUNNER_KEY'));forbidden.append(environment['NATIVE_QUALIFICATION_NONCE'])
+        if args.rustfs:
+            values.update(RUSTFS_ACCESS_KEY=secrets.token_hex(24),RUSTFS_SECRET_KEY=secrets.token_hex(32))
+            forbidden.extend([values['RUSTFS_ACCESS_KEY'],values['RUSTFS_SECRET_KEY']])
         helpers.private_write(directory/'proof.env',''.join(k+"='"+v+"'\n" for k,v in values.items()))
         overlay={'services':{'golf':{'image':images['golf'],'pull_policy':'never','mem_limit':'384m','environment':{'GITEA_URL':'http://native-qualification-proxy:8081','GOLF_ACTIONS_ENGINE_CATALOG':act.CATALOG},'depends_on':{native_proxy.SERVICE_NAME:{'condition':'service_started'}}},'gitea':{'image':images['native'],'pull_policy':'never','mem_limit':'512m','environment':{'GITEA__server__ROOT_URL':smoke.GITEA+'/','GITEA__server__DISABLE_SSH':'true','GITEA__server__START_SSH_SERVER':'false','GITEA__actions__ENABLED':'false'}},'postgres':{'image':images['postgres'],'pull_policy':'never','mem_limit':'768m','command':['postgres','-c','max_wal_size=64MB','-c','min_wal_size=32MB','-c','checkpoint_timeout=30s']},'runner':{'image':images['runner'],'pull_policy':'never'},'runner-daemon':{'image':images['daemon'],'pull_policy':'never','mem_limit':'1024m'},'runner-image-init':{'entrypoint':['/bin/true'],'command':[],'pull_policy':'never'},'runner-actions-image-init':{'entrypoint':['/bin/true'],'command':[],'pull_policy':'never'},native_proxy.SERVICE_NAME:proxy.compose_service(images['golf'],binary)}}
+        if args.rustfs:
+            overlay['services']['rustfs']={'image':images['rustfs'],'pull_policy':'never','mem_limit':'512m','cpus':2,'pids_limit':256,'ports':['127.0.0.1:'+str(ports[4])+':9000']}
         helpers.private_write(directory/'services.json',json.dumps(overlay))
         helpers.private_write(directory/'ports.yaml',f'''services:
   golf:
@@ -200,6 +245,7 @@ def main():
 ''')
         compose=['docker','compose','--project-directory',str(stack),'-p',project,'--env-file',str(directory/'proof.env')]
         for file in ('compose.yaml','compose.ci.yaml','compose.actions-engine.yaml','compose.runner-tls.yaml'):compose+=['-f',str(stack/file)]
+        if args.rustfs:compose+=['-f',str(stack/'compose.storage.yaml')]
         compose+=['-f',str(directory/'services.json'),'-f',str(directory/'ports.yaml')]
         def command(*argv,**kw):return execute(*compose,*argv,**kw)
         def admin(*argv):return command('exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*argv)
@@ -228,6 +274,14 @@ def main():
                 with socket.create_connection(('127.0.0.1',ports[2]),timeout=10) as raw:old_tls.wrap_socket(raw,server_hostname='127.0.0.1')
             except ssl.SSLError:pass
             else:raise AssertionError('TLS1.2 accepted')
+            if args.rustfs:
+                stage('operator initializes only the fresh private RustFS bucket')
+                cid=command('ps','-q','rustfs');row=json.loads(execute('docker','inspect',cid))[0]
+                assert row['Image']==images['rustfs'] and row['Config']['Labels']['com.docker.compose.project']==project
+                binding=row['NetworkSettings']['Ports']['9000/tcp'];assert len(binding)==1 and binding[0]['HostIp']=='127.0.0.1' and binding[0]['HostPort']==str(ports[4])
+                assert row['State']['Running'] and row['State']['Health']['Status']=='healthy'
+                command('exec','-T','golf','golf','objectstore','initialize')
+                record(objectStore={'kind':'env_s3','bucket':'golf-ci','prefix':'golf','image':images['rustfs'],'containerId':row['Id'],'freshOperatorBootstrap':True,'privateOnly':True})
             record(tls={'version':'TLSv1.3','serverAuthenticationOnly':True,'wrongHostnameDenied':True,'untrustedCADenied':True,'tls12Denied':True})
             daemon=command('ps','-q','runner-daemon');daemon_row=json.loads(execute('docker','inspect',daemon))[0]
             assert daemon_row['Image']==images['daemon'] and daemon_row['Config']['Labels']['com.docker.compose.project']==project
@@ -284,6 +338,10 @@ def main():
             stage('actual TLS Docker shell artifact producer')
             command('up','-d','--no-build','--pull','never','runner-image-init','runner-actions-image-init');command('up','-d','--no-build','--pull','never','runner')
             initial=runtime();record(runtimeBefore=initial)
+            if args.rustfs:
+                env=json.loads(execute('docker','inspect',initial['runner']['containerId']))[0]['Config']['Env']
+                assert not any(v.startswith(('GOLF_OBJECT_','RUSTFS_','AWS_')) or values['RUSTFS_SECRET_KEY'] in v or values['RUSTFS_ACCESS_KEY'] in v for v in env)
+
             def terminal():
                 current=rpc('owner','WorkflowRunService/GetWorkflowRun',{'runId':run['id']})['run']
                 return current if current['state'] not in ('WORKFLOW_RUN_STATE_QUEUED','WORKFLOW_RUN_STATE_RUNNING') else None
@@ -316,11 +374,39 @@ def main():
             payload=download('owner');proof=archive_receipt(payload,metadata_row);assert download('reader')==payload
             download('owner',{'Origin':'https://outside.invalid'},403);download('owner',{'Authorization':'Bearer '+owner['token']},403)
             record(artifact=metadata_row,archiveVerification=proof,actualDockerCleanup={'attemptContainersAbsent':True,'attemptVolumesAbsent':True},run={'id':observed['id'],'attemptId':observed['attemptId'],'state':observed['state'],'engineCatalog':CATALOG})
+            if args.rustfs:
+                stage('original source and artifact object locators plus independent signed read')
+                def object_state():
+                    return json.loads(metadata("SELECT jsonb_build_object('sourceStorage',r.source_storage,'artifactStorage',a.storage,'sourceAbsent',r.source_archive IS NULL,'archiveAbsent',a.archive IS NULL,'sourceProfileAbsent',r.source_profile_id IS NULL AND r.source_profile_version IS NULL,'artifactProfileAbsent',a.object_profile_id IS NULL AND a.object_profile_version IS NULL,'sourceKey',r.source_key,'objectKey',a.object_key,'sourceFingerprint',r.source_fingerprint,'objectFingerprint',a.object_fingerprint,'archiveSha256',a.archive_sha256,'archiveBytes',a.archive_bytes) FROM golf_workflow_runs r JOIN golf_workflow_artifacts a ON a.run_id=r.id AND a.attempt_id=r.attempt_id WHERE r.id='"+str(uuid.UUID(run['id']))+"'::uuid"))
+                original_object=object_state();key=object_receipt(original_object,observed,metadata_row)
+                def independent_object():
+                    cid=command('ps','-q','rustfs');receipt=json.loads(execute('docker','inspect',cid))[0]
+                    assert receipt['Id']==manifest['objectStore']['containerId'] and receipt['Image']==images['rustfs'] and receipt['State']['Running'] and receipt['Config']['Labels']['com.docker.compose.project']==project
+                    ports_receipt=receipt['NetworkSettings']['Ports']['9000/tcp']
+                    assert len(ports_receipt)==1 and ports_receipt[0]['HostIp']=='127.0.0.1' and ports_receipt[0]['HostPort']==str(ports[4])
+                    config=signed_get_config('http://127.0.0.1:'+str(ports[4]),key,values['RUSTFS_ACCESS_KEY'],values['RUSTFS_SECRET_KEY'])
+                    path=directory/'independent-object.tar';path.touch(mode=0o600,exist_ok=True);path.chmod(0o600)
+                    result=subprocess.run(['curl','--disable','--silent','--show-error','--request','GET','--aws-sigv4','aws:amz:us-east-1:s3','--noproxy','*','--proto','=http','--max-time','30','--retry','0','--max-filesize',str(10<<20),'--output',str(path),'--write-out','%{http_code}','--config','-'],input=config.encode(),env=environment,cwd=stack,capture_output=True,timeout=35)
+                    assert result.returncode==0 and result.stdout==b'200' and len(result.stderr)<65536 and path.stat().st_size<=10<<20,'Independent private S3 read refused; diagnostics withheld'
+                    data=path.read_bytes();assert data==payload;archive_receipt(data,metadata_row);path.unlink()
+                    return {'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'exactAttachmentMatch':True}
+                signed=independent_object()
+                record(objectProof={'sourceStorage':'env_s3','artifactStorage':'env_s3','postgresSourceAndArtifactBytesAbsent':True,'exactOriginalAddress':True,'fullObjectKey':key,'independentSignedRead':signed,'workerCredentialsAbsent':True})
+                stage('private RustFS unavailable refuses rather than PostgreSQL fallback')
+                command('stop','rustfs')
+                # Raw attachment handler explicitly maps storage failures to503.
+                # Do not invent a new RPC status mapping for the provider error.
+                download('owner',status=503)
+                assert object_state()==original_object
+                command('up','-d','--no-build','--pull','never','--wait','--wait-timeout','90','rustfs')
+                assert independent_object()==signed and download('owner')==payload
+                manifest['objectProof']['providerUnavailableNoFallback']=True;manifest['objectProof']['rustfsRestartExactBytes']=True;record()
             stage('restart original immutable run and attachment without redispatch')
             command('restart','golf');smoke.ready()
             assert rpc('owner','WorkflowArtifactService/GetWorkflowArtifact',{'runId':run['id']})['artifact']==metadata_row and download('owner')==payload
             replay=rpc('owner','WorkflowRunService/DispatchWorkflow',dispatch)['run'];assert replay['id']==observed['id'] and replay['attemptId']==observed['attemptId'] and replay['state']==observed['state']
             assert int(metadata('SELECT count(*) FROM golf_workflow_runs'))==1 and int(metadata('SELECT count(*) FROM golf_workflow_artifacts'))==1
+            if args.rustfs:assert object_state()==original_object and independent_object()==signed
             record(restart={'sameMetadataAndHash':True,'originalDispatchNoReplay':True,'runCount':1,'artifactCount':1},runtimeAfter=runtime())
             if args.ui:
                 stage('actual read-only run attachment browser')
