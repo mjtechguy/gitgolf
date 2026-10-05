@@ -87,6 +87,10 @@ Semantic references: [GitHub contexts](https://docs.github.com/en/actions/refere
 
 ### Checkout, tokens and service endpoints
 
+The first unchanged upstream target remains [Requests lint.yml at611c616](https://github.com/psf/requests/blob/611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60/.github/workflows/lint.yml). Its pinned [checkout URL helper](https://github.com/actions/checkout/blob/9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0/src/url-helper.ts) uses the configured origin plus `/OWNER/REPO`, discarding any `/git` path prefix and omitting `.git`. Its [authentication helper](https://github.com/actions/checkout/blob/9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0/src/git-auth-helper.ts) sends Basic `x-access-token`. Golf's human Git path and `golf` username therefore cannot be substituted merely by changing `GITHUB_SERVER_URL`.
+
+The first [trusted runner-only exact-commit preparation source packet](RUNNER_GIT_PREPARATION_CONTRACT.md) now reuses enrolled-worker/attempt/current source and policy fences, with real PostgreSQL/race and separate installed-Git negotiation proof. Actual native-to-worker checkout integration and deployment remain open. The worker capability remains outside jobs because it also authorizes logs and completion. Unchanged checkout needs a separately scoped read-only job token and compatible checkout-origin routes, with no human-session, sponsor/native PAT or worker-control credential exposed. Qualify actual detached HEAD/tree/workflow bytes and credential removal before claiming a full workspace. Pinned remote Node24 action acquisition/runtime, the original push/PR declarations, contents permissions, job timeout and restricted dependency egress remain independent requirements; none can be enabled by relaxing the existing inspector.
+
 These often determine whether real imported workflows run, even when syntax parses:
 
 | Boundary | Proposed supported behavior / gate |
