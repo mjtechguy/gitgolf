@@ -14,14 +14,53 @@ from pathlib import Path
 import secrets
 import subprocess
 import sys
+import urllib.request
 
 sys.dont_write_bytecode = True
 import smoke
 
 
+def served_browser(args, report, token, native, issue, pull, label, milestone, name):
+    session = smoke.client()
+    logged_in = False
+    try:
+        credentials = dict(line.split(': ', 1) for line in args.golf_login_file.read_text().splitlines() if ': ' in line)
+        actor = smoke.rpc(session, 'SessionService/LoginWithPassword',
+                          {'username': credentials['Email'], 'password': credentials['Password']})['user']
+        logged_in = True
+        route = 'repos/'+native['full_name']
+        smoke.provider(token, 'PUT', route+'/collaborators/'+actor['login'], {'permission': 'read'}, expected=204)
+        milestone = smoke.provider(token, 'GET', route+'/milestones/'+str(milestone['id']))
+        cookies = [dict(name=c.name, value=c.value, url=smoke.GOLF, httpOnly=c.has_nonstandard_attr('HttpOnly'), sameSite='Lax')
+                   for handler in session.handlers if isinstance(handler, urllib.request.HTTPCookieProcessor)
+                   for c in handler.cookiejar]
+        source = subprocess.check_output(['docker', 'inspect', 'golf-golf-1', '--format',
+                                         '{{ index .Config.Labels "io.golf.web.revision" }}'], text=True).strip()
+        config = dict(cookies=cookies, forbidden=[token, credentials['Password']], source=source,
+                      output=str((args.output/'browser').resolve()),
+                      issueUrl=smoke.GOLF+'/'+native['full_name']+'/issues/'+str(issue['number']),
+                      pullUrl=smoke.GOLF+'/'+native['full_name']+'/pull/'+str(pull['number']),
+                      expected=dict(labelName=label['name'], labelColor=label['color'].lstrip('#'),
+                                    assigneeLogin=name, milestoneTitle=milestone['title'],
+                                    openIssues=str(milestone['open_issues']), closedIssues=str(milestone['closed_issues']),
+                                    dueOn=milestone['due_on']))
+        result = subprocess.run(['node', 'scripts/discussion-metadata-browser.mjs'], input=json.dumps(config),
+                                capture_output=True, text=True, timeout=180)
+        report.update(servedSourceRevision=source, browserExitCode=result.returncode)
+        assert result.returncode == 0, 'Served qualification failed; inspect sanitized browser manifest'
+        browser = json.loads((args.output/'browser/browser-manifest.json').read_text())
+        assert browser['passed'] and browser['complete'], 'Served qualification incomplete'
+    finally:
+        if logged_in:
+            smoke.rpc(session, 'SessionService/Logout')
+            smoke.rpc(session, 'SessionService/GetSession', expected=401)
+            report['ownSessionLoggedOut'] = True
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=Path('.tmp/discussion-metadata-native-'+secrets.token_hex(4)))
+    parser.add_argument('--golf-login-file', type=Path, help='also qualify deployed browser views using private local email/password credentials')
     args = parser.parse_args()
     os.umask(0o077)
     args.output.mkdir(parents=True, exist_ok=False)
@@ -78,6 +117,9 @@ def main():
                       pullNumber=pull['number'], testExitCode=result.returncode,
                       nativeVersion=smoke.provider(token, 'GET', 'version')['version'])
         assert result.returncode == 0 and '--- PASS: TestDiscussionMetadataNativeRead' in output and 'SKIP' not in output, 'Native source qualification failed; inspect private receipt'
+        if args.golf_login_file:
+            report['scope'] = 'actual native source and deployed read-only browser metadata; no metadata edits'
+            served_browser(args, report, token, native, issue, pull, label, milestone, name)
         report['passed'] = True
     finally:
         try:
@@ -90,7 +132,7 @@ def main():
             raise
         finally:
             (args.output/'manifest.json').write_text(json.dumps(report, indent=2)+'\n')
-    print('PASS actual native issue/list/PR metadata; owned account/repository purged; deployed Golf unchanged')
+    print('PASS actual native issue/list/PR metadata'+(' and served browser' if args.golf_login_file else '')+'; owned account/repository purged; deployed Golf unchanged')
 
 
 if __name__ == '__main__':
