@@ -39,12 +39,13 @@ func TestActionsGitSourceFixedFileStreamAndClosedReceipt(t *testing.T) {
 			dir := t.TempDir()
 			capture := filepath.Join(dir, "captured.tar")
 			binary := filepath.Join(dir, "docker")
+			ready := filepath.Join(dir, "cancel-ready")
 			copyCommand := "/bin/cat > " + stageQuote(capture)
 			if mode == "copy_failure" {
 				copyCommand = "exit 7"
 			}
 			if mode == "cancel_copy" {
-				copyCommand = "exec /bin/sleep 60"
+				copyCommand = ": > " + stageQuote(ready) + "; exec /bin/sleep 60"
 			}
 			receipt := expected + "  " + GitSourceMetadataPath + "\n"
 			switch mode {
@@ -59,7 +60,7 @@ func TestActionsGitSourceFixedFileStreamAndClosedReceipt(t *testing.T) {
 			}
 			hashCommand := "printf '%s' " + stageQuote(receipt)
 			if mode == "cancel_hash" {
-				hashCommand = "exec /bin/sleep 60"
+				hashCommand = ": > " + stageQuote(ready) + "; exec /bin/sleep 60"
 			}
 			script := "#!/bin/sh\nif [ \"$1\" = container ]; then\n [ \"$2\" = cp ] && [ \"$3\" = '-' ] && [ \"$4\" = '" + strings.Repeat("c", 64) + ":/golf' ] || exit 2\n " + copyCommand + "\nelif [ \"$1\" = exec ]; then\n [ \"$2\" = '" + strings.Repeat("c", 64) + "' ] && [ \"$3\" = sha256sum ] && [ \"$4\" = /golf/git-source.tar ] || exit 3\n " + hashCommand + "\nelse exit 4; fi\n"
 			if os.WriteFile(binary, []byte(script), 0700) != nil {
@@ -67,12 +68,35 @@ func TestActionsGitSourceFixedFileStreamAndClosedReceipt(t *testing.T) {
 			}
 			a := stagingExecutor(t, binary)
 			ctx := context.Background()
-			var cancel context.CancelFunc
+			var cancelled chan time.Time
 			if strings.HasPrefix(mode, "cancel_") {
-				ctx, cancel = context.WithTimeout(ctx, 150*time.Millisecond)
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(t.Context())
 				defer cancel()
+				cancelled = make(chan time.Time, 1)
+				go func() {
+					timeout := time.NewTimer(5 * time.Second)
+					defer timeout.Stop()
+					poll := time.NewTicker(time.Millisecond)
+					defer poll.Stop()
+					for {
+						select {
+						case <-poll.C:
+							if _, e := os.Stat(ready); e == nil {
+								cancelled <- time.Now()
+								cancel()
+								return
+							}
+						case <-timeout.C:
+							cancelled <- time.Time{}
+							cancel()
+							return
+						case <-ctx.Done():
+							return
+						}
+					}
+				}()
 			}
-			start := time.Now()
 			phase, err := a.transferGitSource(ctx, strings.Repeat("c", 64), m, body)
 			wantPhase := "git_source_remote_hash"
 			if mode == "copy_failure" || mode == "cancel_copy" {
@@ -81,8 +105,14 @@ func TestActionsGitSourceFixedFileStreamAndClosedReceipt(t *testing.T) {
 			if phase != wantPhase || (err == nil) != (mode == "valid") || (err != nil && !errors.Is(err, ErrInfrastructure)) {
 				t.Fatalf("wrong fixed-file result %s %v", phase, err)
 			}
-			if strings.HasPrefix(mode, "cancel_") && (ctx.Err() == nil || time.Since(start) > 3*time.Second) {
-				t.Fatal("copy/producer/hash cancellation not bounded")
+			if cancelled != nil {
+				signaled := <-cancelled
+				if signaled.IsZero() {
+					t.Fatal("fixture did not enter its selected cancellation phase")
+				}
+				if ctx.Err() == nil || time.Since(signaled) > 3*time.Second {
+					t.Fatal("copy/producer/hash cancellation not bounded")
+				}
 			}
 			if mode == "valid" || mode == "wrong_sha" || mode == "suffix" || mode == "duplicate" || mode == "foreign_path" || mode == "cancel_hash" {
 				raw, err := os.ReadFile(capture)
