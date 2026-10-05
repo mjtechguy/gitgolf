@@ -3,6 +3,7 @@ import {mkdir,writeFile,rm} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {request,respond,reject} from './rpc';
 import {GetPullReviewRequestsResponseSchema,ListRepositoryAssigneesResponseSchema,SubmitPullReviewRequestRequestSchema,SubmitPullReviewRequestResponseSchema,GetPullReviewRequestOperationRequestSchema,GetPullReviewRequestOperationResponseSchema,DiscussionResourceOperationPhase as Phase} from '../src/gen/golf/v1/golf_pb';
+test.beforeEach(({page})=>{page.on('console',message=>{if(message.type()==='error'&&message.text().includes('Cannot update a component'))throw new Error(message.text());});});
 const host=resolve(import.meta.dirname,'../.tmp/pull-review-requests.html'),P='a'.repeat(64),R='b'.repeat(64),key='golf.review-request.v1:42:11:101';
 test.beforeAll(async()=>{await mkdir(resolve(import.meta.dirname,'../.tmp'),{recursive:true});await writeFile(host,`<!doctype html><html><body><main id="root" class="app-main"></main><script type="module">
 import React,{useEffect,useState} from'react';import{createRoot}from'react-dom/client';import{QueryClient,QueryClientProvider}from'@tanstack/react-query';import{PullReviewRequests}from'/src/PullReviewRequests.tsx';import'/src/styles.css';

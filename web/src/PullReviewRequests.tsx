@@ -23,6 +23,7 @@ export function PullReviewRequests(p:Props){return <Requests key={`${p.userId}:$
 function Requests(p:Props){
  const cache=useQueryClient(),scope=['repository',p.userId,p.repository.owner,p.repository.name,'review-requests',p.repositoryId,p.pull.id],key=`${reviewRequestIntentPrefix}${p.userId}:${p.repositoryId}:${p.pull.id}`;
  const [original,setOriginal]=useState(()=>read(key,p)),[record,setRecord]=useState<PullReviewRequestOperation>(),[editing,setEditing]=useState(false),[confirmation,setConfirmation]=useState<Original>(),[busy,setBusy]=useState(false),[hidden,setHidden]=useState(false),[error,setError]=useState('');
+ const lossQueued=useRef(false);
  const alive=useRef(true),epoch=useRef(0),controller=useRef<AbortController|undefined>(undefined),latch=useRef(false);
  const current=()=>cache.getQueryData<{id:string}>(['session'])?.id===p.userId;
  const active=(v:number)=>alive.current&&epoch.current===v&&current();
@@ -32,7 +33,7 @@ function Requests(p:Props){
  const candidates=useQuery({...privateQuery,queryKey:[...scope,'candidates'],enabled:editing&&ready,queryFn:async({signal})=>{const r=await repositoryClient.listRepositoryAssignees({repository:p.repository,repositoryId:p.repositoryId,pullRequest:true},{signal});if(r.assignees.some(u=>!sourceRepositoryID(u.id)||!/^[A-Za-z0-9_.-]+$/.test(u.login))||new Set(r.assignees.map(u=>u.id)).size!==r.assignees.length)throw failure();return r;}});
  const form=useForm({defaultValues:{reviewerId:''},onSubmit:({value})=>{const candidate=candidates.data?.assignees.find(u=>u.id===value.reviewerId);if(ready&&candidate&&!query.data!.reviewers.some(u=>u.id===candidate.id))prepare(candidate.id,candidate.login,true);}}),values=useStore(form.store,s=>s.values);
  function hide(){epoch.current++;controller.current?.abort();latch.current=false;setHidden(true);setEditing(false);setConfirmation(undefined);setRecord(undefined);setBusy(false);form.reset();}
- useEffect(()=>{clearOtherReviewRequestIntents(p.userId);alive.current=true;const unsub=cache.getQueryCache().subscribe(()=>{if(!current()){try{sessionStorage.removeItem(key);}catch{}hide();}});return()=>{alive.current=false;epoch.current++;controller.current?.abort();unsub();void cache.cancelQueries({queryKey:scope});cache.removeQueries({queryKey:scope});};},[]);
+ useEffect(()=>{clearOtherReviewRequestIntents(p.userId);alive.current=true;const unsub=cache.getQueryCache().subscribe(()=>{if(!current()&&!lossQueued.current){lossQueued.current=true;try{sessionStorage.removeItem(key);}catch{}epoch.current++;controller.current?.abort();latch.current=false;queueMicrotask(()=>{if(alive.current)hide();});}});return()=>{alive.current=false;epoch.current++;controller.current?.abort();unsub();void cache.cancelQueries({queryKey:scope});cache.removeQueries({queryKey:scope});};},[]);
  useEffect(()=>{if(denied(query.error)||denied(candidates.error))hide();},[query.error,candidates.error]);
  useEffect(()=>{if(p.blocked){setEditing(false);setConfirmation(undefined);controller.current?.abort();epoch.current++;setBusy(false);latch.current=false;}},[p.blocked]);
  useEffect(()=>{if(confirmation&&!ready)setConfirmation(undefined);},[confirmation,ready]);
