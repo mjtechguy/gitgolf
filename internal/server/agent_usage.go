@@ -16,8 +16,10 @@ import (
 	"unicode/utf8"
 )
 
+const agentSpendUnavailable = "Monetary spend caps cannot be enforced by the current agent executors. Set 0 for subscription execution with time and reported-token limits; paid API billing remains unavailable."
+
 func agentDefaults() *golfv1.AgentUsageConfig {
-	return &golfv1.AgentUsageConfig{TimeoutSeconds: 600, TokenBudget: 64000, SpendLimitCents: 1000, MaxConcurrent: 1}
+	return &golfv1.AgentUsageConfig{TimeoutSeconds: 600, TokenBudget: 64000, MaxConcurrent: 1}
 }
 func (s *Server) agentAuthority(ctx context.Context, a codexActor, scope golfv1.AgentUsageScope, org string, repo *golfv1.RepositoryKey) (executionAuthority, error) {
 	if scope == golfv1.AgentUsageScope_AGENT_USAGE_SCOPE_PERSONAL {
@@ -70,6 +72,9 @@ func (s *Server) loadAgentConfig(ctx context.Context, q interface {
 	return c, rev, owner, nil
 }
 func agentConfigValid(c *golfv1.AgentUsageConfig) error {
+	if c != nil && c.SpendLimitCents != 0 {
+		return invalid(agentSpendUnavailable)
+	}
 	if c == nil || c.TimeoutSeconds < 30 || c.TimeoutSeconds > 7200 || c.TokenBudget < 1000 || c.TokenBudget > 2000000 || c.SpendLimitCents > 100000 || c.MaxConcurrent < 1 || c.MaxConcurrent > 32 || len(c.Instructions) > 8192 || !utf8.ValidString(c.Instructions) || strings.ContainsRune(c.Instructions, 0) || len(c.AllowedModels) > 100 || len(c.Triggers) > 5 || c.AllowAllModels && len(c.AllowedModels) > 0 {
 		return invalid("Provide bounded agent limits, instructions and model/trigger selections.")
 	}
@@ -126,7 +131,12 @@ func agentIntersect(e, c *golfv1.AgentUsageConfig, key string) {
 	e.Enabled = e.Enabled && c.Enabled && agentModelAllowed(c, key)
 	e.TimeoutSeconds = min(e.TimeoutSeconds, c.TimeoutSeconds)
 	e.TokenBudget = min(e.TokenBudget, c.TokenBudget)
-	e.SpendLimitCents = min(e.SpendLimitCents, c.SpendLimitCents)
+	// Zero cannot erase a positive inherited cap that this executor cannot honor.
+	if e.SpendLimitCents == 0 {
+		e.SpendLimitCents = c.SpendLimitCents
+	} else if c.SpendLimitCents != 0 {
+		e.SpendLimitCents = min(e.SpendLimitCents, c.SpendLimitCents)
+	}
 	e.MaxConcurrent = min(e.MaxConcurrent, c.MaxConcurrent)
 	e.AllowTaskOverrides = e.AllowTaskOverrides && c.AllowTaskOverrides
 	var ts []string
@@ -210,7 +220,22 @@ func (s *Server) agentSettings(ctx context.Context, a codexActor, auth execution
 		if e != nil || r.State != "CONNECTED" || !r.Use && r.Scope == "INSTANCE" {
 			v.Effective.Enabled = false
 			v.BlockedReasons = append(v.BlockedReasons, "Selected connection is not connected or not permitted for this user.")
+		} else if r.Scope == "PERSONAL" && scope != golfv1.AgentUsageScope_AGENT_USAGE_SCOPE_PERSONAL {
+			personal, _, owner, e := s.loadAgentConfig(ctx, s.db, "personal", strconv.FormatInt(a.UserID, 10))
+			if e != nil {
+				return nil, e
+			}
+			if owner != 0 && owner != a.UserID {
+				return nil, errCodexPermission
+			}
+			if personal.SpendLimitCents != 0 && (v.Effective.SpendLimitCents == 0 || personal.SpendLimitCents < v.Effective.SpendLimitCents) {
+				v.Effective.SpendLimitCents = personal.SpendLimitCents
+			}
 		}
+	}
+	if v.Effective.SpendLimitCents != 0 {
+		v.Effective.Enabled = false
+		v.BlockedReasons = append(v.BlockedReasons, agentSpendUnavailable)
 	}
 	if v.Effective.Enabled && (v.Effective.ConnectionId == "" || v.Effective.ModelId == "") {
 		v.Effective.Enabled = false
@@ -427,6 +452,9 @@ func (s *Server) ListAgentModels(ctx context.Context, req *connect.Request[golfv
 
 // Preview resolves permitted choices without a queue entry, model request or write.
 func (s *Server) PreviewAgentTask(ctx context.Context, req *connect.Request[golfv1.PreviewAgentTaskRequest]) (*connect.Response[golfv1.PreviewAgentTaskResponse], error) {
+	if o := req.Msg.Selection; o != nil && o.SpendLimitCents != nil && *o.SpendLimitCents != 0 {
+		return nil, rpcError(invalid(agentSpendUnavailable))
+	}
 	a, e := s.codexIdentity(ctx, req.Header())
 	if e != nil {
 		return nil, rpcError(e)

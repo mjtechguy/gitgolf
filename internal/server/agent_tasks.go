@@ -117,6 +117,9 @@ func (s *Server) taskConfig(ctx context.Context, a codexActor, repo *golfv1.Repo
 		return auth, nil, codexRecord{}, e
 	}
 	c := settings.Effective
+	if c.SpendLimitCents != 0 {
+		return auth, nil, codexRecord{}, invalid(agentSpendUnavailable)
+	}
 	r, e := s.codexAuthorized(ctx, a, c.ConnectionId, false)
 	if e != nil {
 		return auth, nil, r, e
@@ -133,6 +136,9 @@ func (s *Server) taskConfig(ctx context.Context, a codexActor, repo *golfv1.Repo
 		if personal.Instructions != "" {
 			c.Instructions = personal.Instructions + "\n\n" + c.Instructions
 		}
+	}
+	if c.SpendLimitCents != 0 {
+		return auth, nil, r, invalid(agentSpendUnavailable)
 	}
 	manual := false
 	for _, t := range c.Triggers {
@@ -175,6 +181,9 @@ func (s *Server) taskConfig(ctx context.Context, a codexActor, repo *golfv1.Repo
 	return auth, settings, r, nil
 }
 func (s *Server) CreateAgentTask(ctx context.Context, req *connect.Request[golfv1.CreateAgentTaskRequest]) (*connect.Response[golfv1.CreateAgentTaskResponse], error) {
+	if o := req.Msg.Selection; o != nil && o.SpendLimitCents != nil && *o.SpendLimitCents != 0 {
+		return nil, rpcError(invalid(agentSpendUnavailable))
+	}
 	a, e := s.codexIdentity(ctx, req.Header())
 	if e != nil {
 		return nil, rpcError(e)

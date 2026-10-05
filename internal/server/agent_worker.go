@@ -140,6 +140,14 @@ func (s *Server) rejectAgentTask(ctx context.Context, t agentTaskRecord, reason 
 	_, _ = s.db.ExecContext(ctx, `UPDATE golf_agent_tasks SET state='cancelled',reason=$2,version=version+1,finished_at=clock_timestamp() WHERE id=$1 AND forge_url=$3 AND state='queued'`, t.ID, reason, s.config.GiteaURL)
 }
 func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor, worker, seccomp string, t agentTaskRecord) error {
+	var c golfv1.AgentUsageConfig
+	if json.Unmarshal(t.RawConfig, &c) != nil {
+		return errStorageUnavailable
+	}
+	if c.SpendLimitCents != 0 {
+		s.rejectAgentTask(ctx, t, agentSpendUnavailable)
+		return invalid(agentSpendUnavailable)
+	}
 	a, e := s.taskActor(ctx, t)
 	if e == nil {
 		e = s.reviewTaskAccess(ctx, t)
@@ -163,10 +171,6 @@ func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor
 		return errCodexUnavailable
 	}
 	defer releaseCodexOwner(owner, codexLockID(r.ID))
-	var c golfv1.AgentUsageConfig
-	if json.Unmarshal(t.RawConfig, &c) != nil {
-		return errStorageUnavailable
-	}
 	attempt, e := runnerAttemptID()
 	if e != nil {
 		return e

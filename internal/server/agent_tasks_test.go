@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestAgentTaskBoundaries(t *testing.T) {
@@ -171,6 +172,69 @@ func TestAgentTaskAdmissionPostgres(t *testing.T) {
 	w = call("ListAgentTasks", map[string]any{"repository": body["repository"]})
 	if w.Code != 200 || !strings.Contains(w.Body.String(), id) {
 		t.Fatal("Task inventory failed", w.Code, w.Body)
+	}
+
+	// Adversarial legacy policies cannot be silently uncapped by a zero selection.
+	for _, scope := range []string{"repository", "instance", "personal"} {
+		positive := map[string]any{}
+		for key, value := range config {
+			positive[key] = value
+		}
+		positive["spend_limit_cents"] = 1000
+		rawPositive, _ := json.Marshal(positive)
+		if _, err := f.server.db.Exec(`UPDATE golf_agent_usage_settings SET config=$1 WHERE forge_url=$2 AND scope=$3`, rawPositive, f.server.config.GiteaURL, scope); err != nil {
+			t.Fatal(err)
+		}
+		selection := &golfv1.AgentTaskSelection{ConnectionId: connection, ModelId: "model", Reasoning: "high", Trigger: "manual", SpendLimitCents: proto.Uint32(0)}
+		settings, err := f.server.agentSettings(ctx, actor, auth, golfv1.AgentUsageScope_AGENT_USAGE_SCOPE_REPOSITORY, &golfv1.RepositoryKey{Owner: "alice", Name: "example"}, selection)
+		if err != nil || settings.Config.SpendLimitCents != (func() uint32 {
+			if scope == "repository" {
+				return 1000
+			}
+			return 0
+		})() || settings.Effective.Enabled || settings.Effective.SpendLimitCents != 1000 || !strings.Contains(strings.Join(settings.BlockedReasons, " "), "cannot be enforced") {
+			t.Fatal("legacy cap lost from resolved policy", scope, err, settings)
+		}
+		beforeArchives := f.archives
+		rejected := map[string]any{}
+		for key, value := range body {
+			rejected[key] = value
+		}
+		rejected["idempotencyKey"] = uuid.NewString()
+		rejected["selection"] = map[string]any{"connectionId": connection, "modelId": "model", "reasoning": "high", "trigger": "manual", "spendLimitCents": 0}
+		response := call("CreateAgentTask", rejected)
+		if response.Code != 400 || !strings.Contains(response.Body.String(), "cannot be enforced") || f.archives != beforeArchives {
+			t.Fatal("legacy capped dispatch fetched source or queued", scope, response.Code, response.Body, f.archives)
+		}
+		if err := f.server.db.QueryRow(`SELECT count(*) FROM golf_agent_tasks`).Scan(&count); err != nil || count != 1 {
+			t.Fatal("legacy capped task admitted", count, err)
+		}
+		if _, err := f.server.db.Exec(`UPDATE golf_agent_usage_settings SET config=$1 WHERE forge_url=$2 AND scope=$3`, raw, f.server.config.GiteaURL, scope); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Previously queued positive caps are refused before native account/cache or executor access.
+	queued := uuid.NewString()
+	positive := map[string]any{}
+	for key, value := range config {
+		positive[key] = value
+	}
+	positive["spend_limit_cents"] = 1000
+	rawPositive, _ := json.Marshal(positive)
+	if _, err := f.server.db.Exec(`INSERT INTO golf_agent_tasks(id,forge_url,repository_id,owner_id,repository_owner,repository_name,user_id,native_user_id,session_hash,connection_id,connection_version,commit_id,source_archive,config,policy_fingerprint,idempotency_key,input_hash) SELECT $1,forge_url,repository_id,owner_id,repository_owner,repository_name,user_id,native_user_id,session_hash,connection_id,connection_version,commit_id,source_archive,$2,policy_fingerprint,$3,input_hash FROM golf_agent_tasks WHERE id=$4`, queued, rawPositive, uuid.NewString(), id); err != nil {
+		t.Fatal(err)
+	}
+	queuedRecord, err := f.server.taskRecord(ctx, queued)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeArchives := f.archives
+	if err = f.server.executeAgentTask(ctx, nil, "fixture", "/unused", queuedRecord); err == nil || !strings.Contains(err.Error(), "cannot be enforced") {
+		t.Fatal("positive queued cap reached executor", err)
+	}
+	refused, err := f.server.taskRecord(ctx, queued)
+	if err != nil || refused.State != "cancelled" || refused.Attempt != "" || refused.Worker != "" || refused.Version != 2 || refused.Reason != agentSpendUnavailable || f.archives != beforeArchives {
+		t.Fatal("positive queued cap was not terminal before execution", err, refused.State, refused.Reason)
 	}
 	w = call("CancelAgentTask", map[string]string{"taskId": id, "expectedVersion": "1"})
 	if w.Code != 200 || !strings.Contains(w.Body.String(), "cancelled") {

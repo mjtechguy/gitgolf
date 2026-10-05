@@ -1,6 +1,7 @@
 package server
 
 import (
+	"connectrpc.com/connect"
 	"encoding/json"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 	"google.golang.org/protobuf/proto"
@@ -123,7 +124,7 @@ func TestAgentUsageModelCatalogPostgres(t *testing.T) {
 		t.Fatal("safe native catalog missing", w.Code)
 	}
 	original := usageRead(t, usageCall(f.s, admin, "GetAgentUsage", `{"scope":"AGENT_USAGE_SCOPE_PERSONAL"}`))
-	cfg := map[string]any{"enabled": true, "connectionId": id, "modelId": "opus", "reasoning": "high", "allowAllModels": true, "timeoutSeconds": 600, "tokenBudget": 64000, "spendLimitCents": 1000, "maxConcurrent": 2, "triggers": []string{"manual", "push"}, "allowTaskOverrides": true}
+	cfg := map[string]any{"enabled": true, "connectionId": id, "modelId": "opus", "reasoning": "high", "allowAllModels": true, "timeoutSeconds": 600, "tokenBudget": 64000, "spendLimitCents": 0, "maxConcurrent": 2, "triggers": []string{"manual", "push"}, "allowTaskOverrides": true}
 	body := map[string]any{"scope": "AGENT_USAGE_SCOPE_PERSONAL", "scopeId": original["scopeId"], "expectedRevision": "0", "expectedAuthorityRevision": original["authorityRevision"], "config": cfg}
 	raw, _ := json.Marshal(body)
 	usageRead(t, usageCall(f.s, admin, "SaveAgentUsage", string(raw)))
@@ -139,7 +140,7 @@ func TestAgentUsageModelCatalogPostgres(t *testing.T) {
 	body["expectedAuthorityRevision"] = inst["authorityRevision"]
 	raw, _ = json.Marshal(body)
 	usageRead(t, usageCall(f.s, admin, "SaveAgentUsage", string(raw)))
-	w = usageCall(f.s, admin, "PreviewAgentTask", `{"scope":"AGENT_USAGE_SCOPE_PERSONAL","selection":{"connectionId":"`+id+`","modelId":"opus","reasoning":"high","trigger":"push","timeoutSeconds":7200,"spendLimitCents":5000}}`)
+	w = usageCall(f.s, admin, "PreviewAgentTask", `{"scope":"AGENT_USAGE_SCOPE_PERSONAL","selection":{"connectionId":"`+id+`","modelId":"opus","reasoning":"high","trigger":"push","timeoutSeconds":7200,"spendLimitCents":0}}`)
 	if w.Code != 200 {
 		t.Fatal("preview failed", w.Code, w.Body)
 	}
@@ -152,5 +153,43 @@ func TestAgentUsageModelCatalogPostgres(t *testing.T) {
 	}
 	if w = usageCall(f.s, admin, "PreviewAgentTask", `{"scope":"AGENT_USAGE_SCOPE_PERSONAL","selection":{"connectionId":"`+id+`","modelId":"unadvertised"}}`); w.Code == 200 {
 		t.Fatal("invented model accepted")
+	}
+}
+
+func TestAgentSpendCapContract(t *testing.T) {
+	zero := agentDefaults()
+	if zero.SpendLimitCents != 0 || agentConfigValid(zero) != nil {
+		t.Fatal("new scope did not permit supported zero-cap subscription limits")
+	}
+	for _, amount := range []uint32{1, 1000, 100000} {
+		positive := proto.Clone(zero).(*golfv1.AgentUsageConfig)
+		positive.SpendLimitCents = amount
+		if err := agentConfigValid(positive); err == nil || !strings.Contains(err.Error(), "cannot be enforced") {
+			t.Fatal("unaccounted monetary cap accepted", amount, err)
+		}
+		// A nil server proves positive input is refused before authority/storage/catalog work.
+		var server *Server
+		if _, err := server.SaveAgentUsage(t.Context(), connect.NewRequest(&golfv1.SaveAgentUsageRequest{Config: positive})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Fatal("positive save reached authority", err)
+		}
+		selection := &golfv1.AgentTaskSelection{SpendLimitCents: &amount}
+		if _, err := server.PreviewAgentTask(t.Context(), connect.NewRequest(&golfv1.PreviewAgentTaskRequest{Selection: selection})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Fatal("positive preview reached authority", err)
+		}
+		if _, err := server.CreateAgentTask(t.Context(), connect.NewRequest(&golfv1.CreateAgentTaskRequest{Selection: selection})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Fatal("positive dispatch reached authority", err)
+		}
+	}
+	for _, pair := range [][3]uint32{{0, 0, 0}, {1000, 0, 1000}, {0, 1000, 1000}, {500, 1000, 500}, {1000, 500, 500}} {
+		effective := agentDefaults()
+		effective.Enabled = true
+		effective.AllowAllModels = true
+		effective.SpendLimitCents = pair[0]
+		parent := proto.Clone(effective).(*golfv1.AgentUsageConfig)
+		parent.SpendLimitCents = pair[1]
+		agentIntersect(effective, parent, "model")
+		if effective.SpendLimitCents != pair[2] {
+			t.Fatal("zero erased required positive cap", pair, effective.SpendLimitCents)
+		}
 	}
 }
