@@ -93,6 +93,9 @@ func (s *Server) withWikiRead(ctx context.Context, session string, token forgeCr
 	})
 }
 func wikiRPCError(e error) error {
+	if errors.Is(e, errPullSnapshotChanged) {
+		return connect.NewError(connect.CodeFailedPrecondition, errors.New("Wiki changed while being read. Refresh to select its current pages."))
+	}
 	if errors.Is(e, errWikiUnavailable) {
 		return connect.NewError(connect.CodeFailedPrecondition, errors.New("This repository's internal wiki is disabled or unavailable. External wiki URLs are not followed."))
 	}
