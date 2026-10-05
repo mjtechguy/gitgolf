@@ -1396,6 +1396,7 @@ type GolfStandardPullMerge struct {
 	SourceOwnerID         int64
 	SourceRepositoryOwner string
 	SourceRepositoryName  string
+	Method                string
 }
 
 type GolfStandardPullMergeEvent struct {
