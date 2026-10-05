@@ -328,6 +328,7 @@ type engineObserver struct {
 	plan                                       protocol.ActionPlan
 	resolved                                   map[string]string
 	prepared, volumes, started, finished       map[string]bool
+	volumeOwners                               map[string]string
 	nativeResults                              map[string]string
 	sequence, eventSequence, logBytes, entries int
 	err                                        error
@@ -573,7 +574,7 @@ func (o *engineObserver) prepare() (err error) {
 		}
 		protected := protectedActionDirs(o.plan)
 		phase = "engine_job_mounts"
-		if !validJobMounts(r, protected) {
+		if !validJobMounts(r, protected) || !o.bindJobVolumes(r) {
 			return ErrExecution
 		}
 		phase = "engine_job_source_transfer"
@@ -727,6 +728,42 @@ func validJobMounts(r inspected, protected []string) bool {
 		}
 	}
 	return seen[workspace] && seen["/var/run/act"] && seen["/opt/hostedtoolcache"]
+}
+
+// Native act normally creates separate workspace and command-file volumes for
+// each job. Verify that property independently before copying source or ACKing
+// setup. Keep bindings for the whole attempt, including already removed jobs:
+// reuse cannot carry an earlier job's files into a later dependency stage.
+// Only the tool cache may be shared; immutable action binds are checked above.
+// Called under the observer lock, with an inspected owned container and mounts.
+func (o *engineObserver) bindJobVolumes(r inspected) bool {
+	if !containerID.MatchString(r.ID) {
+		return false
+	}
+	bindings := map[string]string{}
+	for _, mount := range r.Mounts {
+		if mount.Type != "volume" {
+			continue
+		}
+		owner := r.ID
+		if mount.Destination == "/opt/hostedtoolcache" {
+			owner = "toolcache"
+		}
+		if _, duplicate := bindings[mount.Source]; duplicate {
+			return false
+		}
+		if previous, exists := o.volumeOwners[mount.Source]; exists && previous != owner {
+			return false
+		}
+		bindings[mount.Source] = owner
+	}
+	if o.volumeOwners == nil {
+		o.volumeOwners = map[string]string{}
+	}
+	for source, owner := range bindings {
+		o.volumeOwners[source] = owner
+	}
+	return true
 }
 func protectActionAncestors(ctx context.Context, directory string, protected []string) error {
 	if len(protected) == 0 {

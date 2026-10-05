@@ -318,6 +318,154 @@ func TestImmutableLocalActionMountsAreExactlyConfined(t *testing.T) {
 	}
 }
 
+func jobVolumeFixture(id, prefix string) inspected {
+	var r inspected
+	r.ID = id
+	for _, pair := range [][2]string{{workspace, prefix + "-workspace"}, {"/var/run/act", prefix + "-env"}, {"/opt/hostedtoolcache", "act-toolcache"}} {
+		r.Mounts = append(r.Mounts, struct {
+			Type, Source, Destination string
+			RW                        bool
+		}{"volume", "/var/lib/docker/volumes/" + pair[1] + "/_data", pair[0], true})
+	}
+	return r
+}
+
+func TestPrivateJobVolumesNeverAliasOrCarryAcrossJobs(t *testing.T) {
+	first := jobVolumeFixture(strings.Repeat("a", 64), "first")
+	second := jobVolumeFixture(strings.Repeat("b", 64), "second")
+	o := &engineObserver{}
+	if !validJobMounts(first, nil) || !o.bindJobVolumes(first) || !o.bindJobVolumes(first) || !o.bindJobVolumes(second) {
+		t.Fatal("fresh independent jobs or intentional shared cache refused")
+	}
+	for _, mutate := range []func(*inspected){
+		func(r *inspected) { r.Mounts[0].Source = first.Mounts[0].Source },
+		func(r *inspected) { r.Mounts[1].Source = first.Mounts[1].Source },
+		func(r *inspected) { r.Mounts[0].Source = first.Mounts[1].Source },
+		func(r *inspected) { r.Mounts[1].Source = first.Mounts[0].Source },
+		func(r *inspected) { r.Mounts[2].Source = first.Mounts[0].Source },
+		func(r *inspected) { r.Mounts[0].Source = first.Mounts[2].Source },
+		func(r *inspected) { r.Mounts[1].Source = r.Mounts[0].Source },
+		func(r *inspected) { r.Mounts[2].Source = r.Mounts[1].Source },
+	} {
+		third := jobVolumeFixture(strings.Repeat("c", 64), "third")
+		mutate(&third)
+		before := len(o.volumeOwners)
+		if !validJobMounts(third, nil) || o.bindJobVolumes(third) || len(o.volumeOwners) != before {
+			t.Fatal("private volume reuse/alias accepted or partial binding escaped")
+		}
+	}
+	// There is deliberately no deletion/unbind on job cleanup: a later job must
+	// not reuse the first workspace after the first container has been removed.
+	later := jobVolumeFixture(strings.Repeat("d", 64), "later")
+	later.Mounts[0].Source = first.Mounts[0].Source
+	if o.bindJobVolumes(later) {
+		t.Fatal("cleaned job's retained workspace accepted")
+	}
+}
+
+func TestPrivateVolumeRefusalPrecedesSourceTransferAndSetupAck(t *testing.T) {
+	for _, reuse := range []bool{false, true} {
+		t.Run(strconv.FormatBool(reuse), func(t *testing.T) {
+			row := jobVolumeFixture(strings.Repeat("b", 64), "second")
+			row.Image = "sha256:" + strings.Repeat("1", 64)
+			row.Config.User = "1000:1000"
+			row.HostConfig.NetworkMode = "none"
+			limits := protocol.DefaultJobLimits()
+			row.HostConfig.Memory, row.HostConfig.MemorySwap = limits.Memory(), limits.Memory()
+			row.HostConfig.NanoCpus = int64(limits.CPUMillis) * 1000000
+			pids := int64(limits.Pids)
+			row.HostConfig.PidsLimit = &pids
+			row.HostConfig.CapDrop = []string{"ALL"}
+			row.HostConfig.SecurityOpt = []string{"no-new-privileges"}
+			observer := &engineObserver{ctx: t.Context(), resolved: map[string]string{"linux": row.Image}, prepared: map[string]bool{}}
+			if reuse {
+				observer.volumeOwners = map[string]string{row.Mounts[0].Source: strings.Repeat("a", 64)}
+			} else {
+				row.Mounts[1].Source = row.Mounts[0].Source
+			}
+			raw, err := json.Marshal([]inspected{row})
+			if err != nil {
+				t.Fatal(err)
+			}
+			directory := t.TempDir()
+			marker := filepath.Join(directory, "unexpected-transfer")
+			// The only executable named Docker is this controlled two-read fixture.
+			// Any cp/exec/permission operation records a marker and fails closed.
+			script := "#!/bin/sh\ncase \"$1\" in\nps) printf '%s\\n' '" + row.ID + "';;\ninspect) printf '%s\\n' '" + string(raw) + "';;\n*) printf called > '" + marker + "'; exit 91;;\nesac\n"
+			if err := os.WriteFile(filepath.Join(directory, "docker"), []byte(script), 0700); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", directory)
+			if err := observer.prepare(); ExecutionFailureStage(err) != "engine_job_mounts" || len(observer.prepared) != 0 {
+				t.Fatal("private alias crossed preparation boundary", err)
+			}
+			if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+				t.Fatal("invalid mount reached source transfer")
+			}
+		})
+	}
+}
+
+func TestTwoJobNeedsNativePlannerAndDependencySkip(t *testing.T) {
+	source, err := os.ReadFile("testdata/two-job-needs.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, failedFirst := range []bool{false, true} {
+		t.Run(strconv.FormatBool(failedFirst), func(t *testing.T) {
+			admitted, native, _, err := admit(testInput(t, string(source), nil))
+			if err != nil || len(admitted.Jobs) != 2 || len(native.Stages) != 2 || admitted.Jobs[0].JobID != "first" || admitted.Jobs[1].JobID != "second" || !reflect.DeepEqual(admitted.Jobs[1].Needs, []string{"first"}) {
+				t.Fatal("literal two-job graph not retained", err)
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			var frames []protocol.ActionFrame
+			observer := &engineObserver{ctx: ctx, cancel: cancel, send: func(f protocol.ActionFrame) error { frames = append(frames, f); return nil }, plan: admitted, started: map[string]bool{}, finished: map[string]bool{}, nativeResults: map[string]string{}}
+			ctx = act.WithJobLoggerFactory(ctx, observer)
+			config := &act.Config{EventName: "workflow_dispatch", Workdir: t.TempDir(), Env: map[string]string{}, Platforms: map[string]string{"linux": "unused"}}
+			// No source execution or Docker success is inferred. The first executor
+			// is substituted; the failure branch runs the real public native second
+			// executor to prove its default dependency skip occurs before Docker.
+			t.Setenv("DOCKER_HOST", "unix:///nonexistent-golf-two-job-source-test.sock")
+			var calls []string
+			execute := func(ctx context.Context, rc *act.RunContext) error {
+				calls = append(calls, rc.Run.JobID)
+				if rc.Run.JobID == "second" {
+					if native.Stages[0].Runs[0].Job().Result == "" {
+						t.Fatal("dependency started before first result")
+					}
+					if failedFirst {
+						return nativeInstanceExecutor(ctx, rc)
+					}
+				}
+				job, ok := observer.identify(common.Logger(ctx).(*logrus.Entry))
+				if !ok {
+					t.Fatal("actual native job context lost")
+				}
+				observer.started[job.InstanceID] = true
+				state := "success"
+				if rc.Run.JobID == "first" && failedFirst {
+					state = "failure"
+					common.SetJobError(ctx, errors.New("controlled first failure"))
+				}
+				common.Logger(ctx).WithField("jobResult", state).Info("controlled executor receipt")
+				return nil
+			}
+			err = executeNativePlan(ctx, native, config, `{}`, observer, execute)
+			if (err != nil) != failedFirst || !reflect.DeepEqual(calls, []string{"first", "second"}) || len(frames) != 2 || frames[0].InstanceID == frames[1].InstanceID {
+				t.Fatal("two-job order/conclusion failed", err, frames)
+			}
+			wantFirst, wantSecond := "success", "success"
+			if failedFirst {
+				wantFirst, wantSecond = "failure", "skipped"
+			}
+			if frames[0].Kind != "job_finished" || frames[1].Kind != "job_finished" || frames[0].State != wantFirst || frames[1].State != wantSecond {
+				t.Fatal("real dependency skip/conclusions lost", frames)
+			}
+		})
+	}
+}
+
 func TestInheritedMatrixFailureIsNotInventedPerInstanceConclusion(t *testing.T) {
 	var frames []protocol.ActionFrame
 	o := testObserver(t, func(frame protocol.ActionFrame) error { frames = append(frames, frame); return nil })
@@ -417,8 +565,7 @@ func TestNativeJobPreparationDiagnosticsDoNotAuthorizeInvalidContainers(t *testi
 
 func diagnosticJobReceipt(t *testing.T, mode string) string {
 	t.Helper()
-	var r inspected
-	r.ID = strings.Repeat("a", 64)
+	r := jobVolumeFixture(strings.Repeat("a", 64), "owned")
 	r.Image = "sha256:" + strings.Repeat("b", 64)
 	r.Config.User = "1000:1000"
 	r.HostConfig.NetworkMode = "none"
@@ -429,12 +576,6 @@ func diagnosticJobReceipt(t *testing.T, mode string) string {
 	r.HostConfig.PidsLimit = &pids
 	r.HostConfig.CapDrop = []string{"ALL"}
 	r.HostConfig.SecurityOpt = []string{"no-new-privileges"}
-	for _, dest := range []string{workspace, "/var/run/act", "/opt/hostedtoolcache"} {
-		r.Mounts = append(r.Mounts, struct {
-			Type, Source, Destination string
-			RW                        bool
-		}{"volume", "/var/lib/docker/volumes/owned/_data", dest, true})
-	}
 	if mode == "private_environment" {
 		r.Config.Env = []string{"GOLF_PRIVATE_AUTH=private credential"}
 	}

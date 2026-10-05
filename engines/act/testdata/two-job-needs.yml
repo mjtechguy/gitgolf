@@ -1,0 +1,16 @@
+name: Two isolated jobs
+on: workflow_dispatch
+jobs:
+  first:
+    runs-on: linux
+    steps:
+      - id: source
+        run: test -f .github/workflows/two-job.yml
+      - id: write
+        run: printf 'first job only\n' > golf-first-job-only && printf 'FIRST_JOB_SOURCE_COMPLETE\n'
+  second:
+    needs: first
+    runs-on: linux
+    steps:
+      - id: fresh
+        run: test ! -e golf-first-job-only && test -f .github/workflows/two-job.yml && printf 'SECOND_JOB_FRESH_WORKSPACE\n'
