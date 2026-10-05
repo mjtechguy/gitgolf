@@ -63,7 +63,7 @@ func (s *Server) emailAuthority(ctx context.Context, d emailDelivery) (emailAcco
 	var key string
 	e := s.db.QueryRowContext(ctx, `SELECT c.user_id,c.native_user_id,c.local_account_id,c.credential_version,COALESCE(a.email,''),a.encrypted_forge_token,a.credential_binding,a.credential_key_id
  FROM golf_email_contacts c JOIN golf_local_accounts a ON a.id=c.local_account_id AND a.user_id=c.user_id JOIN golf_users u ON u.id=c.user_id
- WHERE c.user_id=$1 AND c.version=$2 AND u.forge_url=$3 AND u.forge_user_id=c.native_user_id AND a.disabled_at IS NULL AND a.credential_version=c.credential_version
+ WHERE c.user_id=$1 AND c.version=$2 AND u.forge_url=$3 AND u.forge_user_id=c.native_user_id AND a.disabled_at IS NULL AND a.credential_version=c.credential_version AND NOT EXISTS(SELECT 1 FROM golf_user_access ga WHERE ga.user_id=u.id AND ga.suspended)
  AND (( $4='verification' AND EXISTS(SELECT 1 FROM golf_email_challenges ch WHERE ch.id=$5::uuid AND ch.user_id=c.user_id AND ch.contact_version=c.version AND ch.confirmed_at IS NULL AND ch.expires_at>clock_timestamp() AND ch.attempts<5))
  OR ($4='activity' AND c.enabled AND c.verified_at IS NOT NULL AND c.suppression='' AND EXISTS(SELECT 1 FROM golf_email_subscriptions ss WHERE ss.id=$6::uuid AND ss.user_id=c.user_id AND ss.version=$7 AND ss.epoch=$8 AND ss.contact_version=c.version AND ss.local_account_id=c.local_account_id AND ss.native_user_id=c.native_user_id AND ss.credential_version=c.credential_version AND ss.enabled AND ss.authorization_state='authorized')))`, d.UserID, d.ContactVersion, s.config.GiteaURL, d.Kind, d.ChallengeID, d.SubscriptionID, d.SubscriptionVersion, d.Epoch).Scan(&a.UserID, &a.NativeID, &a.LocalID, &a.CredentialVersion, &a.Email, &cipher, &binding, &key)
 	if errors.Is(e, sql.ErrNoRows) {
@@ -113,18 +113,24 @@ func (s *Server) emailAuthority(ctx context.Context, d emailDelivery) (emailAcco
 			return a, errEmailRevoked
 		}
 	}
+	if e := s.requireGolfUserAccess(ctx, s.db, a.UserID); e != nil {
+		if errors.Is(e, errUnauthenticated) {
+			return emailAccount{}, errEmailRevoked
+		}
+		return emailAccount{}, e
+	}
 	return a, nil
 }
 func (s *Server) emailDeliveryLive(ctx context.Context, d emailDelivery) error {
-	var leaseLive, configurationLive bool
-	e := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_email_deliveries WHERE id=$1 AND lease_id=$2::uuid AND state='sending' AND lease_until>clock_timestamp()),EXISTS(SELECT 1 FROM golf_email_configuration WHERE transport_id=$3::uuid AND transport_version=$4 AND generation=$5)`, d.ID, d.LeaseID, d.TransportID, d.TransportVersion, d.ActivationGeneration).Scan(&leaseLive, &configurationLive)
+	var leaseLive, configurationLive, accessAllowed bool
+	e := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_email_deliveries WHERE id=$1 AND lease_id=$2::uuid AND state='sending' AND lease_until>clock_timestamp()),EXISTS(SELECT 1 FROM golf_email_configuration WHERE transport_id=$3::uuid AND transport_version=$4 AND generation=$5),NOT EXISTS(SELECT 1 FROM golf_user_access WHERE user_id=$6 AND suspended)`, d.ID, d.LeaseID, d.TransportID, d.TransportVersion, d.ActivationGeneration, d.UserID).Scan(&leaseLive, &configurationLive, &accessAllowed)
 	if e != nil {
 		return errStorageUnavailable
 	}
 	if !leaseLive {
 		return errEmailLeaseLost
 	}
-	if !configurationLive {
+	if !configurationLive || !accessAllowed {
 		return errEmailRevoked
 	}
 	return nil

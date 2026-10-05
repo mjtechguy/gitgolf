@@ -24,8 +24,7 @@ func (s *Server) webhookAuthority(ctx context.Context, id uuid.UUID, version, ep
 	var cipher, binding []byte
 	e := s.db.QueryRowContext(ctx, `SELECT s.sponsor_user_id,s.sponsor_native_id,s.repository_id,s.owner_id,s.local_account_id,a.credential_version,s.credential_version,a.encrypted_forge_token,a.credential_binding,a.credential_key_id,s.repository_owner,s.repository_name
  FROM golf_webhook_subscriptions s JOIN golf_local_accounts a ON a.id=s.local_account_id AND a.user_id=s.sponsor_user_id JOIN golf_users u ON u.id=a.user_id
- WHERE s.id=$1 AND s.forge_url=$2 AND u.forge_url=s.forge_url AND u.forge_user_id=s.sponsor_native_id AND s.version=$3 AND s.epoch=$4 AND s.enabled AND s.authorization_state='authorized' AND a.disabled_at IS NULL`, id, s.config.GiteaURL, version, epoch).Scan(&user, &native, &repo, &owner, &account, &currentVersion, &savedVersion, &cipher, &binding, &keyID, &ownerName, &repoName)
-	_ = user
+ WHERE s.id=$1 AND s.forge_url=$2 AND u.forge_url=s.forge_url AND u.forge_user_id=s.sponsor_native_id AND s.version=$3 AND s.epoch=$4 AND s.enabled AND s.authorization_state='authorized' AND a.disabled_at IS NULL AND NOT EXISTS(SELECT 1 FROM golf_user_access ga WHERE ga.user_id=u.id AND ga.suspended)`, id, s.config.GiteaURL, version, epoch).Scan(&user, &native, &repo, &owner, &account, &currentVersion, &savedVersion, &cipher, &binding, &keyID, &ownerName, &repoName)
 	_ = account
 	if errors.Is(e, sql.ErrNoRows) || e == nil && currentVersion != savedVersion {
 		return forgeCredential{}, errWebhookRevoked
@@ -52,16 +51,25 @@ func (s *Server) webhookAuthority(ctx context.Context, id uuid.UUID, version, ep
 	if access.RepositoryId != strconv.FormatInt(repo, 10) || access.OwnerId != strconv.FormatInt(owner, 10) || !automationGrantAdmin(access) {
 		return token, errWebhookRevoked
 	}
+	if e := s.requireGolfUserAccess(ctx, s.db, user); e != nil {
+		if errors.Is(e, errUnauthenticated) {
+			return forgeCredential{}, errWebhookRevoked
+		}
+		return forgeCredential{}, e
+	}
 	return token, nil
 }
 func (s *Server) webhookDeliveryLive(ctx context.Context, d database.GolfWebhookDelivery) error {
-	var ok bool
-	e := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_webhook_deliveries d JOIN golf_webhook_subscriptions s ON s.id=d.subscription_id JOIN golf_local_accounts a ON a.id=s.local_account_id AND a.user_id=s.sponsor_user_id WHERE d.id=$1 AND d.lease_id=$2 AND d.state='sending' AND d.lease_until>clock_timestamp() AND s.version=d.subscription_version AND s.epoch=d.epoch AND s.enabled AND s.authorization_state='authorized' AND a.disabled_at IS NULL AND a.credential_version=s.credential_version)`, d.ID, d.LeaseID).Scan(&ok)
+	var ok, accessAllowed bool
+	e := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_webhook_deliveries d JOIN golf_webhook_subscriptions s ON s.id=d.subscription_id JOIN golf_local_accounts a ON a.id=s.local_account_id AND a.user_id=s.sponsor_user_id WHERE d.id=$1 AND d.lease_id=$2 AND d.state='sending' AND d.lease_until>clock_timestamp() AND s.version=d.subscription_version AND s.epoch=d.epoch AND s.enabled AND s.authorization_state='authorized' AND a.disabled_at IS NULL AND a.credential_version=s.credential_version),NOT EXISTS(SELECT 1 FROM golf_webhook_subscriptions s JOIN golf_user_access ga ON ga.user_id=s.sponsor_user_id WHERE s.id=$3 AND ga.suspended)`, d.ID, d.LeaseID, d.SubscriptionID).Scan(&ok, &accessAllowed)
 	if e != nil {
 		return errStorageUnavailable
 	}
 	if !ok {
 		return errWebhookLeaseLost
+	}
+	if !accessAllowed {
+		return errWebhookRevoked
 	}
 	return nil
 }
