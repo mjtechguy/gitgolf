@@ -6,9 +6,9 @@ import {
   GetAuthenticationOptionsResponseSchema, GetIssueMutationRequestSchema, GetIssueMutationResponseSchema, GetIssueResponseSchema,
   GetRepositoryResponseSchema, GetSessionResponseSchema, IssueCommentSchema, IssueMutationKind, IssueMutationSchema, IssueMutationState,
   IssueSchema, IssueState, ListCapabilitiesResponseSchema, ListIssueCommentsRequestSchema, ListIssueCommentsResponseSchema,
-  ListIssuesResponseSchema, ListRepositoriesResponseSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema, RepositorySchema, UserSchema,
+  ListIssuesRequestSchema, ListIssuesResponseSchema, ListRepositoriesResponseSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema, RepositorySchema, UserSchema,
 } from '../src/gen/golf/v1/golf_pb';
-import type { CreateIssueRequest, CreateIssueCommentRequest, UpdateIssueRequest, IssueMutation } from '../src/gen/golf/v1/golf_pb';
+import type { CreateIssueRequest, CreateIssueCommentRequest, UpdateIssueRequest, IssueMutation, Issue } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 const user = create(UserSchema, { id: '9007199254740993', login: 'alex' });
@@ -23,7 +23,7 @@ type Failure = 'permission_denied' | 'not_found' | 'unauthenticated' | 'unavaila
 async function backend(page: Page) {
   const state = {
     user, signedIn: true, repoId: repository.id, issueId: issue.id, issue: { ...issue }, comments: [comment],
-    emptyFirst: false, unknown: false, drop: false, rejected: false, missingObject: false, mismatch: false,
+    issueRows: undefined as Issue[] | undefined, listPages: [] as number[], emptyFirst: false, unknown: false, drop: false, rejected: false, missingObject: false, mismatch: false,
     updates: [] as UpdateIssueRequest[], updateFailure: '', creates: [] as CreateIssueRequest[], posts: [] as CreateIssueCommentRequest[], inspections: [] as string[], pages: [] as number[],
     records: new Map<string, IssueMutation>(), errors: {} as Record<string, Failure>, barrier: undefined as Promise<void> | undefined,
   };
@@ -34,11 +34,15 @@ async function backend(page: Page) {
     if (method === 'Logout') { state.signedIn = false; return respond(route, LogoutResponseSchema, {}); }
     if (state.errors[method]) { if (state.errors[method] === 'unauthenticated') state.signedIn = false; return reject(route, state.errors[method], method === 'CreateIssueComment' ? 'Posting requires write:issue.' : 'Discussion request unavailable or denied.'); }
     if (!state.signedIn) return reject(route, 'unauthenticated', 'Sign in required.');
+    if (method === 'GetRepositoryStar') return reject(route, 'unimplemented', 'Stars are outside this issue fixture.');
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: state.user });
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
     if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository: { ...repository, id: state.repoId } });
-    if (method === 'ListIssues') return respond(route, ListIssuesResponseSchema, { issues: [state.issue] });
+    if (method === 'ListIssues') {
+      const input = request(route, ListIssuesRequestSchema), number = input.page?.page || 1; state.listPages.push(number);
+      return respond(route, ListIssuesResponseSchema, state.issueRows ? { issues: state.issueRows.slice((number - 1) * 2, number * 2), page: number === 1 ? { nextPage: 2 } : undefined } : { issues: [state.issue] });
+    }
     if (method === 'GetIssue') return respond(route, GetIssueResponseSchema, { issue: { ...state.issue, id: state.issueId } });
     if (method === 'ListIssueComments') {
       const input = request(route, ListIssueCommentsRequestSchema);
@@ -390,7 +394,7 @@ for (const field of ['title', 'body', 'close', 'reopen'] as const) {
     release(); await expect(editor).toHaveCount(0); expect(await stored(page)).toEqual([]);
     if (field === 'title') await expect(page.getByRole('heading', { name: /Edited title #12/ })).toBeVisible();
     if (field === 'body') await expect(page.getByLabel('Issue body, rendered Markdown')).toContainText('No description provided.');
-    if (field === 'close') await expect(page.getByRole('button', { name: 'Reopen issue', exact: true })).toBeEnabled();
+    if (field === 'close') { await expect(page.getByRole('button', { name: 'Reopen issue', exact: true })).toBeEnabled(); await expect(page.locator('.discussion-summary-meta .issue-state svg')).toHaveClass(/lucide-circle-check/); }
     if (field === 'reopen') await expect(page.getByRole('button', { name: 'Close issue', exact: true })).toBeEnabled();
   });
 }
@@ -473,4 +477,24 @@ test('missing native revision disables issue writes, and mobile editors stay com
     await page.screenshot({ path: `test-results/issue-edit-mobile-${theme}.png`, fullPage: true });
     await page.getByRole('button', { name: 'Close editor', exact: true }).click();
   }
+});
+
+for (const theme of ['dark', 'light']) for (const width of [1440, 390]) test(`loaded issue activity sorts and closed icons remain private in ${theme} ${width}px`, async ({ page }) => {
+  const state = await backend(page); const titles = ['Old activity', 'Offset activity', 'Recent activity', 'Missing activity'] as const;
+  state.issueRows = ['2026-10-01T12:00:00Z', '2026-10-03T01:00:00+02:00', '2026-10-03T00:00:00Z', ''].map((updatedAt, index) => create(IssueSchema, { ...issue, id: String(100 + index), number: 20 + index, title: titles[index]!, updatedAt, comments: [2, 10, 0, 3][index]!, state: index === 1 ? IssueState.CLOSED : IssueState.OPEN }));
+  await page.setViewportSize({ width, height: 900 }); await page.addInitScript(theme => localStorage.setItem('golf.theme', theme), theme); await page.goto('/alex/project/issues?state=all');
+  const rows = page.locator('.issue-list>li'), names = rows.locator('h3 a'), sort = page.getByRole('combobox', { name: 'Sort loaded issues', exact: true });
+  await expect(names).toHaveText(titles.slice(0, 2)); await sort.selectOption('updated-newest'); await expect(names).toHaveText([titles[1], titles[0]]);
+  await page.getByRole('button', { name: 'Load more issues', exact: true }).click(); await expect(names).toHaveText([titles[2], titles[1], titles[0], titles[3]]);
+  await sort.selectOption('updated-oldest'); await expect(names).toHaveText([titles[0], titles[1], titles[2], titles[3]]);
+  await sort.selectOption('most-commented'); await expect(names).toHaveText([titles[1], titles[3], titles[0], titles[2]]);
+  await sort.selectOption('least-commented'); await expect(names).toHaveText([titles[2], titles[0], titles[3], titles[1]]);
+  await sort.selectOption('provider'); await expect(names).toHaveText(titles);
+  const closed = rows.filter({ has: page.getByRole('link', { name: titles[1], exact: true }) });
+  await expect(closed.locator(':scope > svg')).toHaveClass(/lucide-circle-check/); await expect(closed.locator('.issue-state svg')).toHaveClass(/lucide-circle-check/); await expect(closed.locator('.issue-state')).toHaveText('closed'); await expect(closed.locator('svg').first()).toHaveAttribute('aria-hidden', 'true');
+  await expect(rows.first().locator(':scope > svg')).toHaveClass(/lucide-circle-dot/);
+  await page.getByRole('searchbox', { name: 'Search loaded issues', exact: true }).fill('Offset'); await expect(names).toHaveText([titles[1]]); await expect(page.getByText('1 of 4 loaded', { exact: true })).toBeVisible(); await sort.selectOption('most-commented'); await expect(names).toHaveText([titles[1]]);
+  await page.getByRole('searchbox', { name: 'Search loaded issues', exact: true }).clear(); await expect(names).toHaveCount(4); expect(state.listPages).toContain(2);
+  await page.evaluate(() => document.fonts.ready); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true); await page.screenshot({ path: test.info().outputPath(`issue-activity-${theme}-${width}.png`), fullPage: true });
+  state.errors.ListIssues = 'permission_denied'; await page.getByRole('button', { name: 'Refresh issues', exact: true }).click(); await expect(page.getByRole('alert')).toBeVisible(); await expect(rows).toHaveCount(0); expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toContain('Offset activity'); expect(state.creates).toHaveLength(0); expect(state.posts).toHaveLength(0); expect(state.updates).toHaveLength(0);
 });

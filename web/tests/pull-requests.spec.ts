@@ -1,5 +1,5 @@
 import { GetStandardPullMergeOperationResponseSchema, StandardPullMergePhase, UpdatePullRequestRequestSchema, UpdatePullRequestResponseSchema, GetIssueMutationRequestSchema, GetIssueMutationResponseSchema, IssueMutationKind, IssueMutationState } from '../src/gen/golf/v1/golf_pb';
-import type { UpdatePullRequestRequest, IssueMutation } from '../src/gen/golf/v1/golf_pb';
+import type { UpdatePullRequestRequest, IssueMutation, PullRequest } from '../src/gen/golf/v1/golf_pb';
 import {ListPullRequestCommitsRequestSchema,ListPullRequestCommitsResponseSchema,ListPullRequestChecksRequestSchema,ListPullRequestChecksResponseSchema,ReportedCheckState} from '../src/gen/golf/v1/golf_pb';
 import {GetPullRequestDiffRequestSchema,GetPullRequestDiffResponseSchema} from '../src/gen/golf/v1/golf_pb';
 import {GetPullRequestDiscussionResponseSchema,ListIssueCommentsResponseSchema,ListReviewerRunsResponseSchema} from '../src/gen/golf/v1/golf_pb';
@@ -31,7 +31,7 @@ const review = create(PullRequestReviewSchema, { id: '9007199254740998', user, b
 const pending = create(PullRequestReviewSchema, { ...review, id: '9007199254740999', user: undefined, body: '', state: PullRequestReviewState.PENDING, stale: false, dismissed: false, official: false, htmlUrl: 'javascript:alert(1)' });
 
 async function backend(page: Page) {
-  const state = { pull:clone(PullRequestSchema,pull),updates:[] as UpdatePullRequestRequest[],inspections:[] as string[],mutation:undefined as IssueMutation|undefined,updateFailure:"",unknown:false,wrongMutation:false,wrongObject:false,missingObject:false,dropUpdate:false,updateWait:undefined as Promise<void>|undefined, signedIn: true, metadataStatus: 200, listStatus: 200, detailStatus: 200, reviewStatus: 200, diffStatus: 200, wrongDiff:'', empty: false,
+  const state = { listRows:undefined as PullRequest[]|undefined, pull:clone(PullRequestSchema,pull),updates:[] as UpdatePullRequestRequest[],inspections:[] as string[],mutation:undefined as IssueMutation|undefined,updateFailure:"",unknown:false,wrongMutation:false,wrongObject:false,missingObject:false,dropUpdate:false,updateWait:undefined as Promise<void>|undefined, signedIn: true, metadataStatus: 200, listStatus: 200, detailStatus: 200, reviewStatus: 200, diffStatus: 200, wrongDiff:'', empty: false,
     workspaceStatus: 200, workspaceWait: undefined as Promise<void>|undefined, mismatched: false, badPage: false, emptyWorkspace: false, duplicateContext: false,
     commitPages: [] as number[], checkPages: [] as number[],
     reviewWait: undefined as Promise<void> | undefined, detailWait: undefined as Promise<void> | undefined,
@@ -58,6 +58,7 @@ async function backend(page: Page) {
       expect(input.repository).toMatchObject({ owner: 'alex', name: 'design-system' });
       state.pages.push(input.page?.page || 0); state.states.push(input.state);
       if (state.listStatus !== 200) return error(state.listStatus, 'Pull requests not found or inaccessible.');
+      if (state.listRows) return respond(route, ListPullRequestsResponseSchema, { pullRequests: state.listRows.slice(((input.page?.page || 1) - 1) * 2, (input.page?.page || 1) * 2), page: input.page?.page === 2 ? undefined : { nextPage: 2 } });
       const listed = { ...pull, head: create(PullRequestRefSchema, { ...pull.head!, retainedSnapshot: true }) };
       return respond(route, ListPullRequestsResponseSchema, state.empty ? {} : input.state === IssueState.CLOSED ? { pullRequests: [closed] } : input.state === IssueState.ALL ? { pullRequests: [listed, closed, snapshot] } : input.page?.page === 2 ? { pullRequests: [listed, snapshot] } : { pullRequests: [listed], page: { nextPage: 2 } });
     }
@@ -625,4 +626,16 @@ test('merged pull request retains explicit original-success inspection through c
  await expect(history.getByRole('status')).toContainText('Native merge confirmed.');
  await page.getByRole('button',{name:'Refresh pull request',exact:true}).click();await expect(history.getByRole('status')).toContainText('Native merge confirmed.');
  expect(reads).toBe(1);expect(state.updates).toHaveLength(0);expect(state.methods).not.toContain('SubmitStandardPullMerge');
+});
+
+for (const theme of ['dark', 'light']) for (const width of [1440, 390]) test(`loaded PR activity sorting excludes unavailable comment counts in ${theme} ${width}px`, async ({ page }) => {
+  const state = await backend(page), titles = ['Old proposal', 'Offset proposal', 'Recent proposal', 'Missing proposal'] as const;
+  state.listRows = ['2026-10-01T12:00:00Z', '2026-10-03T01:00:00+02:00', '2026-10-03T00:00:00Z', 'invalid'].map((updatedAt, index) => create(PullRequestSchema, { ...pull, id: String(100 + index), number: 20 + index, title: titles[index]!, updatedAt }));
+  await page.setViewportSize({ width, height: 900 }); await page.addInitScript(theme => localStorage.setItem('golf.theme', theme), theme); await page.goto('/alex/design-system/pulls');
+  const names = page.locator('.pull-list>li h3 a'), sort = page.getByRole('combobox', { name: 'Sort loaded pull requests', exact: true });
+  await expect(names).toHaveText(titles.slice(0, 2)); await expect(sort.locator('option[value="most-commented"],option[value="least-commented"]')).toHaveCount(0); await sort.selectOption('updated-newest'); await expect(names).toHaveText([titles[1], titles[0]]);
+  await page.getByRole('button', { name: 'Load more pull requests', exact: true }).click(); await expect(names).toHaveText([titles[2], titles[1], titles[0], titles[3]]); await sort.selectOption('updated-oldest'); await expect(names).toHaveText([titles[0], titles[1], titles[2], titles[3]]);
+  await sort.selectOption('provider'); await expect(names).toHaveText(titles); const search = page.getByRole('searchbox', { name: 'Search loaded pull requests', exact: true }); await search.fill('proposal'); await sort.selectOption('updated-newest'); await expect(names).toHaveText([titles[2], titles[1], titles[0], titles[3]]); await search.fill('Offset'); await expect(names).toHaveText([titles[1]]); await expect(page.getByText('1 of 4 loaded', { exact: true })).toBeVisible(); await search.clear(); await expect(names).toHaveCount(4);
+  await page.evaluate(() => document.fonts.ready); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true); await page.screenshot({ path: test.info().outputPath(`pull-activity-${theme}-${width}.png`), fullPage: true });
+  state.listStatus = 403; await page.getByRole('button', { name: 'Refresh pull requests', exact: true }).click(); await expect(page.getByRole('alert')).toBeVisible(); await expect(names).toHaveCount(0); expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toContain('Offset proposal'); expect(state.methods.some(method => /^(Create|Save|Update|Delete|Merge|Submit)/.test(method))).toBe(false);
 });
