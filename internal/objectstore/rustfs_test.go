@@ -125,6 +125,66 @@ func TestRustFSConditionalImmutableStorage(t *testing.T) {
 		t.Fatal("original source was not preserved")
 	}
 	t.Log("native conditional rejection, identical replay and original content verification passed")
+	// Artifacts use the same already-owned provider/bucket, but an independent
+	// run/attempt/content namespace. No source API admits the artifact address.
+	artifactData := []byte("private original build artifact\n")
+	artifactSHA := digest(artifactData)
+	artifactKey := artifactTestKey(artifactData)
+	if err = store.PutArtifactImmutable(context.Background(), artifactKey, artifactData, artifactSHA); err != nil {
+		t.Fatal("original artifact upload failed", err)
+	}
+	if err = store.PutArtifactImmutable(context.Background(), artifactKey, artifactData, artifactSHA); err != nil {
+		t.Fatal("identical artifact replay failed", err)
+	}
+	artifactObjectKey, err := store.artifactObjectKey(artifactKey, artifactSHA)
+	if err != nil {
+		t.Fatal("artifact fixture key invalid")
+	}
+	_, err = store.client.PutObject(context.Background(), &s3.PutObjectInput{Bucket: aws.String(c.Bucket), Key: aws.String(artifactObjectKey), Body: strings.NewReader("artifact replacement"), IfNoneMatch: aws.String("*")})
+	if apiCode(err) != "PreconditionFailed" {
+		t.Fatal("RustFS accepted competing conditional artifact replacement")
+	}
+	got, err = store.GetArtifactVerified(context.Background(), artifactKey, artifactSHA, int64(len(artifactData)))
+	if err != nil || !bytes.Equal(got, artifactData) || len(got) != len(artifactData) {
+		t.Fatal("conditional artifact write changed original bytes")
+	}
+	if _, err = store.GetArtifactVerified(context.Background(), artifactKey, artifactSHA, int64(len(artifactData)-1)); !errors.Is(err, ErrTooLarge) {
+		t.Fatal("artifact download size cap ignored")
+	}
+	if _, err = store.GetArtifactVerified(context.Background(), artifactKey, digest([]byte("different artifact")), 100); !errors.Is(err, ErrConfiguration) {
+		t.Fatal("artifact address accepted a different digest identity")
+	}
+	if err = store.PutImmutable(context.Background(), artifactKey, artifactData, artifactSHA); !errors.Is(err, ErrConfiguration) {
+		t.Fatal("source writer accepted artifact namespace")
+	}
+	if _, err = store.GetVerified(context.Background(), artifactKey, artifactSHA, 100); !errors.Is(err, ErrConfiguration) {
+		t.Fatal("source reader accepted artifact namespace")
+	}
+	if err = store.PutArtifactImmutable(context.Background(), key, data, digest(data)); !errors.Is(err, ErrConfiguration) {
+		t.Fatal("artifact writer accepted source namespace")
+	}
+	if _, err = store.GetArtifactVerified(context.Background(), key, digest(data), 100); !errors.Is(err, ErrConfiguration) {
+		t.Fatal("artifact reader accepted source namespace")
+	}
+	// A distinct owned key populated directly through the native SDK makes the
+	// hash mismatch real without changing either original source or artifact.
+	corruptArtifactKey := strings.Replace(artifactKey, "/"+strings.Repeat("a", 32)+"/", "/"+strings.Repeat("b", 32)+"/", 1)
+	corruptObjectKey, err := store.artifactObjectKey(corruptArtifactKey, artifactSHA)
+	if err != nil || corruptArtifactKey == artifactKey {
+		t.Fatal("corruption fixture not independent")
+	}
+	_, err = store.client.PutObject(context.Background(), &s3.PutObjectInput{Bucket: aws.String(c.Bucket), Key: aws.String(corruptObjectKey), Body: strings.NewReader("different native bytes"), IfNoneMatch: aws.String("*")})
+	if err != nil {
+		t.Fatal("owned native corruption fixture could not be created")
+	}
+	if _, err = store.GetArtifactVerified(context.Background(), corruptArtifactKey, artifactSHA, 100); !errors.Is(err, ErrIntegrity) {
+		t.Fatal("native artifact hash mismatch released bytes")
+	}
+	got, err = store.GetVerified(context.Background(), key, digest(data), 100)
+	if err != nil || !bytes.Equal(got, data) {
+		t.Fatal("artifact operations changed original source")
+	}
+	t.Log("native artifact conditional rejection, exact replay/bytes/size/hash and separate namespaces passed")
 	// Simultaneous fresh conditional writes must produce exactly one winner.
 	raceKey := "installation-one/ci-sources/" + strings.Repeat("f", 64) + ".tar"
 	start := make(chan struct{})
@@ -186,5 +246,12 @@ func TestRustFSConditionalImmutableStorage(t *testing.T) {
 	if err != nil || !bytes.Equal(got, data) {
 		t.Fatal("persistent source did not survive restart")
 	}
-	t.Log("private credential denial, bounds, SHA verification and actual RustFS restart passed")
+	got, err = store.GetArtifactVerified(context.Background(), artifactKey, artifactSHA, int64(len(artifactData)))
+	if err != nil || !bytes.Equal(got, artifactData) || len(got) != len(artifactData) {
+		t.Fatal("original artifact did not survive same-provider restart")
+	}
+	if err = store.PutArtifactImmutable(context.Background(), artifactKey, artifactData, artifactSHA); err != nil {
+		t.Fatal("original artifact replay failed after restart", err)
+	}
+	t.Log("private credential denial, bounds, SHA verification and original source/artifact RustFS restart passed")
 }
