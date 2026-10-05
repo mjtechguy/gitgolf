@@ -114,9 +114,6 @@ func (s *Server) preflightIssueAssignees(ctx context.Context, session string, to
 	if !slices.Equal(current, input.EditAssignees.ExpectedIDs) {
 		return errIssueAssigneesChanged
 	}
-	if slices.Equal(current, input.EditAssignees.ids()) {
-		return errIssueUnchanged
-	}
 	return s.withRepositoryRead(ctx, session, token, repositoryKey{input.Owner, input.Repository}, func(base string, repo Repository) error {
 		if repo.ID != input.RepositoryID {
 			return errIssueTargetChanged
@@ -171,6 +168,9 @@ func (s *Server) preflightIssueAssignees(ctx context.Context, session string, to
 		}
 		if !allowed {
 			return forgeError{status: 403}
+		}
+		if slices.Equal(observed, input.EditAssignees.ids()) {
+			return errIssueUnchanged
 		}
 		*before = fresh.Issue
 		return nil

@@ -212,7 +212,7 @@ func TestIssueAssigneesLifecyclePostgres(t *testing.T) {
 	}
 }
 func TestIssueAssigneesPreflightPostgres(t *testing.T) {
-	for _, mode := range []string{"stale", "unknown", "author-reader", "foreign", "wrong-login", "rename", "reused-login", "unassignable", "change-during-choice", "identity-during-choice", "revision-during-choice", "admin-during-choice", "unchanged", "remove-revoked", "retain-revoked", "large-id"} {
+	for _, mode := range []string{"stale", "unknown", "author-reader", "foreign", "wrong-login", "rename", "reused-login", "unassignable", "change-during-choice", "identity-during-choice", "revision-during-choice", "admin-during-choice", "unchanged", "same-id-wrong-login", "same-id-revoked", "same-id-reader", "same-id-admin-loss", "same-id-valid", "remove-revoked", "retain-revoked", "large-id"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newAssigneesFixture(t)
 			client, _ := f.client(t, "alice")
@@ -239,6 +239,21 @@ func TestIssueAssigneesPreflightPostgres(t *testing.T) {
 				f.unassignable["alice"] = true
 			case "unchanged":
 				req.Assignees.Assignees = nil
+			case "same-id-wrong-login", "same-id-revoked", "same-id-reader", "same-id-admin-loss", "same-id-valid":
+				row := f.issues[1]
+				row.Assignees, _ = json.Marshal(f.candidates[:1])
+				f.issues[1] = row
+				req.Assignees.ExpectedAssigneeIds = []string{"42"}
+				switch mode {
+				case "same-id-wrong-login":
+					req.Assignees.Assignees[0].Login = "bob"
+				case "same-id-revoked":
+					f.candidates = f.candidates[1:]
+				case "same-id-reader":
+					f.admin = false
+				case "same-id-admin-loss":
+					f.mode = "admin-during-choice"
+				}
 			case "remove-revoked", "retain-revoked":
 				row := f.issues[1]
 				row.Assignees, _ = json.Marshal(f.candidates[1:])
@@ -263,6 +278,18 @@ func TestIssueAssigneesPreflightPostgres(t *testing.T) {
 			}
 			if err != nil || out.Msg.Mutation.State != golfv1.IssueMutationState_ISSUE_MUTATION_STATE_REJECTED || f.patches.Load() != 0 {
 				t.Fatal("invalid selection dispatched", err, out)
+			}
+			if strings.HasPrefix(mode, "same-id-") {
+				want := "preflight_unavailable"
+				if mode == "same-id-reader" || mode == "same-id-admin-loss" {
+					want = "provider_http_403"
+				}
+				if mode == "same-id-valid" {
+					want = "unchanged"
+				}
+				if out.Msg.Mutation.FailureCode != want {
+					t.Fatal("no-op skipped exact authority/identity/assignability checks", out.Msg.Mutation.FailureCode, want)
+				}
 			}
 			if (mode == "stale" || mode == "change-during-choice" || mode == "revision-during-choice") && out.Msg.Mutation.FailureCode != "revision_changed" {
 				t.Fatal("wrong stale failure")
