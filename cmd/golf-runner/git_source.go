@@ -140,43 +140,7 @@ func (c *coordinator) prepareGitSource(ctx context.Context, a assignment, parent
 			fail()
 			return
 		}
-		request, e := http.NewRequestWithContext(r.Context(), r.Method, c.origin+"/internal/ci/attempt/"+a.AttemptID+"/git"+suffix, bytes.NewReader(body))
-		if e != nil {
-			fail()
-			return
-		}
-		request.Header.Set("Authorization", "Bearer "+c.key)
-		request.Header.Set("Golf-Runner-ID", c.id)
-		request.Header.Set("Golf-Attempt-Token", a.AttemptToken)
-		if r.Method == http.MethodPost {
-			request.Header.Set("Content-Type", "application/x-git-upload-pack-request")
-		}
-		client := *c.client
-		if client.Timeout <= 0 || client.Timeout > 15*time.Second {
-			client.Timeout = 15 * time.Second
-		}
-		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-		response, e := client.Do(request)
-		if e != nil {
-			fail()
-			return
-		}
-		defer response.Body.Close()
-		if response.StatusCode != 200 || !c.verifiedResponseTLS(response) || response.ContentLength > limit || response.Uncompressed {
-			fail()
-			return
-		}
-		for name, expected := range map[string]string{"Content-Type": content, "Golf-Source-Commit": a.CommitID, "Golf-Workflow-Blob": workflowBlobID, "Cache-Control": "no-store"} {
-			if len(response.Header.Values(name)) != 1 || response.Header.Get(name) != expected {
-				fail()
-				return
-			}
-		}
-		if len(response.Header.Values("Content-Encoding")) != 0 {
-			fail()
-			return
-		}
-		data, e := io.ReadAll(io.LimitReader(response.Body, limit+1))
+		data, e := c.gitPreparationRead(r.Context(), a, workflowBlobID, suffix, body)
 		if e != nil || int64(len(data)) > limit || ctx.Err() != nil {
 			fail()
 			return
