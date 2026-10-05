@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -89,6 +92,52 @@ func TestDiscussionWriteAuthority(t *testing.T) {
 			allowed, err := s.milestoneEditAuthority(ctx, forgeCredential{Kind: "pat", Token: "fixture"}, "/repos/club/project", Repository{ID: 11, Name: "project", FullName: "club/project"})
 			if err != nil || allowed != tc.want {
 				t.Fatalf("unit authority got %v,%v; want %v", allowed, err, tc.want)
+			}
+		})
+	}
+}
+
+// Only independently-created disposable native fixtures; no native writes or DB.
+func TestDiscussionWriteAuthorityNative(t *testing.T) {
+	raw := os.Getenv("GOLF_TEST_DISCUSSION_UNIT_NATIVE_CASES")
+	if raw == "" {
+		t.Skip("set owned native organization unit qualification fixture")
+	}
+	var cases []struct {
+		Role, Owner, Name, RepositoryID, Token string
+		Issue, Pull                            bool
+	}
+	if json.Unmarshal([]byte(raw), &cases) != nil || len(cases) != 4 {
+		t.Fatal("invalid owned unit fixture")
+	}
+	s, e := New(testConfig("http://localhost:3001"), nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, c := range cases {
+		t.Run(c.Role, func(t *testing.T) {
+			if !strings.HasPrefix(c.Owner, "golf-resources-") || c.Name != "units" || c.Token == "" {
+				t.Fatal("fixture identity must be disposable")
+			}
+			credential := forgeCredential{Kind: "pat", Token: c.Token}
+			base := "/repos/" + c.Owner + "/" + c.Name
+			repo, e := s.readRepository(t.Context(), base, credential)
+			if e != nil {
+				t.Fatal("native repository read failed")
+			}
+			if strconv.FormatInt(repo.ID, 10) != c.RepositoryID {
+				t.Fatal("native repository identity changed")
+			}
+			for _, pull := range []bool{false, true} {
+				ctx := context.WithValue(t.Context(), pullDiscussionKey{}, pull)
+				allowed, e := s.milestoneEditAuthority(ctx, credential, base, repo)
+				want := c.Issue
+				if pull {
+					want = c.Pull
+				}
+				if e != nil || allowed != want {
+					t.Fatalf("native unit authority mismatch: pull=%v allowed=%v wanted=%v providerFailed=%v", pull, allowed, want, e != nil)
+				}
 			}
 		})
 	}
