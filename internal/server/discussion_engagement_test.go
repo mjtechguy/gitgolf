@@ -74,7 +74,7 @@ func (f *engagementFixture) serveEngagement(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		if r.Method == http.MethodDelete && strings.HasSuffix(r.URL.Path, "/reactions") {
-			w.WriteHeader(http.StatusOK)
+			w.WriteHeader(http.StatusNoContent)
 		} else {
 			w.WriteHeader(http.StatusCreated)
 		}

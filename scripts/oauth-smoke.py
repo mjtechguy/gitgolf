@@ -507,7 +507,7 @@ def main():
             config = {'golf': GOLF, 'gitea': GITEA, 'alice': alice, 'bob': bob, 'sessionUser': session_user,
                       'legacyUser': legacy_user, 'legacyOrganization': legacy_organization,
                       'ownerAuthorization': basic(owner), 'clientID': app['client_id'], 'applicationID': app['id'],
-                      'scopes': ['write:user', 'write:repository', 'write:issue', 'read:organization'], 'repository': repository,
+                      'scopes': ['write:user', 'write:repository', 'write:issue', 'read:organization', 'write:notification'], 'repository': repository,
                       'revision': source['commit']['sha'], 'path': source_path, 'text': text,
                       'issueTitle': issue_title, 'organization': organization, 'refresh': args.refresh}
             process = subprocess.Popen(['node', str(browser_script)], cwd=ROOT, stdin=subprocess.PIPE,

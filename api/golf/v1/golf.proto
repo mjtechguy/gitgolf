@@ -629,6 +629,7 @@ message DiscussionLabel {
   bool exclusive = 5;
   bool archived = 6;
   string revision = 7;
+  bool organization_owned = 8;
 }
 message DiscussionMilestone {
   string id = 1;
@@ -764,6 +765,8 @@ message CreateIssueCommentResponse {
   IssueComment comment = 2;
 }
 message ListRepositoryLabelsRequest {
+  // Include independently observed inherited organization labels for issue selection.
+  bool include_organization_labels = 5;
   RepositoryKey repository = 1;
   string repository_id = 2;
   PageRequest page = 3;
@@ -4332,6 +4335,7 @@ enum DiscussionResourceOperationKind {
   DISCUSSION_RESOURCE_OPERATION_KIND_REMOVE_REACTION = 10;
   DISCUSSION_RESOURCE_OPERATION_KIND_SUBSCRIBE = 11;
   DISCUSSION_RESOURCE_OPERATION_KIND_UNSUBSCRIBE = 12;
+  DISCUSSION_RESOURCE_OPERATION_KIND_MARK_NOTIFICATION_READ = 13;
 }
 enum DiscussionResourceOperationPhase {
   DISCUSSION_RESOURCE_OPERATION_PHASE_UNSPECIFIED = 0;
@@ -4391,6 +4395,7 @@ message DiscussionResourceOperation {
   string failure_code = 12;
   string created_at = 13;
   string updated_at = 14;
+  bool reaction_comment = 15;
 }
 message SubmitDiscussionResourceOperationResponse {
   DiscussionResourceOperation operation = 1;
@@ -4471,6 +4476,8 @@ message GetRepositoryFileMutationOperationResponse { RepositoryFileMutationOpera
 service DiscussionCollaborationService {
   rpc GetDiscussionEngagement(GetDiscussionEngagementRequest) returns (GetDiscussionEngagementResponse);
   rpc ListDiscussionTimeline(ListDiscussionTimelineRequest) returns (ListDiscussionTimelineResponse);
+  rpc ListOwnForgeNotifications(ListOwnForgeNotificationsRequest) returns (ListOwnForgeNotificationsResponse);
+  rpc ListIssueTemplates(ListIssueTemplatesRequest) returns (ListIssueTemplatesResponse);
 }
 message DiscussionTarget {
   RepositoryKey repository = 1;
@@ -4654,4 +4661,31 @@ message GetRepositoryMirrorStatusResponse {
   string last_updated_at = 5;
   // Host only; remote paths, credentials and query strings never leave the adapter.
   string source_host = 6;
+}
+
+message ListOwnForgeNotificationsRequest { bool include_read = 1; PageRequest page = 2; }
+message OwnForgeNotification {
+  string id = 1;
+  DiscussionTarget target = 2;
+  string title = 3;
+  bool unread = 4;
+  bool pinned = 5;
+  string updated_at = 6;
+  string revision = 7;
+}
+message ListOwnForgeNotificationsResponse { repeated OwnForgeNotification notifications = 1; PageResponse page = 2; }
+message ListIssueTemplatesRequest { RepositoryKey repository = 1; string repository_id = 2; }
+message IssueTemplate {
+  string path = 1;
+  string name = 2;
+  string about = 3;
+  string title = 4;
+  string body = 5;
+  string blob_id = 6;
+}
+message ListIssueTemplatesResponse {
+  repeated IssueTemplate templates = 1;
+  string commit_id = 2;
+  // YAML forms/oversized or invalid templates are observed, not pretended to work.
+  uint32 unsupported_templates = 3;
 }

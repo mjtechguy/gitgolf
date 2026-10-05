@@ -1,3 +1,4 @@
+import {IssueTemplateChooser} from './IssueTemplateChooser';
 import {DiscussionEngagement,DiscussionTimeline} from './DiscussionEngagement';
 import { DiscussionResourceManagement, CommentResourceControls } from './DiscussionResourceControls';
 import { DiscussionListControls, discussionQuery } from './DiscussionListControls';
@@ -12,7 +13,7 @@ import { Link, useBlocker, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, CircleDot, ExternalLink, LoaderCircle, MessageSquare, Plus, RefreshCw, Pencil, FilePenLine, CircleCheck, Undo2 } from 'lucide-react';
 import { repositoryClient, repositoryLink, errorMessage } from './api';
 import { IssueMutationKind, IssueMutationState, IssueState } from './gen/golf/v1/golf_pb';
-import type { CreateIssueCommentRequest, CreateIssueRequest, GetIssueMutationResponse, Issue, IssueComment, IssueMutation, PageResponse, RepositoryKey, UpdateIssueRequest, UpdatePullRequestRequest, PullRequest, User, RepositoryComparisonSelection, CreatePullRequestRequest, DiscussionMilestone, DiscussionLabel } from './gen/golf/v1/golf_pb';
+import type { CreateIssueCommentRequest, CreateIssueRequest, GetIssueMutationResponse, Issue, IssueComment, IssueMutation, PageResponse, RepositoryKey, UpdateIssueRequest, UpdatePullRequestRequest, PullRequest, User, RepositoryComparisonSelection, CreatePullRequestRequest, DiscussionMilestone, DiscussionLabel, IssueTemplate } from './gen/golf/v1/golf_pb';
 import { repositoryOptions } from './navigation';
 import type { RepositoryLocation } from './navigation';
 import { DateLabel, Loading, More, PanelError, privateQuery } from './RepositoryUI';
@@ -52,7 +53,7 @@ function Comment({ comment, controls }: { comment: IssueComment; controls?: Reac
   </article>;
 }
 
-export function DiscussionComposer({ repositoryKey, repositoryId, queryKey, userId, pullRequest, issue, proposal, onCreated, onPending, onPosted, editField, onUpdated, onPullUpdated, creation, onPullCreated, initialTitle, blocked, onClose, onDraftChange, fullPage, milestoneChoices, milestoneReady, labelChoices, labelsReady, assigneeChoices, assigneesReady }: Props & { creation?:RepositoryComparisonSelection; blocked?:boolean; initialTitle?:string; onPullCreated?:(pull:PullRequest)=>void; issue?: Issue; proposal?: PullRequest; onPullUpdated?: (pull?: PullRequest) => void; onCreated?: (issue: Issue) => void; onPending?: (value: boolean) => void; onPosted?: () => void; editField?: IssueIntent['editField']; onUpdated?: (issue?: Issue) => void; onClose?: () => void; onDraftChange?: (dirty: boolean) => void; fullPage?: boolean; milestoneChoices?: readonly DiscussionMilestone[]; milestoneReady?: boolean; labelChoices?: readonly DiscussionLabel[]; labelsReady?: boolean; assigneeChoices?: readonly User[]; assigneesReady?: boolean }) {
+export function DiscussionComposer({ repositoryKey, repositoryId, queryKey, userId, pullRequest, issue, proposal, onCreated, onPending, onPosted, editField, onUpdated, onPullUpdated, creation, onPullCreated, initialTitle, initialBody, blocked, onClose, onDraftChange, fullPage, milestoneChoices, milestoneReady, labelChoices, labelsReady, assigneeChoices, assigneesReady }: Props & { creation?:RepositoryComparisonSelection; blocked?:boolean; initialTitle?:string; initialBody?:string; onPullCreated?:(pull:PullRequest)=>void; issue?: Issue; proposal?: PullRequest; onPullUpdated?: (pull?: PullRequest) => void; onCreated?: (issue: Issue) => void; onPending?: (value: boolean) => void; onPosted?: () => void; editField?: IssueIntent['editField']; onUpdated?: (issue?: Issue) => void; onClose?: () => void; onDraftChange?: (dirty: boolean) => void; fullPage?: boolean; milestoneChoices?: readonly DiscussionMilestone[]; milestoneReady?: boolean; labelChoices?: readonly DiscussionLabel[]; labelsReady?: boolean; assigneeChoices?: readonly User[]; assigneesReady?: boolean }) {
   const edit = Boolean(editField);
   const pageEditor = Boolean(fullPage && !issue && !proposal && !creation && !edit);
   const originalIssue = useRef(issue);
@@ -63,7 +64,7 @@ export function DiscussionComposer({ repositoryKey, repositoryId, queryKey, user
   const kind = creation ? 'pull' : proposal ? 'pull-update' : edit ? 'update' : issue ? 'comment' : 'issue';
   const storageKey = issueIntentKey(userId, repositoryId, creation ? 'new-pull' : proposal ? 'pull-'+proposal.id : issue?.id) + (edit ? ':edit' : '');
   const [intent, setIntent] = useState(() => readIssueIntent(storageKey, repositoryId, issue?.id, target?.number, kind, proposal?.id));
-  const form = useForm({ defaultValues: { title: editField === 'title' ? target?.title || '' : initialTitle || '', body: editField === 'body' ? target?.body || '' : '', draft:false, milestoneId: target?.metadata?.milestone?.id || '0', labelIds: target?.metadata?.labels.map(row => row.id) || [], assigneeIds: target?.metadata?.assignees.map(row => row.id) || [], assigneeSearch: '' }, onSubmit: () => submit() });
+  const form = useForm({ defaultValues: { title: editField === 'title' ? target?.title || '' : initialTitle || '', body: editField === 'body' ? target?.body || '' : initialBody || '', draft:false, milestoneId: target?.metadata?.milestone?.id || '0', labelIds: target?.metadata?.labels.map(row => row.id) || [], assigneeIds: target?.metadata?.assignees.map(row => row.id) || [], assigneeSearch: '' }, onSubmit: () => submit() });
   const { title, body, draft, milestoneId, labelIds, assigneeIds, assigneeSearch } = useStore(form.store, (state) => state.values);
   const originalAssigneeIds = originalTarget?.metadata?.assignees.map(row => row.id) || [];
   const assigneeInventory = new Map(assigneeChoices?.map(row => [row.id, row]));
@@ -203,6 +204,7 @@ export function DiscussionComposer({ repositoryKey, repositoryId, queryKey, user
 function NewIssue(props: Props) {
   const navigate = useNavigate();
   const [dirty, setDirty] = useState(false);
+  const [template,setTemplate]=useState<IssueTemplate>();
   const completed = useRef(false);
   useBlocker({
     shouldBlockFn: () => !completed.current && dirty && !window.confirm('Discard this unsent issue draft?'),
@@ -211,7 +213,7 @@ function NewIssue(props: Props) {
   const cancel = () => void navigate(repositoryOptions(props.location, { issue: undefined, issueNew: undefined }));
   return <section className="issue-create-page" aria-label="New issue">
     <header className="discussion-summary"><div className="discussion-navigation"><Link className="text-button" {...repositoryOptions(props.location, { issue: undefined, issueNew: undefined })}><ArrowLeft size={15} />Issues</Link></div><h2>New issue</h2><p className="field-help">Describe a bug, propose a change, or start a discussion in {props.location.owner}/{props.location.name}.</p></header>
-    <div className="discussion-layout"><section className="browser-panel" aria-label="Issue editor"><div className="browser-panel-heading"><h2><CircleDot size={17} />Create an issue</h2></div><div className="issue-edit-content"><DiscussionComposer {...props} fullPage onDraftChange={setDirty} onClose={cancel} onCreated={(issue) => { completed.current = true; void navigate(repositoryOptions(props.location, { issue: issue.number, issueNew: undefined })); }} /></div></section><aside className="discussion-sidebar" aria-label="Issue creation guidance"><h3>Writing a useful issue</h3><p>Include what happened, what you expected, and steps to reproduce it.</p><h3>Markdown</h3><p>Use headings, lists, links, and code blocks. Preview your description before posting.</p><details className="metadata-details"><summary>Access and request status</summary><p className="field-help">Repository access and issue-write permission are checked when submitting. A pending request keeps its key in this tab, so you can return to check the outcome without posting twice.</p></details></aside></div>
+    <div className="discussion-layout"><section className="browser-panel" aria-label="Issue editor"><div className="browser-panel-heading"><h2><CircleDot size={17} />Create an issue</h2></div><div className="issue-edit-content"><IssueTemplateChooser {...props} choose={value=>{if(!dirty||window.confirm('Replace this unsent issue draft with the selected template?')){setTemplate(value);setDirty(false);}}}/><DiscussionComposer key={template?template.path+template.blobId:'blank'} {...props} initialTitle={template?.title} initialBody={template?.body} fullPage onDraftChange={setDirty} onClose={cancel} onCreated={(issue) => { completed.current = true; void navigate(repositoryOptions(props.location, { issue: issue.number, issueNew: undefined })); }} /></div></section><aside className="discussion-sidebar" aria-label="Issue creation guidance"><h3>Writing a useful issue</h3><p>Include what happened, what you expected, and steps to reproduce it.</p><h3>Markdown</h3><p>Use headings, lists, links, and code blocks. Preview your description before posting.</p><details className="metadata-details"><summary>Access and request status</summary><p className="field-help">Repository access and issue-write permission are checked when submitting. A pending request keeps its key in this tab, so you can return to check the outcome without posting twice.</p></details></aside></div>
   </section>;
 }
 
@@ -265,7 +267,7 @@ export function IssueMetadataControls(props: Props & EditState & { issue?: Issue
   useEffect(() => { if (denied(query.error)) props.onDenied(query.error!); }, [query.error, props.onDenied]);
   const labelsTrigger = useRef<HTMLButtonElement>(null);
   const labelsQuery = useInfiniteQuery({ ...privateQuery, queryKey: [...queryKey, 'labels', repositoryId, pullRequest], initialPageParam: 1, enabled: Boolean(issue.metadata?.labelsKnown),
-    queryFn: ({ pageParam, signal }) => repositoryClient.listRepositoryLabels({ repository: repositoryKey, repositoryId, pullRequest, page: { page: pageParam, limit: 20 } }, { signal, timeoutMs: 8_000 }), getNextPageParam: followingPage });
+    queryFn: ({ pageParam, signal }) => repositoryClient.listRepositoryLabels({ repository: repositoryKey, repositoryId, pullRequest, includeOrganizationLabels:true, page: { page: pageParam, limit: 20 } }, { signal, timeoutMs: 8_000 }), getNextPageParam: followingPage });
   useEffect(() => { if (denied(labelsQuery.error)) props.onDenied(labelsQuery.error!); }, [labelsQuery.error, props.onDenied]);
   const assigneesTrigger = useRef<HTMLButtonElement>(null);
   const assigneesQuery = useQuery({ ...privateQuery, queryKey: [...queryKey, 'assignees', repositoryId, pullRequest], enabled: Boolean(issue.metadata?.assigneesKnown),

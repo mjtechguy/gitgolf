@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -98,6 +99,49 @@ func (s *Server) ListRepositoryLabels(ctx context.Context, req *connect.Request[
 				seen[label.Id] = true
 				result.Labels = append(result.Labels, label)
 			}
+
+			if req.Msg.IncludeOrganizationLabels {
+				owner, org, e := s.discussionRepositoryOrganization(ctx, token, base, repo, key.Owner)
+				if e != nil {
+					return e
+				}
+				if org {
+					var orgRows []json.RawMessage
+					headers, e := s.forge(ctx, http.MethodGet, "/orgs/"+owner.Login+"/labels?"+query.Encode(), token, nil, &orgRows)
+					if e != nil {
+						return e
+					}
+					if len(orgRows) > int(effective) {
+						return errForgeResponseTooLarge
+					}
+					orgNext, e := pullNextPage(headers, page, effective)
+					if e != nil {
+						return e
+					}
+					if orgNext > next {
+						next = orgNext
+					}
+					for _, raw := range orgRows {
+						label, e := nativeLabel(raw)
+						if e != nil {
+							return e
+						}
+						if seen[label.Id] {
+							return errInvalidForgeResponse
+						}
+						seen[label.Id] = true
+						label.OrganizationOwned = true
+						result.Labels = append(result.Labels, label)
+					}
+					after, orgAfter, e := s.discussionRepositoryOrganization(ctx, token, base, repo, key.Owner)
+					if e != nil {
+						return e
+					}
+					if !orgAfter || after.ID != owner.ID {
+						return errIssueTargetChanged
+					}
+				}
+			}
 			result.Page = wirePage(next)
 			return nil
 		})
@@ -123,4 +167,53 @@ func (s *Server) ListRepositoryLabels(ctx context.Context, req *connect.Request[
 		return nil, rpcError(err)
 	}
 	return connect.NewResponse(result), nil
+}
+
+// Bind inherited label reads to the repository's independently observed organization owner.
+func (s *Server) discussionRepositoryOrganization(ctx context.Context, token forgeCredential, base string, repo Repository, name string) (*User, bool, error) {
+	var row struct {
+		ID    int64 `json:"id"`
+		Owner *User `json:"owner"`
+	}
+	if _, e := s.forge(ctx, http.MethodGet, base, token, nil, &row); e != nil {
+		return nil, false, e
+	}
+	if row.ID != repo.ID || row.Owner == nil || row.Owner.ID <= 0 || !strings.EqualFold(row.Owner.Login, name) {
+		return nil, false, errInvalidForgeResponse
+	}
+	org, e := s.repositoryOwnerKind(ctx, token, *row.Owner)
+	return row.Owner, org, e
+}
+func (s *Server) readAssignableDiscussionLabel(ctx context.Context, token forgeCredential, base string, repo Repository, owner string, id int64) (*golfv1.DiscussionLabel, error) {
+	label, e := s.readRepositoryLabel(ctx, token, base, id)
+	if !sourceNotFound(e) {
+		return label, e
+	}
+	orgOwner, org, e := s.discussionRepositoryOrganization(ctx, token, base, repo, owner)
+	if e != nil {
+		return nil, e
+	}
+	if !org {
+		return nil, errResourceNotFound
+	}
+	var raw json.RawMessage
+	if _, e = s.forge(ctx, http.MethodGet, "/orgs/"+orgOwner.Login+"/labels/"+strconv.FormatInt(id, 10), token, nil, &raw); e != nil {
+		return nil, e
+	}
+	label, e = nativeLabel(raw)
+	if e != nil {
+		return nil, e
+	}
+	if label.Id != strconv.FormatInt(id, 10) {
+		return nil, errInvalidForgeResponse
+	}
+	label.OrganizationOwned = true
+	after, orgAfter, e := s.discussionRepositoryOrganization(ctx, token, base, repo, owner)
+	if e != nil {
+		return nil, e
+	}
+	if !orgAfter || after.ID != orgOwner.ID {
+		return nil, errIssueTargetChanged
+	}
+	return label, nil
 }

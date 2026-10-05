@@ -834,6 +834,12 @@ const (
 	// DiscussionCollaborationServiceListDiscussionTimelineProcedure is the fully-qualified name of the
 	// DiscussionCollaborationService's ListDiscussionTimeline RPC.
 	DiscussionCollaborationServiceListDiscussionTimelineProcedure = "/golf.v1.DiscussionCollaborationService/ListDiscussionTimeline"
+	// DiscussionCollaborationServiceListOwnForgeNotificationsProcedure is the fully-qualified name of
+	// the DiscussionCollaborationService's ListOwnForgeNotifications RPC.
+	DiscussionCollaborationServiceListOwnForgeNotificationsProcedure = "/golf.v1.DiscussionCollaborationService/ListOwnForgeNotifications"
+	// DiscussionCollaborationServiceListIssueTemplatesProcedure is the fully-qualified name of the
+	// DiscussionCollaborationService's ListIssueTemplates RPC.
+	DiscussionCollaborationServiceListIssueTemplatesProcedure = "/golf.v1.DiscussionCollaborationService/ListIssueTemplates"
 	// RepositoryReleaseManagementServiceSubmitRepositoryReleaseOperationProcedure is the
 	// fully-qualified name of the RepositoryReleaseManagementService's SubmitRepositoryReleaseOperation
 	// RPC.
@@ -8797,6 +8803,8 @@ func (UnimplementedRepositoryFileMutationServiceHandler) GetRepositoryFileMutati
 type DiscussionCollaborationServiceClient interface {
 	GetDiscussionEngagement(context.Context, *connect.Request[v1.GetDiscussionEngagementRequest]) (*connect.Response[v1.GetDiscussionEngagementResponse], error)
 	ListDiscussionTimeline(context.Context, *connect.Request[v1.ListDiscussionTimelineRequest]) (*connect.Response[v1.ListDiscussionTimelineResponse], error)
+	ListOwnForgeNotifications(context.Context, *connect.Request[v1.ListOwnForgeNotificationsRequest]) (*connect.Response[v1.ListOwnForgeNotificationsResponse], error)
+	ListIssueTemplates(context.Context, *connect.Request[v1.ListIssueTemplatesRequest]) (*connect.Response[v1.ListIssueTemplatesResponse], error)
 }
 
 // NewDiscussionCollaborationServiceClient constructs a client for the
@@ -8822,13 +8830,27 @@ func NewDiscussionCollaborationServiceClient(httpClient connect.HTTPClient, base
 			connect.WithSchema(discussionCollaborationServiceMethods.ByName("ListDiscussionTimeline")),
 			connect.WithClientOptions(opts...),
 		),
+		listOwnForgeNotifications: connect.NewClient[v1.ListOwnForgeNotificationsRequest, v1.ListOwnForgeNotificationsResponse](
+			httpClient,
+			baseURL+DiscussionCollaborationServiceListOwnForgeNotificationsProcedure,
+			connect.WithSchema(discussionCollaborationServiceMethods.ByName("ListOwnForgeNotifications")),
+			connect.WithClientOptions(opts...),
+		),
+		listIssueTemplates: connect.NewClient[v1.ListIssueTemplatesRequest, v1.ListIssueTemplatesResponse](
+			httpClient,
+			baseURL+DiscussionCollaborationServiceListIssueTemplatesProcedure,
+			connect.WithSchema(discussionCollaborationServiceMethods.ByName("ListIssueTemplates")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // discussionCollaborationServiceClient implements DiscussionCollaborationServiceClient.
 type discussionCollaborationServiceClient struct {
-	getDiscussionEngagement *connect.Client[v1.GetDiscussionEngagementRequest, v1.GetDiscussionEngagementResponse]
-	listDiscussionTimeline  *connect.Client[v1.ListDiscussionTimelineRequest, v1.ListDiscussionTimelineResponse]
+	getDiscussionEngagement   *connect.Client[v1.GetDiscussionEngagementRequest, v1.GetDiscussionEngagementResponse]
+	listDiscussionTimeline    *connect.Client[v1.ListDiscussionTimelineRequest, v1.ListDiscussionTimelineResponse]
+	listOwnForgeNotifications *connect.Client[v1.ListOwnForgeNotificationsRequest, v1.ListOwnForgeNotificationsResponse]
+	listIssueTemplates        *connect.Client[v1.ListIssueTemplatesRequest, v1.ListIssueTemplatesResponse]
 }
 
 // GetDiscussionEngagement calls golf.v1.DiscussionCollaborationService.GetDiscussionEngagement.
@@ -8841,11 +8863,23 @@ func (c *discussionCollaborationServiceClient) ListDiscussionTimeline(ctx contex
 	return c.listDiscussionTimeline.CallUnary(ctx, req)
 }
 
+// ListOwnForgeNotifications calls golf.v1.DiscussionCollaborationService.ListOwnForgeNotifications.
+func (c *discussionCollaborationServiceClient) ListOwnForgeNotifications(ctx context.Context, req *connect.Request[v1.ListOwnForgeNotificationsRequest]) (*connect.Response[v1.ListOwnForgeNotificationsResponse], error) {
+	return c.listOwnForgeNotifications.CallUnary(ctx, req)
+}
+
+// ListIssueTemplates calls golf.v1.DiscussionCollaborationService.ListIssueTemplates.
+func (c *discussionCollaborationServiceClient) ListIssueTemplates(ctx context.Context, req *connect.Request[v1.ListIssueTemplatesRequest]) (*connect.Response[v1.ListIssueTemplatesResponse], error) {
+	return c.listIssueTemplates.CallUnary(ctx, req)
+}
+
 // DiscussionCollaborationServiceHandler is an implementation of the
 // golf.v1.DiscussionCollaborationService service.
 type DiscussionCollaborationServiceHandler interface {
 	GetDiscussionEngagement(context.Context, *connect.Request[v1.GetDiscussionEngagementRequest]) (*connect.Response[v1.GetDiscussionEngagementResponse], error)
 	ListDiscussionTimeline(context.Context, *connect.Request[v1.ListDiscussionTimelineRequest]) (*connect.Response[v1.ListDiscussionTimelineResponse], error)
+	ListOwnForgeNotifications(context.Context, *connect.Request[v1.ListOwnForgeNotificationsRequest]) (*connect.Response[v1.ListOwnForgeNotificationsResponse], error)
+	ListIssueTemplates(context.Context, *connect.Request[v1.ListIssueTemplatesRequest]) (*connect.Response[v1.ListIssueTemplatesResponse], error)
 }
 
 // NewDiscussionCollaborationServiceHandler builds an HTTP handler from the service implementation.
@@ -8867,12 +8901,28 @@ func NewDiscussionCollaborationServiceHandler(svc DiscussionCollaborationService
 		connect.WithSchema(discussionCollaborationServiceMethods.ByName("ListDiscussionTimeline")),
 		connect.WithHandlerOptions(opts...),
 	)
+	discussionCollaborationServiceListOwnForgeNotificationsHandler := connect.NewUnaryHandler(
+		DiscussionCollaborationServiceListOwnForgeNotificationsProcedure,
+		svc.ListOwnForgeNotifications,
+		connect.WithSchema(discussionCollaborationServiceMethods.ByName("ListOwnForgeNotifications")),
+		connect.WithHandlerOptions(opts...),
+	)
+	discussionCollaborationServiceListIssueTemplatesHandler := connect.NewUnaryHandler(
+		DiscussionCollaborationServiceListIssueTemplatesProcedure,
+		svc.ListIssueTemplates,
+		connect.WithSchema(discussionCollaborationServiceMethods.ByName("ListIssueTemplates")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/golf.v1.DiscussionCollaborationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DiscussionCollaborationServiceGetDiscussionEngagementProcedure:
 			discussionCollaborationServiceGetDiscussionEngagementHandler.ServeHTTP(w, r)
 		case DiscussionCollaborationServiceListDiscussionTimelineProcedure:
 			discussionCollaborationServiceListDiscussionTimelineHandler.ServeHTTP(w, r)
+		case DiscussionCollaborationServiceListOwnForgeNotificationsProcedure:
+			discussionCollaborationServiceListOwnForgeNotificationsHandler.ServeHTTP(w, r)
+		case DiscussionCollaborationServiceListIssueTemplatesProcedure:
+			discussionCollaborationServiceListIssueTemplatesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -8888,6 +8938,14 @@ func (UnimplementedDiscussionCollaborationServiceHandler) GetDiscussionEngagemen
 
 func (UnimplementedDiscussionCollaborationServiceHandler) ListDiscussionTimeline(context.Context, *connect.Request[v1.ListDiscussionTimelineRequest]) (*connect.Response[v1.ListDiscussionTimelineResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.DiscussionCollaborationService.ListDiscussionTimeline is not implemented"))
+}
+
+func (UnimplementedDiscussionCollaborationServiceHandler) ListOwnForgeNotifications(context.Context, *connect.Request[v1.ListOwnForgeNotificationsRequest]) (*connect.Response[v1.ListOwnForgeNotificationsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.DiscussionCollaborationService.ListOwnForgeNotifications is not implemented"))
+}
+
+func (UnimplementedDiscussionCollaborationServiceHandler) ListIssueTemplates(context.Context, *connect.Request[v1.ListIssueTemplatesRequest]) (*connect.Response[v1.ListIssueTemplatesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.DiscussionCollaborationService.ListIssueTemplates is not implemented"))
 }
 
 // RepositoryReleaseManagementServiceClient is a client for the

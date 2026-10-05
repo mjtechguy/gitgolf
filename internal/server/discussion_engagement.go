@@ -192,7 +192,14 @@ func (s *Server) readDiscussionEngagement(ctx context.Context, session string, t
 		}
 		// The native API additionally enforces locked-issue and blocked-user policy.
 		_, delegated := ctx.Value(apiAuthKey{}).(apiAuth)
-		out.CanReact = active && !delegated
+		out.CanReact = active && !delegated && issue.IsLocked != nil
+		if out.CanReact && *issue.IsLocked {
+			writer, e := s.milestoneEditAuthority(context.WithValue(ctx, pullDiscussionKey{}, t.PullRequest), token, base, repo)
+			if e != nil {
+				return e
+			}
+			out.CanReact = writer
+		}
 		out.CanSubscribe = active && !delegated && t.CommentId == ""
 		out.Revision = resourceHash([]any{t.RepositoryId, t.IssueId, t.Number, t.PullRequest, t.CommentId, actor.ID, out.Reactions, out.Subscribed})
 		return nil
@@ -368,6 +375,16 @@ func (s *Server) ListDiscussionTimeline(ctx context.Context, req *connect.Reques
 }
 
 func (s *Server) preflightResourceRequest(ctx context.Context, session string, token forgeCredential, r discussionResourceRecord, m *golfv1.SubmitDiscussionResourceOperationRequest) error {
+	if r.Kind == "MARK_NOTIFICATION_READ" {
+		row, e := s.notificationForOperation(ctx, session, token, r)
+		if e != nil {
+			return e
+		}
+		if !row.Unread || row.Revision != r.Revision {
+			return errIssueRevisionChanged
+		}
+		return nil
+	}
 	if !engagementKind(r.Kind) {
 		return s.preflightDiscussionResource(ctx, session, token, r)
 	}
@@ -388,6 +405,12 @@ func (s *Server) preflightResourceRequest(ctx context.Context, session string, t
 	if e != nil {
 		return e
 	}
+	if (r.Kind == "ADD_REACTION" || r.Kind == "REMOVE_REACTION") && !v.CanReact {
+		return forgeError{status: http.StatusForbidden}
+	}
+	if (r.Kind == "SUBSCRIBE" || r.Kind == "UNSUBSCRIBE") && !v.CanSubscribe {
+		return forgeError{status: http.StatusForbidden}
+	}
 	if v.Revision != r.Revision || engagementMatches(m, v) {
 		return errIssueRevisionChanged
 	}
@@ -403,7 +426,8 @@ func (s *Server) dispatchEngagement(ctx context.Context, session string, token f
 		return 0, e
 	}
 	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK && (res.StatusCode != http.StatusCreated || resourceKind(m.Kind) == "REMOVE_REACTION") {
+	allowedStatus := res.StatusCode == http.StatusOK || res.StatusCode == http.StatusCreated && resourceKind(m.Kind) != "REMOVE_REACTION" || res.StatusCode == http.StatusNoContent && resourceKind(m.Kind) == "REMOVE_REACTION"
+	if !allowedStatus {
 		return 0, errInvalidForgeResponse
 	}
 	if e := s.resourceAuthority(ctx, session, token, r); e != nil {

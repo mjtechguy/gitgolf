@@ -90,7 +90,7 @@ func (s *Server) preflightIssueLabels(ctx context.Context, session string, token
 		ids = slices.Compact(ids)
 		scopes := map[string]bool{}
 		for _, id := range ids {
-			label, err := s.readRepositoryLabel(ctx, token, base, id)
+			label, err := s.readAssignableDiscussionLabel(ctx, token, base, repo, input.Owner, id)
 			if err != nil {
 				return err
 			}

@@ -45,7 +45,7 @@ func (f *pullMetadataFixture) discussion(row forgePull) discussionIssue {
 	if f.mode == "issue-rebound-after" && f.patches.Load() > 0 {
 		id++
 	}
-	return discussionIssue{forgeIssue: forgeIssue{Issue: Issue{forgeDiscussionMetadata: row.forgeDiscussionMetadata, ID: id, Number: row.Number, Title: row.Title, Body: row.Body, State: row.State, User: *row.User, ContentVersion: row.ContentVersion, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, HTMLURL: row.HTMLURL}, PullRequest: json.RawMessage(`{}`)}, Repository: &struct {
+	return discussionIssue{IsLocked: proto.Bool(false), forgeIssue: forgeIssue{Issue: Issue{forgeDiscussionMetadata: row.forgeDiscussionMetadata, ID: id, Number: row.Number, Title: row.Title, Body: row.Body, State: row.State, User: *row.User, ContentVersion: row.ContentVersion, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, HTMLURL: row.HTMLURL}, PullRequest: json.RawMessage(`{}`)}, Repository: &struct {
 		ID int64 `json:"id"`
 	}{ID: 11}}
 }

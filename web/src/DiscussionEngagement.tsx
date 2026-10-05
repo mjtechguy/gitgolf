@@ -4,7 +4,7 @@ import {Code,ConnectError} from '@connectrpc/connect';
 import {Bell,BellOff,GitBranch,MessageSquare,Smile,RefreshCw} from 'lucide-react';
 import {Link} from '@tanstack/react-router';
 import {discussionCollaborationClient as client} from './api';
-import {DiscussionResourceOperationKind as Kind,type RepositoryKey,type SubmitDiscussionResourceOperationRequest,type DiscussionTimelineEvent} from './gen/golf/v1/golf_pb';
+import {DiscussionResourceOperationKind as Kind,DiscussionResourceOperationPhase as Phase,type RepositoryKey,type SubmitDiscussionResourceOperationRequest,type DiscussionTimelineEvent} from './gen/golf/v1/golf_pb';
 import {useResourceOperation} from './DiscussionResourceControls';
 import {DateLabel,Loading,More,PanelError,privateQuery} from './RepositoryUI';
 import {repositoryOptions,type RepositoryLocation} from './navigation';
@@ -19,6 +19,7 @@ export function DiscussionEngagement(scope:Scope){
  const query=useQuery({...privateQuery,queryKey:[...scope.queryKey,'engagement',scope.issue.id,scope.commentId||''],queryFn:({signal})=>client.getDiscussionEngagement({target:target(scope)},{signal,timeoutMs:15000})});
  useEffect(()=>{if(denied(query.error)){setPicker(false);scope.onDenied(query.error!);}},[query.error,scope.onDenied]);
  const operation=useResourceOperation(scope,`engagement:${scope.issue.id}:${scope.commentId||'description'}`,()=>{setPicker(false);void query.refetch();},scope.onDenied);
+ useEffect(()=>{if(operation.record?.phase===Phase.SUCCEEDED)operation.clear();},[operation.record?.phase]);
  const data=query.isSuccess&&!query.isFetching?query.data:undefined;
  const ready=!!data&&/^[a-f0-9]{64}$/.test(data.revision)&&!operation.original&&!operation.busy;
  const send=(kind:Kind,reaction?:string)=>{if(!ready||!data)return;const input:SubmitDiscussionResourceOperationRequest={$typeName:'golf.v1.SubmitDiscussionResourceOperationRequest',repository:{$typeName:'golf.v1.RepositoryKey',...scope.repositoryKey},repositoryId:scope.repositoryId,issueId:scope.issue.id,number:scope.issue.number,pullRequest:!!scope.pullRequest,resourceId:scope.commentId||scope.issue.id,expectedRevision:data.revision,operationId:crypto.randomUUID(),kind,reactionComment:!!scope.commentId,subscriptionLogin:reaction?'':data.actorLogin,change:reaction?{case:'reaction',value:reaction}:{case:undefined}};operation.submit(input);setPicker(false);};

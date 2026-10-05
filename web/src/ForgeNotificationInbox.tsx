@@ -1,0 +1,22 @@
+import {useState} from 'react';
+import {useInfiniteQuery} from '@tanstack/react-query';
+import {Link} from '@tanstack/react-router';
+import {Bell,Check,RefreshCw} from 'lucide-react';
+import {discussionCollaborationClient} from './api';
+import {DataTable,type DataTableColumn} from './DataTable';
+import {DateLabel,Loading,More,PanelError,privateQuery} from './RepositoryUI';
+import {useResourceOperation} from './DiscussionResourceControls';
+import {DiscussionResourceOperationKind as Kind,type OwnForgeNotification} from './gen/golf/v1/golf_pb';
+import {repositoryOptions} from './navigation';
+function MarkRead({row,userId,refresh}:{row:OwnForgeNotification;userId:string;refresh:()=>void}){
+ const t=row.target!;
+ const op=useResourceOperation({repositoryKey:t.repository!,repositoryId:t.repositoryId,userId,queryKey:['forge-inbox',userId]},`notification:${row.id}`,refresh);
+ return <><button className="icon-button" aria-label={`Mark notification ${row.id} as read`} title="Mark as read" disabled={!row.unread||op.busy||!!op.original} onClick={()=>op.submit({$typeName:'golf.v1.SubmitDiscussionResourceOperationRequest',repository:t.repository,repositoryId:t.repositoryId,issueId:t.issueId,number:t.number,pullRequest:t.pullRequest,resourceId:row.id,expectedRevision:row.revision,operationId:crypto.randomUUID(),kind:Kind.MARK_NOTIFICATION_READ,subscriptionLogin:'',reactionComment:false,change:{case:undefined}})}><Check size={16}/></button>{op.status}{op.error?<p className="error" role="alert">{op.error}</p>:null}</>;
+}
+export function ForgeNotificationInbox({userId}:{userId:string}){
+ const [includeRead,setIncludeRead]=useState(false);
+ const query=useInfiniteQuery({...privateQuery,queryKey:['forge-inbox',userId,includeRead],initialPageParam:1,queryFn:({pageParam,signal})=>discussionCollaborationClient.listOwnForgeNotifications({includeRead,page:{page:pageParam,limit:30}},{signal,timeoutMs:15000}),getNextPageParam:(r,_all,p)=>r.page?.nextPage&&r.page.nextPage>p?r.page.nextPage:undefined});
+ const rows=query.isSuccess&&(!query.isFetching||query.isFetchingNextPage)?query.data.pages.flatMap(p=>p.notifications):[];
+ const columns:DataTableColumn<OwnForgeNotification>[]=[{id:'repository',header:'Repository',accessorFn:r=>`${r.target?.repository?.owner}/${r.target?.repository?.name}`},{accessorKey:'title',header:'Discussion',cell:({row})=>{const t=row.original.target!;return <Link {...repositoryOptions({owner:t.repository!.owner,name:t.repository!.name},{view:t.pullRequest?'pulls':'issues',issue:t.pullRequest?undefined:t.number,pull:t.pullRequest?t.number:undefined})}><strong>{row.original.title}</strong> <span className="muted">#{t.number}</span></Link>;}},{id:'status',header:'Status',accessorFn:r=>r.unread?'Unread':r.pinned?'Pinned':'Read'},{accessorKey:'updatedAt',header:'Updated',cell:({row})=><DateLabel value={row.original.updatedAt}/>},{id:'actions',header:'',enableSorting:false,enableGlobalFilter:false,cell:({row})=><MarkRead key={row.original.id} row={row.original} userId={userId} refresh={()=>void query.refetch()}/>}];
+ return <section className="page-stack"><header className="repository-intro"><div><h1><Bell size={21}/>Notifications</h1><p>Issue and pull request activity for your account.</p></div></header><section className="browser-panel"><div className="browser-panel-heading"><h2>Inbox</h2><div className="panel-actions"><select aria-label="Notification state" value={includeRead?'all':'unread'} onChange={e=>setIncludeRead(e.target.value==='all')}><option value="unread">Unread and pinned</option><option value="all">All notifications</option></select><button className="icon-button" aria-label="Refresh notifications" disabled={query.isFetching} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button></div></div>{query.isError?<PanelError error={query.error} retry={()=>void query.refetch()}/>:query.isPending||query.isFetching&&!query.isFetchingNextPage?<Loading label="Reading notifications…"/>:<DataTable label="notifications" data={rows} columns={columns} getRowId={r=>r.id}/>}<More label="notifications" hasMore={!!query.hasNextPage} loading={query.isFetchingNextPage} load={()=>void query.fetchNextPage()}/><p className="panel-footnote">Search and sorting cover loaded pages. Only currently authorized issue/PR notifications appear; email delivery preferences are configured separately.</p></section></section>;
+}

@@ -15,6 +15,7 @@ import (
 
 type discussionIssue struct {
 	forgeIssue
+	IsLocked   *bool `json:"is_locked"`
 	Repository *struct {
 		ID int64 `json:"id"`
 	} `json:"repository"`

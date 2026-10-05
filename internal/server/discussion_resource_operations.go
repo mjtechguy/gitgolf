@@ -71,7 +71,7 @@ func validateResourceRequest(m *golfv1.SubmitDiscussionResourceOperationRequest)
 	}
 	create := strings.HasPrefix(k, "CREATE_")
 	comment := k == "UPDATE_COMMENT" || k == "DELETE_COMMENT"
-	engagement := engagementKind(k)
+	engagement := engagementKind(k) || k == "MARK_NOTIFICATION_READ"
 	if create {
 		if m.ResourceId != "" || m.ExpectedRevision != "" {
 			return invalid("Creation cannot adopt an existing resource.")
@@ -98,6 +98,10 @@ func validateResourceRequest(m *golfv1.SubmitDiscussionResourceOperationRequest)
 		return invalid("Only own subscription operations accept an actor login.")
 	}
 	switch k {
+	case "MARK_NOTIFICATION_READ":
+		if m.Change != nil || m.SubscriptionLogin != "" || m.ReactionComment {
+			return invalid("Mark-read binds one own discussion notification without replacement content.")
+		}
 	case "ADD_REACTION", "REMOVE_REACTION":
 		if !slices.Contains(discussionReactionNames, m.GetReaction()) || m.SubscriptionLogin != "" || !m.ReactionComment && m.ResourceId != m.IssueId {
 			return invalid("Select a supported own reaction.")
@@ -194,7 +198,7 @@ func scanDiscussionResource(row interface{ Scan(...any) error }) (r discussionRe
 	return
 }
 func wireDiscussionResource(r discussionResourceRecord) *golfv1.DiscussionResourceOperation {
-	v := &golfv1.DiscussionResourceOperation{OperationId: r.OperationID, Kind: golfv1.DiscussionResourceOperationKind(golfv1.DiscussionResourceOperationKind_value["DISCUSSION_RESOURCE_OPERATION_KIND_"+r.Kind]), Phase: golfv1.DiscussionResourceOperationPhase(golfv1.DiscussionResourceOperationPhase_value["DISCUSSION_RESOURCE_OPERATION_PHASE_"+r.Phase]), Repository: &golfv1.RepositoryKey{Owner: r.Owner, Name: r.Name}, RepositoryId: strconv.FormatInt(r.RepositoryID, 10), ExpectedRevision: r.Revision, Number: uint32(r.Number), PullRequest: r.Pull, FailureCode: r.Failure, CreatedAt: r.Created.UTC().Format(time.RFC3339Nano), UpdatedAt: r.Updated.UTC().Format(time.RFC3339Nano)}
+	v := &golfv1.DiscussionResourceOperation{OperationId: r.OperationID, Kind: golfv1.DiscussionResourceOperationKind(golfv1.DiscussionResourceOperationKind_value["DISCUSSION_RESOURCE_OPERATION_KIND_"+r.Kind]), Phase: golfv1.DiscussionResourceOperationPhase(golfv1.DiscussionResourceOperationPhase_value["DISCUSSION_RESOURCE_OPERATION_PHASE_"+r.Phase]), Repository: &golfv1.RepositoryKey{Owner: r.Owner, Name: r.Name}, RepositoryId: strconv.FormatInt(r.RepositoryID, 10), ExpectedRevision: r.Revision, Number: uint32(r.Number), PullRequest: r.Pull, ReactionComment: r.EngagementComment, FailureCode: r.Failure, CreatedAt: r.Created.UTC().Format(time.RFC3339Nano), UpdatedAt: r.Updated.UTC().Format(time.RFC3339Nano)}
 	if r.ResourceID > 0 {
 		v.ResourceId = strconv.FormatInt(r.ResourceID, 10)
 	}
@@ -225,6 +229,10 @@ func (s *Server) readResourceMilestone(ctx context.Context, token forgeCredentia
 }
 
 func (s *Server) resourceAuthority(ctx context.Context, session string, token forgeCredential, r discussionResourceRecord) (err error) {
+	if r.Kind == "MARK_NOTIFICATION_READ" {
+		_, e := s.notificationForOperation(ctx, session, token, r)
+		return e
+	}
 	if engagementKind(r.Kind) {
 		return s.engagementAuthority(ctx, session, token, r)
 	}
@@ -617,6 +625,9 @@ func (s *Server) SubmitDiscussionResourceOperation(ctx context.Context, req *con
 }
 func (s *Server) dispatchDiscussionResource(ctx context.Context, session string, token forgeCredential, r discussionResourceRecord, m *golfv1.SubmitDiscussionResourceOperationRequest, out *golfv1.SubmitDiscussionResourceOperationResponse) (id int64, e error) {
 	base, _ := repositoryPath(repositoryKey{r.Owner, r.Name})
+	if r.Kind == "MARK_NOTIFICATION_READ" {
+		return s.dispatchNotificationRead(ctx, session, token, r, m)
+	}
 	if engagementKind(r.Kind) {
 		return s.dispatchEngagement(ctx, session, token, r, m)
 	}
@@ -739,6 +750,16 @@ func (s *Server) dispatchDiscussionResource(ctx context.Context, session string,
 // Reobserve the exact target and current source after waiting for the completion
 // transaction too. This is observational; the native APIs have no external CAS.
 func (s *Server) confirmDiscussionResource(ctx context.Context, session string, token forgeCredential, r discussionResourceRecord, m *golfv1.SubmitDiscussionResourceOperationRequest, id int64) error {
+	if r.Kind == "MARK_NOTIFICATION_READ" {
+		row, e := s.notificationForOperation(ctx, session, token, r)
+		if e != nil {
+			return e
+		}
+		if id != r.ResourceID || row.Unread {
+			return errIssueRevisionChanged
+		}
+		return nil
+	}
 	if engagementKind(r.Kind) {
 		if id != r.ResourceID {
 			return errIssueTargetChanged
