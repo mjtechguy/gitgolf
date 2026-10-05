@@ -274,7 +274,7 @@ func (s *Server) deploymentResponse(ctx context.Context, session string, token f
 		return nil, deploymentError(e)
 	}
 	if d.wire.Target.RepositoryId != target.RepositoryId || d.wire.Target.OwnerId != target.OwnerId {
-		return nil, errResourceNotFound
+		return nil, deploymentError(errResourceNotFound)
 	}
 	e = s.withWorkflowRepository(ctx, session, token, key, repo, owner, false, func(user User, _ *golfv1.RepositoryAccess) error {
 		reviews, e := s.deploymentReviews(ctx, d.wire.Id)
@@ -429,7 +429,7 @@ func (s *Server) reviewRepositoryDeployment(ctx context.Context, r *connect.Requ
 		return nil, deploymentError(e)
 	}
 	if d.wire.Target.RepositoryId != r.Msg.Target.RepositoryId || d.wire.Target.OwnerId != r.Msg.Target.OwnerId {
-		return nil, errResourceNotFound
+		return nil, deploymentError(errResourceNotFound)
 	}
 	u, e := s.currentUser(ctx, token)
 	if e != nil {
@@ -520,14 +520,14 @@ func (s *Server) activateRepositoryDeployment(ctx context.Context, r *connect.Re
 		return nil, deploymentError(e)
 	}
 	if d.wire.ActorId != strconv.FormatInt(u.ID, 10) || d.wire.Target.RepositoryId != r.Msg.Target.GetRepositoryId() || d.wire.Target.OwnerId != r.Msg.Target.GetOwnerId() {
-		return nil, errResourceNotFound
+		return nil, deploymentError(errResourceNotFound)
 	}
 	key, _, _, e := environmentTarget(r.Msg.Target)
 	if e != nil {
 		return nil, deploymentError(e)
 	}
 	if key != keyFrom(d.wire.Target.Repository) {
-		return nil, errResourceNotFound
+		return nil, deploymentError(errResourceNotFound)
 	}
 	if e = s.environmentAuthority(ctx, token, key, u, r.Msg.Target, true, true); e != nil {
 		return nil, deploymentError(e)
@@ -601,7 +601,7 @@ func (s *Server) revokeRepositoryDeployment(ctx context.Context, r *connect.Requ
 		return nil, deploymentError(e)
 	}
 	if d.wire.Target.RepositoryId != r.Msg.Target.RepositoryId || d.wire.Target.OwnerId != r.Msg.Target.OwnerId {
-		return nil, errResourceNotFound
+		return nil, deploymentError(errResourceNotFound)
 	}
 	e = s.workflowTransaction(ctx, s.cookieValue(r.Header()), u.ID, func(tx *sql.Tx, a database.LockManagedSessionRow, _ []byte) error {
 		if _, e := tx.ExecContext(ctx, "SELECT golf_deployment_lock($1,$2)", s.config.GiteaURL, repo); e != nil {

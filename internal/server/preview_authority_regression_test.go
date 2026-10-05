@@ -11,9 +11,21 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
+	"google.golang.org/protobuf/proto"
 )
+
+func TestStaticDeploymentMismatchedTargetErrorMapping(t *testing.T) {
+	target := &golfv1.RepositoryEnvironmentTarget{Repository: &golfv1.RepositoryKey{Owner: "alice", Name: "example"}, RepositoryId: "1", OwnerId: "2", AccessRevision: strings.Repeat("a", 64)}
+	d := &deploymentRecord{wire: &golfv1.RepositoryDeployment{Target: proto.Clone(target).(*golfv1.RepositoryEnvironmentTarget)}}
+	d.wire.Target.RepositoryId = "3"
+	s := &Server{}
+	if v, e := s.deploymentResponse(t.Context(), "", forgeCredential{}, target, d); v != nil || connect.CodeOf(e) != connect.CodeNotFound {
+		t.Fatal("private target mismatch lost its wire denial", v, e)
+	}
+}
 
 func TestStaticPreviewRejectsGolfCookiesBeforeRedemption(t *testing.T) {
 	s := &Server{preview: &previewConfiguration{origin: "https://preview.localhost:8444"}, previewRequests: make(chan struct{}, 8)}
@@ -119,6 +131,22 @@ func TestStaticDeploymentConcurrentAffirmativeReviewPostgres(t *testing.T) {
 	create, ctx := environmentRequest(f, alice, input)
 	if _, e = f.server.createRepositoryDeployment(ctx, create); e != nil {
 		t.Fatal(e)
+	}
+	wrong := proto.Clone(target).(*golfv1.RepositoryEnvironmentTarget)
+	wrong.Repository.Name = "replacement"
+	activate, ctx := environmentRequest(f, alice, &golfv1.ActivateRepositoryDeploymentRequest{Target: wrong, DeploymentId: input.DeploymentId})
+	if _, e := f.server.ActivateRepositoryDeployment(ctx, activate); connect.CodeOf(e) != connect.CodeNotFound {
+		t.Fatal("public activation target error mapping", e)
+	}
+	wrong = proto.Clone(target).(*golfv1.RepositoryEnvironmentTarget)
+	wrong.RepositoryId = "999999"
+	get, ctx := environmentRequest(f, alice, &golfv1.GetRepositoryDeploymentRequest{Target: wrong, DeploymentId: input.DeploymentId})
+	if _, e := f.server.GetRepositoryDeployment(ctx, get); connect.CodeOf(e) != connect.CodeNotFound {
+		t.Fatal("public inspection target error mapping", e)
+	}
+	review, ctx := environmentRequest(f, bob, &golfv1.ReviewRepositoryDeploymentRequest{Target: wrong, DeploymentId: input.DeploymentId, OperationId: uuid.NewString(), Approve: true})
+	if _, e := f.server.ReviewRepositoryDeployment(ctx, review); connect.CodeOf(e) != connect.CodeNotFound {
+		t.Fatal("public review target error mapping", e)
 	}
 	approve := func(session loginResult) {
 		r, ctx := environmentRequest(f, session, &golfv1.ReviewRepositoryDeploymentRequest{Target: target, DeploymentId: input.DeploymentId, OperationId: uuid.NewString(), Approve: true})
