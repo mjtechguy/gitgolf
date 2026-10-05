@@ -28,6 +28,44 @@ Actual attempt1 failed its old identity assumption before Docker writes.
 unchanged2-GiB reserve with1,330,460KiB available. Its read-only probe is removed;
 no registry, preparation/job container or upstream run is created.
 
+## Job-scoped Git credentials: source-only candidate
+
+Source `83032fa` adds a separate sealed `golf_job_git_` credential namespace with
+AEAD domain `runner_job_git_read`. Only an enrolled TLS1.3 worker with the original
+live attempt can request a credential for an actually started, unfinished,
+admitted graph job. Expiry is at most5 minutes and clipped to the original lease;
+current job/attempt/session or sponsor/policy/approval/worker/resource/key state
+remain required. It has no independent per-token revoke inventory.
+
+The issuer is `POST /internal/ci/attempt/ID/job-git-credential`. Job requests use
+Basic username `x-access-token` against the configured canonical HTTPS PublicURL:
+`GET /OWNER/REPO/info/refs` and `POST /OWNER/REPO/git-upload-pack`. Native ref
+metadata discovery covers the bound repository, including other branch names
+and object IDs; only object fetching is restricted to exact admitted H/depth1/v0.
+Foreign-H fetch and cross-repository discovery are refused. Neither control nor
+native provider credentials enter this capsule or the native request.
+
+These new job routes inherit the ordinary15-second router limit. They do not
+have the separately routed managed-human Git transport's longer deadline.
+Current source qualification uses real PostgreSQL with controlled native/graph
+fixtures; it is not deployed token delivery, Gitea checkout or pinned checkout
+compatibility. Worker coordination and PublicURL can be different origins;
+actual authenticated issuer reachability, exact job delivery/rotation/masking,
+TLS/origin and Git protocol behavior must pass before activation. No Host spoof,
+HTTP fallback or leaked worker token is a substitute.
+
+Independent review reproduced a separate approver's native-admin revocation
+between response buffering and byte release. Correction `557f8d0` rechecks that
+separate native actor before final SQL locks, rejects issuer userinfo/opaque URL
+aliases and explicitly caps handler requests at15 seconds. The [source receipt](../.tmp/job-git-approval-source-proof.json)
+preserves the original private200 regression and final14.555-second real
+PostgreSQL/race pass without skips or leftover owned resources. Independent
+read-only review binds the exact committed files; external native edits after
+the final observation remain non-atomic. Shared forwarding correction `9c6063c` rejects Go's transparent
+gzip decoding as well as visible Content-Encoding. Its [source receipt](../.tmp/git-response-encoding-source-proof/manifest.json)
+uses the actual Go transport for all four upload/receive advertisement/result
+paths; it does not qualify live native responses or the current deployed image.
+
 ## Transport and authority
 
 The two endpoints are:

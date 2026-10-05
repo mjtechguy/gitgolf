@@ -1,5 +1,7 @@
 # Managed manual coding tasks
 
+Scope: original manual Codex baseline. Later automatic OpenCode reviews, recorded activity and current deployed identities are tracked in the [implementation ledger](IMPLEMENTATION_STATUS.md); the remaining-work list below is historical to this baseline. Current monetary-limit behavior is updated below.
+
 Golf can run a manual Codex ChatGPT task in a disposable Docker workspace and retain its final summary and proposed patch. This is the first managed execution path, separate from shell CI and from account authentication. It does not push, commit to the source repository, open a pull request, merge or deploy.
 
 ## Local setup and use
@@ -35,7 +37,7 @@ Only bounded final assistant text and a trusted Git diff enter the result; comma
 
 ## Budgets and remaining work
 
-Only Codex ChatGPT device-auth connections execute. API-billed connections are blocked, including fallback. Runtime is bounded by the effective policy and the initial15-minute qualified ceiling. Token usage interrupts at the next native report above the configured threshold: a provider request can already have exceeded it. This is not a prepaid hard billing cap. Aggregate subscription quotas, prepaid resets and aggregate dollar accounting are separate provider/qualification work.
+This document describes the original manual Codex baseline; later OpenCode review/event slices are tracked separately in the [implementation ledger](IMPLEMENTATION_STATUS.md). For this baseline, only Codex ChatGPT device-auth connections execute. API-billed connections are blocked, including fallback. Runtime is bounded by the effective policy and the initial15-minute qualified ceiling. Token usage interrupts at the next native report above the configured threshold: a provider request can already have exceeded it. This is not a prepaid hard billing cap. Golf cannot enforce a monetary cap with the current executors. New positive caps are refused at save/preview/dispatch; existing positive effective caps also refuse in the worker before credentials or executor access. Zero means supported subscription execution without a Golf monetary cap. A lower-scope zero cannot bypass a positive ancestor or personal cap. Aggregate subscription quotas, prepaid resets and aggregate dollar accounting are separate provider/qualification work.
 
 Automatic push/PR-comment tasks, Claude/OpenCode/Grok/Pi executors, API-billed tasks, delegated API/MCP/ACP task dispatch, streaming logs, fair scheduling, crash-safe mid-turn credential checkpoints, resume, proposal publication, Kubernetes/Cloudflare executors and schema026 canonical recovery remain open. Disconnecting or refreshing an account can be unavailable while its worker owns it; cancel the task and wait for the worker to stop before managing that account. Canonical recovery remains refused above the existing qualified schema021 allowlist.
 
