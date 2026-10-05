@@ -149,7 +149,7 @@ func (s *Server) preflightIssueAssignees(ctx context.Context, session string, to
 		if err != nil {
 			return err
 		}
-		if fresh.ID != input.IssueID || fresh.isPullRequest() {
+		if fresh.ID != input.IssueID || fresh.isPullRequest() != input.PullRequest {
 			return errIssueTargetChanged
 		}
 		observed, err := issueAssigneeIDs(fresh.Issue)

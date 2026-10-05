@@ -58,6 +58,7 @@ func (s *Server) ListRepositoryLabels(ctx context.Context, req *connect.Request[
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
+	ctx = context.WithValue(ctx, pullDiscussionKey{}, req.Msg.PullRequest)
 	result := &golfv1.ListRepositoryLabelsResponse{}
 	err = s.withRepositoryRead(ctx, s.cookieValue(req.Header()), token, key, func(base string, repo Repository) error {
 		if repo.ID != id {

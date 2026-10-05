@@ -73,14 +73,11 @@ func (s *Server) preflightIssueLabels(ctx context.Context, session string, token
 	if !slices.Equal(current, input.EditLabels.ExpectedIDs) {
 		return errIssueLabelsChanged
 	}
-	if slices.Equal(current, input.EditLabels.IDs) {
-		return errIssueUnchanged
-	}
 	return s.withRepositoryRead(ctx, session, token, repositoryKey{input.Owner, input.Repository}, func(base string, repo Repository) error {
 		if repo.ID != input.RepositoryID {
 			return errIssueTargetChanged
 		}
-		// Reuse the current native administrator + writable issue-unit observation.
+		// Reobserve the current native discussion unit write authority.
 		allowed, err := s.milestoneEditAuthority(ctx, token, base, repo)
 		if err != nil {
 			return err
@@ -113,7 +110,7 @@ func (s *Server) preflightIssueLabels(ctx context.Context, session string, token
 		if err != nil {
 			return err
 		}
-		if fresh.ID != input.IssueID || fresh.isPullRequest() {
+		if fresh.ID != input.IssueID || fresh.isPullRequest() != input.PullRequest {
 			return errIssueTargetChanged
 		}
 		observed, err := issueLabelIDs(fresh.Issue)
@@ -132,6 +129,9 @@ func (s *Server) preflightIssueLabels(ctx context.Context, session string, token
 		}
 		if !allowed {
 			return forgeError{status: 403}
+		}
+		if slices.Equal(observed, input.EditLabels.IDs) {
+			return errIssueUnchanged
 		}
 		*before = fresh.Issue
 		return nil

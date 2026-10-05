@@ -1,4 +1,4 @@
-import { DiscussionMetadata } from './DiscussionMetadata';
+import { DiscussionListControls, discussionQuery } from './DiscussionListControls';
 import type {PullRequestMergeObservation} from './gen/golf/v1/golf_pb';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { PullNativeMerge } from './PullNativeMerge';
@@ -12,7 +12,7 @@ import { PullCommits, PullChecks } from './PullWorkspace';
 import { RepositoryListControls, useRepositoryWorkList } from './RepositoryListControls';
 import { MarkdownBody } from './RepositoryContent';
 import { DiffViewer } from './DiffViewer';
-import { Comments } from './IssueBrowser';
+import { Comments, IssueMetadataControls, refreshDiscussionMetadata } from './IssueBrowser';
 import { ReviewerRuns } from './ReviewerPanel';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Code, ConnectError } from '@connectrpc/connect';
@@ -94,6 +94,9 @@ function PullFiles(props: Props & { pull: PullRequest; onReview:()=>void }) {
 function PullDetail(props: Props) {
   const { repositoryKey, queryKey, location } = props;
   const client=useQueryClient();
+  const [metadataMode,setMetadataMode]=useState<import('./issueIntents').IssueIntent['editField']>();
+  const [metadataPending,setMetadataPending]=useState(false);
+  const observedPullId=useRef<string|undefined>(undefined);
   const [reviewing,setReviewing]=useState(false);
   const [reviewGeneration,setReviewGeneration]=useState(0);
   const [dismissedReview,setDismissedReview]=useState(false);
@@ -113,7 +116,10 @@ function PullDetail(props: Props) {
     return response.pullRequest;
   } });
   const pull = !denied&&query.isSuccess ? query.data : undefined;
-  const refreshPull=()=>{authorityEpoch.current++;setMergeDenial(null);void query.refetch();};
+  const scopedMetadataMode=observedPullId.current===pull?.id?metadataMode:undefined;
+  const scopedMetadataPending=observedPullId.current===pull?.id&&metadataPending;
+  useEffect(()=>{if(!pull)return;if(observedPullId.current&&observedPullId.current!==pull.id){setMetadataMode(undefined);setMetadataPending(false);}observedPullId.current=pull.id;},[pull?.id]);
+  const refreshPull=()=>{authorityEpoch.current++;setMergeDenial(null);refreshDiscussionMetadata(client,queryKey);void query.refetch();};
   const [mergeObservation,setMergeObservation]=useState<{scope:string;value:PullRequestMergeObservation|undefined}|null>(null);
   const observeMerge=useCallback((value:PullRequestMergeObservation|undefined)=>setMergeObservation({scope:mergeScope,value}),[mergeScope]);
   const currentMergeObservation=mergeObservation?.scope===mergeScope&&mergeObservation.value?.pullRevision===pull?.revision?mergeObservation.value:undefined;
@@ -140,7 +146,7 @@ function PullDetail(props: Props) {
       {denied||query.isError ? <PanelError error={denied||query.error!} retry={refreshPull} /> : !pull ? <Loading label="Loading pull request…" /> : <>
         <h2 id="pull-detail-title">{pull.title} <span className="muted">#{pull.number}</span></h2>
         <div className="discussion-summary-meta"><PullState pull={pull} /><p>{pull.user?.login || 'Deleted or unavailable author'} opened this pull request on <DateLabel value={pull.createdAt} /></p><span className="pull-comparison"><code>{pull.base?.label || pull.base?.ref}</code><span>←</span><code>{pull.head?.label || pull.head?.ref}</code></span></div>
-        <PullRequestEditControls key={pull.id} {...props} pull={pull} refresh={()=>{void query.refetch();void client.invalidateQueries({queryKey:[...queryKey,'pulls']});}}/>
+        <PullRequestEditControls key={pull.id} {...props} pull={pull} mode={scopedMetadataMode} setMode={setMetadataMode} pending={scopedMetadataPending} setPending={setMetadataPending} refresh={()=>{void query.refetch();void client.invalidateQueries({queryKey:[...queryKey,'pulls']});}}/>
       </>}
     </section>
     </div>
@@ -149,7 +155,7 @@ function PullDetail(props: Props) {
     {pull ? <>
       {reviewOpen?<PullReviewComposer key={`${props.userId}-${props.repositoryId}-${pull.id}-${reviewGeneration}`} repositoryKey={repositoryKey} repositoryId={props.repositoryId} userId={props.userId} pull={pull} blocked={query.isFetching} onClose={closeReview} onCurrentSelection={()=>{setDismissedReview(false);setReviewing(true);setReviewGeneration(v=>v+1);}} onReviewed={refreshReviews}/>:null}
       {location.pullView === 'commits' ? <PullCommits {...props} pull={pull}/> : location.pullView === 'checks' ? <PullChecks {...props} pull={pull}/> : location.pullView === 'files' ? <PullFiles {...props} pull={pull} onReview={openReview}/> : <div className="discussion-layout"><div className="discussion-main"><section className="browser-panel discussion-description" aria-label="Pull request description"><div className="browser-panel-heading"><strong>{pull.user?.login || 'Deleted or unavailable author'}</strong><span className="muted">opened <DateLabel value={pull.createdAt}/></span></div><MarkdownBody text={pull.body || 'No description provided.'} label="Pull request body, rendered Markdown"/>{external ? <div className="issue-footer"><span>Updated <DateLabel value={pull.updatedAt}/></span><a className="text-button" href={external} target="_blank" rel="noopener noreferrer">Open original<ExternalLink size={14}/></a></div> : null}</section><Reviews {...props} pull={pull} onReview={openReview}/><PullDiscussion {...props}/><ReviewerRuns userId={String(queryKey[1]||'')} owner={repositoryKey.owner} name={repositoryKey.name} signingOut={false} pullNumber={pull.number}/></div>
-        <aside className="discussion-sidebar" aria-label="Pull request metadata"><DiscussionMetadata metadata={pull.metadata}/><details className="metadata-details"><summary>Comparison details</summary><RefMetadata title="Base" value={pull.base}/><RefMetadata title="Head" value={pull.head}/></details>{pull.merged ? <div className="pull-merge-record"><strong>Native merge record</strong><p>Merged <DateLabel value={pull.mergedAt}/></p><code>{pull.mergeCommitId || 'Merge commit unavailable'}</code></div> : null}{!pull.merged?<PullMergeObservation key={`${props.userId}-${props.repositoryId}-${pull.id}-${pull.revision}`} client={pullMergeObservationClient} userId={props.userId} repository={repositoryKey} repositoryId={props.repositoryId} pull={pull} blocked={query.isFetching} onAuthorityDenied={denyMergeObservation} onObservation={observeMerge}/>:null}<PullNativeMerge key={`${props.userId}-${props.repositoryId}-${pull.id}`} client={standardPullMergeClient} userId={props.userId} repository={repositoryKey} repositoryId={props.repositoryId} pull={pull} observation={currentMergeObservation} blocked={query.isFetching} onVerified={()=>void query.refetch()} onAuthorityDenied={denyMergeObservation}/></aside>
+        <aside className="discussion-sidebar" aria-label="Pull request metadata"><IssueMetadataControls key={pull.id} {...props} proposal={pull} mode={scopedMetadataMode} setMode={setMetadataMode} pending={scopedMetadataPending} setPending={setMetadataPending} onDenied={error=>{if(error instanceof ConnectError)void denyMergeObservation(error,pull.revision);}} refresh={()=>{void query.refetch();void client.invalidateQueries({queryKey:[...queryKey,'pulls']});}}/><details className="metadata-details"><summary>Comparison details</summary><RefMetadata title="Base" value={pull.base}/><RefMetadata title="Head" value={pull.head}/></details>{pull.merged ? <div className="pull-merge-record"><strong>Native merge record</strong><p>Merged <DateLabel value={pull.mergedAt}/></p><code>{pull.mergeCommitId || 'Merge commit unavailable'}</code></div> : null}{!pull.merged?<PullMergeObservation key={`${props.userId}-${props.repositoryId}-${pull.id}-${pull.revision}`} client={pullMergeObservationClient} userId={props.userId} repository={repositoryKey} repositoryId={props.repositoryId} pull={pull} blocked={query.isFetching} onAuthorityDenied={denyMergeObservation} onObservation={observeMerge}/>:null}<PullNativeMerge key={`${props.userId}-${props.repositoryId}-${pull.id}`} client={standardPullMergeClient} userId={props.userId} repository={repositoryKey} repositoryId={props.repositoryId} pull={pull} observation={currentMergeObservation} blocked={query.isFetching} onVerified={()=>void query.refetch()} onAuthorityDenied={denyMergeObservation}/></aside>
       </div>}
     </> : null}
     </div>
@@ -158,15 +164,15 @@ function PullDetail(props: Props) {
 
 function PullList({ repositoryKey, queryKey, location }: Props) {
   const navigate = useNavigate();
-  const query = useInfiniteQuery({ ...privateQuery, queryKey: [...queryKey, 'pulls', location.state], initialPageParam: 1,
-    queryFn: ({ pageParam, signal }) => repositoryClient.listPullRequests({ repository: repositoryKey, state: location.state === 'open' ? IssueState.OPEN : location.state === 'closed' ? IssueState.CLOSED : IssueState.ALL, page: { page: pageParam, limit: 20 } }, { signal, timeoutMs: 8_000 }), getNextPageParam: followingPage });
+  const query = useInfiniteQuery({ ...privateQuery, queryKey: [...queryKey, 'pulls', location.state, discussionQuery(location), location.sort, location.base], initialPageParam: 1,
+    queryFn: ({ pageParam, signal }) => repositoryClient.listPullRequests({ repository: repositoryKey, query: discussionQuery(location), sort: location.sort || (Object.values(discussionQuery(location)).some(value=>Array.isArray(value)?value.length:Boolean(value))?'newest':''), baseBranch: location.base || '', state: location.state === 'open' ? IssueState.OPEN : location.state === 'closed' ? IssueState.CLOSED : IssueState.ALL, page: { page: pageParam, limit: 20 } }, { signal, timeoutMs: 8_000 }), getNextPageParam: followingPage });
   const pulls = query.isSuccess && (!query.isFetching || query.isFetchingNextPage)
     ? [...new Map(query.data.pages.flatMap((page) => page.pullRequests).map((pull) => [pull.id, pull])).values()] : [];
   const list = useRepositoryWorkList(pulls);
   return <section className="browser-panel repository-work-list" aria-labelledby="pulls-title">
     <div className="browser-panel-heading"><h2 id="pulls-title">Pull requests</h2><div className="panel-actions"><Link className="button primary" {...repositoryOptions(location,{view:'compare',pull:undefined})}><GitPullRequest size={16}/>New pull request</Link><select aria-label="Pull request state" value={location.state} onChange={(event) => void navigate(repositoryOptions(location, { state: event.target.value as RepositoryLocation['state'], pull: undefined }))}><option value="open">Open</option><option value="closed">Closed</option><option value="all">All states</option></select><button className="icon-button manual-refresh" aria-label="Refresh pull requests" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} /></button></div></div>
 
-    <RepositoryListControls label="pull requests" {...list.controls}/>
+    <DiscussionListControls key={JSON.stringify([discussionQuery(location),location.sort,location.base])} location={location} label="pull requests"/><RepositoryListControls label="pull requests" {...list.controls}/>
     {query.isError ? <PanelError error={query.error} retry={() => void query.refetch()} /> : query.isPending || (query.isFetching && !query.isFetchingNextPage) ? <Loading label="Loading pull requests…" /> : <>
       <ul className="issue-list pull-list">{list.rows.map((pull) => <li key={pull.id}><GitPullRequest size={19} /><div><h3><Link {...repositoryOptions(location, { pull: pull.number })}>{pull.title}</Link></h3><p>#{pull.number} opened by {pull.user?.login || 'Deleted or unavailable author'} on <DateLabel value={pull.createdAt} />{pull.head?.retainedSnapshot ? <span className="pull-observation"> · Retained PR snapshot</span> : null}</p></div><PullState pull={pull} /></li>)}</ul>
       {!list.rows.length ? <div className="empty-state"><GitPullRequest size={25} /><h3>No {location.state === 'all' ? '' : `${location.state} `}pull requests.</h3>{query.hasNextPage ? <p>More provider pages may contain visible pull requests.</p> : <p>{list.controls.search ? 'No loaded pull requests match your search.' : 'There are no pull requests matching this state.'}</p>}</div> : null}

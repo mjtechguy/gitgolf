@@ -12,11 +12,12 @@ import (
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 )
 
-// Initial milestone edits deliberately require native repository administrator
-// authority. Generic code push and issue authorship do not imply unit writes.
+// Metadata needs the native discussion unit's write grant. Code push alone is
+// insufficient on organization repositories, where team units are independent.
 func (s *Server) milestoneEditAuthority(ctx context.Context, token forgeCredential, base string, repo Repository) (bool, error) {
 	var row struct {
 		Repository
+		Owner       *User `json:"owner"`
 		Permissions *struct {
 			Admin *bool `json:"admin"`
 		} `json:"permissions"`
@@ -26,10 +27,82 @@ func (s *Server) milestoneEditAuthority(ctx context.Context, token forgeCredenti
 	if err != nil {
 		return false, err
 	}
-	if row.ID != repo.ID || !strings.EqualFold(row.FullName, repo.FullName) || row.Permissions == nil || row.Permissions.Admin == nil || row.Archived == nil || row.IssuesEnabled == nil {
+	enabled := row.IssuesEnabled
+	unit := "repo.issues"
+	if isPullDiscussion(ctx) {
+		enabled, unit = row.PullRequestsEnabled, "repo.pulls"
+	}
+	if row.ID != repo.ID || !strings.EqualFold(row.FullName, repo.FullName) || row.Permissions == nil || row.Permissions.Admin == nil || row.Archived == nil || enabled == nil {
 		return false, errInvalidForgeResponse
 	}
-	return *row.Permissions.Admin && !*row.Archived && *row.IssuesEnabled, nil
+	if *row.Archived || !*enabled {
+		return false, nil
+	}
+	if *row.Permissions.Admin {
+		return true, nil
+	}
+	// A missing owner cannot prove a wider unit grant.
+	if row.Owner == nil || row.Owner.ID <= 0 || !validOrganizationName(row.Owner.Login) {
+		return false, nil
+	}
+	if !strings.EqualFold(row.FullName, row.Owner.Login+"/"+row.Name) {
+		return false, errInvalidForgeResponse
+	}
+	var caller User
+	if _, err := s.forge(ctx, http.MethodGet, "/user", token, nil, &caller); err != nil {
+		return false, err
+	}
+	if caller.ID <= 0 || !validOrganizationName(caller.Login) {
+		return false, errInvalidForgeResponse
+	}
+	org, err := s.repositoryOwnerKind(ctx, token, *row.Owner)
+	if err != nil {
+		return false, err
+	}
+	permission, err := s.repositoryPermission(ctx, token, base, caller)
+	if err != nil {
+		return false, err
+	}
+	if !org {
+		return permission == "write" || permission == "admin" || permission == "owner", nil
+	}
+	direct, err := s.directCollaborator(ctx, token, base, caller)
+	if err != nil {
+		return false, err
+	}
+	if direct && (permission == "write" || permission == "admin" || permission == "owner") {
+		return true, nil
+	}
+	var organization forgeOrganization
+	if _, err := s.forge(ctx, http.MethodGet, "/orgs/"+row.Owner.Login, token, nil, &organization); err != nil {
+		return false, err
+	}
+	if !validOrganization(organization) || organization.ID != row.Owner.ID || !strings.EqualFold(organization.Name, row.Owner.Login) {
+		return false, errInvalidForgeResponse
+	}
+	key := repositoryKey{Owner: row.Owner.Login, Name: row.Name}
+	teams, err := s.repositoryTeamAssociations(ctx, token, key, organization)
+	if err != nil {
+		return false, err
+	}
+	for id := range teams {
+		team, err := s.readRepositoryTeam(ctx, token, organization, id)
+		if err != nil {
+			return false, err
+		}
+		grant := team.UnitPermissions[unit]
+		if grant != "write" && grant != "admin" && grant != "owner" {
+			continue
+		}
+		member, err := s.teamContains(ctx, token, strconv.FormatInt(id, 10), caller)
+		if err != nil {
+			return false, err
+		}
+		if member {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func nativeMilestone(raw json.RawMessage) (*golfv1.DiscussionMilestone, error) {
@@ -82,6 +155,7 @@ func (s *Server) ListRepositoryMilestones(ctx context.Context, req *connect.Requ
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
+	ctx = context.WithValue(ctx, pullDiscussionKey{}, req.Msg.PullRequest)
 	result := &golfv1.ListRepositoryMilestonesResponse{}
 	err = s.withRepositoryRead(ctx, s.cookieValue(req.Header()), token, key, func(base string, repo Repository) error {
 		if repo.ID != id {

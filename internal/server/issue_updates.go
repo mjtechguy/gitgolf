@@ -164,38 +164,46 @@ func (s *Server) UpdateIssue(ctx context.Context, req *connect.Request[golfv1.Up
 	default:
 		return nil, rpcError(invalid("Issue state must be open or closed."))
 	}
-	var milestone *issueMilestoneChange
-	if req.Msg.Milestone != nil {
-		expected, err := milestoneID(req.Msg.Milestone.ExpectedMilestoneId)
-		if err != nil {
-			return nil, rpcError(err)
-		}
-		selected, err := milestoneID(req.Msg.Milestone.MilestoneId)
-		if err != nil {
-			return nil, rpcError(err)
-		}
-		milestone = &issueMilestoneChange{ExpectedID: expected, ID: selected}
-	}
-	var labels *issueLabelsChange
-	if req.Msg.Labels != nil {
-		expected, err := labelIDs(req.Msg.Labels.ExpectedLabelIds, false)
-		if err != nil {
-			return nil, rpcError(err)
-		}
-		selected, err := labelIDs(req.Msg.Labels.LabelIds, true)
-		if err != nil {
-			return nil, rpcError(err)
-		}
-		labels = &issueLabelsChange{ExpectedIDs: expected, IDs: selected}
-	}
-	key := keyFrom(req.Msg.Repository)
-	assignees, err := issueAssigneesInput(req.Msg.Assignees)
+	milestone, labels, assignees, err := discussionChanges(req.Msg.Milestone, req.Msg.Labels, req.Msg.Assignees)
 	if err != nil {
 		return nil, rpcError(err)
 	}
+	key := keyFrom(req.Msg.Repository)
 	result, err := s.createIssueMutation(ctx, s.cookieValue(req.Header()), token, req.Msg.IdempotencyKey, issueMutationInput{Kind: "UPDATE_ISSUE", Owner: key.Owner, Repository: key.Name, RepositoryID: repoID, IssueID: issueID, Number: req.Msg.Number, EditTitle: req.Msg.Title, EditBody: req.Msg.Body, EditState: state, ExpectedRevision: req.Msg.ExpectedRevision, EditMilestone: milestone, EditLabels: labels, EditAssignees: assignees})
 	if err != nil {
 		return nil, rpcError(err)
 	}
 	return connect.NewResponse(&golfv1.UpdateIssueResponse{Mutation: result.Mutation, Issue: result.Issue}), nil
+}
+
+func discussionChanges(milestoneChange *golfv1.IssueMilestoneChange, labelsChange *golfv1.IssueLabelsChange, assigneesChange *golfv1.IssueAssigneesChange) (*issueMilestoneChange, *issueLabelsChange, *issueAssigneesChange, error) {
+	var milestone *issueMilestoneChange
+	if milestoneChange != nil {
+		expected, err := milestoneID(milestoneChange.ExpectedMilestoneId)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		selected, err := milestoneID(milestoneChange.MilestoneId)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		milestone = &issueMilestoneChange{ExpectedID: expected, ID: selected}
+	}
+	var labels *issueLabelsChange
+	if labelsChange != nil {
+		expected, err := labelIDs(labelsChange.ExpectedLabelIds, false)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		selected, err := labelIDs(labelsChange.LabelIds, true)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		labels = &issueLabelsChange{ExpectedIDs: expected, IDs: selected}
+	}
+	assignees, err := issueAssigneesInput(assigneesChange)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return milestone, labels, assignees, nil
 }

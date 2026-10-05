@@ -20,7 +20,7 @@ export function readIssueIntent(storageKey: string, repositoryId: string, issueI
       'issueId' in value && value.issueId === issueId && (!issueId || validID(issueId)) &&
       'number' in value && value.number === number && 'kind' in value && value.kind === kind &&
       (kind !== 'update' || 'editField' in value && ['title','body','close','reopen','milestone','labels','assignees'].includes(String(value.editField))) &&
-      (kind !== 'pull-update' || !issueId && validID(pullRequestId) && 'pullRequestId' in value && value.pullRequestId === pullRequestId && 'editField' in value && ['title','body','close','reopen','draft','ready'].includes(String(value.editField)))) {
+      (kind !== 'pull-update' || !issueId && validID(pullRequestId) && 'pullRequestId' in value && value.pullRequestId === pullRequestId && 'editField' in value && ['title','body','close','reopen','draft','ready','milestone','labels','assignees'].includes(String(value.editField)))) {
       return { key: value.key, kind, repositoryId, issueId, number, ...(kind === 'pull-update' ? {pullRequestId} : {}), ...(kind === 'update' || kind === 'pull-update' ? {editField: (value as unknown as {editField: IssueIntent['editField']}).editField} : {}) };
     }
   } catch { /* A tab record never authorizes a request or supplies private text. */ }

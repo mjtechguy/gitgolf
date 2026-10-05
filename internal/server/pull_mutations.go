@@ -52,7 +52,7 @@ func (input issueMutationInput) validatePull() error {
 		return invalid("Pull request IDs must use their own identity fields.")
 	}
 	if input.Kind == "CREATE_PULL" {
-		if input.PullRequestID != 0 || input.Number != 0 || input.EditTitle != nil || input.EditBody != nil || input.EditState != "" || input.EditDraft != nil || input.ExpectedRevision != "" || !pullTitle(input.Title) {
+		if input.EditMilestone != nil || input.EditLabels != nil || input.EditAssignees != nil || input.PullRequestID != 0 || input.Number != 0 || input.EditTitle != nil || input.EditBody != nil || input.EditState != "" || input.EditDraft != nil || input.ExpectedRevision != "" || !pullTitle(input.Title) {
 			return invalid("Select a source and target branch and a nonempty trimmed PR title up to 255 bytes.")
 		}
 		if _, err := repositoryPath(repositoryKey{input.SourceOwner, input.SourceRepository}); err != nil {
@@ -70,6 +70,24 @@ func (input issueMutationInput) validatePull() error {
 		return nil
 	}
 	fields := 0
+	if input.EditMilestone != nil {
+		fields++
+		if input.EditMilestone.ExpectedID < 0 || input.EditMilestone.ID < 0 {
+			return invalid("Milestone IDs cannot be negative.")
+		}
+	}
+	if input.EditLabels != nil {
+		fields++
+		if err := input.EditLabels.validate(); err != nil {
+			return err
+		}
+	}
+	if input.EditAssignees != nil {
+		fields++
+		if err := input.EditAssignees.validate(); err != nil {
+			return err
+		}
+	}
 	if input.EditTitle != nil {
 		fields++
 	}
@@ -83,7 +101,7 @@ func (input issueMutationInput) validatePull() error {
 		fields++
 	}
 	if fields != 1 || input.PullRequestID <= 0 || input.Number == 0 || input.Number > 2147483647 || input.Title != "" || input.Body != "" || !issueRevisionPattern.MatchString(input.ExpectedRevision) || input.SourceOwner != "" || input.SourceRepository != "" || input.SourceRepositoryID != 0 || input.BaseBranch != "" || input.HeadBranch != "" || input.BaseCommitID != "" || input.HeadCommitID != "" || input.CreateDraft {
-		return invalid("PR updates require exact target IDs, the displayed revision and exactly one title, description, state or draft field.")
+		return invalid("PR updates require exact target IDs, the displayed revision and exactly one title, description, state, draft, milestone, labels or assignees field.")
 	}
 	if input.EditTitle != nil && !pullTitle(*input.EditTitle) {
 		return invalid("PR title must be trimmed nonempty UTF-8 up to 255 bytes, without controls.")
@@ -217,6 +235,9 @@ func (s *Server) observePullCreationBranches(ctx context.Context, session string
 	return observe(repositoryKey{input.SourceOwner, input.SourceRepository}, input.SourceRepositoryID, input.HeadBranch, input.HeadCommitID)
 }
 func (s *Server) dispatchPullMutation(ctx context.Context, session string, token forgeCredential, record database.GolfIssueMutation, input issueMutationInput) (database.GolfIssueMutation, string, string, error) {
+	if input.EditMilestone != nil || input.EditLabels != nil || input.EditAssignees != nil {
+		return s.dispatchPullMetadata(ctx, session, token, record, input)
+	}
 	repo, before, err := s.observePullMutationTarget(ctx, session, token, record)
 	expectedTitle := ""
 	payload := map[string]any{}
@@ -376,8 +397,12 @@ func (s *Server) UpdatePullRequest(ctx context.Context, req *connect.Request[gol
 	default:
 		return nil, rpcError(invalid("PR state must be open or closed."))
 	}
+	milestone, labels, assignees, err := discussionChanges(m.Milestone, m.Labels, m.Assignees)
+	if err != nil {
+		return nil, rpcError(err)
+	}
 	target := keyFrom(m.Repository)
-	result, err := s.createIssueMutation(ctx, s.cookieValue(req.Header()), token, m.IdempotencyKey, issueMutationInput{Kind: "UPDATE_PULL", PullRequest: true, Owner: target.Owner, Repository: target.Name, RepositoryID: repoID, PullRequestID: pullID, Number: m.Number, ExpectedRevision: m.ExpectedRevision, EditTitle: m.Title, EditBody: m.Body, EditState: state, EditDraft: m.Draft})
+	result, err := s.createIssueMutation(ctx, s.cookieValue(req.Header()), token, m.IdempotencyKey, issueMutationInput{Kind: "UPDATE_PULL", PullRequest: true, Owner: target.Owner, Repository: target.Name, RepositoryID: repoID, PullRequestID: pullID, Number: m.Number, ExpectedRevision: m.ExpectedRevision, EditTitle: m.Title, EditBody: m.Body, EditState: state, EditDraft: m.Draft, EditMilestone: milestone, EditLabels: labels, EditAssignees: assignees})
 	if err != nil {
 		return nil, rpcError(err)
 	}

@@ -23,7 +23,7 @@ type Failure = 'permission_denied' | 'not_found' | 'unauthenticated' | 'unavaila
 async function backend(page: Page) {
   const state = {
     user, signedIn: true, repoId: repository.id, issueId: issue.id, issue: { ...issue }, comments: [comment],
-    issueReadWait: undefined as Promise<void> | undefined, issueRows: undefined as Issue[] | undefined, listPages: [] as number[], emptyFirst: false, unknown: false, drop: false, rejected: false, missingObject: false, mismatch: false,
+    issueReadWait: undefined as Promise<void> | undefined, issueRows: undefined as Issue[] | undefined, listPages: [] as number[], serverQueries: [] as unknown[], emptyFirst: false, unknown: false, drop: false, rejected: false, missingObject: false, mismatch: false,
     updates: [] as UpdateIssueRequest[], updateFailure: '', creates: [] as CreateIssueRequest[], posts: [] as CreateIssueCommentRequest[], inspections: [] as string[], pages: [] as number[],
     canEditAssignees: false, assignees: [create(UserSchema,{id:'9007199254740993',login:'PRIVATE_ASSIGNEE_A',fullName:'Alex Reviewer'}),create(UserSchema,{id:'12',login:'PRIVATE_ASSIGNEE_B'})], assigneeReads: 0, assigneeWait: undefined as Promise<void> | undefined,
     canEditLabels: false, labels: [create(DiscussionLabelSchema,{id:"9",name:"PRIVATE_LABEL_A",color:"aabbcc"}),create(DiscussionLabelSchema,{id:"12",name:"PRIVATE_LABEL_B",color:"aaff00"})], labelPages: [] as number[], labelMore: false,
@@ -43,7 +43,7 @@ async function backend(page: Page) {
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
     if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository: { ...repository, id: state.repoId } });
     if (method === 'ListRepositoryAssignees') {
-      const input=request(route,ListRepositoryAssigneesRequestSchema);expect(input.repository).toMatchObject(repoKey);expect(input.repositoryId).toBe(state.repoId);expect(Object.keys(input).sort()).toEqual(['$typeName','repository','repositoryId']);state.assigneeReads++;
+      const input=request(route,ListRepositoryAssigneesRequestSchema);expect(input.repository).toMatchObject(repoKey);expect(input.repositoryId).toBe(state.repoId);expect(Object.keys(input).sort()).toEqual(['$typeName','pullRequest','repository','repositoryId']);state.assigneeReads++;
       if(state.assigneeWait)await state.assigneeWait;
       return respond(route,ListRepositoryAssigneesResponseSchema,{assignees:state.assignees,canEditAssignees:state.canEditAssignees});
     }
@@ -57,7 +57,7 @@ async function backend(page: Page) {
       return respond(route,ListRepositoryMilestonesResponseSchema,{milestones:state.milestoneMore?state.milestones.slice(number-1,number):state.milestones,canEditMilestone:state.canEditMilestone,page:state.milestoneMore&&number===1?{nextPage:2}:undefined});
     }
     if (method === 'ListIssues') {
-      const input = request(route, ListIssuesRequestSchema), number = input.page?.page || 1; state.listPages.push(number);
+      const input = request(route, ListIssuesRequestSchema), number = input.page?.page || 1; state.listPages.push(number); state.serverQueries.push(input.query);
       return respond(route, ListIssuesResponseSchema, state.issueRows ? { issues: state.issueRows.slice((number - 1) * 2, number * 2), page: number === 1 ? { nextPage: 2 } : undefined } : { issues: [state.issue] });
     }
     if (method === 'GetIssue') { if (state.issueReadWait) await state.issueReadWait; return respond(route, GetIssueResponseSchema, { issue: { ...state.issue, id: state.issueId } }); }
@@ -706,7 +706,7 @@ test('assignee inventory refresh masks candidates and blocks saving on late capa
   let release!: () => void; state.assigneeWait = new Promise<void>(resolve => { release = resolve; }); state.canEditAssignees = false;
   const before = state.assigneeReads; await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange', { bubbles: true }))); await expect.poll(() => state.assigneeReads).toBeGreaterThan(before);
   await expect(editor.getByRole('checkbox')).toHaveCount(0); await expect(editor.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled(); release();
-  await expect(editor).toContainText('repository administrator access'); await expect(editor.getByRole('checkbox')).toHaveCount(0); expect(state.updates).toHaveLength(0);
+  await expect(editor).toContainText('discussion write access'); await expect(editor.getByRole('checkbox')).toHaveCount(0); expect(state.updates).toHaveLength(0);
 });
 
 test('open assignee editor loses readiness when current issue metadata becomes unknown', async ({ page }) => {
@@ -753,4 +753,13 @@ test('assignee sign-out clears intent and late acknowledged result cannot restor
   await page.getByRole('checkbox', { name: 'PRIVATE_ASSIGNEE_B', exact: true }).check(); await page.getByRole('region', { name: 'Edit issue assignees', exact: true }).getByRole('button', { name: 'Save changes', exact: true }).click(); await expect.poll(() => state.updates.length).toBe(1);
   await page.getByLabel('Your account', { exact: true }).click(); await page.getByRole('button', { name: 'Sign out', exact: true }).click(); await expect(page.getByRole('heading', { name: 'Welcome to Golf' })).toBeVisible(); release();
   await expect.poll(() => stored(page)).toEqual([]); await expect(page.getByText('PRIVATE_ASSIGNEE_A', { exact: true })).toHaveCount(0); await expect(page.getByRole('checkbox')).toHaveCount(0); expect(state.updates).toHaveLength(1);
+});
+
+
+test('repository issue query is explicit, URL-backed and separate from loaded filters',async({page})=>{
+ const state=await backend(page);await page.goto('/alex/project/issues');
+ const search=page.getByRole('searchbox',{name:'Search repository issues',exact:true});await search.fill('accessibility');await page.getByRole('button',{name:'Show repository filters',exact:true}).click();
+ await page.getByLabel('Author username',{exact:true}).fill('alex');await page.getByLabel('Assignee username',{exact:true}).fill('bob');await page.getByLabel('Label names, comma-separated',{exact:true}).fill('bug, accessibility');await page.getByLabel('Milestone title',{exact:true}).fill('Release');await page.getByRole('button',{name:'Apply filters',exact:true}).click();
+ await expect.poll(()=>state.serverQueries.at(-1)).toMatchObject({search:'accessibility',author:'alex',assignee:'bob',labelNames:['bug','accessibility'],milestoneTitle:'Release'});await expect(page).toHaveURL(/q=accessibility/);await expect(page.getByRole('searchbox',{name:'Search loaded issues',exact:true})).toHaveValue('');
+ await page.getByRole('link',{name:'Private discussion',exact:true}).click();await expect(page).toHaveURL(/issues\/12.*q=accessibility/);await page.getByRole('link',{name:'All open issues',exact:true}).click();await expect(search).toHaveValue('accessibility');await page.getByRole('button',{name:'Clear repository filters',exact:true}).click();await expect.poll(()=>state.serverQueries.at(-1)).toMatchObject({search:'',author:'',assignee:'',labelNames:[],milestoneTitle:''});
 });

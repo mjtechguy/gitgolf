@@ -61,9 +61,6 @@ func (input issueMutationInput) validate(key string) error {
 		return invalid("Provide a positive repository ID and UTF-8 body up to 6000 bytes, without controls other than tab or newlines.")
 	}
 	if isPullMutationKind(input.Kind) {
-		if input.EditMilestone != nil || input.EditLabels != nil || input.EditAssignees != nil {
-			return invalid("Metadata edits currently support ordinary issues only.")
-		}
 		return input.validatePull()
 	}
 	if input.PullRequestID != 0 || input.EditDraft != nil || input.SourceOwner != "" || input.SourceRepository != "" || input.SourceRepositoryID != 0 || input.BaseBranch != "" || input.HeadBranch != "" || input.BaseCommitID != "" || input.HeadCommitID != "" || input.CreateDraft {
@@ -272,58 +269,7 @@ func (s *Server) createIssueMutation(ctx context.Context, session string, token 
 			} else if input.EditAssignees != nil {
 				preflightErr = s.preflightIssueAssignees(ctx, session, token, input, before)
 			} else if input.EditMilestone != nil {
-				current, err := issueMilestoneID(*before)
-				if err != nil {
-					preflightErr = err
-				} else if current != input.EditMilestone.ExpectedID {
-					preflightErr = errIssueMilestoneChanged
-				} else if current == input.EditMilestone.ID {
-					preflightErr = errIssueUnchanged
-				} else {
-					preflightErr = s.withRepositoryRead(ctx, session, token, repositoryKey{input.Owner, input.Repository}, func(base string, currentRepo Repository) error {
-						if currentRepo.ID != input.RepositoryID {
-							return errIssueTargetChanged
-						}
-						allowed, err := s.milestoneEditAuthority(ctx, token, base, currentRepo)
-						if err != nil {
-							return err
-						}
-						if !allowed {
-							return forgeError{status: 403}
-						}
-						if input.EditMilestone.ID != 0 {
-							if err := s.readRepositoryMilestone(ctx, token, base, input.EditMilestone.ID); err != nil {
-								return err
-							}
-						}
-						fresh, err := s.readDiscussionIssue(ctx, token, base, currentRepo, input.Number)
-						if err != nil {
-							return err
-						}
-						if fresh.ID != input.IssueID {
-							return errIssueTargetChanged
-						}
-						freshID, err := issueMilestoneID(fresh.Issue)
-						if err != nil {
-							return err
-						}
-						if freshID != input.EditMilestone.ExpectedID {
-							return errIssueMilestoneChanged
-						}
-						if issueRevision(fresh.Issue) != input.ExpectedRevision {
-							return errIssueRevisionChanged
-						}
-						*before = fresh.Issue
-						allowed, err = s.milestoneEditAuthority(ctx, token, base, currentRepo)
-						if err != nil {
-							return err
-						}
-						if !allowed {
-							return forgeError{status: 403}
-						}
-						return nil
-					})
-				}
+				preflightErr = s.preflightIssueMilestone(ctx, session, token, input, before)
 			} else if input.matchesUpdate(*before) {
 				preflightErr = errIssueUnchanged
 			}

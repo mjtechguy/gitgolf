@@ -1,3 +1,4 @@
+import { ListRepositoryMilestonesRequestSchema,ListRepositoryMilestonesResponseSchema,ListRepositoryLabelsRequestSchema,ListRepositoryLabelsResponseSchema,ListRepositoryAssigneesRequestSchema,ListRepositoryAssigneesResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import { DiscussionMetadataSchema, DiscussionMilestoneSchema, DiscussionLabelSchema } from '../src/gen/golf/v1/golf_pb';
 import { GetStandardPullMergeOperationResponseSchema, StandardPullMergePhase, UpdatePullRequestRequestSchema, UpdatePullRequestResponseSchema, GetIssueMutationRequestSchema, GetIssueMutationResponseSchema, IssueMutationKind, IssueMutationState } from '../src/gen/golf/v1/golf_pb';
 import type { UpdatePullRequestRequest, IssueMutation, PullRequest } from '../src/gen/golf/v1/golf_pb';
@@ -32,7 +33,7 @@ const review = create(PullRequestReviewSchema, { id: '9007199254740998', user, b
 const pending = create(PullRequestReviewSchema, { ...review, id: '9007199254740999', user: undefined, body: '', state: PullRequestReviewState.PENDING, stale: false, dismissed: false, official: false, htmlUrl: 'javascript:alert(1)' });
 
 async function backend(page: Page) {
-  const state = { listRows:undefined as PullRequest[]|undefined, pull:clone(PullRequestSchema,pull),updates:[] as UpdatePullRequestRequest[],inspections:[] as string[],mutation:undefined as IssueMutation|undefined,updateFailure:"",unknown:false,wrongMutation:false,wrongObject:false,missingObject:false,dropUpdate:false,updateWait:undefined as Promise<void>|undefined, signedIn: true, metadataStatus: 200, listStatus: 200, detailStatus: 200, reviewStatus: 200, diffStatus: 200, wrongDiff:'', empty: false,
+  const state = { serverQueries:[] as unknown[], metadataCanEdit:false, metadataWait:undefined as Promise<void>|undefined, listRows:undefined as PullRequest[]|undefined, pull:clone(PullRequestSchema,pull),updates:[] as UpdatePullRequestRequest[],inspections:[] as string[],mutation:undefined as IssueMutation|undefined,updateFailure:"",unknown:false,wrongMutation:false,wrongObject:false,missingObject:false,dropUpdate:false,updateWait:undefined as Promise<void>|undefined, signedIn: true, metadataStatus: 200, listStatus: 200, detailStatus: 200, reviewStatus: 200, diffStatus: 200, wrongDiff:'', empty: false,
     workspaceStatus: 200, workspaceWait: undefined as Promise<void>|undefined, mismatched: false, badPage: false, emptyWorkspace: false, duplicateContext: false,
     commitPages: [] as number[], checkPages: [] as number[],
     reviewWait: undefined as Promise<void> | undefined, detailWait: undefined as Promise<void> | undefined,
@@ -57,7 +58,7 @@ async function backend(page: Page) {
     if (method === 'ListPullRequests') {
       const input = request(route, ListPullRequestsRequestSchema);
       expect(input.repository).toMatchObject({ owner: 'alex', name: 'design-system' });
-      state.pages.push(input.page?.page || 0); state.states.push(input.state);
+      state.pages.push(input.page?.page || 0); state.states.push(input.state); state.serverQueries.push({query:input.query,sort:input.sort,baseBranch:input.baseBranch});
       if (state.listStatus !== 200) return error(state.listStatus, 'Pull requests not found or inaccessible.');
       if (state.listRows) return respond(route, ListPullRequestsResponseSchema, { pullRequests: state.listRows.slice(((input.page?.page || 1) - 1) * 2, (input.page?.page || 1) * 2), page: input.page?.page === 2 ? undefined : { nextPage: 2 } });
       const listed = { ...pull, head: create(PullRequestRefSchema, { ...pull.head!, retainedSnapshot: true }) };
@@ -96,6 +97,14 @@ async function backend(page: Page) {
       const result = [state.pull, closed, snapshot].find((item) => item.number === input.number);
       return result ? respond(route, GetPullRequestResponseSchema, { pullRequest: result }) : error(404, 'Pull request not found or inaccessible.');
     }
+    if(method==='ListRepositoryMilestones'||method==='ListRepositoryLabels'||method==='ListRepositoryAssignees') {
+      const schema=method==='ListRepositoryMilestones'?ListRepositoryMilestonesRequestSchema:method==='ListRepositoryLabels'?ListRepositoryLabelsRequestSchema:ListRepositoryAssigneesRequestSchema;
+      const input=request(route,schema);expect(input.pullRequest).toBe(true);expect(input.repositoryId).toBe(repository.id);
+      if(state.metadataWait)await state.metadataWait;
+      if(method==='ListRepositoryMilestones')return respond(route,ListRepositoryMilestonesResponseSchema,{canEditMilestone:state.metadataCanEdit,milestones:[{id:'51',title:'Release',state:IssueState.OPEN}]});
+      if(method==='ListRepositoryLabels')return respond(route,ListRepositoryLabelsResponseSchema,{canEditLabels:state.metadataCanEdit,labels:[{id:'41',name:'bug',color:'abcdef'},{id:'42',name:'enhancement',color:'123456'}]});
+      return respond(route,ListRepositoryAssigneesResponseSchema,{canEditAssignees:state.metadataCanEdit,assignees:[user,{id:'9007199254740996',login:'bob',fullName:'Bob'}]});
+    }
     if(method==='UpdatePullRequest') {
       const input=request(route,UpdatePullRequestRequestSchema);state.updates.push(input);
       if(state.updateWait)await state.updateWait;
@@ -103,6 +112,13 @@ async function backend(page: Page) {
       if(result===IssueMutationState.SUCCEEDED)state.pull=create(PullRequestSchema,{...state.pull,
         title:input.title??(input.draft===true?'WIP: '+state.pull.title:input.draft===false?state.pull.title.replace(/^WIP: /,''):state.pull.title),body:input.body??state.pull.body,
         state:input.state===IssueState.UNSPECIFIED?state.pull.state:input.state,draft:input.draft??state.pull.draft,revision:'f'.repeat(64)});
+      if(result===IssueMutationState.SUCCEEDED&&(input.milestone||input.labels||input.assignees)) {
+        const metadata=clone(DiscussionMetadataSchema,state.pull.metadata||create(DiscussionMetadataSchema,{labelsKnown:true,assigneesKnown:true,milestoneKnown:true}));
+        if(input.milestone)metadata.milestone=input.milestone.milestoneId==='0'?undefined:create(DiscussionMilestoneSchema,{id:'51',title:'Release',state:IssueState.OPEN});
+        if(input.labels)metadata.labels=input.labels.labelIds.map(id=>create(DiscussionLabelSchema,{id,name:id==='41'?'bug':'enhancement',color:'abcdef'}));
+        if(input.assignees)metadata.assignees=input.assignees.assignees.map(row=>create(UserSchema,{id:row.id,login:row.login}));
+        state.pull.metadata=metadata;
+      }
       state.mutation=create((await import('../src/gen/golf/v1/golf_pb')).IssueMutationSchema,{id:'101',idempotencyKey:input.idempotencyKey,kind:IssueMutationKind.UPDATE_PULL,state:result,repository:input.repository,repositoryId:input.repositoryId,pullRequestId:input.pullRequestId,number:input.number,
         observedResultId:result===IssueMutationState.SUCCEEDED?input.pullRequestId:'',observedNumber:result===IssueMutationState.SUCCEEDED?input.number:0,failureCode:state.updateFailure});
       if(state.dropUpdate)return route.abort();
@@ -647,7 +663,7 @@ for (const theme of ['dark', 'light']) for (const width of [1440, 390]) test(`kn
   const state = await backend(page); state.pull.metadata = create(DiscussionMetadataSchema, { labelsKnown: true, assigneesKnown: true, milestoneKnown: true,
     labels: [create(DiscussionLabelSchema, { id: '41', name: 'PRIVATE_PR_LABEL keyboard', color: '00AaBb', description: 'Native accessibility work', archived: true })], assignees: [create(UserSchema, { ...user, login: 'PRIVATE_PR_ASSIGNEE', fullName: 'Alex' })], milestone: create(DiscussionMilestoneSchema, { id: '51', title: 'PRIVATE_PR_MILESTONE release', description: 'Native release scope', state: IssueState.CLOSED, openIssues: 0n, closedIssues: 18n, dueOn: '2026-12-01T00:00:00Z' }) });
   await page.setViewportSize({ width, height: 900 }); await page.addInitScript(theme => localStorage.setItem('golf.theme', theme), theme); await page.goto('/alex/design-system/pull/12');
-  const sidebar = page.getByRole('complementary', { name: 'Pull request metadata', exact: true }), metadata = sidebar.locator('.discussion-metadata'); await expect(metadata.getByRole('region', { name: 'Labels', exact: true })).toContainText('PRIVATE_PR_LABEL keyboard'); await expect(metadata.locator('.discussion-label-swatch circle')).toHaveAttribute('fill', '#00AaBb'); await expect(metadata.getByRole('region', { name: 'Assignees', exact: true })).toContainText('PRIVATE_PR_ASSIGNEE'); await expect(metadata.locator('.discussion-milestone-state')).toHaveText('Closed'); await expect(metadata.locator('dd')).toHaveText(['0', '18']); await expect(metadata.locator('.discussion-milestone-due time')).toHaveAttribute('datetime', '2026-12-01T00:00:00Z'); await expect(metadata.locator('.discussion-milestone-due time')).toHaveText('Dec 1, 2026'); await expect(metadata.locator('.discussion-milestone-due time')).toHaveAttribute('title', 'Dec 1, 2026'); await expect(sidebar.getByText('Comparison details', { exact: true })).toBeVisible(); if (width === 390) { const menu = page.getByLabel('More pull request actions', { exact: true }); await menu.click(); await expect(page.getByRole('button', { name: 'Edit pull request title', exact: true })).toBeVisible(); await menu.press('Escape'); } else await expect(page.getByRole('button', { name: 'Edit pull request title', exact: true })).toBeVisible(); await expect(page.getByRole('button', { name: 'Add a comment', exact: true })).toBeVisible(); await expect(page.getByRole('navigation', { name: 'Pull request workspace', exact: true }).getByRole('link')).toHaveCount(4); await expect(metadata.locator('button,input,select,form,[style],img,script,a')).toHaveCount(0); await expect(page.getByRole('button', { name: 'Edit issue assignees', exact: true })).toHaveCount(0); expect(state.methods).not.toContain('ListRepositoryAssignees');
+  const sidebar = page.getByRole('complementary', { name: 'Pull request metadata', exact: true }), metadata = sidebar.locator('.discussion-metadata'); await expect(metadata.getByRole('region', { name: 'Labels', exact: true })).toContainText('PRIVATE_PR_LABEL keyboard'); await expect(metadata.locator('.discussion-label-swatch circle')).toHaveAttribute('fill', '#00AaBb'); await expect(metadata.getByRole('region', { name: 'Assignees', exact: true })).toContainText('PRIVATE_PR_ASSIGNEE'); await expect(metadata.locator('.discussion-milestone-state')).toHaveText('Closed'); await expect(metadata.locator('dd')).toHaveText(['0', '18']); await expect(metadata.locator('.discussion-milestone-due time')).toHaveAttribute('datetime', '2026-12-01T00:00:00Z'); await expect(metadata.locator('.discussion-milestone-due time')).toHaveText('Dec 1, 2026'); await expect(metadata.locator('.discussion-milestone-due time')).toHaveAttribute('title', 'Dec 1, 2026'); await expect(sidebar.getByText('Comparison details', { exact: true })).toBeVisible(); if (width === 390) { const menu = page.getByLabel('More pull request actions', { exact: true }); await menu.click(); await expect(page.getByRole('button', { name: 'Edit pull request title', exact: true })).toBeVisible(); await menu.press('Escape'); } else await expect(page.getByRole('button', { name: 'Edit pull request title', exact: true })).toBeVisible(); await expect(page.getByRole('button', { name: 'Add a comment', exact: true })).toBeVisible(); await expect(page.getByRole('navigation', { name: 'Pull request workspace', exact: true }).getByRole('link')).toHaveCount(4); await expect(metadata.locator('button,input,select,form,[style],img,script,a')).toHaveCount(0); await expect(page.getByRole('button', { name: 'Edit issue assignees', exact: true })).toHaveCount(0); expect(state.methods).toContain('ListRepositoryAssignees');
   await page.evaluate(() => document.fonts.ready); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true); await page.screenshot({ path: test.info().outputPath(`pull-metadata-${theme}-${width}.png`), fullPage: true });
   let release!: () => void; state.detailWait = new Promise<void>(resolve => { release = resolve; }); await page.getByRole('button', { name: 'Refresh pull request', exact: true }).click(); await expect(metadata).toBeHidden(); release(); state.detailWait = undefined; await expect(metadata).toBeVisible();
   state.detailStatus = 403; await page.getByRole('button', { name: 'Refresh pull request', exact: true }).click(); await expect(page.getByRole('alert')).toContainText('not found or inaccessible'); await expect(metadata).toHaveCount(0); await expect(page.getByText('PRIVATE_PR_ASSIGNEE', { exact: true })).toHaveCount(0); expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toMatch(/PRIVATE_PR_LABEL|PRIVATE_PR_ASSIGNEE|PRIVATE_PR_MILESTONE/); expect(state.methods.some(method => /^(Create|Save|Update|Delete|Merge|Submit)/.test(method))).toBe(false);
@@ -658,4 +674,49 @@ test('PR metadata omits unknown categories without hiding the existing merge and
   const state = await backend(page); await page.goto('/alex/design-system/pull/12'); const sidebar = page.getByRole('complementary', { name: 'Pull request metadata', exact: true }); await expect(sidebar.locator('.discussion-metadata')).toHaveCount(0); await expect(sidebar.getByText('Comparison details', { exact: true })).toBeVisible();
   state.pull.metadata = create(DiscussionMetadataSchema, { labelsKnown: true, assignees: [user], milestone: { id: '51', title: 'UNVERIFIED_MILESTONE' } }); await page.getByRole('button', { name: 'Refresh pull request', exact: true }).click(); await expect(sidebar.getByRole('region', { name: 'Labels', exact: true })).toHaveText('LabelsNone'); await expect(sidebar.getByRole('region', { name: 'Assignees', exact: true })).toHaveCount(0); await expect(sidebar.getByRole('region', { name: 'Milestone', exact: true })).toHaveCount(0); await expect(sidebar).not.toContainText('UNVERIFIED_MILESTONE'); await expect(sidebar.getByText('Comparison details', { exact: true })).toBeVisible();
   state.pull.metadata = create(DiscussionMetadataSchema, { labelsKnown: true, assigneesKnown: true, milestoneKnown: true }); await page.getByRole('button', { name: 'Refresh pull request', exact: true }).click(); await expect(sidebar.locator('.discussion-metadata>section')).toHaveText(['AssigneesNone', 'LabelsNone', 'MilestoneNone']);
+});
+
+
+test.describe('pull request metadata editing',()=>{
+ test('changes and clears all metadata with exact PR intent and explicit inventory unit',async({page})=>{
+  const state=await backend(page);state.metadataCanEdit=true;state.pull.metadata=create(DiscussionMetadataSchema,{labelsKnown:true,assigneesKnown:true,milestoneKnown:true});
+  await page.goto('/alex/design-system/pull/12');
+  for(const field of ['milestone','labels','assignees'] as const){
+   await page.getByRole('button',{name:`Edit pull request ${field}`,exact:true}).click();
+   const editor=page.getByRole('region',{name:`Edit pull request ${field}`,exact:true});
+   await expect(editor).toBeVisible();
+   await expect(page.getByRole('button',{name:'Edit pull request title',exact:true})).toBeDisabled();
+   if(field==='milestone')await editor.getByRole('combobox',{name:'Issue milestone',exact:true}).selectOption('51');
+   else await editor.getByRole('checkbox',{name:field==='labels'?'bug':'bob',exact:true}).check();
+   await editor.getByRole('button',{name:'Save changes',exact:true}).click();
+   await expect(editor).toHaveCount(0);
+   const input=state.updates.at(-1)!;expect(input.pullRequestId).toBe(pull.id);expect(input.expectedRevision).toMatch(/^[ef]{64}$/);expect(input.repositoryId).toBe(repository.id);expect(input.title).toBeUndefined();expect(input.body).toBeUndefined();expect(input.state).toBe(IssueState.UNSPECIFIED);
+   if(field==='milestone')expect(input.milestone).toMatchObject({expectedMilestoneId:'0',milestoneId:'51'});
+   if(field==='labels')expect(input.labels).toMatchObject({expectedLabelIds:[],labelIds:['41']});
+   if(field==='assignees')expect(input.assignees).toMatchObject({expectedAssigneeIds:[],assignees:[{id:'9007199254740996',login:'bob'}]});
+   await page.getByRole('button',{name:`Edit pull request ${field}`,exact:true}).click();
+   if(field==='milestone')await editor.getByRole('combobox',{name:'Issue milestone',exact:true}).selectOption('0');
+   else await editor.getByRole('checkbox',{name:field==='labels'?'bug':'bob',exact:true}).uncheck();
+   await editor.getByRole('button',{name:'Save changes',exact:true}).click();await expect(editor).toHaveCount(0);
+   if(field==='milestone')expect(state.updates.at(-1)!.milestone).toMatchObject({expectedMilestoneId:'51',milestoneId:'0'});
+   if(field==='labels')expect(state.updates.at(-1)!.labels).toMatchObject({expectedLabelIds:['41'],labelIds:[]});
+   if(field==='assignees')expect(state.updates.at(-1)!.assignees).toMatchObject({expectedAssigneeIds:['9007199254740996'],assignees:[]});
+  }
+  expect(state.updates).toHaveLength(6);expect(state.inspections).toHaveLength(0);
+ });
+ test('uncertain metadata reload only inspects original PR key',async({page})=>{
+  const state=await backend(page);state.metadataCanEdit=true;state.unknown=true;state.pull.metadata=create(DiscussionMetadataSchema,{labelsKnown:true,assigneesKnown:true,milestoneKnown:true});
+  await page.goto('/alex/design-system/pull/12');await page.getByRole('button',{name:'Edit pull request labels',exact:true}).click();await page.getByRole('checkbox',{name:'bug',exact:true}).check();await page.getByRole('button',{name:'Save changes',exact:true}).click();
+  await expect(page.getByText('This request may still be running, or its outcome is unknown.',{exact:false})).toBeVisible();const key=state.updates[0]!.idempotencyKey;
+  await page.reload();await expect(page.getByRole('button',{name:'Check request status',exact:true})).toBeVisible();await page.getByRole('button',{name:'Check request status',exact:true}).click();await expect.poll(()=>state.inspections).toEqual([key]);expect(state.updates).toHaveLength(1);expect(await page.evaluate(()=>JSON.stringify(sessionStorage))).not.toContain('bug');
+ });
+ test('capability loss keeps pending metadata draft disabled',async({page})=>{
+  const state=await backend(page);state.metadataCanEdit=true;state.pull.metadata=create(DiscussionMetadataSchema,{labelsKnown:true,assigneesKnown:true,milestoneKnown:true});await page.goto('/alex/design-system/pull/12');await page.getByRole('button',{name:'Edit pull request assignees',exact:true}).click();await page.getByRole('checkbox',{name:'bob',exact:true}).check();
+  state.metadataCanEdit=false;await page.getByRole('button',{name:'Refresh pull request',exact:true}).click();await expect(page.getByRole('button',{name:'Save changes',exact:true})).toBeDisabled();expect(state.updates).toHaveLength(0);
+ });
+});
+
+
+test('repository PR filters force supported newest order and preserve base branch',async({page})=>{
+ const state=await backend(page);await page.goto('/alex/design-system/pulls');await page.getByRole('button',{name:'Show repository filters',exact:true}).click();await page.getByLabel('Base branch',{exact:true}).fill('release/next');await page.getByRole('combobox',{name:'Repository pull request sort',exact:true}).selectOption('most-commented');await page.getByRole('searchbox',{name:'Search repository pull requests',exact:true}).fill('keyboard');await expect(page.getByRole('combobox',{name:'Repository pull request sort',exact:true})).toHaveValue('newest');await expect(page.getByRole('combobox',{name:'Repository pull request sort',exact:true})).toBeDisabled();await page.getByRole('button',{name:'Apply filters',exact:true}).click();await expect.poll(()=>state.serverQueries.at(-1)).toMatchObject({query:{search:'keyboard'},sort:'newest',baseBranch:'release/next'});await expect(page).toHaveURL(/q=keyboard/);await page.getByRole('button',{name:'Clear repository filters',exact:true}).click();await expect.poll(()=>state.serverQueries.at(-1)).toMatchObject({query:{search:''},sort:'',baseBranch:''});
 });
