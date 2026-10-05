@@ -137,7 +137,7 @@ def main():
             data = {**selected, 'page': {'limit': 50}}
             if not label: data['state'] = 'ISSUE_STATE_ALL'
             result = smoke.rpc(actors[role]['session'], procedure, data)
-            return result['labels' if label else 'milestones'], result.get('canManage', False)
+            return result.get('labels' if label else 'milestones', []), result.get('canManage', False)
 
         for role in ('owner', 'writer'):
             label = apply(role, 'CREATE_LABEL', change={'label': {'name': role+'/resource', 'color': '123456', 'description': 'Label configuration', 'exclusive': True, 'archived': True}})['label']
