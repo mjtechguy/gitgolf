@@ -405,6 +405,7 @@ def main():
             dispatch={'repository':repository,'ref':head,'workflowPath':artifact.PATH,'idempotencyKey':uuid4()}
             admitted=rpc('owner','WorkflowRunService/DispatchWorkflow',dispatch)['run']
             assert admitted['engineCatalog']==artifact.CATALOG
+            record(admittedRun={k:admitted[k] for k in ('id','state','repositoryId','ownerId','commitId','workflowPath','workflowBlobId','sourceSha256','engineCatalog')})
             command('up','-d','--no-build','--pull','never','runner-image-init','runner-actions-image-init','runner')
             runtime_before=runtime(); record(runtimeBefore=runtime_before)
             runner_env=json.loads(execute('docker','inspect',runtime_before['runner']['containerId']))[0]['Config']['Env']
@@ -413,6 +414,13 @@ def main():
                 value=rpc('owner','WorkflowRunService/GetWorkflowRun',{'runId':admitted['id']})['run']
                 return value if value['state'] not in ('WORKFLOW_RUN_STATE_QUEUED','WORKFLOW_RUN_STATE_RUNNING') else None
             observed=helpers.until(terminal,240)
+            record(terminalRun={k:observed[k] for k in ('id','attemptId','state','failureCode','engineCatalog') if k in observed})
+            if observed['state']!='WORKFLOW_RUN_STATE_SUCCEEDED':
+                diagnostics={'run':observed,'logs':rpc('owner','WorkflowRunService/GetWorkflowRunLogs',{'runId':observed['id']})}
+                raw=json.dumps(diagnostics); assert len(raw)<=1<<20
+                for secret in forbidden:
+                    if secret: raw=raw.replace(secret,'[redacted]')
+                helpers.private_write(output/'private-producer-failure.json',raw)
             assert observed['state']=='WORKFLOW_RUN_STATE_SUCCEEDED' and observed['engineCatalog']==artifact.CATALOG and not observed.get('inputContract') and not observed.get('executionBindingId')
             assert observed['commitId']==head and all(observed[k]==admitted[k] for k in ('id','repositoryId','ownerId','workflowBlobId','sourceSha256'))
             a=artifact.artifact_receipt(rpc('owner','WorkflowArtifactService/GetWorkflowArtifact',{'runId':observed['id']})['artifact'],observed)
