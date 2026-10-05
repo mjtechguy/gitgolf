@@ -96,7 +96,7 @@ def main():
         report['publishedSlashTagDeletionRefused']=True
         browser_name='browser/雪-%25'
         cookies=[dict(name=c.name,value=c.value,url=smoke.GOLF,httpOnly=c.has_nonstandard_attr('HttpOnly'),sameSite='Lax') for handler in owner.handlers if isinstance(handler,urllib.request.HTTPCookieProcessor) for c in handler.cookiejar]
-        config={'url':smoke.GOLF+'/'+native['full_name']+'/branches','cookies':cookies,'repositoryId':str(native['id']),'commitId':head,'name':browser_name,'output':str((args.output/'browser').resolve())}
+        config={'url':smoke.GOLF+'/'+native['full_name']+'/branches','cookies':cookies,'repository':repo,'ownerId':access['ownerId'],'accessRevision':access['revision'],'repositoryId':str(native['id']),'commitId':head,'name':browser_name,'output':str((args.output/'browser').resolve())}
         child=subprocess.run(['node','scripts/repository-ref-browser.mjs'],input=json.dumps(config),text=True,capture_output=True,timeout=120)
         assert all(actor[1] not in child.stdout+child.stderr for actor in actors), 'Child diagnostic withheld'
         report['browserExitCode']=child.returncode
