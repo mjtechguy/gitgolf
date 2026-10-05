@@ -7,6 +7,8 @@ Optional --browser captures eight actual read-only views. --assets additionally
 qualifies bounded managed native-asset attachments; no Golf asset writes,
 snapshot/publication, provider or full repository readiness claim. --publish
 adds one explicit existing-tag publication and original-key inspection.
+--publish --browser performs that publication in the actual UI and adds four
+separate receipt captures to the eight read/asset views.
 No lost-acknowledgement or protected publication qualification.
 """
 import argparse
@@ -172,6 +174,8 @@ def self_check(stack):
  assert allowed('POST',tag_path,prefix,publish=True) and not allowed('POST',tag_path,prefix)
  assert allowed('GET',tag_path+'/owned-publication',prefix,publish=True) and not allowed('GET',tag_path+'/foreign',prefix,publish=True)
  assert not allowed('DELETE',tag_path+'/owned-publication',prefix,publish=True) and not allowed('POST',tag_path.replace(prefix,'foreign'),prefix,publish=True)
+ browser_check=subprocess.run(['node',str(stack/'scripts/repository-release-publication-browser.mjs'),'--self-check'],capture_output=True,text=True,timeout=30)
+ assert browser_check.returncode==0 and len(browser_check.stdout)+len(browser_check.stderr)<4096
  print('PASS: pure native scope, release/publication receipts and attachment tamper checks; no resources')
 
 def main():
@@ -341,7 +345,17 @@ def main():
    assert len(api(owner,'GET',path+'/releases'))==2;native_unknown=False
    stage='one explicit Golf existing-tag publication'
    native_unknown=True
-   receipt=publication_receipt(common,rpc(owner,SUBMIT_PUBLICATION,intent)['operation'],intent,owner['id'],PUBLICATION_PHASE+'SUCCEEDED')
+   if args.browser:
+    stage='actual requested publication confirmation and original browser inspection'
+    credentials=[v for v in forbidden if v not in (intent['title'],intent['bodyMarkdown'])]
+    command(['node',str(stack/'scripts/repository-release-publication-browser.mjs')],{'golf':golf,'cookies':cookies,'actorId':owner['id'],'intent':intent,'sourceRevision':args.source_revision,'stackRoot':str(stack),'output':str(output/'publication-browser'),'forbidden':credentials},timeout=180)
+    publication_browser=json.loads((output/'publication-browser/manifest.json').read_text())
+    assert publication_browser['passed'] and publication_browser['complete'] and len(publication_browser['captures'])==4 and publication_browser['submitCount']==publication_browser['originalGetCount']==1 and publication_browser['reloadNoDispatchOrAutomaticInspection'] and not publication_browser['privateCredentialsPersisted'] and not publication_browser['titleAndNotesPersisted']
+    intent=intent|{'operationId':publication_browser['operation']['operationId']}
+    receipt=publication_receipt(common,publication_browser['operation'],intent,owner['id'],PUBLICATION_PHASE+'SUCCEEDED')
+    manifest['publicationBrowser']={'manifest':'publication-browser/manifest.json','captures':4,'submitCount':1,'originalGetCount':1,'separateFromReadAndAssetCaptures':True}
+   else:
+    receipt=publication_receipt(common,rpc(owner,SUBMIT_PUBLICATION,intent)['operation'],intent,owner['id'],PUBLICATION_PHASE+'SUCCEEDED')
    observed=publication_native_receipt(common,api(owner,'GET',path+'/releases/'+receipt['releaseId']),api(owner,'GET',path+'/tags/'+tag_name),intent,owner['id'])
    assert str(observed['id'])==receipt['releaseId'];native_unknown=False
    published_ids={str(r['id']) for r in releases}|{receipt['releaseId']}
@@ -373,7 +387,7 @@ def main():
    rpc(reader,SUBMIT_PUBLICATION,intent|{'operationId':str(uuid.uuid4())},403,'permission_denied')
    rpc(reader,GET_PUBLICATION,publication_status(intent),403,'permission_denied');verify_publication();native_unknown=False
    manifest['scope']='Existing release reads plus one bounded existing-tag Golf publication'+(' and local asset attachments' if args.assets else '')
-   manifest['limits']=['No protected/atomic tag-source fencing or cryptographic artifact promotion','No publication lost-acknowledgement qualification or automatic replacement key','Publication UI remains unqualified; optional browser views are metadata/asset reads','Root owns stack disposal']
+   manifest['limits']=['No protected/atomic tag-source fencing or cryptographic artifact promotion','No publication lost-acknowledgement qualification or automatic replacement key','Four publication receipt views qualify only one confirmed success and explicit original inspection' if args.browser else 'Publication UI remains unqualified','Root owns stack disposal']
    manifest['publicationProof']={'operation':receipt,'tagType':args.publication_tag_type,'explicitPublicationVerified':True,'independentNativeContentAndAuthorMatched':True,'nativeReleaseCount':'3','staleRevisionRejectedWithoutPublication':True,'originalInspectionAndReplayNoAdditionalRelease':True,'changedOriginalContentRefused':True,'restartReceiptAndReplayStable':True,'readerPublicationAndOriginalInspectionRefused':True,'titleAndBodyNotRetained':True};persist()
   stage='native reader removal and current denial'
   api(owner,'DELETE',path+'/collaborators/'+reader['name'],status=204)
