@@ -250,8 +250,11 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 	return b.Buffer.Write(p)
 }
 func (e *Executor) command(ctx context.Context, input io.Reader, args ...string) ([]byte, error) {
+	return e.commandLimit(ctx, input, 64<<10, args...)
+}
+func (e *Executor) commandLimit(ctx context.Context, input io.Reader, limit int, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, e.config.DockerBinary, args...)
-	out := &limitedBuffer{limit: 64 << 10}
+	out := &limitedBuffer{limit: limit}
 	cmd.Stdout = out
 	cmd.Stderr = io.Discard
 	cmd.Stdin = input
