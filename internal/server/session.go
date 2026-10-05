@@ -86,6 +86,9 @@ func (s *Server) createSessionBound(ctx context.Context, user User, kind, payloa
 	if err != nil {
 		return loginResult{}, errStorageUnavailable
 	}
+	if err := s.requireGolfUserAccess(ctx, tx, id); err != nil {
+		return loginResult{}, err
+	}
 	if local != nil {
 		account, err := queries.LockLocalAccount(ctx, database.LockLocalAccountParams{ID: local.accountID, UserID: id})
 		if errors.Is(err, sql.ErrNoRows) {
@@ -160,7 +163,7 @@ func (s *Server) sessionCredentialHash(ctx context.Context, hash []byte) (forgeC
 	if s.db == nil {
 		return forgeCredential{}, errStorageUnavailable
 	}
-	row, err := database.New(s.db).GetSessionCredential(ctx, database.GetSessionCredentialParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+	row, err := s.currentGolfSessionCredential(ctx, hash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return forgeCredential{}, errUnauthenticated
 	}
@@ -171,21 +174,31 @@ func (s *Server) sessionCredentialHash(ctx context.Context, hash []byte) (forgeC
 	if err != nil {
 		return forgeCredential{}, errCredentialUnavailable
 	}
+	var credential forgeCredential
 	switch row.CredentialKind {
 	case "pat", "local":
-		if !row.ExpiresAt.After(time.Now()) {
-			return forgeCredential{}, errUnauthenticated
-		}
-		return forgeCredential{Kind: "pat", Token: payload, Local: row.CredentialKind == "local"}, nil
+		credential = forgeCredential{Kind: "pat", Token: payload, Local: row.CredentialKind == "local"}
 	case "oauth":
-		credential, err := s.oauthCredential(ctx, hash, payload)
-		if !row.ExpiresAt.After(time.Now()) {
-			return forgeCredential{}, errUnauthenticated
+		credential, err = s.oauthCredential(ctx, hash, payload)
+		if err != nil {
+			return forgeCredential{}, err
 		}
-		return credential, err
 	default:
 		return forgeCredential{}, errCredentialUnavailable
 	}
+	// Refresh can wait on a provider or a session lock. Re-read after it has
+	// released its transaction; never acquire a user lock inside OAuth refresh.
+	current, err := s.currentGolfSessionCredential(ctx, hash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return forgeCredential{}, errUnauthenticated
+	}
+	if err != nil {
+		return forgeCredential{}, errStorageUnavailable
+	}
+	if current.ForgeUserID != row.ForgeUserID || current.CredentialKind != row.CredentialKind || !current.ExpiresAt.After(time.Now()) {
+		return forgeCredential{}, errUnauthenticated
+	}
+	return credential, nil
 }
 func (s *Server) logoutSession(ctx context.Context, value string) error {
 	hash, err := sessionHash(value)

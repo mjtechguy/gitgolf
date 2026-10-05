@@ -244,6 +244,9 @@ func (s *Server) workflowTransaction(ctx context.Context, session string, native
 	if err != nil {
 		return errStorageUnavailable
 	}
+	if err := s.requireGolfUserAccess(ctx, tx, identity.ID); err != nil {
+		return err
+	}
 	if identity.ForgeUserID != nativeID {
 		return errUnauthenticated
 	}

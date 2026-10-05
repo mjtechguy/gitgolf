@@ -24,6 +24,9 @@ import (
 // A saved reviewer is an explicit, expiring local-account automation delegation.
 // No browser session is copied: each admitted task gets its own bound session.
 func (s *Server) reviewerActor(ctx context.Context, p reviewerRecord) (codexActor, error) {
+	if e := s.requireGolfUserAccess(ctx, s.db, p.UserID); e != nil {
+		return codexActor{}, e
+	}
 	var cipher, binding []byte
 	var key string
 	var version int64
@@ -43,6 +46,9 @@ func (s *Server) reviewerActor(ctx context.Context, p reviewerRecord) (codexActo
 	auth, e := s.agentAuthority(ctx, a, golfv1.AgentUsageScope_AGENT_USAGE_SCOPE_REPOSITORY, "", p.Config.Repository)
 	if e != nil || mustID(auth.ID) != p.RepoID || auth.OwnerID != p.OwnerID {
 		return a, errCodexPermission
+	}
+	if e := s.requireGolfUserAccess(ctx, s.db, p.UserID); e != nil {
+		return a, e
 	}
 	return a, nil
 }

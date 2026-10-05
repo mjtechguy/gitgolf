@@ -45,6 +45,9 @@ func (s *Server) withManagedSession(ctx context.Context, value string, credentia
 	if err != nil {
 		return errStorageUnavailable
 	}
+	if err := s.requireGolfUserAccess(ctx, tx, identity.ID); err != nil {
+		return err
+	}
 	if user.ID != identity.ForgeUserID {
 		return errUnauthenticated
 	}

@@ -149,6 +149,9 @@ func (s *Server) codexGuard(ctx context.Context, a codexActor, fn func(*sql.Tx, 
 	if e != nil || u.ForgeUserID != a.NativeID || (a.UserID != 0 && a.UserID != u.ID) {
 		return errUnauthenticated
 	}
+	if e := s.requireGolfUserAccess(ctx, tx, u.ID); e != nil {
+		return e
+	}
 	c, e := q.LockManagedSession(ctx, database.LockManagedSessionParams{CallerTokenHash: a.Hash, UserID: u.ID, ForgeURL: s.config.GiteaURL})
 	if e != nil || (c.CredentialKind != "local" && c.CredentialKind != "oauth") {
 		return errUnauthenticated

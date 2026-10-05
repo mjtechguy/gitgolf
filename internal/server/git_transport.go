@@ -59,6 +59,9 @@ func (s *Server) gitCredentialTransaction(ctx context.Context, c gitCredentialRe
 	if e != nil {
 		return errStorageUnavailable
 	}
+	if e := s.requireGolfUserAccess(ctx, tx, actor.ID); e != nil {
+		return e
+	}
 	if actor.ID != c.UserID || actor.ForgeUserID != c.NativeUserID {
 		return errUnauthenticated
 	}

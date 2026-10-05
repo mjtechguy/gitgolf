@@ -25,6 +25,9 @@ func (s *Server) automationRunCredential(ctx context.Context, run workflowRunRec
 	if !automationRunMatchesGrant(run, g) {
 		return g, forgeCredential{}, errUnauthenticated
 	}
+	if err := s.requireGolfUserAccess(ctx, s.db, g.SponsorUserID); err != nil {
+		return g, forgeCredential{}, err
+	}
 	var version int64
 	var encrypted, binding []byte
 	var keyID string
@@ -62,6 +65,9 @@ func (s *Server) lockAutomationRunAuthority(ctx context.Context, tx *sql.Tx, run
 	}
 	if err != nil {
 		return errStorageUnavailable
+	}
+	if err := s.requireGolfUserAccess(ctx, tx, run.UserID); err != nil {
+		return err
 	}
 	var disabled bool
 	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_local_accounts WHERE user_id=$1 AND disabled_at IS NOT NULL)`, run.UserID).Scan(&disabled); err != nil {

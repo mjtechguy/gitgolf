@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
-import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListLocalAccountsResponseSchema, ListLocalAccountsRequestSchema, UserSchema, DisableLocalAccountRequestSchema, DisableLocalAccountResponseSchema } from '../src/gen/golf/v1/golf_pb';
+import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, ListGolfUserAccessResponseSchema, ListLocalAccountsResponseSchema, ListLocalAccountsRequestSchema, UserSchema, DisableLocalAccountRequestSchema, DisableLocalAccountResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 async function backend(page: Page, admin = true) {
@@ -11,6 +11,7 @@ async function backend(page: Page, admin = true) {
     if (method === 'GetAuthenticationOptions') return respond(route, GetAuthenticationOptionsResponseSchema, {});
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, { user: state.user });
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
+    if (method === 'ListGolfUserAccess') return respond(route, ListGolfUserAccessResponseSchema, {});
     if (method === 'Logout' && state.logoutFail) { await new Promise(resolve => setTimeout(resolve, 200)); return reject(route, 'unavailable', 'Sign out could not be completed.'); }
     if (method === 'DisableLocalAccount') {
       const input = request(route, DisableLocalAccountRequestSchema); state.writes.push(input);
@@ -119,7 +120,7 @@ test('global overview separates configuration coverage from account inventory', 
   await page.goto('/admin');
   await expect(page.getByRole('table', { name: 'Instance settings', exact: true })).toBeVisible();
   expect(state.reads).toHaveLength(0);
-  await page.getByRole('link', { name: 'Local accounts', exact: true }).click();
+  await page.getByRole('link', { name: 'Accounts', exact: true }).click();
   await expect(page.getByRole('table', { name: 'Local accounts', exact: true })).toBeVisible();
 });
 

@@ -125,6 +125,9 @@ func (s *Server) checkAutomationAdmin(ctx context.Context, token forgeCredential
 // The supplied personal PAT must independently resolve to the sponsor. Browser
 // credentials authorize this edit only; they are never copied into the grant.
 func (s *Server) verifyAutomationDelegation(ctx context.Context, g automationGrantRecord, token forgeCredential) error {
+	if err := s.requireNativeGolfUserAccess(ctx, g.SponsorNativeUserID); err != nil {
+		return err
+	}
 	caller, err := s.currentUser(ctx, token)
 	if err != nil {
 		return err
@@ -154,7 +157,7 @@ func (s *Server) verifyAutomationDelegation(ctx context.Context, g automationGra
 	if org != g.OrganizationOwned {
 		return errResourceNotFound
 	}
-	return nil
+	return s.requireNativeGolfUserAccess(ctx, g.SponsorNativeUserID)
 }
 func (s *Server) ListAutomationGrants(ctx context.Context, req *connect.Request[golfv1.ListAutomationGrantsRequest]) (*connect.Response[golfv1.ListAutomationGrantsResponse], error) {
 	token, err := workflowBrowserToken(ctx)
