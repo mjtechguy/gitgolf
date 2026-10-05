@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -131,6 +132,7 @@ func newReleaseOperationsFixture(t *testing.T) (*releasePublicationFixture, *syn
 					w.WriteHeader(503)
 					return
 				}
+				w.WriteHeader(http.StatusCreated)
 				json.NewEncoder(w).Encode(f.published.Assets[index])
 			case http.MethodDelete:
 				f.published.Assets = append(f.published.Assets[:index], f.published.Assets[index+1:]...)
@@ -340,4 +342,106 @@ func TestReleaseOperationsManagedBoundary(t *testing.T) {
 		}
 	}
 	_ = context.Background()
+}
+
+// The launcher provisions and purges an owned native fixture; this test runs
+// real production HTTP handlers and a disposable real PostgreSQL schema.
+func TestReleaseOperationsActualNative(t *testing.T) {
+	raw := os.Getenv("GOLF_TEST_RELEASE_OPERATION_NATIVE_CASE")
+	if raw == "" {
+		t.Skip("set owned native release qualification fixture")
+	}
+	var fixture struct{ Native, Token, Owner, Repository, RepositoryID, OwnerID, ReleaseID string }
+	if json.Unmarshal([]byte(raw), &fixture) != nil {
+		t.Fatal("fixture invalid")
+	}
+	config := testConfig(fixture.Native)
+	config.GiteaPublicURL = fixture.Native
+	config.GiteaOAuthClientID = "owned-source-fixture"
+	config.GiteaOAuthClientSecret = "owned-source-fixture-secret"
+	s, e := New(config, testDatabase(t))
+	if e != nil {
+		t.Fatal(e)
+	}
+	sessions, repos, _, httpClient, origin := testRPCClients(t, s)
+	if _, e = sessions.LoginWithGiteaToken(t.Context(), connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: fixture.Token})); e != nil {
+		t.Fatal("owned native login failed")
+	}
+	t.Cleanup(func() {
+		_, e := sessions.Logout(context.Background(), connect.NewRequest(&golfv1.LogoutRequest{}))
+		if e != nil {
+			t.Error("owned source session logout failed")
+		}
+	})
+	options := connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, r connect.AnyRequest) (connect.AnyResponse, error) {
+			r.Header().Set("Origin", config.PublicURL)
+			return next(ctx, r)
+		}
+	}))
+	manager := golfv1connect.NewRepositoryReleaseManagementServiceClient(httpClient, origin.String()+"/rpc", options)
+	accessClient := golfv1connect.NewRepositoryAccessServiceClient(httpClient, origin.String()+"/rpc", options)
+	key := &golfv1.RepositoryKey{Owner: fixture.Owner, Name: fixture.Repository}
+	credential := forgeCredential{Kind: "pat", Token: fixture.Token}
+	base, _ := repositoryPath(keyFrom(key))
+	assetID := ""
+	for _, kind := range []golfv1.RepositoryReleaseOperationKind{golfv1.RepositoryReleaseOperationKind_REPOSITORY_RELEASE_OPERATION_KIND_EDIT, golfv1.RepositoryReleaseOperationKind_REPOSITORY_RELEASE_OPERATION_KIND_UPLOAD_ASSET, golfv1.RepositoryReleaseOperationKind_REPOSITORY_RELEASE_OPERATION_KIND_RENAME_ASSET, golfv1.RepositoryReleaseOperationKind_REPOSITORY_RELEASE_OPERATION_KIND_DELETE_ASSET, golfv1.RepositoryReleaseOperationKind_REPOSITORY_RELEASE_OPERATION_KIND_DELETE} {
+		current, e := repos.GetRepositoryRelease(t.Context(), connect.NewRequest(&golfv1.GetRepositoryReleaseRequest{Repository: key, RepositoryId: fixture.RepositoryID, ReleaseId: fixture.ReleaseID}))
+		if e != nil {
+			t.Fatal("native release read failed")
+		}
+		access, e := accessClient.GetRepositoryAccess(t.Context(), connect.NewRequest(&golfv1.GetRepositoryAccessRequest{Repository: key}))
+		if e != nil {
+			t.Fatal("native authority failed")
+		}
+		m := &golfv1.SubmitRepositoryReleaseOperationRequest{Repository: key, RepositoryId: fixture.RepositoryID, OwnerId: fixture.OwnerID, AccessRevision: access.Msg.Access.Revision, OperationId: randomUUID(), ReleaseId: fixture.ReleaseID, ExpectedRevision: current.Msg.Release.Revision, Kind: kind}
+		switch int32(kind) {
+		case 1:
+			m.Title = "Native qualified notes"
+			m.BodyMarkdown = "Literal **release** notes\n"
+			m.Prerelease = true
+		case 3:
+			m.AssetName = "literal.bin"
+			m.AssetContent = []byte{0, 1, 2, 255, 10}
+		case 4:
+			m.AssetId = assetID
+			m.AssetName = "renamed.bin"
+		case 5:
+			m.AssetId = assetID
+		}
+		result, e := manager.SubmitRepositoryReleaseOperation(t.Context(), connect.NewRequest(m))
+		if e != nil {
+			t.Fatalf("native operation%d failed: %v", kind, e)
+		}
+		if result.Msg.Operation.Phase != golfv1.RepositoryReleasePublicationPhase_REPOSITORY_RELEASE_PUBLICATION_PHASE_SUCCEEDED {
+			t.Fatalf("native operation%d unresolved phase%s; inspect original only", kind, result.Msg.Operation.Phase)
+		}
+		again, e := manager.SubmitRepositoryReleaseOperation(t.Context(), connect.NewRequest(m))
+		if e != nil || !proto.Equal(again.Msg.Operation, result.Msg.Operation) {
+			t.Fatal("native same-key outcome differs")
+		}
+		inspected, e := manager.GetRepositoryReleaseOperation(t.Context(), connect.NewRequest(&golfv1.GetRepositoryReleaseOperationRequest{Repository: key, RepositoryId: fixture.RepositoryID, OwnerId: fixture.OwnerID, OperationId: m.OperationId}))
+		if e != nil || !proto.Equal(inspected.Msg.Operation, result.Msg.Operation) {
+			t.Fatal("native original inspection differs")
+		}
+		if kind == golfv1.RepositoryReleaseOperationKind_REPOSITORY_RELEASE_OPERATION_KIND_UPLOAD_ASSET {
+			assetID = result.Msg.Operation.AssetId
+		}
+		if kind != golfv1.RepositoryReleaseOperationKind_REPOSITORY_RELEASE_OPERATION_KIND_DELETE {
+			var observed forgeRepositoryRelease
+			if _, e = s.forge(t.Context(), http.MethodGet, base+"/releases/"+fixture.ReleaseID, credential, nil, &observed); e != nil {
+				t.Fatal("independent native read failed")
+			}
+			if kind == golfv1.RepositoryReleaseOperationKind_REPOSITORY_RELEASE_OPERATION_KIND_EDIT && (observed.Title != m.Title || observed.Body != m.BodyMarkdown || !*observed.Prerelease) {
+				t.Fatal("independent native metadata differs")
+			}
+			if kind == golfv1.RepositoryReleaseOperationKind_REPOSITORY_RELEASE_OPERATION_KIND_DELETE_ASSET && len(observed.Assets) != 0 {
+				t.Fatal("deleted asset remains")
+			}
+		}
+	}
+	// The supported release DELETE removed release data but preserved the Git tag.
+	if _, e = s.exactSourceTag(t.Context(), base, credential, "v1"); e != nil {
+		t.Fatal("release deletion removed original tag")
+	}
 }

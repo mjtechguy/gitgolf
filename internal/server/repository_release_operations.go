@@ -517,6 +517,9 @@ func (s *Server) SubmitRepositoryReleaseOperation(ctx context.Context, req *conn
 					resultAssetID = uploaded.ID
 				} else {
 					status := http.StatusOK
+					if r.Kind == 4 {
+						status = http.StatusCreated
+					}
 					if method == http.MethodDelete {
 						status = http.StatusNoContent
 					}

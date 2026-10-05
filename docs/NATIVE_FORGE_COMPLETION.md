@@ -23,3 +23,7 @@ Real PostgreSQL tests cover all five effects, semantic fingerprints, preflight a
 Actual pinned Gitea native/served qualification, current-schema restore and deployment remain separate gates. Wider uploads/streaming, contributor releases-unit write permissions and native pending-release lifecycle rules remain open.
 
 Primary endpoint reference: [Gitea1.27 API](https://docs.gitea.com/api/1.27/), repository release and attachment operations.
+
+Actual pinned native source qualification now passes all five operations through production HTTP handlers and a disposable real PostgreSQL schema: edit, exact binary upload, rename, asset deletion, release deletion, same-key replay and explicit original inspection. Independent native reads confirm effects and preservation of the original Git tag. The owned fixture actor is purged. Run `GOLF_TEST_DATABASE_URL=<owned PostgreSQL> python3 scripts/release-management-native-source-proof.py --compose-root <retained Compose root> --output <new evidence directory>` to reproduce. No new Docker jobs or service restarts occur.
+
+This qualification corrected the exact native attachment PATCH status to201, as specified by pinned1.27.3 swagger. Earlier failed attempts remain separate evidence; an unknown outcome was never resent or relabeled. Source/native qualification still does not establish localhost deployment or served UI native acceptance.
