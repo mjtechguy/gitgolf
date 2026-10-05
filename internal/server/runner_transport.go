@@ -561,6 +561,11 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	id, ok := s.enrolledRunner(r)
 	attempt := chi.URLParam(r, "id")
+	action := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+	if action == "job-git-credential" && !s.jobGitIssuerRoute(r, attempt) {
+		runnerFail(w, 403)
+		return
+	}
 	capability := r.Header.Get("Golf-Attempt-Token")
 	raw, err := base64.RawURLEncoding.DecodeString(capability)
 	if !ok || !attemptIdentifier.MatchString(attempt) || err != nil || len(raw) != 32 || base64.RawURLEncoding.EncodeToString(raw) != capability || len(r.Header.Values("Golf-Attempt-Token")) != 1 {
@@ -622,7 +627,14 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		InfrastructureError bool   `json:"infrastructureError"`
 		LogsTruncated       bool   `json:"logsTruncated"`
 	}
-	action := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+	var jobGitInput struct {
+		JobInstanceID string `json:"jobInstanceId"`
+	}
+	if action == "job-git-credential" {
+		if !runnerDecode(w, r, &jobGitInput, 4<<10) {
+			return
+		}
+	}
 	var gitRoute gitTransportRoute
 	var gitResponse []byte
 	if strings.HasPrefix(r.URL.Path, "/internal/ci/attempt/"+attempt+"/git/") {
@@ -668,7 +680,7 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if action != "source" && action != "artifact" && action != "git" && !runnerDecode(w, r, &input, 128<<10) {
+	if action != "source" && action != "artifact" && action != "git" && action != "job-git-credential" && !runnerDecode(w, r, &input, 128<<10) {
 		return
 	}
 	if action == "source" {
@@ -757,6 +769,27 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch action {
+	case "job-git-credential":
+		var cancelled bool
+		if tx.QueryRowContext(ctx, `SELECT cancel_requested FROM golf_workflow_runs WHERE id=$1`, run.ID).Scan(&cancelled) != nil || cancelled {
+			runnerFail(w, 403)
+			return
+		}
+		if err = jobGitRunningJob(ctx, tx, run, jobGitInput.JobInstanceID); err != nil {
+			runnerFail(w, 403)
+			return
+		}
+		credential, e := s.mintJobGitCredential(run, jobGitInput.JobInstanceID, time.Now())
+		if e != nil || ctx.Err() != nil {
+			runnerFail(w, 403)
+			return
+		}
+		if tx.Commit() != nil {
+			runnerFail(w, 503)
+			return
+		}
+		respond(w, 200, credential)
+		return
 	case "git":
 		if err = tx.Commit(); err != nil {
 			runnerFail(w, 503)
