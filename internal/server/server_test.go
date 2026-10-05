@@ -25,6 +25,7 @@ import (
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 	"github.com/mjtechguy/golf-git/gen/golf/v1/golfv1connect"
 	"github.com/mjtechguy/golf-git/internal/server/database"
+	"github.com/pressly/goose/v3"
 )
 
 func testConfig(forgeURL string) Config {
@@ -134,7 +135,9 @@ func TestCredentialEnvelopeAndRedirect(t *testing.T) {
 	}
 }
 
-func testDatabase(t *testing.T) *sql.DB {
+func testDatabase(t *testing.T) *sql.DB { return testDatabaseAtVersion(t, 0) }
+
+func testDatabaseAtVersion(t *testing.T, version int64) *sql.DB {
 	t.Helper()
 	dsn := os.Getenv("GOLF_TEST_DATABASE_URL")
 	if dsn == "" {
@@ -158,7 +161,20 @@ func testDatabase(t *testing.T) *sql.DB {
 	config.RuntimeParams["search_path"] = schema
 	registered := stdlib.RegisterConnConfig(config)
 	t.Cleanup(func() { stdlib.UnregisterConnConfig(registered) })
-	db, err := database.Open(context.Background(), registered)
+	var db *sql.DB
+	if version == 0 {
+		db, err = database.Open(context.Background(), registered)
+	} else {
+		db, err = sql.Open("pgx", registered)
+		if err == nil {
+			db.SetMaxOpenConns(10)
+			var provider *goose.Provider
+			provider, err = goose.NewProvider(goose.DialectPostgres, db, os.DirFS("database/migrations"))
+			if err == nil {
+				_, err = provider.UpTo(t.Context(), version)
+			}
+		}
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

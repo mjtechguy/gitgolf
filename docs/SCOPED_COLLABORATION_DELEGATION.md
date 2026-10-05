@@ -80,3 +80,9 @@ original-key replay, and revoked delegation is refused. Owned actors/repositorie
 are purged. Receipt: [native attempt1](../.tmp/portable-completion075/native-delegation-attempt1/manifest.json).
 This qualifies the bounded native issue/comment slice; it does not qualify all six
 write operations, the CLI/MCP against actual native transport, or served localhost.
+
+The integrated [native CLI/MCP attempt](../.tmp/portable-completion075/native-cli-mcp-attempt1/manifest.json)
+also passes the CLI and actual stdio MCP in both supported protocol revisions
+against those production source handlers and real Gitea. Reusing the original
+comment operation produces exactly one native comment. This remains bounded
+issue/comment qualification, separate from broader PR writes and served rollout.

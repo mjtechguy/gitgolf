@@ -39,7 +39,7 @@ try:
     assert len(issues) == 1 and issues[0]['title'] == 'Owned scoped native issue'
     comments = smoke.provider(token, 'GET', 'repos/'+repo['full_name']+'/issues/'+str(issues[0]['number'])+'/comments')
     assert len(comments) == 1 and comments[0]['body'] == 'One journaled native comment'
-    report.update(passed=True, exactNativeIssueCount=1, exactNativeCommentCount=1, originalKeysDidNotDuplicate=True, revokedWriteRefused=True)
+    report.update(passed=True, exactNativeIssueCount=1, exactNativeCommentCount=1, originalKeysDidNotDuplicate=True, revokedWriteRefused=True, actualCLI=True, actualMCPProtocols=["2026-07-28", "2025-11-25"])
 finally:
     if created:
         smoke.admin('delete', '--username', name, '--purge')

@@ -1,15 +1,22 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 	"github.com/mjtechguy/golf-git/gen/golf/v1/golfv1connect"
+	"github.com/mjtechguy/golf-git/internal/cli"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -30,6 +37,7 @@ func TestApiWriteGrantNative(t *testing.T) {
 		t.Fatal("native source setup", e)
 	}
 	sessions, _, _, httpClient, origin := testRPCClients(t, s)
+	s.config.PublicURL = origin.String()
 	login, e := sessions.LoginWithGiteaToken(t.Context(), connect.NewRequest(&golfv1.LoginWithGiteaTokenRequest{Token: fixture.Token}))
 	if e != nil || login.Msg.User == nil {
 		t.Fatal("native source login", connect.CodeOf(e))
@@ -69,6 +77,53 @@ func TestApiWriteGrantNative(t *testing.T) {
 			t.Fatal("native comment not confirmed", r.Code)
 		}
 	}
+	inputFile := filepath.Join(t.TempDir(), "comment.json")
+	if e = os.WriteFile(inputFile, body, 0600); e != nil {
+		t.Fatal("private request file")
+	}
+	getenv := func(key string) string {
+		if key == "GOLF_API_TOKEN" {
+			return grant.Msg.Token
+		}
+		return ""
+	}
+	var cliOutput, cliDiagnostic bytes.Buffer
+	if code := cli.Run(t.Context(), []string{"--url", origin.String(), "issue", "comment", "--input", inputFile}, strings.NewReader(""), &cliOutput, &cliDiagnostic, getenv); code != 0 || !strings.Contains(cliOutput.String(), "ISSUE_MUTATION_STATE_SUCCEEDED") {
+		t.Fatal("actual native CLI original-key replay failed", code)
+	}
+	for _, version := range []string{"2026-07-28", "2025-11-25"} {
+		ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+		toServer, toServerWriter := io.Pipe()
+		fromServer, fromServerWriter := io.Pipe()
+		done := make(chan int, 1)
+		var diagnostic bytes.Buffer
+		go func() {
+			done <- cli.Run(ctx, []string{"--url", origin.String(), "mcp"}, toServer, fromServerWriter, &diagnostic, getenv)
+			fromServerWriter.Close()
+		}()
+		session, err := mcp.NewClient(&mcp.Implementation{Name: "native-proof", Version: "1"}, nil).Connect(ctx, &mcp.IOTransport{Reader: fromServer, Writer: toServerWriter}, &mcp.ClientSessionOptions{ProtocolVersion: version})
+		if err != nil {
+			cancel()
+			toServer.Close()
+			fromServer.Close()
+			t.Fatal("native MCP handshake")
+		}
+		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "golf_issue_comment", Arguments: map[string]any{"request": json.RawMessage(body)}})
+		if err != nil || result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "ISSUE_MUTATION_STATE_SUCCEEDED") {
+			cancel()
+			session.Close()
+			t.Fatal("native MCP replay")
+		}
+		session.Close()
+		cancel()
+		toServer.Close()
+		fromServer.Close()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("native MCP process did not settle")
+		}
+	}
 	if _, e = management.RevokeApiCredential(t.Context(), connect.NewRequest(&golfv1.RevokeApiCredentialRequest{CredentialId: grant.Msg.Credential.Id})); e != nil {
 		t.Fatal("native grant revocation")
 	}
@@ -77,5 +132,5 @@ func TestApiWriteGrantNative(t *testing.T) {
 	if r := apiRequest(s, grant.Msg.Token, golfv1connect.RepositoryServiceCreateIssueCommentProcedure, string(body)); r.Code != 401 {
 		t.Fatal("native revoked delegation accepted", r.Code)
 	}
-	t.Log("PASS actual supported native issue/comment writes, original-key replay and delegated revocation; no served deployment claim")
+	t.Log("PASS actual native issue/comment writes, CLI and both MCP revisions, original-key replay and delegated revocation; no served deployment claim")
 }

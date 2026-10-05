@@ -570,11 +570,26 @@ func TestRepositoryCreationMigrationAndGuardsPostgres(t *testing.T) {
 	f := newCreationFixture(t)
 	session := f.session(t, "alice", "pat")
 	hash, _ := sessionHash(session.Value)
+	// Start from an actual old schema. Retained journals intentionally prohibit
+	// downgrading a latest schema; that is not an additive-upgrade test.
+	old := testDatabaseAtVersion(t, 202610020003)
+	for _, table := range []string{"golf_users", "golf_sessions"} {
+		var data []byte
+		if err := f.db.QueryRow("SELECT to_jsonb(t) FROM " + table + " t").Scan(&data); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := old.Exec("INSERT INTO "+table+" OVERRIDING SYSTEM VALUE SELECT (jsonb_populate_record(NULL::"+table+",$1::jsonb)).*", string(data)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, column := range [][2]string{{"golf_users", "id"}, {"golf_sessions", "session_id"}} {
+		if _, err := old.Exec("SELECT setval(pg_get_serial_sequence($1,$2),(SELECT max("+column[1]+") FROM "+column[0]+"))", column[0], column[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.db, f.s.db = old, old
 	provider, err := goose.NewProvider(goose.DialectPostgres, f.db, os.DirFS("database/migrations"))
 	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := provider.DownTo(t.Context(), 202610020003); err != nil {
 		t.Fatal(err)
 	}
 	var before []byte
