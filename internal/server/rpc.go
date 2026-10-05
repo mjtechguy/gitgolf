@@ -101,6 +101,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewOrganizationCreationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewInfrastructureConnectionServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewWorkflowRunServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewWorkflowArtifactServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewActionRunServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewCapabilityServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewAuditServiceHandler(s, options...))
@@ -155,7 +156,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.OrganizationCreationServiceGetOrganizationCreationPolicyProcedure, golfv1connect.OrganizationCreationServiceUpdateOrganizationCreationPolicyProcedure, golfv1connect.OrganizationCreationServiceCreateOrganizationProcedure,
 			golfv1connect.ExecutionPolicyServiceGetExecutionPolicyProcedure, golfv1connect.ExecutionPolicyServiceUpdateExecutionPolicyProcedure,
 			golfv1connect.ActionRunServiceListActionRunsProcedure, golfv1connect.ActionRunServiceGetActionRunProcedure,
-			golfv1connect.WorkflowRunServicePrepareWorkflowDispatchProcedure, golfv1connect.WorkflowRunServiceDispatchWorkflowProcedure, golfv1connect.WorkflowRunServiceGetWorkflowRunProcedure, golfv1connect.WorkflowRunServiceGetWorkflowDispatchProcedure, golfv1connect.WorkflowRunServiceListWorkflowRunsProcedure, golfv1connect.WorkflowRunServiceCancelWorkflowRunProcedure, golfv1connect.WorkflowRunServiceGetWorkflowRunLogsProcedure,
+			golfv1connect.WorkflowArtifactServiceGetWorkflowArtifactProcedure, golfv1connect.WorkflowRunServicePrepareWorkflowDispatchProcedure, golfv1connect.WorkflowRunServiceDispatchWorkflowProcedure, golfv1connect.WorkflowRunServiceGetWorkflowRunProcedure, golfv1connect.WorkflowRunServiceGetWorkflowDispatchProcedure, golfv1connect.WorkflowRunServiceListWorkflowRunsProcedure, golfv1connect.WorkflowRunServiceCancelWorkflowRunProcedure, golfv1connect.WorkflowRunServiceGetWorkflowRunLogsProcedure,
 			golfv1connect.InstanceAdminServiceDisableLocalAccountProcedure, golfv1connect.WorkflowServiceInspectWorkflowsProcedure,
 			golfv1connect.RepositoryWebhookServiceListRepositoryWebhooksProcedure, golfv1connect.RepositoryWebhookServiceSaveRepositoryWebhookProcedure, golfv1connect.RepositoryWebhookServiceListRepositoryWebhookDeliveriesProcedure, golfv1connect.RepositoryWebhookServiceTestRepositoryWebhookProcedure, golfv1connect.RepositoryWebhookServiceRedeliverRepositoryWebhookProcedure,
 			golfv1connect.StandardPullMergeServiceSubmitStandardPullMergeProcedure, golfv1connect.StandardPullMergeServiceGetStandardPullMergeOperationProcedure,

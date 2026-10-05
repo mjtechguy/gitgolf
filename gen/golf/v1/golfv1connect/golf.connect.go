@@ -113,6 +113,8 @@ const (
 	PullMergeObservationServiceName = "golf.v1.PullMergeObservationService"
 	// StandardPullMergeServiceName is the fully-qualified name of the StandardPullMergeService service.
 	StandardPullMergeServiceName = "golf.v1.StandardPullMergeService"
+	// WorkflowArtifactServiceName is the fully-qualified name of the WorkflowArtifactService service.
+	WorkflowArtifactServiceName = "golf.v1.WorkflowArtifactService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -721,6 +723,9 @@ const (
 	// StandardPullMergeServiceGetStandardPullMergeOperationProcedure is the fully-qualified name of the
 	// StandardPullMergeService's GetStandardPullMergeOperation RPC.
 	StandardPullMergeServiceGetStandardPullMergeOperationProcedure = "/golf.v1.StandardPullMergeService/GetStandardPullMergeOperation"
+	// WorkflowArtifactServiceGetWorkflowArtifactProcedure is the fully-qualified name of the
+	// WorkflowArtifactService's GetWorkflowArtifact RPC.
+	WorkflowArtifactServiceGetWorkflowArtifactProcedure = "/golf.v1.WorkflowArtifactService/GetWorkflowArtifact"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -7716,4 +7721,75 @@ func (UnimplementedStandardPullMergeServiceHandler) SubmitStandardPullMerge(cont
 
 func (UnimplementedStandardPullMergeServiceHandler) GetStandardPullMergeOperation(context.Context, *connect.Request[v1.GetStandardPullMergeOperationRequest]) (*connect.Response[v1.GetStandardPullMergeOperationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.StandardPullMergeService.GetStandardPullMergeOperation is not implemented"))
+}
+
+// WorkflowArtifactServiceClient is a client for the golf.v1.WorkflowArtifactService service.
+type WorkflowArtifactServiceClient interface {
+	GetWorkflowArtifact(context.Context, *connect.Request[v1.GetWorkflowArtifactRequest]) (*connect.Response[v1.GetWorkflowArtifactResponse], error)
+}
+
+// NewWorkflowArtifactServiceClient constructs a client for the golf.v1.WorkflowArtifactService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewWorkflowArtifactServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) WorkflowArtifactServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	workflowArtifactServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("WorkflowArtifactService").Methods()
+	return &workflowArtifactServiceClient{
+		getWorkflowArtifact: connect.NewClient[v1.GetWorkflowArtifactRequest, v1.GetWorkflowArtifactResponse](
+			httpClient,
+			baseURL+WorkflowArtifactServiceGetWorkflowArtifactProcedure,
+			connect.WithSchema(workflowArtifactServiceMethods.ByName("GetWorkflowArtifact")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// workflowArtifactServiceClient implements WorkflowArtifactServiceClient.
+type workflowArtifactServiceClient struct {
+	getWorkflowArtifact *connect.Client[v1.GetWorkflowArtifactRequest, v1.GetWorkflowArtifactResponse]
+}
+
+// GetWorkflowArtifact calls golf.v1.WorkflowArtifactService.GetWorkflowArtifact.
+func (c *workflowArtifactServiceClient) GetWorkflowArtifact(ctx context.Context, req *connect.Request[v1.GetWorkflowArtifactRequest]) (*connect.Response[v1.GetWorkflowArtifactResponse], error) {
+	return c.getWorkflowArtifact.CallUnary(ctx, req)
+}
+
+// WorkflowArtifactServiceHandler is an implementation of the golf.v1.WorkflowArtifactService
+// service.
+type WorkflowArtifactServiceHandler interface {
+	GetWorkflowArtifact(context.Context, *connect.Request[v1.GetWorkflowArtifactRequest]) (*connect.Response[v1.GetWorkflowArtifactResponse], error)
+}
+
+// NewWorkflowArtifactServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewWorkflowArtifactServiceHandler(svc WorkflowArtifactServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	workflowArtifactServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("WorkflowArtifactService").Methods()
+	workflowArtifactServiceGetWorkflowArtifactHandler := connect.NewUnaryHandler(
+		WorkflowArtifactServiceGetWorkflowArtifactProcedure,
+		svc.GetWorkflowArtifact,
+		connect.WithSchema(workflowArtifactServiceMethods.ByName("GetWorkflowArtifact")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.WorkflowArtifactService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case WorkflowArtifactServiceGetWorkflowArtifactProcedure:
+			workflowArtifactServiceGetWorkflowArtifactHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedWorkflowArtifactServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedWorkflowArtifactServiceHandler struct{}
+
+func (UnimplementedWorkflowArtifactServiceHandler) GetWorkflowArtifact(context.Context, *connect.Request[v1.GetWorkflowArtifactRequest]) (*connect.Response[v1.GetWorkflowArtifactResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.WorkflowArtifactService.GetWorkflowArtifact is not implemented"))
 }

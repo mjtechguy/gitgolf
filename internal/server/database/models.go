@@ -1489,6 +1489,23 @@ type GolfWebhookSubscription struct {
 	WorkflowNotifications int32
 }
 
+type GolfWorkflowArtifact struct {
+	RunID         uuid.UUID
+	AttemptID     string
+	ForgeURL      string
+	RepositoryID  int64
+	OwnerID       int64
+	CommitID      string
+	WorkflowPath  string
+	BlobID        string
+	SourceSha256  string
+	ArchiveSha256 string
+	FileCount     int32
+	FileBytes     int64
+	Archive       []byte
+	CreatedAt     time.Time
+}
+
 type GolfWorkflowDispatchInput struct {
 	RunID            uuid.UUID
 	ContractVersion  int32

@@ -148,10 +148,12 @@ func New(config Config, db *sql.DB) (*Server, error) {
 	r.Post("/internal/ci/attempt/{id}/progress", s.runnerAttempt)
 	r.Post("/internal/ci/attempt/{id}/graph", s.runnerAttempt)
 	r.Post("/internal/ci/attempt/{id}/finish", s.runnerAttempt)
+	r.Post("/internal/ci/attempt/{id}/artifact", s.runnerAttempt)
 	r.Get("/internal/ci/attempt/{id}/source", s.runnerAttempt)
 	rpc := s.rpcBoundary(http.StripPrefix("/rpc", s.rpcHandler()))
 	r.Handle("/rpc", rpc)
 	r.Handle("/rpc/*", rpc)
+	r.Get("/api/workflow-runs/{id}/artifact", s.WorkflowArtifactDownloadHandler())
 	// Removed application REST paths are never served as SPA documents.
 	r.Handle("/api", http.NotFoundHandler())
 	r.Handle("/api/*", http.NotFoundHandler())
