@@ -1,0 +1,2 @@
+export const discussionResourceIntentPrefix='golf.discussion-resource.v1:';
+export function clearOtherDiscussionResourceIntents(userId?:string){try{for(let i=sessionStorage.length-1;i>=0;i--){const key=sessionStorage.key(i);if(key?.startsWith(discussionResourceIntentPrefix)&&(!userId||!key.startsWith(`${discussionResourceIntentPrefix}${userId}:`)))sessionStorage.removeItem(key);}}catch{/* Retained metadata contains no draft text or credentials. */}}

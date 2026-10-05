@@ -113,6 +113,7 @@ func nativeMilestone(raw json.RawMessage) (*golfv1.DiscussionMilestone, error) {
 	if metadata == nil || metadata.Milestone == nil {
 		return nil, errInvalidForgeResponse
 	}
+	metadata.Milestone.Revision = milestoneRevision(metadata.Milestone)
 	return metadata.Milestone, nil
 }
 
@@ -207,6 +208,10 @@ func (s *Server) ListRepositoryMilestones(ctx context.Context, req *connect.Requ
 		}
 		_, delegated := ctx.Value(apiAuthKey{}).(apiAuth)
 		result.CanEditMilestone = after && !delegated
+		if !delegated {
+			manage, manageErr := s.discussionAdministrationAuthority(ctx, token, base, repo)
+			result.CanManage = manageErr == nil && manage
+		}
 		return nil
 	})
 	if err != nil {

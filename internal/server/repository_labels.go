@@ -20,7 +20,9 @@ func nativeLabel(raw json.RawMessage) (*golfv1.DiscussionLabel, error) {
 	if metadata == nil || len(metadata.Labels) != 1 {
 		return nil, errInvalidForgeResponse
 	}
-	return metadata.Labels[0], nil
+	label := metadata.Labels[0]
+	label.Revision = labelRevision(label)
+	return label, nil
 }
 
 func (s *Server) readRepositoryLabel(ctx context.Context, token forgeCredential, base string, id int64) (*golfv1.DiscussionLabel, error) {
@@ -111,6 +113,10 @@ func (s *Server) ListRepositoryLabels(ctx context.Context, req *connect.Request[
 		}
 		_, delegated := ctx.Value(apiAuthKey{}).(apiAuth)
 		result.CanEditLabels = after && !delegated
+		if !delegated {
+			manage, manageErr := s.discussionAdministrationAuthority(ctx, token, base, repo)
+			result.CanManage = manageErr == nil && manage
+		}
 		return nil
 	})
 	if err != nil {

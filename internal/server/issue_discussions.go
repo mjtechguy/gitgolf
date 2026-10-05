@@ -114,7 +114,7 @@ func validIssueComment(comment forgeIssueComment, repo Repository, number uint32
 }
 
 func wireIssueComment(comment forgeIssueComment) *golfv1.IssueComment {
-	return &golfv1.IssueComment{Id: strconv.FormatInt(comment.ID, 10), User: wirePullUser(comment.User), Body: comment.Body, CreatedAt: comment.CreatedAt, UpdatedAt: comment.UpdatedAt, HtmlUrl: comment.HTMLURL}
+	return &golfv1.IssueComment{Id: strconv.FormatInt(comment.ID, 10), User: wirePullUser(comment.User), Body: comment.Body, CreatedAt: comment.CreatedAt, UpdatedAt: comment.UpdatedAt, HtmlUrl: comment.HTMLURL, Revision: commentRevision(comment)}
 }
 
 func (s *Server) readDiscussionComment(ctx context.Context, token forgeCredential, base string, repo Repository, number uint32, id int64) (forgeIssueComment, error) {
@@ -164,6 +164,11 @@ func (s *Server) listIssueComments(ctx context.Context, session string, token fo
 				return err
 			}
 			seen := map[int64]bool{}
+			actor, actorErr := s.currentUser(ctx, token)
+			writer, writerErr := s.milestoneEditAuthority(ctx, token, base, repo)
+			unitActive, activeErr := s.activeDiscussionUnit(ctx, token, base, repo, isPullDiscussion(ctx))
+			_, delegated := ctx.Value(apiAuthKey{}).(apiAuth)
+			canObserveEdit := !delegated && actorErr == nil && writerErr == nil && activeErr == nil && unitActive
 			for _, comment := range comments {
 				if comment.ID <= 0 || seen[comment.ID] {
 					return errInvalidForgeResponse
@@ -185,7 +190,10 @@ func (s *Server) listIssueComments(ctx context.Context, session string, token fo
 				if !validIssueComment(comment, repo, number, isPullDiscussion(ctx)) {
 					return errInvalidForgeResponse
 				}
-				result = append(result, wireIssueComment(comment))
+				wire := wireIssueComment(comment)
+				wire.CanEdit = canObserveEdit && comment.User != nil && comment.User.ID > 0 && (writer || comment.User.ID == actor.ID)
+				wire.CanDelete = wire.CanEdit
+				result = append(result, wire)
 			}
 			after, err := s.readDiscussionIssue(ctx, token, base, repo, number)
 			if err != nil {
@@ -193,6 +201,15 @@ func (s *Server) listIssueComments(ctx context.Context, session string, token fo
 			}
 			if after.ID != issueID {
 				return errIssueTargetChanged
+			}
+			afterWriter, afterWriterErr := s.milestoneEditAuthority(ctx, token, base, repo)
+			afterActive, afterActiveErr := s.activeDiscussionUnit(ctx, token, base, repo, isPullDiscussion(ctx))
+			afterActor, afterActorErr := s.currentUser(ctx, token)
+			if afterWriterErr != nil || afterActiveErr != nil || afterActorErr != nil || afterWriter != writer || !afterActive || afterActor.ID != actor.ID {
+				for _, row := range result {
+					row.CanEdit = false
+					row.CanDelete = false
+				}
 			}
 			return nil
 		})

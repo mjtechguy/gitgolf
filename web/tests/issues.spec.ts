@@ -2,13 +2,14 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import {
+  SubmitDiscussionResourceOperationRequestSchema, SubmitDiscussionResourceOperationResponseSchema, GetDiscussionResourceOperationRequestSchema, GetDiscussionResourceOperationResponseSchema, DiscussionResourceOperationKind, DiscussionResourceOperationPhase, DiscussionResourceOperationSchema,
   ListRepositoryAssigneesRequestSchema, ListRepositoryAssigneesResponseSchema, ListRepositoryLabelsRequestSchema, ListRepositoryLabelsResponseSchema, ListRepositoryMilestonesRequestSchema, ListRepositoryMilestonesResponseSchema, DiscussionMetadataSchema, DiscussionMilestoneSchema, DiscussionLabelSchema, UpdateIssueRequestSchema, UpdateIssueResponseSchema, CreateIssueRequestSchema, CreateIssueResponseSchema, CreateIssueCommentRequestSchema, CreateIssueCommentResponseSchema,
   GetAuthenticationOptionsResponseSchema, GetIssueMutationRequestSchema, GetIssueMutationResponseSchema, GetIssueResponseSchema,
   GetRepositoryResponseSchema, GetSessionResponseSchema, IssueCommentSchema, IssueMutationKind, IssueMutationSchema, IssueMutationState,
   IssueSchema, IssueState, ListCapabilitiesResponseSchema, ListIssueCommentsRequestSchema, ListIssueCommentsResponseSchema,
   ListIssuesRequestSchema, ListIssuesResponseSchema, ListRepositoriesResponseSchema, LoginWithPasswordResponseSchema, LogoutResponseSchema, RepositorySchema, UserSchema,
 } from '../src/gen/golf/v1/golf_pb';
-import type { CreateIssueRequest, CreateIssueCommentRequest, UpdateIssueRequest, IssueMutation, Issue } from '../src/gen/golf/v1/golf_pb';
+import type { CreateIssueRequest, CreateIssueCommentRequest, UpdateIssueRequest, IssueMutation, Issue, SubmitDiscussionResourceOperationRequest, DiscussionResourceOperation } from '../src/gen/golf/v1/golf_pb';
 import { reject, request, respond } from './rpc';
 
 const user = create(UserSchema, { id: '9007199254740993', login: 'alex' });
@@ -28,6 +29,7 @@ async function backend(page: Page) {
     canEditAssignees: false, assignees: [create(UserSchema,{id:'9007199254740993',login:'PRIVATE_ASSIGNEE_A',fullName:'Alex Reviewer'}),create(UserSchema,{id:'12',login:'PRIVATE_ASSIGNEE_B'})], assigneeReads: 0, assigneeWait: undefined as Promise<void> | undefined,
     canEditLabels: false, labels: [create(DiscussionLabelSchema,{id:"9",name:"PRIVATE_LABEL_A",color:"aabbcc"}),create(DiscussionLabelSchema,{id:"12",name:"PRIVATE_LABEL_B",color:"aaff00"})], labelPages: [] as number[], labelMore: false,
     canEditMilestone: false, milestones: [create(DiscussionMilestoneSchema, { id:'51', title:'PRIVATE_MILESTONE_A', state:IssueState.OPEN }), create(DiscussionMilestoneSchema, { id:'52', title:'PRIVATE_MILESTONE_B', state:IssueState.CLOSED })], milestonePages: [] as number[], milestoneMore:false,
+    canManage: false, resourceUnknown:false, resourceRequests: [] as SubmitDiscussionResourceOperationRequest[], resourceRecords:new Map<string,DiscussionResourceOperation>(), resourceInspections:[] as string[],
     records: new Map<string, IssueMutation>(), errors: {} as Record<string, Failure>, barrier: undefined as Promise<void> | undefined,
   };
   await page.route('**/rpc/**', async (route) => {
@@ -49,12 +51,12 @@ async function backend(page: Page) {
     }
     if (method === 'ListRepositoryLabels') {
       const input=request(route,ListRepositoryLabelsRequestSchema);expect(input.repository).toMatchObject(repoKey);expect(input.repositoryId).toBe(state.repoId);const number=input.page?.page||1;state.labelPages.push(number);
-      return respond(route,ListRepositoryLabelsResponseSchema,{labels:state.labelMore?state.labels.slice(number-1,number):state.labels,canEditLabels:state.canEditLabels,page:state.labelMore&&number===1?{nextPage:2}:undefined});
+      return respond(route,ListRepositoryLabelsResponseSchema,{canManage:state.canManage,labels:state.labelMore?state.labels.slice(number-1,number):state.labels,canEditLabels:state.canEditLabels,page:state.labelMore&&number===1?{nextPage:2}:undefined});
     }
     if (method === 'ListRepositoryMilestones') {
       const input=request(route,ListRepositoryMilestonesRequestSchema); expect(input.repository).toMatchObject(repoKey);expect(input.repositoryId).toBe(state.repoId);expect(input.state).toBe(IssueState.ALL);
       const number=input.page?.page||1;state.milestonePages.push(number);
-      return respond(route,ListRepositoryMilestonesResponseSchema,{milestones:state.milestoneMore?state.milestones.slice(number-1,number):state.milestones,canEditMilestone:state.canEditMilestone,page:state.milestoneMore&&number===1?{nextPage:2}:undefined});
+      return respond(route,ListRepositoryMilestonesResponseSchema,{canManage:state.canManage,milestones:state.milestoneMore?state.milestones.slice(number-1,number):state.milestones,canEditMilestone:state.canEditMilestone,page:state.milestoneMore&&number===1?{nextPage:2}:undefined});
     }
     if (method === 'ListIssues') {
       const input = request(route, ListIssuesRequestSchema), number = input.page?.page || 1; state.listPages.push(number); state.serverQueries.push(input.query);
@@ -68,6 +70,19 @@ async function backend(page: Page) {
       const number = input.page?.page || 1; state.pages.push(number);
       return respond(route, ListIssueCommentsResponseSchema, state.emptyFirst && number === 1 ? { page: { nextPage: 2 } } : { comments: state.comments });
     }
+    if(method==='SubmitDiscussionResourceOperation') {
+      const input=request(route,SubmitDiscussionResourceOperationRequestSchema);state.resourceRequests.push(input);
+      const record=create(DiscussionResourceOperationSchema,{operationId:input.operationId,kind:input.kind,repository:repoKey,repositoryId:input.repositoryId,resourceId:input.resourceId,expectedRevision:input.expectedRevision,issueId:input.issueId,number:input.number,pullRequest:input.pullRequest,phase:state.resourceUnknown?DiscussionResourceOperationPhase.DISPATCH_UNKNOWN:DiscussionResourceOperationPhase.SUCCEEDED,observedResourceId:input.resourceId||'71',createdAt:'2026-10-05T00:00:00Z',updatedAt:'2026-10-05T00:00:00Z'});state.resourceRecords.set(input.operationId,record);
+      if(!state.resourceUnknown) {
+        if(input.kind===DiscussionResourceOperationKind.CREATE_LABEL||input.kind===DiscussionResourceOperationKind.UPDATE_LABEL){const d=input.change.case==='label'?input.change.value:undefined;if(d){const row=create(DiscussionLabelSchema,{id:input.resourceId||'71',name:d.name,color:d.color,description:d.description,exclusive:d.exclusive,archived:d.archived,revision:'b'.repeat(64)});state.labels=[...state.labels.filter(r=>r.id!==row.id),row];}}
+        if(input.kind===DiscussionResourceOperationKind.DELETE_LABEL)state.labels=state.labels.filter(r=>r.id!==input.resourceId);
+        if(input.kind===DiscussionResourceOperationKind.UPDATE_MILESTONE){const d=input.change.case==='milestone'?input.change.value:undefined;if(d)state.milestones=state.milestones.map(r=>r.id===input.resourceId?create(DiscussionMilestoneSchema,{...r,title:d.title,description:d.description,state:d.state,dueOn:d.dueDate?d.dueDate+'T23:59:59Z':'',revision:'b'.repeat(64)}):r);}
+        if(input.kind===DiscussionResourceOperationKind.UPDATE_COMMENT)state.comments=state.comments.map(r=>r.id===input.resourceId?{...r,body:input.change.case==='commentBody'?input.change.value:r.body,revision:'b'.repeat(64)}:r);
+        if(input.kind===DiscussionResourceOperationKind.DELETE_COMMENT)state.comments=state.comments.filter(r=>r.id!==input.resourceId);
+      }
+      return respond(route,SubmitDiscussionResourceOperationResponseSchema,{operation:record});
+    }
+    if(method==='GetDiscussionResourceOperation'){const key=request(route,GetDiscussionResourceOperationRequestSchema).operationId;state.resourceInspections.push(key);const record=state.resourceRecords.get(key);return record?respond(route,GetDiscussionResourceOperationResponseSchema,{operation:record}):reject(route,'not_found','No original outcome.');}
     if (method === 'UpdateIssue') {
       const input = request(route, UpdateIssueRequestSchema); state.updates.push(input);
       const mutation = create(IssueMutationSchema, {
@@ -762,4 +777,19 @@ test('repository issue query is explicit, URL-backed and separate from loaded fi
  await page.getByLabel('Author username',{exact:true}).fill('alex');await page.getByLabel('Assignee username',{exact:true}).fill('bob');await page.getByLabel('Label names, comma-separated',{exact:true}).fill('bug, accessibility');await page.getByLabel('Milestone title',{exact:true}).fill('Release');await page.getByRole('button',{name:'Apply filters',exact:true}).click();
  await expect.poll(()=>state.serverQueries.at(-1)).toMatchObject({search:'accessibility',author:'alex',assignee:'bob',labelNames:['bug','accessibility'],milestoneTitle:'Release'});await expect(page).toHaveURL(/q=accessibility/);await expect(page.getByRole('searchbox',{name:'Search loaded issues',exact:true})).toHaveValue('');
  await page.getByRole('link',{name:'Private discussion',exact:true}).click();await expect(page).toHaveURL(/issues\/12.*q=accessibility/);await page.getByRole('link',{name:'All open issues',exact:true}).click();await expect(search).toHaveValue('accessibility');await page.getByRole('button',{name:'Clear repository filters',exact:true}).click();await expect.poll(()=>state.serverQueries.at(-1)).toMatchObject({search:'',author:'',assignee:'',labelNames:[],milestoneTitle:''});
+});
+
+test('label administration uses explicit inventory actions and full snapshots with original-key inspection',async({page})=>{
+ const state=await backend(page);state.canManage=true;state.labels=state.labels.map(r=>({...r,revision:'a'.repeat(64),archived:true}));await page.goto(listURL);await page.getByRole('button',{name:'Labels',exact:true}).click();const panel=page.getByRole('region',{name:'labels administration'});await expect(panel.getByRole('table',{name:'labels',exact:true})).toBeVisible();await expect(panel.getByRole('textbox',{name:'Name',exact:true})).toHaveCount(0);
+ await panel.getByRole('button',{name:'Edit label PRIVATE_LABEL_A',exact:true}).click();await panel.getByLabel('Name',{exact:true}).fill('security');await panel.getByRole('button',{name:'Save label',exact:true}).click();await expect.poll(()=>state.resourceRequests.length).toBe(1);expect(state.resourceRequests[0]).toMatchObject({kind:DiscussionResourceOperationKind.UPDATE_LABEL,repositoryId:repository.id,resourceId:'9',expectedRevision:'a'.repeat(64),change:{case:'label',value:{name:'security',archived:true,exclusive:false,color:'aabbcc',description:''}}});await expect(panel).toContainText('Change confirmed.');await panel.getByRole('button',{name:'Dismiss completed operation',exact:true}).click();
+ await panel.getByRole('button',{name:'Delete label security',exact:true}).click();const confirm=page.getByRole('dialog',{name:'Delete label security?'});await confirm.getByRole('button',{name:'Confirm deletion',exact:true}).click();await expect.poll(()=>state.resourceRequests.length).toBe(2);expect(state.resourceRequests[1]?.change.case).toBeUndefined();await expect(panel.getByRole('button',{name:'Delete label security'})).toHaveCount(0);
+});
+
+test('uncertain resource writes reload with metadata only and inspect without replay',async({page})=>{
+ const state=await backend(page);state.canManage=true;state.resourceUnknown=true;state.labels=state.labels.map(r=>({...r,revision:'a'.repeat(64)}));await page.goto(listURL);await page.getByRole('button',{name:'Labels',exact:true}).click();const panel=page.getByRole('region',{name:'labels administration'});await panel.getByRole('button',{name:'New label',exact:true}).click();await panel.getByLabel('Name',{exact:true}).fill('PRIVATE_RESOURCE_NAME');await panel.getByLabel('Description',{exact:true}).fill('PRIVATE_RESOURCE_DESCRIPTION');await panel.getByRole('button',{name:'Save label',exact:true}).click();await expect(panel).toContainText('Original outcome is unresolved.');const key=state.resourceRequests[0]!.operationId;
+ const original=await page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.startsWith('golf.discussion-resource.')));expect(JSON.stringify(original)).not.toContain('PRIVATE_RESOURCE');await page.reload();await page.getByRole('button',{name:'Labels',exact:true}).click();await panel.getByRole('button',{name:'Inspect original operation',exact:true}).click();await expect.poll(()=>state.resourceInspections).toEqual([key]);expect(state.resourceRequests).toHaveLength(1);await expect(panel.getByRole('button',{name:'New label',exact:true})).toBeDisabled();
+});
+
+test('ordinary comment author controls edit and confirm deletion using exact discussion identity',async({page})=>{
+ const state=await backend(page);state.comments=[{...comment,revision:'a'.repeat(64),canEdit:true,canDelete:true}];await page.goto(detailURL);await page.getByRole('button',{name:`Edit comment ${comment.id}`,exact:true}).click();const form=page.getByRole('form',{name:`Edit comment ${comment.id}`,exact:true});await form.getByLabel('Comment',{exact:true}).fill('Updated private comment');await form.getByRole('button',{name:'Save comment',exact:true}).click();await expect.poll(()=>state.resourceRequests.length).toBe(1);expect(state.resourceRequests[0]).toMatchObject({kind:DiscussionResourceOperationKind.UPDATE_COMMENT,resourceId:comment.id,issueId:issue.id,number:12,pullRequest:false,change:{case:'commentBody',value:'Updated private comment'}});await expect(page.getByLabel(`Comment ${comment.id}, rendered Markdown`)).toContainText('Updated private comment');await page.getByRole('button',{name:`Delete comment ${comment.id}`,exact:true}).click();await page.getByRole('dialog',{name:`Delete comment ${comment.id}?`}).getByRole('button',{name:'Confirm deletion',exact:true}).click();await expect.poll(()=>state.resourceRequests.length).toBe(2);await expect(page.getByLabel(`Comment ${comment.id}, rendered Markdown`)).toHaveCount(0);
 });

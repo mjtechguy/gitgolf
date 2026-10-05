@@ -1,3 +1,4 @@
+import { DiscussionResourceManagement } from './DiscussionResourceControls';
 import { DiscussionListControls, discussionQuery } from './DiscussionListControls';
 import type {PullRequestMergeObservation} from './gen/golf/v1/golf_pb';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
@@ -162,14 +163,15 @@ function PullDetail(props: Props) {
   </>;
 }
 
-function PullList({ repositoryKey, queryKey, location }: Props) {
+function PullList(props: Props) {
+ const {repositoryKey,queryKey,location}=props;
   const navigate = useNavigate();
   const query = useInfiniteQuery({ ...privateQuery, queryKey: [...queryKey, 'pulls', location.state, discussionQuery(location), location.sort, location.base], initialPageParam: 1,
     queryFn: ({ pageParam, signal }) => repositoryClient.listPullRequests({ repository: repositoryKey, query: discussionQuery(location), sort: location.sort || (Object.values(discussionQuery(location)).some(value=>Array.isArray(value)?value.length:Boolean(value))?'newest':''), baseBranch: location.base || '', state: location.state === 'open' ? IssueState.OPEN : location.state === 'closed' ? IssueState.CLOSED : IssueState.ALL, page: { page: pageParam, limit: 20 } }, { signal, timeoutMs: 8_000 }), getNextPageParam: followingPage });
   const pulls = query.isSuccess && (!query.isFetching || query.isFetchingNextPage)
     ? [...new Map(query.data.pages.flatMap((page) => page.pullRequests).map((pull) => [pull.id, pull])).values()] : [];
   const list = useRepositoryWorkList(pulls);
-  return <section className="browser-panel repository-work-list" aria-labelledby="pulls-title">
+  return <><DiscussionResourceManagement {...props}/><section className="browser-panel repository-work-list" aria-labelledby="pulls-title">
     <div className="browser-panel-heading"><h2 id="pulls-title">Pull requests</h2><div className="panel-actions"><Link className="button primary" {...repositoryOptions(location,{view:'compare',pull:undefined})}><GitPullRequest size={16}/>New pull request</Link><select aria-label="Pull request state" value={location.state} onChange={(event) => void navigate(repositoryOptions(location, { state: event.target.value as RepositoryLocation['state'], pull: undefined }))}><option value="open">Open</option><option value="closed">Closed</option><option value="all">All states</option></select><button className="icon-button manual-refresh" aria-label="Refresh pull requests" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={16} /></button></div></div>
 
     <DiscussionListControls key={JSON.stringify([discussionQuery(location),location.sort,location.base])} location={location} label="pull requests"/><RepositoryListControls label="pull requests" {...list.controls}/>
@@ -178,7 +180,7 @@ function PullList({ repositoryKey, queryKey, location }: Props) {
       {!list.rows.length ? <div className="empty-state"><GitPullRequest size={25} /><h3>No {location.state === 'all' ? '' : `${location.state} `}pull requests.</h3>{query.hasNextPage ? <p>More provider pages may contain visible pull requests.</p> : <p>{list.controls.search ? 'No loaded pull requests match your search.' : 'There are no pull requests matching this state.'}</p>}</div> : null}
       <div className="list-footer"><span>{pulls.length} loaded pull requests{query.hasNextPage ? ' · More available' : ''}</span><More hasMore={query.hasNextPage} loading={query.isFetching} load={() => void query.fetchNextPage()} label="pull requests" /></div>
     </>}
-  </section>;
+  </section></>;
 }
 export function PullRequestBrowser(props: Props) {
   return props.location.pull ? <PullDetail key={props.location.pull} {...props} /> : <PullList {...props} />;
