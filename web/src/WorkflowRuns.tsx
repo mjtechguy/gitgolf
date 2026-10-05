@@ -11,6 +11,7 @@ import { DateLabel, Loading, More, PanelError, privateQuery } from './Repository
 import { isRunID, isCommitID, isWorkflowJobInstanceID, isWorkflowStepID, repositoryOptions, type RepositoryLocation } from './navigation';
 import { sourcePath, sourceRepositoryID } from './sourceReads';
 import { WorkflowArtifacts } from './WorkflowArtifacts';
+import { useLiveStatus } from './RepositoryLive';
 
 function useWideWorkflowLayout() {
  const [wide,setWide]=useState(()=>window.matchMedia('(min-width:701px)').matches);
@@ -127,10 +128,13 @@ function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex,ru
    return page;
   },getNextPageParam:page=>page.hasMore?page.logs.at(-1)?.sequence:undefined});
  useEffect(()=>{if(query.error instanceof ConnectError&&[Code.Unauthenticated,Code.PermissionDenied,Code.NotFound].includes(query.error.code))onAuthorityDenied(query.error,run);},[query.error,onAuthorityDenied,run]);
- const loading=query.isPending||query.isFetching&&!query.isFetchingNextPage;
+ const loading=query.isPending;
+ const liveStatus=useLiveStatus();
+ const active=run.state===WorkflowRunState.RUNNING||run.state===WorkflowRunState.QUEUED;
  const withheld=run.outputState===WorkflowOutputState.WITHHELD;
  const text=query.data?.pages.flatMap(page=>page.logs).map(chunk=>chunk.text).join('')||'';
  const denied=Boolean(query.error)||!enabled;
+ useEffect(()=>{if(active&&liveStatus==='live'&&enabled&&!withheld&&!query.error&&query.hasNextPage&&!query.isFetching)void query.fetchNextPage();},[active,liveStatus,enabled,withheld,query.error,query.hasNextPage,query.isFetching,query.fetchNextPage]);
  const matches=search?text.toLowerCase().split(search.toLowerCase()).length-1:0;
  function download(){
   if(denied||loading||!text)return;
@@ -152,7 +156,7 @@ function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex,ru
 
 export function WorkflowRunPage({userId,owner,name,location,repositoryId,runId,signingOut,selectedStep,selectedJobInstanceId,selectedStepId}:{userId:string;owner:string;name:string;location:RepositoryLocation;repositoryId:string;runId:string;signingOut:boolean;selectedStep?:number;selectedJobInstanceId?:string;selectedStepId?:string}) {
  const client=useQueryClient();
- const [notice,setNotice]=useState('');const [pending,setPending]=useState(false);
+ const [notice,setNotice]=useState('');const [pending,setPending]=useState(false);const [checkingAccess,setCheckingAccess]=useState(false);
  const desktop=useWideWorkflowLayout();
  const [mobileJobsOpen,setMobileJobsOpen]=useState(false);
  const controller=useRef<AbortController|null>(null);const alive=useRef(true);
@@ -175,6 +179,7 @@ export function WorkflowRunPage({userId,owner,name,location,repositoryId,runId,s
   client.removeQueries({predicate:scopedLogs});
   client.getQueryCache().find({queryKey:key,exact:true})?.setState({data:undefined,error,status:'error',fetchStatus:'idle'});
  },[client,userId,owner,name,runId,repositoryId,signingOut]);
+ async function refreshRunAccess(){setCheckingAccess(true);try{await query.refetch();}finally{if(alive.current)setCheckingAccess(false);}}
  const engineRun=Boolean(run&&isActionsCatalog(run.engineCatalog));
  const job=run?.jobs.find(job=>job.instanceId===selectedJobInstanceId),engineStep=job?.steps.find(step=>step.id===selectedStepId);
  const badSelection=Boolean(run&&(selectedJobInstanceId&&(!engineRun||!job)||selectedStepId&&!engineStep||engineRun&&selectedStep!==undefined));
@@ -192,8 +197,8 @@ export function WorkflowRunPage({userId,owner,name,location,repositoryId,runId,s
  return <section className="page-stack workflow-run-workspace" aria-label="Workflow run workspace">
   <Link className="text-button" {...repositoryOptions(location,{view:'actions',run:undefined,runKind:undefined,step:undefined,jobInstanceId:undefined,stepId:undefined})}><ArrowLeft size={16}/>All runs</Link>
   {query.error?<PanelError error={query.error} retry={()=>void query.refetch()}/>:!run?<Loading label="Loading selected run…"/>:null}
-  {run?<><div hidden={query.isFetching} className="page-stack">
-   <header className="discussion-summary workflow-run-summary"><div><h2>{run.workflowPath}</h2><p><RunState state={run.state}/><span>{run.origin===WorkflowRunOrigin.PUSH?'Push':run.origin===WorkflowRunOrigin.MANUAL?'Manual':'Unknown trigger'}{run.eventRef?` · ${run.eventRef}`:''}</span><span><Clock3 size={14}/>{elapsed(run)}</span></p></div><div className="row-actions"><button className="icon-button manual-refresh" aria-label="Refresh selected run" title="Refresh selected run" disabled={pending||query.isFetching||signingOut} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button>{run.canCancel?<button className="button secondary" disabled={pending||signingOut||query.isFetching} onClick={()=>void cancel()}>Cancel run</button>:null}</div></header>
+  {run?<><div hidden={checkingAccess} className="page-stack">
+   <header className="discussion-summary workflow-run-summary"><div><h2 title={run.workflowPath}>{run.workflowPath}</h2><p><RunState state={run.state}/><span>{run.origin===WorkflowRunOrigin.PUSH?'Push':run.origin===WorkflowRunOrigin.MANUAL?'Manual':'Unknown trigger'}{run.eventRef?` · ${run.eventRef}`:''}</span><span><Clock3 size={14}/>{elapsed(run)}</span></p></div><div className="row-actions"><button className="icon-button manual-refresh" aria-label="Refresh selected run" title="Refresh selected run" disabled={pending||query.isFetching||signingOut} onClick={()=>void refreshRunAccess()}><RefreshCw size={16}/></button>{run.canCancel?<button className="button secondary" disabled={pending||signingOut||query.isFetching} onClick={()=>void cancel()}>Cancel run</button>:null}</div></header>
    <section className="browser-panel workflow-run-metadata" aria-label="Run summary"><dl><div><dt>Commit</dt><dd><Link {...repositoryOptions({owner,name},{view:'commits',commit:run.commitId})}><GitCommitHorizontal size={14}/><code title={run.commitId}>{run.commitId.slice(0,12)}</code></Link></dd></div><div><dt>Created</dt><dd><DateLabel value={run.createdAt}/></dd></div></dl><details><summary>Execution receipt</summary><dl><div><dt>Worker</dt><dd>{run.runnerId||'Awaiting assignment'}</dd></div><div><dt>Admitted runner pool</dt><dd>{run.runnerPlacement?run.runnerPlacement.legacyUnbound?'Unpooled workers':<code>{run.runnerPlacement.poolId}</code>:'Not recorded'}</dd></div>{run.runnerPlacement?<><div><dt>Placement version</dt><dd><code>{run.runnerPlacement.placementVersion}</code></dd></div>{!run.runnerPlacement.legacyUnbound?<div><dt>Pool configuration version</dt><dd><code>{run.runnerPlacement.poolVersion}</code></dd></div>:null}</>:null}<div><dt>Exit code</dt><dd>{run.exitCode??'Not reported'}</dd></div><div><dt>Attempt</dt><dd><code>{run.attemptId||'Not recorded'}</code></dd></div>{run.engineCatalog?<><div><dt>Engine catalog</dt><dd><code>{run.engineCatalog}</code></dd></div>{run.engineCommit?<div><dt>Engine source</dt><dd><code>{run.engineCommit}</code></dd></div>:null}</>:null}{run.engineCatalog===actionsInputsCatalog?<><div><dt>Manual input contract</dt><dd><code>{run.inputContract}</code></dd></div><div><dt>Input schema</dt><dd><code>{run.schemaSha256}</code></dd></div><div><dt>Submitted inputs receipt</dt><dd><code>{run.submittedSha256}</code></dd></div><div><dt>Effective inputs receipt</dt><dd><code>{run.effectiveSha256}</code></dd></div></>:null}{job?<><div><dt>Job instance</dt><dd><code>{job.instanceId}</code></dd></div><div><dt>Source job</dt><dd><code>{job.jobId}</code></dd></div>{job.matrix.length?<div><dt>Matrix</dt><dd>{matrixLabel(job)}</dd></div>:null}<div><dt>Needs</dt><dd>{job.needs.join(', ')||'No dependencies'}</dd></div><div><dt>Job image</dt><dd><code>{job.imageDigest}</code></dd></div>{job.startedAt?<div><dt>Job started</dt><dd><DateLabel value={job.startedAt}/></dd></div>:null}{job.finishedAt?<div><dt>Job finished</dt><dd><DateLabel value={job.finishedAt}/></dd></div>:null}{engineStep?<><div><dt>Step</dt><dd><code>{engineStep.id}</code></dd></div>{engineStep.startedAt?<div><dt>Step started</dt><dd><DateLabel value={engineStep.startedAt}/></dd></div>:null}{engineStep.finishedAt?<div><dt>Step finished</dt><dd><DateLabel value={engineStep.finishedAt}/></dd></div>:null}</>:null}</>:null}<div><dt>Run</dt><dd><code>{run.id}</code></dd></div><div><dt>Workflow source</dt><dd><Link {...repositoryOptions({owner,name},{ref:run.commitId,path:run.workflowPath},'file')}>{run.workflowPath}</Link></dd></div><div><dt>Workflow blob</dt><dd><code>{run.workflowBlobId}</code></dd></div><div><dt>Source archive</dt><dd><code>{run.sourceSha256}</code></dd></div>{run.origin===WorkflowRunOrigin.PUSH?<><div><dt>Event</dt><dd>{run.repositoryEventId}</dd></div><div><dt>Automation grant</dt><dd><code>{run.automationGrantId}</code></dd></div></>:null}</dl></details></section>
    {run.reason?<p className="panel-footnote">{run.reason}</p>:null}
    <WorkflowArtifacts key={`${userId}-${run.repositoryId}-${run.ownerId}-${run.id}-${run.attemptId}`} run={run} userId={userId} enabled={!query.isFetching&&!signingOut} onAuthorityDenied={denyLogAuthority}/>
@@ -205,10 +210,10 @@ export function WorkflowRunPage({userId,owner,name,location,repositoryId,runId,s
    </>}
    </div></details></aside><div className="automation-run-output">
     {selectedStepId||selectedJobInstanceId?<h3>{engineStep?.name||job?.name||'Selected job'}</h3>:selectedStep!==undefined?<h3>{run.progress?.steps.find(step=>step.index===selectedStep)?.name||'Selected step'}</h3>:null}
-    {badSelection?<PanelError error={new ConnectError('The selected job or step does not belong to this recorded run.',Code.NotFound)} retry={()=>void query.refetch()}/>:!selectedRecorded?<p className="panel-footnote" role="status">{selectedJobInstanceId&&job?noJobOutput(job,engineStep):'The selected step has no recorded output. Choose all run output or a step that started.'}</p>:<WorkflowRunLogs onAuthorityDenied={denyLogAuthority} key={`${run.attemptId}-${run.outputState}-${run.engineCatalog}-${run.inputContract}-${run.schemaSha256}-${run.submittedSha256}-${run.effectiveSha256}-${selectedJobInstanceId||'all'}-${selectedStepId||'all'}-${selectedStep??'all'}`} run={run} userId={userId} owner={owner} name={name} runId={runId} stepIndex={selectedStep} jobInstanceId={selectedJobInstanceId} stepId={selectedStepId} truncated={run.logsTruncated} enabled={!query.isFetching&&!signingOut}/>}
+    {badSelection?<PanelError error={new ConnectError('The selected job or step does not belong to this recorded run.',Code.NotFound)} retry={()=>void query.refetch()}/>:!selectedRecorded?<p className="panel-footnote" role="status">{selectedJobInstanceId&&job?noJobOutput(job,engineStep):'The selected step has no recorded output. Choose all run output or a step that started.'}</p>:<WorkflowRunLogs onAuthorityDenied={denyLogAuthority} key={`${run.attemptId}-${run.outputState}-${run.engineCatalog}-${run.inputContract}-${run.schemaSha256}-${run.submittedSha256}-${run.effectiveSha256}-${selectedJobInstanceId||'all'}-${selectedStepId||'all'}-${selectedStep??'all'}`} run={run} userId={userId} owner={owner} name={name} runId={runId} stepIndex={selectedStep} jobInstanceId={selectedJobInstanceId} stepId={selectedStepId} truncated={run.logsTruncated} enabled={!checkingAccess&&!signingOut}/>}
     {engineRun&&!selectedJobInstanceId&&run.jobs.some(job=>!job.eventsRecorded)?<p className="panel-footnote">Job outcomes without recorded events are shown as pending or unrecorded. The overall run result does not establish missing job or step outcomes.</p>:null}
    </div></div>
-  </div>{query.isFetching?<Loading label="Checking run access…"/>:null}</>:null}
+  </div>{checkingAccess?<Loading label="Checking run access…"/>:null}</>:null}
   {notice&&!signingOut?<p role="status" className="panel-footnote">{notice}</p>:null}
  </section>;
 }

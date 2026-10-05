@@ -16,6 +16,7 @@ async function backend(page:Page){
    const message=toJson(WatchRepositoryResponseSchema,create(WatchRepositoryResponseSchema,{repositoryId:'11',cursor:String(state.cursor),kind:!input.cursor?'reset':input.cursor!==String(state.cursor)?'change':'heartbeat',topics:input.cursor&&input.cursor!==String(state.cursor)?['actions']:[]}));
    return route.fulfill({status:200,contentType:'application/connect+json',body:Buffer.concat([frame(0,message),frame(0,{repositoryId:'11',cursor:String(state.cursor),kind:'reconnect'}),frame(2,{})])});
   }
+  if(method==='GetRepositoryStar')return reject(route,'unimplemented','Optional stars fixture unavailable.');
   if(method==='GetSession')return respond(route,GetSessionResponseSchema,{user:{id:'42',login:'alex'}});
   if(method==='ListCapabilities')return respond(route,ListCapabilitiesResponseSchema,{});
   if(method==='ListRepositories')return respond(route,ListRepositoriesResponseSchema,{});
@@ -78,8 +79,8 @@ test('invalid log continuation and permission loss remove loaded private output'
 });
 
 test('live action invalidations update already-loaded tail and selected run without manual refresh',async({page})=>{
- const state=await backend(page);state.live=true;await page.goto(path);await expect(page.getByText('Live',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Load more log output'})).toBeVisible();
- await page.getByRole('button',{name:'Load more log output'}).click();await expect(page.getByLabel('Workflow run log',{exact:true})).toContainText('</script>');
+ const state=await backend(page);state.live=true;await page.goto(path);await expect(page.getByText('Live',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('Workflow run log',{exact:true})).toContainText('</script>');
  state.chunks=18;state.state=WorkflowRunState.SUCCEEDED;state.cursor++;
  await expect(page.getByLabel('Workflow run log',{exact:true})).toContainText('Chunk 18');await expect(page.locator('.workflow-run-summary .run-state')).toHaveText('succeeded');await expect(page.getByText('1m 5s',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Refresh selected run'})).toBeHidden();await expect(page.getByRole('button',{name:'Cancel run'})).toHaveCount(0);
@@ -165,4 +166,13 @@ for(const recorded of ['bound','unbound','absent'] as const)test(`run receipt re
 });
 test('malformed runner placement refuses run and logs',async({page})=>{
  const state=await backend(page);state.placement={poolId:runId,poolVersion:'00',placementVersion:'5',legacyUnbound:false};await page.goto(path);await expect(page.getByRole('alert')).toContainText('recorded runner placement could not be verified');expect(state.after).toEqual([]);await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);
+});
+
+
+test('live output keeps the same console node during background reads and current denial removes it',async({page})=>{
+ const state=await backend(page);state.live=true;state.chunks=1;await page.goto(path);const log=page.getByLabel('Workflow run log',{exact:true});await expect(log).toContainText('Chunk 1');
+ await page.evaluate(()=>{(window as Window & {__observedConsole?: Element|null}).__observedConsole=document.querySelector('[aria-label="Workflow run log"]');});
+ state.chunks=2;state.cursor++;await expect(log).toContainText('Chunk 2');
+ expect(await page.evaluate(()=>(window as Window & {__observedConsole?: Element|null}).__observedConsole===document.querySelector('[aria-label="Workflow run log"]'))).toBe(true);
+ state.deny=true;state.cursor++;await expect(page.getByRole('alert').first()).toContainText('removed');await expect(log).toHaveCount(0);
 });

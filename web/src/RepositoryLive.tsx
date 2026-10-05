@@ -20,7 +20,7 @@ export function useRepositoryLive(userId:string,owner:string,name:string,reposit
   const refresh=(topics:string[],revalidateMetadata=false)=>{
    void client.invalidateQueries({predicate:query=>{
     const key=query.queryKey;if(!scoped(key))return false;
-    if(key[0]==='repository'&&key[4]==='metadata')return revalidateMetadata && topics.some(topic=>allowedTopics.includes(topic));
+    if(key[0]==='repository'&&key[4]==='metadata')return revalidateMetadata && topics.some(topic=>['source','issues','pulls'].includes(topic));
     if(key[0]==='repository'&&pin.current&&key[4]==='branches')return topics.includes('source')||topics.includes('pulls');
     if(key[0]==='repository'&&pin.current&&key[4]==='pull'&&key.length===6)return false;
     if(key[0]==='repository'&&key[4]==='pull-checks')return topics.includes('pulls')||topics.includes('actions');
