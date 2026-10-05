@@ -354,14 +354,25 @@ test('PR changed-files workspace binds comparison, toggles split, filters, marks
  expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain('new control');
 });
 
+for(const theme of ['dark','light'])for(const width of [1440,390])test(`PR comparison details stay private and on request in ${theme} ${width}px`,async({page})=>{
+ const state=await backend(page),old='d'.repeat(40);state.pull.mergeBaseCommitId=old;await page.setViewportSize({width,height:900});await page.addInitScript(theme=>localStorage.setItem('golf.theme',theme),theme);await page.goto('/alex/design-system/pull/12/files');
+ const diff=page.getByRole('region',{name:'Pull request diff',exact:true}),summary=diff.getByText('Comparison details',{exact:true}),details=summary.locator('..');await expect(page.locator('.diff-file')).toHaveCount(1);
+ await expect(details).not.toHaveAttribute('open','');await expect(details.locator('code').first()).toBeHidden();await expect(diff.getByText('This observation does not establish merge readiness.',{exact:false})).toHaveCount(0);
+ await summary.focus();await page.keyboard.press('Enter');await expect(details.locator('code')).toHaveText([old,head,base]);await expect(details).toContainText('Patch size');await expect(details).toContainText('Binary files show metadata instead of a text preview.');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:test.info().outputPath(`pr-comparison-details-${theme}-${width}.png`),fullPage:true});
+ await summary.press('Enter');await expect(details.locator('code').first()).toBeHidden();await page.screenshot({path:test.info().outputPath(`pr-cleanup-${theme}-${width}.png`),fullPage:true});
+ await page.getByRole('button',{name:'Private draft',exact:true}).click();await expect(diff.getByText('Comparison details',{exact:true})).toHaveCount(0);const draft=page.getByRole('region',{name:'Private review draft',exact:true});await expect(draft.getByRole('alert')).toContainText('Private draft access');await draft.getByRole('button',{name:'Close',exact:true}).click();await expect(summary).toBeVisible();
+ state.diffStatus=403;await page.getByRole('button',{name:'Refresh PR diff',exact:true}).click();await expect(diff.getByRole('alert')).toBeVisible();await expect(diff.getByText('Comparison details',{exact:true})).toHaveCount(0);await expect(diff).not.toContainText(old);expect(state.methods.some(method=>/^(Create|Save|Update|Delete|Merge|Submit)/.test(method))).toBe(false);
+});
+
 test('PR diff names actual merge-base old side separately from a diverged base tip',async({page})=>{
  const state=await backend(page);const old='d'.repeat(40);state.pull.mergeBaseCommitId=old;
  await page.goto('/alex/design-system/pull/12/files');
  await expect(page.locator('.diff-file')).toHaveCount(1);
  await expect(page.getByRole('link',{name:'Line 2',exact:true})).toHaveAttribute('href',new RegExp(`diff-${old}-${head}-file-0-R2`));
- const footer=page.locator('.panel-footnote').filter({hasText:'Old side'});
- await expect(footer).toContainText(`Old side ${old.slice(0,12)}`);await expect(footer).toContainText(`Base branch tip ${base.slice(0,12)}`);
- await expect(footer.locator('code').first()).toHaveAttribute('title',old);
+ const details=page.getByRole('region',{name:'Pull request diff',exact:true}).locator('details').filter({has:page.getByText('Comparison details',{exact:true})});
+ await expect(details.locator('code').first()).toBeHidden();await details.getByText('Comparison details',{exact:true}).click();await expect(details).toContainText(`Old side${old}`);await expect(details).toContainText(`Base branch tip${base}`);
+ await expect(details.locator('code').first()).toHaveAttribute('title',old);await expect(details).toContainText('Text diffs are limited to 512 KiB.');
  await page.getByLabel('Viewed',{exact:true}).check();
  state.pull.mergeBaseCommitId='f'.repeat(40);
  await page.getByRole('button',{name:'Refresh pull request',exact:true}).click();
@@ -373,7 +384,7 @@ for(const wrong of ['repository','pull','merge-base'])test(`PR diff refuses mism
  const state=await backend(page);await page.goto('/alex/design-system/pull/12/files');await expect(page.locator('.diff-lines')).toContainText('new control');
  state.wrongDiff=wrong;await page.getByRole('button',{name:'Refresh PR diff',exact:true}).click();
  await expect(page.getByRole('alert')).toHaveText('The PR diff does not match the selected comparison.');
- await expect(page.locator('.diff-workspace')).toHaveCount(0);await expect(page.getByText('new control',{exact:true})).toHaveCount(0);
+ await expect(page.locator('.diff-workspace')).toHaveCount(0);await expect(page.getByText('new control',{exact:true})).toHaveCount(0);await expect(page.getByRole('region',{name:'Pull request diff',exact:true}).getByText('Comparison details',{exact:true})).toHaveCount(0);
 });
 
 for(const old of ['', 'main', 'd'.repeat(64)])test(`PR diff refuses unavailable or invalid old-side metadata (${old.length||'empty'}) before dispatch`,async({page})=>{

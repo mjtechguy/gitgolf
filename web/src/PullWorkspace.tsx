@@ -46,7 +46,6 @@ export function PullCommits(props:Props) {
  const commits=query.isSuccess&&(!query.isFetching||query.isFetchingNextPage)?[...new Map(query.data.pages.flatMap(page=>page.commits).map(commit=>[commit.sha,commit])).values()]:[];
  return <section className="browser-panel commit-history" aria-labelledby="pull-commits-title"><div className="browser-panel-heading"><h2 id="pull-commits-title">Commits</h2><button className="icon-button manual-refresh" aria-label="Refresh PR commits" disabled={query.isFetching} onClick={()=>void query.refetch()}><RefreshCw size={16}/></button></div>
   {query.isError?<PanelError error={query.error} retry={()=>void query.refetch()}/>:!query.isSuccess||query.isFetching&&!query.isFetchingNextPage?<Loading label="Reading PR commits…"/>:<><CommitList commits={commits} location={props.location}/>{!commits.length?<div className="empty-state"><CircleDashed size={24}/><h3>No commits returned for this comparison.</h3></div>:null}<div className="list-footer"><span>{commits.length} loaded commits{query.hasNextPage?' · More available':''}</span><More hasMore={query.hasNextPage} loading={query.isFetching} load={()=>void query.fetchNextPage()} label="PR commits"/></div></>}
-  <p className="panel-footnote">Native PR commit history for the selected comparison. Commit links open their exact diff; author dates preserve native order.</p>
  </section>;
 }
 function CheckState({state}:{state:ReportedCheckState}) {

@@ -95,13 +95,23 @@ test('native root headers, first-parent merges, binary markers, empty text and 6
   await page.goto(diffURL(merge));
   await expect(page.getByText('Merge commit: only the first-parent comparison is shown.', { exact: true })).toBeVisible();
   await expect(page.locator('.commit-diff-metadata')).toContainText(otherParent);
-  await expect(page.getByText('not merge eligibility or independently verified patch evidence', { exact: false })).toBeVisible();
+  await expect(page.getByText('not merge eligibility or independently verified patch evidence', { exact: false })).toHaveCount(0);
+  await expect(page.locator('.commit-diff-metadata')).toContainText('Text diffs are limited to 512 KiB.');
   state.raw = '';
   await page.goto(diffURL(sha256));
   await expect(page.getByRole('heading', { name: 'No diff text returned' })).toBeVisible();
   await expect(page.getByLabel('Unified diff, plain text')).toHaveCount(0);
   expect(state.commits.at(-1)).toBe(sha256);
   await expect(page.locator('.commit-diff-metadata')).toContainText(sha256);
+});
+
+for(const theme of ['dark','light'])for(const width of [1440,390])test(`commit diff keeps preview details on request in ${theme} ${width}px`,async({page})=>{
+ const state=await backend(page);state.raw=filePatch('src/main.ts');await page.setViewportSize({width,height:900});await page.addInitScript(theme=>localStorage.setItem('golf.theme',theme),theme);await page.goto(diffURL(head));
+ const details=page.locator('.commit-diff-metadata details');await expect(details).not.toHaveAttribute('open','');await expect(page.locator('.diff-lines')).toBeVisible();
+ await expect(page.getByText('not merge eligibility or independently verified patch evidence',{exact:false})).toHaveCount(0);await expect(page.getByText('Text diffs are limited to 512 KiB.',{exact:false})).toBeHidden();await expect(page.locator('.browser-panel > .panel-footnote')).toHaveCount(0);
+ const summary=details.getByText('Commit details',{exact:true});await summary.focus();await page.keyboard.press('Enter');await expect(details).toContainText(`${new TextEncoder().encode(state.raw).byteLength} bytes`);await expect(details).toContainText('Binary files show metadata instead of a text preview.');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await summary.press('Enter');await expect(page.getByText('Text diffs are limited to 512 KiB.',{exact:false})).toBeHidden();
+ await page.screenshot({path:test.info().outputPath(`diff-cleanup-${theme}-${width}.png`),fullPage:true});
 });
 
 test('typed diff failures remove cached text, retries hide stale content and repository denial clears metadata', async ({ page }) => {
