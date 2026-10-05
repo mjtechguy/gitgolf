@@ -443,7 +443,7 @@ func TestReleasePublicationOnceAndOriginalPostgres(t *testing.T) {
 		case "title":
 			c.Title += "x"
 		case "body":
-			c.BodyMarkdown += "x"
+			c.BodyMarkdown = "x" + c.BodyMarkdown[1:]
 		case "tag":
 			c.TagName = "different"
 		case "object":
@@ -452,6 +452,9 @@ func TestReleasePublicationOnceAndOriginalPostgres(t *testing.T) {
 			c.CommitId = strings.Repeat("d", 40)
 		case "prerelease":
 			c.Prerelease = false
+		}
+		if e := validateReleasePublication(c); e != nil {
+			t.Fatal("changed intent must remain valid", field, e)
 		}
 		if _, e = f.submit(t, session, c); connect.CodeOf(e) != connect.CodeFailedPrecondition {
 			t.Fatal("changed intent accepted", field, e)
