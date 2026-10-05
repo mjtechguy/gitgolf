@@ -57,7 +57,7 @@ def main():
             else:
                 expected_blob=blob_id(data);assert operation['blobId']==expected_blob
                 native_blob=smoke.provider(token,'GET',base+'/git/blobs/'+expected_blob);assert native_blob['sha']==expected_blob and native_blob['size']==len(data) and base64.b64decode(native_blob['content'])==data
-                source=smoke.rpc(owner,'RepositoryService/GetSource',{**target,'ref':commit,'path':payload['path']});assert source['commitId']==commit and source['file']['entry']['sha']==expected_blob
+                source=smoke.rpc(owner,'RepositoryService/GetContents',{**target,'ref':commit,'path':payload['path']});assert source['commitId']==commit and source['file']['entry']['sha']==expected_blob
         original=head()
         for actor in actors[1:]:submit('CREATE','denied-'+actor[0]+'.txt',b'not allowed',session=actor[2],expected=404 if actor is actors[3] else 403)
         path='雪-%25.txt';data=b'# Useful documentation\n';payload,operation=submit('CREATE',path,data);succeeded(payload,operation,data)
