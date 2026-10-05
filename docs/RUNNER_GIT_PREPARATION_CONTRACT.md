@@ -64,7 +64,8 @@ read-only review binds the exact committed files; external native edits after
 the final observation remain non-atomic. Shared forwarding correction `9c6063c` rejects Go's transparent
 gzip decoding as well as visible Content-Encoding. Its [source receipt](../.tmp/git-response-encoding-source-proof/manifest.json)
 uses the actual Go transport for all four upload/receive advertisement/result
-paths; it does not qualify live native responses or the current deployed image.
+paths. This shared guard is included in current core `99630ef`; its source tests
+do not qualify live native Git responses or job credential delivery.
 
 ## Transport and authority
 
