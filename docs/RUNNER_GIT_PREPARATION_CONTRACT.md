@@ -15,9 +15,18 @@ archive/tree/path validator. [Envelope evidence](../.tmp/git-source-envelope-fin
 source/native-local checks. No assignment, advertisement or runtime activation
 follows. Actual Docker engine transfer/materialization needs an approved
 registry-digest-pinned Git job image and resource/cleanup qualification. The
-scratch preparation image's content ID without a RepoDigest does not satisfy
-that job-image gate. Existing job volume storage has no hard disk quota;
+scratch preparation image's local OCI index/content identity alone does not
+satisfy the registry-digest-pinned job-image gate. Existing job volume storage has no hard disk quota;
 preparation tmpfs limits cannot be claimed for that job workspace.
+
+Worker composition `85e7db5` joins fixed TLS PACK transport, native preparation,
+original archive manifest and a final source fence under one deadline. Source
+and controlled native/TLS checks pass; no runtime activation follows. Qualifier
+`89461dd` verifies OCI index→platform→config→compressed layer→diff-ID linkage.
+Actual attempt1 failed its old identity assumption before Docker writes.
+[Attempt2](../.tmp/actions-git-source-actual-attempt2/manifest.json) stops at the
+unchanged2-GiB reserve with1,330,460KiB available. Its read-only probe is removed;
+no registry, preparation/job container or upstream run is created.
 
 ## Transport and authority
 
