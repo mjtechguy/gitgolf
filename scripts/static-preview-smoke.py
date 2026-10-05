@@ -82,6 +82,13 @@ def parse_launch(data, origin):
     return grant
 
 
+def browser_session_cookie(cookie, origin):
+    assert cookie.name == '__Host-golf_session' and cookie.secure and not cookie.domain_specified and cookie.path == '/'
+    assert cookie.has_nonstandard_attr('HttpOnly') and cookie.get_nonstandard_attr('SameSite') == 'Lax'
+    return {'name':cookie.name,'value':cookie.value,'url':origin,'secure':cookie.secure,
+            'httpOnly':cookie.has_nonstandard_attr('HttpOnly'),'sameSite':cookie.get_nonstandard_attr('SameSite')}
+
+
 def self_check():
     request = dict(deploymentId=uuid4(), target={'repositoryId':'12'}, manifestSha256='a'*64,
                    environmentId=uuid4(), environmentVersion='1', source={'kind':'REPOSITORY_SOURCE_REF_KIND_COMMIT','name':'b'*40},
@@ -104,7 +111,19 @@ def self_check():
         except AssertionError: pass
         else: raise AssertionError('Foreign launch destination admitted')
     assert artifact.source_files()[artifact.PATH] and artifact.EXPECTED['dist/index.html']
-    print('PASS: pure original deployment/launch/owned artifact guards; no resources.')
+    cookie = http.cookiejar.Cookie(0, '__Host-golf_session', 'a'*43, None, False, 'localhost.local', False, False,
+                                  '/', True, True, None, True, None, None, {'HttpOnly':None,'SameSite':'Lax'}, False)
+    observed = browser_session_cookie(cookie, 'https://localhost:12345')
+    assert observed['secure'] and observed['httpOnly'] and observed['sameSite'] == 'Lax'
+    for changes in ({'secure':False}, {'domain_specified':True}, {'path':'/other'}, {'_rest':{'SameSite':'Lax'}}, {'_rest':{'HttpOnly':None,'SameSite':'Strict'}}):
+        prior = {field:getattr(cookie,field) for field in changes}
+        for field,value in changes.items(): setattr(cookie,field,value)
+        try: browser_session_cookie(cookie, 'https://localhost:12345')
+        except AssertionError: pass
+        else: raise AssertionError('Unobserved or weakened canonical cookie admitted')
+        finally:
+            for field,value in prior.items(): setattr(cookie,field,value)
+    print('PASS: pure original deployment/launch/cookie/owned artifact guards; no resources.')
 
 
 class PreviewConnection(http.client.HTTPSConnection):
@@ -156,10 +175,10 @@ def main():
     def stage(name):
         global STAGE
         STAGE = name; record(stage=name); print('CHECK: '+name, flush=True)
-    def execute(*argv, payload=None, timeout=180):
+    def execute(*argv, payload=None, timeout=180, expected_failure=False):
         result = subprocess.run(argv, input=None if payload is None else json.dumps(payload).encode(), cwd=stack, env=environment, capture_output=True, timeout=timeout)
         assert len(result.stdout)<=8<<20 and len(result.stderr)<=8<<20
-        if result.returncode and not (output/'private-command-failure.json').exists():
+        if result.returncode and not expected_failure and not (output/'private-command-failure.json').exists():
             raw = json.dumps({'stage':STAGE,'exitCode':result.returncode,'stdout':result.stdout.decode(errors='replace'),'stderr':result.stderr.decode(errors='replace')})
             for secret in forbidden:
                 if secret: raw = raw.replace(secret,'[redacted]')
@@ -366,7 +385,7 @@ def main():
             def seeded():
                 rows=[]
                 for ref in (artifact.IMAGE,artifact.DIND):
-                    try: row=json.loads(command('exec','-T','runner-daemon','docker','image','inspect',ref))[0]
+                    try: row=json.loads(command('exec','-T','runner-daemon','docker','image','inspect',ref,expected_failure=True))[0]
                     except AssertionError: return None
                     canonical=ref.split('@')[0].rsplit(':',1)[0]+'@'+ref.split('@')[1]
                     assert row['Os']=='linux' and canonical in row.get('RepoDigests',[]); rows.append({'reference':ref,'id':row['Id'],'registryDigest':canonical})
@@ -387,7 +406,8 @@ def main():
                 identity=smoke.provider(actor['token'],'GET','user'); actor['id']=str(identity['id']); assert identity['is_admin']==(role=='golfadmin')
                 operator('create',dict(username=actor['name'],email=actor['email'],password=actor['password'],forge_token=actor['token'],is_instance_admin=role=='golfadmin')); actor['enrolled']=True; login(role)
                 cookies=[c for h in actor['session'].handlers if isinstance(h,urllib.request.HTTPCookieProcessor) for c in h.cookiejar]
-                assert len(cookies)==1 and cookies[0].name=='__Host-golf_session' and cookies[0].secure and not cookies[0].domain_specified and cookies[0].path=='/'
+                assert len(cookies)==1
+                browser_session_cookie(cookies[0],smoke.GOLF)
                 forbidden.append(cookies[0].value)
             owner=actors['owner']; native=smoke.provider(owner['token'],'POST','user/repos',{'name':'static-preview','private':True,'auto_init':True,'default_branch':'main'},expected=201)
             repository={'owner':owner['name'],'name':native['name']}; base='repos/'+native['full_name']; smoke.wait_for_push(owner['token'],native['full_name'])
@@ -448,7 +468,7 @@ def main():
             record(artifact=a,source={'commitId':head,'workflowPath':artifact.PATH,'workflowBlobId':observed['workflowBlobId'],'sourceSha256':observed['sourceSha256']},originalStorage=original_storage)
             check('producedArtifact',realDocker=True,qualifiedShellGitLab=True,exactArchive=True,independentOriginalBytes=True,workerObjectCredentialsAbsent=True)
             stage('original Create, independent review, wait and capacity')
-            policy=dict(allowAllSources=True,reviewers=[{'id':actors['reviewer']['id'],'login':actors['reviewer']['name']}],requiredApprovals=1,preventSelfApproval=True,protectedPreviews=True,waitSeconds=8,maxConcurrency=1,previewTtlSeconds=180)
+            policy=dict(allowAllSources=True,reviewers=[{'id':actors['reviewer']['id'],'login':actors['reviewer']['name']}],requiredApprovals=1,preventSelfApproval=True,protectedPreviews=True,waitSeconds=8,maxConcurrency=1,previewTtlSeconds=1800)
             env=save_environment('Preview qualification',policy)
             first,request,prepared=create(env)
             rpc('owner',SERVICE+'ActivateRepositoryDeployment',selected(first),400,'failed_precondition')
@@ -485,7 +505,7 @@ def main():
             check('isolatedAccess',singleUseLaunch=True,cookieSecureHttpOnlyHostOnly=True,wrongDeploymentCookieDenied=True,golfCookieDenied=True,bearerDenied=True,wrongOriginDenied=True,unknownPathDenied=True)
             stage('served browser UI, protected form open and origin isolation')
             def browser_cookies(role):
-                return [{'name':c.name,'value':c.value,'url':smoke.GOLF,'secure':True,'httpOnly':True,'sameSite':'Strict'} for h in actors[role]['session'].handlers if isinstance(h,urllib.request.HTTPCookieProcessor) for c in h.cookiejar]
+                return [browser_session_cookie(c,smoke.GOLF) for h in actors[role]['session'].handlers if isinstance(h,urllib.request.HTTPCookieProcessor) for c in h.cookiejar]
             execute('node',str(ROOT/'scripts/static-preview-browser.mjs'),payload=dict(golf=smoke.GOLF,previewBase=preview_base,spki=spki,sourceRevision=args.source_revision,repository=repository,deployment=first,secondDeploymentId=second['id'],expectedFiles={k.removeprefix('dist/'):v.decode() for k,v in artifact.EXPECTED.items()},cookies=browser_cookies('owner'),readerCookies=browser_cookies('reader'),forbidden=forbidden,stackRoot=str(stack),output=str(output/'browser')),timeout=180)
             browser=json.loads((output/'browser/manifest.json').read_text()); assert browser['passed'] and browser['complete'] and len(browser['captures'])==4
             record(browser={'manifest':'browser/manifest.json','captures':4,'actualProtectedOpen':True})
@@ -536,19 +556,25 @@ def main():
             assert get(first)['canOpen'] and preview(first,cookie=owner_view)[0]==artifact.EXPECTED['dist/index.html']
             check('operatorTargetDrift',samePrivateCA=True,newCertificatePublicKeyDenied=True,originalCertificateRestored=True,originalReceiptPreserved=True)
             stage('expiry bookkeeping and fresh rollback request')
-            deadline=datetime.datetime.fromisoformat(first['expiresAt'].replace('Z','+00:00')).timestamp()
-            helpers.until(lambda:time.time()>deadline,195)
-            assert get(first)['state']=='EXPIRED'; preview(first,cookie=owner_view,expected=404)
-            assert metadata("SELECT count(*) FROM golf_preview_credentials WHERE deployment_id='"+str(uuid.UUID(first['id']))+"'::uuid")=='0'
-            assert metadata("SELECT count(*) FROM golf_deployment_events WHERE deployment_id='"+str(uuid.UUID(first['id']))+"'::uuid AND state='EXPIRED'")=='1'
-            assert get(first)['state']=='EXPIRED'
+            expiry_env=save_environment('Short expiry qualification',policy|{'previewTtlSeconds':60})
+            expiring,_,_=create(expiry_env); approve(expiring)
+            eligible=datetime.datetime.fromisoformat(expiring['eligibleAt'].replace('Z','+00:00')).timestamp(); helpers.until(lambda:time.time()>=eligible,15)
+            expiring=activate(expiring); expiry_cookie=open_preview(expiring,'owner')
+            assert preview(expiring,cookie=expiry_cookie)[0]==artifact.EXPECTED['dist/index.html']
+            deadline=datetime.datetime.fromisoformat(expiring['expiresAt'].replace('Z','+00:00')).timestamp()
+            helpers.until(lambda:time.time()>deadline,75)
+            assert get(expiring)['state']=='EXPIRED'; preview(expiring,cookie=expiry_cookie,expected=404)
+            assert metadata("SELECT count(*) FROM golf_preview_credentials WHERE deployment_id='"+str(uuid.UUID(expiring['id']))+"'::uuid")=='0'
+            assert metadata("SELECT count(*) FROM golf_deployment_events WHERE deployment_id='"+str(uuid.UUID(expiring['id']))+"'::uuid AND state='EXPIRED'")=='1'
+            assert get(expiring)['state']=='EXPIRED'
+            revoke(first); preview(first,cookie=owner_view,expected=404)
             # The pending original cannot resurrect prior approvals; explicitly revoke it before the rollback.
             revoke(second)
             rollback,rollback_request,rollback_prepared=create(env); assert rollback['id']!=first['id'] and not rollback.get('approvals')
             approve(rollback); eligible=datetime.datetime.fromisoformat(rollback['eligibleAt'].replace('Z','+00:00')).timestamp(); helpers.until(lambda:time.time()>=eligible,15)
-            rollback=activate(rollback); assert origin(rollback)!=origin(first) and rollback['artifact']==first['artifact']
+            rollback=activate(rollback); assert origin(rollback)!=origin(first) and origin(rollback)!=origin(expiring) and rollback['artifact']==first['artifact']==expiring['artifact']
             rollback_cookie=open_preview(rollback); assert preview(rollback,cookie=rollback_cookie)[0]==artifact.EXPECTED['dist/index.html']
-            check('expiryRollback',actualClockExpiry=True,accessRecordsRemoved=True,oneExpiryEvent=True,newRequestHostname=True,freshApprovals=True,sameEarlierArtifact=True)
+            check('expiryRollback',actualClockExpiry=True,expiryTtlSeconds=60,accessRecordsRemoved=True,oneExpiryEvent=True,newRequestHostname=True,freshApprovals=True,sameEarlierArtifact=True)
             stage('reviewer role/session, credential version, issuer and policy invalidation')
             smoke.provider(owner['token'],'DELETE',base+'/collaborators/'+actors['reviewer']['name'],expected=204)
             preview(rollback,cookie=rollback_cookie,expected=404); assert not get(rollback).get('canOpen',False)
@@ -575,7 +601,7 @@ def main():
             deleted=rpc('owner',ENV+'DeleteRepositoryEnvironment',dict(target=target(),environmentId=env['id'],expectedVersion=env['version'],operationId=uuid4(),currentPassword=owner['password']))['environment']
             assert deleted['deleted']; preview(deletion_case,cookie=deletion_cookie,expected=404); revoke(deletion_case)
             check('invalidations',reviewerNativeRole=True,reviewerParentLogout=True,reviewerCredentialVersion=True,issuerLogout=True,explicitReviewerDecline=True,environmentVersion=True,environmentDeletion=True,explicitRevoke=True,revokedAccessRecordsRemoved=True)
-            record(deployments={'original':first['id'],'capacity':second['id'],'rollback':rollback['id'],'credentialVersion':credential_case['id'],'issuer':issuer_case['id'],'decline':decline_case['id'],'policy':policy_case['id'],'revoke':revocation_case['id'],'environmentDelete':deletion_case['id']})
+            record(deployments={'original':first['id'],'capacity':second['id'],'expiry':expiring['id'],'rollback':rollback['id'],'credentialVersion':credential_case['id'],'issuer':issuer_case['id'],'decline':decline_case['id'],'policy':policy_case['id'],'revoke':revocation_case['id'],'environmentDelete':deletion_case['id']})
             runtime_after=runtime(); assert runtime_after==runtime_before; record(runtimeAfter=runtime_after)
             passed=True
         except Exception as error:
