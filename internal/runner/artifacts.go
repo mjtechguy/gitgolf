@@ -163,24 +163,34 @@ func NormalizeArtifactArchive(data []byte, paths []string) ([]byte, int, int64, 
 }
 
 func (e *Executor) collectArtifacts(ctx context.Context, container, attempt, owner string, paths []string) ([]byte, error) {
-	if _, err := e.command(ctx, nil, "container", "pause", container); err != nil {
-		return nil, err
+	verify := func(paused bool) bool {
+		var rows []struct {
+			ID     string
+			Config struct{ Labels map[string]string }
+			State  struct{ Running, Paused bool }
+		}
+		return e.inspect(ctx, "container", container, &rows) == nil && len(rows) == 1 && rows[0].ID == container && rows[0].State.Running && rows[0].State.Paused == paused && owned(rows[0].Config.Labels, attempt, owner, e.config.WorkerID)
 	}
-	var rows []struct {
-		ID     string
-		Config struct{ Labels map[string]string }
-		State  struct{ Running, Paused bool }
-	}
-	if e.inspect(ctx, "container", container, &rows) != nil || len(rows) != 1 || rows[0].ID != container || !rows[0].State.Running || !rows[0].State.Paused || !owned(rows[0].Config.Labels, attempt, owner, e.config.WorkerID) {
+	if !verify(false) {
 		return nil, ErrInfrastructure
 	}
-	cmd := exec.CommandContext(ctx, e.config.DockerBinary, "container", "cp", container+":/workspace/.", "-")
+	// Docker's archive API does not expose this job's live tmpfs workspace.
+	// Use the approved image's ordinary tar without dereferencing links. This
+	// captures bytes, not an atomic filesystem snapshot: background writes can
+	// race capture. Independent normalization rejects unsafe/incomplete output.
+	cmd := exec.CommandContext(ctx, e.config.DockerBinary, "container", "exec", "--user=1000:1000", "--workdir=/workspace", container, "/usr/bin/env", "-i", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "/bin/tar", "-C", "/workspace", "-cf", "-", ".")
 	cmd.WaitDelay = 2 * time.Second
 	out := &limitedBuffer{limit: maxArtifactWorkspace}
 	cmd.Stdout = out
 	cmd.Stderr = io.Discard
 	if cmd.Run() != nil {
 		return nil, ErrArtifacts
+	}
+	if _, err := e.command(ctx, nil, "container", "pause", container); err != nil {
+		return nil, err
+	}
+	if !verify(true) {
+		return nil, ErrInfrastructure
 	}
 	archive, _, _, err := NormalizeArtifactArchive(out.Bytes(), paths)
 	return archive, err
