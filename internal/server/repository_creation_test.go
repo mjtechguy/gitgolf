@@ -503,7 +503,7 @@ func TestRepositoryCreationCanceledUnknownPostgres(t *testing.T) {
 	done := make(chan error, 1)
 	private := true
 	go func() {
-		_, _, err := f.s.createRepository(ctx, session.Value, forgeCredential{Kind: "pat", Token: "alice-creation-token"}, "example", "", &private, creationFixtureKey)
+		_, _, err := f.s.createRepository(ctx, session.Value, forgeCredential{Kind: "pat", Token: "alice-creation-token"}, "example", "", &private, creationFixtureKey, "", false)
 		done <- err
 	}()
 	select {
@@ -522,7 +522,7 @@ func TestRepositoryCreationCanceledUnknownPostgres(t *testing.T) {
 		t.Fatal("canceled create did not settle")
 	}
 	f.counts(t, 1, 1)
-	record, repo, err := f.s.createRepository(t.Context(), session.Value, forgeCredential{Kind: "pat", Token: "alice-creation-token"}, "example", "", &private, creationFixtureKey)
+	record, repo, err := f.s.createRepository(t.Context(), session.Value, forgeCredential{Kind: "pat", Token: "alice-creation-token"}, "example", "", &private, creationFixtureKey, "", false)
 	if err != nil || record.State != "OUTCOME_UNKNOWN" || repo != nil || f.posts.Load() != 1 {
 		t.Fatal("canceled unknown outcome resent", err)
 	}
@@ -555,7 +555,7 @@ func TestRepositoryCreationObservedResultAfterCancellationPostgres(t *testing.T)
 		return response, err
 	})
 	private := true
-	_, _, err := f.s.createRepository(ctx, session.Value, forgeCredential{Kind: "pat", Token: "alice-creation-token"}, "example", "", &private, creationFixtureKey)
+	_, _, err := f.s.createRepository(ctx, session.Value, forgeCredential{Kind: "pat", Token: "alice-creation-token"}, "example", "", &private, creationFixtureKey, "", false)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatal("canceled response was not denied", err)
 	}

@@ -444,4 +444,43 @@ func TestReleaseOperationsActualNative(t *testing.T) {
 	if _, e = s.exactSourceTag(t.Context(), base, credential, "v1"); e != nil {
 		t.Fatal("release deletion removed original tag")
 	}
+	if os.Getenv("GOLF_TEST_PUBLIC_IMPORT_NATIVE") == "1" {
+		// Verify public GitHub/GitLab cloning and a native pull mirror using tiny
+		// owned imports. This does not qualify provider metadata migration or CI.
+		mirrors := golfv1connect.NewRepositoryMirrorServiceClient(httpClient, origin.String()+"/rpc", options)
+		for _, input := range []struct {
+			Name, Source string
+			Mirror       bool
+		}{{"github-import", "https://github.com/octocat/Hello-World", false}, {"gitlab-import", "https://gitlab.com/gitlab-examples/nodejs", false}, {"github-mirror", "https://github.com/octocat/Hello-World", true}} {
+			private := true
+			m := &golfv1.CreateRepositoryRequest{Name: input.Name, Description: "Owned native public import qualification", Private: &private, IdempotencyKey: randomUUID(), SourceUrl: input.Source, PullMirror: input.Mirror}
+			r, e := repos.CreateRepository(t.Context(), connect.NewRequest(m))
+			if e != nil {
+				t.Fatalf("actual%s import failed: %v", input.Name, e)
+			}
+			if r.Msg.Creation.State != golfv1.RepositoryCreationState_REPOSITORY_CREATION_STATE_SUCCEEDED {
+				t.Fatalf("actual%s import unresolved; inspect original only", input.Name)
+			}
+			replay, e := repos.CreateRepository(t.Context(), connect.NewRequest(m))
+			if e != nil || !proto.Equal(replay.Msg.Creation, r.Msg.Creation) {
+				t.Fatal("actual import original replay changed")
+			}
+			observed, e := repos.GetRepositoryCreation(t.Context(), connect.NewRequest(&golfv1.GetRepositoryCreationRequest{IdempotencyKey: m.IdempotencyKey}))
+			if e != nil || !proto.Equal(observed.Msg.Creation, r.Msg.Creation) {
+				t.Fatal("actual import inspection changed")
+			}
+			if r.Msg.Repository == nil || r.Msg.Repository.Empty {
+				t.Fatal("actual imported repository has no code")
+			}
+			status, e := mirrors.GetRepositoryMirrorStatus(t.Context(), connect.NewRequest(&golfv1.GetRepositoryMirrorStatusRequest{Repository: &golfv1.RepositoryKey{Owner: fixture.Owner, Name: input.Name}, RepositoryId: r.Msg.Repository.Id}))
+			if e != nil || status.Msg.PullMirror != input.Mirror {
+				t.Fatal("actual mirror status differs", e)
+			}
+			if input.Mirror && status.Msg.SourceHost != "github.com" {
+				t.Fatal("actual mirror source host differs")
+			}
+			t.Logf("Qualified actual public import %s; pull mirror=%t", input.Name, input.Mirror)
+		}
+
+	}
 }

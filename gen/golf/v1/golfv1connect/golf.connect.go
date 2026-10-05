@@ -135,6 +135,8 @@ const (
 	RepositoryReleaseManagementServiceName = "golf.v1.RepositoryReleaseManagementService"
 	// PullReviewRequestServiceName is the fully-qualified name of the PullReviewRequestService service.
 	PullReviewRequestServiceName = "golf.v1.PullReviewRequestService"
+	// RepositoryMirrorServiceName is the fully-qualified name of the RepositoryMirrorService service.
+	RepositoryMirrorServiceName = "golf.v1.RepositoryMirrorService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -848,6 +850,9 @@ const (
 	// PullReviewRequestServiceGetPullReviewRequestOperationProcedure is the fully-qualified name of the
 	// PullReviewRequestService's GetPullReviewRequestOperation RPC.
 	PullReviewRequestServiceGetPullReviewRequestOperationProcedure = "/golf.v1.PullReviewRequestService/GetPullReviewRequestOperation"
+	// RepositoryMirrorServiceGetRepositoryMirrorStatusProcedure is the fully-qualified name of the
+	// RepositoryMirrorService's GetRepositoryMirrorStatus RPC.
+	RepositoryMirrorServiceGetRepositoryMirrorStatusProcedure = "/golf.v1.RepositoryMirrorService/GetRepositoryMirrorStatus"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -9108,4 +9113,75 @@ func (UnimplementedPullReviewRequestServiceHandler) SubmitPullReviewRequest(cont
 
 func (UnimplementedPullReviewRequestServiceHandler) GetPullReviewRequestOperation(context.Context, *connect.Request[v1.GetPullReviewRequestOperationRequest]) (*connect.Response[v1.GetPullReviewRequestOperationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullReviewRequestService.GetPullReviewRequestOperation is not implemented"))
+}
+
+// RepositoryMirrorServiceClient is a client for the golf.v1.RepositoryMirrorService service.
+type RepositoryMirrorServiceClient interface {
+	GetRepositoryMirrorStatus(context.Context, *connect.Request[v1.GetRepositoryMirrorStatusRequest]) (*connect.Response[v1.GetRepositoryMirrorStatusResponse], error)
+}
+
+// NewRepositoryMirrorServiceClient constructs a client for the golf.v1.RepositoryMirrorService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRepositoryMirrorServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepositoryMirrorServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	repositoryMirrorServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryMirrorService").Methods()
+	return &repositoryMirrorServiceClient{
+		getRepositoryMirrorStatus: connect.NewClient[v1.GetRepositoryMirrorStatusRequest, v1.GetRepositoryMirrorStatusResponse](
+			httpClient,
+			baseURL+RepositoryMirrorServiceGetRepositoryMirrorStatusProcedure,
+			connect.WithSchema(repositoryMirrorServiceMethods.ByName("GetRepositoryMirrorStatus")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// repositoryMirrorServiceClient implements RepositoryMirrorServiceClient.
+type repositoryMirrorServiceClient struct {
+	getRepositoryMirrorStatus *connect.Client[v1.GetRepositoryMirrorStatusRequest, v1.GetRepositoryMirrorStatusResponse]
+}
+
+// GetRepositoryMirrorStatus calls golf.v1.RepositoryMirrorService.GetRepositoryMirrorStatus.
+func (c *repositoryMirrorServiceClient) GetRepositoryMirrorStatus(ctx context.Context, req *connect.Request[v1.GetRepositoryMirrorStatusRequest]) (*connect.Response[v1.GetRepositoryMirrorStatusResponse], error) {
+	return c.getRepositoryMirrorStatus.CallUnary(ctx, req)
+}
+
+// RepositoryMirrorServiceHandler is an implementation of the golf.v1.RepositoryMirrorService
+// service.
+type RepositoryMirrorServiceHandler interface {
+	GetRepositoryMirrorStatus(context.Context, *connect.Request[v1.GetRepositoryMirrorStatusRequest]) (*connect.Response[v1.GetRepositoryMirrorStatusResponse], error)
+}
+
+// NewRepositoryMirrorServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRepositoryMirrorServiceHandler(svc RepositoryMirrorServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	repositoryMirrorServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryMirrorService").Methods()
+	repositoryMirrorServiceGetRepositoryMirrorStatusHandler := connect.NewUnaryHandler(
+		RepositoryMirrorServiceGetRepositoryMirrorStatusProcedure,
+		svc.GetRepositoryMirrorStatus,
+		connect.WithSchema(repositoryMirrorServiceMethods.ByName("GetRepositoryMirrorStatus")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RepositoryMirrorService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RepositoryMirrorServiceGetRepositoryMirrorStatusProcedure:
+			repositoryMirrorServiceGetRepositoryMirrorStatusHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRepositoryMirrorServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRepositoryMirrorServiceHandler struct{}
+
+func (UnimplementedRepositoryMirrorServiceHandler) GetRepositoryMirrorStatus(context.Context, *connect.Request[v1.GetRepositoryMirrorStatusRequest]) (*connect.Response[v1.GetRepositoryMirrorStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryMirrorService.GetRepositoryMirrorStatus is not implemented"))
 }

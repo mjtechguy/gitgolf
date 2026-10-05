@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -101,6 +102,7 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewStandardPullMergeServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryReleasePublicationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryReleaseManagementServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewRepositoryMirrorServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryRefMutationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryFileMutationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewPullReviewRequestServiceHandler(s, options...))
@@ -174,6 +176,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 			golfv1connect.RepositoryDeploymentServicePrepareStaticDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceCreateRepositoryDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceGetRepositoryDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceListRepositoryDeploymentsProcedure, golfv1connect.RepositoryDeploymentServiceReviewRepositoryDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceActivateRepositoryDeploymentProcedure, golfv1connect.RepositoryDeploymentServiceRevokeRepositoryDeploymentProcedure,
 			golfv1connect.RepositoryReleasePublicationServiceSubmitRepositoryReleasePublicationProcedure, golfv1connect.RepositoryReleasePublicationServiceGetRepositoryReleasePublicationOperationProcedure,
 			golfv1connect.RepositoryReleaseManagementServiceSubmitRepositoryReleaseOperationProcedure, golfv1connect.RepositoryReleaseManagementServiceGetRepositoryReleaseOperationProcedure,
+			golfv1connect.RepositoryMirrorServiceGetRepositoryMirrorStatusProcedure,
 			golfv1connect.RepositoryRefMutationServiceSubmitRepositoryRefMutationProcedure, golfv1connect.RepositoryRefMutationServiceGetRepositoryRefMutationOperationProcedure,
 			golfv1connect.PullReviewRequestServiceGetPullReviewRequestsProcedure, golfv1connect.PullReviewRequestServiceSubmitPullReviewRequestProcedure, golfv1connect.PullReviewRequestServiceGetPullReviewRequestOperationProcedure,
 			golfv1connect.RepositoryFileMutationServiceGetRepositoryFileMutationAccessProcedure, golfv1connect.RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure, golfv1connect.RepositoryFileMutationServiceGetRepositoryFileMutationOperationProcedure,
@@ -402,14 +405,14 @@ func wireRepositoryCreation(record database.GolfRepositoryCreation) *golfv1.Repo
 	}
 	return &golfv1.RepositoryCreation{Id: strconv.FormatInt(record.ID, 10), IdempotencyKey: record.IdempotencyKey,
 		State: state, RequestedName: record.RequestedName, Private: record.Private, CreatedAt: record.CreatedAt.Format(time.RFC3339Nano),
-		UpdatedAt: record.UpdatedAt.Format(time.RFC3339Nano), RepositoryId: repositoryID, FailureCode: record.FailureCode}
+		UpdatedAt: record.UpdatedAt.Format(time.RFC3339Nano), RepositoryId: repositoryID, FailureCode: record.FailureCode, InputSha256: hex.EncodeToString(record.PayloadFingerprint)}
 }
 func (s *Server) CreateRepository(ctx context.Context, req *connect.Request[golfv1.CreateRepositoryRequest]) (*connect.Response[golfv1.CreateRepositoryResponse], error) {
 	token, err := rpcToken(ctx)
 	if err != nil {
 		return nil, err
 	}
-	creation, repo, err := s.createRepository(ctx, s.cookieValue(req.Header()), token, req.Msg.Name, req.Msg.Description, req.Msg.Private, req.Msg.IdempotencyKey)
+	creation, repo, err := s.createRepository(ctx, s.cookieValue(req.Header()), token, req.Msg.Name, req.Msg.Description, req.Msg.Private, req.Msg.IdempotencyKey, req.Msg.SourceUrl, req.Msg.PullMirror)
 	if err != nil {
 		return nil, rpcError(err)
 	}

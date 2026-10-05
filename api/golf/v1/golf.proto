@@ -351,6 +351,9 @@ message CreateRepositoryRequest {
   // Optional for compatibility. Supply one canonical UUID v4 for safe retries;
   // the same account/key with different inputs is rejected. Keys do not expire.
   string idempotency_key = 4;
+  // Optional public GitHub/GitLab source; credentialed/connected migration is separate.
+  string source_url = 5;
+  bool pull_mirror = 6;
 }
 message CreateRepositoryResponse {
   Repository repository = 1;
@@ -375,6 +378,7 @@ message RepositoryCreation {
   string repository_id = 8;
   // Bounded category only; never provider response bodies or request secrets.
   string failure_code = 9;
+  string input_sha256 = 10;
 }
 message GetRepositoryCreationRequest { string idempotency_key = 1; }
 message GetRepositoryCreationResponse {
@@ -4634,3 +4638,20 @@ message GetPullReviewRequestOperationRequest {
  string operation_id = 5;
 }
 message GetPullReviewRequestOperationResponse { PullReviewRequestOperation operation = 1; }
+
+service RepositoryMirrorService {
+  rpc GetRepositoryMirrorStatus(GetRepositoryMirrorStatusRequest) returns (GetRepositoryMirrorStatusResponse);
+}
+message GetRepositoryMirrorStatusRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+}
+message GetRepositoryMirrorStatusResponse {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  bool pull_mirror = 3;
+  string interval = 4;
+  string last_updated_at = 5;
+  // Host only; remote paths, credentials and query strings never leave the adapter.
+  string source_host = 6;
+}

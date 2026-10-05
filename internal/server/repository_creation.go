@@ -26,6 +26,8 @@ type repositoryCreationInput struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Private     bool   `json:"private"`
+	SourceURL   string `json:"source_url,omitempty"`
+	PullMirror  bool   `json:"pull_mirror,omitempty"`
 }
 
 func repositoryCreationKey(value string) (string, error) {
@@ -44,7 +46,7 @@ func repositoryCreationKey(value string) (string, error) {
 	return value, nil
 }
 
-func (s *Server) createRepository(ctx context.Context, session string, credential forgeCredential, name, description string, private *bool, key string) (database.GolfRepositoryCreation, *Repository, error) {
+func (s *Server) createRepository(ctx context.Context, session string, credential forgeCredential, name, description string, private *bool, key string, source string, pullMirror bool) (database.GolfRepositoryCreation, *Repository, error) {
 	var record database.GolfRepositoryCreation
 	if !repositoryName.MatchString(name) || len(description) > 2000 || !utf8.ValidString(description) || private == nil {
 		return record, nil, invalid("Provide a 1–100 character repository name, description up to 2000 bytes, and explicit private boolean.")
@@ -54,7 +56,14 @@ func (s *Server) createRepository(ctx context.Context, session string, credentia
 	if err != nil {
 		return record, nil, err
 	}
-	input := repositoryCreationInput{name, description, *private}
+	canonicalSource, _, err := publicImportURL(source)
+	if err != nil {
+		return record, nil, err
+	}
+	if pullMirror && canonicalSource == "" {
+		return record, nil, invalid("A pull mirror requires a public source project.")
+	}
+	input := repositoryCreationInput{Name: name, Description: description, Private: *private, SourceURL: canonicalSource, PullMirror: pullMirror}
 	canonical, _ := json.Marshal(input)
 	fingerprint := sha256.Sum256(canonical)
 	owner, err := s.currentUser(ctx, credential)
@@ -101,7 +110,14 @@ func (s *Server) createRepository(ctx context.Context, session string, credentia
 			Repository
 			Visibility *bool `json:"private"`
 		}
-		_, providerErr = s.forge(ctx, "POST", "/user/repos", credential, input, &response)
+		if canonicalSource == "" {
+			_, providerErr = s.forge(ctx, "POST", "/user/repos", credential, input, &response)
+		} else {
+			providerErr = s.verifyPublicImport(ctx, canonicalSource)
+			if providerErr == nil {
+				_, providerErr = s.forgeJSON(ctx, "POST", "/repos/migrate", credential, map[string]any{"clone_addr": canonicalSource, "repo_name": name, "repo_owner": owner.Login, "description": description, "private": *private, "mirror": pullMirror}, &response, 201)
+			}
+		}
 		if providerErr == nil {
 			if response.Visibility == nil || response.ID <= 0 || response.Name != name || response.FullName != owner.Login+"/"+name || *response.Visibility != *private {
 				providerErr = errInvalidForgeResponse
