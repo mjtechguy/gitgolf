@@ -20,12 +20,12 @@ function Label({ label }: { label: DiscussionLabel }) {
   </li>;
 }
 
-export function DiscussionMetadata({ metadata, milestoneAction }: { metadata?: Metadata; milestoneAction?: ReactNode }) {
+export function DiscussionMetadata({ metadata, milestoneAction, labelsAction }: { metadata?: Metadata; milestoneAction?: ReactNode; labelsAction?: ReactNode }) {
   if (!metadata || !metadata.labelsKnown && !metadata.assigneesKnown && !metadata.milestoneKnown) return null;
   const milestone = metadata.milestone;
   return <div className="discussion-metadata">
     {metadata.assigneesKnown ? <section aria-label="Assignees"><h3>Assignees</h3>{metadata.assignees.length ? <ul className="discussion-assignees">{metadata.assignees.map(user => <li key={user.id}><UserRound size={16} aria-hidden="true"/><span><strong>{user.login || 'Unavailable account'}</strong>{user.fullName && user.fullName !== user.login ? <span className="muted">{user.fullName}</span> : null}</span></li>)}</ul> : <p className="muted">None</p>}</section> : null}
-    {metadata.labelsKnown ? <section aria-label="Labels"><h3>Labels</h3>{metadata.labels.length ? <ul className="discussion-labels">{metadata.labels.map(label => <Label key={label.id} label={label}/>)}</ul> : <p className="muted">None</p>}</section> : null}
+    {metadata.labelsKnown ? <section aria-label="Labels"><div className="discussion-metadata-heading"><h3>Labels</h3>{labelsAction}</div>{metadata.labels.length ? <ul className="discussion-labels">{metadata.labels.map(label => <Label key={label.id} label={label}/>)}</ul> : <p className="muted">None</p>}</section> : null}
     {metadata.milestoneKnown ? <section aria-label="Milestone"><div className="discussion-metadata-heading"><h3>Milestone</h3>{milestoneAction}</div>{milestone ? <>
       <strong className="discussion-milestone-title"><Milestone size={16} aria-hidden="true"/>{milestone.title}</strong>
       <span className={`discussion-milestone-state ${milestone.state === IssueState.CLOSED ? 'muted' : ''}`}>{milestone.state === IssueState.CLOSED ? <CircleCheck size={13} aria-hidden="true"/> : <CircleDot size={13} aria-hidden="true"/>}{milestone.state === IssueState.OPEN ? 'Open' : milestone.state === IssueState.CLOSED ? 'Closed' : 'State unavailable'}</span>

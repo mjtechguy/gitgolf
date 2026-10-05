@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { create } from '@bufbuild/protobuf';
 import {
-  ListRepositoryMilestonesRequestSchema, ListRepositoryMilestonesResponseSchema, DiscussionMetadataSchema, DiscussionMilestoneSchema, DiscussionLabelSchema, UpdateIssueRequestSchema, UpdateIssueResponseSchema, CreateIssueRequestSchema, CreateIssueResponseSchema, CreateIssueCommentRequestSchema, CreateIssueCommentResponseSchema,
+  ListRepositoryLabelsRequestSchema, ListRepositoryLabelsResponseSchema, ListRepositoryMilestonesRequestSchema, ListRepositoryMilestonesResponseSchema, DiscussionMetadataSchema, DiscussionMilestoneSchema, DiscussionLabelSchema, UpdateIssueRequestSchema, UpdateIssueResponseSchema, CreateIssueRequestSchema, CreateIssueResponseSchema, CreateIssueCommentRequestSchema, CreateIssueCommentResponseSchema,
   GetAuthenticationOptionsResponseSchema, GetIssueMutationRequestSchema, GetIssueMutationResponseSchema, GetIssueResponseSchema,
   GetRepositoryResponseSchema, GetSessionResponseSchema, IssueCommentSchema, IssueMutationKind, IssueMutationSchema, IssueMutationState,
   IssueSchema, IssueState, ListCapabilitiesResponseSchema, ListIssueCommentsRequestSchema, ListIssueCommentsResponseSchema,
@@ -25,6 +25,7 @@ async function backend(page: Page) {
     user, signedIn: true, repoId: repository.id, issueId: issue.id, issue: { ...issue }, comments: [comment],
     issueReadWait: undefined as Promise<void> | undefined, issueRows: undefined as Issue[] | undefined, listPages: [] as number[], emptyFirst: false, unknown: false, drop: false, rejected: false, missingObject: false, mismatch: false,
     updates: [] as UpdateIssueRequest[], updateFailure: '', creates: [] as CreateIssueRequest[], posts: [] as CreateIssueCommentRequest[], inspections: [] as string[], pages: [] as number[],
+    canEditLabels: false, labels: [create(DiscussionLabelSchema,{id:"9",name:"PRIVATE_LABEL_A",color:"aabbcc"}),create(DiscussionLabelSchema,{id:"12",name:"PRIVATE_LABEL_B",color:"aaff00"})], labelPages: [] as number[], labelMore: false,
     canEditMilestone: false, milestones: [create(DiscussionMilestoneSchema, { id:'51', title:'PRIVATE_MILESTONE_A', state:IssueState.OPEN }), create(DiscussionMilestoneSchema, { id:'52', title:'PRIVATE_MILESTONE_B', state:IssueState.CLOSED })], milestonePages: [] as number[], milestoneMore:false,
     records: new Map<string, IssueMutation>(), errors: {} as Record<string, Failure>, barrier: undefined as Promise<void> | undefined,
   };
@@ -40,6 +41,10 @@ async function backend(page: Page) {
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
     if (method === 'ListRepositories') return respond(route, ListRepositoriesResponseSchema, { repositories: [repository] });
     if (method === 'GetRepository') return respond(route, GetRepositoryResponseSchema, { repository: { ...repository, id: state.repoId } });
+    if (method === 'ListRepositoryLabels') {
+      const input=request(route,ListRepositoryLabelsRequestSchema);expect(input.repository).toMatchObject(repoKey);expect(input.repositoryId).toBe(state.repoId);const number=input.page?.page||1;state.labelPages.push(number);
+      return respond(route,ListRepositoryLabelsResponseSchema,{labels:state.labelMore?state.labels.slice(number-1,number):state.labels,canEditLabels:state.canEditLabels,page:state.labelMore&&number===1?{nextPage:2}:undefined});
+    }
     if (method === 'ListRepositoryMilestones') {
       const input=request(route,ListRepositoryMilestonesRequestSchema); expect(input.repository).toMatchObject(repoKey);expect(input.repositoryId).toBe(state.repoId);expect(input.state).toBe(IssueState.ALL);
       const number=input.page?.page||1;state.milestonePages.push(number);
@@ -65,7 +70,7 @@ async function backend(page: Page) {
         issueId: state.issueId, number: 12, failureCode: state.updateFailure,
       });
       state.records.set(input.idempotencyKey, mutation);
-      if (!state.updateFailure) state.issue = { ...state.issue, ...(input.title !== undefined ? { title: input.title } : {}), ...(input.body !== undefined ? { body: input.body } : {}), ...(input.state !== IssueState.UNSPECIFIED ? { state: input.state } : {}), ...(input.milestone ? {metadata: create(DiscussionMetadataSchema,{...create(DiscussionMetadataSchema,state.issue.metadata),milestoneKnown:true,milestone:state.milestones.find(row=>row.id===input.milestone!.milestoneId)})}:{}), revision: 'b'.repeat(64) };
+      if (!state.updateFailure) state.issue = { ...state.issue, ...(input.title !== undefined ? { title: input.title } : {}), ...(input.body !== undefined ? { body: input.body } : {}), ...(input.state !== IssueState.UNSPECIFIED ? { state: input.state } : {}), ...(input.milestone ? {metadata: create(DiscussionMetadataSchema,{...create(DiscussionMetadataSchema,state.issue.metadata),milestoneKnown:true,milestone:state.milestones.find(row=>row.id===input.milestone!.milestoneId)})}:{}), ...(input.labels ? {metadata: create(DiscussionMetadataSchema,{...create(DiscussionMetadataSchema,state.issue.metadata),labelsKnown:true,labels:state.labels.filter(row=>input.labels!.labelIds.includes(row.id))})}:{}), revision: 'b'.repeat(64) };
       if (state.barrier) await state.barrier;
       if (state.drop) return route.abort('failed');
       return respond(route, UpdateIssueResponseSchema, { mutation: state.mismatch ? { ...mutation, issueId: '9999' } : mutation, issue: mutation.state === IssueMutationState.SUCCEEDED && !state.missingObject ? state.issue : undefined });
@@ -570,4 +575,28 @@ test('unavailable milestone inventory exposes retry without hiding the authorize
  const state=await backend(page);enableMilestones(state);state.errors.ListRepositoryMilestones='unavailable';await page.goto('/alex/project/issues/12');
  const sidebar=page.getByRole('complementary',{name:'Issue metadata',exact:true});await expect(sidebar.getByRole('alert')).toBeVisible();await expect(page.locator('#issue-detail-title')).toBeVisible();
  delete state.errors.ListRepositoryMilestones;await sidebar.getByRole('button',{name:'Try again',exact:true}).click();await expect(page.getByRole('button',{name:'Edit issue milestone',exact:true})).toBeVisible();expect(state.updates).toHaveLength(0);
+});
+
+function enableLabels(state: Awaited<ReturnType<typeof backend>>) {
+ state.canEditLabels=true;state.issue.metadata=create(DiscussionMetadataSchema,{labelsKnown:true,labels:[state.labels[0]!]});
+}
+test('labels pencil opens shared form and replaces then clears exact IDs without changing other fields',async({page})=>{
+ const state=await backend(page);enableLabels(state);await page.goto('/alex/project/issues/12');await expect(page.getByRole('checkbox')).toHaveCount(0);
+ await page.getByRole('button',{name:'Edit issue labels',exact:true}).click();let editor=page.getByRole('region',{name:'Edit issue labels',exact:true});await expect(editor.getByRole('button',{name:'Save changes',exact:true})).toBeDisabled();await editor.getByRole('checkbox',{name:'PRIVATE_LABEL_B',exact:true}).check();await expect(page.getByRole('button',{name:'Edit issue title',exact:true})).toBeDisabled();await editor.getByRole('button',{name:'Save changes',exact:true}).click();await expect(editor).toHaveCount(0);
+ expect(state.updates[0]!.labels).toMatchObject({expectedLabelIds:['9'],labelIds:['9','12']});
+ await page.getByRole('button',{name:'Edit issue labels',exact:true}).click();editor=page.getByRole('region',{name:'Edit issue labels',exact:true});await editor.getByRole('checkbox',{name:'PRIVATE_LABEL_A',exact:true}).uncheck();await editor.getByRole('checkbox',{name:'PRIVATE_LABEL_B',exact:true}).uncheck();await editor.getByRole('button',{name:'Save changes',exact:true}).click();await expect(editor).toHaveCount(0);
+ expect(state.updates[1]!.labels).toMatchObject({expectedLabelIds:['9','12'],labelIds:[]});for(const request of state.updates){expect(request.title).toBeUndefined();expect(request.body).toBeUndefined();expect(request.milestone).toBeUndefined();expect(request.state).toBe(IssueState.UNSPECIFIED);}expect(state.issue.title).toBe(issue.title);expect(state.issue.body).toBe(issue.body);expect(await stored(page)).toEqual([]);
+});
+test('label inventory pages and native admin permission control the editor',async({page})=>{
+ const state=await backend(page);enableLabels(state);state.labelMore=true;await page.goto('/alex/project/issues/12');await page.getByRole('button',{name:'Edit issue labels',exact:true}).click();const editor=page.getByRole('region',{name:'Edit issue labels',exact:true});await expect(editor.getByRole('checkbox',{name:'PRIVATE_LABEL_B',exact:true})).toHaveCount(0);await editor.getByRole('button',{name:'Load more labels',exact:true}).click();await expect(editor.getByRole('checkbox',{name:'PRIVATE_LABEL_B',exact:true})).toBeVisible();expect(state.labelPages.at(-1)).toBe(2);
+ await editor.getByRole('button',{name:'Close editor',exact:true}).click();await expect(page.getByRole('button',{name:'Edit issue labels',exact:true})).toBeFocused();state.canEditLabels=false;await page.reload();await expect(page.getByRole('complementary',{name:'Issue metadata',exact:true})).toContainText('PRIVATE_LABEL_A');await expect(page.getByRole('button',{name:'Edit issue labels',exact:true})).toHaveCount(0);expect(state.updates).toHaveLength(0);
+});
+test('lost label response resumes original UUID inspection without storing private choices or another update',async({page})=>{
+ const state=await backend(page);enableLabels(state);state.drop=true;await page.goto('/alex/project/issues/12');await page.getByRole('button',{name:'Edit issue labels',exact:true}).click();const editor=page.getByRole('region',{name:'Edit issue labels',exact:true});await editor.getByRole('checkbox',{name:'PRIVATE_LABEL_B',exact:true}).check();await editor.getByRole('button',{name:'Save changes',exact:true}).click();await expect(editor.getByRole('button',{name:'Check request status',exact:true})).toBeEnabled();const key=state.updates[0]!.idempotencyKey;expect(JSON.parse((await stored(page))[0]![1])).toEqual({key,kind:'update',repositoryId:repository.id,issueId:issue.id,number:12,editField:'labels'});await page.reload();await page.getByRole('button',{name:'Check request status',exact:true}).click();await expect(page.getByRole('region',{name:'Edit issue labels',exact:true})).toHaveCount(0);expect(state.updates).toHaveLength(1);expect(state.inspections).toEqual([key]);
+});
+test('label selection refuses lossy native IDs but allows explicit removal of a large current ID',async({page})=>{
+ const state=await backend(page);state.labels.push(create(DiscussionLabelSchema,{id:'9007199254740993',name:'BIG_NATIVE_ID',color:'ffffff'}));enableLabels(state);state.issue.metadata!.labels=[state.labels[2]!];await page.goto('/alex/project/issues/12');await page.getByRole('button',{name:'Edit issue labels',exact:true}).click();const editor=page.getByRole('region',{name:'Edit issue labels',exact:true});await expect(editor.getByRole('checkbox',{name:'BIG_NATIVE_ID',exact:true})).toBeEnabled();await expect(editor.getByRole('button',{name:'Save changes',exact:true})).toBeDisabled();await editor.getByRole('checkbox',{name:'BIG_NATIVE_ID',exact:true}).uncheck();await expect(editor.getByRole('checkbox',{name:'BIG_NATIVE_ID',exact:true})).toBeDisabled();await editor.getByRole('button',{name:'Save changes',exact:true}).click();await expect(editor).toHaveCount(0);expect(state.updates[0]!.labels).toMatchObject({expectedLabelIds:['9007199254740993'],labelIds:[]});
+});
+for(const theme of ['dark','light'])test(`labels editor compact ${theme} and current native denial hides private content`,async({page})=>{
+ const state=await backend(page);enableLabels(state);await page.setViewportSize({width:390,height:900});await page.addInitScript(value=>localStorage.setItem('golf.theme',value),theme);await page.goto('/alex/project/issues/12');await page.getByRole('button',{name:'Edit issue labels',exact:true}).click();await expect(page.getByRole('checkbox',{name:'PRIVATE_LABEL_A',exact:true})).toBeFocused();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:test.info().outputPath(`labels-editor-${theme}-390.png`),fullPage:true});state.errors.ListRepositoryLabels='permission_denied';await page.reload();await expect(page.getByRole('alert')).toBeVisible();await expect(page.getByText('PRIVATE_BODY <script>alert(1)</script>',{exact:true})).toHaveCount(0);await expect(page.getByRole('checkbox')).toHaveCount(0);expect(state.updates).toHaveLength(0);
 });
