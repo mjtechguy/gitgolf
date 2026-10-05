@@ -33,3 +33,22 @@ The shared run workspace reads metadata for successful ordinary GitLab runs, ver
 Source runner/cmd race checks pass3.358s/1.288s; final focused artifact/compiler/server checks pass1.477s/1.753s/1.231s. Vet, protobuf lint, TypeScript, production build and whitespace checks pass. The61 affected source-browser cases pass45.8s on isolated4193, including legacy/typed run regressions and four artifact theme/size variants. The final16 artifact browser cases pass20.2s, including held-read sign-out and late-response privacy. These mocked browser responses and fake Docker command receipts are source tests, not actual native/Docker delivery proof. The initial browser run had59 passes and one overly exact metadata-read-count assertion failure; the test now requires a fresh bounded read after reload and zero writes, without implying a single read across parent authority revalidation.
 
 `TestWorkflowArtifactsUploadFinishDownloadAndPrivacyPostgres` authors genuine RPC GitLab admission and protocol claim/progress/upload/finish/read scenarios, immutable/replayed bytes, old/HTTP refusal, pre-finish withholding and cancelled/revoked privacy. It has three outcome subcases and is unrun here. The parent integrates/regenerates the append-only protocol, adds the metadata client/browser-only service registration/allowlist, mounts the two routes and runs the real PostgreSQL and disposable Docker GitLab qualification. Current retained services are not modified by this source packet.
+
+## Prepared disposable runtime recipe
+
+`scripts/workflow-artifacts-smoke.py --self-check` and the paired browser helper self-check are source-only guards. The actual helper is prepared, unrun. An operator supplies exact cached core/runner image IDs, their common source revision, independent core/runner/engine binary SHA-256 receipts, the existing native proxy binary and a fresh output directory:
+
+```sh
+python3 scripts/workflow-artifacts-smoke.py \
+  --image "$CORE_IMAGE_ID" --runner-image "$RUNNER_IMAGE_ID" \
+  --source-revision "$SOURCE_COMMIT" \
+  --expected-core-sha256 "$CORE_BINARY_SHA256" \
+  --expected-runner-sha256 "$RUNNER_BINARY_SHA256" \
+  --expected-engine-sha256 "$ENGINE_BINARY_SHA256" \
+  --proxy-binary "$NATIVE_PROXY_BINARY" --stack-root "$STACK_ROOT" \
+  --output "$FRESH_PRIVATE_OUTPUT" --ui
+```
+
+The helper never builds or pulls. Its `seed.json` uses `golf.workflow-artifacts.seed.v1` and a fresh `golf-artifacts62-` project, binding the exact owned daemon ID/image plus approved Alpine/DinD registry digests. Only the operator seeds that daemon. The recipe uses verified TLS1.3 with strict CA/hostname checks, ordinary native owner/reader accounts and one actual GitLab job writing two literal files under `dist`. It requires a successful original attempt, maintained completion marker, independently empty attempt container/volume inventory, exact tar bodies/hash/metadata, reader read followed by native permission removal, Origin/bearer refusal and restart-stable original output without a replacement attempt. Missing-capability/HTTP exclusions are authenticated protocol observations, not a claim to exercise an old worker binary.
+
+Optional `--ui` captures four actual read-only run/receipt views in dark/light at1440/390, without RPC interception or dispatch. Private cookies arrive on stdin, fonts/theme/overflow and browser-storage guards are checked, and artifacts remain downloadable attachments. Exact owned actor/session/project cleanup and foreign identity observations run even after an original failure; diagnostics are bounded and private. A passing controlled fixture would qualify this bounded producer only, not previews/CD, secrets-bearing output, general Actions artifacts, recovery or full repository readiness.
