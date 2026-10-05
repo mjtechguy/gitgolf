@@ -123,7 +123,7 @@ function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex,ru
  const withheld=run.outputState===WorkflowOutputState.WITHHELD;
  const text=query.data?.pages.flatMap(page=>page.logs).map(chunk=>chunk.text).join('')||'';
  const denied=Boolean(query.error)||!enabled;
- useEffect(()=>{if(active&&liveStatus==='live'&&enabled&&!withheld&&!query.error&&query.hasNextPage&&!query.isFetching)void query.fetchNextPage();},[active,liveStatus,enabled,withheld,query.error,query.hasNextPage,query.isFetching,query.fetchNextPage]);
+ useEffect(()=>{if(enabled&&!withheld&&!query.error&&query.hasNextPage&&!query.isFetching)void query.fetchNextPage();},[enabled,withheld,query.error,query.hasNextPage,query.isFetching,query.fetchNextPage]);
  const fileName=`golf-run-${runId}${jobInstanceId?'-job-'+jobInstanceId:''}${stepId?'-step-'+stepId:stepIndex!==undefined?'-step-'+(stepIndex+1):''}${query.hasNextPage?'-loaded':''}.log`;
  const scopeKey=JSON.stringify([userId,owner,name,runId,run.repositoryId,run.attemptId,run.commitId,jobInstanceId,stepId,stepIndex,run.outputState,run.engineCatalog,run.inputContract,run.schemaSha256,run.submittedSha256,run.effectiveSha256]);
  return <section className="browser-panel workflow-log-panel" aria-labelledby="workflow-log-title">
@@ -132,9 +132,7 @@ function WorkflowRunLogs({userId,owner,name,runId,truncated,enabled,stepIndex,ru
   {!denied&&withheld?<p className="panel-footnote" role="status">Output is withheld pending a verified execution result and current authorization.</p>:null}
   {!denied&&run.outputState===WorkflowOutputState.REDACTED?<p className="panel-footnote">Configured secret values were masked before this log was published.</p>:null}
   {query.data?<WorkflowLogConsole scopeKey={scopeKey} text={text} authorized={!denied&&!withheld} status={active?liveStatus==='live'?'streaming':'reconnecting':'idle'} fileName={fileName} hasMore={Boolean(query.hasNextPage)} refreshing={query.isFetching}/>:null}
-  {!denied&&!loading?<More hasMore={Boolean(query.hasNextPage)} loading={query.isFetchingNextPage} load={()=>void query.fetchNextPage()} label="log output"/>:null}
-  {!denied&&!loading&&(truncated||query.data?.pages.some(page=>page.truncated))?<p className="panel-footnote" role="status">Output reached the worker limit. The stored log is truncated; loading more cannot recover omitted output.</p>:null}
-  <p className="panel-footnote">Search and download cover loaded chunks only.</p>
+  {!denied&&!loading&&(truncated||query.data?.pages.some(page=>page.truncated))?<p className="panel-footnote" role="status">Output reached the worker limit. The stored log is truncated; omitted output cannot be recovered.</p>:null}
  </section>;
 }
 

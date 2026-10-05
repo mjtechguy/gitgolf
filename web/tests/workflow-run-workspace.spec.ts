@@ -12,7 +12,7 @@ import { GetSessionResponseSchema,GetRepositoryResponseSchema,ListRepositoriesRe
 const runId='12345678-1234-4234-8234-123456789abc',head='a'.repeat(40),path=`/alex/demo/actions/runs/${runId}`;
 function frame(flag:number,body:unknown){const payload=Buffer.from(JSON.stringify(body)),header=Buffer.alloc(5);header[0]=flag;header.writeUInt32BE(payload.length,1);return Buffer.concat([header,payload]);}
 async function backend(page:Page){
- const state={placement:undefined as {poolId:string;poolVersion:string;placementVersion:string;legacyUnbound:boolean}|undefined,catalog:'',cursor:1,live:false,deny:false,foreign:false,badLogs:false,truncated:false,chunks:17,after:[] as string[],reads:0,cancels:[] as {runId:string;expectedVersion:string}[],cancelLost:false,cancelBarrier:undefined as Promise<void>|undefined,state:WorkflowRunState.RUNNING,progress:false,stepComplete:false,startSecond:true,stepReads:[] as (number|undefined)[]};
+ const state={placement:undefined as {poolId:string;poolVersion:string;placementVersion:string;legacyUnbound:boolean}|undefined,catalog:'',cursor:1,live:false,deny:false,foreign:false,badLogs:false,logBarrier:undefined as Promise<void>|undefined,truncated:false,chunks:17,after:[] as string[],reads:0,cancels:[] as {runId:string;expectedVersion:string}[],cancelLost:false,cancelBarrier:undefined as Promise<void>|undefined,state:WorkflowRunState.RUNNING,progress:false,stepComplete:false,startSecond:true,stepReads:[] as (number|undefined)[]};
  const run=()=>({runnerPlacement:state.placement,engineCatalog:state.catalog,id:runId,repositoryId:state.foreign?'22':'11',workflowPath:'.github/workflows/qualification.yml',workflowBlobId:'b'.repeat(40),sourceSha256:'c'.repeat(64),commitId:head,createdAt:'2026-10-03T00:00:00Z',startedAt:'2026-10-03T00:01:00Z',finishedAt:state.state===WorkflowRunState.RUNNING?undefined:'2026-10-03T00:02:05Z',exitCode:state.state===WorkflowRunState.RUNNING?undefined:0,runnerId:'local-worker',version:'9',canCancel:state.state===WorkflowRunState.RUNNING,origin:WorkflowRunOrigin.PUSH,eventRef:'refs/heads/main',repositoryEventId:'5',automationGrantId:'owned-grant',state:state.state,logsTruncated:state.truncated,progress:state.progress?{jobId:'check',name:'Check source',eventsRecorded:true,steps:[{index:0,name:'First step',state:WorkflowStepState.SUCCEEDED,startedAt:'2026-10-03T00:01:00Z',finishedAt:'2026-10-03T00:01:10Z',exitCode:0},{index:1,name:'Second step',state:!state.startSecond?WorkflowStepState.PENDING:state.stepComplete?WorkflowStepState.SUCCEEDED:WorkflowStepState.RUNNING,startedAt:state.startSecond?'2026-10-03T00:01:11Z':undefined,finishedAt:state.stepComplete?'2026-10-03T00:01:25Z':undefined,exitCode:state.stepComplete?0:undefined}]}:undefined});
  await page.route('**/rpc/**',async(route:Route)=>{
   const method=new URL(route.request().url()).pathname.split('/').at(-1)!;
@@ -36,6 +36,7 @@ async function backend(page:Page){
   if(method==='GetWorkflowRunLogs'){
    const input=request(route,GetWorkflowRunLogsRequestSchema);expect(input.runId).toBe(runId);state.after.push(input.afterSequence.toString());state.stepReads.push(input.stepIndex);
    if(input.stepIndex!==undefined){return respond(route,GetWorkflowRunLogsResponseSchema,{logs:[{sequence:BigInt(input.stepIndex+1),text:input.stepIndex===0?'First step output':'Second step output'}]});}
+   if(input.afterSequence>0n&&state.logBarrier)await state.logBarrier;
    if(state.deny)return reject(route,'permission_denied','Run log access removed.');
    if(state.badLogs&&input.afterSequence>0n)return respond(route,GetWorkflowRunLogsResponseSchema,{logs:[{sequence:input.afterSequence,text:'Invalid repeated sequence'}],hasMore:true});
    const start=Number(input.afterSequence),end=Math.min(start+16,state.chunks);
@@ -55,8 +56,6 @@ test('canonical run workspace continues logs across chunks, searches safely, dow
  await expect(page.getByRole('heading',{name:'.github/workflows/qualification.yml',exact:true})).toBeVisible();
  await expect(page.getByRole('link',{name:'All runs'})).toHaveAttribute('href',/\/alex\/demo\/actions/);
  await expect(page.getByRole('link',{name:head.slice(0,12),exact:true})).toHaveAttribute('href',new RegExp(`/commit/${head}`));
- await expect(page.getByRole('button',{name:'Load more log output'})).toBeVisible();
- await page.getByRole('button',{name:'Load more log output'}).click();
  const log=page.getByLabel('Workflow run log',{exact:true});await expect.poll(()=>terminalText(log)).toContain('<script>window.executed=true</script>');
  await expect(log.locator('script')).toHaveCount(0);expect(await page.evaluate(()=>('executed' in window))).toBe(false);
  expect(state.after).toContain('16');await expect(page.getByRole('button',{name:'Load more log output'})).toHaveCount(0);
@@ -69,6 +68,24 @@ test('canonical run workspace continues logs across chunks, searches safely, dow
  await expect(page.getByRole('searchbox',{name:'Search terminal scrollback'})).toHaveValue('');
 });
 
+
+test('a finished run automatically reads every validated page once without load controls',async({page})=>{
+ const state=await backend(page);state.state=WorkflowRunState.SUCCEEDED;state.chunks=18;await page.goto(path);
+ const expected=[...Array.from({length:15},(_,index)=>`Chunk ${index+1}`),'<script>window.executed=true</script>','Chunk 18'].join('\n');
+ await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe(expected);
+ // StrictMode may abort a provisional cursor-zero read; only the validated continuation advances.
+ expect(state.after.filter(cursor=>cursor!=='0')).toEqual(['16']);expect(state.after[0]).toBe('0');await expect(page.getByRole('button',{name:'Load more log output'})).toHaveCount(0);
+ await expect(page.getByText('Search and download cover loaded chunks only.',{exact:true})).toHaveCount(0);
+ const reads=state.after.length;await page.waitForTimeout(250);expect(state.after).toHaveLength(reads);
+});
+
+test('a denied automatic continuation clears previously loaded output and stops pagination',async({page})=>{
+ const state=await backend(page);let release!:()=>void;state.logBarrier=new Promise(resolve=>{release=resolve;});await page.goto(path);
+ const log=page.getByLabel('Workflow run log',{exact:true});await expect.poll(()=>terminalText(log)).toContain('Chunk 1');await expect.poll(()=>state.after.includes('16')).toBe(true);
+ state.deny=true;release();await expect(page.getByRole('alert').first()).toContainText('removed');await expect(log).toHaveCount(0);
+ const reads=state.after.length;await page.waitForTimeout(250);expect(state.after).toHaveLength(reads);expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain('Chunk 1');
+});
+
 test('foreign run binding refuses content before requesting logs and malformed run paths fail',async({page})=>{
  const state=await backend(page);state.foreign=true;await page.goto(path);
  await expect(page.getByRole('alert')).toHaveText('This run does not belong to the selected repository.');
@@ -78,8 +95,9 @@ test('foreign run binding refuses content before requesting logs and malformed r
 });
 
 test('invalid log continuation and permission loss remove loaded private output',async({page})=>{
- const state=await backend(page);await page.goto(path);await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toContain('Chunk 1');
- state.badLogs=true;await page.getByRole('button',{name:'Load more log output'}).click();await expect(page.getByRole('alert')).toContainText('invalid sequence');await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);
+ const state=await backend(page);let release!:()=>void;state.logBarrier=new Promise(resolve=>{release=resolve;});await page.goto(path);await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toContain('Chunk 1');
+ await expect.poll(()=>state.after.includes('16')).toBe(true);state.badLogs=true;release();await expect(page.getByRole('alert')).toContainText('invalid sequence');await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);
+ const reads=state.after.length;await page.waitForTimeout(250);expect(state.after).toHaveLength(reads);
  state.deny=true;await page.getByRole('button',{name:'Refresh selected run'}).click();await expect(page.getByRole('alert')).toHaveText('Run access removed.');await expect(page.getByRole('heading',{name:'Run log',exact:true})).toHaveCount(0);
  expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain('Chunk 1');
 });

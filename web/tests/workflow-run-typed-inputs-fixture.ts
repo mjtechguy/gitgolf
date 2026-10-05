@@ -6,7 +6,7 @@ export const runId='12345678-1234-4234-8234-123456789abc',commit='a'.repeat(40),
 export const catalog='golf.workflow.act.v0.2.89.linux.v2',contract='golf.workflow.dispatch.inputs.v1';
 export const path=`/alex/demo/actions/runs/${runId}`,selectedPath=path+`?jobInstanceId=${job}&stepId=literal`;
 export async function typedRunFixture(page:Page){
- const state={catalog,contract,schema:'e'.repeat(64),submitted:'f'.repeat(64),effective:'9'.repeat(64),origin:WorkflowRunOrigin.MANUAL,status:WorkflowRunState.SUCCEEDED,publication:WorkflowOutputState.ORDINARY,withheldBinding:true,deny:false,logError:'' as ''|'permission_denied'|'not_found'|'unauthenticated',badReceipt:'',logBarrier:undefined as Promise<void>|undefined,reads:0,filters:[] as {job:string;step:string;after:string}[]};
+ const state={catalog,contract,schema:'e'.repeat(64),submitted:'f'.repeat(64),effective:'9'.repeat(64),origin:WorkflowRunOrigin.MANUAL,status:WorkflowRunState.SUCCEEDED,publication:WorkflowOutputState.ORDINARY,withheldBinding:true,deny:false,logError:'' as ''|'permission_denied'|'not_found'|'unauthenticated',badReceipt:'',logBarrier:undefined as Promise<void>|undefined,continuationBarrier:undefined as Promise<void>|undefined,reads:0,filters:[] as {job:string;step:string;after:string}[]};
  const run=()=>{
   const queued=state.status===WorkflowRunState.QUEUED,running=state.status===WorkflowRunState.RUNNING;
   const startedAt=queued?undefined:'2026-10-04T00:01:00Z',finishedAt=queued||running?undefined:'2026-10-04T00:01:10Z';
@@ -30,6 +30,7 @@ export async function typedRunFixture(page:Page){
    const input=request(route,GetWorkflowRunLogsRequestSchema);expect(input.runId).toBe(runId);
    state.filters.push({job:input.jobInstanceId,step:input.stepId,after:input.afterSequence.toString()});
    if(state.logBarrier)await state.logBarrier;
+   if(input.afterSequence>0n&&state.continuationBarrier)await state.continuationBarrier;
    if(state.logError)return reject(route,state.logError,'Typed run log unavailable.');
    const receipt={runId,attemptId:attempt,repositoryId:'11',sourceCommitId:commit,jobInstanceId:input.jobInstanceId,stepId:input.stepId,outputState:state.publication};
    if(state.badReceipt==='run')receipt.runId='87654321-1234-4234-8234-123456789abc';

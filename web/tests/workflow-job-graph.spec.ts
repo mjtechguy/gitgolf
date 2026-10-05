@@ -12,7 +12,7 @@ const runId='12345678-1234-4234-8234-123456789abc',commit='a'.repeat(40),attempt
 const build='1'.repeat(32),test22='2'.repeat(32),test24='3'.repeat(32),skip='4'.repeat(32),image='alpine:3.23@sha256:'+'5'.repeat(64),path=`/alex/demo/actions/runs/${runId}`;
 const started='2026-10-04T00:01:00Z',finished='2026-10-04T00:01:10Z';
 async function fixture(page:Page){
- const state={methods:[] as string[],inventories:[] as {repositoryId:string;kindFilter:ActionRunKind;workflowPath:string}[],twoJobs:false,dependencySkipped:false,typed:false,typedFault:'',publication:'' as ''|'withheld'|'redacted',rawWithheld:false,reads:0,deny:false,logDeny:false,logError:'' as ''|'permission_denied'|'not_found'|'unauthenticated',runBarrier:undefined as Promise<void>|undefined,badGraph:'',badReceipt:'',unrecorded:false,startSecond:false,complete:false,logBarrier:undefined as Promise<void>|undefined,filters:[] as {jobInstanceId:string;stepId:string;stepIndex:number|undefined;after:string}[]};
+ const state={methods:[] as string[],inventories:[] as {repositoryId:string;kindFilter:ActionRunKind;workflowPath:string}[],twoJobs:false,dependencySkipped:false,typed:false,typedFault:'',publication:'' as ''|'withheld'|'redacted',rawWithheld:false,reads:0,deny:false,logDeny:false,logError:'' as ''|'permission_denied'|'not_found'|'unauthenticated',runBarrier:undefined as Promise<void>|undefined,badGraph:'',badReceipt:'',unrecorded:false,startSecond:false,complete:false,logBarrier:undefined as Promise<void>|undefined,continuationBarrier:undefined as Promise<void>|undefined,filters:[] as {jobInstanceId:string;stepId:string;stepIndex:number|undefined;after:string}[]};
  const run=()=>{
   const steps=(pending=false)=>[{id:'0',name:'Inspect source',state:pending?WorkflowStepState.PENDING:WorkflowStepState.SUCCEEDED,startedAt:pending?undefined:started,finishedAt:pending?undefined:finished},{id:'verify-code',name:'Verify source',state:pending?WorkflowStepState.PENDING:state.complete?WorkflowStepState.SUCCEEDED:WorkflowStepState.RUNNING,startedAt:pending?undefined:finished,finishedAt:state.complete&&!pending?'2026-10-04T00:01:30Z':undefined}];
   const jobs=[{instanceId:build,jobId:'build',name:'Build source',matrix:[],needs:[],state:WorkflowStepState.SUCCEEDED,startedAt:started,finishedAt:finished,eventsRecorded:true,imageDigest:image,steps:[{id:'compile',name:'Compile',state:WorkflowStepState.SUCCEEDED,startedAt:started,finishedAt:finished}]},{instanceId:test22,jobId:'test',name:'Test source',matrix:[{name:'node',valueJson:'"22"'}],needs:['build'],state:state.complete?WorkflowStepState.SUCCEEDED:WorkflowStepState.RUNNING,startedAt:finished,finishedAt:state.complete?'2026-10-04T00:01:30Z':undefined,eventsRecorded:true,imageDigest:image,steps:steps()},{instanceId:test24,jobId:'test',name:'Test source',matrix:[{name:'node',valueJson:'"24"'}],needs:['build'],state:state.startSecond?WorkflowStepState.RUNNING:WorkflowStepState.PENDING,startedAt:state.startSecond?started:undefined,eventsRecorded:state.startSecond,imageDigest:image,steps:steps(!state.startSecond)},{instanceId:skip,jobId:'optional',name:'Optional check',matrix:[],needs:['build'],state:WorkflowStepState.SKIPPED,finishedAt:finished,eventsRecorded:true,imageDigest:image,steps:[{id:'optional',name:'Optional source check',state:WorkflowStepState.SKIPPED,startedAt:undefined,finishedAt:undefined}]}];
@@ -53,6 +53,7 @@ async function fixture(page:Page){
    const input=request(route,GetWorkflowRunLogsRequestSchema);expect(input.runId).toBe(runId);
    state.filters.push({jobInstanceId:input.jobInstanceId,stepId:input.stepId,stepIndex:input.stepIndex,after:input.afterSequence.toString()});
    if(state.logBarrier)await state.logBarrier;
+   if(input.afterSequence>0n&&state.continuationBarrier)await state.continuationBarrier;
    if(state.logError)return reject(route,state.logError,'Job log unavailable.');
    if(state.logDeny)return reject(route,'permission_denied','Job log access removed.');
    const receipt={outputState:state.publication==='withheld'?WorkflowOutputState.WITHHELD:state.publication==='redacted'?WorkflowOutputState.REDACTED:WorkflowOutputState.UNSPECIFIED,runId,attemptId:attempt,repositoryId:'11',sourceCommitId:commit,jobInstanceId:input.jobInstanceId,stepId:input.stepId};
@@ -79,11 +80,11 @@ test('matrix jobs use immutable scoped links and filtered logs survive reload wi
  await page.getByRole('link',{name:'running Test source node: 22 · In progress',exact:true}).click();
  await expect(page).toHaveURL(new RegExp(`jobInstanceId=${test22}`));await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node22 job output');
  await page.getByRole('link',{name:'succeeded Inspect source 10s',exact:true}).click();
- await expect(page).toHaveURL(/stepId=0/);await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node22 0');
- await page.getByRole('button',{name:'Load more log output'}).click();expect(state.filters.at(-1)).toEqual({jobInstanceId:test22,stepId:'0',stepIndex:undefined,after:'7'});
+ await expect(page).toHaveURL(/stepId=0/);await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node22 0\nNode22 0');
+ expect(state.filters.at(-1)).toEqual({jobInstanceId:test22,stepId:'0',stepIndex:undefined,after:'7'});
  await page.reload();await expect(page.getByRole('link',{name:'succeeded Inspect source 10s',exact:true})).toHaveAttribute('aria-current','page');
- await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node22 0');
- const download=page.waitForEvent('download');await page.getByRole('button',{name:'Download loaded log'}).click();expect((await download).suggestedFilename()).toBe(`golf-run-${runId}-job-${test22}-step-0-loaded.log`);
+ await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node22 0\nNode22 0');
+ const download=page.waitForEvent('download');await page.getByRole('button',{name:'Download loaded log'}).click();expect((await download).suggestedFilename()).toBe(`golf-run-${runId}-job-${test22}-step-0.log`);
  state.startSecond=true;await page.getByRole('button',{name:'Refresh selected run',exact:true}).click();
  await page.getByRole('link',{name:'running Test source node: 24 · In progress',exact:true}).click();await page.getByRole('link',{name:'succeeded Inspect source 10s',exact:true}).click();
  await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node24 0');expect(state.filters.at(-1)?.jobInstanceId).toBe(test24);
@@ -100,7 +101,7 @@ for(const workflowPath of ['', '.github/workflows/graph.yml'])test(`workflow dri
  const filterIsPreserved=async()=>{const query=new URL(page.url()).searchParams;expect(query.get('actionKind')).toBe('workflow');expect(query.get('workflowPath')||'').toBe(workflowPath);};
  await expect(page.getByRole('link',{name:'All runs',exact:true})).toBeVisible();await filterIsPreserved();
  await page.getByRole('link',{name:'running Test source node: 22 · In progress',exact:true}).click();await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node22 job output');await filterIsPreserved();
- await page.getByRole('link',{name:'succeeded Inspect source 10s',exact:true}).click();await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node22 0');await filterIsPreserved();
+ await page.getByRole('link',{name:'succeeded Inspect source 10s',exact:true}).click();await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node22 0\nNode22 0');await filterIsPreserved();
  await page.reload();await expect(page.getByRole('link',{name:'succeeded Inspect source 10s',exact:true})).toHaveAttribute('aria-current','page');await filterIsPreserved();
  await page.getByRole('link',{name:'All run output',exact:true}).click();await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('All jobs job output');await filterIsPreserved();
  await page.getByRole('link',{name:'All runs',exact:true}).click();await expect(table.getByRole('link',{name:'.github/workflows/graph.yml',exact:true})).toBeVisible();await filterIsPreserved();
@@ -128,6 +129,17 @@ for(const bad of ['run','attempt','repository','source','job','step'])test(`mism
  await expect(page.getByRole('alert')).toContainText('log receipt does not match');await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);await expect(page.getByLabel('Jobs and steps')).toBeVisible();
 });
 
+
+for(const bad of ['run','attempt','repository','source','job','step'])test(`mismatched ${bad} automatic continuation removes already loaded private output`,async({page})=>{
+ const state=await fixture(page);let release!:()=>void;state.continuationBarrier=new Promise(resolve=>{release=resolve});
+ await page.goto(path+`?jobInstanceId=${test22}&stepId=0`);const log=page.getByLabel('Workflow run log',{exact:true});
+ await expect.poll(()=>terminalText(log)).toBe('Node22 0');await expect.poll(()=>state.filters.some(filter=>filter.after==='7')).toBe(true);
+ state.badReceipt=bad;release();await expect(page.getByRole('alert')).toContainText('log receipt does not match');await expect(log).toHaveCount(0);
+ expect(state.filters.every(filter=>filter.jobInstanceId===test22&&filter.stepId==='0'&&filter.stepIndex===undefined&&['0','7'].includes(filter.after))).toBe(true);
+ const reads=state.filters.length;await page.waitForTimeout(250);expect(state.filters).toHaveLength(reads);await expect(page.getByLabel('Jobs and steps')).toBeVisible();
+ expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain('Node22');
+});
+
 test('unknown but syntactically valid job or step does not broaden to all logs',async({page})=>{
  const state=await fixture(page);await page.goto(path+`?jobInstanceId=${'7'.repeat(32)}`);
  await expect(page.getByRole('alert')).toContainText('does not belong');expect(state.filters).toEqual([]);
@@ -149,7 +161,7 @@ test('late log responses after navigation and access loss never revive prior pri
  const state=await fixture(page);let release!:()=>void;state.logBarrier=new Promise(resolve=>{release=resolve});await page.goto(path+`?jobInstanceId=${test22}&stepId=0`);
  await expect.poll(()=>state.filters.length).toBeGreaterThanOrEqual(1);await page.goto(path+`?jobInstanceId=${test24}`);release();
  await expect(page.getByRole('status').filter({hasText:'has no recorded start or output'})).toBeVisible();await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);
- state.logBarrier=undefined;await page.goto(path+`?jobInstanceId=${test22}&stepId=0`);await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node22 0');
+ state.logBarrier=undefined;await page.goto(path+`?jobInstanceId=${test22}&stepId=0`);await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node22 0\nNode22 0');
  state.deny=true;await page.getByRole('button',{name:'Refresh selected run',exact:true}).click();
  await expect(page.getByRole('alert')).toHaveText('Run access removed.');await expect(page.getByLabel('Jobs and steps')).toHaveCount(0);await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);
  expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain('Node22');
@@ -157,7 +169,7 @@ test('late log responses after navigation and access loss never revive prior pri
 
 for(const theme of ['dark','light'])for(const width of [390,1440])test(`graph selection ${theme}/${width} stays compact, contained and keyboard reachable`,async({page},testInfo)=>{
  await fixture(page);await page.setViewportSize({width,height:900});await page.addInitScript(theme=>localStorage.setItem('golf.theme',theme),theme);
- await page.goto(path+`?jobInstanceId=${test22}&stepId=0`);await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node22 0');
+ await page.goto(path+`?jobInstanceId=${test22}&stepId=0`);await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node22 0\nNode22 0');
  await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
  await page.screenshot({path:testInfo.outputPath(`job-graph-${theme}-${width}-initial.png`),fullPage:true});
  if(width===390){const box=await page.getByLabel('Workflow run log',{exact:true}).boundingBox();expect(box!.y).toBeLessThan(700);}
@@ -172,7 +184,7 @@ for(const theme of ['dark','light'])for(const width of [390,1440])test(`graph se
 
 test('legacy graph aliases retain exact typed scope and return canonical links',async({page})=>{
  const state=await fixture(page);await page.goto(`/repositories/alex/demo?view=actions&run=${runId}&jobInstanceId=${test22}&stepId=0`);
- await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node22 0');
+ await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node22 0\nNode22 0');
  await page.getByRole('link',{name:'running Verify source In progress',exact:true}).click();
  await expect(page).toHaveURL(new RegExp(`/alex/demo/actions/runs/${runId}\\?`));
  await expect(page).toHaveURL(/stepId=verify-code/);expect(state.filters.at(-1)?.jobInstanceId).toBe(test22);
@@ -180,9 +192,9 @@ test('legacy graph aliases retain exact typed scope and return canonical links',
 
 
 for(const code of ['permission_denied','not_found'] as const)test(`log ${code} clears bound job metadata and cancels a late parent revalidation without automatic retry`,async({page})=>{
- const state=await fixture(page);await page.goto(path+`?jobInstanceId=${test22}&stepId=0`);await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node22 0');
- let releaseLogs!:()=>void,releaseRun!:()=>void;state.logBarrier=new Promise(resolve=>{releaseLogs=resolve});
- await page.getByRole('button',{name:'Load more log output',exact:true}).click();await expect.poll(()=>state.filters.some(filter=>filter.after==='7')).toBe(true);
+ const state=await fixture(page);let releaseLogs!:()=>void,releaseRun!:()=>void;state.continuationBarrier=new Promise(resolve=>{releaseLogs=resolve});
+ await page.goto(path+`?jobInstanceId=${test22}&stepId=0`);await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node22 0');
+ await expect.poll(()=>state.filters.some(filter=>filter.after==='7')).toBe(true);
  state.runBarrier=new Promise(resolve=>{releaseRun=resolve});const previous=state.reads;await page.getByRole('button',{name:'Refresh selected run',exact:true}).click();await expect.poll(()=>state.reads).toBeGreaterThan(previous);
  state.logError=code;releaseLogs();await expect(page.getByRole('alert')).toHaveText('Job log unavailable.');
  await expect(page.getByLabel('Jobs and steps')).toHaveCount(0);await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);
@@ -192,7 +204,7 @@ for(const code of ['permission_denied','not_found'] as const)test(`log ${code} c
 });
 
 test('unauthenticated log read ends the managed session and clears the entire private run',async({page})=>{
- const state=await fixture(page);await page.goto(path+`?jobInstanceId=${test22}&stepId=0`);await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node22 0');
+ const state=await fixture(page);await page.goto(path+`?jobInstanceId=${test22}&stepId=0`);await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Node22 0\nNode22 0');
  state.logError='unauthenticated';await page.getByRole('button',{name:'Refresh run log',exact:true}).click();
  await expect(page.getByRole('form',{name:'Golf account sign-in',exact:true})).toBeVisible();
  await expect(page.getByLabel('Jobs and steps')).toHaveCount(0);await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);
@@ -218,8 +230,8 @@ test('two completed nonmatrix jobs keep equal step IDs in separate immutable log
  await page.goto(path+`?jobInstanceId=${build}&stepId=0`);await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Build 0');
  await expect(page.getByRole('link',{name:'succeeded Build source build · 10s',exact:true})).toBeVisible();await expect(page.getByRole('link',{name:'succeeded Verify job verify · 20s',exact:true})).toBeVisible();await expect(page.getByLabel('Jobs and steps')).not.toContainText('node:');
  await page.getByRole('link',{name:'succeeded Verify job verify · 20s',exact:true}).click();await page.getByRole('link',{name:'succeeded Inspect source 10s',exact:true}).click();
- await expect(page).toHaveURL(new RegExp(`jobInstanceId=${test22}`));await expect(page).toHaveURL(/stepId=0/);await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Verify job 0');
- await page.reload();await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Verify job 0');await expect(page.getByRole('link',{name:'succeeded Inspect source 10s',exact:true})).toHaveAttribute('aria-current','page');
+ await expect(page).toHaveURL(new RegExp(`jobInstanceId=${test22}`));await expect(page).toHaveURL(/stepId=0/);await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Verify job 0\nVerify job 0');
+ await page.reload();await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Verify job 0\nVerify job 0');await expect(page.getByRole('link',{name:'succeeded Inspect source 10s',exact:true})).toHaveAttribute('aria-current','page');
  await page.getByText('Execution receipt',{exact:true}).click();const receipt=page.getByRole('region',{name:'Run summary',exact:true});await expect(receipt).toContainText(attempt);await expect(receipt).toContainText(catalog);await expect(receipt).toContainText(test22);await expect(receipt).toContainText('build');
  expect(state.filters.some(v=>v.jobInstanceId===build&&v.stepId==='0')).toBe(true);expect(state.filters.some(v=>v.jobInstanceId===test22&&v.stepId==='0')).toBe(true);expect(state.filters.every(v=>[build,test22].includes(v.jobInstanceId)&&v.stepIndex===undefined)).toBe(true);
 });
@@ -236,7 +248,7 @@ test('recorded failed prerequisite and skipped dependent never synthesize job or
 test('pending and unrecorded dependent descriptions wait for a real scoped start',async({page})=>{
  const state=await fixture(page);state.twoJobs=true;await page.goto(path+`?jobInstanceId=${test22}`);const notice=page.getByRole('status').filter({hasText:'has no recorded start or output'});
  await expect(notice).toContainText('This job is pending.');expect(state.filters).toEqual([]);await page.getByRole('link',{name:'pending Inspect source pending',exact:true}).click();await expect(notice).toContainText('This step is pending.');await expect(notice).toContainText('Declared dependencies: build.');await expect(notice).not.toContainText('queued');expect(state.filters).toEqual([]);
- state.startSecond=true;await page.getByRole('button',{name:'Refresh selected run',exact:true}).click();await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Verify job 0');expect(state.filters.every(v=>v.jobInstanceId===test22&&v.stepId==='0'&&v.stepIndex===undefined)).toBe(true);
+ state.startSecond=true;await page.getByRole('button',{name:'Refresh selected run',exact:true}).click();await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Verify job 0\nVerify job 0');expect(state.filters.every(v=>v.jobInstanceId===test22&&v.stepId==='0'&&v.stepIndex===undefined)).toBe(true);
  state.unrecorded=true;const prior=state.filters.length;await page.getByRole('button',{name:'Refresh selected run',exact:true}).click();await expect(notice).toContainText('No outcome was recorded for this step.');await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);expect(state.filters).toHaveLength(prior);
 });
 
@@ -244,7 +256,7 @@ test('v2 typed secret output retains withholding then exact redacted two-job sco
  const state=await fixture(page);state.twoJobs=true;state.startSecond=true;state.typed=true;state.publication='withheld';await page.goto(path+`?jobInstanceId=${test22}&stepId=0`);
  await expect(page.getByText('Output is withheld pending a verified execution result and current authorization.',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Download loaded log',exact:true})).toHaveCount(0);await expect(page.getByLabel('Workflow run log',{exact:true})).toHaveCount(0);
  await page.getByText('Execution receipt',{exact:true}).click();const receipt=page.getByRole('region',{name:'Run summary',exact:true});await expect(receipt).toContainText('golf.workflow.act.v0.2.89.linux.v2');await expect(receipt).toContainText('golf.workflow.dispatch.inputs.v1');await expect(receipt).toContainText('6'.repeat(64));await expect(receipt).toContainText('7'.repeat(64));await expect(receipt).toContainText('8'.repeat(64));
- state.publication='redacted';await page.getByRole('button',{name:'Refresh selected run',exact:true}).click();await expect(page.getByText('Configured secret values were masked before this log was published.',{exact:true})).toBeVisible();await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Verify job 0');expect(state.filters.every(v=>v.jobInstanceId===test22&&v.stepId==='0'&&v.stepIndex===undefined)).toBe(true);
+ state.publication='redacted';await page.getByRole('button',{name:'Refresh selected run',exact:true}).click();await expect(page.getByText('Configured secret values were masked before this log was published.',{exact:true})).toBeVisible();await expect.poll(()=>terminalText(page.getByLabel('Workflow run log',{exact:true}))).toBe('Verify job 0\nVerify job 0');expect(state.filters.every(v=>v.jobInstanceId===test22&&v.stepId==='0'&&v.stepIndex===undefined)).toBe(true);
 });
 for(const fault of ['schema','contract','binding','binding-version','origin'])test(`v2 secret ${fault} receipt is still refused before output`,async({page})=>{
  const state=await fixture(page);state.typed=true;state.publication='withheld';state.typedFault=fault;await page.goto(path);await expect(page.getByRole('alert')).toContainText('recorded job graph');await expect(page.getByLabel('Jobs and steps')).toHaveCount(0);expect(state.filters).toEqual([]);
