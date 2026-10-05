@@ -188,6 +188,7 @@ service RepositoryService {
   rpc ListIssues(ListIssuesRequest) returns (ListIssuesResponse);
   rpc GetPullRequestDiscussion(GetPullRequestDiscussionRequest) returns (GetPullRequestDiscussionResponse);
   rpc GetIssue(GetIssueRequest) returns (GetIssueResponse);
+  rpc ListRepositoryMilestones(ListRepositoryMilestonesRequest) returns (ListRepositoryMilestonesResponse);
   rpc ListIssueComments(ListIssueCommentsRequest) returns (ListIssueCommentsResponse);
   rpc CreateIssue(CreateIssueRequest) returns (CreateIssueResponse);
   rpc CreateIssueComment(CreateIssueCommentRequest) returns (CreateIssueCommentResponse);
@@ -728,6 +729,25 @@ message CreateIssueCommentResponse {
   IssueMutation mutation = 1;
   IssueComment comment = 2;
 }
+message ListRepositoryMilestonesRequest {
+  RepositoryKey repository = 1;
+  string repository_id = 2;
+  // Unspecified defaults to OPEN. ALL includes closed milestones.
+  IssueState state = 3;
+  PageRequest page = 4;
+}
+message ListRepositoryMilestonesResponse {
+  repeated DiscussionMilestone milestones = 1;
+  PageResponse page = 2;
+  // Initial editor admits only current native repository administrators.
+  // This is an observation, not a reservation or general issue-unit write grant.
+  bool can_edit_milestone = 3;
+}
+message IssueMilestoneChange {
+  // Canonical decimal IDs; 0 is explicitly observed None or requested clear.
+  string expected_milestone_id = 1;
+  string milestone_id = 2;
+}
 // Exactly one changed field per request. Explicit empty body clears the description.
 message UpdateIssueRequest {
   RepositoryKey repository = 1;
@@ -740,6 +760,7 @@ message UpdateIssueRequest {
   optional string body = 8;
   // Unspecified means unchanged; only OPEN/CLOSED are accepted when changing state.
   IssueState state = 9;
+  IssueMilestoneChange milestone = 10;
 }
 message UpdateIssueResponse {
   IssueMutation mutation = 1;

@@ -31,20 +31,21 @@ type issueMutationInput struct {
 	Title        string `json:"title"`
 	Body         string `json:"body"`
 	// Appended optional fields preserve all existing create/comment fingerprints.
-	EditTitle          *string `json:"edit_title,omitempty"`
-	EditBody           *string `json:"edit_body,omitempty"`
-	EditState          string  `json:"edit_state,omitempty"`
-	ExpectedRevision   string  `json:"expected_revision,omitempty"`
-	PullRequestID      int64   `json:"pull_request_id,omitempty"`
-	EditDraft          *bool   `json:"edit_draft,omitempty"`
-	SourceOwner        string  `json:"source_owner,omitempty"`
-	SourceRepository   string  `json:"source_repository,omitempty"`
-	SourceRepositoryID int64   `json:"source_repository_id,omitempty"`
-	BaseBranch         string  `json:"base_branch,omitempty"`
-	HeadBranch         string  `json:"head_branch,omitempty"`
-	BaseCommitID       string  `json:"base_commit_id,omitempty"`
-	HeadCommitID       string  `json:"head_commit_id,omitempty"`
-	CreateDraft        bool    `json:"create_draft,omitempty"`
+	EditTitle          *string               `json:"edit_title,omitempty"`
+	EditBody           *string               `json:"edit_body,omitempty"`
+	EditState          string                `json:"edit_state,omitempty"`
+	ExpectedRevision   string                `json:"expected_revision,omitempty"`
+	PullRequestID      int64                 `json:"pull_request_id,omitempty"`
+	EditDraft          *bool                 `json:"edit_draft,omitempty"`
+	SourceOwner        string                `json:"source_owner,omitempty"`
+	SourceRepository   string                `json:"source_repository,omitempty"`
+	SourceRepositoryID int64                 `json:"source_repository_id,omitempty"`
+	BaseBranch         string                `json:"base_branch,omitempty"`
+	HeadBranch         string                `json:"head_branch,omitempty"`
+	BaseCommitID       string                `json:"base_commit_id,omitempty"`
+	HeadCommitID       string                `json:"head_commit_id,omitempty"`
+	EditMilestone      *issueMilestoneChange `json:"edit_milestone,omitempty"`
+	CreateDraft        bool                  `json:"create_draft,omitempty"`
 }
 
 func (input issueMutationInput) validate(key string) error {
@@ -58,12 +59,15 @@ func (input issueMutationInput) validate(key string) error {
 		return invalid("Provide a positive repository ID and UTF-8 body up to 6000 bytes, without controls other than tab or newlines.")
 	}
 	if isPullMutationKind(input.Kind) {
+		if input.EditMilestone != nil {
+			return invalid("Milestone edits currently support ordinary issues only.")
+		}
 		return input.validatePull()
 	}
 	if input.PullRequestID != 0 || input.EditDraft != nil || input.SourceOwner != "" || input.SourceRepository != "" || input.SourceRepositoryID != 0 || input.BaseBranch != "" || input.HeadBranch != "" || input.BaseCommitID != "" || input.HeadCommitID != "" || input.CreateDraft {
 		return invalid("Pull fields require a pull request mutation.")
 	}
-	if input.Kind != "UPDATE_ISSUE" && (input.EditTitle != nil || input.EditBody != nil || input.EditState != "" || input.ExpectedRevision != "") {
+	if input.Kind != "UPDATE_ISSUE" && (input.EditTitle != nil || input.EditBody != nil || input.EditState != "" || input.EditMilestone != nil || input.ExpectedRevision != "") {
 		return invalid("Edit fields require an issue update.")
 	}
 	switch input.Kind {
@@ -261,6 +265,59 @@ func (s *Server) createIssueMutation(ctx context.Context, session string, token 
 		if preflightErr == nil && input.Kind == "UPDATE_ISSUE" {
 			if before == nil || issueRevision(*before) != input.ExpectedRevision {
 				preflightErr = errIssueRevisionChanged
+			} else if input.EditMilestone != nil {
+				current, err := issueMilestoneID(*before)
+				if err != nil {
+					preflightErr = err
+				} else if current != input.EditMilestone.ExpectedID {
+					preflightErr = errIssueMilestoneChanged
+				} else if current == input.EditMilestone.ID {
+					preflightErr = errIssueUnchanged
+				} else {
+					preflightErr = s.withRepositoryRead(ctx, session, token, repositoryKey{input.Owner, input.Repository}, func(base string, currentRepo Repository) error {
+						if currentRepo.ID != input.RepositoryID {
+							return errIssueTargetChanged
+						}
+						allowed, err := s.milestoneEditAuthority(ctx, token, base, currentRepo)
+						if err != nil {
+							return err
+						}
+						if !allowed {
+							return forgeError{status: 403}
+						}
+						if input.EditMilestone.ID != 0 {
+							if err := s.readRepositoryMilestone(ctx, token, base, input.EditMilestone.ID); err != nil {
+								return err
+							}
+						}
+						fresh, err := s.readDiscussionIssue(ctx, token, base, currentRepo, input.Number)
+						if err != nil {
+							return err
+						}
+						if fresh.ID != input.IssueID {
+							return errIssueTargetChanged
+						}
+						freshID, err := issueMilestoneID(fresh.Issue)
+						if err != nil {
+							return err
+						}
+						if freshID != input.EditMilestone.ExpectedID {
+							return errIssueMilestoneChanged
+						}
+						if issueRevision(fresh.Issue) != input.ExpectedRevision {
+							return errIssueRevisionChanged
+						}
+						*before = fresh.Issue
+						allowed, err = s.milestoneEditAuthority(ctx, token, base, currentRepo)
+						if err != nil {
+							return err
+						}
+						if !allowed {
+							return forgeError{status: 403}
+						}
+						return nil
+					})
+				}
 			} else if input.matchesUpdate(*before) {
 				preflightErr = errIssueUnchanged
 			}
@@ -276,6 +333,9 @@ func (s *Server) createIssueMutation(ctx context.Context, session string, token 
 				failure = "target_changed"
 			}
 			if errors.Is(preflightErr, errIssueRevisionChanged) {
+				failure = "revision_changed"
+			}
+			if errors.Is(preflightErr, errIssueMilestoneChanged) {
 				failure = "revision_changed"
 			}
 			if errors.Is(preflightErr, errIssueUnchanged) {

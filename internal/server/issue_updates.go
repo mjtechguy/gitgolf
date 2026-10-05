@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -15,6 +16,7 @@ import (
 )
 
 var errIssueRevisionChanged = errors.New("issue revision changed")
+var errIssueMilestoneChanged = errors.New("issue milestone changed")
 var errIssueUnchanged = errors.New("issue field unchanged")
 var issueRevisionPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
@@ -31,8 +33,37 @@ func issueRevision(issue Issue) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }
+
+type issueMilestoneChange struct {
+	ExpectedID int64 `json:"expected_id"`
+	ID         int64 `json:"id"`
+}
+
+func milestoneID(value string) (int64, error) {
+	id, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || id < 0 || strconv.FormatInt(id, 10) != value {
+		return 0, invalid("Milestone IDs must be canonical nonnegative decimal strings; 0 explicitly means None.")
+	}
+	return id, nil
+}
+func issueMilestoneID(issue Issue) (int64, error) {
+	metadata, err := discussionMetadata(issue.forgeDiscussionMetadata)
+	if err != nil {
+		return 0, err
+	}
+	if metadata == nil || !metadata.MilestoneKnown {
+		return 0, errInvalidForgeResponse
+	}
+	if metadata.Milestone == nil {
+		return 0, nil
+	}
+	return discussionID(metadata.Milestone.Id)
+}
 func (input issueMutationInput) validateUpdate() error {
 	fields := 0
+	if input.EditMilestone != nil {
+		fields++
+	}
 	if input.EditTitle != nil {
 		fields++
 	}
@@ -43,7 +74,10 @@ func (input issueMutationInput) validateUpdate() error {
 		fields++
 	}
 	if fields != 1 || input.PullRequest || input.IssueID <= 0 || input.Number == 0 || input.Number > 2147483647 || input.Title != "" || input.Body != "" || !issueRevisionPattern.MatchString(input.ExpectedRevision) {
-		return invalid("Issue updates require exact target IDs, the displayed revision and exactly one title, body or state field.")
+		return invalid("Issue updates require exact target IDs, the displayed revision and exactly one title, body, state or milestone field.")
+	}
+	if input.EditMilestone != nil && (input.EditMilestone.ExpectedID < 0 || input.EditMilestone.ID < 0) {
+		return invalid("Milestone IDs cannot be negative.")
 	}
 	if input.EditTitle != nil && (*input.EditTitle == "" || strings.TrimSpace(*input.EditTitle) != *input.EditTitle || !discussionText(*input.EditTitle, 255) || strings.IndexFunc(*input.EditTitle, unicode.IsControl) >= 0) {
 		return invalid("Issue title must be trimmed nonempty UTF-8, at most 255 bytes, without controls.")
@@ -57,10 +91,17 @@ func (input issueMutationInput) validateUpdate() error {
 	return nil
 }
 func (input issueMutationInput) matchesUpdate(issue Issue) bool {
+	if input.EditMilestone != nil {
+		id, err := issueMilestoneID(issue)
+		return err == nil && id == input.EditMilestone.ID
+	}
 	return (input.EditTitle == nil || issue.Title == *input.EditTitle) && (input.EditBody == nil || issue.Body == *input.EditBody) && (input.EditState == "" || issue.State == input.EditState)
 }
 func (input issueMutationInput) nativeUpdate(before Issue) map[string]any {
 	result := map[string]any{"content_version": *before.ContentVersion}
+	if input.EditMilestone != nil {
+		result["milestone"] = input.EditMilestone.ID
+	}
 	if input.EditTitle != nil {
 		result["title"] = *input.EditTitle
 	}
@@ -95,8 +136,20 @@ func (s *Server) UpdateIssue(ctx context.Context, req *connect.Request[golfv1.Up
 	default:
 		return nil, rpcError(invalid("Issue state must be open or closed."))
 	}
+	var milestone *issueMilestoneChange
+	if req.Msg.Milestone != nil {
+		expected, err := milestoneID(req.Msg.Milestone.ExpectedMilestoneId)
+		if err != nil {
+			return nil, rpcError(err)
+		}
+		selected, err := milestoneID(req.Msg.Milestone.MilestoneId)
+		if err != nil {
+			return nil, rpcError(err)
+		}
+		milestone = &issueMilestoneChange{ExpectedID: expected, ID: selected}
+	}
 	key := keyFrom(req.Msg.Repository)
-	result, err := s.createIssueMutation(ctx, s.cookieValue(req.Header()), token, req.Msg.IdempotencyKey, issueMutationInput{Kind: "UPDATE_ISSUE", Owner: key.Owner, Repository: key.Name, RepositoryID: repoID, IssueID: issueID, Number: req.Msg.Number, EditTitle: req.Msg.Title, EditBody: req.Msg.Body, EditState: state, ExpectedRevision: req.Msg.ExpectedRevision})
+	result, err := s.createIssueMutation(ctx, s.cookieValue(req.Header()), token, req.Msg.IdempotencyKey, issueMutationInput{Kind: "UPDATE_ISSUE", Owner: key.Owner, Repository: key.Name, RepositoryID: repoID, IssueID: issueID, Number: req.Msg.Number, EditTitle: req.Msg.Title, EditBody: req.Msg.Body, EditState: state, ExpectedRevision: req.Msg.ExpectedRevision, EditMilestone: milestone})
 	if err != nil {
 		return nil, rpcError(err)
 	}

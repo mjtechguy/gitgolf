@@ -23,6 +23,7 @@ import (
 )
 
 type discussionFixture struct {
+	nativeHook  func(http.ResponseWriter, *http.Request) bool
 	s           *Server
 	db          *sql.DB
 	mu          sync.Mutex
@@ -47,6 +48,9 @@ func newDiscussionFixture(t *testing.T) *discussionFixture {
 	f.issues[2] = f.issue(42, 2, "Other", "other issue")
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if f.nativeHook != nil && f.nativeHook(w, r) {
+			return
+		}
 		user := User{ID: 7, Login: "alice"}
 		if r.Header.Get("Authorization") == "token bob-issue-token" {
 			user = User{ID: 8, Login: "bob"}
