@@ -415,8 +415,15 @@ func (o *engineObserver) Fire(entry *logrus.Entry) error {
 	}
 	ids, _ := entry.Data["stepID"].([]string)
 	if entry.Data["raw_output"] == true {
-		o.logBytes += len(entry.Message) + 1
-		if o.logBytes > 256<<10 {
+		// Every pinned raw producer forwards NewLineWriter's bytes, including
+		// its existing LF. Preserve blank lines, CR progress and partial ANSI;
+		// do not synthesize a second line ending. Charge sanitized wire bytes.
+		text := strings.ReplaceAll(strings.ToValidUTF8(entry.Message, "�"), "\x00", "�")
+		if text == "" {
+			return nil
+		}
+		o.logBytes += len(text)
+		if len(text) > 32<<10 || o.logBytes > 256<<10 {
 			o.fail()
 			return nil
 		}
@@ -424,7 +431,7 @@ func (o *engineObserver) Fire(entry *logrus.Entry) error {
 		if len(ids) > 0 {
 			step = ids[0]
 		}
-		if err := o.emit(protocol.ActionFrame{Kind: "log", InstanceID: job.InstanceID, StepID: step, Text: strings.ReplaceAll(strings.ToValidUTF8(entry.Message, "�"), "\x00", "�") + "\n"}); err != nil {
+		if err := o.emit(protocol.ActionFrame{Kind: "log", InstanceID: job.InstanceID, StepID: step, Text: text}); err != nil {
 			o.fail()
 		}
 		return nil

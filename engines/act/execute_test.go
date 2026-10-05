@@ -233,6 +233,79 @@ func TestRawSourceJSONAndLogPrefixesCannotForgeEngineObservations(t *testing.T) 
 		}
 	}
 }
+
+// Exercise the actual pinned writer -> raw logrus -> observer path: the writer
+// retains each LF before calling the raw logger, whose hook precedes formatting.
+func TestNativeRawLineWriterPreservesExistingLineEndings(t *testing.T) {
+	var frames []protocol.ActionFrame
+	o := testObserver(t, func(frame protocol.ActionFrame) error { frames = append(frames, frame); return nil })
+	logger := o.WithJobLogger().WithFields(nativeEntry("", logrus.Fields{"raw_output": true}).Data)
+	writer := common.NewLineWriter(func(s string) bool { logger.Infof("%s", s); return true })
+	chunks := []string{"first\n", "\n", "intentional\n\n", "\x1b[3", "2mPASS\x1b[0m\rprogress 100%\n"}
+	for _, chunk := range chunks {
+		if n, err := writer.Write([]byte(chunk)); err != nil || n != len(chunk) {
+			t.Fatal("native writer refused chunk", err)
+		}
+	}
+	var joined strings.Builder
+	for _, frame := range frames {
+		if frame.Kind != "log" || frame.InstanceID != strings.Repeat("a", 32) || frame.StepID != "first" {
+			t.Fatal("raw log scope changed")
+		}
+		joined.WriteString(frame.Text)
+	}
+	expected := strings.Join(chunks, "")
+	if o.err != nil || joined.String() != expected || o.logBytes != len(expected) || len(frames) != 5 {
+		t.Fatalf("native raw bytes changed: %q (bytes %d, frames %d)", joined.String(), o.logBytes, len(frames))
+	}
+}
+
+func TestRawLogChunksPreservePartialANSIProgressAndNoLF(t *testing.T) {
+	var frames []protocol.ActionFrame
+	o := testObserver(t, func(frame protocol.ActionFrame) error { frames = append(frames, frame); return nil })
+	chunks := []string{"single\n", "\n\n", "\x1b[3", "2mcolored\x1b[0m", "\rprogress 50%", "\r\x1b[2Kprogress 100%", "tail without LF", "", "valid ☃\x00invalid\xff"}
+	for _, chunk := range chunks {
+		o.Fire(nativeEntry(chunk, logrus.Fields{"raw_output": true}))
+	}
+	var joined strings.Builder
+	for _, frame := range frames {
+		joined.WriteString(frame.Text)
+	}
+	expected := strings.ReplaceAll(strings.ToValidUTF8(strings.Join(chunks, ""), "�"), "\x00", "�")
+	if o.err != nil || joined.String() != expected || o.logBytes != len(expected) || len(frames) != len(chunks)-1 {
+		t.Fatalf("raw chunk changed: %q (bytes %d, frames %d)", joined.String(), o.logBytes, len(frames))
+	}
+}
+
+func TestRawLogBoundsChargeSanitizedBytesWithoutInventedLF(t *testing.T) {
+	t.Run("exact total", func(t *testing.T) {
+		count := 0
+		o := testObserver(t, func(protocol.ActionFrame) error { count++; return nil })
+		for i := 0; i < 8; i++ {
+			o.Fire(nativeEntry(strings.Repeat("x", 32<<10), logrus.Fields{"raw_output": true}))
+		}
+		if o.err != nil || count != 8 || o.logBytes != 256<<10 {
+			t.Fatal("exact byte budget refused")
+		}
+		o.Fire(nativeEntry("", logrus.Fields{"raw_output": true}))
+		if o.err != nil || count != 8 {
+			t.Fatal("empty input fabricated output")
+		}
+		o.Fire(nativeEntry("x", logrus.Fields{"raw_output": true}))
+		if o.err == nil || count != 8 {
+			t.Fatal("over-budget byte emitted")
+		}
+	})
+	t.Run("sanitizer expansion", func(t *testing.T) {
+		count := 0
+		o := testObserver(t, func(protocol.ActionFrame) error { count++; return nil })
+		o.Fire(nativeEntry(strings.Repeat("\x00", 32<<10), logrus.Fields{"raw_output": true}))
+		if o.err == nil || count != 0 {
+			t.Fatal("expanded wire chunk escaped byte bound")
+		}
+	})
+}
+
 func TestObservationAckRefusalStopsEngineWithoutInventedCompletion(t *testing.T) {
 	o := testObserver(t, func(protocol.ActionFrame) error { return errors.New("durable receiver denied") })
 	o.Fire(nativeEntry("⭐ Run Main first", logrus.Fields{}))
