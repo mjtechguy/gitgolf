@@ -1,6 +1,6 @@
 import {expect,test,type Page} from '@playwright/test';
 import {create,clone,toJson} from '@bufbuild/protobuf';
-import {GetSessionResponseSchema,GetAuthenticationOptionsResponseSchema,ListCapabilitiesResponseSchema,ListRepositoriesResponseSchema,GetRepositoryResponseSchema,GetPullRequestResponseSchema,ListPullRequestReviewsResponseSchema,ListReviewerRunsResponseSchema,GetPullRequestDiscussionResponseSchema,ListIssueCommentsResponseSchema,GetPullRequestMergeObservationRequestSchema,GetPullRequestMergeObservationResponseSchema,PullRequestSchema,PullRequestMergeObservationSchema,RepositorySchema,UserSchema,IssueState,PullMergeTargetProtection,PullMergeSourceState,RepositorySourceRefKind,WatchRepositoryResponseSchema,type PullRequestMergeObservation} from '../src/gen/golf/v1/golf_pb';
+import {GetSessionResponseSchema,GetAuthenticationOptionsResponseSchema,ListCapabilitiesResponseSchema,ListRepositoriesResponseSchema,GetRepositoryResponseSchema,GetPullRequestResponseSchema,ListPullRequestReviewsResponseSchema,ListReviewerRunsResponseSchema,GetPullRequestDiscussionResponseSchema,ListIssueCommentsResponseSchema,GetPullRequestMergeObservationRequestSchema,GetPullRequestMergeObservationResponseSchema,PullRequestSchema,PullRequestMergeObservationSchema,ProtectedReviewObservationSchema,RepositorySchema,UserSchema,IssueState,PullMergeTargetProtection,PullMergeSourceState,RepositorySourceRefKind,WatchRepositoryResponseSchema,type PullRequestMergeObservation} from '../src/gen/golf/v1/golf_pb';
 import {respond,request,reject,disabledAgentTasks} from './rpc';
 
 const key={owner:'alex',name:'private'},H='a'.repeat(40),B='b'.repeat(40),R='e'.repeat(64);
@@ -139,4 +139,16 @@ test('fork merge availability needs separately observed source owner identity',a
 for(const fault of ['invalid-owner','retained-owner'] as const)test(`invalid fork observation ${fault} never enables merge`,async({page})=>{
  const state=await backend(page);state.change=v=>{v.nativeCallerCanMerge=true;v.currentTargetWriter=true;v.sourceOwnerId='0';if(fault==='retained-owner'){v.sourceState=PullMergeSourceState.UNAVAILABLE;v.source=undefined;v.sourceRepository=undefined;v.sourceRepositoryId='';v.sourceOwnerId='7';}};
  await open(page);await inspect(page);await expect(panel(page).getByRole('alert')).toContainText('does not match');await expect(page.getByRole('button',{name:'Merge pull request',exact:true})).toHaveCount(0);expect(state.methods).not.toContain('SubmitStandardPullMerge');
+});
+
+
+test('protected exact-head exclusions remain diagnostic and never enable publication087',async({page})=>{
+ const state=await backend(page);state.change=v=>{v.targetProtection=PullMergeTargetProtection.PROTECTED;v.nativeCallerCanMerge=true;v.currentTargetWriter=true;v.sourceOwnerId='7';v.protectedReviews=create(ProtectedReviewObservationSchema,{selectedHeadCommitId:H,exactHeadOfficialApprovals:1,observedReviews:2,exclusions:[{reviewId:'99',reviewerId:'53',reviewedCommitId:B,reason:'stale_head'}]});};
+ await open(page);await inspect(page);await panel(page).getByText('Native merge observations',{exact:true}).click();
+ await expect(panel(page)).toContainText('Exact-head official approvals observed');await expect(panel(page)).toContainText('including 1 on another head');await expect(panel(page)).toContainText('do not prove current reviewer eligibility');
+ await expect(page.getByRole('button',{name:'Merge pull request',exact:true})).toHaveCount(0);expect(state.methods).not.toContain('SubmitStandardPullMerge');
+});
+for(const fault of ['head','count','reason','duplicate'] as const)test(`protected review ${fault} receipt rejected087`,async({page})=>{
+ const state=await backend(page);state.change=v=>{v.targetProtection=PullMergeTargetProtection.PROTECTED;v.protectedReviews=create(ProtectedReviewObservationSchema,{selectedHeadCommitId:H,observedReviews:1,exclusions:[{reviewId:'99',reviewedCommitId:B,reason:'stale_head'}]});const reviews=v.protectedReviews;if(fault==='head')reviews.selectedHeadCommitId=B;if(fault==='count')reviews.observedReviews=2;if(fault==='reason')reviews.exclusions[0]!.reason='eligible';if(fault==='duplicate'){reviews.exclusions.push(reviews.exclusions[0]!);reviews.observedReviews=2;}};
+ await open(page);await inspect(page);await expect(panel(page).getByRole('alert')).toContainText('does not match');await expect(page.getByRole('button',{name:'Merge pull request',exact:true})).toHaveCount(0);
 });

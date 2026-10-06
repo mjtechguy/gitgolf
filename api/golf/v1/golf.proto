@@ -3956,6 +3956,8 @@ message PullRequestMergeObservation {
   string fingerprint = 14;
   string unavailable_reason = 15;
   optional string source_owner_id = 16;
+  // Native review observations only; does not establish reviewer eligibility or a merge permit.
+  ProtectedReviewObservation protected_reviews = 17;
 }
 message GetPullRequestMergeObservationResponse { PullRequestMergeObservation observation = 1; }
 
@@ -5014,4 +5016,22 @@ service MirrorObservationService { rpc GetMirrorSyncObservation(GetMirrorSyncObs
 message GetMirrorSyncObservationRequest { RepositoryKey repository=1; string repository_id=2; string owner_id=3; string operation_id=4; }
 message GetMirrorSyncObservationResponse {
  string contract=1; RepositoryMirrorOperation operation=2; string source_url=3; string default_branch=4; string baseline_native_updated_at=5; string native_updated_at=6; string source_head_commit_id=7; string native_head_commit_id=8; bool completion_observed=9; string reason=10;
+}
+
+// Exact-head observations ignore asynchronous stale flags as a freshness substitute.
+message ProtectedReviewObservation {
+  string selected_head_commit_id = 1;
+  uint32 exact_head_official_approvals = 2;
+  uint32 exact_head_official_change_requests = 3;
+  repeated ProtectedReviewExclusion exclusions = 4;
+  // Empty only when every bounded native page and required metadata was read.
+  string unavailable_reason = 5;
+  uint32 observed_reviews = 6;
+}
+message ProtectedReviewExclusion {
+  string review_id = 1;
+  string reviewer_id = 2;
+  string reviewed_commit_id = 3;
+  // stale_head, dismissed, stale, unofficial, author, non_decision, superseded.
+  string reason = 4;
 }

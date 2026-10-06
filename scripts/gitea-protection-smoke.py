@@ -93,7 +93,7 @@ def check(label):
     print('PASS: ' + label, flush=True)
 
 
-def qualify():
+def qualify(protected_receive_check=None, review_observation_check=None):
     assert api(None, 'GET', 'version')['version'] == '1.27.3'
     with urllib.request.build_opener(NoRedirect()).open(GITEA + '/swagger.v1.json', timeout=15) as response:
         raw = response.read(MAX_RESPONSE + 1)
@@ -208,6 +208,8 @@ def qualify():
             api(developer['token'], 'DELETE', protection, expected=403)
             assert current() == base
             check('owner/developer direct Git and content API writes denied; developer cannot weaken protection')
+            if protected_receive_check:
+                protected_receive_check((developer, owner), repository, work, first, base)
             request = pull('feature')
             number = request['number']
             ready(number, first)
@@ -221,6 +223,8 @@ def qualify():
             git('push', '--quiet', remote, 'HEAD:refs/heads/feature')
             ready(number, second)
             status(second)
+            if review_observation_check:
+                review_observation_check(developer, repository, number, second, first)
             deadline = time.monotonic() + 30
             while True:
                 reviews = api(reviewer['token'], 'GET', route + f'/pulls/{number}/reviews?limit=50')

@@ -108,6 +108,12 @@ func (s *Server) mergeObservationSnapshot(ctx context.Context, session string, t
 	} else if !mergeReadUnavailable(e) {
 		return nil, e
 	}
+	if result.TargetProtection == golfv1.PullMergeTargetProtection_PULL_MERGE_TARGET_PROTECTION_PROTECTED {
+		result.ProtectedReviews, e = s.protectedReviewObservation(ctx, token, base, pull, selected.HeadCommitId)
+		if e != nil {
+			return nil, e
+		}
+	}
 	if strings.HasPrefix(pull.Head.Ref, "refs/pull/") || pull.Head.RepositoryID <= 0 {
 		result.SourceState = golfv1.PullMergeSourceState_PULL_MERGE_SOURCE_STATE_RETAINED_ONLY
 		return result, nil
@@ -233,7 +239,7 @@ func (s *Server) GetPullRequestMergeObservation(ctx context.Context, req *connec
 		first.Fingerprint = accessRevision(first)
 		first.ObservedAt = time.Now().UTC().Format(time.RFC3339Nano)
 		encoded, err := protojson.Marshal(first)
-		if err != nil || len(encoded) > 16<<10 {
+		if err != nil || len(encoded) > 64<<10 {
 			return errForgeResponseTooLarge
 		}
 		result = first

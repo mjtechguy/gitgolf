@@ -116,6 +116,15 @@ func newPullMergeFixture(t *testing.T) *pullMergeFixture {
 			return
 		}
 		mode := f.mode.Load().(string)
+		if r.URL.Path == "/api/v1/settings/api" {
+			json.NewEncoder(w).Encode(map[string]int{"max_response_items": 100})
+			return
+		}
+		if r.URL.Path == "/api/v1/repos/alice/private/pulls/7/reviews" {
+			w.Header().Set("X-Total-Count", "0")
+			json.NewEncoder(w).Encode([]any{})
+			return
+		}
 		if r.URL.Path == "/api/v1/user" {
 			json.NewEncoder(w).Encode(map[string]any{"id": 42, "login": "alice", "is_admin": false})
 			return
