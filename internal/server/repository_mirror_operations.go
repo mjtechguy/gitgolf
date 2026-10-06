@@ -292,7 +292,8 @@ func (s *Server) SubmitRepositoryMirrorOperation(ctx context.Context, req *conne
 					return nil
 				}
 				if m.Kind == 1 {
-					before.Interval = m.Interval
+					duration, _ := time.ParseDuration(m.Interval)
+					before.Interval = duration.String()
 				}
 				if mirrorRevision(after) != mirrorRevision(before) {
 					return nil

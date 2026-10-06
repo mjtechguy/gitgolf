@@ -53,7 +53,7 @@ func TestNative078Actual(t *testing.T) {
 	if raw == "" {
 		t.Skip("owned native078 fixture required")
 	}
-	var f struct{ Native, Token, Owner, Repository, RepositoryID, OwnerID string }
+	var f struct{ Native, Token, Owner, Repository, RepositoryID, OwnerID, Organization, OrganizationID, Mirror, MirrorID string }
 	if json.Unmarshal([]byte(raw), &f) != nil {
 		t.Fatal("fixture invalid")
 	}
@@ -129,6 +129,71 @@ func TestNative078Actual(t *testing.T) {
 	files, e := packages.GetRepositoryPackageFiles(t.Context(), connect.NewRequest(&golfv1.GetRepositoryPackageFilesRequest{Repository: key, RepositoryId: f.RepositoryID, Package: p}))
 	if e != nil || len(files.Msg.Files) != 1 || files.Msg.Files[0].Name != "hello.txt" || files.Msg.Files[0].SizeBytes != "15" {
 		t.Fatal("native package files differ", e)
+	}
+
+	labels := golfv1connect.NewOrganizationLabelServiceClient(transport, origin.String()+"/rpc", opts)
+	labelID, revision := "", ""
+	for _, kind := range []golfv1.OrganizationLabelOperationKind{1, 2, 3} {
+		m := &golfv1.SubmitOrganizationLabelOperationRequest{Organization: f.Organization, OrganizationId: f.OrganizationID, OperationId: randomUUID(), Kind: kind, LabelId: labelID, ExpectedRevision: revision}
+		if kind != 3 {
+			m.Name = "Qualified inherited label"
+			m.Color = "abcdef"
+			m.Description = "Actual native org label"
+			m.Exclusive = kind == 2
+			m.Archived = kind == 2
+		}
+		r, e := labels.SubmitOrganizationLabelOperation(t.Context(), connect.NewRequest(m))
+		if e != nil || r.Msg.Operation.Phase != golfv1.RepositoryReleasePublicationPhase_REPOSITORY_RELEASE_PUBLICATION_PHASE_SUCCEEDED {
+			t.Fatal("org label mutation failed", kind, e)
+		}
+		again, e := labels.SubmitOrganizationLabelOperation(t.Context(), connect.NewRequest(m))
+		if e != nil || !proto.Equal(again.Msg.Operation, r.Msg.Operation) {
+			t.Fatal("org label original replay changed")
+		}
+		inspected, e := labels.GetOrganizationLabelOperation(t.Context(), connect.NewRequest(&golfv1.GetOrganizationLabelOperationRequest{Organization: f.Organization, OrganizationId: f.OrganizationID, OperationId: m.OperationId}))
+		if e != nil || !proto.Equal(inspected.Msg.Operation, r.Msg.Operation) {
+			t.Fatal("org label original inspection changed")
+		}
+		inventory, e := labels.ListOrganizationLabels(t.Context(), connect.NewRequest(&golfv1.ListOrganizationLabelsRequest{Organization: f.Organization}))
+		if e != nil || !inventory.Msg.CanManage {
+			t.Fatal("org label inventory failed", e)
+		}
+		if kind != 3 {
+			if len(inventory.Msg.Labels) != 1 {
+				t.Fatal("org label inventory differs")
+			}
+			labelID = inventory.Msg.Labels[0].Label.Id
+			revision = inventory.Msg.Labels[0].Revision
+		} else if len(inventory.Msg.Labels) != 0 {
+			t.Fatal("deleted org label retained")
+		}
+	}
+	mirror := golfv1connect.NewRepositoryMirrorServiceClient(transport, origin.String()+"/rpc", opts)
+	mirrorKey := &golfv1.RepositoryKey{Owner: f.Owner, Name: f.Mirror}
+	for _, kind := range []golfv1.RepositoryMirrorOperationKind{1, 2} {
+		status, e := mirror.GetRepositoryMirrorStatus(t.Context(), connect.NewRequest(&golfv1.GetRepositoryMirrorStatusRequest{Repository: mirrorKey, RepositoryId: f.MirrorID}))
+		if e != nil || !status.Msg.PullMirror || status.Msg.OwnerId != f.OwnerID || !validAccessRevision(status.Msg.ConfigurationRevision) {
+			t.Fatal("mirror current context failed", e)
+		}
+		m := &golfv1.SubmitRepositoryMirrorOperationRequest{Repository: mirrorKey, RepositoryId: f.MirrorID, OwnerId: f.OwnerID, OperationId: randomUUID(), Kind: kind, ExpectedConfigurationRevision: status.Msg.ConfigurationRevision}
+		if kind == 1 {
+			m.Interval = "2h"
+		}
+		r, e := mirror.SubmitRepositoryMirrorOperation(t.Context(), connect.NewRequest(m))
+		if e != nil || r.Msg.Operation.Phase != golfv1.RepositoryReleasePublicationPhase_REPOSITORY_RELEASE_PUBLICATION_PHASE_SUCCEEDED {
+			t.Fatal("mirror mutation failed", kind, e)
+		}
+		if r.Msg.Operation.SynchronizationRequestAccepted != (kind == 2) {
+			t.Fatal("sync acceptance confused with completion")
+		}
+		again, e := mirror.SubmitRepositoryMirrorOperation(t.Context(), connect.NewRequest(m))
+		if e != nil || !proto.Equal(again.Msg.Operation, r.Msg.Operation) {
+			t.Fatal("mirror replay changed")
+		}
+		inspected, e := mirror.GetRepositoryMirrorOperation(t.Context(), connect.NewRequest(&golfv1.GetRepositoryMirrorOperationRequest{Repository: mirrorKey, RepositoryId: f.MirrorID, OwnerId: f.OwnerID, OperationId: m.OperationId}))
+		if e != nil || !proto.Equal(inspected.Msg.Operation, r.Msg.Operation) {
+			t.Fatal("mirror inspection changed")
+		}
 	}
 	_ = http.StatusOK
 }
