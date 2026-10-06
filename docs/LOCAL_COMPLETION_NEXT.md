@@ -2,13 +2,17 @@
 
 Local Compose consumers come first. This ordering follows the [complete Settings requirements](REPOSITORY_SETTINGS_IMPLEMENTATION.md); it does not narrow them or turn intermediate slices Ready. [Implementation status](IMPLEMENTATION_STATUS.md) remains the deployment ledger. Kubernetes and optional Cloudflare adapters have separate qualification gates.
 
-## Last recorded deployed baseline for this source pass
+## Latest local pass
+
+The077–082 batch is integrated and deployed on clean frozen `2cc1d85` at schema082. [Matching source/native/deployment/running/served evidence](IMPLEMENTATION_STATUS.md#portable-priorities077082-deployed-bounded-consumers-2026-10-05) records passing checks, preserved retained authentication/resources and live MFA/recovery/PAT revocation after a backend restart. The bounded scopes below remain explicit; protected/full-CI/interactive-agent/CD/recovery/Cloudflare gates remain open.
+
+## Previous076 baseline
 
 The previous four-stream pass is integrated and deployed at schema076 on clean frozen `fffb28a`. Current source/native,190 browser, PostgreSQL/race, deployment/authentication and independent running receipts are in the [076 ledger](IMPLEMENTATION_STATUS.md#portable-completion076-four-parallel-streams-2026-10-05). Ordinary file writers, individual reviewer requests, reactions/subscriptions/activity, own issue/PR notifications/mark-read, Markdown templates, inherited label selection, release/asset writes, public provider imports/pull mirrors, wiki reads and scoped CLI/MCP collaboration now have bounded consumers. The older071 statements below retain historical scopes rather than overriding076.
 
 ## Integrated source after076
 
-The deployed076 paragraph above is the baseline for this pass, not a claim that newer source runs on localhost. Later source/native/browser checks advance the following consumers; matching frozen rollout and actual served proof must be recorded separately in the implementation ledger.
+The previous076 paragraph is historical. The current082 ledger records the matching frozen rollout separately from source/native/browser checks for these consumers.
 
 | Packet | New consumer | Explicit boundary |
 | --- | --- | --- |
