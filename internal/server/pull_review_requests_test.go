@@ -19,10 +19,11 @@ import (
 
 type reviewRequestFixture struct {
 	*releasePublicationFixture
-	mu          sync.Mutex
-	requested   bool
-	requests    atomic.Int32
-	requestMode atomic.Value
+	mu            sync.Mutex
+	requested     bool
+	teamRequested bool
+	requests      atomic.Int32
+	requestMode   atomic.Value
 }
 
 func newReviewRequestFixture(t *testing.T) *reviewRequestFixture {
@@ -34,6 +35,14 @@ func newReviewRequestFixture(t *testing.T) *reviewRequestFixture {
 		base := "/api/v1/repos/alice/private"
 		mode := f.requestMode.Load().(string)
 		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/v1/teams/100" {
+			json.NewEncoder(w).Encode(reviewFixtureTeam())
+			return
+		}
+		if r.URL.Path == base+"/teams" {
+			json.NewEncoder(w).Encode([]forgeOrganizationTeam{reviewFixtureTeam()})
+			return
+		}
 		if r.URL.Path == "/api/v1/users/bob" {
 			json.NewEncoder(w).Encode(User{ID: 43, Login: "bob"})
 			return
@@ -46,12 +55,18 @@ func newReviewRequestFixture(t *testing.T) *reviewRequestFixture {
 			json.Unmarshal(b, &raw)
 			f.mu.Lock()
 			present := f.requested
+			teamPresent := f.teamRequested
 			f.mu.Unlock()
 			users := []User{}
 			if present {
 				users = append(users, User{ID: 43, Login: "bob"})
 			}
 			raw["requested_reviewers"] = users
+			teams := []forgeOrganizationTeam{}
+			if teamPresent {
+				teams = append(teams, reviewFixtureTeam())
+			}
+			raw["requested_reviewers_teams"] = teams
 			if mode == "unknown-inventory" {
 				delete(raw, "requested_reviewers")
 			}
@@ -65,11 +80,20 @@ func newReviewRequestFixture(t *testing.T) *reviewRequestFixture {
 			f.requests.Add(1)
 			var input map[string][]string
 			json.NewDecoder(r.Body).Decode(&input)
-			if len(input["reviewers"]) != 1 || input["reviewers"][0] != "bob" {
+			if len(input["team_reviewers"]) == 1 {
+				if input["team_reviewers"][0] != "reviewers" {
+					t.Error("wrong native team")
+				}
+				f.mu.Lock()
+				f.teamRequested = r.Method == "POST"
+				f.mu.Unlock()
+			} else if len(input["reviewers"]) != 1 || input["reviewers"][0] != "bob" {
 				t.Error("wrong native reviewer")
 			}
 			f.mu.Lock()
-			f.requested = r.Method == "POST"
+			if len(input["reviewers"]) > 0 {
+				f.requested = r.Method == "POST"
+			}
 			f.mu.Unlock()
 			if mode == "lost" {
 				w.WriteHeader(500)
@@ -195,5 +219,38 @@ func TestReviewRequestValidation(t *testing.T) {
 		if validateReviewRequest(bad) == nil {
 			t.Fatal("invalid target admitted")
 		}
+	}
+}
+
+func reviewFixtureTeam() forgeOrganizationTeam {
+	return forgeOrganizationTeam{ID: 100, Name: "reviewers", Permission: "read", Visibility: "public", Organization: &forgeOrganization{ID: 50, Name: "alice", Visibility: "public"}, UnitPermissions: map[string]string{"repo.pulls": "read"}}
+}
+func TestReviewRequestTeamOriginalPostgres(t *testing.T) {
+	f := newReviewRequestFixture(t)
+	session := f.session(t, "pat")
+	m := f.requestInput(t, session, true)
+	m.ReviewerTeam = true
+	m.ReviewerId = "100"
+	m.ReviewerLogin = "reviewers"
+	r, e := f.submitRequest(t, session, m)
+	if e != nil || r.Phase != golfv1.DiscussionResourceOperationPhase_DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED {
+		t.Fatal("team request", e, r)
+	}
+	replay, e := f.submitRequest(t, session, m)
+	if e != nil || !proto.Equal(r, replay) || f.requests.Load() != 1 {
+		t.Fatal("team replay", e)
+	}
+	remove := f.requestInput(t, session, false)
+	remove.ReviewerTeam = true
+	remove.ReviewerId = "100"
+	remove.ReviewerLogin = "reviewers"
+	r, e = f.submitRequest(t, session, remove)
+	if e != nil || r.Phase != golfv1.DiscussionResourceOperationPhase_DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED || f.requests.Load() != 2 {
+		t.Fatal("team removal", e, r)
+	}
+	changed := proto.Clone(m).(*golfv1.SubmitPullReviewRequestRequest)
+	changed.ReviewerTeam = false
+	if _, e = f.submitRequest(t, session, changed); e == nil {
+		t.Fatal("same key changed identity kind")
 	}
 }

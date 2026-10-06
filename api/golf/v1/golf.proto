@@ -4606,7 +4606,12 @@ message GetRepositoryFileMutationAccessResponse {
 }
 
 service PullReviewRequestService {
+ rpc GetPullCodeOwners(GetPullCodeOwnersRequest) returns (GetPullCodeOwnersResponse);
+ rpc GetPullReviewCommentState(GetPullReviewCommentStateRequest) returns (GetPullReviewCommentStateResponse);
+ rpc SubmitPullReviewCommentInteraction(SubmitPullReviewCommentInteractionRequest) returns (SubmitPullReviewCommentInteractionResponse);
+ rpc GetPullReviewCommentOperation(GetPullReviewCommentOperationRequest) returns (GetPullReviewCommentOperationResponse);
  rpc GetPullReviewRequests(GetPullReviewRequestsRequest) returns (GetPullReviewRequestsResponse);
+ rpc GetPullReviewTeamCandidates(GetPullReviewTeamCandidatesRequest) returns (GetPullReviewTeamCandidatesResponse);
  rpc SubmitPullReviewRequest(SubmitPullReviewRequestRequest) returns (SubmitPullReviewRequestResponse);
  rpc GetPullReviewRequestOperation(GetPullReviewRequestOperationRequest) returns (GetPullReviewRequestOperationResponse);
 }
@@ -4624,6 +4629,7 @@ message GetPullReviewRequestsResponse {
  string requests_revision = 5;
  repeated User reviewers = 6;
  bool can_manage = 7;
+ repeated OrganizationTeam teams = 8;
 }
 message SubmitPullReviewRequestRequest {
  RepositoryKey repository = 1;
@@ -4636,7 +4642,13 @@ message SubmitPullReviewRequestRequest {
  string reviewer_login = 8;
  bool request_review = 9;
  string operation_id = 10;
+ // True binds reviewer_id/name to an exact organization team instead of a user.
+ bool reviewer_team = 11;
 }
+message GetPullReviewTeamCandidatesRequest {
+ RepositoryKey repository = 1; string repository_id = 2; string pull_request_id = 3; uint32 number = 4;
+}
+message GetPullReviewTeamCandidatesResponse { repeated OrganizationTeam teams = 1; }
 message PullReviewRequestOperation {
  string contract = 1;
  SubmitPullReviewRequestRequest original = 2;
@@ -4820,3 +4832,36 @@ message BeginOwnMFARequest { string expected_version = 1; string password_confir
 message BeginOwnMFAResponse { OwnMFA mfa = 1; string secret = 2; string provisioning_uri = 3; }
 message ChangeOwnMFARequest { string expected_version = 1; string password_confirmation = 2; string code = 3; }
 message ChangeOwnMFAResponse { OwnMFA mfa = 1; repeated string recovery_codes = 2; bool requires_login = 3; uint64 sessions_revoked = 4; string operation_id = 5; }
+message GetPullReviewCommentStateRequest {
+ RepositoryKey repository = 1; string repository_id = 2; string pull_request_id = 3; uint32 number = 4;
+ string review_id = 5; string review_commit_id = 6; string comment_id = 7;
+}
+message GetPullReviewCommentStateResponse {
+ string repository_id = 1; string pull_request_id = 2; uint32 number = 3;
+ string pull_revision = 4; string comment_revision = 5; PullRequestReviewComment comment = 6; bool can_manage = 7; bool can_reply = 8;
+}
+message SubmitPullReviewCommentInteractionRequest {
+ RepositoryKey repository = 1; string repository_id = 2; string pull_request_id = 3; uint32 number = 4;
+ string review_id = 5; string review_commit_id = 6; string comment_id = 7;
+ string expected_pull_revision = 8; string expected_comment_revision = 9; bool resolve = 10; string operation_id = 11;
+ // Reply body is volatile; retained originals omit it and bind its SHA256.
+ string reply_body = 12; string reply_body_hash = 13;
+}
+message PullReviewCommentOperation {
+ string contract = 1; SubmitPullReviewCommentInteractionRequest original = 2; string actor_id = 3;
+ DiscussionResourceOperationPhase phase = 4; string failure_code = 5; string created_at = 6; string updated_at = 7;
+ string reply_id = 8;
+}
+message SubmitPullReviewCommentInteractionResponse { PullReviewCommentOperation operation = 1; }
+message GetPullReviewCommentOperationRequest {
+ RepositoryKey repository = 1; string repository_id = 2; string pull_request_id = 3; uint32 number = 4;
+ string operation_id = 5;
+}
+message GetPullReviewCommentOperationResponse { PullReviewCommentOperation operation = 1; }
+
+message GetPullCodeOwnersRequest { PullRequestSelection selection = 1; string expected_pull_revision = 2; }
+message PullCodeOwnerMatch { string path = 1; repeated string owners = 2; }
+message GetPullCodeOwnersResponse {
+ PullRequestSelection selection = 1; string pull_revision = 2; string path = 3; string blob_id = 4;
+ repeated PullCodeOwnerMatch matches = 5; string source = 6; bool routing_complete = 7; uint32 unsupported_rules = 8;
+}

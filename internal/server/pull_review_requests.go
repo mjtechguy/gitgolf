@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -54,8 +55,8 @@ func reviewRequestFingerprint(m *golfv1.SubmitPullReviewRequestRequest) []byte {
 	return h[:]
 }
 
-// Only individually requested users are changed. Teams, routing/CODEOWNERS and
-// approval eligibility are separate contracts; no native pending review is read.
+// Exact individual users or organization teams are changed. Review requests
+// are collaboration state, not eligible approval or protected merge authority.
 func (s *Server) reviewRequestSnapshot(ctx context.Context, session string, token forgeCredential, key repositoryKey, repoID, pullID string, number uint32) (*golfv1.GetPullReviewRequestsResponse, error) {
 	var result *golfv1.GetPullReviewRequestsResponse
 	e := s.withRepositoryRead(ctx, session, token, key, func(base string, repo Repository) error {
@@ -65,6 +66,7 @@ func (s *Server) reviewRequestSnapshot(ctx context.Context, session string, toke
 		var row struct {
 			forgePull
 			Requested json.RawMessage `json:"requested_reviewers"`
+			Teams     json.RawMessage `json:"requested_reviewers_teams"`
 		}
 		if _, e := s.forge(ctx, http.MethodGet, base+"/pulls/"+strconv.FormatUint(uint64(number), 10), token, nil, &row); e != nil {
 			return e
@@ -88,6 +90,21 @@ func (s *Server) reviewRequestSnapshot(ctx context.Context, session string, toke
 			seen[u.ID] = true
 			seenLogin[u.Login] = true
 		}
+		var teams []forgeOrganizationTeam
+		if len(row.Teams) > 0 && string(row.Teams) != "null" && json.Unmarshal(row.Teams, &teams) != nil {
+			return errInvalidForgeResponse
+		}
+		if len(teams) > 200 {
+			return errForgeResponseTooLarge
+		}
+		teamIDs := map[int64]bool{}
+		for _, team := range teams {
+			if !validOrganizationTeam(team) || !validOrganizationName(team.Name) || teamIDs[team.ID] {
+				return errInvalidForgeResponse
+			}
+			teamIDs[team.ID] = true
+		}
+		sort.Slice(teams, func(i, j int) bool { return teams[i].ID < teams[j].ID })
 		sort.Slice(users, func(i, j int) bool { return users[i].ID < users[j].ID })
 		identities := make([][]any, 0, len(users))
 		wire := make([]*golfv1.User, 0, len(users))
@@ -129,14 +146,25 @@ func (s *Server) reviewRequestSnapshot(ctx context.Context, session string, toke
 		var after struct {
 			forgePull
 			Requested json.RawMessage `json:"requested_reviewers"`
+			Teams     json.RawMessage `json:"requested_reviewers_teams"`
 		}
 		if _, e = s.forge(ctx, http.MethodGet, base+"/pulls/"+strconv.FormatUint(uint64(number), 10), token, nil, &after); e != nil {
 			return e
 		}
-		if !validPull(after.forgePull, repo) || after.ID != row.ID || after.Number != row.Number || pullRevision(after.forgePull) != pullRevision(row.forgePull) || !bytes.Equal(after.Requested, row.Requested) {
+		if !validPull(after.forgePull, repo) || after.ID != row.ID || after.Number != row.Number || pullRevision(after.forgePull) != pullRevision(row.forgePull) || !bytes.Equal(after.Requested, row.Requested) || !bytes.Equal(after.Teams, row.Teams) {
 			return errPullSnapshotChanged
 		}
-		result = &golfv1.GetPullReviewRequestsResponse{RepositoryId: repoID, PullRequestId: pullID, Number: number, PullRevision: pullRevision(row.forgePull), RequestsRevision: resourceHash(identities), Reviewers: wire, CanManage: manage}
+		requestRevision := resourceHash(identities)
+		if len(teams) > 0 {
+			requestRevision = resourceHash(struct {
+				Users [][]any
+				Teams []forgeOrganizationTeam
+			}{identities, teams})
+		}
+		result = &golfv1.GetPullReviewRequestsResponse{RepositoryId: repoID, PullRequestId: pullID, Number: number, PullRevision: pullRevision(row.forgePull), RequestsRevision: requestRevision, Reviewers: wire, CanManage: manage}
+		for _, team := range teams {
+			result.Teams = append(result.Teams, wireOrganizationTeam(team))
+		}
 		return nil
 	})
 	return result, e
@@ -168,6 +196,9 @@ func (s *Server) reviewRequestPreflight(ctx context.Context, session string, tok
 	}
 	if snap.PullRevision != m.ExpectedPullRevision || snap.RequestsRevision != m.ExpectedRequestsRevision {
 		return errPullSnapshotChanged
+	}
+	if m.ReviewerTeam {
+		return s.reviewTeamPreflight(ctx, token, m, snap)
 	}
 	present := false
 	for _, u := range snap.Reviewers {
@@ -274,7 +305,7 @@ func (s *Server) validateReviewRequestPermit(ctx context.Context, tx *sql.Tx, p 
 		return errLifecycleBlocked
 	}
 	a, _ := json.Marshal(input)
-	b, _ := json.Marshal(map[string]any{"reviewers": []string{m.ReviewerLogin}})
+	b, _ := json.Marshal(reviewRequestPayload(m))
 	if !bytes.Equal(a, b) {
 		return errLifecycleBlocked
 	}
@@ -408,15 +439,25 @@ func (s *Server) SubmitPullReviewRequest(ctx context.Context, req *connect.Reque
 				if m.RequestReview {
 					method, status = "POST", http.StatusCreated
 				}
-				_, nativeErr = s.forgeJSON(held, method, base+"/pulls/"+strconv.FormatUint(uint64(m.Number), 10)+"/requested_reviewers", token, map[string]any{"reviewers": []string{m.ReviewerLogin}}, nil, status)
+				_, nativeErr = s.forgeJSON(held, method, base+"/pulls/"+strconv.FormatUint(uint64(m.Number), 10)+"/requested_reviewers", token, reviewRequestPayload(m), nil, status)
 				if nativeErr == nil {
 					current, e := s.reviewRequestSnapshot(held, session, token, keyFrom(m.Repository), m.RepositoryId, m.PullRequestId, m.Number)
 					nativeErr = e
 					if e == nil {
 						found := false
 						for _, u := range current.Reviewers {
+							if m.ReviewerTeam {
+								continue
+							}
 							if u.Id == m.ReviewerId && u.Login == m.ReviewerLogin {
 								found = true
+							}
+						}
+						if m.ReviewerTeam {
+							for _, team := range current.Teams {
+								if team.Id == m.ReviewerId && team.Name == m.ReviewerLogin {
+									found = true
+								}
 							}
 						}
 						if found != m.RequestReview || !current.CanManage {
@@ -445,4 +486,102 @@ func (s *Server) SubmitPullReviewRequest(ctx context.Context, req *connect.Reque
 		return nil, e
 	}
 	return connect.NewResponse(&golfv1.SubmitPullReviewRequestResponse{Operation: out.Msg.Operation}), nil
+}
+
+func reviewRequestPayload(m *golfv1.SubmitPullReviewRequestRequest) any {
+	if m.ReviewerTeam {
+		return map[string]any{"team_reviewers": []string{m.ReviewerLogin}}
+	}
+	return map[string]any{"reviewers": []string{m.ReviewerLogin}}
+}
+func (s *Server) reviewTeamPreflight(ctx context.Context, token forgeCredential, m *golfv1.SubmitPullReviewRequestRequest, snap *golfv1.GetPullReviewRequestsResponse) error {
+	present := false
+	for _, team := range snap.Teams {
+		if team.Id == m.ReviewerId {
+			if team.Name != m.ReviewerLogin {
+				return errRepositoryAccessConflict
+			}
+			present = true
+		}
+	}
+	if present == m.RequestReview {
+		return errRepositoryAccessConflict
+	}
+	id, _ := discussionID(m.ReviewerId)
+	var team repositoryNativeTeam
+	if _, e := s.forge(ctx, http.MethodGet, "/teams/"+m.ReviewerId, token, nil, &team); e != nil {
+		return e
+	}
+	if team.ID != id || team.Name != m.ReviewerLogin || team.Organization == nil || !validOrganization(*team.Organization) || !strings.EqualFold(team.Organization.Name, m.Repository.Owner) {
+		return errRepositoryAccessConflict
+	}
+	// Exact repository association and pull unit, never code-only privileges.
+	attached, e := s.repositoryTeamAssociations(ctx, token, keyFrom(m.Repository), *team.Organization)
+	if e != nil {
+		return e
+	}
+	if !attached[id] || team.UnitPermissions["repo.pulls"] == "" || team.UnitPermissions["repo.pulls"] == "none" {
+		return errResourceNotFound
+	}
+	return nil
+}
+func (s *Server) GetPullReviewTeamCandidates(ctx context.Context, req *connect.Request[golfv1.GetPullReviewTeamCandidatesRequest]) (*connect.Response[golfv1.GetPullReviewTeamCandidatesResponse], error) {
+	token, session, e := s.reviewDraftCaller(ctx, req.Header())
+	if e != nil {
+		return nil, e
+	}
+	m := req.Msg
+	if e = reviewRequestTarget(keyFrom(m.Repository), m.RepositoryId, m.PullRequestId, m.Number); e != nil {
+		return nil, rpcError(e)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	snap, e := s.reviewRequestSnapshot(ctx, session, token, keyFrom(m.Repository), m.RepositoryId, m.PullRequestId, m.Number)
+	if e != nil {
+		return nil, lifecycleRPCError(e)
+	}
+	if !snap.CanManage {
+		return nil, lifecycleRPCError(errResourceNotFound)
+	}
+	out := &golfv1.GetPullReviewTeamCandidatesResponse{}
+	e = s.withRepositoryRead(ctx, session, token, keyFrom(m.Repository), func(base string, repo Repository) error {
+		if strconv.FormatInt(repo.ID, 10) != m.RepositoryId {
+			return errIssueTargetChanged
+		}
+		var rows []repositoryNativeTeam
+		headers, e := s.forge(ctx, http.MethodGet, base+"/teams", token, nil, &rows)
+		if e != nil {
+			return e
+		}
+		if rows == nil || headers.Get("Link") != "" {
+			return errInvalidForgeResponse
+		}
+		if len(rows) > 200 {
+			return errForgeResponseTooLarge
+		}
+		seen := map[int64]bool{}
+		for _, candidate := range rows {
+			if seen[candidate.ID] {
+				return errInvalidForgeResponse
+			}
+			seen[candidate.ID] = true
+			if !validOrganizationName(candidate.Name) || candidate.UnitPermissions["repo.pulls"] == "" || candidate.UnitPermissions["repo.pulls"] == "none" {
+				continue
+			}
+			var team repositoryNativeTeam
+			if _, e = s.forge(ctx, http.MethodGet, "/teams/"+strconv.FormatInt(candidate.ID, 10), token, nil, &team); e != nil {
+				return e
+			}
+			if team.ID != candidate.ID || team.Name != candidate.Name || team.Organization == nil || !validOrganization(*team.Organization) || !strings.EqualFold(team.Organization.Name, m.Repository.Owner) || repositoryTeamConfiguration(*team.Organization, team.forgeOrganizationTeam) != repositoryTeamConfiguration(*team.Organization, candidate.forgeOrganizationTeam) {
+				return errRepositoryAccessConflict
+			}
+			out.Teams = append(out.Teams, wireOrganizationTeam(team.forgeOrganizationTeam))
+		}
+		return nil
+	})
+	if e != nil {
+		return nil, lifecycleRPCError(e)
+	}
+	sort.Slice(out.Teams, func(i, j int) bool { return out.Teams[i].Name < out.Teams[j].Name })
+	return connect.NewResponse(out), nil
 }
