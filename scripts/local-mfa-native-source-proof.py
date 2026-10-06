@@ -59,7 +59,7 @@ def main():
                 raise RuntimeError('Private native diagnostic withheld')
             (args.output/'go-test.log').write_text(log)
             report['testExitCode'] = result.returncode
-            if result.returncode:
+            if result.returncode or "--- PASS: TestLocalMFANativeProof" not in log or "--- SKIP:" in log:
                 raise RuntimeError('Native MFA/forms proof failed; inspect sanitized receipt')
         report.update(passed=True, scope='Actual native identity, opaque password challenge, TOTP after application restart, recovery regeneration/refusal, factor disable/logout, exact-commit YAML template and independently read native issue publication. No served-runtime claim.')
     finally:

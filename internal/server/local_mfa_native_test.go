@@ -46,7 +46,6 @@ func TestLocalMFANativeProof(t *testing.T) {
 		t.Fatal("invalid owned MFA fixture")
 	}
 	config := testConfig(in.URL)
-	config.GiteaPublicURL = in.URL
 	s, e := New(config, testDatabase(t))
 	if e != nil {
 		t.Fatal("native MFA server unavailable")
