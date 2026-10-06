@@ -139,6 +139,13 @@ const (
 	RepositoryMirrorServiceName = "golf.v1.RepositoryMirrorService"
 	// RepositoryWikiServiceName is the fully-qualified name of the RepositoryWikiService service.
 	RepositoryWikiServiceName = "golf.v1.RepositoryWikiService"
+	// RepositoryWikiManagementServiceName is the fully-qualified name of the
+	// RepositoryWikiManagementService service.
+	RepositoryWikiManagementServiceName = "golf.v1.RepositoryWikiManagementService"
+	// ForgePackageServiceName is the fully-qualified name of the ForgePackageService service.
+	ForgePackageServiceName = "golf.v1.ForgePackageService"
+	// OrganizationLabelServiceName is the fully-qualified name of the OrganizationLabelService service.
+	OrganizationLabelServiceName = "golf.v1.OrganizationLabelService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -861,12 +868,45 @@ const (
 	// RepositoryMirrorServiceGetRepositoryMirrorStatusProcedure is the fully-qualified name of the
 	// RepositoryMirrorService's GetRepositoryMirrorStatus RPC.
 	RepositoryMirrorServiceGetRepositoryMirrorStatusProcedure = "/golf.v1.RepositoryMirrorService/GetRepositoryMirrorStatus"
+	// RepositoryMirrorServiceSubmitRepositoryMirrorOperationProcedure is the fully-qualified name of
+	// the RepositoryMirrorService's SubmitRepositoryMirrorOperation RPC.
+	RepositoryMirrorServiceSubmitRepositoryMirrorOperationProcedure = "/golf.v1.RepositoryMirrorService/SubmitRepositoryMirrorOperation"
+	// RepositoryMirrorServiceGetRepositoryMirrorOperationProcedure is the fully-qualified name of the
+	// RepositoryMirrorService's GetRepositoryMirrorOperation RPC.
+	RepositoryMirrorServiceGetRepositoryMirrorOperationProcedure = "/golf.v1.RepositoryMirrorService/GetRepositoryMirrorOperation"
 	// RepositoryWikiServiceListRepositoryWikiPagesProcedure is the fully-qualified name of the
 	// RepositoryWikiService's ListRepositoryWikiPages RPC.
 	RepositoryWikiServiceListRepositoryWikiPagesProcedure = "/golf.v1.RepositoryWikiService/ListRepositoryWikiPages"
 	// RepositoryWikiServiceGetRepositoryWikiPageProcedure is the fully-qualified name of the
 	// RepositoryWikiService's GetRepositoryWikiPage RPC.
 	RepositoryWikiServiceGetRepositoryWikiPageProcedure = "/golf.v1.RepositoryWikiService/GetRepositoryWikiPage"
+	// RepositoryWikiManagementServiceGetRepositoryWikiWriteContextProcedure is the fully-qualified name
+	// of the RepositoryWikiManagementService's GetRepositoryWikiWriteContext RPC.
+	RepositoryWikiManagementServiceGetRepositoryWikiWriteContextProcedure = "/golf.v1.RepositoryWikiManagementService/GetRepositoryWikiWriteContext"
+	// RepositoryWikiManagementServiceSubmitRepositoryWikiOperationProcedure is the fully-qualified name
+	// of the RepositoryWikiManagementService's SubmitRepositoryWikiOperation RPC.
+	RepositoryWikiManagementServiceSubmitRepositoryWikiOperationProcedure = "/golf.v1.RepositoryWikiManagementService/SubmitRepositoryWikiOperation"
+	// RepositoryWikiManagementServiceGetRepositoryWikiOperationProcedure is the fully-qualified name of
+	// the RepositoryWikiManagementService's GetRepositoryWikiOperation RPC.
+	RepositoryWikiManagementServiceGetRepositoryWikiOperationProcedure = "/golf.v1.RepositoryWikiManagementService/GetRepositoryWikiOperation"
+	// RepositoryWikiManagementServiceListRepositoryWikiRevisionsProcedure is the fully-qualified name
+	// of the RepositoryWikiManagementService's ListRepositoryWikiRevisions RPC.
+	RepositoryWikiManagementServiceListRepositoryWikiRevisionsProcedure = "/golf.v1.RepositoryWikiManagementService/ListRepositoryWikiRevisions"
+	// ForgePackageServiceListRepositoryPackagesProcedure is the fully-qualified name of the
+	// ForgePackageService's ListRepositoryPackages RPC.
+	ForgePackageServiceListRepositoryPackagesProcedure = "/golf.v1.ForgePackageService/ListRepositoryPackages"
+	// ForgePackageServiceGetRepositoryPackageFilesProcedure is the fully-qualified name of the
+	// ForgePackageService's GetRepositoryPackageFiles RPC.
+	ForgePackageServiceGetRepositoryPackageFilesProcedure = "/golf.v1.ForgePackageService/GetRepositoryPackageFiles"
+	// OrganizationLabelServiceListOrganizationLabelsProcedure is the fully-qualified name of the
+	// OrganizationLabelService's ListOrganizationLabels RPC.
+	OrganizationLabelServiceListOrganizationLabelsProcedure = "/golf.v1.OrganizationLabelService/ListOrganizationLabels"
+	// OrganizationLabelServiceSubmitOrganizationLabelOperationProcedure is the fully-qualified name of
+	// the OrganizationLabelService's SubmitOrganizationLabelOperation RPC.
+	OrganizationLabelServiceSubmitOrganizationLabelOperationProcedure = "/golf.v1.OrganizationLabelService/SubmitOrganizationLabelOperation"
+	// OrganizationLabelServiceGetOrganizationLabelOperationProcedure is the fully-qualified name of the
+	// OrganizationLabelService's GetOrganizationLabelOperation RPC.
+	OrganizationLabelServiceGetOrganizationLabelOperationProcedure = "/golf.v1.OrganizationLabelService/GetOrganizationLabelOperation"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -9184,6 +9224,8 @@ func (UnimplementedPullReviewRequestServiceHandler) GetPullReviewRequestOperatio
 // RepositoryMirrorServiceClient is a client for the golf.v1.RepositoryMirrorService service.
 type RepositoryMirrorServiceClient interface {
 	GetRepositoryMirrorStatus(context.Context, *connect.Request[v1.GetRepositoryMirrorStatusRequest]) (*connect.Response[v1.GetRepositoryMirrorStatusResponse], error)
+	SubmitRepositoryMirrorOperation(context.Context, *connect.Request[v1.SubmitRepositoryMirrorOperationRequest]) (*connect.Response[v1.SubmitRepositoryMirrorOperationResponse], error)
+	GetRepositoryMirrorOperation(context.Context, *connect.Request[v1.GetRepositoryMirrorOperationRequest]) (*connect.Response[v1.GetRepositoryMirrorOperationResponse], error)
 }
 
 // NewRepositoryMirrorServiceClient constructs a client for the golf.v1.RepositoryMirrorService
@@ -9203,12 +9245,26 @@ func NewRepositoryMirrorServiceClient(httpClient connect.HTTPClient, baseURL str
 			connect.WithSchema(repositoryMirrorServiceMethods.ByName("GetRepositoryMirrorStatus")),
 			connect.WithClientOptions(opts...),
 		),
+		submitRepositoryMirrorOperation: connect.NewClient[v1.SubmitRepositoryMirrorOperationRequest, v1.SubmitRepositoryMirrorOperationResponse](
+			httpClient,
+			baseURL+RepositoryMirrorServiceSubmitRepositoryMirrorOperationProcedure,
+			connect.WithSchema(repositoryMirrorServiceMethods.ByName("SubmitRepositoryMirrorOperation")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryMirrorOperation: connect.NewClient[v1.GetRepositoryMirrorOperationRequest, v1.GetRepositoryMirrorOperationResponse](
+			httpClient,
+			baseURL+RepositoryMirrorServiceGetRepositoryMirrorOperationProcedure,
+			connect.WithSchema(repositoryMirrorServiceMethods.ByName("GetRepositoryMirrorOperation")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // repositoryMirrorServiceClient implements RepositoryMirrorServiceClient.
 type repositoryMirrorServiceClient struct {
-	getRepositoryMirrorStatus *connect.Client[v1.GetRepositoryMirrorStatusRequest, v1.GetRepositoryMirrorStatusResponse]
+	getRepositoryMirrorStatus       *connect.Client[v1.GetRepositoryMirrorStatusRequest, v1.GetRepositoryMirrorStatusResponse]
+	submitRepositoryMirrorOperation *connect.Client[v1.SubmitRepositoryMirrorOperationRequest, v1.SubmitRepositoryMirrorOperationResponse]
+	getRepositoryMirrorOperation    *connect.Client[v1.GetRepositoryMirrorOperationRequest, v1.GetRepositoryMirrorOperationResponse]
 }
 
 // GetRepositoryMirrorStatus calls golf.v1.RepositoryMirrorService.GetRepositoryMirrorStatus.
@@ -9216,10 +9272,23 @@ func (c *repositoryMirrorServiceClient) GetRepositoryMirrorStatus(ctx context.Co
 	return c.getRepositoryMirrorStatus.CallUnary(ctx, req)
 }
 
+// SubmitRepositoryMirrorOperation calls
+// golf.v1.RepositoryMirrorService.SubmitRepositoryMirrorOperation.
+func (c *repositoryMirrorServiceClient) SubmitRepositoryMirrorOperation(ctx context.Context, req *connect.Request[v1.SubmitRepositoryMirrorOperationRequest]) (*connect.Response[v1.SubmitRepositoryMirrorOperationResponse], error) {
+	return c.submitRepositoryMirrorOperation.CallUnary(ctx, req)
+}
+
+// GetRepositoryMirrorOperation calls golf.v1.RepositoryMirrorService.GetRepositoryMirrorOperation.
+func (c *repositoryMirrorServiceClient) GetRepositoryMirrorOperation(ctx context.Context, req *connect.Request[v1.GetRepositoryMirrorOperationRequest]) (*connect.Response[v1.GetRepositoryMirrorOperationResponse], error) {
+	return c.getRepositoryMirrorOperation.CallUnary(ctx, req)
+}
+
 // RepositoryMirrorServiceHandler is an implementation of the golf.v1.RepositoryMirrorService
 // service.
 type RepositoryMirrorServiceHandler interface {
 	GetRepositoryMirrorStatus(context.Context, *connect.Request[v1.GetRepositoryMirrorStatusRequest]) (*connect.Response[v1.GetRepositoryMirrorStatusResponse], error)
+	SubmitRepositoryMirrorOperation(context.Context, *connect.Request[v1.SubmitRepositoryMirrorOperationRequest]) (*connect.Response[v1.SubmitRepositoryMirrorOperationResponse], error)
+	GetRepositoryMirrorOperation(context.Context, *connect.Request[v1.GetRepositoryMirrorOperationRequest]) (*connect.Response[v1.GetRepositoryMirrorOperationResponse], error)
 }
 
 // NewRepositoryMirrorServiceHandler builds an HTTP handler from the service implementation. It
@@ -9235,10 +9304,26 @@ func NewRepositoryMirrorServiceHandler(svc RepositoryMirrorServiceHandler, opts 
 		connect.WithSchema(repositoryMirrorServiceMethods.ByName("GetRepositoryMirrorStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
+	repositoryMirrorServiceSubmitRepositoryMirrorOperationHandler := connect.NewUnaryHandler(
+		RepositoryMirrorServiceSubmitRepositoryMirrorOperationProcedure,
+		svc.SubmitRepositoryMirrorOperation,
+		connect.WithSchema(repositoryMirrorServiceMethods.ByName("SubmitRepositoryMirrorOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryMirrorServiceGetRepositoryMirrorOperationHandler := connect.NewUnaryHandler(
+		RepositoryMirrorServiceGetRepositoryMirrorOperationProcedure,
+		svc.GetRepositoryMirrorOperation,
+		connect.WithSchema(repositoryMirrorServiceMethods.ByName("GetRepositoryMirrorOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/golf.v1.RepositoryMirrorService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case RepositoryMirrorServiceGetRepositoryMirrorStatusProcedure:
 			repositoryMirrorServiceGetRepositoryMirrorStatusHandler.ServeHTTP(w, r)
+		case RepositoryMirrorServiceSubmitRepositoryMirrorOperationProcedure:
+			repositoryMirrorServiceSubmitRepositoryMirrorOperationHandler.ServeHTTP(w, r)
+		case RepositoryMirrorServiceGetRepositoryMirrorOperationProcedure:
+			repositoryMirrorServiceGetRepositoryMirrorOperationHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -9250,6 +9335,14 @@ type UnimplementedRepositoryMirrorServiceHandler struct{}
 
 func (UnimplementedRepositoryMirrorServiceHandler) GetRepositoryMirrorStatus(context.Context, *connect.Request[v1.GetRepositoryMirrorStatusRequest]) (*connect.Response[v1.GetRepositoryMirrorStatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryMirrorService.GetRepositoryMirrorStatus is not implemented"))
+}
+
+func (UnimplementedRepositoryMirrorServiceHandler) SubmitRepositoryMirrorOperation(context.Context, *connect.Request[v1.SubmitRepositoryMirrorOperationRequest]) (*connect.Response[v1.SubmitRepositoryMirrorOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryMirrorService.SubmitRepositoryMirrorOperation is not implemented"))
+}
+
+func (UnimplementedRepositoryMirrorServiceHandler) GetRepositoryMirrorOperation(context.Context, *connect.Request[v1.GetRepositoryMirrorOperationRequest]) (*connect.Response[v1.GetRepositoryMirrorOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryMirrorService.GetRepositoryMirrorOperation is not implemented"))
 }
 
 // RepositoryWikiServiceClient is a client for the golf.v1.RepositoryWikiService service.
@@ -9346,4 +9439,379 @@ func (UnimplementedRepositoryWikiServiceHandler) ListRepositoryWikiPages(context
 
 func (UnimplementedRepositoryWikiServiceHandler) GetRepositoryWikiPage(context.Context, *connect.Request[v1.GetRepositoryWikiPageRequest]) (*connect.Response[v1.GetRepositoryWikiPageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryWikiService.GetRepositoryWikiPage is not implemented"))
+}
+
+// RepositoryWikiManagementServiceClient is a client for the golf.v1.RepositoryWikiManagementService
+// service.
+type RepositoryWikiManagementServiceClient interface {
+	GetRepositoryWikiWriteContext(context.Context, *connect.Request[v1.GetRepositoryWikiWriteContextRequest]) (*connect.Response[v1.GetRepositoryWikiWriteContextResponse], error)
+	SubmitRepositoryWikiOperation(context.Context, *connect.Request[v1.SubmitRepositoryWikiOperationRequest]) (*connect.Response[v1.SubmitRepositoryWikiOperationResponse], error)
+	GetRepositoryWikiOperation(context.Context, *connect.Request[v1.GetRepositoryWikiOperationRequest]) (*connect.Response[v1.GetRepositoryWikiOperationResponse], error)
+	ListRepositoryWikiRevisions(context.Context, *connect.Request[v1.ListRepositoryWikiRevisionsRequest]) (*connect.Response[v1.ListRepositoryWikiRevisionsResponse], error)
+}
+
+// NewRepositoryWikiManagementServiceClient constructs a client for the
+// golf.v1.RepositoryWikiManagementService service. By default, it uses the Connect protocol with
+// the binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use
+// the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewRepositoryWikiManagementServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepositoryWikiManagementServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	repositoryWikiManagementServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryWikiManagementService").Methods()
+	return &repositoryWikiManagementServiceClient{
+		getRepositoryWikiWriteContext: connect.NewClient[v1.GetRepositoryWikiWriteContextRequest, v1.GetRepositoryWikiWriteContextResponse](
+			httpClient,
+			baseURL+RepositoryWikiManagementServiceGetRepositoryWikiWriteContextProcedure,
+			connect.WithSchema(repositoryWikiManagementServiceMethods.ByName("GetRepositoryWikiWriteContext")),
+			connect.WithClientOptions(opts...),
+		),
+		submitRepositoryWikiOperation: connect.NewClient[v1.SubmitRepositoryWikiOperationRequest, v1.SubmitRepositoryWikiOperationResponse](
+			httpClient,
+			baseURL+RepositoryWikiManagementServiceSubmitRepositoryWikiOperationProcedure,
+			connect.WithSchema(repositoryWikiManagementServiceMethods.ByName("SubmitRepositoryWikiOperation")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryWikiOperation: connect.NewClient[v1.GetRepositoryWikiOperationRequest, v1.GetRepositoryWikiOperationResponse](
+			httpClient,
+			baseURL+RepositoryWikiManagementServiceGetRepositoryWikiOperationProcedure,
+			connect.WithSchema(repositoryWikiManagementServiceMethods.ByName("GetRepositoryWikiOperation")),
+			connect.WithClientOptions(opts...),
+		),
+		listRepositoryWikiRevisions: connect.NewClient[v1.ListRepositoryWikiRevisionsRequest, v1.ListRepositoryWikiRevisionsResponse](
+			httpClient,
+			baseURL+RepositoryWikiManagementServiceListRepositoryWikiRevisionsProcedure,
+			connect.WithSchema(repositoryWikiManagementServiceMethods.ByName("ListRepositoryWikiRevisions")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// repositoryWikiManagementServiceClient implements RepositoryWikiManagementServiceClient.
+type repositoryWikiManagementServiceClient struct {
+	getRepositoryWikiWriteContext *connect.Client[v1.GetRepositoryWikiWriteContextRequest, v1.GetRepositoryWikiWriteContextResponse]
+	submitRepositoryWikiOperation *connect.Client[v1.SubmitRepositoryWikiOperationRequest, v1.SubmitRepositoryWikiOperationResponse]
+	getRepositoryWikiOperation    *connect.Client[v1.GetRepositoryWikiOperationRequest, v1.GetRepositoryWikiOperationResponse]
+	listRepositoryWikiRevisions   *connect.Client[v1.ListRepositoryWikiRevisionsRequest, v1.ListRepositoryWikiRevisionsResponse]
+}
+
+// GetRepositoryWikiWriteContext calls
+// golf.v1.RepositoryWikiManagementService.GetRepositoryWikiWriteContext.
+func (c *repositoryWikiManagementServiceClient) GetRepositoryWikiWriteContext(ctx context.Context, req *connect.Request[v1.GetRepositoryWikiWriteContextRequest]) (*connect.Response[v1.GetRepositoryWikiWriteContextResponse], error) {
+	return c.getRepositoryWikiWriteContext.CallUnary(ctx, req)
+}
+
+// SubmitRepositoryWikiOperation calls
+// golf.v1.RepositoryWikiManagementService.SubmitRepositoryWikiOperation.
+func (c *repositoryWikiManagementServiceClient) SubmitRepositoryWikiOperation(ctx context.Context, req *connect.Request[v1.SubmitRepositoryWikiOperationRequest]) (*connect.Response[v1.SubmitRepositoryWikiOperationResponse], error) {
+	return c.submitRepositoryWikiOperation.CallUnary(ctx, req)
+}
+
+// GetRepositoryWikiOperation calls
+// golf.v1.RepositoryWikiManagementService.GetRepositoryWikiOperation.
+func (c *repositoryWikiManagementServiceClient) GetRepositoryWikiOperation(ctx context.Context, req *connect.Request[v1.GetRepositoryWikiOperationRequest]) (*connect.Response[v1.GetRepositoryWikiOperationResponse], error) {
+	return c.getRepositoryWikiOperation.CallUnary(ctx, req)
+}
+
+// ListRepositoryWikiRevisions calls
+// golf.v1.RepositoryWikiManagementService.ListRepositoryWikiRevisions.
+func (c *repositoryWikiManagementServiceClient) ListRepositoryWikiRevisions(ctx context.Context, req *connect.Request[v1.ListRepositoryWikiRevisionsRequest]) (*connect.Response[v1.ListRepositoryWikiRevisionsResponse], error) {
+	return c.listRepositoryWikiRevisions.CallUnary(ctx, req)
+}
+
+// RepositoryWikiManagementServiceHandler is an implementation of the
+// golf.v1.RepositoryWikiManagementService service.
+type RepositoryWikiManagementServiceHandler interface {
+	GetRepositoryWikiWriteContext(context.Context, *connect.Request[v1.GetRepositoryWikiWriteContextRequest]) (*connect.Response[v1.GetRepositoryWikiWriteContextResponse], error)
+	SubmitRepositoryWikiOperation(context.Context, *connect.Request[v1.SubmitRepositoryWikiOperationRequest]) (*connect.Response[v1.SubmitRepositoryWikiOperationResponse], error)
+	GetRepositoryWikiOperation(context.Context, *connect.Request[v1.GetRepositoryWikiOperationRequest]) (*connect.Response[v1.GetRepositoryWikiOperationResponse], error)
+	ListRepositoryWikiRevisions(context.Context, *connect.Request[v1.ListRepositoryWikiRevisionsRequest]) (*connect.Response[v1.ListRepositoryWikiRevisionsResponse], error)
+}
+
+// NewRepositoryWikiManagementServiceHandler builds an HTTP handler from the service implementation.
+// It returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewRepositoryWikiManagementServiceHandler(svc RepositoryWikiManagementServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	repositoryWikiManagementServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("RepositoryWikiManagementService").Methods()
+	repositoryWikiManagementServiceGetRepositoryWikiWriteContextHandler := connect.NewUnaryHandler(
+		RepositoryWikiManagementServiceGetRepositoryWikiWriteContextProcedure,
+		svc.GetRepositoryWikiWriteContext,
+		connect.WithSchema(repositoryWikiManagementServiceMethods.ByName("GetRepositoryWikiWriteContext")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryWikiManagementServiceSubmitRepositoryWikiOperationHandler := connect.NewUnaryHandler(
+		RepositoryWikiManagementServiceSubmitRepositoryWikiOperationProcedure,
+		svc.SubmitRepositoryWikiOperation,
+		connect.WithSchema(repositoryWikiManagementServiceMethods.ByName("SubmitRepositoryWikiOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryWikiManagementServiceGetRepositoryWikiOperationHandler := connect.NewUnaryHandler(
+		RepositoryWikiManagementServiceGetRepositoryWikiOperationProcedure,
+		svc.GetRepositoryWikiOperation,
+		connect.WithSchema(repositoryWikiManagementServiceMethods.ByName("GetRepositoryWikiOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	repositoryWikiManagementServiceListRepositoryWikiRevisionsHandler := connect.NewUnaryHandler(
+		RepositoryWikiManagementServiceListRepositoryWikiRevisionsProcedure,
+		svc.ListRepositoryWikiRevisions,
+		connect.WithSchema(repositoryWikiManagementServiceMethods.ByName("ListRepositoryWikiRevisions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.RepositoryWikiManagementService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case RepositoryWikiManagementServiceGetRepositoryWikiWriteContextProcedure:
+			repositoryWikiManagementServiceGetRepositoryWikiWriteContextHandler.ServeHTTP(w, r)
+		case RepositoryWikiManagementServiceSubmitRepositoryWikiOperationProcedure:
+			repositoryWikiManagementServiceSubmitRepositoryWikiOperationHandler.ServeHTTP(w, r)
+		case RepositoryWikiManagementServiceGetRepositoryWikiOperationProcedure:
+			repositoryWikiManagementServiceGetRepositoryWikiOperationHandler.ServeHTTP(w, r)
+		case RepositoryWikiManagementServiceListRepositoryWikiRevisionsProcedure:
+			repositoryWikiManagementServiceListRepositoryWikiRevisionsHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedRepositoryWikiManagementServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedRepositoryWikiManagementServiceHandler struct{}
+
+func (UnimplementedRepositoryWikiManagementServiceHandler) GetRepositoryWikiWriteContext(context.Context, *connect.Request[v1.GetRepositoryWikiWriteContextRequest]) (*connect.Response[v1.GetRepositoryWikiWriteContextResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryWikiManagementService.GetRepositoryWikiWriteContext is not implemented"))
+}
+
+func (UnimplementedRepositoryWikiManagementServiceHandler) SubmitRepositoryWikiOperation(context.Context, *connect.Request[v1.SubmitRepositoryWikiOperationRequest]) (*connect.Response[v1.SubmitRepositoryWikiOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryWikiManagementService.SubmitRepositoryWikiOperation is not implemented"))
+}
+
+func (UnimplementedRepositoryWikiManagementServiceHandler) GetRepositoryWikiOperation(context.Context, *connect.Request[v1.GetRepositoryWikiOperationRequest]) (*connect.Response[v1.GetRepositoryWikiOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryWikiManagementService.GetRepositoryWikiOperation is not implemented"))
+}
+
+func (UnimplementedRepositoryWikiManagementServiceHandler) ListRepositoryWikiRevisions(context.Context, *connect.Request[v1.ListRepositoryWikiRevisionsRequest]) (*connect.Response[v1.ListRepositoryWikiRevisionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.RepositoryWikiManagementService.ListRepositoryWikiRevisions is not implemented"))
+}
+
+// ForgePackageServiceClient is a client for the golf.v1.ForgePackageService service.
+type ForgePackageServiceClient interface {
+	ListRepositoryPackages(context.Context, *connect.Request[v1.ListRepositoryPackagesRequest]) (*connect.Response[v1.ListRepositoryPackagesResponse], error)
+	GetRepositoryPackageFiles(context.Context, *connect.Request[v1.GetRepositoryPackageFilesRequest]) (*connect.Response[v1.GetRepositoryPackageFilesResponse], error)
+}
+
+// NewForgePackageServiceClient constructs a client for the golf.v1.ForgePackageService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewForgePackageServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ForgePackageServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	forgePackageServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("ForgePackageService").Methods()
+	return &forgePackageServiceClient{
+		listRepositoryPackages: connect.NewClient[v1.ListRepositoryPackagesRequest, v1.ListRepositoryPackagesResponse](
+			httpClient,
+			baseURL+ForgePackageServiceListRepositoryPackagesProcedure,
+			connect.WithSchema(forgePackageServiceMethods.ByName("ListRepositoryPackages")),
+			connect.WithClientOptions(opts...),
+		),
+		getRepositoryPackageFiles: connect.NewClient[v1.GetRepositoryPackageFilesRequest, v1.GetRepositoryPackageFilesResponse](
+			httpClient,
+			baseURL+ForgePackageServiceGetRepositoryPackageFilesProcedure,
+			connect.WithSchema(forgePackageServiceMethods.ByName("GetRepositoryPackageFiles")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// forgePackageServiceClient implements ForgePackageServiceClient.
+type forgePackageServiceClient struct {
+	listRepositoryPackages    *connect.Client[v1.ListRepositoryPackagesRequest, v1.ListRepositoryPackagesResponse]
+	getRepositoryPackageFiles *connect.Client[v1.GetRepositoryPackageFilesRequest, v1.GetRepositoryPackageFilesResponse]
+}
+
+// ListRepositoryPackages calls golf.v1.ForgePackageService.ListRepositoryPackages.
+func (c *forgePackageServiceClient) ListRepositoryPackages(ctx context.Context, req *connect.Request[v1.ListRepositoryPackagesRequest]) (*connect.Response[v1.ListRepositoryPackagesResponse], error) {
+	return c.listRepositoryPackages.CallUnary(ctx, req)
+}
+
+// GetRepositoryPackageFiles calls golf.v1.ForgePackageService.GetRepositoryPackageFiles.
+func (c *forgePackageServiceClient) GetRepositoryPackageFiles(ctx context.Context, req *connect.Request[v1.GetRepositoryPackageFilesRequest]) (*connect.Response[v1.GetRepositoryPackageFilesResponse], error) {
+	return c.getRepositoryPackageFiles.CallUnary(ctx, req)
+}
+
+// ForgePackageServiceHandler is an implementation of the golf.v1.ForgePackageService service.
+type ForgePackageServiceHandler interface {
+	ListRepositoryPackages(context.Context, *connect.Request[v1.ListRepositoryPackagesRequest]) (*connect.Response[v1.ListRepositoryPackagesResponse], error)
+	GetRepositoryPackageFiles(context.Context, *connect.Request[v1.GetRepositoryPackageFilesRequest]) (*connect.Response[v1.GetRepositoryPackageFilesResponse], error)
+}
+
+// NewForgePackageServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewForgePackageServiceHandler(svc ForgePackageServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	forgePackageServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("ForgePackageService").Methods()
+	forgePackageServiceListRepositoryPackagesHandler := connect.NewUnaryHandler(
+		ForgePackageServiceListRepositoryPackagesProcedure,
+		svc.ListRepositoryPackages,
+		connect.WithSchema(forgePackageServiceMethods.ByName("ListRepositoryPackages")),
+		connect.WithHandlerOptions(opts...),
+	)
+	forgePackageServiceGetRepositoryPackageFilesHandler := connect.NewUnaryHandler(
+		ForgePackageServiceGetRepositoryPackageFilesProcedure,
+		svc.GetRepositoryPackageFiles,
+		connect.WithSchema(forgePackageServiceMethods.ByName("GetRepositoryPackageFiles")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.ForgePackageService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case ForgePackageServiceListRepositoryPackagesProcedure:
+			forgePackageServiceListRepositoryPackagesHandler.ServeHTTP(w, r)
+		case ForgePackageServiceGetRepositoryPackageFilesProcedure:
+			forgePackageServiceGetRepositoryPackageFilesHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedForgePackageServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedForgePackageServiceHandler struct{}
+
+func (UnimplementedForgePackageServiceHandler) ListRepositoryPackages(context.Context, *connect.Request[v1.ListRepositoryPackagesRequest]) (*connect.Response[v1.ListRepositoryPackagesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ForgePackageService.ListRepositoryPackages is not implemented"))
+}
+
+func (UnimplementedForgePackageServiceHandler) GetRepositoryPackageFiles(context.Context, *connect.Request[v1.GetRepositoryPackageFilesRequest]) (*connect.Response[v1.GetRepositoryPackageFilesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ForgePackageService.GetRepositoryPackageFiles is not implemented"))
+}
+
+// OrganizationLabelServiceClient is a client for the golf.v1.OrganizationLabelService service.
+type OrganizationLabelServiceClient interface {
+	ListOrganizationLabels(context.Context, *connect.Request[v1.ListOrganizationLabelsRequest]) (*connect.Response[v1.ListOrganizationLabelsResponse], error)
+	SubmitOrganizationLabelOperation(context.Context, *connect.Request[v1.SubmitOrganizationLabelOperationRequest]) (*connect.Response[v1.SubmitOrganizationLabelOperationResponse], error)
+	GetOrganizationLabelOperation(context.Context, *connect.Request[v1.GetOrganizationLabelOperationRequest]) (*connect.Response[v1.GetOrganizationLabelOperationResponse], error)
+}
+
+// NewOrganizationLabelServiceClient constructs a client for the golf.v1.OrganizationLabelService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewOrganizationLabelServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) OrganizationLabelServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	organizationLabelServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("OrganizationLabelService").Methods()
+	return &organizationLabelServiceClient{
+		listOrganizationLabels: connect.NewClient[v1.ListOrganizationLabelsRequest, v1.ListOrganizationLabelsResponse](
+			httpClient,
+			baseURL+OrganizationLabelServiceListOrganizationLabelsProcedure,
+			connect.WithSchema(organizationLabelServiceMethods.ByName("ListOrganizationLabels")),
+			connect.WithClientOptions(opts...),
+		),
+		submitOrganizationLabelOperation: connect.NewClient[v1.SubmitOrganizationLabelOperationRequest, v1.SubmitOrganizationLabelOperationResponse](
+			httpClient,
+			baseURL+OrganizationLabelServiceSubmitOrganizationLabelOperationProcedure,
+			connect.WithSchema(organizationLabelServiceMethods.ByName("SubmitOrganizationLabelOperation")),
+			connect.WithClientOptions(opts...),
+		),
+		getOrganizationLabelOperation: connect.NewClient[v1.GetOrganizationLabelOperationRequest, v1.GetOrganizationLabelOperationResponse](
+			httpClient,
+			baseURL+OrganizationLabelServiceGetOrganizationLabelOperationProcedure,
+			connect.WithSchema(organizationLabelServiceMethods.ByName("GetOrganizationLabelOperation")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// organizationLabelServiceClient implements OrganizationLabelServiceClient.
+type organizationLabelServiceClient struct {
+	listOrganizationLabels           *connect.Client[v1.ListOrganizationLabelsRequest, v1.ListOrganizationLabelsResponse]
+	submitOrganizationLabelOperation *connect.Client[v1.SubmitOrganizationLabelOperationRequest, v1.SubmitOrganizationLabelOperationResponse]
+	getOrganizationLabelOperation    *connect.Client[v1.GetOrganizationLabelOperationRequest, v1.GetOrganizationLabelOperationResponse]
+}
+
+// ListOrganizationLabels calls golf.v1.OrganizationLabelService.ListOrganizationLabels.
+func (c *organizationLabelServiceClient) ListOrganizationLabels(ctx context.Context, req *connect.Request[v1.ListOrganizationLabelsRequest]) (*connect.Response[v1.ListOrganizationLabelsResponse], error) {
+	return c.listOrganizationLabels.CallUnary(ctx, req)
+}
+
+// SubmitOrganizationLabelOperation calls
+// golf.v1.OrganizationLabelService.SubmitOrganizationLabelOperation.
+func (c *organizationLabelServiceClient) SubmitOrganizationLabelOperation(ctx context.Context, req *connect.Request[v1.SubmitOrganizationLabelOperationRequest]) (*connect.Response[v1.SubmitOrganizationLabelOperationResponse], error) {
+	return c.submitOrganizationLabelOperation.CallUnary(ctx, req)
+}
+
+// GetOrganizationLabelOperation calls
+// golf.v1.OrganizationLabelService.GetOrganizationLabelOperation.
+func (c *organizationLabelServiceClient) GetOrganizationLabelOperation(ctx context.Context, req *connect.Request[v1.GetOrganizationLabelOperationRequest]) (*connect.Response[v1.GetOrganizationLabelOperationResponse], error) {
+	return c.getOrganizationLabelOperation.CallUnary(ctx, req)
+}
+
+// OrganizationLabelServiceHandler is an implementation of the golf.v1.OrganizationLabelService
+// service.
+type OrganizationLabelServiceHandler interface {
+	ListOrganizationLabels(context.Context, *connect.Request[v1.ListOrganizationLabelsRequest]) (*connect.Response[v1.ListOrganizationLabelsResponse], error)
+	SubmitOrganizationLabelOperation(context.Context, *connect.Request[v1.SubmitOrganizationLabelOperationRequest]) (*connect.Response[v1.SubmitOrganizationLabelOperationResponse], error)
+	GetOrganizationLabelOperation(context.Context, *connect.Request[v1.GetOrganizationLabelOperationRequest]) (*connect.Response[v1.GetOrganizationLabelOperationResponse], error)
+}
+
+// NewOrganizationLabelServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewOrganizationLabelServiceHandler(svc OrganizationLabelServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	organizationLabelServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("OrganizationLabelService").Methods()
+	organizationLabelServiceListOrganizationLabelsHandler := connect.NewUnaryHandler(
+		OrganizationLabelServiceListOrganizationLabelsProcedure,
+		svc.ListOrganizationLabels,
+		connect.WithSchema(organizationLabelServiceMethods.ByName("ListOrganizationLabels")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationLabelServiceSubmitOrganizationLabelOperationHandler := connect.NewUnaryHandler(
+		OrganizationLabelServiceSubmitOrganizationLabelOperationProcedure,
+		svc.SubmitOrganizationLabelOperation,
+		connect.WithSchema(organizationLabelServiceMethods.ByName("SubmitOrganizationLabelOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationLabelServiceGetOrganizationLabelOperationHandler := connect.NewUnaryHandler(
+		OrganizationLabelServiceGetOrganizationLabelOperationProcedure,
+		svc.GetOrganizationLabelOperation,
+		connect.WithSchema(organizationLabelServiceMethods.ByName("GetOrganizationLabelOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.OrganizationLabelService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case OrganizationLabelServiceListOrganizationLabelsProcedure:
+			organizationLabelServiceListOrganizationLabelsHandler.ServeHTTP(w, r)
+		case OrganizationLabelServiceSubmitOrganizationLabelOperationProcedure:
+			organizationLabelServiceSubmitOrganizationLabelOperationHandler.ServeHTTP(w, r)
+		case OrganizationLabelServiceGetOrganizationLabelOperationProcedure:
+			organizationLabelServiceGetOrganizationLabelOperationHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedOrganizationLabelServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedOrganizationLabelServiceHandler struct{}
+
+func (UnimplementedOrganizationLabelServiceHandler) ListOrganizationLabels(context.Context, *connect.Request[v1.ListOrganizationLabelsRequest]) (*connect.Response[v1.ListOrganizationLabelsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationLabelService.ListOrganizationLabels is not implemented"))
+}
+
+func (UnimplementedOrganizationLabelServiceHandler) SubmitOrganizationLabelOperation(context.Context, *connect.Request[v1.SubmitOrganizationLabelOperationRequest]) (*connect.Response[v1.SubmitOrganizationLabelOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationLabelService.SubmitOrganizationLabelOperation is not implemented"))
+}
+
+func (UnimplementedOrganizationLabelServiceHandler) GetOrganizationLabelOperation(context.Context, *connect.Request[v1.GetOrganizationLabelOperationRequest]) (*connect.Response[v1.GetOrganizationLabelOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationLabelService.GetOrganizationLabelOperation is not implemented"))
 }

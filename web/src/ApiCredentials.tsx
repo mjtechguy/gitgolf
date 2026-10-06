@@ -210,7 +210,7 @@ export function ApiCredentials({ userId, signingOut }: { userId: string; signing
 
   return <div className="api-credentials page-stack">
     <header className="repository-intro"><div><span className="eyebrow">YOUR GOLF ACCOUNT</span><h1><KeyRound size={29} />API credentials</h1><p>Short-lived, scoped access for your tools.</p></div><button ref={newButton} className="button primary" disabled={editing || Boolean(visibleSecret) || uncertain || Boolean(listError) || query.isFetching || signingOut} onClick={() => { setEditing(true); setNotice(''); }}><Plus size={16} />New API credential</button></header>
-    <p className="organization-guidance">Credentials use your current repository access. Optional issue/PR writes are limited to one repository. Access ends when the source session expires, is revoked, or signs out.</p>
+    <p className="organization-guidance">Credentials use your current repository access. Optional writes and execution inspection are scoped to one repository. Access ends when the source session expires, is revoked, or signs out.</p>
     {editing || visibleSecret || uncertain ? <section className="browser-panel credential-create-panel" aria-labelledby="credential-create-title">
       <div className="browser-panel-heading"><h2 id="credential-create-title">Create an API credential</h2><span className="visibility">Explicit scopes</span></div>
       <div className="credential-form-content">

@@ -103,6 +103,7 @@ const organizationSettingsRoute = createRoute({
   beforeLoad: ({ params }) => { if (!params.organization || /[\/\\]/.test(params.organization)) throw notFound(); },
   component: OrganizationSettingsPage,
 });
+const organizationLabelsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/organizations/$organization/settings/labels', beforeLoad: ({params}) => {if(!params.organization || /[\/\\]/.test(params.organization))throw notFound();}, component: () => {const {organization}=organizationLabelsRoute.useParams();return <App location={{kind:'organization-labels',organization}}/>;} });
 const organizationSecretsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/organizations/$organization/settings/secrets', beforeLoad: ({ params }) => { if (!params.organization || /[\/\\]/.test(params.organization)) throw notFound(); }, component: () => { const { organization } = organizationSecretsRoute.useParams(); return <App location={{ kind: 'organization-secrets', organization }} />; } });
 const organizationTeamSettingsRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/organizations/$organization/teams/$teamId/settings',
@@ -142,7 +143,7 @@ const validateRepositorySearch = (search: Record<string, unknown>): RepositorySe
     const issue = search.issue === undefined ? undefined : typeof search.issue === 'number' ? search.issue : typeof search.issue === 'string' && /^[1-9][0-9]*$/.test(search.issue) ? Number(search.issue) : NaN;
     const pull = search.pull === undefined ? undefined : typeof search.pull === 'number' ? search.pull : typeof search.pull === 'string' && /^[1-9][0-9]*$/.test(search.pull) ? Number(search.pull) : NaN;
     return {
-      view: search.view === 'commits' || search.view === 'issues' || search.view === 'pulls' || search.view === 'actions' || search.view === 'compare' || search.view === 'releases' || search.view === 'deployments' || search.view === 'branches' || search.view === 'tags' || search.view === 'wiki' ? search.view : 'source',
+      view: search.view === 'commits' || search.view === 'issues' || search.view === 'pulls' || search.view === 'actions' || search.view === 'compare' || search.view === 'releases' || search.view === 'deployments' || search.view === 'branches' || search.view === 'tags' || search.view === 'wiki' || search.view === 'packages' ? search.view : 'source',
       q:typeof search.q==='string'?search.q:undefined,author:typeof search.author==='string'?search.author:undefined,assignee:typeof search.assignee==='string'?search.assignee:undefined,labels:typeof search.labels==='string'?search.labels:undefined,milestone:typeof search.milestone==='string'?search.milestone:undefined,sort:search.sort as RepositorySearch['sort'],
       ref: typeof search.ref === 'string' ? search.ref : '', path: typeof search.path === 'string' ? search.path : '',
       base:typeof search.base==='string'?search.base:undefined,head:typeof search.head==='string'?search.head:undefined,sourceOwner:typeof search.sourceOwner==='string'?search.sourceOwner:undefined,sourceName:typeof search.sourceName==='string'?search.sourceName:undefined,
@@ -214,6 +215,7 @@ function canonicalLocation(owner:string,name:string,tail:string,search:Repositor
     if(isCommitID(item)) return {...location,view:'source' as const,ref:item,path:parts.slice(2).join('/'),sourceRoute:parts[0] as 'tree'|'blob'};
     return {...location,view:'source' as const,ref:'',path:'',sourceSuffix:suffix,sourceRoute:parts[0] as 'tree'|'blob'};
   }
+  if(tail==='packages')return {...location,view:'packages' as const};
   if(parts[0]==='wiki'){
     if(parts.length===1&&search.wikiPage===undefined)return {...location,view:'wiki' as const,wikiPage:undefined};
     if(parts.length===2&&item&&item!=='.'&&item!=='..'&&item.length<=1024&&/^[A-Za-z0-9_.~+%\-]+$/.test(item)){try{decodeURIComponent(item.replaceAll('+',' '));}catch{throw notFound();}if(search.wikiPage!==undefined&&search.wikiPage!==item)throw notFound();return {...location,view:'wiki' as const,wikiPage:item};}
@@ -298,7 +300,7 @@ function OrganizationPage() {
 
 // Router owns navigation only. Private server data stays in the cancellable Query cache.
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([homeRoute, notificationInboxRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryDeletionRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWebhooksRoute, canonicalRepositorySecretsRoute, canonicalRepositoryEnvironmentsRoute, canonicalRepositoryRulesRoute, canonicalRepositoryGitRoute, canonicalRepositoryRunnersRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceNotificationsRoute, instanceRunnersRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationSecretsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountInvitationsRoute, accountSecurityRoute, accountAgentsRoute, sessionsRoute]),
+  routeTree: rootRoute.addChildren([homeRoute, notificationInboxRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryDeletionRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWebhooksRoute, canonicalRepositorySecretsRoute, canonicalRepositoryEnvironmentsRoute, canonicalRepositoryRulesRoute, canonicalRepositoryGitRoute, canonicalRepositoryRunnersRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceNotificationsRoute, instanceRunnersRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationLabelsRoute, organizationSecretsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountInvitationsRoute, accountSecurityRoute, accountAgentsRoute, sessionsRoute]),
   defaultPreload: false,
   // Refs and paths are opaque strings, including names such as "1234" or "true".
   parseSearch: (search) => {

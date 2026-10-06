@@ -1,5 +1,5 @@
 export type RepositorySearch = {
-  view: 'source' | 'commits' | 'issues' | 'pulls' | 'actions' | 'compare' | 'releases' | 'deployments' | 'branches' | 'tags' | 'wiki';
+  view: 'source' | 'commits' | 'issues' | 'pulls' | 'actions' | 'compare' | 'releases' | 'deployments' | 'branches' | 'tags' | 'wiki' | 'packages';
   q?: string;
   author?: string;
   assignee?: string;
@@ -37,7 +37,7 @@ export type RepositorySearch = {
 export const defaultRepositorySearch: RepositorySearch = { view: 'source', ref: '', path: '', branch: '', state: 'open' };
 export type RepositoryLocation = RepositorySearch & { kind: 'repository'; owner: string; name: string; sourceSuffix?: string; sourceRoute?: 'tree' | 'blob' };
 export type OrganizationLocation = { kind: 'organizations'; organization?: string; team?: string };
-export type Location = RepositoryLocation | OrganizationLocation | { kind: 'repository-deletion'; owner: string; name: string; repositoryId: string } | { kind: 'repository-git' | 'repository-runners' | 'repository-rules' | 'repository-secrets' | 'repository-environments' | 'repository-webhooks' | 'repository-settings' | 'repository-access-settings' | 'repository-workflows'; owner: string; name: string } | { kind: 'organization-team-settings'; organization: string; teamId: string } | { kind: 'organization-settings' | 'organization-secrets'; organization: string } | { kind: 'instance-settings'; view?: 'overview' | 'accounts' | 'execution' | 'organizations' | 'infrastructure' | 'agents' | 'notifications' | 'runners' } | { kind: 'status' } | { kind: 'audit' } | { kind: 'api-credentials' } | { kind: 'ssh-keys' } | { kind: 'account-agents' } | { kind:'notifications' } | { kind: 'account-invitations' } | { kind: 'account-security' } | { kind: 'settings' } | { kind: 'sessions' } | { kind: 'home'; oauthFailed?: boolean } | { kind: 'missing' };
+export type Location = RepositoryLocation | OrganizationLocation | { kind: 'repository-deletion'; owner: string; name: string; repositoryId: string } | { kind: 'repository-git' | 'repository-runners' | 'repository-rules' | 'repository-secrets' | 'repository-environments' | 'repository-webhooks' | 'repository-settings' | 'repository-access-settings' | 'repository-workflows'; owner: string; name: string } | { kind: 'organization-team-settings'; organization: string; teamId: string } | { kind: 'organization-settings' | 'organization-secrets' | 'organization-labels'; organization: string } | { kind: 'instance-settings'; view?: 'overview' | 'accounts' | 'execution' | 'organizations' | 'infrastructure' | 'agents' | 'notifications' | 'runners' } | { kind: 'status' } | { kind: 'audit' } | { kind: 'api-credentials' } | { kind: 'ssh-keys' } | { kind: 'account-agents' } | { kind:'notifications' } | { kind: 'account-invitations' } | { kind: 'account-security' } | { kind: 'settings' } | { kind: 'sessions' } | { kind: 'home'; oauthFailed?: boolean } | { kind: 'missing' };
 export const isRunID = (value: string) => /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value);
 export const isWorkflowJobInstanceID = (value:string) => /^[a-f0-9]{32}$/.test(value);
 export const isWorkflowStepID = (value:string) => /^(?:[A-Za-z_][A-Za-z0-9_-]{0,63}|0|[1-9][0-9]{0,2})$/.test(value);
@@ -78,6 +78,7 @@ export function repositoryOptions(location: Pick<RepositoryLocation, 'owner' | '
   let path = '';
   if(next.view==='branches'||next.view==='tags')path=next.view;
   else if(next.view==='deployments')path=next.deploymentId?`deployments/${next.deploymentId}`:'deployments';
+  else if(next.view==='packages')path='packages';
   else if(next.view==='wiki')path=next.wikiPage?`wiki/${next.wikiPage}`:'wiki';
   else if(next.view==='releases')path=next.releaseId?`releases/${next.releaseId}`:'releases';
   else if(next.view==='compare')path='compare';

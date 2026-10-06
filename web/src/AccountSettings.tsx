@@ -5,7 +5,7 @@ import { ExecutionPolicyPanel } from './ExecutionPolicyPanel';
 import { ExecutionScope } from './gen/golf/v1/golf_pb';
 import { lazy, Suspense, useMemo, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
-import { Rocket, Server, MailPlus, Webhook, History, KeyRound, ShieldCheck, UserRound } from 'lucide-react';
+import { Rocket, Server, MailPlus, Webhook, History, KeyRound, ShieldCheck, Tags, UserRound } from 'lucide-react';
 import type { User } from './gen/golf/v1/golf_pb';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { useQuery } from '@tanstack/react-query';
@@ -32,6 +32,7 @@ export function AccountLayout({ children }: { children: ReactNode }) {
 export function OrganizationSettingsLayout({ children, organization }: { children: ReactNode; organization: string }) {
   return <div className="account-layout"><nav className="account-navigation" aria-label="Organization settings"><span className="eyebrow">ORGANIZATION SETTINGS</span>
     <Link to="/organizations/$organization/settings" params={{ organization }} activeOptions={{ exact: true }}><UserRound size={18} />General</Link>
+    <Link to="/organizations/$organization/settings/labels" params={{organization}} activeOptions={{exact:true}}><Tags size={18}/>Labels</Link>
     <Link to="/organizations/$organization/settings/secrets" params={{ organization }} activeOptions={{ exact: true }}><KeyRound size={18} />Secrets and variables</Link>
     <Link to="/organizations/$organization" params={{ organization }} activeOptions={{ exact: true }}><ShieldCheck size={18} />Members and teams</Link>
   </nav><div className="account-content">{children}</div></div>;
