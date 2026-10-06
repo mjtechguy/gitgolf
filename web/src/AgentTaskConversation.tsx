@@ -9,8 +9,9 @@ import { MarkdownBody } from './RepositoryContent';
 import { DateLabel, Loading, PanelError, privateQuery } from './RepositoryUI';
 import { isCommitID, isRunID } from './navigation';
 import { sourceRepositoryID } from './sourceReads';
+import { AgentTaskControls, useAgentTaskControl } from './AgentTaskControls088';
 
-const kinds = ['prompt','thread_started','turn_started','tool_started','tool_completed','approval_declined','assistant_message','plan_updated','usage_updated','turn_completed'];
+const kinds = ['prompt','user_message','thread_started','turn_started','tool_started','tool_completed','approval_declined','assistant_message','plan_updated','usage_updated','turn_completed'];
 const statuses = ['', 'inProgress','completed','failed','interrupted','declined','pending'];
 const tools = ['', 'commandExecution','fileChange'];
 const bodies = [Body.WITHHELD, Body.AVAILABLE, Body.UNAVAILABLE];
@@ -30,7 +31,7 @@ function validatePage(response:ListAgentTaskEventsResponse,repositoryId:string,u
   if(event.bodyState!==Body.AVAILABLE){if(event.text||event.threadId||event.turnId||event.itemId||event.phase||event.plan.length)invalid();}
   else {
    if(!safeText(event.text,event.kind==='prompt'?16384:65536)||![event.threadId,event.turnId,event.itemId].every(nativeId)||!['','commentary','final_answer'].includes(event.phase)||event.plan.length>32||event.plan.reduce((sum,step)=>sum+bytes(step.step),0)>16384||event.plan.some(step=>!step.step.trim()||!safeText(step.step,512)||!['pending','inProgress','completed'].includes(step.status)))invalid();
-   if(event.kind!=='prompt'&&event.kind!=='assistant_message'&&event.text||event.kind!=='assistant_message'&&event.phase||event.kind!=='plan_updated'&&event.plan.length)invalid();
+   if(event.kind!=='prompt'&&event.kind!=='assistant_message'&&event.kind!=='user_message'&&event.text||event.kind!=='assistant_message'&&event.phase||event.kind!=='plan_updated'&&event.plan.length)invalid();
   }
  }
  if(response.nextSequence&&(!response.events.length||response.nextSequence!==response.events.at(-1)!.sequence||sequence>=513))invalid();
@@ -44,6 +45,7 @@ type Props={userId:string;repositoryId:string;owner:string;name:string;task:Agen
 export function useAgentTaskConversation({userId,repositoryId,owner,name,task,ready}:Props) {
  const client=useQueryClient(),limit=32;
  const scope=JSON.stringify([userId,repositoryId,owner,name,task?.id,task?.attemptId,task?.commitId]);
+ const controller=useAgentTaskControl({userId,scope,task,ready});
  const generation=useRef({scope,ready,value:0});
  if(generation.current.scope!==scope||generation.current.ready!==ready)generation.current={scope,ready,value:generation.current.value+1};
  const [refreshRequest,setRefreshRequest]=useState({scope,number:0});
@@ -81,12 +83,14 @@ export function useAgentTaskConversation({userId,repositoryId,owner,name,task,re
  useEffect(()=>{if(!ready||paused)void client.cancelQueries({queryKey:key,exact:true});},[client,scope,ready,paused]);
  useEffect(()=>{if(ready&&refreshRequest.scope===scope&&refreshRequest.number>handledRefresh.current){handledRefresh.current=refreshRequest.number;void query.refetch({cancelRefetch:false});}},[ready,scope,refreshRequest]);
  const pendingRefresh=refreshRequest.scope===scope&&refreshRequest.number>handledRefresh.current;
- const visible=ready&&!pendingRefresh&&query.isSuccess&&!query.error&&!query.isFetching;
- return {query,ready,paused,scheduleRefresh:()=>setRefreshRequest(previous=>({scope,number:previous.number+1})),setPaused:(value:boolean)=>{setPause({scope,value});if(!value)setRefreshRequest(previous=>({scope,number:previous.number+1}));},pendingRefresh,body:visible?query.data.bodyState:undefined,events:visible?query.data.events:[],running:task?.state==='running'};
+ const denied=conversationDenial(controller.query.error);
+ const visible=ready&&!denied&&!pendingRefresh&&query.isSuccess&&!query.error&&!query.isFetching;
+ return {query:{...query,error:query.error||(denied?controller.query.error:null)},controller,ready,paused,scheduleRefresh:()=>setRefreshRequest(previous=>({scope,number:previous.number+1})),setPaused:(value:boolean)=>{setPause({scope,value});if(!value)setRefreshRequest(previous=>({scope,number:previous.number+1}));},pendingRefresh,body:visible?query.data.bodyState:undefined,events:visible?query.data.events:[],running:task?.state==='running'};
 }
 
 function presentation(event:AgentTaskEvent) {
  if(event.kind==='prompt')return {label:'Task prompt',Icon:MessageSquare};
+ if(event.kind==='user_message')return {label:'Your reply',Icon:MessageSquare};
  if(event.kind==='assistant_message')return {label:event.phase==='final_answer'?'Final reply':event.phase==='commentary'?'Agent commentary':'Assistant message',Icon:Bot};
  if(event.kind==='plan_updated')return {label:'Plan updated',Icon:ListTodo};
  if(event.kind==='usage_updated')return {label:'Usage reported',Icon:CheckCircle2};
@@ -107,5 +111,5 @@ export function AgentTaskConversation({reader}:{reader:ReturnType<typeof useAgen
  {(event.kind==='prompt'||event.kind==='assistant_message'||event.kind==='plan_updated')&&event.bodyState!==Body.AVAILABLE?<p className="panel-footnote">{event.bodyState===Body.WITHHELD?'Content withheld pending screening.':'Message content unavailable.'}</p>:null}
  </article></li>})}</ol>
  </>}
- <p className="panel-footnote">Recorded activity supports Codex tasks and OpenCode read-only PR reviews. Raw commands, terminal output and reasoning are not shown. Reply, approvals and continuation are not available here.</p></section>;
+ <AgentTaskControls controller={reader.controller}/><p className="panel-footnote">Raw commands, terminal output and reasoning are not shown. Managed conversation controls require this attempt's qualified live ACP sandbox.</p></section>;
 }

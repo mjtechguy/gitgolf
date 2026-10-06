@@ -276,7 +276,8 @@ func Plan(input protocol.ActionPlanInput) (protocol.ActionPlan, error) {
 func admit(input protocol.ActionPlanInput) (protocol.ActionPlan, *model.Plan, map[string]file, error) {
 	out := protocol.ActionPlan{}
 	typed := input.Catalog == protocol.ActionsInputsCatalog
-	if (input.Catalog != protocol.ActionsCatalog && !typed) || !safePath(input.WorkflowPath) || !fullObjectPattern.MatchString(input.WorkflowBlobID) || (input.Event != "workflow_dispatch" && input.Event != "push" && input.Event != "inspect") || input.Event == "push" && (!strings.HasPrefix(input.Ref, "refs/heads/") || !safePath(strings.TrimPrefix(input.Ref, "refs/heads/"))) || len(input.Images) < 1 || len(input.Images) > 20 {
+	agents := input.Catalog == protocol.ActionsAgentCatalog
+	if (input.Catalog != protocol.ActionsCatalog && !typed && !agents) || agents && input.Event == "push" || !safePath(input.WorkflowPath) || !fullObjectPattern.MatchString(input.WorkflowBlobID) || (input.Event != "workflow_dispatch" && input.Event != "push" && input.Event != "inspect") || input.Event == "push" && (!strings.HasPrefix(input.Ref, "refs/heads/") || !safePath(strings.TrimPrefix(input.Ref, "refs/heads/"))) || len(input.Images) < 1 || len(input.Images) > 20 {
 		return out, nil, nil, ErrProfile
 	}
 	for label, image := range input.Images {
@@ -352,7 +353,7 @@ func admit(input protocol.ActionPlanInput) (protocol.ActionPlan, *model.Plan, ma
 			return out, nil, nil, ErrProfile
 		}
 		expanded := 0
-		if err = validateSteps(steps, files, dependencies, nil, 0, false, typed, &expanded); err != nil {
+		if err = validateSteps(steps, files, dependencies, nil, 0, false, typed, agents, &expanded); err != nil {
 			return out, nil, nil, err
 		}
 		expandedSteps[id] = expanded
@@ -446,7 +447,11 @@ func admit(input protocol.ActionPlanInput) (protocol.ActionPlan, *model.Plan, ma
 					if len(sname) > 255 || strings.Contains(sname, "${{") {
 						return out, nil, nil, ErrProfile
 					}
-					entry.Steps = append(entry.Steps, protocol.ActionStep{ID: sid, Name: sname})
+					prompt := ""
+					if step.Uses == protocol.WorkflowAgentAction {
+						prompt = step.With["prompt"]
+					}
+					entry.Steps = append(entry.Steps, protocol.ActionStep{ID: sid, Name: sname, AgentPrompt: prompt})
 				}
 				totalSteps += expandedSteps[run.JobID]
 				if totalSteps > 128 || len(out.Jobs) >= 12 {
@@ -706,7 +711,7 @@ func inputExpressionAST(root actionlint.ExprNode) bool {
 	})
 	return valid
 }
-func validateSteps(steps *yaml.Node, files map[string]file, deps map[string]string, stack map[string]bool, depth int, composite, typed bool, budget *int) error {
+func validateSteps(steps *yaml.Node, files map[string]file, deps map[string]string, stack map[string]bool, depth int, composite, typed, agents bool, budget *int) error {
 	if depth > 4 {
 		return ErrProfile
 	}
@@ -736,6 +741,14 @@ func validateSteps(steps *yaml.Node, files map[string]file, deps map[string]stri
 				return ErrProfile
 			}
 			if field(step, "with") != nil {
+				return ErrProfile
+			}
+			continue
+		}
+		if scalar(uses) && uses.Value == protocol.WorkflowAgentAction {
+			with := field(step, "with")
+			prompt := field(with, "prompt")
+			if !agents || composite || !mapping(with, "prompt") || !scalar(prompt) || strings.TrimSpace(prompt.Value) == "" || len(prompt.Value) > 2048 || strings.Contains(prompt.Value, "${{") || field(step, "shell") != nil || field(step, "env") != nil {
 				return ErrProfile
 			}
 			continue
@@ -822,7 +835,7 @@ func validateSteps(steps *yaml.Node, files map[string]file, deps map[string]stri
 		}
 		deps[metadataPath] = hex.EncodeToString(h[:])
 		stack[directory] = true
-		err = validateSteps(children, files, deps, stack, depth+1, true, typed, budget)
+		err = validateSteps(children, files, deps, stack, depth+1, true, typed, agents, budget)
 		delete(stack, directory)
 		if err != nil {
 			return err

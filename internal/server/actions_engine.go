@@ -64,6 +64,9 @@ func (s *Server) planActions(ctx context.Context, path, blob, event, ref string,
 		return nil, errActionsEngine
 	}
 	input := runner.ActionPlanInput{Catalog: runner.ActionsCatalog, WorkflowPath: path, WorkflowBlobID: blob, Archive: archive, Event: event, Ref: ref, Images: s.runnerImages}
+	if s.config.ActionsEngineCatalog == runner.ActionsAgentCatalog {
+		input.Catalog = runner.ActionsAgentCatalog
+	}
 	return s.planActionsInput(ctx, input)
 }
 
@@ -76,7 +79,7 @@ func (s *Server) planActionsManual(ctx context.Context, path, blob, ref string, 
 }
 
 func (s *Server) planActionsInput(ctx context.Context, input runner.ActionPlanInput) (*runner.ActionPlan, error) {
-	if !s.actionsEngineConfigured() || !runner.IsActionsCatalog(input.Catalog) || input.Catalog == runner.ActionsInputsCatalog && s.config.ActionsEngineCatalog != runner.ActionsInputsCatalog {
+	if !s.actionsEngineConfigured() || !runner.IsActionsCatalog(input.Catalog) || input.Catalog == runner.ActionsInputsCatalog && s.config.ActionsEngineCatalog != runner.ActionsInputsCatalog || input.Catalog == runner.ActionsAgentCatalog && (s.config.ActionsEngineCatalog != runner.ActionsAgentCatalog || !s.agentACPAvailable(ctx)) {
 		return nil, errActionsEngine
 	}
 	body, err := json.Marshal(input)
@@ -158,7 +161,7 @@ func validateActionPlan(plan runner.ActionPlan, input runner.ActionPlanInput) er
 		}
 		seen := map[string]bool{}
 		for _, step := range j.Steps {
-			if !actionStepID(step.ID) || seen[step.ID] || !boundedActionLabel(step.Name) {
+			if !actionStepID(step.ID) || seen[step.ID] || !boundedActionLabel(step.Name) || step.AgentPrompt != "" && (input.Catalog != runner.ActionsAgentCatalog || strings.TrimSpace(step.AgentPrompt) == "" || !conversationText(step.AgentPrompt, 2048) || strings.Contains(step.AgentPrompt, "${{")) {
 				return errActionsEngine
 			}
 			seen[step.ID] = true

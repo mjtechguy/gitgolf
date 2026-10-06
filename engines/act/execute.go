@@ -86,6 +86,9 @@ func Execute(ctx context.Context, input protocol.ActionExecutionInput, observe f
 	if err != nil || !reflect.DeepEqual(plan, input.Plan) {
 		return ErrExecution
 	}
+	if plan.Catalog == protocol.ActionsAgentCatalog {
+		prepareNativeAgentSteps(native)
+	}
 	phase = "engine_input_validation"
 	if !validatedManualInputs(input, files) {
 		return ErrExecution
@@ -360,7 +363,7 @@ func (o *engineObserver) emit(frame protocol.ActionFrame) error {
 	}
 	o.sequence++
 	frame.Sequence = o.sequence
-	if frame.Kind != "log" {
+	if frame.Kind != "log" && frame.Kind != "agent_requested" {
 		o.eventSequence++
 		frame.EventSequence = o.eventSequence
 	}
@@ -523,8 +526,38 @@ func (o *engineObserver) Fire(entry *logrus.Entry) error {
 		if o.emit(protocol.ActionFrame{Kind: "step_started", InstanceID: job.InstanceID, StepID: ids[0]}) != nil {
 			o.fail()
 		}
+		for _, step := range job.Steps {
+			if step.ID == ids[0] && step.AgentPrompt != "" {
+				if o.plan.Catalog != protocol.ActionsAgentCatalog || o.emit(protocol.ActionFrame{Kind: "agent_requested", InstanceID: job.InstanceID, StepID: step.ID}) != nil {
+					o.fail()
+				}
+			}
+		}
 	}
 	return nil
+}
+
+// The trusted observer blocks this native step until the coordinator's original
+// child task completes. No credentials or client RPC reach its ordinary shell.
+func prepareNativeAgentSteps(plan *model.Plan) {
+	seen := map[*model.Job]bool{}
+	for _, stage := range plan.Stages {
+		for _, run := range stage.Runs {
+			job := run.Job()
+			if seen[job] {
+				continue
+			}
+			seen[job] = true
+			for _, step := range job.Steps {
+				if step.Uses == protocol.WorkflowAgentAction {
+					step.Uses = ""
+					step.With = nil
+					step.Run = "true"
+					step.Shell = "sh"
+				}
+			}
+		}
+	}
 }
 
 type inspected struct {

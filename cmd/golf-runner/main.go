@@ -485,6 +485,9 @@ func (c *coordinator) pollCapabilities() any {
 	}
 	if c.actions != nil && c.manualInputsReady() {
 		out.Catalogs = append(out.Catalogs, runner.ActionsInputsCatalog)
+		if os.Getenv("GOLF_RUNNER_ACTIONS_AGENTS088") == "1" {
+			out.Catalogs = append(out.Catalogs, runner.ActionsAgentCatalog)
+		}
 		out.Capabilities = append(out.Capabilities, runner.ManualInputsCapability)
 	}
 	if c.manualInputsReady() {
@@ -493,6 +496,9 @@ func (c *coordinator) pollCapabilities() any {
 	return out
 }
 func (c *coordinator) validAssignment(a assignment) bool {
+	if a.EngineCatalog == runner.ActionsAgentCatalog && (os.Getenv("GOLF_RUNNER_ACTIONS_AGENTS088") != "1" || !c.manualInputsReady()) {
+		return false
+	}
 	if len(a.ArtifactPaths) > 0 && (!c.manualInputsReady() || runner.ValidateArtifactPaths(a.ArtifactPaths) != nil || a.ActionsPlan != nil || a.ManualInputs != nil || a.ExecutionEnvironment != nil || a.EngineCatalog != "") {
 		return false
 	}
@@ -581,7 +587,9 @@ func (e *actionFrameAckError) Unwrap() error { return e.cause }
 
 func (c *coordinator) acknowledgeActionFrame(ctx context.Context, a assignment, forward *logForwarder, frame runner.ActionFrame) error {
 	var err error
-	if frame.Kind == "log" {
+	if frame.Kind == "agent_requested" {
+		err = c.workflowAgentStep(ctx, a, frame)
+	} else if frame.Kind == "log" {
 		forward.jobInstanceID, forward.stepID = frame.InstanceID, frame.StepID
 		err = forward.write(ctx, runner.LogChunk{Stream: "stdout", Data: []byte(frame.Text)}, true)
 	} else {

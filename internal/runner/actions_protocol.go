@@ -12,13 +12,15 @@ import (
 // separately built engine module.
 const ActionsCatalog = "golf.workflow.act.v0.2.89.linux.v1"
 const ActionsInputsCatalog = "golf.workflow.act.v0.2.89.linux.v2"
+const ActionsAgentCatalog = "golf.workflow.act.v0.2.89.linux.agents088.v1"
+const WorkflowAgentAction = "golf/agent@v1"
 const ManualInputsCapability = "golf.workflow.dispatch.inputs.v1"
 const ActionsEngineCommit = "4f411281417e88660bea1c1a1749aa71ae0bd60f"
 const ActionsDaemonImage = "docker:29.8.1-dind@sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0"
 
 // This identifies known wire catalogs, not configured availability or authority.
 func IsActionsCatalog(c string) bool {
-	return c == ActionsCatalog || c == ActionsInputsCatalog
+	return c == ActionsCatalog || c == ActionsInputsCatalog || c == ActionsAgentCatalog
 }
 
 type ActionPlanInput struct {
@@ -37,8 +39,9 @@ type ActionMatrixEntry struct {
 	Value string `json:"value"`
 }
 type ActionStep struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	AgentPrompt string `json:"agentPrompt,omitempty"`
 }
 type ActionJob struct {
 	InstanceID string              `json:"instanceId"`

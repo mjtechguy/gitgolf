@@ -61,7 +61,7 @@ func (s *Server) executionImage(plan *workflowExecutionPlan) (string, error) {
 		return "", errRunnerUnavailable
 	}
 	if plan.Actions != nil {
-		if !s.actionsEngineConfigured() || !runner.IsActionsCatalog(plan.Actions.Catalog) || plan.Actions.Catalog == runner.ActionsInputsCatalog && s.config.ActionsEngineCatalog != runner.ActionsInputsCatalog || len(plan.Actions.Jobs) == 0 {
+		if !s.actionsEngineConfigured() || !runner.IsActionsCatalog(plan.Actions.Catalog) || plan.Actions.Catalog == runner.ActionsInputsCatalog && s.config.ActionsEngineCatalog != runner.ActionsInputsCatalog || plan.Actions.Catalog == runner.ActionsAgentCatalog && s.config.ActionsEngineCatalog != runner.ActionsAgentCatalog || len(plan.Actions.Jobs) == 0 {
 			return "", errRunnerUnavailable
 		}
 		for _, job := range plan.Actions.Jobs {
@@ -275,7 +275,7 @@ func (s *Server) runnerPoll(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		seenCatalogs[catalog] = true
-		if catalog == runner.ActionsCatalog && s.actionsEngineConfigured() || catalog == runner.ActionsInputsCatalog && s.actionsEngineConfigured() && s.config.ActionsEngineCatalog == runner.ActionsInputsCatalog && manualConsumer {
+		if catalog == runner.ActionsCatalog && s.actionsEngineConfigured() || catalog == runner.ActionsInputsCatalog && s.actionsEngineConfigured() && s.config.ActionsEngineCatalog == runner.ActionsInputsCatalog && manualConsumer || catalog == runner.ActionsAgentCatalog && s.actionsEngineConfigured() && s.config.ActionsEngineCatalog == runner.ActionsAgentCatalog && s.agentACPAvailable(r.Context()) && manualConsumer {
 			catalogs = append(catalogs, catalog)
 		}
 	}
@@ -699,6 +699,18 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	var agentAdmission *workflowAgentAdmission
+	if action == "agent" {
+		if r.TLS == nil || r.TLS.Version < tls.VersionTLS13 {
+			runnerFail(w, 403)
+			return
+		}
+		agentAdmission, err = s.prepareWorkflowAgent(ctx, run, input.JobInstanceID, input.StepID)
+		if err != nil {
+			runnerFail(w, 403)
+			return
+		}
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		runnerFail(w, 503)
@@ -769,6 +781,21 @@ func (s *Server) runnerAttempt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch action {
+	case "agent":
+		state, task, e := s.admitWorkflowAgent(ctx, tx, run, agentAdmission)
+		if e != nil {
+			runnerFail(w, 403)
+			return
+		}
+		if tx.Commit() != nil {
+			runnerFail(w, 503)
+			return
+		}
+		if state == "queued" {
+			s.releaseAgentAccountOwner(agentAdmission.Account.ID)
+		}
+		respond(w, 200, map[string]string{"state": state, "taskId": task})
+		return
 	case "job-git-credential":
 		var cancelled bool
 		if tx.QueryRowContext(ctx, `SELECT cancel_requested FROM golf_workflow_runs WHERE id=$1`, run.ID).Scan(&cancelled) != nil || cancelled {

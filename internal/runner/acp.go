@@ -19,15 +19,19 @@ var ErrACPUnsupported = errors.New("ACP operation is not supported")
 
 type ACPInput struct{ ID, Kind, Text string }
 type ACPPermission struct {
-	ID, Session, Tool string
-	Options           []ACPPermissionOption
+	ID, Session, Tool, Kind string
+	Options                 []ACPPermissionOption
 }
 type ACPPermissionOption struct {
 	ID   string `json:"optionId"`
 	Kind string `json:"kind"`
 }
 type ACPOptions struct {
-	CWD, ResumeSession string
+	CWD, ResumeSession          string
+	ExpectedVersion             string
+	ExpectedMode, ExpectedModel string
+	StopAfterTurn               bool
+	Ready                       func(context.Context, ACPState) error
 	// Gate rechecks current attempt, connection, policy and ownership. BeforeSend
 	// commits the immutable request ID/body; neither callback may silently retry.
 	Gate       func(context.Context) error
@@ -37,6 +41,10 @@ type ACPOptions struct {
 	// Empty/default decisions cancel. Only exact allow_once is eligible.
 	Permission func(context.Context, ACPPermission) (string, error)
 	Input      <-chan ACPInput
+}
+type ACPState struct {
+	Session, Version string
+	Resume           bool
 }
 
 type acpFrame struct {
@@ -124,6 +132,8 @@ func RunACP(ctx context.Context, stream io.ReadWriteCloser, opt ACPOptions) erro
 	cancelRequested := false
 	sequence := int64(0)
 	prompts := 0
+	version := ""
+	resume := false
 	inputClosed := false
 	permissionIDs := map[string]bool{}
 	seen := map[string]bool{}
@@ -154,6 +164,9 @@ func RunACP(ctx context.Context, stream io.ReadWriteCloser, opt ACPOptions) erro
 			return run.Err()
 		case input, ok := <-inputChannel:
 			if !ok {
+				if opt.Gate(run) != nil {
+					return ErrACPProtocol
+				}
 				inputClosed = true
 				if active {
 					if !cancelRequested {
@@ -182,6 +195,24 @@ func RunACP(ctx context.Context, stream io.ReadWriteCloser, opt ACPOptions) erro
 				}
 				cancelRequested = true
 				if err := notify("session/cancel", map[string]string{"sessionId": session}); err != nil {
+					return err
+				}
+				continue
+			}
+			if input.Kind == "resume" {
+				if active || !resume {
+					return ErrACPUnsupported
+				}
+				if err := opt.BeforeSend(run, input); err != nil {
+					return err
+				}
+				seen[input.ID] = true
+				pending = next
+				next++
+				stage = "session"
+				pendingSession = ""
+				opt.ResumeSession = session
+				if err := request(pending, "session/resume", map[string]any{"sessionId": session, "cwd": opt.CWD, "mcpServers": []any{}}); err != nil {
 					return err
 				}
 				continue
@@ -223,7 +254,10 @@ func RunACP(ctx context.Context, stream io.ReadWriteCloser, opt ACPOptions) erro
 				switch stage {
 				case "initialize":
 					var v struct {
-						ProtocolVersion   int `json:"protocolVersion"`
+						ProtocolVersion int `json:"protocolVersion"`
+						AgentInfo       struct {
+							Version string `json:"version"`
+						} `json:"agentInfo"`
 						AgentCapabilities struct {
 							SessionCapabilities struct {
 								Resume json.RawMessage `json:"resume"`
@@ -233,6 +267,11 @@ func RunACP(ctx context.Context, stream io.ReadWriteCloser, opt ACPOptions) erro
 					if json.Unmarshal(f.Result, &v) != nil || v.ProtocolVersion != 1 {
 						return ErrACPProtocol
 					}
+					version = v.AgentInfo.Version
+					if opt.ExpectedVersion != "" && version != opt.ExpectedVersion {
+						return ErrACPUnsupported
+					}
+					resume = len(v.AgentCapabilities.SessionCapabilities.Resume) > 0 && string(v.AgentCapabilities.SessionCapabilities.Resume) != "null"
 					pending = next
 					next++
 					method := "session/new"
@@ -251,9 +290,28 @@ func RunACP(ctx context.Context, stream io.ReadWriteCloser, opt ACPOptions) erro
 				case "session":
 					var v struct {
 						SessionID string `json:"sessionId"`
+						Modes     struct {
+							CurrentModeID string `json:"currentModeId"`
+						} `json:"modes"`
+						Models struct {
+							CurrentModelID string `json:"currentModelId"`
+						} `json:"models"`
+						ConfigOptions []struct{ Category, CurrentValue string } `json:"configOptions"`
 					}
 					if json.Unmarshal(f.Result, &v) != nil {
 						return ErrACPProtocol
+					}
+					mode, model := v.Modes.CurrentModeID, v.Models.CurrentModelID
+					for _, o := range v.ConfigOptions {
+						if o.Category == "mode" {
+							mode = o.CurrentValue
+						}
+						if o.Category == "model" {
+							model = o.CurrentValue
+						}
+					}
+					if opt.ExpectedMode != "" && mode != opt.ExpectedMode || opt.ExpectedModel != "" && model != opt.ExpectedModel {
+						return ErrACPUnsupported
 					}
 					if opt.ResumeSession != "" {
 						session = opt.ResumeSession
@@ -270,6 +328,11 @@ func RunACP(ctx context.Context, stream io.ReadWriteCloser, opt ACPOptions) erro
 					pending = 0
 					if err := emit(AgentObservation{Kind: "thread_started"}); err != nil {
 						return err
+					}
+					if opt.Ready != nil {
+						if err := opt.Ready(run, ACPState{session, version, resume}); err != nil {
+							return err
+						}
 					}
 				case "ready":
 					if !active {
@@ -299,6 +362,9 @@ func RunACP(ctx context.Context, stream io.ReadWriteCloser, opt ACPOptions) erro
 					}
 					active = false
 					pending = 0
+					if opt.StopAfterTurn {
+						return nil
+					}
 					if inputClosed {
 						return nil
 					}
@@ -330,7 +396,7 @@ func RunACP(ctx context.Context, stream io.ReadWriteCloser, opt ACPOptions) erro
 					}
 					optionIDs[option.ID] = true
 				}
-				permission := ACPPermission{ID: requestID, Session: session, Tool: p.ToolCall.ToolCallID, Options: p.Options}
+				permission := ACPPermission{ID: requestID, Session: session, Tool: p.ToolCall.ToolCallID, Kind: tools[p.ToolCall.ToolCallID], Options: p.Options}
 
 				decision := ""
 				if opt.Permission != nil && !cancelRequested {
@@ -412,13 +478,25 @@ func RunACP(ctx context.Context, stream io.ReadWriteCloser, opt ACPOptions) erro
 					MessageID                string                      `json:"messageId"`
 					Content                  struct{ Type, Text string } `json:"content"`
 					ToolCallID, Kind, Status string
-					Entries                  []struct{ Content, Status string } `json:"entries"`
+					CurrentModeID            string                                    `json:"currentModeId"`
+					ConfigOptions            []struct{ Category, CurrentValue string } `json:"configOptions"`
+					Entries                  []struct{ Content, Status string }        `json:"entries"`
 				} `json:"update"`
 			}
 			if json.Unmarshal(f.Params, &p) != nil {
 				return ErrACPProtocol
 			}
 			u := p.Update
+			if u.Type == "current_mode_update" && opt.ExpectedMode != "" && u.CurrentModeID != opt.ExpectedMode {
+				return ErrACPUnsupported
+			}
+			if u.Type == "config_option_update" {
+				for _, o := range u.ConfigOptions {
+					if o.Category == "mode" && opt.ExpectedMode != "" && o.CurrentValue != opt.ExpectedMode || o.Category == "model" && opt.ExpectedModel != "" && o.CurrentValue != opt.ExpectedModel {
+						return ErrACPUnsupported
+					}
+				}
+			}
 			// Native OpenCode advertises commands before session/new acknowledges.
 			// Bind this metadata to the ensuing receipt; do not replay it as a turn.
 			if stage == "session" {
@@ -501,6 +579,12 @@ func RunACP(ctx context.Context, stream io.ReadWriteCloser, opt ACPOptions) erro
 						kind = "commandExecution"
 					} else if u.Kind == "edit" {
 						kind = "fileChange"
+					} else if u.Kind == "read" {
+						tools[u.ToolCallID] = "read"
+						if len(tools) > 64 {
+							return ErrACPProtocol
+						}
+						continue
 					} else {
 						continue
 					}
@@ -514,6 +598,9 @@ func RunACP(ctx context.Context, stream io.ReadWriteCloser, opt ACPOptions) erro
 				}
 				if kind == "finished" {
 					return ErrACPProtocol
+				}
+				if kind == "read" {
+					continue
 				}
 				if kind != "" && (u.Status == "completed" || u.Status == "failed") {
 					if err := emit(AgentObservation{Kind: "tool_completed", ItemID: u.ToolCallID, ToolKind: kind, Status: u.Status}); err != nil {

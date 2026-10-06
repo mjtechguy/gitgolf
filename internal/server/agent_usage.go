@@ -158,7 +158,7 @@ func (s *Server) agentSettings(ctx context.Context, a codexActor, auth execution
 	if rev > 0 && owner != auth.OwnerID {
 		return nil, errExecutionPolicyConflict
 	}
-	v := &golfv1.AgentUsageSettings{Scope: scope, ScopeId: auth.ID, Revision: strconv.FormatInt(rev, 10), AuthorityRevision: auth.Revision, CanEdit: auth.CanEdit, Config: c, Effective: proto.Clone(c).(*golfv1.AgentUsageConfig), BlockedReasons: []string{"Managed manual Codex tasks and configured OpenCode Go PR reviewers use the local worker; other automatic agent triggers remain unavailable."}}
+	v := &golfv1.AgentUsageSettings{Scope: scope, ScopeId: auth.ID, Revision: strconv.FormatInt(rev, 10), AuthorityRevision: auth.Revision, CanEdit: auth.CanEdit, Config: c, Effective: proto.Clone(c).(*golfv1.AgentUsageConfig), BlockedReasons: []string{"Managed Codex tasks and configured OpenCode Go PR reviewers use the local worker. OpenCode conversation and workflow steps require separate exact ACP image/version/policy receipts; other automatic agent triggers remain unavailable."}}
 	if len(overrides) > 0 && overrides[0] != nil {
 		o := overrides[0]
 		if o.ConnectionId != "" {

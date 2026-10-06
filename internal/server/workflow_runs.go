@@ -114,7 +114,7 @@ func wireWorkflowRun(r workflowRunRecord, canCancel bool) *golfv1.WorkflowRun {
 	if w.EngineCatalog == "" {
 		w.EngineCatalog = workflowExecutionCatalog
 	}
-	if w.EngineCatalog == runner.ActionsCatalog || w.EngineCatalog == workflowTypedEngineCatalog {
+	if runner.IsActionsCatalog(w.EngineCatalog) {
 		w.EngineCommit = runner.ActionsEngineCommit
 		w.Jobs = r.ActionJobs
 	}

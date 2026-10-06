@@ -150,7 +150,8 @@ func (s *Server) taskConfig(ctx context.Context, a codexActor, repo *golfv1.Repo
 	if !c.Enabled || !manual || r.State != "CONNECTED" || r.Scope == "INSTANCE" && !r.Use {
 		return auth, nil, r, invalid("Enable the selected trigger, model and account at every required scope.")
 	}
-	if !(r.Harness == "codex" && r.Method == "chatgptDeviceCode") && !(trigger != "manual" && r.Harness == "opencode" && r.Provider == "opencode-go" && s.config.ReviewImage != "") {
+	managedACP := trigger == "manual" && r.Harness == "opencode" && r.Provider == "opencode-go" && s.agentACPAvailable(ctx) && c.Reasoning == ""
+	if !(r.Harness == "codex" && r.Method == "chatgptDeviceCode") && !(trigger != "manual" && r.Harness == "opencode" && r.Provider == "opencode-go" && s.config.ReviewImage != "") && !managedACP {
 		return auth, nil, r, invalid("This executor supports Codex ChatGPT connections. Other harnesses and API billing require separate qualification.")
 	}
 	if e = agentConfigValid(c); e != nil {
@@ -286,21 +287,24 @@ func (s *Server) CreateAgentTask(ctx context.Context, req *connect.Request[golfv
 	}
 	// Release this server's idle account broker. The worker must acquire the same
 	// advisory account owner before exporting rotating credentials for a task.
-	s.codexMu.Lock()
-	rt := s.codexRuntimes[r.ID]
-	s.codexMu.Unlock()
-	if rt != nil {
-		rt.mu.Lock()
-		s.closeCodexLocked(rt)
-		rt.mu.Unlock()
-	}
+	s.releaseAgentAccountOwner(r.ID)
 	task, e := s.taskRecord(ctx, id)
 	if e != nil {
 		return nil, rpcError(e)
 	}
 	return connect.NewResponse(&golfv1.CreateAgentTaskResponse{Task: task.wire(true)}), nil
 }
-func mustID(v string) int64       { n, _ := strconv.ParseInt(v, 10, 64); return n }
+func mustID(v string) int64 { n, _ := strconv.ParseInt(v, 10, 64); return n }
+func (s *Server) releaseAgentAccountOwner(id string) {
+	s.codexMu.Lock()
+	rt := s.codexRuntimes[id]
+	s.codexMu.Unlock()
+	if rt != nil {
+		rt.mu.Lock()
+		s.closeCodexLocked(rt)
+		rt.mu.Unlock()
+	}
+}
 func bytesEqual(a, b []byte) bool { return string(a) == string(b) }
 func (s *Server) agentFence(ctx context.Context, tx *sql.Tx, a codexActor, r codexRecord, repoID, ownerID int64, fingerprint string) error {
 	// Shared policy locks serialize configuration changes against admission and
@@ -345,7 +349,7 @@ func (s *Server) ListAgentTasks(ctx context.Context, req *connect.Request[golfv1
 		return nil, rpcError(errStorageUnavailable)
 	}
 	defer rows.Close()
-	out := &golfv1.ListAgentTasksResponse{ExecutionAvailable: s.agentAvailable(ctx), Reason: "Manual Codex ChatGPT tasks only. Automatic triggers, API billing and additional harnesses are not enabled."}
+	out := &golfv1.ListAgentTasksResponse{ExecutionAvailable: s.agentAvailable(ctx), Reason: "Manual Codex tasks; OpenCode conversation requires an exact qualified ACP image. Automatic triggers and additional harnesses are not enabled."}
 	for rows.Next() {
 		v, e := scanAgentTask(rows)
 		if e != nil {

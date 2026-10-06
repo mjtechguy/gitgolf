@@ -27,6 +27,9 @@ type AgentJob struct {
 	// Observe must durably accept the private projection, or fail closed. The
 	// consumer screens credentials and fences current authority before storage.
 	Observe func(context.Context, AgentObservation) error
+	// Managed ACP is opt-in after exact image/native sandbox qualification.
+	ACP        *ACPOptions
+	Checkpoint func(context.Context, []byte) error
 }
 
 // AgentObservation is a bounded private projection of native observations, not
@@ -150,6 +153,9 @@ func (e *Executor) ExecuteAgent(ctx context.Context, j AgentJob) (out AgentResul
 	}
 	stage = "credential-envelope"
 	authTar, err := agentArchive(j.Auth)
+	if j.ACP != nil {
+		authTar, err = managedACPEnvelope(j)
+	}
 	if err != nil {
 		return out, err
 	}
@@ -204,7 +210,11 @@ func (e *Executor) ExecuteAgent(ctx context.Context, j AgentJob) (out AgentResul
 		mount := "type=volume,src=" + volume + ",dst=/golf,volume-nocopy"
 		if task {
 			mount += ",readonly"
-			args = append(args, "--network=bridge", "--read-only", "--init", "--security-opt=seccomp="+j.SeccompPath, "--tmpfs=/workspace:rw,nosuid,nodev,size=134217728,mode=0700,uid=1000,gid=1000", "--tmpfs=/auth:rw,nosuid,nodev,noexec,size=16777216,mode=0700,uid=1000,gid=1000", "--tmpfs=/tmp:rw,nosuid,nodev,size=67108864,mode=1777", "--workdir=/workspace")
+			authMount := "--tmpfs=/auth:rw,nosuid,nodev,noexec,size=16777216,mode=0700,uid=1000,gid=1000"
+			if j.ACP != nil {
+				authMount = "--tmpfs=/auth:rw,nosuid,nodev,noexec,size=536870912,mode=0700,uid=1000,gid=1000"
+			}
+			args = append(args, "--network=bridge", "--read-only", "--init", "--security-opt=seccomp="+j.SeccompPath, "--tmpfs=/workspace:rw,nosuid,nodev,size=134217728,mode=0700,uid=1000,gid=1000", authMount, "--tmpfs=/tmp:rw,nosuid,nodev,size=67108864,mode=1777", "--workdir=/workspace")
 		} else {
 			args = append(args, "--network=none")
 		}
@@ -251,11 +261,20 @@ git init -q
 git -c core.hooksPath=/dev/null add .
 git -c core.hooksPath=/dev/null -c user.name=Golf -c user.email=task@golf.invalid commit -q --allow-empty -m snapshot
 `
+	if j.ACP != nil {
+		// Never load repository-owned executable config, plugins, dotenv or hooks.
+		bootstrap = strings.Replace(bootstrap, "mkdir -p /workspace/.codex", `find /workspace -type d -name .opencode -prune -exec rm -rf {} +
+find /workspace -type f \( -name opencode.json -o -name opencode.jsonc -o -name '.env*' \) -delete
+mkdir -p /workspace/.codex`, 1)
+	}
 	stage = "workspace-bootstrap"
 	if _, err = e.command(run, nil, "container", "exec", container, "/bin/sh", "-c", bootstrap); err != nil {
 		return
 	}
 	args := []string{"container", "exec", "-i", container, "/usr/bin/env", "-i", "PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/auth", "CODEX_HOME=/auth", "RUST_LOG=off", "/bin/sh", "-c", "echo $$ > /auth/native.pid; exec codex app-server --listen stdio://"}
+	if j.ACP != nil {
+		args = managedACPCommand(container)
+	}
 	cmd := exec.CommandContext(run, e.config.DockerBinary, args...)
 	cmd.WaitDelay = 2 * time.Second
 	cmd.Stderr = io.Discard
@@ -273,7 +292,67 @@ git -c core.hooksPath=/dev/null -c user.name=Golf -c user.email=task@golf.invali
 	}
 	defer func() { input.Close(); cmd.Process.Kill(); cmd.Wait() }()
 	stage = "native-protocol"
-	out, err = agentProtocol(run, input, output, j)
+	if j.ACP != nil {
+		options := *j.ACP
+		options.CWD = "/workspace"
+		options.ExpectedVersion = ManagedACPVersion
+		options.ExpectedMode = "golf-workspace"
+		options.ExpectedModel = j.Model
+		original := options.Observe
+		ready := options.Ready
+		session := ""
+		lastStatus := ""
+		options.Ready = func(ctx context.Context, v ACPState) error {
+			session = v.Session
+			if ready != nil {
+				return ready(ctx, v)
+			}
+			return nil
+		}
+		options.Observe = func(ctx context.Context, v AgentObservation) error {
+			if err := original(ctx, v); err != nil {
+				return err
+			}
+			if v.Kind == "assistant_message" {
+				out.Summary = v.Text
+			}
+			if v.Kind == "turn_completed" {
+				lastStatus = v.Status
+			}
+			if v.Kind == "turn_completed" && j.Checkpoint != nil {
+				tokens, err := e.managedACPUsage(ctx, container, session, j.Model)
+				if err != nil {
+					return err
+				}
+				out.Tokens = tokens
+				if tokens > int64(j.TokenBudget) {
+					return ErrACPTokenBudget
+				}
+				if err = original(ctx, AgentObservation{Kind: "usage_updated", ThreadID: session, TurnID: v.TurnID, TotalTokens: &tokens}); err != nil {
+					return err
+				}
+				auth, err := e.managedACPAuth(ctx, container)
+				if err != nil {
+					return err
+				}
+				return j.Checkpoint(ctx, auth)
+			}
+			return nil
+		}
+		err = RunACP(run, &acpDuplex{Reader: output, Writer: input, close: func() error { return input.Close() }}, options)
+		if err == nil && lastStatus == "completed" {
+			out.State = "succeeded"
+		} else if err == nil {
+			out.State = "failed"
+			out.Summary = ""
+			err = ErrACPProtocol
+		} else if errors.Is(err, ErrACPTokenBudget) {
+			out.State = "budget_exceeded"
+			out.Summary = ""
+		}
+	} else {
+		out, err = agentProtocol(run, input, output, j)
+	}
 	// Always recover the rotating native cache, including cancellation/failure.
 	// It never becomes an artifact, browser receipt or log.
 	recoverCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -285,7 +364,12 @@ git -c core.hooksPath=/dev/null -c user.name=Golf -c user.email=task@golf.invali
 		return out, ErrInfrastructure
 	}
 	stage = "credential-recovery"
-	auth, x := e.command(recoverCtx, nil, "container", "exec", container, "/bin/cat", "/auth/auth.json")
+	var auth []byte
+	if j.ACP != nil {
+		auth, x = e.managedACPAuth(recoverCtx, container)
+	} else {
+		auth, x = e.command(recoverCtx, nil, "container", "exec", container, "/bin/cat", "/auth/auth.json")
+	}
 	if x != nil || len(auth) > 65536 || !json.Valid(auth) {
 		out.State = "lost"
 		out.Patch = ""

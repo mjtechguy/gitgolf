@@ -133,7 +133,7 @@ func conversationMetadata(p conversationPayload) (kind, status, tool string, tok
 		if kind == "tool_started" && status != "inProgress" || kind == "tool_completed" && status != "completed" && status != "failed" && status != "declined" || kind == "approval_declined" && status != "declined" {
 			return bad()
 		}
-	case "assistant_message":
+	case "assistant_message", "user_message":
 		if !conversationNativeID(v.ItemID) || !conversationText(v.Text, 65536) || (v.Phase != "" && v.Phase != "commentary" && v.Phase != "final_answer") || status != "" {
 			return bad()
 		}
@@ -163,7 +163,7 @@ func conversationMetadata(p conversationPayload) (kind, status, tool string, tok
 	default:
 		return bad()
 	}
-	if kind != "assistant_message" && (v.Text != "" || v.Phase != "") {
+	if kind != "assistant_message" && kind != "user_message" && (v.Text != "" || v.Phase != "") {
 		return bad()
 	}
 	if kind != "plan_updated" && v.Plan != nil {
@@ -189,7 +189,7 @@ func (s *Server) conversationGuard(ctx context.Context, t agentTaskRecord, r cod
 		return e
 	}
 	return s.codexGuard(ctx, a, func(tx *sql.Tx, _ int64) error {
-		if e := s.agentFence(ctx, tx, a, r, t.RepositoryID, t.OwnerID, t.Fingerprint); e != nil {
+		if e := s.agentAttemptFence(ctx, tx, a, r, t); e != nil {
 			return e
 		}
 		var owns bool

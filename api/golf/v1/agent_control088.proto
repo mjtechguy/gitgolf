@@ -1,0 +1,48 @@
+syntax = "proto3";
+package golf.v1;
+option go_package = "github.com/mjtechguy/golf-git/gen/golf/v1;golfv1";
+
+// Cookie-session-only control of one original managed attempt. Inspection grants
+// cannot send prompts, grant tools or acquire another session's dispatch authority.
+service AgentControlService {
+  rpc GetAgentControl(GetAgentControlRequest) returns (GetAgentControlResponse);
+  rpc SubmitAgentCommand(SubmitAgentCommandRequest) returns (SubmitAgentCommandResponse);
+  rpc ListWorkflowAgentChildren(ListWorkflowAgentChildrenRequest) returns (ListWorkflowAgentChildrenResponse);
+}
+message GetAgentControlRequest { string task_id = 1; string attempt_id = 2; }
+message AgentControl {
+  string task_id = 1;
+  string attempt_id = 2;
+  string task_version = 3;
+  string revision = 4;
+  bool available = 5;
+  string state = 6; // initializing, active, idle, permission, closed
+  string reason = 7;
+  string native_version = 8;
+  string image = 9;
+  string permission_id = 10;
+  string tool_id = 11;
+  repeated string allow_once_options = 12;
+  bool can_resume = 13; // Native negotiation + preserved original sandbox only.
+  repeated AgentControlMessage messages = 14; // Completed text, screened at the native cache checkpoint.
+}
+message AgentControlMessage { string sequence = 1; string text = 2; }
+message GetAgentControlResponse { AgentControl control = 1; }
+message SubmitAgentCommandRequest {
+  string task_id = 1;
+  string attempt_id = 2;
+  string expected_task_version = 3;
+  string expected_revision = 4;
+  string request_id = 5;
+  string kind = 6; // reply, cancel_turn, resume, permission, finish
+  string text = 7;
+  string permission_id = 8;
+  string option_id = 9; // empty rejects; only an exact native allow_once is eligible.
+}
+message SubmitAgentCommandResponse {
+  string request_id = 1;
+  string state = 2; // queued, claimed: acknowledgement never proves native effect.
+}
+message ListWorkflowAgentChildrenRequest { string run_id = 1; string attempt_id = 2; }
+message WorkflowAgentChild { string job_instance_id = 1; string step_id = 2; string task_id = 3; string attempt_id = 4; string state = 5; }
+message ListWorkflowAgentChildrenResponse { string run_id = 1; string attempt_id = 2; string repository_id = 3; string commit_id = 4; repeated WorkflowAgentChild children = 5; }

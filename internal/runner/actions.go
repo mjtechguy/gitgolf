@@ -408,7 +408,18 @@ func (a *ActionsExecutor) execute(ctx context.Context, attempt string, input Act
 			break
 		}
 		sequence = frame.Sequence
-		if frame.Kind == "log" {
+		if frame.Kind == "agent_requested" {
+			known := false
+			for _, job := range input.Plan.Jobs {
+				for _, step := range job.Steps {
+					known = known || job.InstanceID == frame.InstanceID && step.ID == frame.StepID && step.AgentPrompt != ""
+				}
+			}
+			if input.Plan.Catalog != ActionsAgentCatalog || !known || frame.EventSequence != 0 || frame.Text != "" || frame.State != "" {
+				err = ErrInfrastructure
+				break
+			}
+		} else if frame.Kind == "log" {
 			logBytes += len(frame.Text)
 			if frame.EventSequence != 0 || frame.State != "" || frame.Text == "" || logBytes > 256<<10 {
 				err = ErrInfrastructure

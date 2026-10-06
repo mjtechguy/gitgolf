@@ -86,13 +86,24 @@ func (s *Server) RunAgentWorker(ctx context.Context, worker, seccomp string) err
 			return errors.New("Native read-only reviewer qualification failed; worker remains unavailable")
 		}
 	}
+	acpImage, acpVersion := "", ""
+	if s.config.ReviewImage != "" {
+		check, cancel := context.WithTimeout(ctx, 30*time.Second)
+		if err := executor.QualifyManagedACP(check, s.config.ReviewImage, seccomp); err == nil {
+			acpImage, acpVersion = s.config.ReviewImage, runner.ManagedACPVersion
+		} else if errors.Is(err, runner.ErrCleanup) {
+			cancel()
+			return errors.New("ACP qualification cleanup failed; worker remains unavailable")
+		}
+		cancel()
+	}
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {
 		if ctx.Err() != nil {
 			return nil
 		}
-		_, e = s.db.ExecContext(ctx, `INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image) VALUES($1,$2,$3) ON CONFLICT(forge_url,worker_id) DO UPDATE SET image=EXCLUDED.image,last_seen=clock_timestamp()`, s.config.GiteaURL, worker, s.config.AgentImage)
+		_, e = s.db.ExecContext(ctx, `INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version) VALUES($1,$2,$3,$4,$5) ON CONFLICT(forge_url,worker_id) DO UPDATE SET image=EXCLUDED.image,acp_image=EXCLUDED.acp_image,acp_version=EXCLUDED.acp_version,last_seen=clock_timestamp()`, s.config.GiteaURL, worker, s.config.AgentImage, acpImage, acpVersion)
 		if e != nil {
 			return errStorageUnavailable
 		}
@@ -107,7 +118,7 @@ func (s *Server) RunAgentWorker(ctx context.Context, worker, seccomp string) err
 			s.publishReviews(ctx)
 		}
 		// A reviewer task is dispatchable only after its durable review receipt is linked.
-		t, e := scanAgentTask(s.db.QueryRowContext(ctx, `SELECT `+agentTaskColumns+` FROM golf_agent_tasks WHERE forge_url=$1 AND state='queued' AND (COALESCE(config->>'model_id','') NOT LIKE 'opencode-go/%' OR EXISTS(SELECT 1 FROM golf_reviewer_runs rr WHERE rr.task_id=golf_agent_tasks.id AND rr.state IN ('queued','running'))) ORDER BY created_at,id LIMIT 1`, s.config.GiteaURL))
+		t, e := scanAgentTask(s.db.QueryRowContext(ctx, `SELECT `+agentTaskColumns+` FROM golf_agent_tasks WHERE forge_url=$1 AND state='queued' AND (COALESCE(config->>'model_id','') NOT LIKE 'opencode-go/%' OR $2 OR EXISTS(SELECT 1 FROM golf_reviewer_runs rr WHERE rr.task_id=golf_agent_tasks.id AND rr.state IN ('queued','running'))) ORDER BY created_at,id LIMIT 1`, s.config.GiteaURL, acpImage != ""))
 		if e == nil {
 			_ = s.executeAgentTask(ctx, executor, worker, seccomp, t)
 		} else if !errors.Is(e, sql.ErrNoRows) {
@@ -134,7 +145,10 @@ func (s *Server) taskActor(ctx context.Context, t agentTaskRecord) (codexActor, 
 	if caller.ID != t.NativeID {
 		return a, errUnauthenticated
 	}
-	return a, s.taskAccess(ctx, a, t)
+	if e = s.taskAccess(ctx, a, t); e == nil {
+		e = s.workflowAgentAuthority(ctx, t)
+	}
+	return a, e
 }
 func (s *Server) rejectAgentTask(ctx context.Context, t agentTaskRecord, reason string) {
 	_, _ = s.db.ExecContext(ctx, `UPDATE golf_agent_tasks SET state='cancelled',reason=$2,version=version+1,finished_at=clock_timestamp() WHERE id=$1 AND forge_url=$3 AND state='queued'`, t.ID, reason, s.config.GiteaURL)
@@ -176,7 +190,7 @@ func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor
 		return e
 	}
 	e = s.codexGuard(ctx, a, func(tx *sql.Tx, _ int64) error {
-		if e := s.agentFence(ctx, tx, a, r, t.RepositoryID, t.OwnerID, t.Fingerprint); e != nil {
+		if e := s.agentAttemptFence(ctx, tx, a, r, t); e != nil {
 			return e
 		}
 		// Conservative global concurrency ceiling; account ownership further limits
@@ -205,6 +219,7 @@ func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor
 		}
 		return e
 	}
+	t.Attempt, t.Worker, t.Version = attempt, worker, t.Version+1
 	var encrypted []byte
 	var key string
 	e = owner.QueryRowContext(ctx, `SELECT encrypted_credential,credential_key_id FROM golf_codex_auth WHERE connection_id=$1`, r.ID).Scan(&encrypted, &key)
@@ -245,7 +260,7 @@ func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor
 				}
 				if alive {
 					err = s.codexGuard(check, fresh, func(tx *sql.Tx, _ int64) error {
-						if e := s.agentFence(check, tx, fresh, r, t.RepositoryID, t.OwnerID, t.Fingerprint); e != nil {
+						if e := s.agentAttemptFence(check, tx, fresh, r, t); e != nil {
 							return e
 						}
 						result, e := tx.ExecContext(check, `UPDATE golf_agent_tasks SET lease_expires_at=clock_timestamp()+interval '45 seconds' WHERE id=$1 AND state='running' AND attempt_id=$2 AND worker_id=$3 AND lease_expires_at>clock_timestamp()`, t.ID, attempt, worker)
@@ -309,7 +324,29 @@ func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor
 	}
 	if r.Harness == "opencode" && r.Provider == "opencode-go" {
 		job.ImageDigest = s.config.ReviewImage
-		result, executionErr = executor.ExecuteReview(run, job)
+		var reviewer bool
+		if e = s.db.QueryRowContext(run, `SELECT EXISTS(SELECT 1 FROM golf_reviewer_runs WHERE task_id=$1)`, t.ID).Scan(&reviewer); e != nil {
+			executionErr = errStorageUnavailable
+		} else if reviewer {
+			result, executionErr = executor.ExecuteReview(run, job)
+		} else if !s.agentACPAvailable(run) {
+			executionErr = errRunnerUnavailable
+		} else {
+			cleanup, err := s.managedACPJob(run, t, r, worker, attempt, &job)
+			if err != nil {
+				executionErr = err
+			} else {
+				var workflowChild bool
+				if e = s.db.QueryRowContext(run, `SELECT EXISTS(SELECT 1 FROM golf_workflow_agent_children WHERE task_id=$1)`, t.ID).Scan(&workflowChild); e != nil {
+					executionErr = errStorageUnavailable
+					cleanup()
+				} else {
+					job.ACP.StopAfterTurn = workflowChild
+					result, executionErr = executor.ExecuteAgent(run, job)
+					cleanup()
+				}
+			}
+		}
 	} else {
 		result, executionErr = executor.ExecuteAgent(run, job)
 	}
@@ -346,7 +383,7 @@ func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor
 		return e
 	}
 	e = s.codexGuard(finish, fresh, func(tx *sql.Tx, _ int64) error {
-		if e := s.agentFence(finish, tx, fresh, r, t.RepositoryID, t.OwnerID, t.Fingerprint); e != nil {
+		if e := s.agentAttemptFence(finish, tx, fresh, r, t); e != nil {
 			return e
 		}
 		var state string
