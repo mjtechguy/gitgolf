@@ -39,6 +39,7 @@ async function fixture(page:Page){
    case'GetPackagePublication':return respond(route,p.GetPackagePublicationResponseSchema,{operation:s.packageOperation});
    case'DownloadGenericPackageFile':return respond(route,p.DownloadGenericPackageFileResponseSchema,{repositoryId:'19',packageId:'7',fileId:'8',fileName:'PRIVATE-FILE.txt',sha256:sha(Buffer.from('hello')),content:Buffer.from('hello')});
    case'GetPullRequest':return respond(route,p.GetPullRequestResponseSchema,{pullRequest:{id:'101',number:7,title:'Review current snapshot',body:'Private PR body',state:p.IssueState.OPEN,user,revision:P,mergeBaseCommitId:H,base:{repositoryId:'19',ref:'main',commitId:H},head:{repositoryId:'19',ref:'feature',commitId:'d'.repeat(40)},createdAt:'2026-10-06T00:00:00Z',updatedAt:'2026-10-06T00:00:00Z'}});
+   case'GetPullReviewRequests':return respond(route,p.GetPullReviewRequestsResponseSchema,{repositoryId:'19',pullRequestId:'101',number:7,pullRevision:P,requestsRevision:R,canManage:false,reviewers:[],teams:[]});
    case'ListPullRequestReviews':return respond(route,p.ListPullRequestReviewsResponseSchema,{reviews:[]});
    case'GetPullRequestDiscussion':return respond(route,p.GetPullRequestDiscussionResponseSchema,{issue:{id:'102',number:7,title:'Review current snapshot',state:p.IssueState.OPEN}});
    case'ListIssueComments':return respond(route,p.ListIssueCommentsResponseSchema,{});
