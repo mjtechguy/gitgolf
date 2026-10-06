@@ -56,11 +56,18 @@ func (s *Server) GetRepositoryMirrorStatus(ctx context.Context, req *connect.Req
 			}
 			host = strings.ToLower(u.Hostname())
 		}
+		var configuration mirrorConfiguration
+		if _, e = s.forge(ctx, http.MethodGet, base, token, nil, &configuration); e != nil {
+			return e
+		}
+		if configuration.ID != row.ID || configuration.Mirror == nil || *configuration.Mirror != *row.Mirror || configuration.Interval != row.Interval || configuration.OriginalURL != row.OriginalURL || configuration.Archived == nil {
+			return errRepositoryAccessConflict
+		}
 		updated := row.Updated
 		if strings.HasPrefix(updated, "0001-") {
 			updated = ""
 		}
-		result = &golfv1.GetRepositoryMirrorStatusResponse{Repository: req.Msg.Repository, RepositoryId: req.Msg.RepositoryId, PullMirror: *row.Mirror, Interval: row.Interval, LastUpdatedAt: updated, SourceHost: host}
+		result = &golfv1.GetRepositoryMirrorStatusResponse{Repository: req.Msg.Repository, RepositoryId: req.Msg.RepositoryId, PullMirror: *row.Mirror, Interval: row.Interval, LastUpdatedAt: updated, SourceHost: host, OwnerId: before.OwnerId, ConfigurationRevision: mirrorRevision(configuration)}
 		after, e := s.rulesAuthority(ctx, token, key, actor)
 		if e != nil {
 			return e

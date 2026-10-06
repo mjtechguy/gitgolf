@@ -4648,6 +4648,8 @@ message GetPullReviewRequestOperationResponse { PullReviewRequestOperation opera
 
 service RepositoryMirrorService {
   rpc GetRepositoryMirrorStatus(GetRepositoryMirrorStatusRequest) returns (GetRepositoryMirrorStatusResponse);
+ rpc SubmitRepositoryMirrorOperation(SubmitRepositoryMirrorOperationRequest) returns (SubmitRepositoryMirrorOperationResponse);
+ rpc GetRepositoryMirrorOperation(GetRepositoryMirrorOperationRequest) returns (GetRepositoryMirrorOperationResponse);
 }
 message GetRepositoryMirrorStatusRequest {
   RepositoryKey repository = 1;
@@ -4661,6 +4663,8 @@ message GetRepositoryMirrorStatusResponse {
   string last_updated_at = 5;
   // Host only; remote paths, credentials and query strings never leave the adapter.
   string source_host = 6;
+ string owner_id = 7;
+ string configuration_revision = 8;
 }
 
 message ListOwnForgeNotificationsRequest { bool include_read = 1; PageRequest page = 2; }
@@ -4719,3 +4723,79 @@ message GetRepositoryWikiPageResponse {
  string content_unavailable_reason = 4;
  string commit_count = 5;
 }
+
+// Native forge completion078: original wiki writes and current package reads.
+service RepositoryWikiManagementService {
+ rpc GetRepositoryWikiWriteContext(GetRepositoryWikiWriteContextRequest) returns (GetRepositoryWikiWriteContextResponse);
+ rpc SubmitRepositoryWikiOperation(SubmitRepositoryWikiOperationRequest) returns (SubmitRepositoryWikiOperationResponse);
+ rpc GetRepositoryWikiOperation(GetRepositoryWikiOperationRequest) returns (GetRepositoryWikiOperationResponse);
+ rpc ListRepositoryWikiRevisions(ListRepositoryWikiRevisionsRequest) returns (ListRepositoryWikiRevisionsResponse);
+}
+message GetRepositoryWikiWriteContextRequest { RepositoryKey repository = 1; string repository_id = 2; }
+message GetRepositoryWikiWriteContextResponse { RepositoryAccess access = 1; }
+enum RepositoryWikiOperationKind {
+ REPOSITORY_WIKI_OPERATION_KIND_UNSPECIFIED = 0;
+ REPOSITORY_WIKI_OPERATION_KIND_CREATE = 1;
+ REPOSITORY_WIKI_OPERATION_KIND_EDIT = 2;
+ REPOSITORY_WIKI_OPERATION_KIND_DELETE = 3;
+}
+message SubmitRepositoryWikiOperationRequest {
+ RepositoryKey repository = 1; string repository_id = 2; string owner_id = 3; string access_revision = 4;
+ string operation_id = 5; RepositoryWikiOperationKind kind = 6; string slug = 7;
+ string expected_commit_id = 8; string title = 9; string markdown = 10; string commit_message = 11;
+}
+message GetRepositoryWikiOperationRequest { RepositoryKey repository = 1; string repository_id = 2; string owner_id = 3; string operation_id = 4; }
+message RepositoryWikiOperation {
+ string contract = 1; string operation_id = 2; RepositoryKey repository = 3; string repository_id = 4;
+ string owner_id = 5; string actor_id = 6; RepositoryWikiOperationKind kind = 7; string slug = 8;
+ string expected_commit_id = 9; string input_sha256 = 10; RepositoryReleasePublicationPhase phase = 11;
+ string result_slug = 12; string result_commit_id = 13; string failure_code = 14; string created_at = 15; string updated_at = 16;
+}
+message SubmitRepositoryWikiOperationResponse { RepositoryWikiOperation operation = 1; }
+message GetRepositoryWikiOperationResponse { RepositoryWikiOperation operation = 1; }
+message ListRepositoryWikiRevisionsRequest { RepositoryKey repository = 1; string repository_id = 2; string slug = 3; uint32 page = 4; }
+message RepositoryWikiRevision { string commit_id = 1; string author_name = 2; string updated_at = 3; string message = 4; }
+message ListRepositoryWikiRevisionsResponse { string repository_id = 1; string slug = 2; string observed_commit_id = 3; repeated RepositoryWikiRevision revisions = 4; string native_commit_count = 5; uint32 next_page = 6; }
+service ForgePackageService {
+ rpc ListRepositoryPackages(ListRepositoryPackagesRequest) returns (ListRepositoryPackagesResponse);
+ rpc GetRepositoryPackageFiles(GetRepositoryPackageFilesRequest) returns (GetRepositoryPackageFilesResponse);
+}
+message ListRepositoryPackagesRequest { RepositoryKey repository = 1; string repository_id = 2; PageRequest page = 3; }
+message ForgePackage {
+ string id = 1; string name = 2; string type = 3; string version = 4; string created_at = 5; string creator_login = 6;
+}
+message ListRepositoryPackagesResponse { string repository_id = 1; repeated ForgePackage packages = 2; PageResponse page = 3; }
+message GetRepositoryPackageFilesRequest { RepositoryKey repository = 1; string repository_id = 2; ForgePackage package = 3; }
+message ForgePackageFile { string id = 1; string name = 2; string size_bytes = 3; string sha256 = 4; }
+message GetRepositoryPackageFilesResponse { string repository_id = 1; string package_id = 2; repeated ForgePackageFile files = 3; }
+service OrganizationLabelService {
+ rpc ListOrganizationLabels(ListOrganizationLabelsRequest) returns (ListOrganizationLabelsResponse);
+ rpc SubmitOrganizationLabelOperation(SubmitOrganizationLabelOperationRequest) returns (SubmitOrganizationLabelOperationResponse);
+ rpc GetOrganizationLabelOperation(GetOrganizationLabelOperationRequest) returns (GetOrganizationLabelOperationResponse);
+}
+message ListOrganizationLabelsRequest { string organization = 1; PageRequest page = 2; }
+message OrganizationLabel { DiscussionLabel label = 1; string revision = 2; }
+message ListOrganizationLabelsResponse { string organization_id = 1; repeated OrganizationLabel labels = 2; bool can_manage = 3; PageResponse page = 4; }
+message SubmitOrganizationLabelOperationRequest {
+ string organization = 1; string organization_id = 2; string operation_id = 3;
+ // CREATE=1 EDIT=2 DELETE=3. No repository authority substitutes for org ownership.
+ OrganizationLabelOperationKind kind = 4; string label_id = 5; string expected_revision = 6;
+ string name = 7; string color = 8; string description = 9; bool exclusive = 10; bool archived = 11;
+}
+message GetOrganizationLabelOperationRequest { string organization = 1; string organization_id = 2; string operation_id = 3; }
+message OrganizationLabelOperation {
+ string contract = 1; string operation_id = 2; string actor_id = 3; string organization = 4; string organization_id = 5;
+ OrganizationLabelOperationKind kind = 6; string label_id = 7; string expected_revision = 8; string input_sha256 = 9;
+ RepositoryReleasePublicationPhase phase = 10; string result_label_id = 11; string failure_code = 12;
+}
+message SubmitOrganizationLabelOperationResponse { OrganizationLabelOperation operation = 1; }
+message GetOrganizationLabelOperationResponse { OrganizationLabelOperation operation = 1; }
+
+enum OrganizationLabelOperationKind { ORGANIZATION_LABEL_OPERATION_KIND_UNSPECIFIED = 0; ORGANIZATION_LABEL_OPERATION_KIND_CREATE = 1; ORGANIZATION_LABEL_OPERATION_KIND_EDIT = 2; ORGANIZATION_LABEL_OPERATION_KIND_DELETE = 3; }
+
+enum RepositoryMirrorOperationKind { REPOSITORY_MIRROR_OPERATION_KIND_UNSPECIFIED = 0; REPOSITORY_MIRROR_OPERATION_KIND_SET_INTERVAL = 1; REPOSITORY_MIRROR_OPERATION_KIND_REQUEST_SYNC = 2; }
+message SubmitRepositoryMirrorOperationRequest { RepositoryKey repository = 1; string repository_id = 2; string owner_id = 3; string operation_id = 4; string expected_configuration_revision = 5; RepositoryMirrorOperationKind kind = 6; string interval = 7; }
+message GetRepositoryMirrorOperationRequest { RepositoryKey repository = 1; string repository_id = 2; string owner_id = 3; string operation_id = 4; }
+message RepositoryMirrorOperation { string contract = 1; string operation_id = 2; string actor_id = 3; RepositoryKey repository = 4; string repository_id = 5; string owner_id = 6; string expected_configuration_revision = 7; RepositoryMirrorOperationKind kind = 8; string interval = 9; string input_sha256 = 10; RepositoryReleasePublicationPhase phase = 11; bool synchronization_request_accepted = 12; string failure_code = 13; }
+message SubmitRepositoryMirrorOperationResponse { RepositoryMirrorOperation operation = 1; }
+message GetRepositoryMirrorOperationResponse { RepositoryMirrorOperation operation = 1; }

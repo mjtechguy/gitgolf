@@ -183,6 +183,16 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 				cancel()
 				return nil, e
 			}
+		} else if mirror, ok := ctx.Value(mirrorPermitKey{}).(mirrorPermit); ok {
+			if e := s.validateMirrorPermit(ctx, held.tx, mirror, repo, key, method, path, input); e != nil {
+				cancel()
+				return nil, e
+			}
+		} else if wiki, ok := ctx.Value(wikiOperationPermitKey{}).(wikiOperationPermit); ok {
+			if e := s.validateWikiOperationPermit(ctx, held.tx, wiki, repo, key, method, path, input); e != nil {
+				cancel()
+				return nil, e
+			}
 		} else if release, ok := ctx.Value(releaseOperationPermitKey{}).(releaseOperationPermit); ok {
 			if e := s.validateReleaseOperationPermit(ctx, held.tx, release, repo, key, method, path, input); e != nil {
 				cancel()
