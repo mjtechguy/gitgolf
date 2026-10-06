@@ -1009,6 +1009,9 @@ message PullRequestReviewComment {
   // Per-comment native resolver presence, including a deleted resolver.
   // This does not establish resolution of an inferred location or thread.
   bool resolved = 15;
+  // Verified successful Golf reply operation with both native comments visible.
+  // Absent for external/unknown ancestry; location equality never establishes it.
+  string reply_to_comment_id = 16;
 }
 message GetPullRequestReviewCommentsRequest {
   RepositoryKey repository = 1;
@@ -4925,3 +4928,43 @@ message ResetRegularLocalMFAResponse {
  uint64 recovery_codes_revoked = 4;
  string operation_id = 5;
 }
+
+service PullReviewAuthoringService {
+ rpc GetPullReviewAuthoringState(GetPullReviewAuthoringStateRequest) returns (GetPullReviewAuthoringStateResponse);
+ rpc SubmitPullReviewAuthoringOperation(SubmitPullReviewAuthoringOperationRequest) returns (SubmitPullReviewAuthoringOperationResponse);
+ rpc GetPullReviewAuthoringOperation(GetPullReviewAuthoringOperationRequest) returns (GetPullReviewAuthoringOperationResponse);
+}
+enum PullReviewAuthoringKind {
+ PULL_REVIEW_AUTHORING_KIND_UNSPECIFIED = 0;
+ PULL_REVIEW_AUTHORING_KIND_CREATE_DRAFT = 1;
+ PULL_REVIEW_AUTHORING_KIND_CREATE_FROM_PRIVATE_DRAFT = 2;
+ PULL_REVIEW_AUTHORING_KIND_UPDATE_DRAFT = 3;
+ PULL_REVIEW_AUTHORING_KIND_SUBMIT_DRAFT = 4;
+ PULL_REVIEW_AUTHORING_KIND_DISCARD_DRAFT = 5;
+ PULL_REVIEW_AUTHORING_KIND_EDIT_COMMENT = 6;
+ PULL_REVIEW_AUTHORING_KIND_DELETE_COMMENT = 7;
+}
+message GetPullReviewAuthoringStateRequest {
+ PullReviewDraftTarget target = 1; string review_id = 2; string review_commit_id = 3; string comment_id = 4;
+}
+message GetPullReviewAuthoringStateResponse {
+ PullReviewDraftTarget target = 1; string pull_revision = 2; string snapshot_revision = 3; string current_head_commit_id = 4;
+ PullRequestReview review = 5; repeated PullRequestReviewComment comments = 6;
+ bool can_create = 7; bool can_update = 8; bool can_submit = 9; bool can_discard = 10; bool can_edit_comment = 11; bool can_delete_comment = 12;
+ bool own_pending = 13;
+}
+message SubmitPullReviewAuthoringOperationRequest {
+ PullReviewDraftTarget target = 1; PullReviewAuthoringKind kind = 2; string review_id = 3; string review_commit_id = 4; string comment_id = 5;
+ string expected_pull_revision = 6; string expected_snapshot_revision = 7;
+ // Volatile first-dispatch body; retained originals omit plaintext.
+ string body = 8; string body_hash = 9; PullRequestReviewState decision = 10; string operation_id = 11;
+ // Existing actor-owned encrypted Golf saved version; does not consume that draft.
+ string golf_draft_id = 12; string expected_draft_version = 13; string expected_target_generation = 14;
+}
+message PullReviewAuthoringOperation {
+ string contract = 1; SubmitPullReviewAuthoringOperationRequest original = 2; string actor_id = 3;
+ DiscussionResourceOperationPhase phase = 4; string failure_code = 5; string created_at = 6; string updated_at = 7; string observed_review_id = 8;
+}
+message SubmitPullReviewAuthoringOperationResponse { PullReviewAuthoringOperation operation = 1; }
+message GetPullReviewAuthoringOperationRequest { PullReviewDraftTarget target = 1; string operation_id = 2; }
+message GetPullReviewAuthoringOperationResponse { PullReviewAuthoringOperation operation = 1; }

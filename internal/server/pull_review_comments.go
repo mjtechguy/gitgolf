@@ -144,6 +144,9 @@ func (s *Server) getPullRequestReviewComments(ctx context.Context, session strin
 		for _, row := range rows {
 			result.Comments = append(result.Comments, &golfv1.PullRequestReviewComment{Id: strconv.FormatInt(row.ID, 10), User: wirePullUser(row.User), Resolver: wirePullUser(row.Resolver), Body: row.Body, Path: row.Path, OldLine: uint32(row.OriginalPosition), NewLine: uint32(row.Position), ReviewId: m.ReviewId, CommitId: row.CommitID, OriginalCommitId: row.OriginalCommitID, DiffHunk: row.DiffHunk, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, HtmlUrl: row.HTMLURL, Resolved: row.Resolver != nil})
 		}
+		if err := s.enrichReviewReplyParents(ctx, repoID, pullID, m.Number, after, result.Comments); err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
