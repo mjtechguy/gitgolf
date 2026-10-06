@@ -254,6 +254,9 @@ func ensureLegacyBinding(ctx context.Context, db *sql.DB, keys *Keyring) error {
 		}
 	}
 
+	if err := validateLegacyProviderConnections086(ctx, tx, keys); err != nil {
+		return errKeyBootstrap
+	}
 	automationCursor := ""
 	for {
 		rows, err := q.BootstrapLegacyAutomationCredentials(ctx, automationCursor)
@@ -657,6 +660,11 @@ func rotateCredentialBatch(ctx context.Context, db *sql.DB, keys *Keyring, opera
 	if err != nil {
 		return fail(err)
 	}
+	providerCount, err := rotateProviderConnections086(ctx, tx, keys, batchSize-len(sessions)-len(attempts)-len(locals)-len(infrastructure)-codexCount)
+	if err != nil {
+		return fail(err)
+	}
+	codexCount += providerCount // Same infrastructure-credential domain/inventory family.
 	automation, err := q.LockRotationAutomationCredentials(ctx, database.LockRotationAutomationCredentialsParams{ActiveKeyID: active, RowLimit: int32(batchSize - len(sessions) - len(attempts) - len(locals) - len(infrastructure) - codexCount)})
 	if err != nil {
 		return fail(keyOperationError(ctx))

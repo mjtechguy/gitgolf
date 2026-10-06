@@ -4968,3 +4968,42 @@ message PullReviewAuthoringOperation {
 message SubmitPullReviewAuthoringOperationResponse { PullReviewAuthoringOperation operation = 1; }
 message GetPullReviewAuthoringOperationRequest { PullReviewDraftTarget target = 1; string operation_id = 2; }
 message GetPullReviewAuthoringOperationResponse { PullReviewAuthoringOperation operation = 1; }
+// Portable forge086 uses personal provider credentials only at fixed origins.
+service ProviderImportService {
+ rpc ListProviderConnections(ListProviderConnectionsRequest) returns (ListProviderConnectionsResponse);
+ rpc CreateProviderConnection(CreateProviderConnectionRequest) returns (CreateProviderConnectionResponse);
+ rpc UpdateProviderConnection(UpdateProviderConnectionRequest) returns (UpdateProviderConnectionResponse);
+ rpc PreviewProviderImport(PreviewProviderImportRequest) returns (PreviewProviderImportResponse);
+ rpc SubmitProviderImport(SubmitProviderImportRequest) returns (SubmitProviderImportResponse);
+ rpc GetProviderImport(GetProviderImportRequest) returns (GetProviderImportResponse);
+}
+message ProviderConnection { string id = 1; string version = 2; string provider = 3; string name = 4; string provider_account_id = 5; string provider_login = 6; bool revoked = 7; string created_at = 8; }
+message ListProviderConnectionsRequest {}
+message ListProviderConnectionsResponse { repeated ProviderConnection connections = 1; }
+message CreateProviderConnectionRequest { string connection_id = 1; string provider = 2; string name = 3; string token = 4; }
+message CreateProviderConnectionResponse { ProviderConnection connection = 1; }
+message UpdateProviderConnectionRequest { string connection_id = 1; string expected_version = 2; string name = 3; bool revoke = 4; }
+message UpdateProviderConnectionResponse { ProviderConnection connection = 1; }
+message PreviewProviderImportRequest { string connection_id = 1; string connection_version = 2; string source_url = 3; }
+message ProviderImportPreview { string connection_id = 1; string connection_version = 2; string source_url = 3; string provider_repository_id = 4; string provider_full_name = 5; bool source_private = 6; string default_branch = 7; string source_head_commit_id = 8; string source_revision = 9; }
+message PreviewProviderImportResponse { ProviderImportPreview preview = 1; }
+message SubmitProviderImportRequest { ProviderImportPreview preview = 1; string operation_id = 2; string destination_name = 3; string description = 4; }
+message GetProviderImportRequest { string operation_id = 1; }
+message ProviderImportOperation { string contract = 1; string operation_id = 2; string actor_id = 3; string connection_id = 4; string connection_version = 5; string source_url = 6; string provider_repository_id = 7; string source_head_commit_id = 8; string destination_name = 9; string input_sha256 = 10; RepositoryReleasePublicationPhase phase = 11; string repository_id = 12; string failure_code = 13; repeated string fidelity_verified = 14; repeated string fidelity_unqualified = 15; }
+message SubmitProviderImportResponse { ProviderImportOperation operation = 1; Repository repository = 2; }
+message GetProviderImportResponse { ProviderImportOperation operation = 1; Repository repository = 2; }
+service PackagePublicationService {
+ rpc GetPackagePublicationAccess(GetPackagePublicationAccessRequest) returns (GetPackagePublicationAccessResponse);
+ rpc SubmitPackagePublication(SubmitPackagePublicationRequest) returns (SubmitPackagePublicationResponse);
+ rpc GetPackagePublication(GetPackagePublicationRequest) returns (GetPackagePublicationResponse);
+ rpc DownloadGenericPackageFile(DownloadGenericPackageFileRequest) returns (DownloadGenericPackageFileResponse);
+}
+message GetPackagePublicationAccessRequest { RepositoryKey repository = 1; string repository_id = 2; }
+message GetPackagePublicationAccessResponse { RepositoryAccess access = 1; bool allowed = 2; string reason = 3; bool public_namespace_acknowledgement_required = 4; }
+message SubmitPackagePublicationRequest { RepositoryKey repository = 1; string repository_id = 2; string owner_id = 3; string access_revision = 4; string operation_id = 5; string package_name = 6; string version = 7; string file_name = 8; bytes content = 9; bool public_namespace_acknowledged = 10; }
+message GetPackagePublicationRequest { RepositoryKey repository = 1; string repository_id = 2; string owner_id = 3; string operation_id = 4; }
+message PackagePublicationOperation { string contract = 1; string operation_id = 2; string actor_id = 3; RepositoryKey repository = 4; string repository_id = 5; string owner_id = 6; string package_name = 7; string version = 8; string file_name = 9; string input_sha256 = 10; string content_sha256 = 11; string size_bytes = 12; RepositoryReleasePublicationPhase phase = 13; string result_package_id = 14; string result_file_id = 15; string failure_code = 16; }
+message SubmitPackagePublicationResponse { PackagePublicationOperation operation = 1; }
+message GetPackagePublicationResponse { PackagePublicationOperation operation = 1; }
+message DownloadGenericPackageFileRequest { RepositoryKey repository = 1; string repository_id = 2; ForgePackage package = 3; string file_id = 4; }
+message DownloadGenericPackageFileResponse { string repository_id = 1; string package_id = 2; string file_id = 3; string file_name = 4; string sha256 = 5; bytes content = 6; }
