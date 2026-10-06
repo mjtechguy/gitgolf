@@ -536,3 +536,45 @@ func TestProvider086UnknownNeverResendsPostgres(t *testing.T) {
 		t.Fatal("unknown import admission bypassed")
 	}
 }
+
+func TestProvider086GitLabSelectedPrivatePreviewPostgres(t *testing.T) {
+	f := newReleasePublicationFixture(t)
+	session := f.session(t, "pat")
+	ctx, _, h := f.scope(session)
+	base := f.s.client.Transport
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	f.s.client.Transport = forge086Transport(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host != "gitlab.com" {
+			return base.RoundTrip(r)
+		}
+		if r.Header.Get("PRIVATE-TOKEN") != forge086Token || r.Header.Get("Authorization") != "" {
+			t.Error("GitLab selected token boundary")
+		}
+		switch r.URL.Path {
+		case "/api/v4/user":
+			return forge086Response(r, 200, map[string]any{"id": 81, "username": "source-owner"}), nil
+		case "/api/v4/projects/team/project":
+			if !strings.Contains(r.URL.EscapedPath(), "team%2Fproject") {
+				t.Error("GitLab namespace path must remain escaped")
+			}
+			return forge086Response(r, 200, map[string]any{"id": 82, "path_with_namespace": "team/project", "visibility": "private", "http_url_to_repo": "https://gitlab.com/team/project.git", "default_branch": "main"}), nil
+		case "/api/v4/projects/team/project/repository/branches/main":
+			return forge086Response(r, 200, map[string]any{"name": "main", "commit": map[string]string{"id": strings.Repeat("b", 40)}}), nil
+		}
+		t.Error("unexpected GitLab selected read", r.URL.Path)
+		return forge086Response(r, 404, nil), nil
+	})
+	c, e := f.s.CreateProviderConnection(ctx, forge086Request(&golfv1.CreateProviderConnectionRequest{ConnectionId: randomUUID(), Provider: "gitlab", Name: "Owned GitLab fixture", Token: forge086Token}, h))
+	if e != nil {
+		t.Fatal(e)
+	}
+	p, e := f.s.PreviewProviderImport(ctx, forge086Request(&golfv1.PreviewProviderImportRequest{ConnectionId: c.Msg.Connection.Id, ConnectionVersion: c.Msg.Connection.Version, SourceUrl: "https://gitlab.com/team/project"}, h))
+	if e != nil || !p.Msg.Preview.SourcePrivate || p.Msg.Preview.ProviderRepositoryId != "82" || p.Msg.Preview.SourceHeadCommitId != strings.Repeat("b", 40) {
+		t.Fatal("GitLab private selected preview", e, p)
+	}
+	if _, e = f.s.PreviewProviderImport(ctx, forge086Request(&golfv1.PreviewProviderImportRequest{ConnectionId: c.Msg.Connection.Id, ConnectionVersion: c.Msg.Connection.Version, SourceUrl: "https://github.com/team/project"}, h)); e == nil {
+		t.Fatal("cross-provider connection accepted")
+	}
+}
