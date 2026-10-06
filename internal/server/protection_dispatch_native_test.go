@@ -66,7 +66,7 @@ func TestProtectionUnknownNativeProof(t *testing.T) {
 	get.Header().Set("Origin", s.config.PublicURL)
 	before, e := client.GetRepositoryRules(t.Context(), get)
 	if e != nil {
-		t.Fatal("owned native rule inventory")
+		t.Fatal("owned native rule inventory", connect.CodeOf(e))
 	}
 	var writes atomic.Int32
 	s.client.Transport = creationRoundTripper(func(r *http.Request) (*http.Response, error) {
