@@ -39,12 +39,16 @@ const (
 	// AgentControlServiceSubmitAgentCommandProcedure is the fully-qualified name of the
 	// AgentControlService's SubmitAgentCommand RPC.
 	AgentControlServiceSubmitAgentCommandProcedure = "/golf.v1.AgentControlService/SubmitAgentCommand"
+	// AgentControlServiceListWorkflowAgentChildrenProcedure is the fully-qualified name of the
+	// AgentControlService's ListWorkflowAgentChildren RPC.
+	AgentControlServiceListWorkflowAgentChildrenProcedure = "/golf.v1.AgentControlService/ListWorkflowAgentChildren"
 )
 
 // AgentControlServiceClient is a client for the golf.v1.AgentControlService service.
 type AgentControlServiceClient interface {
 	GetAgentControl(context.Context, *connect.Request[v1.GetAgentControlRequest]) (*connect.Response[v1.GetAgentControlResponse], error)
 	SubmitAgentCommand(context.Context, *connect.Request[v1.SubmitAgentCommandRequest]) (*connect.Response[v1.SubmitAgentCommandResponse], error)
+	ListWorkflowAgentChildren(context.Context, *connect.Request[v1.ListWorkflowAgentChildrenRequest]) (*connect.Response[v1.ListWorkflowAgentChildrenResponse], error)
 }
 
 // NewAgentControlServiceClient constructs a client for the golf.v1.AgentControlService service. By
@@ -70,13 +74,20 @@ func NewAgentControlServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(agentControlServiceMethods.ByName("SubmitAgentCommand")),
 			connect.WithClientOptions(opts...),
 		),
+		listWorkflowAgentChildren: connect.NewClient[v1.ListWorkflowAgentChildrenRequest, v1.ListWorkflowAgentChildrenResponse](
+			httpClient,
+			baseURL+AgentControlServiceListWorkflowAgentChildrenProcedure,
+			connect.WithSchema(agentControlServiceMethods.ByName("ListWorkflowAgentChildren")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // agentControlServiceClient implements AgentControlServiceClient.
 type agentControlServiceClient struct {
-	getAgentControl    *connect.Client[v1.GetAgentControlRequest, v1.GetAgentControlResponse]
-	submitAgentCommand *connect.Client[v1.SubmitAgentCommandRequest, v1.SubmitAgentCommandResponse]
+	getAgentControl           *connect.Client[v1.GetAgentControlRequest, v1.GetAgentControlResponse]
+	submitAgentCommand        *connect.Client[v1.SubmitAgentCommandRequest, v1.SubmitAgentCommandResponse]
+	listWorkflowAgentChildren *connect.Client[v1.ListWorkflowAgentChildrenRequest, v1.ListWorkflowAgentChildrenResponse]
 }
 
 // GetAgentControl calls golf.v1.AgentControlService.GetAgentControl.
@@ -89,10 +100,16 @@ func (c *agentControlServiceClient) SubmitAgentCommand(ctx context.Context, req 
 	return c.submitAgentCommand.CallUnary(ctx, req)
 }
 
+// ListWorkflowAgentChildren calls golf.v1.AgentControlService.ListWorkflowAgentChildren.
+func (c *agentControlServiceClient) ListWorkflowAgentChildren(ctx context.Context, req *connect.Request[v1.ListWorkflowAgentChildrenRequest]) (*connect.Response[v1.ListWorkflowAgentChildrenResponse], error) {
+	return c.listWorkflowAgentChildren.CallUnary(ctx, req)
+}
+
 // AgentControlServiceHandler is an implementation of the golf.v1.AgentControlService service.
 type AgentControlServiceHandler interface {
 	GetAgentControl(context.Context, *connect.Request[v1.GetAgentControlRequest]) (*connect.Response[v1.GetAgentControlResponse], error)
 	SubmitAgentCommand(context.Context, *connect.Request[v1.SubmitAgentCommandRequest]) (*connect.Response[v1.SubmitAgentCommandResponse], error)
+	ListWorkflowAgentChildren(context.Context, *connect.Request[v1.ListWorkflowAgentChildrenRequest]) (*connect.Response[v1.ListWorkflowAgentChildrenResponse], error)
 }
 
 // NewAgentControlServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -114,12 +131,20 @@ func NewAgentControlServiceHandler(svc AgentControlServiceHandler, opts ...conne
 		connect.WithSchema(agentControlServiceMethods.ByName("SubmitAgentCommand")),
 		connect.WithHandlerOptions(opts...),
 	)
+	agentControlServiceListWorkflowAgentChildrenHandler := connect.NewUnaryHandler(
+		AgentControlServiceListWorkflowAgentChildrenProcedure,
+		svc.ListWorkflowAgentChildren,
+		connect.WithSchema(agentControlServiceMethods.ByName("ListWorkflowAgentChildren")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/golf.v1.AgentControlService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AgentControlServiceGetAgentControlProcedure:
 			agentControlServiceGetAgentControlHandler.ServeHTTP(w, r)
 		case AgentControlServiceSubmitAgentCommandProcedure:
 			agentControlServiceSubmitAgentCommandHandler.ServeHTTP(w, r)
+		case AgentControlServiceListWorkflowAgentChildrenProcedure:
+			agentControlServiceListWorkflowAgentChildrenHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -135,4 +160,8 @@ func (UnimplementedAgentControlServiceHandler) GetAgentControl(context.Context, 
 
 func (UnimplementedAgentControlServiceHandler) SubmitAgentCommand(context.Context, *connect.Request[v1.SubmitAgentCommandRequest]) (*connect.Response[v1.SubmitAgentCommandResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AgentControlService.SubmitAgentCommand is not implemented"))
+}
+
+func (UnimplementedAgentControlServiceHandler) ListWorkflowAgentChildren(context.Context, *connect.Request[v1.ListWorkflowAgentChildrenRequest]) (*connect.Response[v1.ListWorkflowAgentChildrenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AgentControlService.ListWorkflowAgentChildren is not implemented"))
 }

@@ -8,6 +8,9 @@ import (
 // Recovery destroys copied authority, never immutable operation identities or
 // uncertain native effects. All original source writers must already be drained.
 type RecoveryQuarantineCounts struct {
+	AgentControls       uint64 `json:"agent_controls"`
+	AgentCommands       uint64 `json:"agent_commands"`
+	AgentWorkerReceipts uint64 `json:"agent_worker_receipts"`
 	MFAAccounts         uint64 `json:"mfa_accounts"`
 	MFAChallenges       uint64 `json:"mfa_challenges"`
 	MFARecoveryCodes    uint64 `json:"mfa_recovery_codes"`
@@ -28,7 +31,7 @@ func quarantineRestoredAuthority(ctx context.Context, tx *sql.Tx, backup, operat
 	if _, err := tx.ExecContext(ctx, `LOCK TABLE golf_local_mfa,golf_mfa_recovery_codes,golf_mfa_login_challenges,golf_mfa_attempts,golf_mfa_events,golf_codex_connections,golf_codex_auth,golf_agent_tasks,golf_reviewers,golf_reviewer_runs,golf_reviewer_publications,golf_webhook_deliveries,golf_email_deliveries,golf_email_challenges,golf_git_transport_profiles IN ACCESS EXCLUSIVE MODE`); err != nil {
 		return counts, err
 	}
-	if _, err := tx.ExecContext(ctx, `LOCK TABLE golf_provider_connections IN ACCESS EXCLUSIVE MODE`); err != nil {
+	if _, err := tx.ExecContext(ctx, `LOCK TABLE golf_provider_connections,golf_agent_controls,golf_agent_commands,golf_agent_worker_presence IN ACCESS EXCLUSIVE MODE`); err != nil {
 		return counts, err
 	}
 	for _, write := range []struct {
@@ -39,6 +42,9 @@ func quarantineRestoredAuthority(ctx context.Context, tx *sql.Tx, backup, operat
 		{`DELETE FROM golf_mfa_login_challenges`, &counts.MFAChallenges},
 		{`DELETE FROM golf_mfa_recovery_codes`, &counts.MFARecoveryCodes},
 		{`DELETE FROM golf_codex_auth`, &counts.AgentCredentials},
+		{`UPDATE golf_agent_controls SET state='closed',permission_id='',tool_id='',allow_once_options='[]',revision=revision+1 WHERE state<>'closed'`, &counts.AgentControls},
+		{`UPDATE golf_agent_commands SET state='claimed' WHERE state='queued'`, &counts.AgentCommands},
+		{`UPDATE golf_agent_worker_presence SET acp_image='',acp_version='',acp_file_tools=false WHERE acp_image<>'' OR acp_version<>'' OR acp_file_tools`, &counts.AgentWorkerReceipts},
 		{`UPDATE golf_codex_connections SET state='REAUTH_REQUIRED',version=version+1,auth_method='',email='',plan_type='',checked_at=NULL,login_id='',verification_url='',user_code='',login_expires_at=NULL,reason_code='recovery_quarantine',updated_at=clock_timestamp() WHERE state IN ('CONNECTED','AWAITING_AUTH')`, &counts.AgentConnections},
 		{`UPDATE golf_agent_tasks SET state=CASE WHEN state='running' THEN 'lost' ELSE 'cancelled' END,version=version+1,finished_at=clock_timestamp(),lease_expires_at=NULL,reason='Restored instance quarantined; inspect prior external effects. No automatic replay.' WHERE state IN ('queued','running')`, &counts.AgentTasks},
 		{`UPDATE golf_reviewers SET enabled=false,revision=revision+1 WHERE enabled`, &counts.Reviewers},

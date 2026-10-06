@@ -477,6 +477,210 @@ func (x *SubmitAgentCommandResponse) GetState() string {
 	return ""
 }
 
+type ListWorkflowAgentChildrenRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	AttemptId     string                 `protobuf:"bytes,2,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWorkflowAgentChildrenRequest) Reset() {
+	*x = ListWorkflowAgentChildrenRequest{}
+	mi := &file_golf_v1_agent_control088_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWorkflowAgentChildrenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWorkflowAgentChildrenRequest) ProtoMessage() {}
+
+func (x *ListWorkflowAgentChildrenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_agent_control088_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWorkflowAgentChildrenRequest.ProtoReflect.Descriptor instead.
+func (*ListWorkflowAgentChildrenRequest) Descriptor() ([]byte, []int) {
+	return file_golf_v1_agent_control088_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ListWorkflowAgentChildrenRequest) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *ListWorkflowAgentChildrenRequest) GetAttemptId() string {
+	if x != nil {
+		return x.AttemptId
+	}
+	return ""
+}
+
+type WorkflowAgentChild struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	JobInstanceId string                 `protobuf:"bytes,1,opt,name=job_instance_id,json=jobInstanceId,proto3" json:"job_instance_id,omitempty"`
+	StepId        string                 `protobuf:"bytes,2,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
+	TaskId        string                 `protobuf:"bytes,3,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	AttemptId     string                 `protobuf:"bytes,4,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	State         string                 `protobuf:"bytes,5,opt,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkflowAgentChild) Reset() {
+	*x = WorkflowAgentChild{}
+	mi := &file_golf_v1_agent_control088_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowAgentChild) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowAgentChild) ProtoMessage() {}
+
+func (x *WorkflowAgentChild) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_agent_control088_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowAgentChild.ProtoReflect.Descriptor instead.
+func (*WorkflowAgentChild) Descriptor() ([]byte, []int) {
+	return file_golf_v1_agent_control088_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *WorkflowAgentChild) GetJobInstanceId() string {
+	if x != nil {
+		return x.JobInstanceId
+	}
+	return ""
+}
+
+func (x *WorkflowAgentChild) GetStepId() string {
+	if x != nil {
+		return x.StepId
+	}
+	return ""
+}
+
+func (x *WorkflowAgentChild) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
+func (x *WorkflowAgentChild) GetAttemptId() string {
+	if x != nil {
+		return x.AttemptId
+	}
+	return ""
+}
+
+func (x *WorkflowAgentChild) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+type ListWorkflowAgentChildrenResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	AttemptId     string                 `protobuf:"bytes,2,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	RepositoryId  string                 `protobuf:"bytes,3,opt,name=repository_id,json=repositoryId,proto3" json:"repository_id,omitempty"`
+	CommitId      string                 `protobuf:"bytes,4,opt,name=commit_id,json=commitId,proto3" json:"commit_id,omitempty"`
+	Children      []*WorkflowAgentChild  `protobuf:"bytes,5,rep,name=children,proto3" json:"children,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWorkflowAgentChildrenResponse) Reset() {
+	*x = ListWorkflowAgentChildrenResponse{}
+	mi := &file_golf_v1_agent_control088_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWorkflowAgentChildrenResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWorkflowAgentChildrenResponse) ProtoMessage() {}
+
+func (x *ListWorkflowAgentChildrenResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_agent_control088_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWorkflowAgentChildrenResponse.ProtoReflect.Descriptor instead.
+func (*ListWorkflowAgentChildrenResponse) Descriptor() ([]byte, []int) {
+	return file_golf_v1_agent_control088_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ListWorkflowAgentChildrenResponse) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *ListWorkflowAgentChildrenResponse) GetAttemptId() string {
+	if x != nil {
+		return x.AttemptId
+	}
+	return ""
+}
+
+func (x *ListWorkflowAgentChildrenResponse) GetRepositoryId() string {
+	if x != nil {
+		return x.RepositoryId
+	}
+	return ""
+}
+
+func (x *ListWorkflowAgentChildrenResponse) GetCommitId() string {
+	if x != nil {
+		return x.CommitId
+	}
+	return ""
+}
+
+func (x *ListWorkflowAgentChildrenResponse) GetChildren() []*WorkflowAgentChild {
+	if x != nil {
+		return x.Children
+	}
+	return nil
+}
+
 var File_golf_v1_agent_control088_proto protoreflect.FileDescriptor
 
 const file_golf_v1_agent_control088_proto_rawDesc = "" +
@@ -524,10 +728,29 @@ const file_golf_v1_agent_control088_proto_rawDesc = "" +
 	"\x1aSubmitAgentCommandResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x14\n" +
-	"\x05state\x18\x02 \x01(\tR\x05state2\xca\x01\n" +
+	"\x05state\x18\x02 \x01(\tR\x05state\"X\n" +
+	" ListWorkflowAgentChildrenRequest\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1d\n" +
+	"\n" +
+	"attempt_id\x18\x02 \x01(\tR\tattemptId\"\xa3\x01\n" +
+	"\x12WorkflowAgentChild\x12&\n" +
+	"\x0fjob_instance_id\x18\x01 \x01(\tR\rjobInstanceId\x12\x17\n" +
+	"\astep_id\x18\x02 \x01(\tR\x06stepId\x12\x17\n" +
+	"\atask_id\x18\x03 \x01(\tR\x06taskId\x12\x1d\n" +
+	"\n" +
+	"attempt_id\x18\x04 \x01(\tR\tattemptId\x12\x14\n" +
+	"\x05state\x18\x05 \x01(\tR\x05state\"\xd4\x01\n" +
+	"!ListWorkflowAgentChildrenResponse\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1d\n" +
+	"\n" +
+	"attempt_id\x18\x02 \x01(\tR\tattemptId\x12#\n" +
+	"\rrepository_id\x18\x03 \x01(\tR\frepositoryId\x12\x1b\n" +
+	"\tcommit_id\x18\x04 \x01(\tR\bcommitId\x127\n" +
+	"\bchildren\x18\x05 \x03(\v2\x1b.golf.v1.WorkflowAgentChildR\bchildren2\xbe\x02\n" +
 	"\x13AgentControlService\x12T\n" +
 	"\x0fGetAgentControl\x12\x1f.golf.v1.GetAgentControlRequest\x1a .golf.v1.GetAgentControlResponse\x12]\n" +
-	"\x12SubmitAgentCommand\x12\".golf.v1.SubmitAgentCommandRequest\x1a#.golf.v1.SubmitAgentCommandResponseB2Z0github.com/mjtechguy/golf-git/gen/golf/v1;golfv1b\x06proto3"
+	"\x12SubmitAgentCommand\x12\".golf.v1.SubmitAgentCommandRequest\x1a#.golf.v1.SubmitAgentCommandResponse\x12r\n" +
+	"\x19ListWorkflowAgentChildren\x12).golf.v1.ListWorkflowAgentChildrenRequest\x1a*.golf.v1.ListWorkflowAgentChildrenResponseB2Z0github.com/mjtechguy/golf-git/gen/golf/v1;golfv1b\x06proto3"
 
 var (
 	file_golf_v1_agent_control088_proto_rawDescOnce sync.Once
@@ -541,27 +764,33 @@ func file_golf_v1_agent_control088_proto_rawDescGZIP() []byte {
 	return file_golf_v1_agent_control088_proto_rawDescData
 }
 
-var file_golf_v1_agent_control088_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_golf_v1_agent_control088_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_golf_v1_agent_control088_proto_goTypes = []any{
-	(*GetAgentControlRequest)(nil),     // 0: golf.v1.GetAgentControlRequest
-	(*AgentControl)(nil),               // 1: golf.v1.AgentControl
-	(*AgentControlMessage)(nil),        // 2: golf.v1.AgentControlMessage
-	(*GetAgentControlResponse)(nil),    // 3: golf.v1.GetAgentControlResponse
-	(*SubmitAgentCommandRequest)(nil),  // 4: golf.v1.SubmitAgentCommandRequest
-	(*SubmitAgentCommandResponse)(nil), // 5: golf.v1.SubmitAgentCommandResponse
+	(*GetAgentControlRequest)(nil),            // 0: golf.v1.GetAgentControlRequest
+	(*AgentControl)(nil),                      // 1: golf.v1.AgentControl
+	(*AgentControlMessage)(nil),               // 2: golf.v1.AgentControlMessage
+	(*GetAgentControlResponse)(nil),           // 3: golf.v1.GetAgentControlResponse
+	(*SubmitAgentCommandRequest)(nil),         // 4: golf.v1.SubmitAgentCommandRequest
+	(*SubmitAgentCommandResponse)(nil),        // 5: golf.v1.SubmitAgentCommandResponse
+	(*ListWorkflowAgentChildrenRequest)(nil),  // 6: golf.v1.ListWorkflowAgentChildrenRequest
+	(*WorkflowAgentChild)(nil),                // 7: golf.v1.WorkflowAgentChild
+	(*ListWorkflowAgentChildrenResponse)(nil), // 8: golf.v1.ListWorkflowAgentChildrenResponse
 }
 var file_golf_v1_agent_control088_proto_depIdxs = []int32{
 	2, // 0: golf.v1.AgentControl.messages:type_name -> golf.v1.AgentControlMessage
 	1, // 1: golf.v1.GetAgentControlResponse.control:type_name -> golf.v1.AgentControl
-	0, // 2: golf.v1.AgentControlService.GetAgentControl:input_type -> golf.v1.GetAgentControlRequest
-	4, // 3: golf.v1.AgentControlService.SubmitAgentCommand:input_type -> golf.v1.SubmitAgentCommandRequest
-	3, // 4: golf.v1.AgentControlService.GetAgentControl:output_type -> golf.v1.GetAgentControlResponse
-	5, // 5: golf.v1.AgentControlService.SubmitAgentCommand:output_type -> golf.v1.SubmitAgentCommandResponse
-	4, // [4:6] is the sub-list for method output_type
-	2, // [2:4] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	7, // 2: golf.v1.ListWorkflowAgentChildrenResponse.children:type_name -> golf.v1.WorkflowAgentChild
+	0, // 3: golf.v1.AgentControlService.GetAgentControl:input_type -> golf.v1.GetAgentControlRequest
+	4, // 4: golf.v1.AgentControlService.SubmitAgentCommand:input_type -> golf.v1.SubmitAgentCommandRequest
+	6, // 5: golf.v1.AgentControlService.ListWorkflowAgentChildren:input_type -> golf.v1.ListWorkflowAgentChildrenRequest
+	3, // 6: golf.v1.AgentControlService.GetAgentControl:output_type -> golf.v1.GetAgentControlResponse
+	5, // 7: golf.v1.AgentControlService.SubmitAgentCommand:output_type -> golf.v1.SubmitAgentCommandResponse
+	8, // 8: golf.v1.AgentControlService.ListWorkflowAgentChildren:output_type -> golf.v1.ListWorkflowAgentChildrenResponse
+	6, // [6:9] is the sub-list for method output_type
+	3, // [3:6] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_golf_v1_agent_control088_proto_init() }
@@ -575,7 +804,7 @@ func file_golf_v1_agent_control088_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_golf_v1_agent_control088_proto_rawDesc), len(file_golf_v1_agent_control088_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

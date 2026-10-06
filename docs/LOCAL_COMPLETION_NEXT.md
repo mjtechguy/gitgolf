@@ -39,6 +39,12 @@ These packets have runnable source/native/browser evidence within their stated c
 |085 | Sponsor/PR-author persona instructions with current comment identity/author/digest revalidation; running OpenCode completed-message progress; executable ACP-v1 transport. | [Agent workflow contract](AGENT_WORKFLOWS085_CONTRACT.md). ACP transport and no-model native initialization/session are separate from managed browser/worker commands, permission UI, preserved context/auth recovery and agent workflow steps. Changed/deleted historical instructions do not become new authority. |
 |086 | Personal selected GitHub/GitLab.com connections/imports; bounded fresh generic personal-owner packages/downloads; ordinary wiki-unit writers and safe canonical navigation/sidebar/footer; later mirror timestamp/default-branch HEAD observation. | [Forge contract](contracts/PORTABLE_FORGE086.md). Actual private migration fidelity remains unqualified. Package privacy follows the personal owner namespace, with explicit native `write:package` required; new consent never silently broadens retained credentials. Mirror completion does not establish request causation, all refs/history/LFS or private/arbitrary upstream equality. |
 
+## Current087–091 packet
+
+Four streams are integrated in source; the [ledger](IMPLEMENTATION_STATUS.md#portable-priorities087091-integrated-source-local-rollout-pending-2026-10-06) records verification and rollout separately. New consumers are exact-head protected-review observations, managed private ACP commands/parent-bound Actions children, pending saved-inline append, bounded batch/rename and discussion attachments, and opt-in verified-email password recovery. Native upload/batch/review and real PostgreSQL source evidence are scoped; final integration and retained deployment remain pending.
+
+The next acceptance after this packet is not another settings scaffold: qualify actual managed task image/file tools/provider usage, explicit private-provider migration fixtures, unchanged upstream workflow checkout/remote actions/dependencies, and complete protected publication on an exclusive supported ingress. Keep the original capacity reserve. Original unknown operations are inspected, never resent or adopted. Native atomic HEAD/base CAS, full coordinated restore, CD, Kubernetes and Cloudflare remain separate gates.
+
 ## Prioritized engineering on existing infrastructure
 
 | Order | Packet | Concrete next acceptance |

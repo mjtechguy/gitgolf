@@ -19,6 +19,32 @@ type GolfActiveObjectConnection struct {
 	Revision  int64
 }
 
+type GolfAgentCommand struct {
+	TaskID    uuid.UUID
+	AttemptID string
+	RequestID uuid.UUID
+	Kind      string
+	InputHash []byte
+	ContentID uuid.UUID
+	State     string
+	CreatedAt time.Time
+}
+
+type GolfAgentControl struct {
+	TaskID           uuid.UUID
+	AttemptID        string
+	Image            string
+	NativeVersion    string
+	NativeSession    string
+	Resume           bool
+	State            string
+	Revision         int64
+	ScreenedSequence int64
+	PermissionID     string
+	ToolID           string
+	AllowOnceOptions json.RawMessage
+}
+
 type GolfAgentConversation struct {
 	TaskID            uuid.UUID
 	AttemptID         string
@@ -56,6 +82,15 @@ type GolfAgentModelCatalog struct {
 	ConnectionVersion int64
 	Models            json.RawMessage
 	CheckedAt         time.Time
+}
+
+type GolfAgentNativeSend struct {
+	TaskID    uuid.UUID
+	AttemptID string
+	InputID   string
+	Kind      string
+	InputHash []byte
+	CreatedAt time.Time
 }
 
 type GolfAgentTask struct {
@@ -124,10 +159,12 @@ type GolfAgentUsageSetting struct {
 }
 
 type GolfAgentWorkerPresence struct {
-	ForgeURL string
-	WorkerID string
-	Image    string
-	LastSeen time.Time
+	ForgeURL   string
+	WorkerID   string
+	Image      string
+	LastSeen   time.Time
+	AcpImage   string
+	AcpVersion string
 }
 
 type GolfApiCredential struct {
@@ -2102,6 +2139,16 @@ type GolfWebhookSubscription struct {
 	CreatedAt             time.Time
 	UpdatedAt             time.Time
 	WorkflowNotifications int32
+}
+
+type GolfWorkflowAgentChild struct {
+	RunID         uuid.UUID
+	ParentAttempt string
+	InstanceID    string
+	StepID        string
+	TaskID        uuid.UUID
+	SourceSha256  string
+	CreatedAt     time.Time
 }
 
 type GolfWorkflowArtifact struct {

@@ -1,3 +1,4 @@
+import {AgentControlService} from './gen/golf/v1/agent_control088_pb';
 import {PasswordRecoveryEnrollmentService} from './gen/golf/v1/password_recovery_enrollment090_pb';
 import {PasswordRecoveryService} from './gen/golf/v1/password_recovery090_pb';
 import {ProviderImportService,PackagePublicationService} from './gen/golf/v1/golf_pb';
@@ -92,3 +93,5 @@ export function repositoryLink(value: string): string | undefined {
 export const repositoryFileMutationClient = createClient(RepositoryFileMutationService, transport);
 
 export const passwordRecoveryEnrollmentClient = createClient(PasswordRecoveryEnrollmentService, transport);
+
+export const agentControlClient = createClient(AgentControlService, transport);

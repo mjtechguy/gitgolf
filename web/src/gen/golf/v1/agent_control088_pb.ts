@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file golf/v1/agent_control088.proto.
  */
 export const file_golf_v1_agent_control088: GenFile = /*@__PURE__*/
-  fileDesc("Ch5nb2xmL3YxL2FnZW50X2NvbnRyb2wwODgucHJvdG8SB2dvbGYudjEiPQoWR2V0QWdlbnRDb250cm9sUmVxdWVzdBIPCgd0YXNrX2lkGAEgASgJEhIKCmF0dGVtcHRfaWQYAiABKAkivAIKDEFnZW50Q29udHJvbBIPCgd0YXNrX2lkGAEgASgJEhIKCmF0dGVtcHRfaWQYAiABKAkSFAoMdGFza192ZXJzaW9uGAMgASgJEhAKCHJldmlzaW9uGAQgASgJEhEKCWF2YWlsYWJsZRgFIAEoCBINCgVzdGF0ZRgGIAEoCRIOCgZyZWFzb24YByABKAkSFgoObmF0aXZlX3ZlcnNpb24YCCABKAkSDQoFaW1hZ2UYCSABKAkSFQoNcGVybWlzc2lvbl9pZBgKIAEoCRIPCgd0b29sX2lkGAsgASgJEhoKEmFsbG93X29uY2Vfb3B0aW9ucxgMIAMoCRISCgpjYW5fcmVzdW1lGA0gASgIEi4KCG1lc3NhZ2VzGA4gAygLMhwuZ29sZi52MS5BZ2VudENvbnRyb2xNZXNzYWdlIjUKE0FnZW50Q29udHJvbE1lc3NhZ2USEAoIc2VxdWVuY2UYASABKAkSDAoEdGV4dBgCIAEoCSJBChdHZXRBZ2VudENvbnRyb2xSZXNwb25zZRImCgdjb250cm9sGAEgASgLMhUuZ29sZi52MS5BZ2VudENvbnRyb2wi1AEKGVN1Ym1pdEFnZW50Q29tbWFuZFJlcXVlc3QSDwoHdGFza19pZBgBIAEoCRISCgphdHRlbXB0X2lkGAIgASgJEh0KFWV4cGVjdGVkX3Rhc2tfdmVyc2lvbhgDIAEoCRIZChFleHBlY3RlZF9yZXZpc2lvbhgEIAEoCRISCgpyZXF1ZXN0X2lkGAUgASgJEgwKBGtpbmQYBiABKAkSDAoEdGV4dBgHIAEoCRIVCg1wZXJtaXNzaW9uX2lkGAggASgJEhEKCW9wdGlvbl9pZBgJIAEoCSI/ChpTdWJtaXRBZ2VudENvbW1hbmRSZXNwb25zZRISCgpyZXF1ZXN0X2lkGAEgASgJEg0KBXN0YXRlGAIgASgJMsoBChNBZ2VudENvbnRyb2xTZXJ2aWNlElQKD0dldEFnZW50Q29udHJvbBIfLmdvbGYudjEuR2V0QWdlbnRDb250cm9sUmVxdWVzdBogLmdvbGYudjEuR2V0QWdlbnRDb250cm9sUmVzcG9uc2USXQoSU3VibWl0QWdlbnRDb21tYW5kEiIuZ29sZi52MS5TdWJtaXRBZ2VudENvbW1hbmRSZXF1ZXN0GiMuZ29sZi52MS5TdWJtaXRBZ2VudENvbW1hbmRSZXNwb25zZUIyWjBnaXRodWIuY29tL21qdGVjaGd1eS9nb2xmLWdpdC9nZW4vZ29sZi92MTtnb2xmdjFiBnByb3RvMw");
+  fileDesc("Ch5nb2xmL3YxL2FnZW50X2NvbnRyb2wwODgucHJvdG8SB2dvbGYudjEiPQoWR2V0QWdlbnRDb250cm9sUmVxdWVzdBIPCgd0YXNrX2lkGAEgASgJEhIKCmF0dGVtcHRfaWQYAiABKAkivAIKDEFnZW50Q29udHJvbBIPCgd0YXNrX2lkGAEgASgJEhIKCmF0dGVtcHRfaWQYAiABKAkSFAoMdGFza192ZXJzaW9uGAMgASgJEhAKCHJldmlzaW9uGAQgASgJEhEKCWF2YWlsYWJsZRgFIAEoCBINCgVzdGF0ZRgGIAEoCRIOCgZyZWFzb24YByABKAkSFgoObmF0aXZlX3ZlcnNpb24YCCABKAkSDQoFaW1hZ2UYCSABKAkSFQoNcGVybWlzc2lvbl9pZBgKIAEoCRIPCgd0b29sX2lkGAsgASgJEhoKEmFsbG93X29uY2Vfb3B0aW9ucxgMIAMoCRISCgpjYW5fcmVzdW1lGA0gASgIEi4KCG1lc3NhZ2VzGA4gAygLMhwuZ29sZi52MS5BZ2VudENvbnRyb2xNZXNzYWdlIjUKE0FnZW50Q29udHJvbE1lc3NhZ2USEAoIc2VxdWVuY2UYASABKAkSDAoEdGV4dBgCIAEoCSJBChdHZXRBZ2VudENvbnRyb2xSZXNwb25zZRImCgdjb250cm9sGAEgASgLMhUuZ29sZi52MS5BZ2VudENvbnRyb2wi1AEKGVN1Ym1pdEFnZW50Q29tbWFuZFJlcXVlc3QSDwoHdGFza19pZBgBIAEoCRISCgphdHRlbXB0X2lkGAIgASgJEh0KFWV4cGVjdGVkX3Rhc2tfdmVyc2lvbhgDIAEoCRIZChFleHBlY3RlZF9yZXZpc2lvbhgEIAEoCRISCgpyZXF1ZXN0X2lkGAUgASgJEgwKBGtpbmQYBiABKAkSDAoEdGV4dBgHIAEoCRIVCg1wZXJtaXNzaW9uX2lkGAggASgJEhEKCW9wdGlvbl9pZBgJIAEoCSI/ChpTdWJtaXRBZ2VudENvbW1hbmRSZXNwb25zZRISCgpyZXF1ZXN0X2lkGAEgASgJEg0KBXN0YXRlGAIgASgJIkYKIExpc3RXb3JrZmxvd0FnZW50Q2hpbGRyZW5SZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCRISCgphdHRlbXB0X2lkGAIgASgJInIKEldvcmtmbG93QWdlbnRDaGlsZBIXCg9qb2JfaW5zdGFuY2VfaWQYASABKAkSDwoHc3RlcF9pZBgCIAEoCRIPCgd0YXNrX2lkGAMgASgJEhIKCmF0dGVtcHRfaWQYBCABKAkSDQoFc3RhdGUYBSABKAkioAEKIUxpc3RXb3JrZmxvd0FnZW50Q2hpbGRyZW5SZXNwb25zZRIOCgZydW5faWQYASABKAkSEgoKYXR0ZW1wdF9pZBgCIAEoCRIVCg1yZXBvc2l0b3J5X2lkGAMgASgJEhEKCWNvbW1pdF9pZBgEIAEoCRItCghjaGlsZHJlbhgFIAMoCzIbLmdvbGYudjEuV29ya2Zsb3dBZ2VudENoaWxkMr4CChNBZ2VudENvbnRyb2xTZXJ2aWNlElQKD0dldEFnZW50Q29udHJvbBIfLmdvbGYudjEuR2V0QWdlbnRDb250cm9sUmVxdWVzdBogLmdvbGYudjEuR2V0QWdlbnRDb250cm9sUmVzcG9uc2USXQoSU3VibWl0QWdlbnRDb21tYW5kEiIuZ29sZi52MS5TdWJtaXRBZ2VudENvbW1hbmRSZXF1ZXN0GiMuZ29sZi52MS5TdWJtaXRBZ2VudENvbW1hbmRSZXNwb25zZRJyChlMaXN0V29ya2Zsb3dBZ2VudENoaWxkcmVuEikuZ29sZi52MS5MaXN0V29ya2Zsb3dBZ2VudENoaWxkcmVuUmVxdWVzdBoqLmdvbGYudjEuTGlzdFdvcmtmbG93QWdlbnRDaGlsZHJlblJlc3BvbnNlQjJaMGdpdGh1Yi5jb20vbWp0ZWNoZ3V5L2dvbGYtZ2l0L2dlbi9nb2xmL3YxO2dvbGZ2MWIGcHJvdG8z");
 
 /**
  * @generated from message golf.v1.GetAgentControlRequest
@@ -247,6 +247,102 @@ export const SubmitAgentCommandResponseSchema: GenMessage<SubmitAgentCommandResp
   messageDesc(file_golf_v1_agent_control088, 5);
 
 /**
+ * @generated from message golf.v1.ListWorkflowAgentChildrenRequest
+ */
+export type ListWorkflowAgentChildrenRequest = Message<"golf.v1.ListWorkflowAgentChildrenRequest"> & {
+  /**
+   * @generated from field: string run_id = 1;
+   */
+  runId: string;
+
+  /**
+   * @generated from field: string attempt_id = 2;
+   */
+  attemptId: string;
+};
+
+/**
+ * Describes the message golf.v1.ListWorkflowAgentChildrenRequest.
+ * Use `create(ListWorkflowAgentChildrenRequestSchema)` to create a new message.
+ */
+export const ListWorkflowAgentChildrenRequestSchema: GenMessage<ListWorkflowAgentChildrenRequest> = /*@__PURE__*/
+  messageDesc(file_golf_v1_agent_control088, 6);
+
+/**
+ * @generated from message golf.v1.WorkflowAgentChild
+ */
+export type WorkflowAgentChild = Message<"golf.v1.WorkflowAgentChild"> & {
+  /**
+   * @generated from field: string job_instance_id = 1;
+   */
+  jobInstanceId: string;
+
+  /**
+   * @generated from field: string step_id = 2;
+   */
+  stepId: string;
+
+  /**
+   * @generated from field: string task_id = 3;
+   */
+  taskId: string;
+
+  /**
+   * @generated from field: string attempt_id = 4;
+   */
+  attemptId: string;
+
+  /**
+   * @generated from field: string state = 5;
+   */
+  state: string;
+};
+
+/**
+ * Describes the message golf.v1.WorkflowAgentChild.
+ * Use `create(WorkflowAgentChildSchema)` to create a new message.
+ */
+export const WorkflowAgentChildSchema: GenMessage<WorkflowAgentChild> = /*@__PURE__*/
+  messageDesc(file_golf_v1_agent_control088, 7);
+
+/**
+ * @generated from message golf.v1.ListWorkflowAgentChildrenResponse
+ */
+export type ListWorkflowAgentChildrenResponse = Message<"golf.v1.ListWorkflowAgentChildrenResponse"> & {
+  /**
+   * @generated from field: string run_id = 1;
+   */
+  runId: string;
+
+  /**
+   * @generated from field: string attempt_id = 2;
+   */
+  attemptId: string;
+
+  /**
+   * @generated from field: string repository_id = 3;
+   */
+  repositoryId: string;
+
+  /**
+   * @generated from field: string commit_id = 4;
+   */
+  commitId: string;
+
+  /**
+   * @generated from field: repeated golf.v1.WorkflowAgentChild children = 5;
+   */
+  children: WorkflowAgentChild[];
+};
+
+/**
+ * Describes the message golf.v1.ListWorkflowAgentChildrenResponse.
+ * Use `create(ListWorkflowAgentChildrenResponseSchema)` to create a new message.
+ */
+export const ListWorkflowAgentChildrenResponseSchema: GenMessage<ListWorkflowAgentChildrenResponse> = /*@__PURE__*/
+  messageDesc(file_golf_v1_agent_control088, 8);
+
+/**
  * Cookie-session-only control of one original managed attempt. Inspection grants
  * cannot send prompts, grant tools or acquire another session's dispatch authority.
  *
@@ -268,6 +364,14 @@ export const AgentControlService: GenService<{
     methodKind: "unary";
     input: typeof SubmitAgentCommandRequestSchema;
     output: typeof SubmitAgentCommandResponseSchema;
+  },
+  /**
+   * @generated from rpc golf.v1.AgentControlService.ListWorkflowAgentChildren
+   */
+  listWorkflowAgentChildren: {
+    methodKind: "unary";
+    input: typeof ListWorkflowAgentChildrenRequestSchema;
+    output: typeof ListWorkflowAgentChildrenResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_golf_v1_agent_control088, 0);
