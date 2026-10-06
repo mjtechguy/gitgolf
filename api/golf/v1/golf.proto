@@ -4606,6 +4606,9 @@ message GetRepositoryFileMutationAccessResponse {
 }
 
 service PullReviewRequestService {
+ rpc GetPullReviewLifecycleState(GetPullReviewLifecycleStateRequest) returns (GetPullReviewLifecycleStateResponse);
+ rpc SubmitPullReviewLifecycle(SubmitPullReviewLifecycleRequest) returns (SubmitPullReviewLifecycleResponse);
+ rpc GetPullReviewLifecycleOperation(GetPullReviewLifecycleOperationRequest) returns (GetPullReviewLifecycleOperationResponse);
  rpc GetPullCodeOwners(GetPullCodeOwnersRequest) returns (GetPullCodeOwnersResponse);
  rpc GetPullReviewCommentState(GetPullReviewCommentStateRequest) returns (GetPullReviewCommentStateResponse);
  rpc SubmitPullReviewCommentInteraction(SubmitPullReviewCommentInteractionRequest) returns (SubmitPullReviewCommentInteractionResponse);
@@ -4873,3 +4876,25 @@ message DisableOwnMFARequest { string expected_version = 1; string password_conf
 message DisableOwnMFAResponse { OwnMFA mfa = 1; repeated string recovery_codes = 2; bool requires_login = 3; uint64 sessions_revoked = 4; string operation_id = 5; }
 message RegenerateOwnMFARecoveryRequest { string expected_version = 1; string password_confirmation = 2; string code = 3; }
 message RegenerateOwnMFARecoveryResponse { OwnMFA mfa = 1; repeated string recovery_codes = 2; bool requires_login = 3; uint64 sessions_revoked = 4; string operation_id = 5; }
+message GetPullReviewLifecycleStateRequest {
+ RepositoryKey repository = 1; string repository_id = 2; string pull_request_id = 3; uint32 number = 4;
+ string review_id = 5; string review_commit_id = 6;
+}
+message GetPullReviewLifecycleStateResponse {
+ string repository_id = 1; string pull_request_id = 2; uint32 number = 3; string pull_revision = 4;
+ string review_revision = 5; PullRequestReview review = 6; bool can_manage = 7; bool can_restore = 8; string current_head_commit_id = 9;
+}
+message SubmitPullReviewLifecycleRequest {
+ RepositoryKey repository = 1; string repository_id = 2; string pull_request_id = 3; uint32 number = 4;
+ string review_id = 5; string review_commit_id = 6; string expected_pull_revision = 7; string expected_review_revision = 8;
+ bool dismiss = 9; string operation_id = 10; string reason = 11; string reason_hash = 12;
+}
+message PullReviewLifecycleOperation {
+ string contract = 1; SubmitPullReviewLifecycleRequest original = 2; string actor_id = 3;
+ DiscussionResourceOperationPhase phase = 4; string failure_code = 5; string created_at = 6; string updated_at = 7;
+}
+message SubmitPullReviewLifecycleResponse { PullReviewLifecycleOperation operation = 1; }
+message GetPullReviewLifecycleOperationRequest {
+ RepositoryKey repository = 1; string repository_id = 2; string pull_request_id = 3; uint32 number = 4; string operation_id = 5;
+}
+message GetPullReviewLifecycleOperationResponse { PullReviewLifecycleOperation operation = 1; }

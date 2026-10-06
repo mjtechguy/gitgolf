@@ -178,6 +178,15 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 			cancel()
 			return nil, errStorageUnavailable
 		}
+		var reviewBlocked bool
+		if e = held.tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_pull_review_lifecycle_operations WHERE forge_url=$1 AND repository_id=$2 AND phase IN ('RESERVED','DISPATCH_UNKNOWN'))`, s.config.GiteaURL, repo.ID).Scan(&reviewBlocked); e != nil {
+			cancel()
+			return nil, errStorageUnavailable
+		}
+		if _, ownReview := ctx.Value(reviewLifecyclePermitKey{}).(reviewLifecyclePermit); reviewBlocked && !ownReview {
+			cancel()
+			return nil, errLifecycleBlocked
+		}
 		var commentBlocked bool
 		if e = held.tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_pull_review_comment_operations WHERE forge_url=$1 AND repository_id=$2 AND phase IN ('RESERVED','DISPATCH_UNKNOWN'))`, s.config.GiteaURL, repo.ID).Scan(&commentBlocked); e != nil {
 			cancel()
@@ -209,6 +218,11 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 			}
 		} else if publication, ok := ctx.Value(releasePublicationPermitKey{}).(releasePublicationPermit); ok {
 			if e := s.validateReleasePublicationPermit(ctx, held.tx, publication, repo, key, method, path, input); e != nil {
+				cancel()
+				return nil, e
+			}
+		} else if review, ok := ctx.Value(reviewLifecyclePermitKey{}).(reviewLifecyclePermit); ok {
+			if e := s.validateReviewLifecyclePermit(ctx, held.tx, review, repo, key, method, path, input); e != nil {
 				cancel()
 				return nil, e
 			}

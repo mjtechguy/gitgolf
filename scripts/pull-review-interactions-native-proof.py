@@ -9,7 +9,7 @@ sys.dont_write_bytecode=True
 from smoke import ROOT,GITEA,command,provider,wait_for_push
 
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--stack-root',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();stack=a.stack_root.resolve();os.umask(0o077)
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--lifecycle',action='store_true',help='Qualify published review dismissal/restoration instead of inline interactions');p.add_argument('--stack-root',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();stack=a.stack_root.resolve();os.umask(0o077)
  assert os.environ.get('GOLF_TEST_DATABASE_URL'),'Supply owned isolated host PostgreSQL';a.output.mkdir(parents=True,exist_ok=False)
  report={'passed':False,'ownedFixturesPurged':False,'dockerResourcesCreated':0};users=[];actors={};repos=[];org=None;prefix='golf-review077-'+secrets.token_hex(4)
  def admin(*v):return command('docker','compose','--project-directory',str(stack),'--file',str(stack/'compose.yaml'),'--env-file',str(stack/'.env'),'exec','-T','gitea','gitea','--config','/etc/gitea/app.ini','admin','user',*v)
@@ -25,13 +25,13 @@ def main():
   with tempfile.TemporaryDirectory(prefix='golf-review077-') as d:
    f=Path(d)/'fixture.json';fd=os.open(f,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
    with os.fdopen(fd,'w') as out:json.dump({'URL':GITEA,'Owner':owner['name'],'Reviewer':reviewer['name'],'OwnerToken':owner['token'],'ReviewerToken':reviewer['token'],'Organization':org['name'],'Branch':repo['default_branch'],'RepositoryID':repo['id'],'TeamID':team['id']},out)
-   result=subprocess.run(['go','test','-race','./internal/server','-run','^TestReviewInteractionsNativeProof$','-count=1','-v'],cwd=ROOT,env={**os.environ,'GOLF_REVIEW_INTERACTIONS_NATIVE_PROOF':str(f)},capture_output=True,text=True,timeout=240)
+   result=subprocess.run(['go','test','-race','./internal/server','-run','^TestReviewLifecycleNativeProof$' if a.lifecycle else '^TestReviewInteractionsNativeProof$','-count=1','-v'],cwd=ROOT,env={**os.environ,'GOLF_REVIEW_INTERACTIONS_NATIVE_PROOF':str(f)},capture_output=True,text=True,timeout=240)
    safe=[]
    for line in (result.stdout+result.stderr).splitlines():
     if any(actor['token'] in line for actor in actors.values()):raise RuntimeError('private diagnostic withheld')
     safe.append(line)
-   (a.output/'go-test.log').write_text('\n'.join(safe)+'\n');assert result.returncode==0,'Native review interactions failed; inspect private receipt'
-  report.update(passed=True,nativeVersion=provider(owner['token'],'GET','version')['version'],sourceRevision=command('git','rev-parse','HEAD'),scope='Actual production HTTP handlers, exact native team add/remove replay, published reply/resolution/reopen readback, hidden pending refusal and selected-base CODEOWNERS. No served browser, protected merge, workflow or model execution.')
+   (a.output/'go-test.log').write_text('\n'.join(safe)+'\n');assert ('=== RUN   TestReviewLifecycleNativeProof' if a.lifecycle else '=== RUN   TestReviewInteractionsNativeProof') in result.stdout,'Wrong native qualifier selected';assert result.returncode==0,'Native review interactions failed; inspect private receipt'
+  report.update(passed=True,nativeVersion=provider(owner['token'],'GET','version')['version'],sourceRevision=command('git','rev-parse','HEAD'),scope=('Actual production HTTP published review dismissal/restoration/replay, single-review priors=false, fresh reason hash, old-head restoration refusal and supported re-request. No served browser, protected merge or execution.' if a.lifecycle else 'Actual production HTTP handlers, exact native team add/remove replay, published reply/resolution/reopen readback, hidden pending refusal and selected-base CODEOWNERS. No served browser, protected merge, workflow or model execution.'))
  finally:
   errors=[]
   for token,base in reversed(repos):
