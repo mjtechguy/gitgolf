@@ -101,10 +101,7 @@ func (s *Server) ListIssueTemplates(ctx context.Context, req *connect.Request[go
 		}
 		for _, entry := range entries {
 			ext := strings.ToLower(path.Ext(entry.Name))
-			if ext != ".md" {
-				if (ext == ".yml" || ext == ".yaml") && entry.Name != "config.yml" && entry.Name != "config.yaml" {
-					out.UnsupportedTemplates++
-				}
+			if ext != ".md" && ext != ".yml" && ext != ".yaml" || entry.Name == "config.yml" || entry.Name == "config.yaml" {
 				continue
 			}
 			if entry.Size > 6000 {
@@ -119,7 +116,7 @@ func (s *Server) ListIssueTemplates(ctx context.Context, req *connect.Request[go
 				out.UnsupportedTemplates++
 				continue
 			}
-			template, e := markdownIssueTemplate(entry, *result.File.Content)
+			template, e := issueTemplate(entry, *result.File.Content)
 			if e != nil {
 				out.UnsupportedTemplates++
 				continue

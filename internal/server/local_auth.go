@@ -50,7 +50,13 @@ type LocalAccountResult struct {
 	CredentialVersion string `json:"credential_version"`
 	SessionsRevoked   uint64 `json:"sessions_revoked"`
 }
-type localLoginBinding struct{ accountID, userID, version int64 }
+type localLoginBinding struct {
+	accountID, userID, version int64
+	mfaChallenge               []byte
+	mfaVersion                 int64
+	mfaCode                    string
+	background                 bool
+}
 
 // Login addresses are case-insensitive ASCII mailboxes; display names, Unicode,
 // whitespace and provider-specific dot/plus rewriting are deliberately rejected.
@@ -192,7 +198,15 @@ func (s *Server) loginLocalSession(ctx context.Context, username, password, oldV
 		return loginResult{}, errLocalCredentials
 	}
 	user.IsInstanceAdmin = row.IsInstanceAdmin
-	result, err := s.createSessionBound(ctx, user, "local", token, oldValue, &localLoginBinding{row.ID, row.UserID, row.CredentialVersion})
+	challenge, expires, required, err := s.beginMFALogin(ctx, row)
+	if err != nil {
+		return loginResult{}, err
+	}
+	if required {
+		_ = s.releaseLocalPasswordAttempt(ctx, reservation)
+		return loginResult{MFAChallenge: challenge, Expires: expires}, nil
+	}
+	result, err := s.createSessionBound(ctx, user, "local", token, oldValue, &localLoginBinding{accountID: row.ID, userID: row.UserID, version: row.CredentialVersion})
 	if err != nil {
 		return loginResult{}, err
 	}

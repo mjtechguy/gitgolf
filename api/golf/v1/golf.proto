@@ -11,6 +11,7 @@ service SessionService {
   rpc GetAuthenticationOptions(GetAuthenticationOptionsRequest) returns (GetAuthenticationOptionsResponse);
   rpc BeginGiteaOAuth(BeginGiteaOAuthRequest) returns (BeginGiteaOAuthResponse);
   rpc LoginWithPassword(LoginWithPasswordRequest) returns (LoginWithPasswordResponse);
+  rpc CompletePasswordMFA(CompletePasswordMFARequest) returns (LoginWithPasswordResponse);
   rpc LoginWithGiteaToken(LoginWithGiteaTokenRequest) returns (LoginWithGiteaTokenResponse);
   rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
   rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
@@ -312,7 +313,8 @@ message LoginWithPasswordRequest {
   string username = 1;
   string password = 2;
 }
-message LoginWithPasswordResponse { User user = 1; }
+message LoginWithPasswordResponse { User user = 1; bool mfa_required = 2; string challenge_expires_at = 3; }
+message CompletePasswordMFARequest { string code = 1; }
 message LoginWithGiteaTokenRequest { string token = 1; }
 message LoginWithGiteaTokenResponse { User user = 1; }
 message GetSessionRequest {}
@@ -1722,6 +1724,11 @@ service AccountSecurityService {
  rpc GetAccountSecurity(GetAccountSecurityRequest) returns (GetAccountSecurityResponse);
  rpc ChangeOwnPassword(ChangeOwnPasswordRequest) returns (ChangeOwnPasswordResponse);
  rpc ChangeOwnLoginEmail(ChangeOwnLoginEmailRequest) returns (ChangeOwnLoginEmailResponse);
+ rpc GetOwnMFA(GetOwnMFARequest) returns (GetOwnMFAResponse);
+ rpc BeginOwnMFA(BeginOwnMFARequest) returns (BeginOwnMFAResponse);
+ rpc ConfirmOwnMFA(ChangeOwnMFARequest) returns (ChangeOwnMFAResponse);
+ rpc DisableOwnMFA(ChangeOwnMFARequest) returns (ChangeOwnMFAResponse);
+ rpc RegenerateOwnMFARecovery(ChangeOwnMFARequest) returns (ChangeOwnMFAResponse);
 }
 
 // Explicit personal native-token delegation; independent of browser sessions.
@@ -1776,6 +1783,7 @@ message AccountSecurity {
  string login_email = 4;
  string credential_version = 5;
  bool can_manage = 6;
+ bool mfa_enabled = 7;
 }
 message GetAccountSecurityRequest {}
 message GetAccountSecurityResponse { AccountSecurity security = 1; }
@@ -1785,6 +1793,7 @@ message ChangeOwnPasswordRequest {
  string expected_credential_version = 3;
  string password_confirmation = 4;
  string new_password = 5;
+ string mfa_code = 6;
 }
 message ChangeOwnLoginEmailRequest {
  string account_id = 1;
@@ -1792,6 +1801,7 @@ message ChangeOwnLoginEmailRequest {
  string expected_credential_version = 3;
  string password_confirmation = 4;
  string login_email = 5;
+ string mfa_code = 6;
 }
 message ChangeOwnPasswordResponse {
  string credential_version = 1;
@@ -4686,11 +4696,14 @@ message IssueTemplate {
   string title = 4;
   string body = 5;
   string blob_id = 6;
+  repeated IssueFormField fields = 7;
 }
+message IssueFormOption { string label = 1; bool required = 2; }
+message IssueFormField { string id = 1; string type = 2; string label = 3; string description = 4; string placeholder = 5; string value = 6; bool required = 7; repeated IssueFormOption options = 8; bool multiple = 9; string render = 10; uint32 min_length = 11; optional uint32 default_option = 12; }
 message ListIssueTemplatesResponse {
   repeated IssueTemplate templates = 1;
   string commit_id = 2;
-  // YAML forms/oversized or invalid templates are observed, not pretended to work.
+  // Unsupported field types, oversized or invalid templates are observed, not pretended to work.
   uint32 unsupported_templates = 3;
 }
 
@@ -4799,3 +4812,11 @@ message GetRepositoryMirrorOperationRequest { RepositoryKey repository = 1; stri
 message RepositoryMirrorOperation { string contract = 1; string operation_id = 2; string actor_id = 3; RepositoryKey repository = 4; string repository_id = 5; string owner_id = 6; string expected_configuration_revision = 7; RepositoryMirrorOperationKind kind = 8; string interval = 9; string input_sha256 = 10; RepositoryReleasePublicationPhase phase = 11; bool synchronization_request_accepted = 12; string failure_code = 13; }
 message SubmitRepositoryMirrorOperationResponse { RepositoryMirrorOperation operation = 1; }
 message GetRepositoryMirrorOperationResponse { RepositoryMirrorOperation operation = 1; }
+// Golf-local TOTP only. These secrets never enter query, mutation or browser storage.
+message GetOwnMFARequest {}
+message OwnMFA { string user_id = 1; string account_id = 2; string version = 3; bool enabled = 4; uint32 remaining_recovery_codes = 5; string pending_expires_at = 6; }
+message GetOwnMFAResponse { OwnMFA mfa = 1; }
+message BeginOwnMFARequest { string expected_version = 1; string password_confirmation = 2; }
+message BeginOwnMFAResponse { OwnMFA mfa = 1; string secret = 2; string provisioning_uri = 3; }
+message ChangeOwnMFARequest { string expected_version = 1; string password_confirmation = 2; string code = 3; }
+message ChangeOwnMFAResponse { OwnMFA mfa = 1; repeated string recovery_codes = 2; bool requires_login = 3; uint64 sessions_revoked = 4; string operation_id = 5; }

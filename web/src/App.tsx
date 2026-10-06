@@ -91,15 +91,16 @@ const scopeLabels: Record<string, string> = {
 
 function Login({ oauthFailed, notice }: { oauthFailed: boolean; notice?: string }) {
   const client = useQueryClient();
-  const loginForm = useForm({ defaultValues: { username: '', password: '' }, onSubmit: async () => { await submitPassword(); } });
-  const { username, password } = useStore(loginForm.store, (state) => state.values);
+  const loginForm = useForm({ defaultValues: { username: '', password: '', mfaCode: '' }, onSubmit: async () => { await submitPassword(); } });
+  const { username, password, mfaCode } = useStore(loginForm.store, (state) => state.values);
   const setUsername = (value: string) => loginForm.setFieldValue('username', value);
   const setPassword = (value: string) => loginForm.setFieldValue('password', value);
+  const [mfaChallenge, setMfaChallenge] = useState<string | null>(null);
   const [passwordPending, setPasswordPending] = useState(false);
   const [passwordError, setPasswordError] = useState<Error | null>(null);
   const passwordAttempt = useRef<AbortController | null>(null);
   useEffect(() => {
-    const clear = () => { setPassword(''); passwordAttempt.current?.abort(); };
+    const clear = () => { setPassword(''); loginForm.setFieldValue('mfaCode',''); setMfaChallenge(null); passwordAttempt.current?.abort(); };
     window.addEventListener('pagehide', clear);
     return () => { window.removeEventListener('pagehide', clear); passwordAttempt.current?.abort(); };
   }, []);
@@ -110,7 +111,7 @@ function Login({ oauthFailed, notice }: { oauthFailed: boolean; notice?: string 
   const passwordAvailable = options.isSuccess && !options.isFetching && options.data.localPasswordEnabled;
   const oauthAvailable = options.isSuccess && !options.isFetching && options.data.giteaOauthEnabled;
   async function signedIn() {
-    setPassword('');
+    setPassword(''); loginForm.setFieldValue('mfaCode',''); setMfaChallenge(null);
     forgetPrivateQueries(client);
     await client.invalidateQueries({ queryKey: ['session'] });
   }
@@ -127,17 +128,17 @@ function Login({ oauthFailed, notice }: { oauthFailed: boolean; notice?: string 
   const redirecting = oauth.isPending || oauth.isSuccess;
   const busy = passwordPending || redirecting;
   async function submitPassword() {
-    if (!passwordAvailable || busy || passwordAttempt.current || !username.trim() || !password) return;
+    if (!passwordAvailable || busy || passwordAttempt.current || (mfaChallenge ? !mfaCode.trim() : !username.trim() || !password)) return;
     // Keep the credential out of mutation/query caches and clear the input before waiting.
-    const request = { username: username.trim(), password };
+    const request = { username: username.trim(), password }; const factor=mfaCode.trim(); loginForm.setFieldValue('mfaCode','');
     const controller = new AbortController();
     passwordAttempt.current = controller;
     setPassword(''); setPasswordError(null); setPasswordPending(true);
     try {
-      await sessionClient.loginWithPassword(request, { signal: controller.signal, timeoutMs: 15_000 });
-      await signedIn();
+      const response=mfaChallenge?await sessionClient.completePasswordMFA({code:factor},{signal:controller.signal,timeoutMs:15000}):await sessionClient.loginWithPassword(request, { signal: controller.signal, timeoutMs: 15_000 });
+      if(response.mfaRequired){if(response.user||!response.challengeExpiresAt||!Number.isFinite(Date.parse(response.challengeExpiresAt)))throw new ConnectError('Invalid authentication challenge.',Code.Internal);setMfaChallenge(response.challengeExpiresAt);}else{if(!response.user)throw new ConnectError('Sign-in could not be confirmed.',Code.Internal);await signedIn();}
     } catch (error) {
-      if (!controller.signal.aborted) setPasswordError(new Error(error instanceof ConnectError && error.code === Code.ResourceExhausted ? 'Too many sign-in attempts. Wait a few minutes and try again.' : error instanceof ConnectError && error.code === Code.Unavailable ? 'Sign-in is temporarily unavailable. Try again later.' : 'Sign-in could not be completed. Check your Golf email or username and password and try again.'));
+      if (!controller.signal.aborted) setPasswordError(new Error(error instanceof ConnectError && error.code === Code.ResourceExhausted ? 'Too many sign-in attempts. Wait a few minutes and try again.' : error instanceof ConnectError && error.code === Code.Unavailable ? 'Sign-in is temporarily unavailable. Try again later.' : mfaChallenge?'The authentication code was not accepted. Use a fresh authenticator code or unused recovery code. If the challenge expired, start sign-in again.':'Sign-in could not be completed. Check your Golf email or username and password and try again.'));
     } finally {
       request.password = '';
       passwordAttempt.current = null;
@@ -162,15 +163,15 @@ function Login({ oauthFailed, notice }: { oauthFailed: boolean; notice?: string 
         {oauthFailed ? <p className="error" role="alert">Provider sign-in could not be completed. Please try again or sign in with your Golf account.</p> : null}
         {options.isPending || options.isFetching ? <p className="auth-options-status" role="status"><LoaderCircle className="spin" size={14} />Checking sign-in options…</p> : options.isError ? <div className="auth-options-error"><p className="error" role="alert">Sign-in options could not be loaded. Retry or contact your installation administrator.</p><button className="text-button" onClick={() => void options.refetch()}>Retry sign-in options</button></div> : !passwordAvailable ? <p className="auth-options-status">Golf password sign-in is not enabled for this installation. {oauthAvailable ? 'Use the connected provider below.' : 'Contact your installation administrator to enable sign-in.'}</p> : null}
         <form onSubmit={(event) => { event.preventDefault(); void loginForm.handleSubmit(); }} aria-label="Golf account sign-in">
-          <label htmlFor="golf-username">Email or username</label>
+          {mfaChallenge?<><label htmlFor="golf-mfa-code">Authenticator or recovery code</label><input id="golf-mfa-code" autoComplete="one-time-code" autoCapitalize="none" spellCheck={false} required maxLength={27} value={mfaCode} disabled={busy} onChange={event=>loginForm.setFieldValue('mfaCode',event.target.value)}/><p className="field-help">Enter a fresh six-digit authenticator code or one unused recovery code.</p><button type="button" className="text-button" disabled={busy} onClick={()=>{setMfaChallenge(null);loginForm.reset();setPasswordError(null);}}>Start sign-in again</button></>:<><label htmlFor="golf-username">Email or username</label>
           <input id="golf-username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={username} onChange={(event) => setUsername(event.target.value)} disabled={!passwordAvailable || busy} />
           <label htmlFor="golf-password">Password</label>
           <input id="golf-password" name="password" type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} aria-describedby="password-help" disabled={!passwordAvailable || busy} />
           <p className="field-help" id="password-help">Use the Golf account enrolled by your installation operator.</p>
-          <ErrorMessage error={passwordError} />
-          <button className="button primary full" disabled={!passwordAvailable || !username.trim() || !password || busy}>{passwordPending ? <LoaderCircle size={17} className="spin" /> : <ArrowRight size={17} />}{passwordPending ? 'Signing in…' : 'Sign in'}</button>
+          </>}<ErrorMessage error={passwordError} />
+          <button className="button primary full" disabled={!passwordAvailable || (mfaChallenge?!mfaCode.trim():!username.trim()||!password) || busy}>{passwordPending ? <LoaderCircle size={17} className="spin" /> : <ArrowRight size={17} />}{passwordPending ? 'Signing in…' : mfaChallenge ? 'Verify and sign in' : 'Sign in'}</button>
         </form>
-        {oauthAvailable ? <section className="oauth-section" aria-label="Provider sign-in">
+        {oauthAvailable&&!mfaChallenge ? <section className="oauth-section" aria-label="Provider sign-in">
           <p className="oauth-provider">Continue through your connected provider. Your provider password stays with it.</p>
           <div className="oauth-permissions" id="oauth-permissions"><h3>Requested permissions</h3><p>Golf requests these scopes within your existing account access.</p>{options.data.scopes.length ? <ul>{options.data.scopes.map((scope) => <li key={scope}><code>{scope}</code>{scopeLabels[scope] ? <span>{scopeLabels[scope]}</span> : null}</li>)}</ul> : <p>No additional scopes were listed by this installation.</p>}</div>
           <ErrorMessage error={oauth.error} />
@@ -322,7 +323,7 @@ function RepositoryRow({ repository }: { repository: Repository }) {
 }
 
 
-function Workspace({ user, location, onSessionEnd }: { user: User; location: Location; onSessionEnd: (notice?: string) => void }) {
+function Workspace({ user, location, onSessionEnd }: { user: User; location: Location; onSessionEnd: (notice?: string,recoveryCodes?:string[]) => void }) {
   const hash = useLocation({ select: (current) => current.hash });
   const client = useQueryClient();
   const [search, setSearch] = useState('');
@@ -339,8 +340,8 @@ function Workspace({ user, location, onSessionEnd }: { user: User; location: Loc
   });
   const repositories = repositoryQuery.isSuccess && (!repositoryQuery.isFetching || repositoryQuery.isFetchingNextPage) ? [...new Map(repositoryQuery.data.pages.flatMap((page) => page.repositories).map((repository) => [repository.id, repository])).values()] : [];
   const filtered = repositories.filter((repository) => `${repository.fullName} ${repository.description}`.toLowerCase().includes(search.toLowerCase().trim()) && (visibility === 'all' || repository.private === (visibility === 'private')) && (ownership === 'all' || repository.fullName.split('/')[0]?.toLowerCase() === user.login.toLowerCase())).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-  async function signedOut(notice?: string) {
-    onSessionEnd(notice);
+  async function signedOut(notice?: string,recoveryCodes?:string[]) {
+    onSessionEnd(notice,recoveryCodes);
     clearOtherCreationIntents();
     clearOtherAccessIntents();
     clearOtherRuleIntents();
@@ -375,11 +376,22 @@ function Workspace({ user, location, onSessionEnd }: { user: User; location: Loc
 
 export function App({ location }: { location: Location }) {
   const [loginNotice, setLoginNotice] = useState<string>();
+  const [recoveryDisclosure,setRecoveryDisclosure]=useState<string[]|null>(null);
+  useEffect(()=>{const clear=()=>setRecoveryDisclosure(null);window.addEventListener('pagehide',clear);return()=>window.removeEventListener('pagehide',clear);},[]);
+  useEffect(()=>{if(!recoveryDisclosure)return;const timer=setTimeout(()=>setRecoveryDisclosure(null),5*60*1000);return()=>clearTimeout(timer);},[recoveryDisclosure]);
+  const onSessionEnd=(notice?:string,codes?:string[])=>{setLoginNotice(notice);setRecoveryDisclosure(codes?.length?[...codes]:null);};
   const client = useQueryClient();
   const session = useQuery({ queryKey: ['session'], queryFn: async ({ signal }) => {
     try { const response = await sessionClient.getSession({}, { signal }); if (!response.user) throw new ConnectError('The session response is missing its user.', Code.Internal); return response.user; }
     catch (error) { if (error instanceof ConnectError && error.code === Code.Unauthenticated) { forgetPrivateQueries(client); return null; } throw error; }
   } });
   useEffect(() => { if (session.isSuccess) { clearOtherCreationIntents(session.data?.id); clearOtherAccessIntents(session.data?.id); clearOtherRuleIntents(session.data?.id); clearOtherWorkflowDispatchIntents(session.data?.id); clearOtherStandardMergeIntents(session.data?.id); clearOtherReleasePublicationIntents(session.data?.id); clearOtherRefMutationIntents(session.data?.id); clearOtherFileMutationIntents(session.data?.id); clearOtherDiscussionResourceIntents(session.data?.id); clearOtherReviewRequestIntents(session.data?.id); clearOtherDeploymentIntents(session.data?.id); if (session.data) setLoginNotice(undefined); } }, [session.isSuccess, session.data?.id]);
-  return <><a className="skip-link" href="#main-content">Skip to content</a>{session.isPending ? <main className="loading-screen" id="main-content"><Brand /><p role="status"><LoaderCircle size={18} className="spin" />Opening your workspace…</p></main> : session.error ? <main className="loading-screen" id="main-content"><Brand /><ErrorMessage error={session.error} /><button className="button secondary" onClick={() => void session.refetch()}>Try again</button></main> : session.data ? <Workspace key={session.data.id} user={session.data} location={location} onSessionEnd={setLoginNotice} /> : <Login oauthFailed={location.kind === 'home' && Boolean(location.oauthFailed)} notice={loginNotice} />}</>;
+  return <><a className="skip-link" href="#main-content">Skip to content</a>{recoveryDisclosure?<MFARecoveryDisclosure codes={recoveryDisclosure} acknowledge={()=>setRecoveryDisclosure(null)}/>:session.isPending ? <main className="loading-screen" id="main-content"><Brand /><p role="status"><LoaderCircle size={18} className="spin" />Opening your workspace…</p></main> : session.error ? <main className="loading-screen" id="main-content"><Brand /><ErrorMessage error={session.error} /><button className="button secondary" onClick={() => void session.refetch()}>Try again</button></main> : session.data ? <Workspace key={session.data.id} user={session.data} location={location} onSessionEnd={onSessionEnd} /> : <Login oauthFailed={location.kind === 'home' && Boolean(location.oauthFailed)} notice={loginNotice} />}</>;
+}
+
+// One-time factor recovery disclosure lives outside the authenticated workspace.
+// Its plaintext is ephemeral React state, independent of expired private queries.
+function MFARecoveryDisclosure({codes,acknowledge}:{codes:string[];acknowledge:()=>void}){
+ const [error,setError]=useState('');
+ return <main className="login-page" id="main-content"><Brand/><section className="browser-panel credential-form-content" aria-labelledby="mfa-recovery-title"><h1 id="mfa-recovery-title">Save your recovery codes</h1><p>Your authenticator settings were saved and password sessions were revoked. Each code works once, together with your Golf password. Save these codes in your password manager before continuing. This disclosure clears when leaving or reloading the page and after five minutes.</p><pre className="source-preview" aria-label="Recovery codes">{codes.join('\n')}</pre><div className="credential-actions"><button className="button secondary" onClick={()=>void navigator.clipboard.writeText(codes.join('\n')).catch(()=>setError('Copy failed. Select the codes and copy them manually.'))}>Copy recovery codes</button><button className="button primary" onClick={acknowledge}>I saved my codes. Return to sign-in</button></div>{error?<p className="error" role="alert">{error}</p>:null}</section></main>;
 }

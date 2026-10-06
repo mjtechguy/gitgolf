@@ -112,7 +112,7 @@ func rpcError(err error) error {
 		code, message = connect.CodeFailedPrecondition, "Repository settings changed. Refresh before editing again."
 	case errors.Is(err, errSSHKeyRejected):
 		code, message = connect.CodeFailedPrecondition, "The SSH key was rejected or already exists. Refresh your keys and check the public key before trying again."
-	case errors.Is(err, errLocalCredentials):
+	case errors.Is(err, errLocalCredentials), errors.Is(err, errMFARequired):
 		code, message = connect.CodeUnauthenticated, "Sign-in could not be completed. Check your Golf username and password and try again."
 	case errors.Is(err, errLocalRateLimited):
 		code, message = connect.CodeResourceExhausted, "Too many sign-in attempts. Wait before trying again."

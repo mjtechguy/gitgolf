@@ -45,6 +45,11 @@ func (s *Server) GetAccountSecurity(ctx context.Context, req *connect.Request[go
 			return err
 		}
 		result.Security = &golfv1.AccountSecurity{UserId: strconv.FormatInt(row.ForgeUserID, 10), AccountId: strconv.FormatInt(row.ID, 10), Username: row.Username, LoginEmail: row.Email.String, CredentialVersion: strconv.FormatInt(row.CredentialVersion, 10), CanManage: true}
+		if mfa, e := loadLocalMFA(ctx, s.db, row.ID, false); e == nil {
+			result.Security.MfaEnabled = mfa.Enabled
+		} else if !errors.Is(e, sql.ErrNoRows) {
+			return errStorageUnavailable
+		}
 		return nil
 	})
 	if err != nil {
@@ -54,8 +59,8 @@ func (s *Server) GetAccountSecurity(ctx context.Context, req *connect.Request[go
 }
 
 type ownSecurityChange struct {
-	accountID, userID, version            int64
-	confirmation, password, email, action string
+	accountID, userID, version                     int64
+	confirmation, password, email, action, mfaCode string
 }
 type ownSecurityResult struct {
 	version, revoked int64
@@ -125,6 +130,11 @@ func (s *Server) changeOwnSecurity(ctx context.Context, value string, token forg
 			return empty, err
 		}
 	}
+	if input.mfaCode != "" {
+		if err := s.reserveMFAAttempt(ctx, initial.ID); err != nil {
+			return empty, err
+		}
+	}
 	// Native waits and both KDFs finish before acquiring any account locks.
 	latest, err := s.ownSecuritySnapshot(ctx, value, token)
 	if err != nil {
@@ -176,6 +186,21 @@ func (s *Server) changeOwnSecurity(ctx context.Context, value string, token forg
 	}
 	if !sameOwnSecurity(initial, current) {
 		return empty, errUnauthenticated
+	}
+	mfa, mfaErr := loadLocalMFA(ctx, tx, initial.ID, true)
+	if mfaErr != nil && !errors.Is(mfaErr, sql.ErrNoRows) {
+		return empty, errStorageUnavailable
+	}
+	if mfaErr == nil && mfa.Enabled {
+		recovery, err := s.consumeMFA(ctx, tx, mfa, input.mfaCode)
+		if err != nil {
+			return empty, err
+		}
+		if recovery {
+			if _, err = tx.ExecContext(ctx, `INSERT INTO golf_mfa_events(account_id,user_id,action,version) VALUES($1,$2,'recovery_used',$3)`, initial.ID, initial.UserID, mfa.Version); err != nil {
+				return empty, errStorageUnavailable
+			}
+		}
 	}
 	// The account row lock plus expected-version comparison is the local CAS.
 	switch input.action {
@@ -250,7 +275,7 @@ func (s *Server) ChangeOwnPassword(ctx context.Context, req *connect.Request[gol
 	if !validLocalPassword(req.Msg.NewPassword) {
 		return nil, rpcError(invalid("New password must contain at least 15 characters and at most 1024 UTF-8 bytes."))
 	}
-	input.action, input.password = "SELF_PASSWORD_CHANGED", req.Msg.NewPassword
+	input.action, input.password, input.mfaCode = "SELF_PASSWORD_CHANGED", req.Msg.NewPassword, req.Msg.MfaCode
 	result, err := s.changeOwnSecurity(ctx, s.cookieValue(req.Header()), token, input)
 	if err != nil {
 		return nil, rpcError(err)
@@ -272,7 +297,7 @@ func (s *Server) ChangeOwnLoginEmail(ctx context.Context, req *connect.Request[g
 	if !valid {
 		return nil, rpcError(invalid("Provide a valid Golf sign-in email alias."))
 	}
-	input.action, input.email = "SELF_EMAIL_CHANGED", email
+	input.action, input.email, input.mfaCode = "SELF_EMAIL_CHANGED", email, req.Msg.MfaCode
 	result, err := s.changeOwnSecurity(ctx, s.cookieValue(req.Header()), token, input)
 	if err != nil {
 		return nil, rpcError(err)

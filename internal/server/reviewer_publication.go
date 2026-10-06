@@ -177,7 +177,7 @@ func (s *Server) reviewerBoundComparison(ctx context.Context, p reviewerRecord, 
 	if err != nil {
 		return err
 	}
-	login, err := s.createSessionBound(ctx, caller, "local", a.Credential.Token, "", &localLoginBinding{p.LocalID, p.UserID, p.LocalVersion})
+	login, err := s.createSessionBound(ctx, caller, "local", a.Credential.Token, "", &localLoginBinding{accountID: p.LocalID, userID: p.UserID, version: p.LocalVersion, background: true})
 	if err != nil {
 		return err
 	}

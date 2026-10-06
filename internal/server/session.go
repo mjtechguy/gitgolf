@@ -34,9 +34,10 @@ func (s *Server) sessionCookie(value string, expires time.Time, maxAge int) *htt
 }
 
 type loginResult struct {
-	User    User
-	Value   string
-	Expires time.Time
+	User         User
+	Value        string
+	Expires      time.Time
+	MFAChallenge string
 }
 
 func (s *Server) loginSession(ctx context.Context, token, oldValue string) (loginResult, error) {
@@ -89,6 +90,17 @@ func (s *Server) createSessionBound(ctx context.Context, user User, kind, payloa
 	if err := s.requireGolfUserAccess(ctx, tx, id); err != nil {
 		return loginResult{}, err
 	}
+	// Interactive native-token login cannot race local MFA enrollment: both
+	// hold the same Golf actor lock before consulting/changing MFA metadata.
+	if local == nil && kind == "pat" {
+		var required bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_local_mfa m JOIN golf_local_accounts a ON a.id=m.account_id WHERE a.user_id=$1 AND m.enabled)`, id).Scan(&required); err != nil {
+			return loginResult{}, errStorageUnavailable
+		}
+		if required {
+			return loginResult{}, errMFARequired
+		}
+	}
 	if local != nil {
 		account, err := queries.LockLocalAccount(ctx, database.LockLocalAccountParams{ID: local.accountID, UserID: id})
 		if errors.Is(err, sql.ErrNoRows) {
@@ -99,6 +111,9 @@ func (s *Server) createSessionBound(ctx context.Context, user User, kind, payloa
 		}
 		if local.userID != id || account.DisabledAt.Valid || account.CredentialVersion != local.version {
 			return loginResult{}, errLocalCredentials
+		}
+		if err := s.checkMFASessionBinding(ctx, tx, local); err != nil {
+			return loginResult{}, err
 		}
 		user.IsInstanceAdmin = account.IsInstanceAdmin
 	}
@@ -148,7 +163,7 @@ func (s *Server) createSessionBound(ctx context.Context, user User, kind, payloa
 	// while deleting expired rows belonging to unrelated accounts. A cleanup
 	// failure cannot turn an already committed sign-in into a false failure.
 	_ = database.New(s.db).DeleteExpiredSessions(ctx)
-	return loginResult{user, value, expires}, nil
+	return loginResult{User: user, Value: value, Expires: expires}, nil
 }
 func (s *Server) sessionCredential(ctx context.Context, value string) (forgeCredential, error) {
 	hash, err := s.authSessionHash(ctx, value, nil)

@@ -135,7 +135,7 @@ func (s *Server) admitReview(ctx context.Context, p reviewerRecord, number uint3
 	if e != nil {
 		return out, e
 	}
-	login, e := s.createSessionBound(ctx, user, "local", a.Credential.Token, "", &localLoginBinding{p.LocalID, p.UserID, p.LocalVersion})
+	login, e := s.createSessionBound(ctx, user, "local", a.Credential.Token, "", &localLoginBinding{accountID: p.LocalID, userID: p.UserID, version: p.LocalVersion, background: true})
 	if e != nil {
 		return out, e
 	}

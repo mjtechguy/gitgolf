@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, GetAccountSecurityResponseSchema, ChangeOwnPasswordRequestSchema, ChangeOwnPasswordResponseSchema, ChangeOwnLoginEmailRequestSchema, ChangeOwnLoginEmailResponseSchema, LogoutResponseSchema } from '../src/gen/golf/v1/golf_pb';
+import { GetAuthenticationOptionsResponseSchema, GetSessionResponseSchema, ListCapabilitiesResponseSchema, GetAccountSecurityResponseSchema, GetOwnMFAResponseSchema, ChangeOwnPasswordRequestSchema, ChangeOwnPasswordResponseSchema, ChangeOwnLoginEmailRequestSchema, ChangeOwnLoginEmailResponseSchema, LogoutResponseSchema } from '../src/gen/golf/v1/golf_pb';
 import { request, respond, reject } from './rpc';
 async function fixture(page: Page) {
   const state = { writes: [] as unknown[], unknown: false, signedOut: false, denied: false, logouts: 0 };
@@ -10,6 +10,7 @@ async function fixture(page: Page) {
     if (method === 'GetSession') return respond(route, GetSessionResponseSchema, state.signedOut ? {} : { user: { id: '9007199254740993', login: 'alex' } });
     if (method === 'ListCapabilities') return respond(route, ListCapabilitiesResponseSchema, {});
     if (method === 'Logout') { state.logouts++; state.signedOut = true; return respond(route, LogoutResponseSchema, {}); }
+    if (method === 'GetOwnMFA') return respond(route, GetOwnMFAResponseSchema, {mfa:{accountId:'9007199254740995',userId:'9007199254740993',version:'0'}});
     if (method === 'GetAccountSecurity') return state.denied ? reject(route, 'permission_denied', 'Account access denied.') : respond(route, GetAccountSecurityResponseSchema, { security: { accountId: '9007199254740995', userId: '9007199254740993', username: 'alex', loginEmail: 'alex@example.invalid', credentialVersion: '9007199254740997', canManage: true } });
     if (method === 'ChangeOwnPassword' || method === 'ChangeOwnLoginEmail') {
       state.writes.push(request(route, method === 'ChangeOwnPassword' ? ChangeOwnPasswordRequestSchema : ChangeOwnLoginEmailRequestSchema));

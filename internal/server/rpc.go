@@ -162,10 +162,11 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		}
 		public := false
 		switch procedure {
-		case golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLoginWithPasswordProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
+		case golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLoginWithPasswordProcedure, golfv1connect.SessionServiceCompletePasswordMFAProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
 			public = true
 		case golfv1connect.ReviewerServiceGetReviewerProcedure, golfv1connect.ReviewerServiceSaveReviewerProcedure, golfv1connect.ReviewerServiceListReviewerRunsProcedure, golfv1connect.ReviewerServiceRequestReviewProcedure, golfv1connect.AgentTaskServiceCreateAgentTaskProcedure, golfv1connect.AgentTaskServiceListAgentTasksProcedure, golfv1connect.AgentTaskServiceGetAgentTaskProcedure, golfv1connect.AgentTaskServiceCancelAgentTaskProcedure, golfv1connect.AgentTaskServiceListAgentTaskEventsProcedure, golfv1connect.AgentUsageServicePreviewAgentTaskProcedure, golfv1connect.AgentUsageServiceGetAgentUsageProcedure, golfv1connect.AgentUsageServiceSaveAgentUsageProcedure, golfv1connect.AgentUsageServiceListAgentModelsProcedure, golfv1connect.CodexAccountServiceCompleteAgentLoginProcedure, golfv1connect.CodexAccountServiceListCodexConnectionsProcedure, golfv1connect.CodexAccountServiceCreateCodexConnectionProcedure, golfv1connect.CodexAccountServiceSetCodexConnectionAccessProcedure, golfv1connect.CodexAccountServiceGetCodexConnectionProcedure, golfv1connect.CodexAccountServiceStartCodexLoginProcedure, golfv1connect.CodexAccountServiceCancelCodexLoginProcedure, golfv1connect.CodexAccountServiceRefreshCodexConnectionProcedure, golfv1connect.CodexAccountServiceDisconnectCodexConnectionProcedure,
 			golfv1connect.AutomationGrantServiceListAutomationGrantsProcedure, golfv1connect.AutomationGrantServiceCreateAutomationGrantProcedure, golfv1connect.AutomationGrantServiceRevokeAutomationGrantProcedure,
+			golfv1connect.AccountSecurityServiceGetOwnMFAProcedure, golfv1connect.AccountSecurityServiceBeginOwnMFAProcedure, golfv1connect.AccountSecurityServiceConfirmOwnMFAProcedure, golfv1connect.AccountSecurityServiceDisableOwnMFAProcedure, golfv1connect.AccountSecurityServiceRegenerateOwnMFARecoveryProcedure,
 			golfv1connect.AccountSecurityServiceGetAccountSecurityProcedure, golfv1connect.AccountSecurityServiceChangeOwnPasswordProcedure, golfv1connect.AccountSecurityServiceChangeOwnLoginEmailProcedure,
 			golfv1connect.InstanceAdminServiceEnrollRegularLocalAccountProcedure, golfv1connect.InstanceAdminServiceResetRegularLocalPasswordProcedure, golfv1connect.InstanceAdminServiceEnableRegularLocalAccountProcedure,
 			golfv1connect.ProfileServiceGetProfileProcedure, golfv1connect.ProfileServiceUpdateProfileProcedure,
@@ -306,8 +307,14 @@ func (s *Server) LoginWithPassword(ctx context.Context, req *connect.Request[gol
 	if err != nil {
 		return nil, rpcError(err)
 	}
+	if result.MFAChallenge != "" {
+		response := connect.NewResponse(&golfv1.LoginWithPasswordResponse{MfaRequired: true, ChallengeExpiresAt: result.Expires.UTC().Format(time.RFC3339Nano)})
+		response.Header().Add("Set-Cookie", s.mfaCookie(result.MFAChallenge, result.Expires, int(mfaChallengeLifetime.Seconds())).String())
+		return response, nil
+	}
 	response := connect.NewResponse(&golfv1.LoginWithPasswordResponse{User: wireUser(result.User)})
 	response.Header().Add("Set-Cookie", s.sessionCookie(result.Value, result.Expires, int(sessionLifetime.Seconds())).String())
+	response.Header().Add("Set-Cookie", s.mfaCookie("", time.Unix(1, 0), -1).String())
 	return response, nil
 }
 func (s *Server) LoginWithGiteaToken(ctx context.Context, req *connect.Request[golfv1.LoginWithGiteaTokenRequest]) (*connect.Response[golfv1.LoginWithGiteaTokenResponse], error) {

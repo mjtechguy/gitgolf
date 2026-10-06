@@ -364,6 +364,10 @@ func acknowledgesCurrentSessionRevocation(request connect.AnyRequest, response c
 	case golfv1connect.SessionServiceRevokeSessionProcedure:
 		reply, ok := response.(*connect.Response[golfv1.RevokeSessionResponse])
 		return ok && reply != nil && reply.Msg != nil && reply.Msg.CurrentSessionRevoked
+	case golfv1connect.AccountSecurityServiceConfirmOwnMFAProcedure, golfv1connect.AccountSecurityServiceDisableOwnMFAProcedure, golfv1connect.AccountSecurityServiceRegenerateOwnMFARecoveryProcedure:
+		input, inputOK := request.(*connect.Request[golfv1.ChangeOwnMFARequest])
+		reply, replyOK := response.(*connect.Response[golfv1.ChangeOwnMFAResponse])
+		return inputOK && replyOK && input != nil && input.Msg != nil && reply != nil && reply.Msg != nil && reply.Msg.Mfa != nil && credentialReceipt(input.Msg.ExpectedVersion, reply.Msg.Mfa.Version, reply.Msg.OperationId, reply.Msg.SessionsRevoked, reply.Msg.RequiresLogin)
 	case golfv1connect.AccountSecurityServiceChangeOwnPasswordProcedure:
 		input, inputOK := request.(*connect.Request[golfv1.ChangeOwnPasswordRequest])
 		reply, replyOK := response.(*connect.Response[golfv1.ChangeOwnPasswordResponse])
