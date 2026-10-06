@@ -976,6 +976,28 @@ type GolfPullReviewCommentOperation struct {
 	UpdatedAt        time.Time
 }
 
+type GolfPullReviewLifecycleEvent struct {
+	ID          int64
+	OperationID int64
+	Phase       string
+	OccurredAt  time.Time
+}
+
+type GolfPullReviewLifecycleOperation struct {
+	ID               int64
+	UserID           int64
+	ForgeURL         string
+	ActorID          int64
+	OperationID      string
+	RepositoryID     int64
+	Original         []byte
+	InputFingerprint []byte
+	Phase            string
+	FailureCode      string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
 type GolfPullReviewMutation struct {
 	ID                 int64
 	UserID             int64

@@ -874,6 +874,15 @@ const (
 	// RepositoryReleaseManagementServiceGetRepositoryReleaseOperationProcedure is the fully-qualified
 	// name of the RepositoryReleaseManagementService's GetRepositoryReleaseOperation RPC.
 	RepositoryReleaseManagementServiceGetRepositoryReleaseOperationProcedure = "/golf.v1.RepositoryReleaseManagementService/GetRepositoryReleaseOperation"
+	// PullReviewRequestServiceGetPullReviewLifecycleStateProcedure is the fully-qualified name of the
+	// PullReviewRequestService's GetPullReviewLifecycleState RPC.
+	PullReviewRequestServiceGetPullReviewLifecycleStateProcedure = "/golf.v1.PullReviewRequestService/GetPullReviewLifecycleState"
+	// PullReviewRequestServiceSubmitPullReviewLifecycleProcedure is the fully-qualified name of the
+	// PullReviewRequestService's SubmitPullReviewLifecycle RPC.
+	PullReviewRequestServiceSubmitPullReviewLifecycleProcedure = "/golf.v1.PullReviewRequestService/SubmitPullReviewLifecycle"
+	// PullReviewRequestServiceGetPullReviewLifecycleOperationProcedure is the fully-qualified name of
+	// the PullReviewRequestService's GetPullReviewLifecycleOperation RPC.
+	PullReviewRequestServiceGetPullReviewLifecycleOperationProcedure = "/golf.v1.PullReviewRequestService/GetPullReviewLifecycleOperation"
 	// PullReviewRequestServiceGetPullCodeOwnersProcedure is the fully-qualified name of the
 	// PullReviewRequestService's GetPullCodeOwners RPC.
 	PullReviewRequestServiceGetPullCodeOwnersProcedure = "/golf.v1.PullReviewRequestService/GetPullCodeOwners"
@@ -9288,6 +9297,9 @@ func (UnimplementedRepositoryReleaseManagementServiceHandler) GetRepositoryRelea
 
 // PullReviewRequestServiceClient is a client for the golf.v1.PullReviewRequestService service.
 type PullReviewRequestServiceClient interface {
+	GetPullReviewLifecycleState(context.Context, *connect.Request[v1.GetPullReviewLifecycleStateRequest]) (*connect.Response[v1.GetPullReviewLifecycleStateResponse], error)
+	SubmitPullReviewLifecycle(context.Context, *connect.Request[v1.SubmitPullReviewLifecycleRequest]) (*connect.Response[v1.SubmitPullReviewLifecycleResponse], error)
+	GetPullReviewLifecycleOperation(context.Context, *connect.Request[v1.GetPullReviewLifecycleOperationRequest]) (*connect.Response[v1.GetPullReviewLifecycleOperationResponse], error)
 	GetPullCodeOwners(context.Context, *connect.Request[v1.GetPullCodeOwnersRequest]) (*connect.Response[v1.GetPullCodeOwnersResponse], error)
 	GetPullReviewCommentState(context.Context, *connect.Request[v1.GetPullReviewCommentStateRequest]) (*connect.Response[v1.GetPullReviewCommentStateResponse], error)
 	SubmitPullReviewCommentInteraction(context.Context, *connect.Request[v1.SubmitPullReviewCommentInteractionRequest]) (*connect.Response[v1.SubmitPullReviewCommentInteractionResponse], error)
@@ -9309,6 +9321,24 @@ func NewPullReviewRequestServiceClient(httpClient connect.HTTPClient, baseURL st
 	baseURL = strings.TrimRight(baseURL, "/")
 	pullReviewRequestServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("PullReviewRequestService").Methods()
 	return &pullReviewRequestServiceClient{
+		getPullReviewLifecycleState: connect.NewClient[v1.GetPullReviewLifecycleStateRequest, v1.GetPullReviewLifecycleStateResponse](
+			httpClient,
+			baseURL+PullReviewRequestServiceGetPullReviewLifecycleStateProcedure,
+			connect.WithSchema(pullReviewRequestServiceMethods.ByName("GetPullReviewLifecycleState")),
+			connect.WithClientOptions(opts...),
+		),
+		submitPullReviewLifecycle: connect.NewClient[v1.SubmitPullReviewLifecycleRequest, v1.SubmitPullReviewLifecycleResponse](
+			httpClient,
+			baseURL+PullReviewRequestServiceSubmitPullReviewLifecycleProcedure,
+			connect.WithSchema(pullReviewRequestServiceMethods.ByName("SubmitPullReviewLifecycle")),
+			connect.WithClientOptions(opts...),
+		),
+		getPullReviewLifecycleOperation: connect.NewClient[v1.GetPullReviewLifecycleOperationRequest, v1.GetPullReviewLifecycleOperationResponse](
+			httpClient,
+			baseURL+PullReviewRequestServiceGetPullReviewLifecycleOperationProcedure,
+			connect.WithSchema(pullReviewRequestServiceMethods.ByName("GetPullReviewLifecycleOperation")),
+			connect.WithClientOptions(opts...),
+		),
 		getPullCodeOwners: connect.NewClient[v1.GetPullCodeOwnersRequest, v1.GetPullCodeOwnersResponse](
 			httpClient,
 			baseURL+PullReviewRequestServiceGetPullCodeOwnersProcedure,
@@ -9362,6 +9392,9 @@ func NewPullReviewRequestServiceClient(httpClient connect.HTTPClient, baseURL st
 
 // pullReviewRequestServiceClient implements PullReviewRequestServiceClient.
 type pullReviewRequestServiceClient struct {
+	getPullReviewLifecycleState        *connect.Client[v1.GetPullReviewLifecycleStateRequest, v1.GetPullReviewLifecycleStateResponse]
+	submitPullReviewLifecycle          *connect.Client[v1.SubmitPullReviewLifecycleRequest, v1.SubmitPullReviewLifecycleResponse]
+	getPullReviewLifecycleOperation    *connect.Client[v1.GetPullReviewLifecycleOperationRequest, v1.GetPullReviewLifecycleOperationResponse]
 	getPullCodeOwners                  *connect.Client[v1.GetPullCodeOwnersRequest, v1.GetPullCodeOwnersResponse]
 	getPullReviewCommentState          *connect.Client[v1.GetPullReviewCommentStateRequest, v1.GetPullReviewCommentStateResponse]
 	submitPullReviewCommentInteraction *connect.Client[v1.SubmitPullReviewCommentInteractionRequest, v1.SubmitPullReviewCommentInteractionResponse]
@@ -9370,6 +9403,22 @@ type pullReviewRequestServiceClient struct {
 	getPullReviewTeamCandidates        *connect.Client[v1.GetPullReviewTeamCandidatesRequest, v1.GetPullReviewTeamCandidatesResponse]
 	submitPullReviewRequest            *connect.Client[v1.SubmitPullReviewRequestRequest, v1.SubmitPullReviewRequestResponse]
 	getPullReviewRequestOperation      *connect.Client[v1.GetPullReviewRequestOperationRequest, v1.GetPullReviewRequestOperationResponse]
+}
+
+// GetPullReviewLifecycleState calls golf.v1.PullReviewRequestService.GetPullReviewLifecycleState.
+func (c *pullReviewRequestServiceClient) GetPullReviewLifecycleState(ctx context.Context, req *connect.Request[v1.GetPullReviewLifecycleStateRequest]) (*connect.Response[v1.GetPullReviewLifecycleStateResponse], error) {
+	return c.getPullReviewLifecycleState.CallUnary(ctx, req)
+}
+
+// SubmitPullReviewLifecycle calls golf.v1.PullReviewRequestService.SubmitPullReviewLifecycle.
+func (c *pullReviewRequestServiceClient) SubmitPullReviewLifecycle(ctx context.Context, req *connect.Request[v1.SubmitPullReviewLifecycleRequest]) (*connect.Response[v1.SubmitPullReviewLifecycleResponse], error) {
+	return c.submitPullReviewLifecycle.CallUnary(ctx, req)
+}
+
+// GetPullReviewLifecycleOperation calls
+// golf.v1.PullReviewRequestService.GetPullReviewLifecycleOperation.
+func (c *pullReviewRequestServiceClient) GetPullReviewLifecycleOperation(ctx context.Context, req *connect.Request[v1.GetPullReviewLifecycleOperationRequest]) (*connect.Response[v1.GetPullReviewLifecycleOperationResponse], error) {
+	return c.getPullReviewLifecycleOperation.CallUnary(ctx, req)
 }
 
 // GetPullCodeOwners calls golf.v1.PullReviewRequestService.GetPullCodeOwners.
@@ -9418,6 +9467,9 @@ func (c *pullReviewRequestServiceClient) GetPullReviewRequestOperation(ctx conte
 // PullReviewRequestServiceHandler is an implementation of the golf.v1.PullReviewRequestService
 // service.
 type PullReviewRequestServiceHandler interface {
+	GetPullReviewLifecycleState(context.Context, *connect.Request[v1.GetPullReviewLifecycleStateRequest]) (*connect.Response[v1.GetPullReviewLifecycleStateResponse], error)
+	SubmitPullReviewLifecycle(context.Context, *connect.Request[v1.SubmitPullReviewLifecycleRequest]) (*connect.Response[v1.SubmitPullReviewLifecycleResponse], error)
+	GetPullReviewLifecycleOperation(context.Context, *connect.Request[v1.GetPullReviewLifecycleOperationRequest]) (*connect.Response[v1.GetPullReviewLifecycleOperationResponse], error)
 	GetPullCodeOwners(context.Context, *connect.Request[v1.GetPullCodeOwnersRequest]) (*connect.Response[v1.GetPullCodeOwnersResponse], error)
 	GetPullReviewCommentState(context.Context, *connect.Request[v1.GetPullReviewCommentStateRequest]) (*connect.Response[v1.GetPullReviewCommentStateResponse], error)
 	SubmitPullReviewCommentInteraction(context.Context, *connect.Request[v1.SubmitPullReviewCommentInteractionRequest]) (*connect.Response[v1.SubmitPullReviewCommentInteractionResponse], error)
@@ -9435,6 +9487,24 @@ type PullReviewRequestServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewPullReviewRequestServiceHandler(svc PullReviewRequestServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	pullReviewRequestServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("PullReviewRequestService").Methods()
+	pullReviewRequestServiceGetPullReviewLifecycleStateHandler := connect.NewUnaryHandler(
+		PullReviewRequestServiceGetPullReviewLifecycleStateProcedure,
+		svc.GetPullReviewLifecycleState,
+		connect.WithSchema(pullReviewRequestServiceMethods.ByName("GetPullReviewLifecycleState")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pullReviewRequestServiceSubmitPullReviewLifecycleHandler := connect.NewUnaryHandler(
+		PullReviewRequestServiceSubmitPullReviewLifecycleProcedure,
+		svc.SubmitPullReviewLifecycle,
+		connect.WithSchema(pullReviewRequestServiceMethods.ByName("SubmitPullReviewLifecycle")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pullReviewRequestServiceGetPullReviewLifecycleOperationHandler := connect.NewUnaryHandler(
+		PullReviewRequestServiceGetPullReviewLifecycleOperationProcedure,
+		svc.GetPullReviewLifecycleOperation,
+		connect.WithSchema(pullReviewRequestServiceMethods.ByName("GetPullReviewLifecycleOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
 	pullReviewRequestServiceGetPullCodeOwnersHandler := connect.NewUnaryHandler(
 		PullReviewRequestServiceGetPullCodeOwnersProcedure,
 		svc.GetPullCodeOwners,
@@ -9485,6 +9555,12 @@ func NewPullReviewRequestServiceHandler(svc PullReviewRequestServiceHandler, opt
 	)
 	return "/golf.v1.PullReviewRequestService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case PullReviewRequestServiceGetPullReviewLifecycleStateProcedure:
+			pullReviewRequestServiceGetPullReviewLifecycleStateHandler.ServeHTTP(w, r)
+		case PullReviewRequestServiceSubmitPullReviewLifecycleProcedure:
+			pullReviewRequestServiceSubmitPullReviewLifecycleHandler.ServeHTTP(w, r)
+		case PullReviewRequestServiceGetPullReviewLifecycleOperationProcedure:
+			pullReviewRequestServiceGetPullReviewLifecycleOperationHandler.ServeHTTP(w, r)
 		case PullReviewRequestServiceGetPullCodeOwnersProcedure:
 			pullReviewRequestServiceGetPullCodeOwnersHandler.ServeHTTP(w, r)
 		case PullReviewRequestServiceGetPullReviewCommentStateProcedure:
@@ -9509,6 +9585,18 @@ func NewPullReviewRequestServiceHandler(svc PullReviewRequestServiceHandler, opt
 
 // UnimplementedPullReviewRequestServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedPullReviewRequestServiceHandler struct{}
+
+func (UnimplementedPullReviewRequestServiceHandler) GetPullReviewLifecycleState(context.Context, *connect.Request[v1.GetPullReviewLifecycleStateRequest]) (*connect.Response[v1.GetPullReviewLifecycleStateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullReviewRequestService.GetPullReviewLifecycleState is not implemented"))
+}
+
+func (UnimplementedPullReviewRequestServiceHandler) SubmitPullReviewLifecycle(context.Context, *connect.Request[v1.SubmitPullReviewLifecycleRequest]) (*connect.Response[v1.SubmitPullReviewLifecycleResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullReviewRequestService.SubmitPullReviewLifecycle is not implemented"))
+}
+
+func (UnimplementedPullReviewRequestServiceHandler) GetPullReviewLifecycleOperation(context.Context, *connect.Request[v1.GetPullReviewLifecycleOperationRequest]) (*connect.Response[v1.GetPullReviewLifecycleOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullReviewRequestService.GetPullReviewLifecycleOperation is not implemented"))
+}
 
 func (UnimplementedPullReviewRequestServiceHandler) GetPullCodeOwners(context.Context, *connect.Request[v1.GetPullCodeOwnersRequest]) (*connect.Response[v1.GetPullCodeOwnersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullReviewRequestService.GetPullCodeOwners is not implemented"))
