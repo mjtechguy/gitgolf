@@ -67,7 +67,7 @@ func (s *Server) packagePublicationAccess(ctx context.Context, session string, t
 			return nil
 		}
 		allowed = true
-		reason = "Generic package access follows the native owner namespace, independently of repository permissions."
+		reason = "Package visibility follows the native owner namespace, independently of repository permissions. Publication additionally requires native write:package authority: ownership does not prove the scopes of existing consent or mapped personal access tokens. An operator must explicitly grant that scope or you must reauthorize; Golf does not silently elevate retained credentials."
 		return nil
 	})
 	return
@@ -97,7 +97,7 @@ func validatePackagePublication(m *golfv1.SubmitPackagePublicationRequest) error
 		return e
 	}
 	if !creationKey.MatchString(m.OperationId) || !genericPackageName.MatchString(m.PackageName) || !genericPackageName.MatchString(m.Version) || !genericPackageName.MatchString(m.FileName) || len(m.Content) > 256<<10 {
-		return invalid("Use an original UUID and safe generic package/version/file names; uploads support at most256 KiB.")
+		return invalid("Use an original UUID and safe generic package/version/file names; uploads support at most 256 KiB.")
 	}
 	return nil
 }
