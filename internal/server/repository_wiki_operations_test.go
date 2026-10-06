@@ -331,3 +331,31 @@ func TestWikiOperationJournalPostgres(t *testing.T) {
 		})
 	}
 }
+func TestNative078ManagedBoundaries(t *testing.T) {
+	s, e := New(testConfig("http://forge.invalid"), nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, procedure := range []string{golfv1connect.RepositoryWikiManagementServiceGetRepositoryWikiWriteContextProcedure, golfv1connect.RepositoryWikiManagementServiceSubmitRepositoryWikiOperationProcedure, golfv1connect.RepositoryWikiManagementServiceGetRepositoryWikiOperationProcedure, golfv1connect.OrganizationLabelServiceSubmitOrganizationLabelOperationProcedure, golfv1connect.OrganizationLabelServiceGetOrganizationLabelOperationProcedure, golfv1connect.RepositoryMirrorServiceSubmitRepositoryMirrorOperationProcedure, golfv1connect.RepositoryMirrorServiceGetRepositoryMirrorOperationProcedure} {
+		for _, mode := range []string{"anonymous", "cross-origin", "api"} {
+			r := httptest.NewRequest(http.MethodPost, s.config.PublicURL+"/rpc"+procedure, strings.NewReader(`{}`))
+			r.Header.Set("Content-Type", "application/json")
+			r.Header.Set("Connect-Protocol-Version", "1")
+			r.Header.Set("Origin", s.config.PublicURL)
+			want := 401
+			if mode == "cross-origin" {
+				r.Header.Set("Origin", "https://foreign.invalid")
+				want = 403
+			}
+			if mode == "api" {
+				r.Header.Set("Authorization", "Bearer golf_ro_"+strings.Repeat("A", 43))
+				want = 403
+			}
+			w := httptest.NewRecorder()
+			s.ServeHTTP(w, r)
+			if w.Code != want || w.Header().Get("Cache-Control") != "no-store" {
+				t.Fatal("managed mutation boundary", mode, w.Code)
+			}
+		}
+	}
+}
