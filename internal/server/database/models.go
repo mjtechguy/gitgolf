@@ -1642,6 +1642,14 @@ type GolfReviewer struct {
 	ExpiresAt       time.Time
 }
 
+type GolfReviewerCommentCommand struct {
+	RunID          uuid.UUID
+	CommentID      int64
+	AuthorNativeID int64
+	BodySha256     []byte
+	CreatedAt      time.Time
+}
+
 type GolfReviewerPublication struct {
 	RunID              uuid.UUID
 	ForgeURL           string
