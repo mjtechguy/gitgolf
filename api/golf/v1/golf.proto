@@ -11,7 +11,7 @@ service SessionService {
   rpc GetAuthenticationOptions(GetAuthenticationOptionsRequest) returns (GetAuthenticationOptionsResponse);
   rpc BeginGiteaOAuth(BeginGiteaOAuthRequest) returns (BeginGiteaOAuthResponse);
   rpc LoginWithPassword(LoginWithPasswordRequest) returns (LoginWithPasswordResponse);
-  rpc CompletePasswordMFA(CompletePasswordMFARequest) returns (LoginWithPasswordResponse);
+  rpc CompletePasswordMFA(CompletePasswordMFARequest) returns (CompletePasswordMFAResponse);
   rpc LoginWithGiteaToken(LoginWithGiteaTokenRequest) returns (LoginWithGiteaTokenResponse);
   rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
   rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
@@ -1726,9 +1726,9 @@ service AccountSecurityService {
  rpc ChangeOwnLoginEmail(ChangeOwnLoginEmailRequest) returns (ChangeOwnLoginEmailResponse);
  rpc GetOwnMFA(GetOwnMFARequest) returns (GetOwnMFAResponse);
  rpc BeginOwnMFA(BeginOwnMFARequest) returns (BeginOwnMFAResponse);
- rpc ConfirmOwnMFA(ChangeOwnMFARequest) returns (ChangeOwnMFAResponse);
- rpc DisableOwnMFA(ChangeOwnMFARequest) returns (ChangeOwnMFAResponse);
- rpc RegenerateOwnMFARecovery(ChangeOwnMFARequest) returns (ChangeOwnMFAResponse);
+ rpc ConfirmOwnMFA(ConfirmOwnMFARequest) returns (ConfirmOwnMFAResponse);
+ rpc DisableOwnMFA(DisableOwnMFARequest) returns (DisableOwnMFAResponse);
+ rpc RegenerateOwnMFARecovery(RegenerateOwnMFARecoveryRequest) returns (RegenerateOwnMFARecoveryResponse);
 }
 
 // Explicit personal native-token delegation; independent of browser sessions.
@@ -4865,3 +4865,11 @@ message GetPullCodeOwnersResponse {
  PullRequestSelection selection = 1; string pull_revision = 2; string path = 3; string blob_id = 4;
  repeated PullCodeOwnerMatch matches = 5; string source = 6; bool routing_complete = 7; uint32 unsupported_rules = 8;
 }
+
+message CompletePasswordMFAResponse { User user = 1; bool mfa_required = 2; string challenge_expires_at = 3; }
+message ConfirmOwnMFARequest { string expected_version = 1; string password_confirmation = 2; string code = 3; }
+message ConfirmOwnMFAResponse { OwnMFA mfa = 1; repeated string recovery_codes = 2; bool requires_login = 3; uint64 sessions_revoked = 4; string operation_id = 5; }
+message DisableOwnMFARequest { string expected_version = 1; string password_confirmation = 2; string code = 3; }
+message DisableOwnMFAResponse { OwnMFA mfa = 1; repeated string recovery_codes = 2; bool requires_login = 3; uint64 sessions_revoked = 4; string operation_id = 5; }
+message RegenerateOwnMFARecoveryRequest { string expected_version = 1; string password_confirmation = 2; string code = 3; }
+message RegenerateOwnMFARecoveryResponse { OwnMFA mfa = 1; repeated string recovery_codes = 2; bool requires_login = 3; uint64 sessions_revoked = 4; string operation_id = 5; }

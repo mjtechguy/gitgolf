@@ -92,7 +92,7 @@ func TestLocalMFANativeProof(t *testing.T) {
 	if e != nil {
 		t.Fatal("native MFA code unavailable")
 	}
-	enabled, e := security.ConfirmOwnMFA(t.Context(), mfaNativeRequest(s, &golfv1.ChangeOwnMFARequest{ExpectedVersion: "1", PasswordConfirmation: localTestPassword, Code: code}))
+	enabled, e := security.ConfirmOwnMFA(t.Context(), mfaNativeRequest(s, &golfv1.ConfirmOwnMFARequest{ExpectedVersion: "1", PasswordConfirmation: localTestPassword, Code: code}))
 	if e != nil || !enabled.Msg.Mfa.Enabled || len(enabled.Msg.RecoveryCodes) != 10 || !enabled.Msg.RequiresLogin {
 		t.Fatal("native MFA enable failed")
 	}
@@ -130,7 +130,7 @@ func TestLocalMFANativeProof(t *testing.T) {
 	if e != nil || state.Msg.Mfa.RemainingRecoveryCodes != 10 {
 		t.Fatal("native own recovery count failed")
 	}
-	regenerated, e := security.RegenerateOwnMFARecovery(t.Context(), mfaNativeRequest(restart, &golfv1.ChangeOwnMFARequest{ExpectedVersion: "2", PasswordConfirmation: localTestPassword, Code: enabled.Msg.RecoveryCodes[1]}))
+	regenerated, e := security.RegenerateOwnMFARecovery(t.Context(), mfaNativeRequest(restart, &golfv1.RegenerateOwnMFARecoveryRequest{ExpectedVersion: "2", PasswordConfirmation: localTestPassword, Code: enabled.Msg.RecoveryCodes[1]}))
 	if e != nil || len(regenerated.Msg.RecoveryCodes) != 10 || regenerated.Msg.Mfa.Version != "3" {
 		t.Fatal("native recovery regeneration failed")
 	}
@@ -143,7 +143,7 @@ func TestLocalMFANativeProof(t *testing.T) {
 	if _, e = sessions.CompletePasswordMFA(t.Context(), connect.NewRequest(&golfv1.CompletePasswordMFARequest{Code: regenerated.Msg.RecoveryCodes[0]})); e != nil {
 		t.Fatal("native replacement recovery failed")
 	}
-	disabled, e := security.DisableOwnMFA(t.Context(), mfaNativeRequest(restart, &golfv1.ChangeOwnMFARequest{ExpectedVersion: "3", PasswordConfirmation: localTestPassword, Code: regenerated.Msg.RecoveryCodes[1]}))
+	disabled, e := security.DisableOwnMFA(t.Context(), mfaNativeRequest(restart, &golfv1.DisableOwnMFARequest{ExpectedVersion: "3", PasswordConfirmation: localTestPassword, Code: regenerated.Msg.RecoveryCodes[1]}))
 	if e != nil || disabled.Msg.Mfa.Enabled {
 		t.Fatal("native disable failed")
 	}

@@ -204,7 +204,7 @@ func (s *Server) beginMFALogin(ctx context.Context, row database.GetLocalAccount
 	}
 	return value, expires, true, nil
 }
-func (s *Server) CompletePasswordMFA(ctx context.Context, req *connect.Request[golfv1.CompletePasswordMFARequest]) (*connect.Response[golfv1.LoginWithPasswordResponse], error) {
+func (s *Server) CompletePasswordMFA(ctx context.Context, req *connect.Request[golfv1.CompletePasswordMFARequest]) (*connect.Response[golfv1.CompletePasswordMFAResponse], error) {
 	hash, e := sessionHash(s.mfaCookieValue(req.Header()))
 	if e != nil {
 		return nil, rpcError(errLocalCredentials)
@@ -247,7 +247,7 @@ func (s *Server) CompletePasswordMFA(ctx context.Context, req *connect.Request[g
 	if e != nil {
 		return nil, rpcError(e)
 	}
-	response := connect.NewResponse(&golfv1.LoginWithPasswordResponse{User: wireUser(result.User)})
+	response := connect.NewResponse(&golfv1.CompletePasswordMFAResponse{User: wireUser(result.User)})
 	response.Header().Add("Set-Cookie", s.sessionCookie(result.Value, result.Expires, int(sessionLifetime.Seconds())).String())
 	response.Header().Add("Set-Cookie", s.mfaCookie("", time.Unix(1, 0), -1).String())
 	return response, nil
@@ -485,24 +485,39 @@ func (s *Server) changeOwnMFA(ctx context.Context, header http.Header, m *golfv1
 	})
 	return out, e
 }
-func (s *Server) ownMFAResponse(ctx context.Context, req *connect.Request[golfv1.ChangeOwnMFARequest], action string) (*connect.Response[golfv1.ChangeOwnMFAResponse], error) {
-	v, e := s.changeOwnMFA(ctx, req.Header(), req.Msg, action)
-	if e != nil {
-		return nil, rpcError(e)
+func (s *Server) ConfirmOwnMFA(ctx context.Context, req *connect.Request[golfv1.ConfirmOwnMFARequest]) (*connect.Response[golfv1.ConfirmOwnMFAResponse], error) {
+	m := req.Msg
+	result, err := s.changeOwnMFA(ctx, req.Header(), &golfv1.ChangeOwnMFARequest{ExpectedVersion: m.ExpectedVersion, PasswordConfirmation: m.PasswordConfirmation, Code: m.Code}, "enabled")
+	if err != nil {
+		return nil, rpcError(err)
 	}
-	out := connect.NewResponse(v)
-	out.Header().Add("Set-Cookie", s.sessionCookie("", time.Unix(1, 0), -1).String())
-	out.Header().Add("Set-Cookie", s.mfaCookie("", time.Unix(1, 0), -1).String())
+	out := connect.NewResponse(&golfv1.ConfirmOwnMFAResponse{Mfa: result.Mfa, RecoveryCodes: result.RecoveryCodes, RequiresLogin: result.RequiresLogin, SessionsRevoked: result.SessionsRevoked, OperationId: result.OperationId})
+	s.clearMFASessionCookies(out.Header())
 	return out, nil
 }
-func (s *Server) ConfirmOwnMFA(ctx context.Context, req *connect.Request[golfv1.ChangeOwnMFARequest]) (*connect.Response[golfv1.ChangeOwnMFAResponse], error) {
-	return s.ownMFAResponse(ctx, req, "enabled")
+func (s *Server) DisableOwnMFA(ctx context.Context, req *connect.Request[golfv1.DisableOwnMFARequest]) (*connect.Response[golfv1.DisableOwnMFAResponse], error) {
+	m := req.Msg
+	result, err := s.changeOwnMFA(ctx, req.Header(), &golfv1.ChangeOwnMFARequest{ExpectedVersion: m.ExpectedVersion, PasswordConfirmation: m.PasswordConfirmation, Code: m.Code}, "disabled")
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	out := connect.NewResponse(&golfv1.DisableOwnMFAResponse{Mfa: result.Mfa, RecoveryCodes: result.RecoveryCodes, RequiresLogin: result.RequiresLogin, SessionsRevoked: result.SessionsRevoked, OperationId: result.OperationId})
+	s.clearMFASessionCookies(out.Header())
+	return out, nil
 }
-func (s *Server) DisableOwnMFA(ctx context.Context, req *connect.Request[golfv1.ChangeOwnMFARequest]) (*connect.Response[golfv1.ChangeOwnMFAResponse], error) {
-	return s.ownMFAResponse(ctx, req, "disabled")
+func (s *Server) RegenerateOwnMFARecovery(ctx context.Context, req *connect.Request[golfv1.RegenerateOwnMFARecoveryRequest]) (*connect.Response[golfv1.RegenerateOwnMFARecoveryResponse], error) {
+	m := req.Msg
+	result, err := s.changeOwnMFA(ctx, req.Header(), &golfv1.ChangeOwnMFARequest{ExpectedVersion: m.ExpectedVersion, PasswordConfirmation: m.PasswordConfirmation, Code: m.Code}, "recovery_regenerated")
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	out := connect.NewResponse(&golfv1.RegenerateOwnMFARecoveryResponse{Mfa: result.Mfa, RecoveryCodes: result.RecoveryCodes, RequiresLogin: result.RequiresLogin, SessionsRevoked: result.SessionsRevoked, OperationId: result.OperationId})
+	s.clearMFASessionCookies(out.Header())
+	return out, nil
 }
-func (s *Server) RegenerateOwnMFARecovery(ctx context.Context, req *connect.Request[golfv1.ChangeOwnMFARequest]) (*connect.Response[golfv1.ChangeOwnMFAResponse], error) {
-	return s.ownMFAResponse(ctx, req, "recovery_regenerated")
+func (s *Server) clearMFASessionCookies(header http.Header) {
+	header.Add("Set-Cookie", s.sessionCookie("", time.Unix(1, 0), -1).String())
+	header.Add("Set-Cookie", s.mfaCookie("", time.Unix(1, 0), -1).String())
 }
 
 // All local session creation paths share this lock-bound gate. The code and the
