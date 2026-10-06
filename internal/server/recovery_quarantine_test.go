@@ -1,12 +1,15 @@
 package server
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 	"github.com/mjtechguy/golf-git/internal/runner"
 )
 
@@ -77,13 +80,68 @@ func TestRecoveryAgentQuarantinePreservesOriginalJournalPostgres(t *testing.T) {
 	}
 	queued := uuid.NewString()
 	f.x.task(t, queued, 11, f.x.user, f.x.at)
+	image := "sha256:" + strings.Repeat("d", 64)
+	if _, e = s.db.Exec(`INSERT INTO golf_agent_controls(task_id,attempt_id,image,native_version,native_session,state,revision,screened_sequence,permission_id,tool_id,allow_once_options,resume) VALUES($1,$2,$3,$4,'native-thread','dispatching',2,4,'original-permission','workspace-read','["allow-once"]',true)`, f.t.ID, f.attempt, image, runner.ManagedACPVersion); e != nil {
+		t.Fatal("fixture exact preserved sandbox control", e)
+	}
+	request := &golfv1.SubmitAgentCommandRequest{TaskId: f.t.ID, AttemptId: f.attempt, RequestId: uuid.NewString(), Kind: "permission", PermissionId: "original-permission", OptionId: "allow-once", ExpectedTaskVersion: strconv.FormatInt(f.t.Version, 10), ExpectedRevision: "1"}
+	command, e := json.Marshal(request)
+	if e != nil {
+		t.Fatal("fixture original command")
+	}
+	digest := sha256.Sum256(command)
+	commandBinding := conversationBinding(f.t, s.config.GiteaURL, f.attempt, 4, command)
+	commandCipher, commandKey, e := s.keyring.seal(conversationContentDomain, string(command), commandBinding)
+	if e != nil {
+		t.Fatal("fixture encrypted original command")
+	}
+	content := uuid.NewString()
+	if _, e = s.db.Exec(`INSERT INTO golf_agent_conversation_contents(id,task_id,attempt_id,forge_url,repository_id,user_id,sequence,encrypted_content,content_binding,credential_key_id) VALUES($1,$2,$3,$4,$5,$6,4,$7,$8,$9)`, content, f.t.ID, f.attempt, s.config.GiteaURL, f.t.RepositoryID, f.t.UserID, commandCipher, commandBinding, commandKey); e != nil {
+		t.Fatal("fixture retained command content", e)
+	}
+	if _, e = s.db.Exec(`INSERT INTO golf_agent_commands(task_id,attempt_id,request_id,kind,input_hash,content_id) VALUES($1,$2,$3,'permission',$4,$5)`, f.t.ID, f.attempt, request.RequestId, digest[:], content); e != nil {
+		t.Fatal("fixture original queued command", e)
+	}
+	nativeInput, e := json.Marshal(runner.ACPInput{ID: "initial", Kind: "prompt", Text: "Exact original task prompt"})
+	if e != nil {
+		t.Fatal("fixture original native input")
+	}
+	nativeDigest := sha256.Sum256(nativeInput)
+	if _, e = s.db.Exec(`INSERT INTO golf_agent_native_sends(task_id,attempt_id,input_id,kind,input_hash) VALUES($1,$2,'initial','prompt',$3)`, f.t.ID, f.attempt, nativeDigest[:]); e != nil {
+		t.Fatal("fixture retained native-send exclusion", e)
+	}
+	if _, e = s.db.Exec(`INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version,acp_file_tools) VALUES($1,'worker',$2,$2,$3,true)`, s.config.GiteaURL, image, runner.ManagedACPVersion); e != nil {
+		t.Fatal("fixture copied qualified worker receipt", e)
+	}
+	retained := func() string {
+		t.Helper()
+		var original string
+		if e := s.db.QueryRow(`SELECT jsonb_build_array((SELECT coalesce(jsonb_agg(to_jsonb(c) ORDER BY c.id),'[]') FROM golf_agent_conversation_contents c),(SELECT coalesce(jsonb_agg(to_jsonb(c)-'state' ORDER BY c.request_id),'[]') FROM golf_agent_commands c),(SELECT coalesce(jsonb_agg(to_jsonb(n) ORDER BY n.input_id),'[]') FROM golf_agent_native_sends n))::text`).Scan(&original); e != nil {
+			t.Fatal("retained command/cipher/send snapshot", e)
+		}
+		return original
+	}
+	original := retained()
 	var before string
 	if e := s.db.QueryRow(`SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text)::text,'[]') FROM golf_agent_task_events t`).Scan(&before); e != nil {
 		t.Fatal(e)
 	}
 	result, e := InvalidateRestoredSessions(t.Context(), s.db, strings.Repeat("f", 32))
-	if e != nil || result.Quarantine.AgentTasks != 2 || result.Quarantine.AgentConnections != 1 || result.Quarantine.AgentCredentials != 1 {
+	if e != nil || result.Quarantine.AgentTasks != 2 || result.Quarantine.AgentConnections != 1 || result.Quarantine.AgentCredentials != 1 || result.Quarantine.AgentControls != 1 || result.Quarantine.AgentCommands != 1 || result.Quarantine.AgentWorkerReceipts != 1 {
 		t.Fatal("restored tasks/credentials not quarantined", e)
+	}
+	var closed, claimed, receiptCleared bool
+	if e = s.db.QueryRow(`SELECT state='closed' AND revision=3 AND native_session='native-thread' AND image=$3 AND native_version=$4 AND screened_sequence=4 AND permission_id='' AND tool_id='' AND allow_once_options='[]'::jsonb FROM golf_agent_controls WHERE task_id=$1 AND attempt_id=$2`, f.t.ID, f.attempt, image, runner.ManagedACPVersion).Scan(&closed); e != nil || !closed {
+		t.Fatal("copied sandbox or permission authority remained live", e)
+	}
+	if e = s.db.QueryRow(`SELECT state='claimed' FROM golf_agent_commands WHERE task_id=$1 AND attempt_id=$2 AND request_id=$3`, f.t.ID, f.attempt, request.RequestId).Scan(&claimed); e != nil || !claimed {
+		t.Fatal("copied command remained dispatchable", e)
+	}
+	if e = s.db.QueryRow(`SELECT image=$2 AND acp_image='' AND acp_version='' AND NOT acp_file_tools FROM golf_agent_worker_presence WHERE forge_url=$1 AND worker_id='worker'`, s.config.GiteaURL, image).Scan(&receiptCleared); e != nil || !receiptCleared {
+		t.Fatal("copied native/file-tool receipt remained usable", e)
+	}
+	if original != retained() {
+		t.Fatal("restore rewrote original command identity, encrypted content or native send")
 	}
 	running, e := s.taskRecord(t.Context(), f.t.ID)
 	if e != nil || running.State != "lost" || running.Attempt != f.t.Attempt {
@@ -100,5 +158,9 @@ func TestRecoveryAgentQuarantinePreservesOriginalJournalPostgres(t *testing.T) {
 	var after string
 	if e = s.db.QueryRow(`SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text)::text,'[]') FROM golf_agent_task_events t`).Scan(&after); e != nil || before != after {
 		t.Fatal("restore rewrote retained conversation")
+	}
+	again, e := InvalidateRestoredSessions(t.Context(), s.db, strings.Repeat("f", 32))
+	if e != nil || again.Quarantine != (RecoveryQuarantineCounts{}) || original != retained() {
+		t.Fatal("repeated recovery revived copied authority or rewrote originals", e)
 	}
 }
