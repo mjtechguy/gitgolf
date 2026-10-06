@@ -31,7 +31,7 @@ func packageType(v string) bool {
 	return strings.Contains("|alpine|cargo|chef|composer|conan|conda|container|cran|debian|generic|go|helm|maven|npm|nuget|pub|pypi|rpm|rubygems|swift|terraform|vagrant|", "|"+v+"|") && v != "" && !strings.Contains(v, "|")
 }
 func packageWire(row nativePackage, repo Repository, ownerID int64) (*golfv1.ForgePackage, error) {
-	if row.ID < 1 || !packageSegment(row.Name) || !packageType(row.Type) || !packageSegment(row.Version) || !validPullTime(row.Created) || row.Owner == nil || !validPullUser(row.Owner) || row.Owner.ID != ownerID || row.Repository == nil || !validRepository(*row.Repository) || row.Repository.ID != repo.ID || !strings.EqualFold(row.Repository.FullName, repo.FullName) || !strings.EqualFold(row.Owner.Login, strings.Split(repo.FullName, "/")[0]) || row.Creator == nil || !validPullUser(row.Creator) {
+	if row.ID < 1 || !packageSegment(row.Name) || !packageType(row.Type) || !packageSegment(row.Version) || !validPullTime(row.Created) || row.Owner == nil || !validPullUser(row.Owner) || row.Owner.ID < 1 || row.Owner.ID != ownerID || row.Repository == nil || !validRepository(*row.Repository) || row.Repository.ID != repo.ID || !strings.EqualFold(row.Repository.FullName, repo.FullName) || !strings.EqualFold(row.Owner.Login, strings.Split(repo.FullName, "/")[0]) || row.Creator == nil || !validPullUser(row.Creator) {
 		return nil, errInvalidForgeResponse
 	}
 	return &golfv1.ForgePackage{Id: strconv.FormatInt(row.ID, 10), Name: row.Name, Type: row.Type, Version: row.Version, CreatedAt: row.Created, CreatorLogin: row.Creator.Login}, nil
@@ -53,7 +53,7 @@ func (s *Server) withPackageRead(ctx context.Context, session string, token forg
 		if _, e := s.forge(ctx, http.MethodGet, base, token, nil, &config); e != nil {
 			return e
 		}
-		if config.ID != repo.ID || config.HasPackages == nil || !*config.HasPackages || config.Owner == nil || !validPullUser(config.Owner) || !strings.EqualFold(config.Owner.Login, key.Owner) {
+		if config.ID != repo.ID || config.HasPackages == nil || !*config.HasPackages || config.Owner == nil || config.Owner.ID < 1 || !validPullUser(config.Owner) || !strings.EqualFold(config.Owner.Login, key.Owner) {
 			return forgeError{http.StatusNotFound}
 		}
 		if e := fn("/packages/"+url.PathEscape(key.Owner), repo, config.Owner.ID); e != nil {
