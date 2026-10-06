@@ -154,6 +154,8 @@ const (
 	// PackagePublicationServiceName is the fully-qualified name of the PackagePublicationService
 	// service.
 	PackagePublicationServiceName = "golf.v1.PackagePublicationService"
+	// MirrorObservationServiceName is the fully-qualified name of the MirrorObservationService service.
+	MirrorObservationServiceName = "golf.v1.MirrorObservationService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -999,6 +1001,9 @@ const (
 	// PackagePublicationServiceDownloadGenericPackageFileProcedure is the fully-qualified name of the
 	// PackagePublicationService's DownloadGenericPackageFile RPC.
 	PackagePublicationServiceDownloadGenericPackageFileProcedure = "/golf.v1.PackagePublicationService/DownloadGenericPackageFile"
+	// MirrorObservationServiceGetMirrorSyncObservationProcedure is the fully-qualified name of the
+	// MirrorObservationService's GetMirrorSyncObservation RPC.
+	MirrorObservationServiceGetMirrorSyncObservationProcedure = "/golf.v1.MirrorObservationService/GetMirrorSyncObservation"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -10773,4 +10778,75 @@ func (UnimplementedPackagePublicationServiceHandler) GetPackagePublication(conte
 
 func (UnimplementedPackagePublicationServiceHandler) DownloadGenericPackageFile(context.Context, *connect.Request[v1.DownloadGenericPackageFileRequest]) (*connect.Response[v1.DownloadGenericPackageFileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PackagePublicationService.DownloadGenericPackageFile is not implemented"))
+}
+
+// MirrorObservationServiceClient is a client for the golf.v1.MirrorObservationService service.
+type MirrorObservationServiceClient interface {
+	GetMirrorSyncObservation(context.Context, *connect.Request[v1.GetMirrorSyncObservationRequest]) (*connect.Response[v1.GetMirrorSyncObservationResponse], error)
+}
+
+// NewMirrorObservationServiceClient constructs a client for the golf.v1.MirrorObservationService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewMirrorObservationServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) MirrorObservationServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	mirrorObservationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("MirrorObservationService").Methods()
+	return &mirrorObservationServiceClient{
+		getMirrorSyncObservation: connect.NewClient[v1.GetMirrorSyncObservationRequest, v1.GetMirrorSyncObservationResponse](
+			httpClient,
+			baseURL+MirrorObservationServiceGetMirrorSyncObservationProcedure,
+			connect.WithSchema(mirrorObservationServiceMethods.ByName("GetMirrorSyncObservation")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// mirrorObservationServiceClient implements MirrorObservationServiceClient.
+type mirrorObservationServiceClient struct {
+	getMirrorSyncObservation *connect.Client[v1.GetMirrorSyncObservationRequest, v1.GetMirrorSyncObservationResponse]
+}
+
+// GetMirrorSyncObservation calls golf.v1.MirrorObservationService.GetMirrorSyncObservation.
+func (c *mirrorObservationServiceClient) GetMirrorSyncObservation(ctx context.Context, req *connect.Request[v1.GetMirrorSyncObservationRequest]) (*connect.Response[v1.GetMirrorSyncObservationResponse], error) {
+	return c.getMirrorSyncObservation.CallUnary(ctx, req)
+}
+
+// MirrorObservationServiceHandler is an implementation of the golf.v1.MirrorObservationService
+// service.
+type MirrorObservationServiceHandler interface {
+	GetMirrorSyncObservation(context.Context, *connect.Request[v1.GetMirrorSyncObservationRequest]) (*connect.Response[v1.GetMirrorSyncObservationResponse], error)
+}
+
+// NewMirrorObservationServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewMirrorObservationServiceHandler(svc MirrorObservationServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	mirrorObservationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("MirrorObservationService").Methods()
+	mirrorObservationServiceGetMirrorSyncObservationHandler := connect.NewUnaryHandler(
+		MirrorObservationServiceGetMirrorSyncObservationProcedure,
+		svc.GetMirrorSyncObservation,
+		connect.WithSchema(mirrorObservationServiceMethods.ByName("GetMirrorSyncObservation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.MirrorObservationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case MirrorObservationServiceGetMirrorSyncObservationProcedure:
+			mirrorObservationServiceGetMirrorSyncObservationHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedMirrorObservationServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedMirrorObservationServiceHandler struct{}
+
+func (UnimplementedMirrorObservationServiceHandler) GetMirrorSyncObservation(context.Context, *connect.Request[v1.GetMirrorSyncObservationRequest]) (*connect.Response[v1.GetMirrorSyncObservationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.MirrorObservationService.GetMirrorSyncObservation is not implemented"))
 }

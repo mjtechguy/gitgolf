@@ -835,6 +835,14 @@ type GolfMfaRecoveryCode struct {
 	UsedAt    sql.NullTime
 }
 
+type GolfMirrorSyncBaseline struct {
+	OperationID        int64
+	SourceURL          string
+	DefaultBranch      string
+	NativeUpdatedAt    string
+	NativeHeadCommitID string
+}
+
 type GolfNotificationContent struct {
 	ID               uuid.UUID
 	Kind             string

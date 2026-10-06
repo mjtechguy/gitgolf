@@ -1,4 +1,5 @@
 import {ProviderImportService,PackagePublicationService} from './gen/golf/v1/golf_pb';
+import {MirrorObservationService} from './gen/golf/v1/golf_pb';
 import { createClient, ConnectError } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
 import { DiscussionCollaborationService, RepositoryReleaseManagementService, RepositoryRefMutationService, RepositoryFileMutationService } from './gen/golf/v1/golf_pb';
@@ -17,6 +18,7 @@ const transport = createConnectTransport({
 export const discussionCollaborationClient = createClient(DiscussionCollaborationService, transport);
 
 export const providerImportClient=createClient(ProviderImportService,transport);
+export const mirrorObservationClient=createClient(MirrorObservationService,transport);
 export const packagePublicationClient=createClient(PackagePublicationService,transport);
 export const repositoryMirrorClient=createClient(RepositoryMirrorService,transport);
 export const releaseManagementClient=createClient(RepositoryReleaseManagementService,transport);
