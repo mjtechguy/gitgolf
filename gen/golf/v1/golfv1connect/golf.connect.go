@@ -386,6 +386,9 @@ const (
 	// InstanceAdminServiceResetRegularLocalPasswordProcedure is the fully-qualified name of the
 	// InstanceAdminService's ResetRegularLocalPassword RPC.
 	InstanceAdminServiceResetRegularLocalPasswordProcedure = "/golf.v1.InstanceAdminService/ResetRegularLocalPassword"
+	// InstanceAdminServiceResetRegularLocalMFAProcedure is the fully-qualified name of the
+	// InstanceAdminService's ResetRegularLocalMFA RPC.
+	InstanceAdminServiceResetRegularLocalMFAProcedure = "/golf.v1.InstanceAdminService/ResetRegularLocalMFA"
 	// InstanceAdminServiceEnableRegularLocalAccountProcedure is the fully-qualified name of the
 	// InstanceAdminService's EnableRegularLocalAccount RPC.
 	InstanceAdminServiceEnableRegularLocalAccountProcedure = "/golf.v1.InstanceAdminService/EnableRegularLocalAccount"
@@ -3217,6 +3220,7 @@ func (UnimplementedOrganizationAdminServiceHandler) RemoveTeamMember(context.Con
 type InstanceAdminServiceClient interface {
 	EnrollRegularLocalAccount(context.Context, *connect.Request[v1.EnrollRegularLocalAccountRequest]) (*connect.Response[v1.EnrollRegularLocalAccountResponse], error)
 	ResetRegularLocalPassword(context.Context, *connect.Request[v1.ResetRegularLocalPasswordRequest]) (*connect.Response[v1.ResetRegularLocalPasswordResponse], error)
+	ResetRegularLocalMFA(context.Context, *connect.Request[v1.ResetRegularLocalMFARequest]) (*connect.Response[v1.ResetRegularLocalMFAResponse], error)
 	EnableRegularLocalAccount(context.Context, *connect.Request[v1.EnableRegularLocalAccountRequest]) (*connect.Response[v1.EnableRegularLocalAccountResponse], error)
 	DisableLocalAccount(context.Context, *connect.Request[v1.DisableLocalAccountRequest]) (*connect.Response[v1.DisableLocalAccountResponse], error)
 	ListLocalAccounts(context.Context, *connect.Request[v1.ListLocalAccountsRequest]) (*connect.Response[v1.ListLocalAccountsResponse], error)
@@ -3246,6 +3250,12 @@ func NewInstanceAdminServiceClient(httpClient connect.HTTPClient, baseURL string
 			httpClient,
 			baseURL+InstanceAdminServiceResetRegularLocalPasswordProcedure,
 			connect.WithSchema(instanceAdminServiceMethods.ByName("ResetRegularLocalPassword")),
+			connect.WithClientOptions(opts...),
+		),
+		resetRegularLocalMFA: connect.NewClient[v1.ResetRegularLocalMFARequest, v1.ResetRegularLocalMFAResponse](
+			httpClient,
+			baseURL+InstanceAdminServiceResetRegularLocalMFAProcedure,
+			connect.WithSchema(instanceAdminServiceMethods.ByName("ResetRegularLocalMFA")),
 			connect.WithClientOptions(opts...),
 		),
 		enableRegularLocalAccount: connect.NewClient[v1.EnableRegularLocalAccountRequest, v1.EnableRegularLocalAccountResponse](
@@ -3291,6 +3301,7 @@ func NewInstanceAdminServiceClient(httpClient connect.HTTPClient, baseURL string
 type instanceAdminServiceClient struct {
 	enrollRegularLocalAccount  *connect.Client[v1.EnrollRegularLocalAccountRequest, v1.EnrollRegularLocalAccountResponse]
 	resetRegularLocalPassword  *connect.Client[v1.ResetRegularLocalPasswordRequest, v1.ResetRegularLocalPasswordResponse]
+	resetRegularLocalMFA       *connect.Client[v1.ResetRegularLocalMFARequest, v1.ResetRegularLocalMFAResponse]
 	enableRegularLocalAccount  *connect.Client[v1.EnableRegularLocalAccountRequest, v1.EnableRegularLocalAccountResponse]
 	disableLocalAccount        *connect.Client[v1.DisableLocalAccountRequest, v1.DisableLocalAccountResponse]
 	listLocalAccounts          *connect.Client[v1.ListLocalAccountsRequest, v1.ListLocalAccountsResponse]
@@ -3307,6 +3318,11 @@ func (c *instanceAdminServiceClient) EnrollRegularLocalAccount(ctx context.Conte
 // ResetRegularLocalPassword calls golf.v1.InstanceAdminService.ResetRegularLocalPassword.
 func (c *instanceAdminServiceClient) ResetRegularLocalPassword(ctx context.Context, req *connect.Request[v1.ResetRegularLocalPasswordRequest]) (*connect.Response[v1.ResetRegularLocalPasswordResponse], error) {
 	return c.resetRegularLocalPassword.CallUnary(ctx, req)
+}
+
+// ResetRegularLocalMFA calls golf.v1.InstanceAdminService.ResetRegularLocalMFA.
+func (c *instanceAdminServiceClient) ResetRegularLocalMFA(ctx context.Context, req *connect.Request[v1.ResetRegularLocalMFARequest]) (*connect.Response[v1.ResetRegularLocalMFAResponse], error) {
+	return c.resetRegularLocalMFA.CallUnary(ctx, req)
 }
 
 // EnableRegularLocalAccount calls golf.v1.InstanceAdminService.EnableRegularLocalAccount.
@@ -3343,6 +3359,7 @@ func (c *instanceAdminServiceClient) GetGolfUserAccessOperation(ctx context.Cont
 type InstanceAdminServiceHandler interface {
 	EnrollRegularLocalAccount(context.Context, *connect.Request[v1.EnrollRegularLocalAccountRequest]) (*connect.Response[v1.EnrollRegularLocalAccountResponse], error)
 	ResetRegularLocalPassword(context.Context, *connect.Request[v1.ResetRegularLocalPasswordRequest]) (*connect.Response[v1.ResetRegularLocalPasswordResponse], error)
+	ResetRegularLocalMFA(context.Context, *connect.Request[v1.ResetRegularLocalMFARequest]) (*connect.Response[v1.ResetRegularLocalMFAResponse], error)
 	EnableRegularLocalAccount(context.Context, *connect.Request[v1.EnableRegularLocalAccountRequest]) (*connect.Response[v1.EnableRegularLocalAccountResponse], error)
 	DisableLocalAccount(context.Context, *connect.Request[v1.DisableLocalAccountRequest]) (*connect.Response[v1.DisableLocalAccountResponse], error)
 	ListLocalAccounts(context.Context, *connect.Request[v1.ListLocalAccountsRequest]) (*connect.Response[v1.ListLocalAccountsResponse], error)
@@ -3368,6 +3385,12 @@ func NewInstanceAdminServiceHandler(svc InstanceAdminServiceHandler, opts ...con
 		InstanceAdminServiceResetRegularLocalPasswordProcedure,
 		svc.ResetRegularLocalPassword,
 		connect.WithSchema(instanceAdminServiceMethods.ByName("ResetRegularLocalPassword")),
+		connect.WithHandlerOptions(opts...),
+	)
+	instanceAdminServiceResetRegularLocalMFAHandler := connect.NewUnaryHandler(
+		InstanceAdminServiceResetRegularLocalMFAProcedure,
+		svc.ResetRegularLocalMFA,
+		connect.WithSchema(instanceAdminServiceMethods.ByName("ResetRegularLocalMFA")),
 		connect.WithHandlerOptions(opts...),
 	)
 	instanceAdminServiceEnableRegularLocalAccountHandler := connect.NewUnaryHandler(
@@ -3412,6 +3435,8 @@ func NewInstanceAdminServiceHandler(svc InstanceAdminServiceHandler, opts ...con
 			instanceAdminServiceEnrollRegularLocalAccountHandler.ServeHTTP(w, r)
 		case InstanceAdminServiceResetRegularLocalPasswordProcedure:
 			instanceAdminServiceResetRegularLocalPasswordHandler.ServeHTTP(w, r)
+		case InstanceAdminServiceResetRegularLocalMFAProcedure:
+			instanceAdminServiceResetRegularLocalMFAHandler.ServeHTTP(w, r)
 		case InstanceAdminServiceEnableRegularLocalAccountProcedure:
 			instanceAdminServiceEnableRegularLocalAccountHandler.ServeHTTP(w, r)
 		case InstanceAdminServiceDisableLocalAccountProcedure:
@@ -3439,6 +3464,10 @@ func (UnimplementedInstanceAdminServiceHandler) EnrollRegularLocalAccount(contex
 
 func (UnimplementedInstanceAdminServiceHandler) ResetRegularLocalPassword(context.Context, *connect.Request[v1.ResetRegularLocalPasswordRequest]) (*connect.Response[v1.ResetRegularLocalPasswordResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InstanceAdminService.ResetRegularLocalPassword is not implemented"))
+}
+
+func (UnimplementedInstanceAdminServiceHandler) ResetRegularLocalMFA(context.Context, *connect.Request[v1.ResetRegularLocalMFARequest]) (*connect.Response[v1.ResetRegularLocalMFAResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.InstanceAdminService.ResetRegularLocalMFA is not implemented"))
 }
 
 func (UnimplementedInstanceAdminServiceHandler) EnableRegularLocalAccount(context.Context, *connect.Request[v1.EnableRegularLocalAccountRequest]) (*connect.Response[v1.EnableRegularLocalAccountResponse], error) {

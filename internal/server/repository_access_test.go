@@ -68,7 +68,13 @@ func TestRepositoryAccessBoundary(t *testing.T) {
 				t.Fatalf("%s boundary %d", method, recorder.Code)
 			}
 		}
-		if got := apiRequest(s, apiTokenPrefix+strings.Repeat("A", 43), path, "malformed"); got.Code != 403 {
+		wantBearer := http.StatusForbidden
+		if method == "GetRepositoryAccess" {
+			// Baseline machine reads include access metadata; authentication still
+			// requires the credential database, which this boundary fixture omits.
+			wantBearer = http.StatusServiceUnavailable
+		}
+		if got := apiRequest(s, apiTokenPrefix+strings.Repeat("A", 43), path, "malformed"); got.Code != wantBearer {
 			t.Fatalf("bearer reached %s: %d", method, got.Code)
 		}
 	}

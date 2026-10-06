@@ -13,8 +13,8 @@ import (
 
 const listLocalAccounts = `-- name: ListLocalAccounts :many
 SELECT a.id,a.username,a.email,u.forge_user_id,a.is_instance_admin,
-       a.disabled_at,a.credential_version,a.created_at,a.user_id
-FROM golf_local_accounts a JOIN golf_users u ON u.id = a.user_id
+       a.disabled_at,a.credential_version,a.created_at,a.user_id,COALESCE(m.version,0)::text AS mfa_version,COALESCE(m.enabled,false)::boolean AS mfa_enabled,m.pending_expires_at AS mfa_pending_expires_at
+FROM golf_local_accounts a JOIN golf_users u ON u.id = a.user_id LEFT JOIN golf_local_mfa m ON m.account_id=a.id
 WHERE u.forge_url = $1
 ORDER BY a.id
 LIMIT $3 OFFSET $2
@@ -27,15 +27,18 @@ type ListLocalAccountsParams struct {
 }
 
 type ListLocalAccountsRow struct {
-	ID                int64
-	Username          string
-	Email             sql.NullString
-	ForgeUserID       int64
-	IsInstanceAdmin   bool
-	DisabledAt        sql.NullTime
-	CredentialVersion int64
-	CreatedAt         time.Time
-	UserID            int64
+	ID                  int64
+	Username            string
+	Email               sql.NullString
+	ForgeUserID         int64
+	IsInstanceAdmin     bool
+	DisabledAt          sql.NullTime
+	CredentialVersion   int64
+	CreatedAt           time.Time
+	UserID              int64
+	MfaVersion          string
+	MfaEnabled          bool
+	MfaPendingExpiresAt sql.NullTime
 }
 
 // Only nonsecret local-account metadata crosses the administration boundary.
@@ -59,6 +62,9 @@ func (q *Queries) ListLocalAccounts(ctx context.Context, arg ListLocalAccountsPa
 			&i.CredentialVersion,
 			&i.CreatedAt,
 			&i.UserID,
+			&i.MfaVersion,
+			&i.MfaEnabled,
+			&i.MfaPendingExpiresAt,
 		); err != nil {
 			return nil, err
 		}

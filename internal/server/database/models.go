@@ -803,13 +803,17 @@ type GolfMfaAttempt struct {
 }
 
 type GolfMfaEvent struct {
-	ID          int64
-	AccountID   int64
-	UserID      int64
-	Action      string
-	Version     int64
-	OperationID string
-	CreatedAt   time.Time
+	ID             int64
+	AccountID      int64
+	UserID         int64
+	Action         string
+	Version        int64
+	OperationID    string
+	CreatedAt      time.Time
+	ActorUserID    sql.NullInt64
+	ActorSessionID sql.NullInt64
+	Reason         string
+	ActorKind      string
 }
 
 type GolfMfaLoginChallenge struct {
