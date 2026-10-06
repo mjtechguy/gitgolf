@@ -288,6 +288,15 @@ func (s *Server) authoringPrivateSource(ctx context.Context, session string, tok
 	if e != nil {
 		return nil, reviewerPublicationInput{}, reviewComparison{}, e
 	}
-	input, c, e := inlinePayload(draft, "PENDING")
+	input, c, e := authoringInlinePayload(draft)
 	return draft, input, c, e
+}
+
+// Pending is not an approval decision and permits an empty summary. Reuse the
+// qualified coordinate/transport checks without implicitly rejecting a draft
+// that will later be published as an approval.
+func authoringInlinePayload(draft *golfv1.PullReviewDraft) (reviewerPublicationInput, reviewComparison, error) {
+	input, c, e := inlinePayload(draft, "APPROVED")
+	input.Event = "PENDING"
+	return input, c, e
 }

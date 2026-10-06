@@ -119,7 +119,7 @@ func TestReviewAuthoringNativeProof(t *testing.T) {
 		t.Helper()
 		snap := stable()
 		m := &golfv1.SubmitPullReviewAuthoringOperationRequest{Target: target, Kind: kind, ReviewId: selection.ReviewId, ReviewCommitId: selection.ReviewCommitId, CommentId: selection.CommentId, ExpectedPullRevision: snap.PullRevision, ExpectedSnapshotRevision: snap.SnapshotRevision, OperationId: uuid.NewString(), Body: body}
-		if body != "" {
+		if kind == authorCreate || kind == authorUpdate || kind == authorSubmit || kind == authorEdit {
 			m.BodyHash = replyBodyHash(body)
 		}
 		return m
@@ -170,7 +170,7 @@ func TestReviewAuthoringNativeProof(t *testing.T) {
 		t.Fatal("Diff capture")
 	}
 	hash := sha256.Sum256([]byte(raw))
-	save := &golfv1.SavePullRequestReviewDraftRequest{Target: target, DraftId: uuid.NewString(), OperationId: uuid.NewString(), ExpectedVersion: "0", ExpectedTargetGeneration: "0", Summary: "Owned saved inline review", Entries: []*golfv1.PullReviewDraftEntry{{Id: uuid.NewString(), Coordinate: &golfv1.PullReviewDraftCoordinate{Path: "review-authoring.txt", Line: 1, Side: golfv1.PullReviewDraftSide_PULL_REVIEW_DRAFT_SIDE_NEW}, Body: "Owned saved inline finding"}}, Comparison: &golfv1.SavePullRequestReviewDraftRequest_Capture{Capture: &golfv1.PullReviewDraftCapture{Selection: &golfv1.PullRequestSelection{Repository: key, RepositoryId: target.RepositoryId, PullRequestId: target.PullRequestId, Number: target.Number, BaseCommitId: nativePull.Base.SHA, HeadCommitId: nativePull.Head.SHA}, ExpectedPullRevision: snap.PullRevision, MergeBaseCommitId: nativePull.MergeBase, DiffSha256: hex.EncodeToString(hash[:])}}}
+	save := &golfv1.SavePullRequestReviewDraftRequest{Target: target, DraftId: uuid.NewString(), OperationId: uuid.NewString(), ExpectedVersion: "0", ExpectedTargetGeneration: "0", Summary: "", Entries: []*golfv1.PullReviewDraftEntry{{Id: uuid.NewString(), Coordinate: &golfv1.PullReviewDraftCoordinate{Path: "review-authoring.txt", Line: 1, Side: golfv1.PullReviewDraftSide_PULL_REVIEW_DRAFT_SIDE_NEW}, Body: "Owned saved inline finding"}}, Comparison: &golfv1.SavePullRequestReviewDraftRequest_Capture{Capture: &golfv1.PullReviewDraftCapture{Selection: &golfv1.PullRequestSelection{Repository: key, RepositoryId: target.RepositoryId, PullRequestId: target.PullRequestId, Number: target.Number, BaseCommitId: nativePull.Base.SHA, HeadCommitId: nativePull.Head.SHA}, ExpectedPullRevision: snap.PullRevision, MergeBaseCommitId: nativePull.MergeBase, DiffSha256: hex.EncodeToString(hash[:])}}}
 	saved, e := repos.SavePullRequestReviewDraft(t.Context(), connect.NewRequest(save))
 	if e != nil {
 		t.Fatalf("Encrypted private capture %s", connect.CodeOf(e))
@@ -226,10 +226,40 @@ func TestReviewAuthoringNativeProof(t *testing.T) {
 	for _, decision := range []golfv1.PullRequestReviewState{golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_APPROVED, golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_REQUEST_CHANGES} {
 		selection.ReviewId = ""
 		selection.ReviewCommitId = ""
-		submit(proposal(authorCreate, "Owned pending decision"))
+		submit(proposal(authorCreate, ""))
 		selectOwn()
 		m := proposal(authorSubmit, "Owned final decision")
 		m.Decision = decision
+		if decision == golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_APPROVED {
+			m.Body = ""
+			m.BodyHash = replyBodyHash("")
+		}
 		submit(m)
 	}
+	// A PR author may prepare native pending inline comments and publish COMMENT,
+	// while Golf still refuses approval/change-request self-review.
+	client = other
+	repos = golfv1connect.NewRepositoryServiceClient(otherTransport, otherOrigin.String()+"/rpc")
+	selection.ReviewId = ""
+	selection.ReviewCommitId = ""
+	selection.CommentId = ""
+	ownerCapture := stable()
+	ownerSave := proto.Clone(save).(*golfv1.SavePullRequestReviewDraftRequest)
+	ownerSave.DraftId = uuid.NewString()
+	ownerSave.OperationId = uuid.NewString()
+	ownerSave.GetCapture().ExpectedPullRevision = ownerCapture.PullRevision
+	ownedDraft, e := repos.SavePullRequestReviewDraft(t.Context(), connect.NewRequest(ownerSave))
+	if e != nil {
+		t.Fatalf("Owned PR private capture %s", connect.CodeOf(e))
+	}
+	ownedTransfer := proposal(authorPrivate, "")
+	ownedTransfer.GolfDraftId = ownedDraft.Msg.Draft.Id
+	ownedTransfer.ExpectedDraftVersion = ownedDraft.Msg.CurrentVersion
+	ownedTransfer.ExpectedTargetGeneration = ownedDraft.Msg.TargetGeneration
+	submit(ownedTransfer)
+	selectOwn()
+	ownComment := proposal(authorSubmit, "PR author inline comment")
+	ownComment.Decision = golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_COMMENT
+	submit(ownComment)
+
 }

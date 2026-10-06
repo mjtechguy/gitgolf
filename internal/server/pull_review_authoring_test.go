@@ -20,11 +20,12 @@ import (
 
 type authoringFixture struct {
 	*reviewRequestFixture
-	mu       sync.Mutex
-	review   *forgePullReview
-	comments []forgePullReviewComment
-	writes   atomic.Int32
-	lost     atomic.Bool
+	mu         sync.Mutex
+	review     *forgePullReview
+	comments   []forgePullReviewComment
+	writes     atomic.Int32
+	lost       atomic.Bool
+	pullAuthor atomic.Int64
 }
 
 func newAuthoringFixture(t *testing.T) *authoringFixture {
@@ -35,6 +36,18 @@ func newAuthoringFixture(t *testing.T) *authoringFixture {
 		w.Header().Set("Content-Type", "application/json")
 		base := "/api/v1/repos/alice/private"
 		reviews := base + "/pulls/7/reviews"
+		if r.URL.Path == base+"/pulls/7" && f.pullAuthor.Load() > 0 {
+			rec := httptest.NewRecorder()
+			proxy.ServeHTTP(rec, r)
+			var raw map[string]any
+			json.Unmarshal(rec.Body.Bytes(), &raw)
+			if rec.Code == 200 {
+				raw["user"] = map[string]any{"id": f.pullAuthor.Load(), "login": "author"}
+			}
+			w.WriteHeader(rec.Code)
+			json.NewEncoder(w).Encode(raw)
+			return
+		}
 		if r.URL.Path == "/api/v1/user" {
 			rec := httptest.NewRecorder()
 			proxy.ServeHTTP(rec, r)
@@ -157,7 +170,7 @@ func (f *authoringFixture) input(t *testing.T, session loginResult, kind golfv1.
 		t.Fatal(e)
 	}
 	m := &golfv1.SubmitPullReviewAuthoringOperationRequest{Target: selection.Target, Kind: kind, ReviewId: selection.ReviewId, ReviewCommitId: selection.ReviewCommitId, CommentId: selection.CommentId, Body: body, ExpectedPullRevision: snap.wire.PullRevision, ExpectedSnapshotRevision: snap.wire.SnapshotRevision, OperationId: uuid.NewString()}
-	if body != "" {
+	if kind == authorCreate || kind == authorUpdate || kind == authorSubmit || kind == authorEdit {
 		m.BodyHash = replyBodyHash(body)
 	}
 	if kind == authorSubmit {
@@ -321,5 +334,34 @@ func TestReviewAuthoringOriginalAndExclusionPostgres(t *testing.T) {
 	}
 	if r.Phase != golfv1.DiscussionResourceOperationPhase_DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED {
 		t.Fatal("Missing complete outcome")
+	}
+}
+
+func TestReviewAuthoringEmptyDraftAndApprovalPostgres(t *testing.T) {
+	f := newAuthoringFixture(t)
+	session := f.session(t, "pat")
+	m := f.input(t, session, authorCreate, "")
+	if r, e := f.submit(session, m); e != nil || r.Phase != golfv1.DiscussionResourceOperationPhase_DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED {
+		t.Fatal("Empty pending draft", e, r)
+	}
+	m = f.input(t, session, authorUpdate, "")
+	if r, e := f.submit(session, m); e != nil || r.Phase != golfv1.DiscussionResourceOperationPhase_DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED {
+		t.Fatal("Empty pending edit", e, r)
+	}
+	m = f.input(t, session, authorSubmit, "")
+	if _, e := f.submit(session, m); e == nil {
+		t.Fatal("Empty COMMENT summary accepted")
+	}
+	f.mu.Lock()
+	f.review.User.ID = 42
+	f.mu.Unlock()
+	if f.writes.Load() != 2 {
+		t.Fatal("Empty comment dispatched")
+	}
+	f.pullAuthor.Store(43)
+	m = f.input(t, session, authorSubmit, "")
+	m.Decision = golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_APPROVED
+	if r, e := f.submit(session, m); e != nil || r.Phase != golfv1.DiscussionResourceOperationPhase_DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED {
+		t.Fatal("Empty approval refused", e, r)
 	}
 }

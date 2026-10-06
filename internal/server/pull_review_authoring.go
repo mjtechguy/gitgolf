@@ -56,7 +56,7 @@ func validateReviewAuthoring(m *golfv1.SubmitPullReviewAuthoringOperationRequest
 	}
 	body := m.Kind == authorCreate || m.Kind == authorUpdate || m.Kind == authorSubmit || m.Kind == authorEdit
 	if body {
-		if !issueRevisionPattern.MatchString(m.BodyHash) || m.Body != "" && (!discussionText(m.Body, 6000) || strings.TrimSpace(m.Body) == "" || replyBodyHash(m.Body) != m.BodyHash) {
+		if !issueRevisionPattern.MatchString(m.BodyHash) || m.Body != "" && (!discussionText(m.Body, 6000) || replyBodyHash(m.Body) != m.BodyHash) {
 			return invalid("Use an exact bounded review body.")
 		}
 	} else if m.Body != "" || m.BodyHash != "" {
@@ -238,7 +238,7 @@ func (s *Server) authoringPreflight(ctx context.Context, session string, token f
 			return snap, nil, nil, e
 		}
 		scope, _ := reviewDraftTarget(m.Target)
-		r := database.GolfInlineReviewMutation{ActorID: snap.actor.ID, ExpectedRevision: m.ExpectedPullRevision, HeadCommit: input.Head, BaseTip: draft.Comparison.Capture.Selection.BaseCommitId, MergeBase: draft.Comparison.Capture.MergeBaseCommitId, Decision: "PENDING"}
+		r := database.GolfInlineReviewMutation{ActorID: snap.actor.ID, ExpectedRevision: m.ExpectedPullRevision, HeadCommit: input.Head, BaseTip: draft.Comparison.Capture.Selection.BaseCommitId, MergeBase: draft.Comparison.Capture.MergeBaseCommitId, Decision: "COMMENT"}
 		_, _, _, e = s.inlinePreflight(ctx, session, token, m.Target, scope, r, draft)
 		return snap, input, draft, e
 	case authorUpdate:
@@ -247,6 +247,9 @@ func (s *Server) authoringPreflight(ctx context.Context, session string, token f
 		}
 		return snap, reviewerPublicationInput{Body: m.Body, Head: m.ReviewCommitId, Event: "PENDING", Comments: []reviewerPublicationComment{}}, nil, nil
 	case authorSubmit:
+		if m.Decision != golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_APPROVED && strings.TrimSpace(m.Body) == "" {
+			return snap, nil, nil, invalid("Comments and change requests require a review summary.")
+		}
 		if !w.CanSubmit || m.Decision != golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_COMMENT && snap.pull.User != nil && snap.pull.User.ID == snap.actor.ID {
 			return snap, nil, nil, errResourceNotFound
 		}
@@ -257,6 +260,9 @@ func (s *Server) authoringPreflight(ctx context.Context, session string, token f
 		}
 		return snap, nil, nil, nil
 	case authorEdit:
+		if strings.TrimSpace(m.Body) == "" {
+			return snap, nil, nil, invalid("An edited inline comment requires text.")
+		}
 		if !w.CanEditComment {
 			return snap, nil, nil, errResourceNotFound
 		}
@@ -357,7 +363,7 @@ func (s *Server) SubmitPullReviewAuthoringOperation(ctx context.Context, req *co
 		if !errors.Is(e, sql.ErrNoRows) {
 			return errStorageUnavailable
 		}
-		if m.BodyHash != "" && m.Body == "" {
+		if m.BodyHash != "" && replyBodyHash(m.Body) != m.BodyHash {
 			return invalid("A new operation requires its exact body.")
 		}
 		if _, _, _, e = s.authoringPreflight(held, session, token, m); e != nil {
