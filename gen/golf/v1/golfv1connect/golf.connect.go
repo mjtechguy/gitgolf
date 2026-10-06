@@ -165,6 +165,9 @@ const (
 	// SessionServiceLoginWithPasswordProcedure is the fully-qualified name of the SessionService's
 	// LoginWithPassword RPC.
 	SessionServiceLoginWithPasswordProcedure = "/golf.v1.SessionService/LoginWithPassword"
+	// SessionServiceCompletePasswordMFAProcedure is the fully-qualified name of the SessionService's
+	// CompletePasswordMFA RPC.
+	SessionServiceCompletePasswordMFAProcedure = "/golf.v1.SessionService/CompletePasswordMFA"
 	// SessionServiceLoginWithGiteaTokenProcedure is the fully-qualified name of the SessionService's
 	// LoginWithGiteaToken RPC.
 	SessionServiceLoginWithGiteaTokenProcedure = "/golf.v1.SessionService/LoginWithGiteaToken"
@@ -491,6 +494,21 @@ const (
 	// AccountSecurityServiceChangeOwnLoginEmailProcedure is the fully-qualified name of the
 	// AccountSecurityService's ChangeOwnLoginEmail RPC.
 	AccountSecurityServiceChangeOwnLoginEmailProcedure = "/golf.v1.AccountSecurityService/ChangeOwnLoginEmail"
+	// AccountSecurityServiceGetOwnMFAProcedure is the fully-qualified name of the
+	// AccountSecurityService's GetOwnMFA RPC.
+	AccountSecurityServiceGetOwnMFAProcedure = "/golf.v1.AccountSecurityService/GetOwnMFA"
+	// AccountSecurityServiceBeginOwnMFAProcedure is the fully-qualified name of the
+	// AccountSecurityService's BeginOwnMFA RPC.
+	AccountSecurityServiceBeginOwnMFAProcedure = "/golf.v1.AccountSecurityService/BeginOwnMFA"
+	// AccountSecurityServiceConfirmOwnMFAProcedure is the fully-qualified name of the
+	// AccountSecurityService's ConfirmOwnMFA RPC.
+	AccountSecurityServiceConfirmOwnMFAProcedure = "/golf.v1.AccountSecurityService/ConfirmOwnMFA"
+	// AccountSecurityServiceDisableOwnMFAProcedure is the fully-qualified name of the
+	// AccountSecurityService's DisableOwnMFA RPC.
+	AccountSecurityServiceDisableOwnMFAProcedure = "/golf.v1.AccountSecurityService/DisableOwnMFA"
+	// AccountSecurityServiceRegenerateOwnMFARecoveryProcedure is the fully-qualified name of the
+	// AccountSecurityService's RegenerateOwnMFARecovery RPC.
+	AccountSecurityServiceRegenerateOwnMFARecoveryProcedure = "/golf.v1.AccountSecurityService/RegenerateOwnMFARecovery"
 	// AutomationGrantServiceListAutomationGrantsProcedure is the fully-qualified name of the
 	// AutomationGrantService's ListAutomationGrants RPC.
 	AutomationGrantServiceListAutomationGrantsProcedure = "/golf.v1.AutomationGrantService/ListAutomationGrants"
@@ -914,6 +932,7 @@ type SessionServiceClient interface {
 	GetAuthenticationOptions(context.Context, *connect.Request[v1.GetAuthenticationOptionsRequest]) (*connect.Response[v1.GetAuthenticationOptionsResponse], error)
 	BeginGiteaOAuth(context.Context, *connect.Request[v1.BeginGiteaOAuthRequest]) (*connect.Response[v1.BeginGiteaOAuthResponse], error)
 	LoginWithPassword(context.Context, *connect.Request[v1.LoginWithPasswordRequest]) (*connect.Response[v1.LoginWithPasswordResponse], error)
+	CompletePasswordMFA(context.Context, *connect.Request[v1.CompletePasswordMFARequest]) (*connect.Response[v1.LoginWithPasswordResponse], error)
 	LoginWithGiteaToken(context.Context, *connect.Request[v1.LoginWithGiteaTokenRequest]) (*connect.Response[v1.LoginWithGiteaTokenResponse], error)
 	GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
 	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
@@ -949,6 +968,12 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+SessionServiceLoginWithPasswordProcedure,
 			connect.WithSchema(sessionServiceMethods.ByName("LoginWithPassword")),
+			connect.WithClientOptions(opts...),
+		),
+		completePasswordMFA: connect.NewClient[v1.CompletePasswordMFARequest, v1.LoginWithPasswordResponse](
+			httpClient,
+			baseURL+SessionServiceCompletePasswordMFAProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("CompletePasswordMFA")),
 			connect.WithClientOptions(opts...),
 		),
 		loginWithGiteaToken: connect.NewClient[v1.LoginWithGiteaTokenRequest, v1.LoginWithGiteaTokenResponse](
@@ -995,6 +1020,7 @@ type sessionServiceClient struct {
 	getAuthenticationOptions *connect.Client[v1.GetAuthenticationOptionsRequest, v1.GetAuthenticationOptionsResponse]
 	beginGiteaOAuth          *connect.Client[v1.BeginGiteaOAuthRequest, v1.BeginGiteaOAuthResponse]
 	loginWithPassword        *connect.Client[v1.LoginWithPasswordRequest, v1.LoginWithPasswordResponse]
+	completePasswordMFA      *connect.Client[v1.CompletePasswordMFARequest, v1.LoginWithPasswordResponse]
 	loginWithGiteaToken      *connect.Client[v1.LoginWithGiteaTokenRequest, v1.LoginWithGiteaTokenResponse]
 	getSession               *connect.Client[v1.GetSessionRequest, v1.GetSessionResponse]
 	listSessions             *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
@@ -1016,6 +1042,11 @@ func (c *sessionServiceClient) BeginGiteaOAuth(ctx context.Context, req *connect
 // LoginWithPassword calls golf.v1.SessionService.LoginWithPassword.
 func (c *sessionServiceClient) LoginWithPassword(ctx context.Context, req *connect.Request[v1.LoginWithPasswordRequest]) (*connect.Response[v1.LoginWithPasswordResponse], error) {
 	return c.loginWithPassword.CallUnary(ctx, req)
+}
+
+// CompletePasswordMFA calls golf.v1.SessionService.CompletePasswordMFA.
+func (c *sessionServiceClient) CompletePasswordMFA(ctx context.Context, req *connect.Request[v1.CompletePasswordMFARequest]) (*connect.Response[v1.LoginWithPasswordResponse], error) {
+	return c.completePasswordMFA.CallUnary(ctx, req)
 }
 
 // LoginWithGiteaToken calls golf.v1.SessionService.LoginWithGiteaToken.
@@ -1053,6 +1084,7 @@ type SessionServiceHandler interface {
 	GetAuthenticationOptions(context.Context, *connect.Request[v1.GetAuthenticationOptionsRequest]) (*connect.Response[v1.GetAuthenticationOptionsResponse], error)
 	BeginGiteaOAuth(context.Context, *connect.Request[v1.BeginGiteaOAuthRequest]) (*connect.Response[v1.BeginGiteaOAuthResponse], error)
 	LoginWithPassword(context.Context, *connect.Request[v1.LoginWithPasswordRequest]) (*connect.Response[v1.LoginWithPasswordResponse], error)
+	CompletePasswordMFA(context.Context, *connect.Request[v1.CompletePasswordMFARequest]) (*connect.Response[v1.LoginWithPasswordResponse], error)
 	LoginWithGiteaToken(context.Context, *connect.Request[v1.LoginWithGiteaTokenRequest]) (*connect.Response[v1.LoginWithGiteaTokenResponse], error)
 	GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
 	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
@@ -1084,6 +1116,12 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		SessionServiceLoginWithPasswordProcedure,
 		svc.LoginWithPassword,
 		connect.WithSchema(sessionServiceMethods.ByName("LoginWithPassword")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceCompletePasswordMFAHandler := connect.NewUnaryHandler(
+		SessionServiceCompletePasswordMFAProcedure,
+		svc.CompletePasswordMFA,
+		connect.WithSchema(sessionServiceMethods.ByName("CompletePasswordMFA")),
 		connect.WithHandlerOptions(opts...),
 	)
 	sessionServiceLoginWithGiteaTokenHandler := connect.NewUnaryHandler(
@@ -1130,6 +1168,8 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 			sessionServiceBeginGiteaOAuthHandler.ServeHTTP(w, r)
 		case SessionServiceLoginWithPasswordProcedure:
 			sessionServiceLoginWithPasswordHandler.ServeHTTP(w, r)
+		case SessionServiceCompletePasswordMFAProcedure:
+			sessionServiceCompletePasswordMFAHandler.ServeHTTP(w, r)
 		case SessionServiceLoginWithGiteaTokenProcedure:
 			sessionServiceLoginWithGiteaTokenHandler.ServeHTTP(w, r)
 		case SessionServiceGetSessionProcedure:
@@ -1161,6 +1201,10 @@ func (UnimplementedSessionServiceHandler) BeginGiteaOAuth(context.Context, *conn
 
 func (UnimplementedSessionServiceHandler) LoginWithPassword(context.Context, *connect.Request[v1.LoginWithPasswordRequest]) (*connect.Response[v1.LoginWithPasswordResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.SessionService.LoginWithPassword is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) CompletePasswordMFA(context.Context, *connect.Request[v1.CompletePasswordMFARequest]) (*connect.Response[v1.LoginWithPasswordResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.SessionService.CompletePasswordMFA is not implemented"))
 }
 
 func (UnimplementedSessionServiceHandler) LoginWithGiteaToken(context.Context, *connect.Request[v1.LoginWithGiteaTokenRequest]) (*connect.Response[v1.LoginWithGiteaTokenResponse], error) {
@@ -4514,6 +4558,11 @@ type AccountSecurityServiceClient interface {
 	GetAccountSecurity(context.Context, *connect.Request[v1.GetAccountSecurityRequest]) (*connect.Response[v1.GetAccountSecurityResponse], error)
 	ChangeOwnPassword(context.Context, *connect.Request[v1.ChangeOwnPasswordRequest]) (*connect.Response[v1.ChangeOwnPasswordResponse], error)
 	ChangeOwnLoginEmail(context.Context, *connect.Request[v1.ChangeOwnLoginEmailRequest]) (*connect.Response[v1.ChangeOwnLoginEmailResponse], error)
+	GetOwnMFA(context.Context, *connect.Request[v1.GetOwnMFARequest]) (*connect.Response[v1.GetOwnMFAResponse], error)
+	BeginOwnMFA(context.Context, *connect.Request[v1.BeginOwnMFARequest]) (*connect.Response[v1.BeginOwnMFAResponse], error)
+	ConfirmOwnMFA(context.Context, *connect.Request[v1.ChangeOwnMFARequest]) (*connect.Response[v1.ChangeOwnMFAResponse], error)
+	DisableOwnMFA(context.Context, *connect.Request[v1.ChangeOwnMFARequest]) (*connect.Response[v1.ChangeOwnMFAResponse], error)
+	RegenerateOwnMFARecovery(context.Context, *connect.Request[v1.ChangeOwnMFARequest]) (*connect.Response[v1.ChangeOwnMFAResponse], error)
 }
 
 // NewAccountSecurityServiceClient constructs a client for the golf.v1.AccountSecurityService
@@ -4545,14 +4594,49 @@ func NewAccountSecurityServiceClient(httpClient connect.HTTPClient, baseURL stri
 			connect.WithSchema(accountSecurityServiceMethods.ByName("ChangeOwnLoginEmail")),
 			connect.WithClientOptions(opts...),
 		),
+		getOwnMFA: connect.NewClient[v1.GetOwnMFARequest, v1.GetOwnMFAResponse](
+			httpClient,
+			baseURL+AccountSecurityServiceGetOwnMFAProcedure,
+			connect.WithSchema(accountSecurityServiceMethods.ByName("GetOwnMFA")),
+			connect.WithClientOptions(opts...),
+		),
+		beginOwnMFA: connect.NewClient[v1.BeginOwnMFARequest, v1.BeginOwnMFAResponse](
+			httpClient,
+			baseURL+AccountSecurityServiceBeginOwnMFAProcedure,
+			connect.WithSchema(accountSecurityServiceMethods.ByName("BeginOwnMFA")),
+			connect.WithClientOptions(opts...),
+		),
+		confirmOwnMFA: connect.NewClient[v1.ChangeOwnMFARequest, v1.ChangeOwnMFAResponse](
+			httpClient,
+			baseURL+AccountSecurityServiceConfirmOwnMFAProcedure,
+			connect.WithSchema(accountSecurityServiceMethods.ByName("ConfirmOwnMFA")),
+			connect.WithClientOptions(opts...),
+		),
+		disableOwnMFA: connect.NewClient[v1.ChangeOwnMFARequest, v1.ChangeOwnMFAResponse](
+			httpClient,
+			baseURL+AccountSecurityServiceDisableOwnMFAProcedure,
+			connect.WithSchema(accountSecurityServiceMethods.ByName("DisableOwnMFA")),
+			connect.WithClientOptions(opts...),
+		),
+		regenerateOwnMFARecovery: connect.NewClient[v1.ChangeOwnMFARequest, v1.ChangeOwnMFAResponse](
+			httpClient,
+			baseURL+AccountSecurityServiceRegenerateOwnMFARecoveryProcedure,
+			connect.WithSchema(accountSecurityServiceMethods.ByName("RegenerateOwnMFARecovery")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // accountSecurityServiceClient implements AccountSecurityServiceClient.
 type accountSecurityServiceClient struct {
-	getAccountSecurity  *connect.Client[v1.GetAccountSecurityRequest, v1.GetAccountSecurityResponse]
-	changeOwnPassword   *connect.Client[v1.ChangeOwnPasswordRequest, v1.ChangeOwnPasswordResponse]
-	changeOwnLoginEmail *connect.Client[v1.ChangeOwnLoginEmailRequest, v1.ChangeOwnLoginEmailResponse]
+	getAccountSecurity       *connect.Client[v1.GetAccountSecurityRequest, v1.GetAccountSecurityResponse]
+	changeOwnPassword        *connect.Client[v1.ChangeOwnPasswordRequest, v1.ChangeOwnPasswordResponse]
+	changeOwnLoginEmail      *connect.Client[v1.ChangeOwnLoginEmailRequest, v1.ChangeOwnLoginEmailResponse]
+	getOwnMFA                *connect.Client[v1.GetOwnMFARequest, v1.GetOwnMFAResponse]
+	beginOwnMFA              *connect.Client[v1.BeginOwnMFARequest, v1.BeginOwnMFAResponse]
+	confirmOwnMFA            *connect.Client[v1.ChangeOwnMFARequest, v1.ChangeOwnMFAResponse]
+	disableOwnMFA            *connect.Client[v1.ChangeOwnMFARequest, v1.ChangeOwnMFAResponse]
+	regenerateOwnMFARecovery *connect.Client[v1.ChangeOwnMFARequest, v1.ChangeOwnMFAResponse]
 }
 
 // GetAccountSecurity calls golf.v1.AccountSecurityService.GetAccountSecurity.
@@ -4570,11 +4654,41 @@ func (c *accountSecurityServiceClient) ChangeOwnLoginEmail(ctx context.Context, 
 	return c.changeOwnLoginEmail.CallUnary(ctx, req)
 }
 
+// GetOwnMFA calls golf.v1.AccountSecurityService.GetOwnMFA.
+func (c *accountSecurityServiceClient) GetOwnMFA(ctx context.Context, req *connect.Request[v1.GetOwnMFARequest]) (*connect.Response[v1.GetOwnMFAResponse], error) {
+	return c.getOwnMFA.CallUnary(ctx, req)
+}
+
+// BeginOwnMFA calls golf.v1.AccountSecurityService.BeginOwnMFA.
+func (c *accountSecurityServiceClient) BeginOwnMFA(ctx context.Context, req *connect.Request[v1.BeginOwnMFARequest]) (*connect.Response[v1.BeginOwnMFAResponse], error) {
+	return c.beginOwnMFA.CallUnary(ctx, req)
+}
+
+// ConfirmOwnMFA calls golf.v1.AccountSecurityService.ConfirmOwnMFA.
+func (c *accountSecurityServiceClient) ConfirmOwnMFA(ctx context.Context, req *connect.Request[v1.ChangeOwnMFARequest]) (*connect.Response[v1.ChangeOwnMFAResponse], error) {
+	return c.confirmOwnMFA.CallUnary(ctx, req)
+}
+
+// DisableOwnMFA calls golf.v1.AccountSecurityService.DisableOwnMFA.
+func (c *accountSecurityServiceClient) DisableOwnMFA(ctx context.Context, req *connect.Request[v1.ChangeOwnMFARequest]) (*connect.Response[v1.ChangeOwnMFAResponse], error) {
+	return c.disableOwnMFA.CallUnary(ctx, req)
+}
+
+// RegenerateOwnMFARecovery calls golf.v1.AccountSecurityService.RegenerateOwnMFARecovery.
+func (c *accountSecurityServiceClient) RegenerateOwnMFARecovery(ctx context.Context, req *connect.Request[v1.ChangeOwnMFARequest]) (*connect.Response[v1.ChangeOwnMFAResponse], error) {
+	return c.regenerateOwnMFARecovery.CallUnary(ctx, req)
+}
+
 // AccountSecurityServiceHandler is an implementation of the golf.v1.AccountSecurityService service.
 type AccountSecurityServiceHandler interface {
 	GetAccountSecurity(context.Context, *connect.Request[v1.GetAccountSecurityRequest]) (*connect.Response[v1.GetAccountSecurityResponse], error)
 	ChangeOwnPassword(context.Context, *connect.Request[v1.ChangeOwnPasswordRequest]) (*connect.Response[v1.ChangeOwnPasswordResponse], error)
 	ChangeOwnLoginEmail(context.Context, *connect.Request[v1.ChangeOwnLoginEmailRequest]) (*connect.Response[v1.ChangeOwnLoginEmailResponse], error)
+	GetOwnMFA(context.Context, *connect.Request[v1.GetOwnMFARequest]) (*connect.Response[v1.GetOwnMFAResponse], error)
+	BeginOwnMFA(context.Context, *connect.Request[v1.BeginOwnMFARequest]) (*connect.Response[v1.BeginOwnMFAResponse], error)
+	ConfirmOwnMFA(context.Context, *connect.Request[v1.ChangeOwnMFARequest]) (*connect.Response[v1.ChangeOwnMFAResponse], error)
+	DisableOwnMFA(context.Context, *connect.Request[v1.ChangeOwnMFARequest]) (*connect.Response[v1.ChangeOwnMFAResponse], error)
+	RegenerateOwnMFARecovery(context.Context, *connect.Request[v1.ChangeOwnMFARequest]) (*connect.Response[v1.ChangeOwnMFAResponse], error)
 }
 
 // NewAccountSecurityServiceHandler builds an HTTP handler from the service implementation. It
@@ -4602,6 +4716,36 @@ func NewAccountSecurityServiceHandler(svc AccountSecurityServiceHandler, opts ..
 		connect.WithSchema(accountSecurityServiceMethods.ByName("ChangeOwnLoginEmail")),
 		connect.WithHandlerOptions(opts...),
 	)
+	accountSecurityServiceGetOwnMFAHandler := connect.NewUnaryHandler(
+		AccountSecurityServiceGetOwnMFAProcedure,
+		svc.GetOwnMFA,
+		connect.WithSchema(accountSecurityServiceMethods.ByName("GetOwnMFA")),
+		connect.WithHandlerOptions(opts...),
+	)
+	accountSecurityServiceBeginOwnMFAHandler := connect.NewUnaryHandler(
+		AccountSecurityServiceBeginOwnMFAProcedure,
+		svc.BeginOwnMFA,
+		connect.WithSchema(accountSecurityServiceMethods.ByName("BeginOwnMFA")),
+		connect.WithHandlerOptions(opts...),
+	)
+	accountSecurityServiceConfirmOwnMFAHandler := connect.NewUnaryHandler(
+		AccountSecurityServiceConfirmOwnMFAProcedure,
+		svc.ConfirmOwnMFA,
+		connect.WithSchema(accountSecurityServiceMethods.ByName("ConfirmOwnMFA")),
+		connect.WithHandlerOptions(opts...),
+	)
+	accountSecurityServiceDisableOwnMFAHandler := connect.NewUnaryHandler(
+		AccountSecurityServiceDisableOwnMFAProcedure,
+		svc.DisableOwnMFA,
+		connect.WithSchema(accountSecurityServiceMethods.ByName("DisableOwnMFA")),
+		connect.WithHandlerOptions(opts...),
+	)
+	accountSecurityServiceRegenerateOwnMFARecoveryHandler := connect.NewUnaryHandler(
+		AccountSecurityServiceRegenerateOwnMFARecoveryProcedure,
+		svc.RegenerateOwnMFARecovery,
+		connect.WithSchema(accountSecurityServiceMethods.ByName("RegenerateOwnMFARecovery")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/golf.v1.AccountSecurityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AccountSecurityServiceGetAccountSecurityProcedure:
@@ -4610,6 +4754,16 @@ func NewAccountSecurityServiceHandler(svc AccountSecurityServiceHandler, opts ..
 			accountSecurityServiceChangeOwnPasswordHandler.ServeHTTP(w, r)
 		case AccountSecurityServiceChangeOwnLoginEmailProcedure:
 			accountSecurityServiceChangeOwnLoginEmailHandler.ServeHTTP(w, r)
+		case AccountSecurityServiceGetOwnMFAProcedure:
+			accountSecurityServiceGetOwnMFAHandler.ServeHTTP(w, r)
+		case AccountSecurityServiceBeginOwnMFAProcedure:
+			accountSecurityServiceBeginOwnMFAHandler.ServeHTTP(w, r)
+		case AccountSecurityServiceConfirmOwnMFAProcedure:
+			accountSecurityServiceConfirmOwnMFAHandler.ServeHTTP(w, r)
+		case AccountSecurityServiceDisableOwnMFAProcedure:
+			accountSecurityServiceDisableOwnMFAHandler.ServeHTTP(w, r)
+		case AccountSecurityServiceRegenerateOwnMFARecoveryProcedure:
+			accountSecurityServiceRegenerateOwnMFARecoveryHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -4629,6 +4783,26 @@ func (UnimplementedAccountSecurityServiceHandler) ChangeOwnPassword(context.Cont
 
 func (UnimplementedAccountSecurityServiceHandler) ChangeOwnLoginEmail(context.Context, *connect.Request[v1.ChangeOwnLoginEmailRequest]) (*connect.Response[v1.ChangeOwnLoginEmailResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AccountSecurityService.ChangeOwnLoginEmail is not implemented"))
+}
+
+func (UnimplementedAccountSecurityServiceHandler) GetOwnMFA(context.Context, *connect.Request[v1.GetOwnMFARequest]) (*connect.Response[v1.GetOwnMFAResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AccountSecurityService.GetOwnMFA is not implemented"))
+}
+
+func (UnimplementedAccountSecurityServiceHandler) BeginOwnMFA(context.Context, *connect.Request[v1.BeginOwnMFARequest]) (*connect.Response[v1.BeginOwnMFAResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AccountSecurityService.BeginOwnMFA is not implemented"))
+}
+
+func (UnimplementedAccountSecurityServiceHandler) ConfirmOwnMFA(context.Context, *connect.Request[v1.ChangeOwnMFARequest]) (*connect.Response[v1.ChangeOwnMFAResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AccountSecurityService.ConfirmOwnMFA is not implemented"))
+}
+
+func (UnimplementedAccountSecurityServiceHandler) DisableOwnMFA(context.Context, *connect.Request[v1.ChangeOwnMFARequest]) (*connect.Response[v1.ChangeOwnMFAResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AccountSecurityService.DisableOwnMFA is not implemented"))
+}
+
+func (UnimplementedAccountSecurityServiceHandler) RegenerateOwnMFARecovery(context.Context, *connect.Request[v1.ChangeOwnMFARequest]) (*connect.Response[v1.ChangeOwnMFAResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.AccountSecurityService.RegenerateOwnMFARecovery is not implemented"))
 }
 
 // AutomationGrantServiceClient is a client for the golf.v1.AutomationGrantService service.

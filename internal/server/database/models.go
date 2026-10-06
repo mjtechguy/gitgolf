@@ -786,6 +786,51 @@ type GolfLocalLoginLimit struct {
 	ResetsAt time.Time
 }
 
+type GolfLocalMfa struct {
+	AccountID        int64
+	Version          int64
+	Enabled          bool
+	ActiveContentID  uuid.NullUUID
+	PendingContentID uuid.NullUUID
+	PendingExpiresAt sql.NullTime
+	LastCounter      int64
+}
+
+type GolfMfaAttempt struct {
+	AccountID   int64
+	WindowStart time.Time
+	Attempts    int32
+}
+
+type GolfMfaEvent struct {
+	ID          int64
+	AccountID   int64
+	UserID      int64
+	Action      string
+	Version     int64
+	OperationID string
+	CreatedAt   time.Time
+}
+
+type GolfMfaLoginChallenge struct {
+	TokenHash         []byte
+	AccountID         int64
+	UserID            int64
+	CredentialVersion int64
+	MfaVersion        int64
+	ExpiresAt         time.Time
+	Attempts          int32
+	ConsumedAt        sql.NullTime
+	CreatedAt         time.Time
+}
+
+type GolfMfaRecoveryCode struct {
+	AccountID int64
+	Version   int64
+	CodeHash  []byte
+	UsedAt    sql.NullTime
+}
+
 type GolfNotificationContent struct {
 	ID               uuid.UUID
 	Kind             string
@@ -872,6 +917,30 @@ type GolfOrganizationExecutionVersion struct {
 	ContentBinding       []byte
 	CredentialKeyID      string
 	CreatedAt            time.Time
+}
+
+type GolfOrganizationLabelOperation struct {
+	ID               int64
+	UserID           int64
+	ForgeURL         string
+	ActorID          int64
+	OperationID      string
+	Organization     string
+	OrganizationID   int64
+	Kind             int32
+	LabelID          int64
+	ExpectedRevision string
+	InputFingerprint []byte
+	Phase            string
+	ResultLabelID    int64
+	FailureCode      string
+}
+
+type GolfOrganizationLabelOperationEvent struct {
+	ID          int64
+	OperationID int64
+	Phase       string
+	OccurredAt  time.Time
 }
 
 type GolfPreviewCredential struct {
@@ -1261,6 +1330,32 @@ type GolfRepositoryLifecycleOperation struct {
 	OwnerIsOrganization bool
 }
 
+type GolfRepositoryMirrorOperation struct {
+	ID               int64
+	UserID           int64
+	ForgeURL         string
+	ActorID          int64
+	OperationID      string
+	RepositoryOwner  string
+	RepositoryName   string
+	RepositoryID     int64
+	OwnerID          int64
+	ExpectedRevision string
+	Kind             int32
+	IntervalValue    string
+	InputFingerprint []byte
+	Phase            string
+	SyncAccepted     bool
+	FailureCode      string
+}
+
+type GolfRepositoryMirrorOperationEvent struct {
+	ID          int64
+	OperationID int64
+	Phase       string
+	OccurredAt  time.Time
+}
+
 type GolfRepositoryRefMutation struct {
 	ID               int64
 	UserID           int64
@@ -1393,6 +1488,36 @@ type GolfRepositoryRunnerPlacement struct {
 	MemoryBytes         int64
 	Pids                int32
 	TimeoutSeconds      int32
+}
+
+type GolfRepositoryWikiOperation struct {
+	ID               int64
+	UserID           int64
+	ForgeURL         string
+	ActorID          int64
+	OperationID      string
+	RepositoryID     int64
+	OwnerID          int64
+	RepositoryOwner  string
+	RepositoryName   string
+	AccessRevision   string
+	Kind             int32
+	Slug             string
+	ExpectedCommitID string
+	InputFingerprint []byte
+	Phase            string
+	ResultSlug       string
+	ResultCommitID   string
+	FailureCode      string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+type GolfRepositoryWikiOperationEvent struct {
+	ID          int64
+	OperationID int64
+	Phase       string
+	OccurredAt  time.Time
 }
 
 type GolfReviewContent struct {
