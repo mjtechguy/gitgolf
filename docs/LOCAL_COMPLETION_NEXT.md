@@ -2,20 +2,13 @@
 
 Local Compose consumers come first. This ordering follows the [complete Settings requirements](REPOSITORY_SETTINGS_IMPLEMENTATION.md); it does not narrow them or turn intermediate slices Ready. [Implementation status](IMPLEMENTATION_STATUS.md) remains the deployment ledger. Kubernetes and optional Cloudflare adapters have separate qualification gates.
 
-## Latest source checkpoint (2026-10-06)
+## Latest local pass (2026-10-06)
 
-The 083–086 bounded batch is integrated at `4a83276`, followed by explicit new OAuth consent for `write:package` in `5a59966`. It is source-complete within the [stated contracts and source/native evidence](IMPLEMENTATION_STATUS.md#portable-priorities083086-source-complete-bounded-batch-local-deployment-pending-2026-10-06), awaiting a matching retained-local rollout. The [source aggregate](../.tmp/priority086-final/manifest.json) and [full-App QA](../.tmp/priority086-qa/manifest.json) are distinct from deployment. No new runtime/image identity or whole-phase readiness follows from source completion.
+The 083–086 bounded batch is deployed on clean frozen `8a47797` at schema086. [The ledger](IMPLEMENTATION_STATUS.md#portable-priorities083086-deployed-bounded-consumers-2026-10-06) records exact image identities, native/source evidence,119 controlled browser cases, integrated PostgreSQL/race, encrypted cutover backup, independent running checks and actual served review/package/wiki/authentication proofs. Accounts, sessions, connections, grants/history and resource limits are preserved at cutover. Narrow implementation and remaining acceptance remain distinct.
 
-## Latest independently recorded local pass
+The previous077–082 batch at `2cc1d85`/schema082 retains its [original evidence](IMPLEMENTATION_STATUS.md#portable-priorities077082-deployed-bounded-consumers-2026-10-05); those historical receipts are not relabeled as086.
 
-The 077–082 batch remains the recorded deployed baseline on clean frozen `2cc1d85` at schema082 until the 086 rollout is independently recorded. [Matching source/native/deployment/running/served evidence](IMPLEMENTATION_STATUS.md#portable-priorities077082-deployed-bounded-consumers-2026-10-05) retains its original authentication/resource preservation and live MFA/recovery/PAT revocation after a backend restart. The subsequent source scopes below do not relabel those historical receipts.
-
-## Immediate rollout and verification packet
-
-1. Freeze and build the integrated 083–086 source; drain the existing managed roles, retain the current encrypted rollback snapshot and preserve accounts, configured profiles, grants/history, ports, images/resources and the execution reserve.
-2. Apply the narrow local rollout and independently bind schema, running core/worker/runner binaries, served assets and a worker heartbeat after StartedAt. Keep successful deployment separate from source tests; root records exact identities only after actual success.
-3. Exercise served review authoring, provider connection/import/package prerequisites, ordinary wiki units/navigation, mirror observation and current authority masking. Preserve unknown original inspection and current comment checks; do not run paid models, new CI jobs or unqualified ACP controls merely to label the batch complete.
-4. Record the [implementation ledger](IMPLEMENTATION_STATUS.md) and concrete remaining acceptance below. Rollback/quarantine depends on the actual resulting schema/account/provider state, not a general claim that old binaries are safe.
+No extra Docker services/capacity, paid model calls, execution jobs or Cloudflare resources were added. Next priorities below retain the original2-GiB execution reserve and current service composition. Managed ACP controls, private migration fidelity and protected publication remain unavailable until their own runnable gates pass.
 
 ## Previous076 baseline
 
@@ -23,7 +16,7 @@ The previous four-stream pass is integrated and deployed at schema076 on clean f
 
 ## Integrated source after076
 
-The previous076 paragraph is historical. The current082 ledger records the matching frozen rollout separately from source/native/browser checks for these consumers.
+The previous076 paragraph is historical. The historical082 ledger records the matching frozen rollout separately from source/native/browser checks for these consumers.
 
 | Packet | New consumer | Explicit boundary |
 | --- | --- | --- |
