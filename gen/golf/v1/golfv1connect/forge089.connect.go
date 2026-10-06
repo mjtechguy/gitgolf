@@ -27,6 +27,9 @@ const (
 	// DiscussionAttachmentServiceName is the fully-qualified name of the DiscussionAttachmentService
 	// service.
 	DiscussionAttachmentServiceName = "golf.v1.DiscussionAttachmentService"
+	// DiscussionAttachmentUploadServiceName is the fully-qualified name of the
+	// DiscussionAttachmentUploadService service.
+	DiscussionAttachmentUploadServiceName = "golf.v1.DiscussionAttachmentUploadService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -49,6 +52,17 @@ const (
 	// DiscussionAttachmentServiceDownloadDiscussionAttachmentProcedure is the fully-qualified name of
 	// the DiscussionAttachmentService's DownloadDiscussionAttachment RPC.
 	DiscussionAttachmentServiceDownloadDiscussionAttachmentProcedure = "/golf.v1.DiscussionAttachmentService/DownloadDiscussionAttachment"
+	// DiscussionAttachmentUploadServiceGetDiscussionAttachmentUploadStateProcedure is the
+	// fully-qualified name of the DiscussionAttachmentUploadService's
+	// GetDiscussionAttachmentUploadState RPC.
+	DiscussionAttachmentUploadServiceGetDiscussionAttachmentUploadStateProcedure = "/golf.v1.DiscussionAttachmentUploadService/GetDiscussionAttachmentUploadState"
+	// DiscussionAttachmentUploadServiceSubmitDiscussionAttachmentUploadProcedure is the fully-qualified
+	// name of the DiscussionAttachmentUploadService's SubmitDiscussionAttachmentUpload RPC.
+	DiscussionAttachmentUploadServiceSubmitDiscussionAttachmentUploadProcedure = "/golf.v1.DiscussionAttachmentUploadService/SubmitDiscussionAttachmentUpload"
+	// DiscussionAttachmentUploadServiceGetDiscussionAttachmentUploadOperationProcedure is the
+	// fully-qualified name of the DiscussionAttachmentUploadService's
+	// GetDiscussionAttachmentUploadOperation RPC.
+	DiscussionAttachmentUploadServiceGetDiscussionAttachmentUploadOperationProcedure = "/golf.v1.DiscussionAttachmentUploadService/GetDiscussionAttachmentUploadOperation"
 )
 
 // RepositoryFileBatchServiceClient is a client for the golf.v1.RepositoryFileBatchService service.
@@ -246,4 +260,131 @@ func (UnimplementedDiscussionAttachmentServiceHandler) ListDiscussionAttachments
 
 func (UnimplementedDiscussionAttachmentServiceHandler) DownloadDiscussionAttachment(context.Context, *connect.Request[v1.DownloadDiscussionAttachmentRequest]) (*connect.Response[v1.DownloadDiscussionAttachmentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.DiscussionAttachmentService.DownloadDiscussionAttachment is not implemented"))
+}
+
+// DiscussionAttachmentUploadServiceClient is a client for the
+// golf.v1.DiscussionAttachmentUploadService service.
+type DiscussionAttachmentUploadServiceClient interface {
+	GetDiscussionAttachmentUploadState(context.Context, *connect.Request[v1.GetDiscussionAttachmentUploadStateRequest]) (*connect.Response[v1.GetDiscussionAttachmentUploadStateResponse], error)
+	SubmitDiscussionAttachmentUpload(context.Context, *connect.Request[v1.SubmitDiscussionAttachmentUploadRequest]) (*connect.Response[v1.SubmitDiscussionAttachmentUploadResponse], error)
+	GetDiscussionAttachmentUploadOperation(context.Context, *connect.Request[v1.GetDiscussionAttachmentUploadOperationRequest]) (*connect.Response[v1.GetDiscussionAttachmentUploadOperationResponse], error)
+}
+
+// NewDiscussionAttachmentUploadServiceClient constructs a client for the
+// golf.v1.DiscussionAttachmentUploadService service. By default, it uses the Connect protocol with
+// the binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use
+// the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewDiscussionAttachmentUploadServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) DiscussionAttachmentUploadServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	discussionAttachmentUploadServiceMethods := v1.File_golf_v1_forge089_proto.Services().ByName("DiscussionAttachmentUploadService").Methods()
+	return &discussionAttachmentUploadServiceClient{
+		getDiscussionAttachmentUploadState: connect.NewClient[v1.GetDiscussionAttachmentUploadStateRequest, v1.GetDiscussionAttachmentUploadStateResponse](
+			httpClient,
+			baseURL+DiscussionAttachmentUploadServiceGetDiscussionAttachmentUploadStateProcedure,
+			connect.WithSchema(discussionAttachmentUploadServiceMethods.ByName("GetDiscussionAttachmentUploadState")),
+			connect.WithClientOptions(opts...),
+		),
+		submitDiscussionAttachmentUpload: connect.NewClient[v1.SubmitDiscussionAttachmentUploadRequest, v1.SubmitDiscussionAttachmentUploadResponse](
+			httpClient,
+			baseURL+DiscussionAttachmentUploadServiceSubmitDiscussionAttachmentUploadProcedure,
+			connect.WithSchema(discussionAttachmentUploadServiceMethods.ByName("SubmitDiscussionAttachmentUpload")),
+			connect.WithClientOptions(opts...),
+		),
+		getDiscussionAttachmentUploadOperation: connect.NewClient[v1.GetDiscussionAttachmentUploadOperationRequest, v1.GetDiscussionAttachmentUploadOperationResponse](
+			httpClient,
+			baseURL+DiscussionAttachmentUploadServiceGetDiscussionAttachmentUploadOperationProcedure,
+			connect.WithSchema(discussionAttachmentUploadServiceMethods.ByName("GetDiscussionAttachmentUploadOperation")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// discussionAttachmentUploadServiceClient implements DiscussionAttachmentUploadServiceClient.
+type discussionAttachmentUploadServiceClient struct {
+	getDiscussionAttachmentUploadState     *connect.Client[v1.GetDiscussionAttachmentUploadStateRequest, v1.GetDiscussionAttachmentUploadStateResponse]
+	submitDiscussionAttachmentUpload       *connect.Client[v1.SubmitDiscussionAttachmentUploadRequest, v1.SubmitDiscussionAttachmentUploadResponse]
+	getDiscussionAttachmentUploadOperation *connect.Client[v1.GetDiscussionAttachmentUploadOperationRequest, v1.GetDiscussionAttachmentUploadOperationResponse]
+}
+
+// GetDiscussionAttachmentUploadState calls
+// golf.v1.DiscussionAttachmentUploadService.GetDiscussionAttachmentUploadState.
+func (c *discussionAttachmentUploadServiceClient) GetDiscussionAttachmentUploadState(ctx context.Context, req *connect.Request[v1.GetDiscussionAttachmentUploadStateRequest]) (*connect.Response[v1.GetDiscussionAttachmentUploadStateResponse], error) {
+	return c.getDiscussionAttachmentUploadState.CallUnary(ctx, req)
+}
+
+// SubmitDiscussionAttachmentUpload calls
+// golf.v1.DiscussionAttachmentUploadService.SubmitDiscussionAttachmentUpload.
+func (c *discussionAttachmentUploadServiceClient) SubmitDiscussionAttachmentUpload(ctx context.Context, req *connect.Request[v1.SubmitDiscussionAttachmentUploadRequest]) (*connect.Response[v1.SubmitDiscussionAttachmentUploadResponse], error) {
+	return c.submitDiscussionAttachmentUpload.CallUnary(ctx, req)
+}
+
+// GetDiscussionAttachmentUploadOperation calls
+// golf.v1.DiscussionAttachmentUploadService.GetDiscussionAttachmentUploadOperation.
+func (c *discussionAttachmentUploadServiceClient) GetDiscussionAttachmentUploadOperation(ctx context.Context, req *connect.Request[v1.GetDiscussionAttachmentUploadOperationRequest]) (*connect.Response[v1.GetDiscussionAttachmentUploadOperationResponse], error) {
+	return c.getDiscussionAttachmentUploadOperation.CallUnary(ctx, req)
+}
+
+// DiscussionAttachmentUploadServiceHandler is an implementation of the
+// golf.v1.DiscussionAttachmentUploadService service.
+type DiscussionAttachmentUploadServiceHandler interface {
+	GetDiscussionAttachmentUploadState(context.Context, *connect.Request[v1.GetDiscussionAttachmentUploadStateRequest]) (*connect.Response[v1.GetDiscussionAttachmentUploadStateResponse], error)
+	SubmitDiscussionAttachmentUpload(context.Context, *connect.Request[v1.SubmitDiscussionAttachmentUploadRequest]) (*connect.Response[v1.SubmitDiscussionAttachmentUploadResponse], error)
+	GetDiscussionAttachmentUploadOperation(context.Context, *connect.Request[v1.GetDiscussionAttachmentUploadOperationRequest]) (*connect.Response[v1.GetDiscussionAttachmentUploadOperationResponse], error)
+}
+
+// NewDiscussionAttachmentUploadServiceHandler builds an HTTP handler from the service
+// implementation. It returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewDiscussionAttachmentUploadServiceHandler(svc DiscussionAttachmentUploadServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	discussionAttachmentUploadServiceMethods := v1.File_golf_v1_forge089_proto.Services().ByName("DiscussionAttachmentUploadService").Methods()
+	discussionAttachmentUploadServiceGetDiscussionAttachmentUploadStateHandler := connect.NewUnaryHandler(
+		DiscussionAttachmentUploadServiceGetDiscussionAttachmentUploadStateProcedure,
+		svc.GetDiscussionAttachmentUploadState,
+		connect.WithSchema(discussionAttachmentUploadServiceMethods.ByName("GetDiscussionAttachmentUploadState")),
+		connect.WithHandlerOptions(opts...),
+	)
+	discussionAttachmentUploadServiceSubmitDiscussionAttachmentUploadHandler := connect.NewUnaryHandler(
+		DiscussionAttachmentUploadServiceSubmitDiscussionAttachmentUploadProcedure,
+		svc.SubmitDiscussionAttachmentUpload,
+		connect.WithSchema(discussionAttachmentUploadServiceMethods.ByName("SubmitDiscussionAttachmentUpload")),
+		connect.WithHandlerOptions(opts...),
+	)
+	discussionAttachmentUploadServiceGetDiscussionAttachmentUploadOperationHandler := connect.NewUnaryHandler(
+		DiscussionAttachmentUploadServiceGetDiscussionAttachmentUploadOperationProcedure,
+		svc.GetDiscussionAttachmentUploadOperation,
+		connect.WithSchema(discussionAttachmentUploadServiceMethods.ByName("GetDiscussionAttachmentUploadOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.DiscussionAttachmentUploadService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case DiscussionAttachmentUploadServiceGetDiscussionAttachmentUploadStateProcedure:
+			discussionAttachmentUploadServiceGetDiscussionAttachmentUploadStateHandler.ServeHTTP(w, r)
+		case DiscussionAttachmentUploadServiceSubmitDiscussionAttachmentUploadProcedure:
+			discussionAttachmentUploadServiceSubmitDiscussionAttachmentUploadHandler.ServeHTTP(w, r)
+		case DiscussionAttachmentUploadServiceGetDiscussionAttachmentUploadOperationProcedure:
+			discussionAttachmentUploadServiceGetDiscussionAttachmentUploadOperationHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedDiscussionAttachmentUploadServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedDiscussionAttachmentUploadServiceHandler struct{}
+
+func (UnimplementedDiscussionAttachmentUploadServiceHandler) GetDiscussionAttachmentUploadState(context.Context, *connect.Request[v1.GetDiscussionAttachmentUploadStateRequest]) (*connect.Response[v1.GetDiscussionAttachmentUploadStateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.DiscussionAttachmentUploadService.GetDiscussionAttachmentUploadState is not implemented"))
+}
+
+func (UnimplementedDiscussionAttachmentUploadServiceHandler) SubmitDiscussionAttachmentUpload(context.Context, *connect.Request[v1.SubmitDiscussionAttachmentUploadRequest]) (*connect.Response[v1.SubmitDiscussionAttachmentUploadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.DiscussionAttachmentUploadService.SubmitDiscussionAttachmentUpload is not implemented"))
+}
+
+func (UnimplementedDiscussionAttachmentUploadServiceHandler) GetDiscussionAttachmentUploadOperation(context.Context, *connect.Request[v1.GetDiscussionAttachmentUploadOperationRequest]) (*connect.Response[v1.GetDiscussionAttachmentUploadOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.DiscussionAttachmentUploadService.GetDiscussionAttachmentUploadOperation is not implemented"))
 }

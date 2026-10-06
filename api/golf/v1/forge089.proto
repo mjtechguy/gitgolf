@@ -51,3 +51,27 @@ message DownloadDiscussionAttachmentResponse {
  DiscussionTarget target = 1; DiscussionAttachment attachment = 2; bytes content = 3;
  string content_sha256 = 4;
 }
+
+service DiscussionAttachmentUploadService {
+ rpc GetDiscussionAttachmentUploadState(GetDiscussionAttachmentUploadStateRequest) returns (GetDiscussionAttachmentUploadStateResponse);
+ rpc SubmitDiscussionAttachmentUpload(SubmitDiscussionAttachmentUploadRequest) returns (SubmitDiscussionAttachmentUploadResponse);
+ rpc GetDiscussionAttachmentUploadOperation(GetDiscussionAttachmentUploadOperationRequest) returns (GetDiscussionAttachmentUploadOperationResponse);
+}
+message GetDiscussionAttachmentUploadStateRequest { DiscussionTarget target = 1; }
+message GetDiscussionAttachmentUploadStateResponse {
+ DiscussionTarget target = 1; string actor_id = 2; bool can_upload = 3;
+ string target_revision = 4; string attachments_revision = 5; string allowed_types = 6; uint64 max_size_bytes = 7;
+}
+message SubmitDiscussionAttachmentUploadRequest {
+ DiscussionTarget target = 1; string expected_target_revision = 2; string expected_attachments_revision = 3;
+ string operation_id = 4; string name = 5; bytes content = 6; string content_sha256 = 7;
+ uint64 content_size_bytes = 8;
+}
+message DiscussionAttachmentUploadOperation {
+ string contract = 1; SubmitDiscussionAttachmentUploadRequest original = 2; string actor_id = 3;
+ DiscussionResourceOperationPhase phase = 4; DiscussionAttachment attachment = 5;
+ string created_at = 6; string updated_at = 7; string failure_code = 8;
+}
+message SubmitDiscussionAttachmentUploadResponse { DiscussionAttachmentUploadOperation operation = 1; }
+message GetDiscussionAttachmentUploadOperationRequest { DiscussionTarget target = 1; string operation_id = 2; }
+message GetDiscussionAttachmentUploadOperationResponse { DiscussionAttachmentUploadOperation operation = 1; }

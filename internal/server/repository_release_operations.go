@@ -252,14 +252,19 @@ func (s *Server) validateReleaseOperationPermit(ctx context.Context, tx *sql.Tx,
 	}
 	return nil
 }
-func (s *Server) releaseUpload(ctx context.Context, token forgeCredential, path string, m *golfv1.SubmitRepositoryReleaseOperationRequest) (row forgeReleaseDownloadAsset, e error) {
+func (s *Server) releaseUpload(ctx context.Context, token forgeCredential, path string, m *golfv1.SubmitRepositoryReleaseOperationRequest) (forgeReleaseDownloadAsset, error) {
+	_, _, manifest := releaseOperationNative(m)
+	return s.uploadNativeAttachment(ctx, token, path, m.AssetName, m.AssetContent, manifest)
+}
+
+func (s *Server) uploadNativeAttachment(ctx context.Context, token forgeCredential, path, name string, content []byte, manifest any) (row forgeReleaseDownloadAsset, e error) {
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	part, e := writer.CreateFormFile("attachment", m.AssetName)
+	part, e := writer.CreateFormFile("attachment", name)
 	if e != nil {
 		return row, e
 	}
-	if _, e = part.Write(m.AssetContent); e != nil {
+	if _, e = part.Write(content); e != nil {
 		return row, e
 	}
 	if e = writer.Close(); e != nil {
@@ -278,7 +283,6 @@ func (s *Server) releaseUpload(ctx context.Context, token forgeCredential, path 
 		return row, errUnauthenticated
 	}
 	request.Header.Set("Authorization", scheme+" "+token.Token)
-	_, _, manifest := releaseOperationNative(m)
 	done, e := s.beginRepositoryLifecycleWrite(ctx, http.MethodPost, path, token, manifest, request)
 	if e != nil {
 		return row, e
@@ -296,7 +300,7 @@ func (s *Server) releaseUpload(ctx context.Context, token forgeCredential, path 
 	if e != nil || len(data) >= 64<<10 || json.Unmarshal(data, &row) != nil {
 		return row, errInvalidForgeResponse
 	}
-	if !validReleaseDownloadAsset(row, row.ID) || row.Name != m.AssetName || *row.Size != int64(len(m.AssetContent)) {
+	if !validReleaseDownloadAsset(row, row.ID) || row.Name != name || *row.Size != int64(len(content)) {
 		return row, errInvalidForgeResponse
 	}
 	return

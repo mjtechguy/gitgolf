@@ -786,6 +786,482 @@ func (x *DownloadDiscussionAttachmentResponse) GetContentSha256() string {
 	return ""
 }
 
+type GetDiscussionAttachmentUploadStateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Target        *DiscussionTarget      `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDiscussionAttachmentUploadStateRequest) Reset() {
+	*x = GetDiscussionAttachmentUploadStateRequest{}
+	mi := &file_golf_v1_forge089_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDiscussionAttachmentUploadStateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDiscussionAttachmentUploadStateRequest) ProtoMessage() {}
+
+func (x *GetDiscussionAttachmentUploadStateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_forge089_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDiscussionAttachmentUploadStateRequest.ProtoReflect.Descriptor instead.
+func (*GetDiscussionAttachmentUploadStateRequest) Descriptor() ([]byte, []int) {
+	return file_golf_v1_forge089_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *GetDiscussionAttachmentUploadStateRequest) GetTarget() *DiscussionTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+type GetDiscussionAttachmentUploadStateResponse struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Target              *DiscussionTarget      `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	ActorId             string                 `protobuf:"bytes,2,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	CanUpload           bool                   `protobuf:"varint,3,opt,name=can_upload,json=canUpload,proto3" json:"can_upload,omitempty"`
+	TargetRevision      string                 `protobuf:"bytes,4,opt,name=target_revision,json=targetRevision,proto3" json:"target_revision,omitempty"`
+	AttachmentsRevision string                 `protobuf:"bytes,5,opt,name=attachments_revision,json=attachmentsRevision,proto3" json:"attachments_revision,omitempty"`
+	AllowedTypes        string                 `protobuf:"bytes,6,opt,name=allowed_types,json=allowedTypes,proto3" json:"allowed_types,omitempty"`
+	MaxSizeBytes        uint64                 `protobuf:"varint,7,opt,name=max_size_bytes,json=maxSizeBytes,proto3" json:"max_size_bytes,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *GetDiscussionAttachmentUploadStateResponse) Reset() {
+	*x = GetDiscussionAttachmentUploadStateResponse{}
+	mi := &file_golf_v1_forge089_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDiscussionAttachmentUploadStateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDiscussionAttachmentUploadStateResponse) ProtoMessage() {}
+
+func (x *GetDiscussionAttachmentUploadStateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_forge089_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDiscussionAttachmentUploadStateResponse.ProtoReflect.Descriptor instead.
+func (*GetDiscussionAttachmentUploadStateResponse) Descriptor() ([]byte, []int) {
+	return file_golf_v1_forge089_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GetDiscussionAttachmentUploadStateResponse) GetTarget() *DiscussionTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *GetDiscussionAttachmentUploadStateResponse) GetActorId() string {
+	if x != nil {
+		return x.ActorId
+	}
+	return ""
+}
+
+func (x *GetDiscussionAttachmentUploadStateResponse) GetCanUpload() bool {
+	if x != nil {
+		return x.CanUpload
+	}
+	return false
+}
+
+func (x *GetDiscussionAttachmentUploadStateResponse) GetTargetRevision() string {
+	if x != nil {
+		return x.TargetRevision
+	}
+	return ""
+}
+
+func (x *GetDiscussionAttachmentUploadStateResponse) GetAttachmentsRevision() string {
+	if x != nil {
+		return x.AttachmentsRevision
+	}
+	return ""
+}
+
+func (x *GetDiscussionAttachmentUploadStateResponse) GetAllowedTypes() string {
+	if x != nil {
+		return x.AllowedTypes
+	}
+	return ""
+}
+
+func (x *GetDiscussionAttachmentUploadStateResponse) GetMaxSizeBytes() uint64 {
+	if x != nil {
+		return x.MaxSizeBytes
+	}
+	return 0
+}
+
+type SubmitDiscussionAttachmentUploadRequest struct {
+	state                       protoimpl.MessageState `protogen:"open.v1"`
+	Target                      *DiscussionTarget      `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	ExpectedTargetRevision      string                 `protobuf:"bytes,2,opt,name=expected_target_revision,json=expectedTargetRevision,proto3" json:"expected_target_revision,omitempty"`
+	ExpectedAttachmentsRevision string                 `protobuf:"bytes,3,opt,name=expected_attachments_revision,json=expectedAttachmentsRevision,proto3" json:"expected_attachments_revision,omitempty"`
+	OperationId                 string                 `protobuf:"bytes,4,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	Name                        string                 `protobuf:"bytes,5,opt,name=name,proto3" json:"name,omitempty"`
+	Content                     []byte                 `protobuf:"bytes,6,opt,name=content,proto3" json:"content,omitempty"`
+	ContentSha256               string                 `protobuf:"bytes,7,opt,name=content_sha256,json=contentSha256,proto3" json:"content_sha256,omitempty"`
+	ContentSizeBytes            uint64                 `protobuf:"varint,8,opt,name=content_size_bytes,json=contentSizeBytes,proto3" json:"content_size_bytes,omitempty"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
+}
+
+func (x *SubmitDiscussionAttachmentUploadRequest) Reset() {
+	*x = SubmitDiscussionAttachmentUploadRequest{}
+	mi := &file_golf_v1_forge089_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitDiscussionAttachmentUploadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitDiscussionAttachmentUploadRequest) ProtoMessage() {}
+
+func (x *SubmitDiscussionAttachmentUploadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_forge089_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitDiscussionAttachmentUploadRequest.ProtoReflect.Descriptor instead.
+func (*SubmitDiscussionAttachmentUploadRequest) Descriptor() ([]byte, []int) {
+	return file_golf_v1_forge089_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *SubmitDiscussionAttachmentUploadRequest) GetTarget() *DiscussionTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *SubmitDiscussionAttachmentUploadRequest) GetExpectedTargetRevision() string {
+	if x != nil {
+		return x.ExpectedTargetRevision
+	}
+	return ""
+}
+
+func (x *SubmitDiscussionAttachmentUploadRequest) GetExpectedAttachmentsRevision() string {
+	if x != nil {
+		return x.ExpectedAttachmentsRevision
+	}
+	return ""
+}
+
+func (x *SubmitDiscussionAttachmentUploadRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *SubmitDiscussionAttachmentUploadRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *SubmitDiscussionAttachmentUploadRequest) GetContent() []byte {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *SubmitDiscussionAttachmentUploadRequest) GetContentSha256() string {
+	if x != nil {
+		return x.ContentSha256
+	}
+	return ""
+}
+
+func (x *SubmitDiscussionAttachmentUploadRequest) GetContentSizeBytes() uint64 {
+	if x != nil {
+		return x.ContentSizeBytes
+	}
+	return 0
+}
+
+type DiscussionAttachmentUploadOperation struct {
+	state         protoimpl.MessageState                   `protogen:"open.v1"`
+	Contract      string                                   `protobuf:"bytes,1,opt,name=contract,proto3" json:"contract,omitempty"`
+	Original      *SubmitDiscussionAttachmentUploadRequest `protobuf:"bytes,2,opt,name=original,proto3" json:"original,omitempty"`
+	ActorId       string                                   `protobuf:"bytes,3,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	Phase         DiscussionResourceOperationPhase         `protobuf:"varint,4,opt,name=phase,proto3,enum=golf.v1.DiscussionResourceOperationPhase" json:"phase,omitempty"`
+	Attachment    *DiscussionAttachment                    `protobuf:"bytes,5,opt,name=attachment,proto3" json:"attachment,omitempty"`
+	CreatedAt     string                                   `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     string                                   `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	FailureCode   string                                   `protobuf:"bytes,8,opt,name=failure_code,json=failureCode,proto3" json:"failure_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiscussionAttachmentUploadOperation) Reset() {
+	*x = DiscussionAttachmentUploadOperation{}
+	mi := &file_golf_v1_forge089_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiscussionAttachmentUploadOperation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiscussionAttachmentUploadOperation) ProtoMessage() {}
+
+func (x *DiscussionAttachmentUploadOperation) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_forge089_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiscussionAttachmentUploadOperation.ProtoReflect.Descriptor instead.
+func (*DiscussionAttachmentUploadOperation) Descriptor() ([]byte, []int) {
+	return file_golf_v1_forge089_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *DiscussionAttachmentUploadOperation) GetContract() string {
+	if x != nil {
+		return x.Contract
+	}
+	return ""
+}
+
+func (x *DiscussionAttachmentUploadOperation) GetOriginal() *SubmitDiscussionAttachmentUploadRequest {
+	if x != nil {
+		return x.Original
+	}
+	return nil
+}
+
+func (x *DiscussionAttachmentUploadOperation) GetActorId() string {
+	if x != nil {
+		return x.ActorId
+	}
+	return ""
+}
+
+func (x *DiscussionAttachmentUploadOperation) GetPhase() DiscussionResourceOperationPhase {
+	if x != nil {
+		return x.Phase
+	}
+	return DiscussionResourceOperationPhase_DISCUSSION_RESOURCE_OPERATION_PHASE_UNSPECIFIED
+}
+
+func (x *DiscussionAttachmentUploadOperation) GetAttachment() *DiscussionAttachment {
+	if x != nil {
+		return x.Attachment
+	}
+	return nil
+}
+
+func (x *DiscussionAttachmentUploadOperation) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *DiscussionAttachmentUploadOperation) GetUpdatedAt() string {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return ""
+}
+
+func (x *DiscussionAttachmentUploadOperation) GetFailureCode() string {
+	if x != nil {
+		return x.FailureCode
+	}
+	return ""
+}
+
+type SubmitDiscussionAttachmentUploadResponse struct {
+	state         protoimpl.MessageState               `protogen:"open.v1"`
+	Operation     *DiscussionAttachmentUploadOperation `protobuf:"bytes,1,opt,name=operation,proto3" json:"operation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubmitDiscussionAttachmentUploadResponse) Reset() {
+	*x = SubmitDiscussionAttachmentUploadResponse{}
+	mi := &file_golf_v1_forge089_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitDiscussionAttachmentUploadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitDiscussionAttachmentUploadResponse) ProtoMessage() {}
+
+func (x *SubmitDiscussionAttachmentUploadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_forge089_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitDiscussionAttachmentUploadResponse.ProtoReflect.Descriptor instead.
+func (*SubmitDiscussionAttachmentUploadResponse) Descriptor() ([]byte, []int) {
+	return file_golf_v1_forge089_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *SubmitDiscussionAttachmentUploadResponse) GetOperation() *DiscussionAttachmentUploadOperation {
+	if x != nil {
+		return x.Operation
+	}
+	return nil
+}
+
+type GetDiscussionAttachmentUploadOperationRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Target        *DiscussionTarget      `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	OperationId   string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDiscussionAttachmentUploadOperationRequest) Reset() {
+	*x = GetDiscussionAttachmentUploadOperationRequest{}
+	mi := &file_golf_v1_forge089_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDiscussionAttachmentUploadOperationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDiscussionAttachmentUploadOperationRequest) ProtoMessage() {}
+
+func (x *GetDiscussionAttachmentUploadOperationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_forge089_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDiscussionAttachmentUploadOperationRequest.ProtoReflect.Descriptor instead.
+func (*GetDiscussionAttachmentUploadOperationRequest) Descriptor() ([]byte, []int) {
+	return file_golf_v1_forge089_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *GetDiscussionAttachmentUploadOperationRequest) GetTarget() *DiscussionTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *GetDiscussionAttachmentUploadOperationRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+type GetDiscussionAttachmentUploadOperationResponse struct {
+	state         protoimpl.MessageState               `protogen:"open.v1"`
+	Operation     *DiscussionAttachmentUploadOperation `protobuf:"bytes,1,opt,name=operation,proto3" json:"operation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDiscussionAttachmentUploadOperationResponse) Reset() {
+	*x = GetDiscussionAttachmentUploadOperationResponse{}
+	mi := &file_golf_v1_forge089_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDiscussionAttachmentUploadOperationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDiscussionAttachmentUploadOperationResponse) ProtoMessage() {}
+
+func (x *GetDiscussionAttachmentUploadOperationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_golf_v1_forge089_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDiscussionAttachmentUploadOperationResponse.ProtoReflect.Descriptor instead.
+func (*GetDiscussionAttachmentUploadOperationResponse) Descriptor() ([]byte, []int) {
+	return file_golf_v1_forge089_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *GetDiscussionAttachmentUploadOperationResponse) GetOperation() *DiscussionAttachmentUploadOperation {
+	if x != nil {
+		return x.Operation
+	}
+	return nil
+}
+
 var File_golf_v1_forge089_proto protoreflect.FileDescriptor
 
 const file_golf_v1_forge089_proto_rawDesc = "" +
@@ -858,13 +1334,57 @@ const file_golf_v1_forge089_proto_rawDesc = "" +
 	"attachment\x18\x02 \x01(\v2\x1d.golf.v1.DiscussionAttachmentR\n" +
 	"attachment\x12\x18\n" +
 	"\acontent\x18\x03 \x01(\fR\acontent\x12%\n" +
-	"\x0econtent_sha256\x18\x04 \x01(\tR\rcontentSha2562\x97\x02\n" +
+	"\x0econtent_sha256\x18\x04 \x01(\tR\rcontentSha256\"^\n" +
+	")GetDiscussionAttachmentUploadStateRequest\x121\n" +
+	"\x06target\x18\x01 \x01(\v2\x19.golf.v1.DiscussionTargetR\x06target\"\xc0\x02\n" +
+	"*GetDiscussionAttachmentUploadStateResponse\x121\n" +
+	"\x06target\x18\x01 \x01(\v2\x19.golf.v1.DiscussionTargetR\x06target\x12\x19\n" +
+	"\bactor_id\x18\x02 \x01(\tR\aactorId\x12\x1d\n" +
+	"\n" +
+	"can_upload\x18\x03 \x01(\bR\tcanUpload\x12'\n" +
+	"\x0ftarget_revision\x18\x04 \x01(\tR\x0etargetRevision\x121\n" +
+	"\x14attachments_revision\x18\x05 \x01(\tR\x13attachmentsRevision\x12#\n" +
+	"\rallowed_types\x18\x06 \x01(\tR\fallowedTypes\x12$\n" +
+	"\x0emax_size_bytes\x18\a \x01(\x04R\fmaxSizeBytes\"\x80\x03\n" +
+	"'SubmitDiscussionAttachmentUploadRequest\x121\n" +
+	"\x06target\x18\x01 \x01(\v2\x19.golf.v1.DiscussionTargetR\x06target\x128\n" +
+	"\x18expected_target_revision\x18\x02 \x01(\tR\x16expectedTargetRevision\x12B\n" +
+	"\x1dexpected_attachments_revision\x18\x03 \x01(\tR\x1bexpectedAttachmentsRevision\x12!\n" +
+	"\foperation_id\x18\x04 \x01(\tR\voperationId\x12\x12\n" +
+	"\x04name\x18\x05 \x01(\tR\x04name\x12\x18\n" +
+	"\acontent\x18\x06 \x01(\fR\acontent\x12%\n" +
+	"\x0econtent_sha256\x18\a \x01(\tR\rcontentSha256\x12,\n" +
+	"\x12content_size_bytes\x18\b \x01(\x04R\x10contentSizeBytes\"\x8b\x03\n" +
+	"#DiscussionAttachmentUploadOperation\x12\x1a\n" +
+	"\bcontract\x18\x01 \x01(\tR\bcontract\x12L\n" +
+	"\boriginal\x18\x02 \x01(\v20.golf.v1.SubmitDiscussionAttachmentUploadRequestR\boriginal\x12\x19\n" +
+	"\bactor_id\x18\x03 \x01(\tR\aactorId\x12?\n" +
+	"\x05phase\x18\x04 \x01(\x0e2).golf.v1.DiscussionResourceOperationPhaseR\x05phase\x12=\n" +
+	"\n" +
+	"attachment\x18\x05 \x01(\v2\x1d.golf.v1.DiscussionAttachmentR\n" +
+	"attachment\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x06 \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\a \x01(\tR\tupdatedAt\x12!\n" +
+	"\ffailure_code\x18\b \x01(\tR\vfailureCode\"v\n" +
+	"(SubmitDiscussionAttachmentUploadResponse\x12J\n" +
+	"\toperation\x18\x01 \x01(\v2,.golf.v1.DiscussionAttachmentUploadOperationR\toperation\"\x85\x01\n" +
+	"-GetDiscussionAttachmentUploadOperationRequest\x121\n" +
+	"\x06target\x18\x01 \x01(\v2\x19.golf.v1.DiscussionTargetR\x06target\x12!\n" +
+	"\foperation_id\x18\x02 \x01(\tR\voperationId\"|\n" +
+	".GetDiscussionAttachmentUploadOperationResponse\x12J\n" +
+	"\toperation\x18\x01 \x01(\v2,.golf.v1.DiscussionAttachmentUploadOperationR\toperation2\x97\x02\n" +
 	"\x1aRepositoryFileBatchService\x12r\n" +
 	"\x19SubmitRepositoryFileBatch\x12).golf.v1.SubmitRepositoryFileBatchRequest\x1a*.golf.v1.SubmitRepositoryFileBatchResponse\x12\x84\x01\n" +
 	"\x1fGetRepositoryFileBatchOperation\x12/.golf.v1.GetRepositoryFileBatchOperationRequest\x1a0.golf.v1.GetRepositoryFileBatchOperationResponse2\x8e\x02\n" +
 	"\x1bDiscussionAttachmentService\x12r\n" +
 	"\x19ListDiscussionAttachments\x12).golf.v1.ListDiscussionAttachmentsRequest\x1a*.golf.v1.ListDiscussionAttachmentsResponse\x12{\n" +
-	"\x1cDownloadDiscussionAttachment\x12,.golf.v1.DownloadDiscussionAttachmentRequest\x1a-.golf.v1.DownloadDiscussionAttachmentResponseB2Z0github.com/mjtechguy/golf-git/gen/golf/v1;golfv1b\x06proto3"
+	"\x1cDownloadDiscussionAttachment\x12,.golf.v1.DownloadDiscussionAttachmentRequest\x1a-.golf.v1.DownloadDiscussionAttachmentResponse2\xd9\x03\n" +
+	"!DiscussionAttachmentUploadService\x12\x8d\x01\n" +
+	"\"GetDiscussionAttachmentUploadState\x122.golf.v1.GetDiscussionAttachmentUploadStateRequest\x1a3.golf.v1.GetDiscussionAttachmentUploadStateResponse\x12\x87\x01\n" +
+	" SubmitDiscussionAttachmentUpload\x120.golf.v1.SubmitDiscussionAttachmentUploadRequest\x1a1.golf.v1.SubmitDiscussionAttachmentUploadResponse\x12\x99\x01\n" +
+	"&GetDiscussionAttachmentUploadOperation\x126.golf.v1.GetDiscussionAttachmentUploadOperationRequest\x1a7.golf.v1.GetDiscussionAttachmentUploadOperationResponseB2Z0github.com/mjtechguy/golf-git/gen/golf/v1;golfv1b\x06proto3"
 
 var (
 	file_golf_v1_forge089_proto_rawDescOnce sync.Once
@@ -878,52 +1398,75 @@ func file_golf_v1_forge089_proto_rawDescGZIP() []byte {
 	return file_golf_v1_forge089_proto_rawDescData
 }
 
-var file_golf_v1_forge089_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_golf_v1_forge089_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_golf_v1_forge089_proto_goTypes = []any{
-	(*RepositoryFileBatchChange)(nil),               // 0: golf.v1.RepositoryFileBatchChange
-	(*SubmitRepositoryFileBatchRequest)(nil),        // 1: golf.v1.SubmitRepositoryFileBatchRequest
-	(*RepositoryFileBatchOperation)(nil),            // 2: golf.v1.RepositoryFileBatchOperation
-	(*SubmitRepositoryFileBatchResponse)(nil),       // 3: golf.v1.SubmitRepositoryFileBatchResponse
-	(*GetRepositoryFileBatchOperationRequest)(nil),  // 4: golf.v1.GetRepositoryFileBatchOperationRequest
-	(*GetRepositoryFileBatchOperationResponse)(nil), // 5: golf.v1.GetRepositoryFileBatchOperationResponse
-	(*ListDiscussionAttachmentsRequest)(nil),        // 6: golf.v1.ListDiscussionAttachmentsRequest
-	(*DiscussionAttachment)(nil),                    // 7: golf.v1.DiscussionAttachment
-	(*ListDiscussionAttachmentsResponse)(nil),       // 8: golf.v1.ListDiscussionAttachmentsResponse
-	(*DownloadDiscussionAttachmentRequest)(nil),     // 9: golf.v1.DownloadDiscussionAttachmentRequest
-	(*DownloadDiscussionAttachmentResponse)(nil),    // 10: golf.v1.DownloadDiscussionAttachmentResponse
-	(RepositoryFileMutationKind)(0),                 // 11: golf.v1.RepositoryFileMutationKind
-	(*RepositoryKey)(nil),                           // 12: golf.v1.RepositoryKey
-	(RepositoryFileMutationPhase)(0),                // 13: golf.v1.RepositoryFileMutationPhase
-	(*DiscussionTarget)(nil),                        // 14: golf.v1.DiscussionTarget
+	(*RepositoryFileBatchChange)(nil),                      // 0: golf.v1.RepositoryFileBatchChange
+	(*SubmitRepositoryFileBatchRequest)(nil),               // 1: golf.v1.SubmitRepositoryFileBatchRequest
+	(*RepositoryFileBatchOperation)(nil),                   // 2: golf.v1.RepositoryFileBatchOperation
+	(*SubmitRepositoryFileBatchResponse)(nil),              // 3: golf.v1.SubmitRepositoryFileBatchResponse
+	(*GetRepositoryFileBatchOperationRequest)(nil),         // 4: golf.v1.GetRepositoryFileBatchOperationRequest
+	(*GetRepositoryFileBatchOperationResponse)(nil),        // 5: golf.v1.GetRepositoryFileBatchOperationResponse
+	(*ListDiscussionAttachmentsRequest)(nil),               // 6: golf.v1.ListDiscussionAttachmentsRequest
+	(*DiscussionAttachment)(nil),                           // 7: golf.v1.DiscussionAttachment
+	(*ListDiscussionAttachmentsResponse)(nil),              // 8: golf.v1.ListDiscussionAttachmentsResponse
+	(*DownloadDiscussionAttachmentRequest)(nil),            // 9: golf.v1.DownloadDiscussionAttachmentRequest
+	(*DownloadDiscussionAttachmentResponse)(nil),           // 10: golf.v1.DownloadDiscussionAttachmentResponse
+	(*GetDiscussionAttachmentUploadStateRequest)(nil),      // 11: golf.v1.GetDiscussionAttachmentUploadStateRequest
+	(*GetDiscussionAttachmentUploadStateResponse)(nil),     // 12: golf.v1.GetDiscussionAttachmentUploadStateResponse
+	(*SubmitDiscussionAttachmentUploadRequest)(nil),        // 13: golf.v1.SubmitDiscussionAttachmentUploadRequest
+	(*DiscussionAttachmentUploadOperation)(nil),            // 14: golf.v1.DiscussionAttachmentUploadOperation
+	(*SubmitDiscussionAttachmentUploadResponse)(nil),       // 15: golf.v1.SubmitDiscussionAttachmentUploadResponse
+	(*GetDiscussionAttachmentUploadOperationRequest)(nil),  // 16: golf.v1.GetDiscussionAttachmentUploadOperationRequest
+	(*GetDiscussionAttachmentUploadOperationResponse)(nil), // 17: golf.v1.GetDiscussionAttachmentUploadOperationResponse
+	(RepositoryFileMutationKind)(0),                        // 18: golf.v1.RepositoryFileMutationKind
+	(*RepositoryKey)(nil),                                  // 19: golf.v1.RepositoryKey
+	(RepositoryFileMutationPhase)(0),                       // 20: golf.v1.RepositoryFileMutationPhase
+	(*DiscussionTarget)(nil),                               // 21: golf.v1.DiscussionTarget
+	(DiscussionResourceOperationPhase)(0),                  // 22: golf.v1.DiscussionResourceOperationPhase
 }
 var file_golf_v1_forge089_proto_depIdxs = []int32{
-	11, // 0: golf.v1.RepositoryFileBatchChange.kind:type_name -> golf.v1.RepositoryFileMutationKind
-	12, // 1: golf.v1.SubmitRepositoryFileBatchRequest.repository:type_name -> golf.v1.RepositoryKey
+	18, // 0: golf.v1.RepositoryFileBatchChange.kind:type_name -> golf.v1.RepositoryFileMutationKind
+	19, // 1: golf.v1.SubmitRepositoryFileBatchRequest.repository:type_name -> golf.v1.RepositoryKey
 	0,  // 2: golf.v1.SubmitRepositoryFileBatchRequest.changes:type_name -> golf.v1.RepositoryFileBatchChange
 	1,  // 3: golf.v1.RepositoryFileBatchOperation.original:type_name -> golf.v1.SubmitRepositoryFileBatchRequest
-	13, // 4: golf.v1.RepositoryFileBatchOperation.phase:type_name -> golf.v1.RepositoryFileMutationPhase
+	20, // 4: golf.v1.RepositoryFileBatchOperation.phase:type_name -> golf.v1.RepositoryFileMutationPhase
 	2,  // 5: golf.v1.SubmitRepositoryFileBatchResponse.operation:type_name -> golf.v1.RepositoryFileBatchOperation
-	12, // 6: golf.v1.GetRepositoryFileBatchOperationRequest.repository:type_name -> golf.v1.RepositoryKey
+	19, // 6: golf.v1.GetRepositoryFileBatchOperationRequest.repository:type_name -> golf.v1.RepositoryKey
 	2,  // 7: golf.v1.GetRepositoryFileBatchOperationResponse.operation:type_name -> golf.v1.RepositoryFileBatchOperation
-	14, // 8: golf.v1.ListDiscussionAttachmentsRequest.target:type_name -> golf.v1.DiscussionTarget
-	14, // 9: golf.v1.ListDiscussionAttachmentsResponse.target:type_name -> golf.v1.DiscussionTarget
+	21, // 8: golf.v1.ListDiscussionAttachmentsRequest.target:type_name -> golf.v1.DiscussionTarget
+	21, // 9: golf.v1.ListDiscussionAttachmentsResponse.target:type_name -> golf.v1.DiscussionTarget
 	7,  // 10: golf.v1.ListDiscussionAttachmentsResponse.attachments:type_name -> golf.v1.DiscussionAttachment
-	14, // 11: golf.v1.DownloadDiscussionAttachmentRequest.target:type_name -> golf.v1.DiscussionTarget
-	14, // 12: golf.v1.DownloadDiscussionAttachmentResponse.target:type_name -> golf.v1.DiscussionTarget
+	21, // 11: golf.v1.DownloadDiscussionAttachmentRequest.target:type_name -> golf.v1.DiscussionTarget
+	21, // 12: golf.v1.DownloadDiscussionAttachmentResponse.target:type_name -> golf.v1.DiscussionTarget
 	7,  // 13: golf.v1.DownloadDiscussionAttachmentResponse.attachment:type_name -> golf.v1.DiscussionAttachment
-	1,  // 14: golf.v1.RepositoryFileBatchService.SubmitRepositoryFileBatch:input_type -> golf.v1.SubmitRepositoryFileBatchRequest
-	4,  // 15: golf.v1.RepositoryFileBatchService.GetRepositoryFileBatchOperation:input_type -> golf.v1.GetRepositoryFileBatchOperationRequest
-	6,  // 16: golf.v1.DiscussionAttachmentService.ListDiscussionAttachments:input_type -> golf.v1.ListDiscussionAttachmentsRequest
-	9,  // 17: golf.v1.DiscussionAttachmentService.DownloadDiscussionAttachment:input_type -> golf.v1.DownloadDiscussionAttachmentRequest
-	3,  // 18: golf.v1.RepositoryFileBatchService.SubmitRepositoryFileBatch:output_type -> golf.v1.SubmitRepositoryFileBatchResponse
-	5,  // 19: golf.v1.RepositoryFileBatchService.GetRepositoryFileBatchOperation:output_type -> golf.v1.GetRepositoryFileBatchOperationResponse
-	8,  // 20: golf.v1.DiscussionAttachmentService.ListDiscussionAttachments:output_type -> golf.v1.ListDiscussionAttachmentsResponse
-	10, // 21: golf.v1.DiscussionAttachmentService.DownloadDiscussionAttachment:output_type -> golf.v1.DownloadDiscussionAttachmentResponse
-	18, // [18:22] is the sub-list for method output_type
-	14, // [14:18] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	21, // 14: golf.v1.GetDiscussionAttachmentUploadStateRequest.target:type_name -> golf.v1.DiscussionTarget
+	21, // 15: golf.v1.GetDiscussionAttachmentUploadStateResponse.target:type_name -> golf.v1.DiscussionTarget
+	21, // 16: golf.v1.SubmitDiscussionAttachmentUploadRequest.target:type_name -> golf.v1.DiscussionTarget
+	13, // 17: golf.v1.DiscussionAttachmentUploadOperation.original:type_name -> golf.v1.SubmitDiscussionAttachmentUploadRequest
+	22, // 18: golf.v1.DiscussionAttachmentUploadOperation.phase:type_name -> golf.v1.DiscussionResourceOperationPhase
+	7,  // 19: golf.v1.DiscussionAttachmentUploadOperation.attachment:type_name -> golf.v1.DiscussionAttachment
+	14, // 20: golf.v1.SubmitDiscussionAttachmentUploadResponse.operation:type_name -> golf.v1.DiscussionAttachmentUploadOperation
+	21, // 21: golf.v1.GetDiscussionAttachmentUploadOperationRequest.target:type_name -> golf.v1.DiscussionTarget
+	14, // 22: golf.v1.GetDiscussionAttachmentUploadOperationResponse.operation:type_name -> golf.v1.DiscussionAttachmentUploadOperation
+	1,  // 23: golf.v1.RepositoryFileBatchService.SubmitRepositoryFileBatch:input_type -> golf.v1.SubmitRepositoryFileBatchRequest
+	4,  // 24: golf.v1.RepositoryFileBatchService.GetRepositoryFileBatchOperation:input_type -> golf.v1.GetRepositoryFileBatchOperationRequest
+	6,  // 25: golf.v1.DiscussionAttachmentService.ListDiscussionAttachments:input_type -> golf.v1.ListDiscussionAttachmentsRequest
+	9,  // 26: golf.v1.DiscussionAttachmentService.DownloadDiscussionAttachment:input_type -> golf.v1.DownloadDiscussionAttachmentRequest
+	11, // 27: golf.v1.DiscussionAttachmentUploadService.GetDiscussionAttachmentUploadState:input_type -> golf.v1.GetDiscussionAttachmentUploadStateRequest
+	13, // 28: golf.v1.DiscussionAttachmentUploadService.SubmitDiscussionAttachmentUpload:input_type -> golf.v1.SubmitDiscussionAttachmentUploadRequest
+	16, // 29: golf.v1.DiscussionAttachmentUploadService.GetDiscussionAttachmentUploadOperation:input_type -> golf.v1.GetDiscussionAttachmentUploadOperationRequest
+	3,  // 30: golf.v1.RepositoryFileBatchService.SubmitRepositoryFileBatch:output_type -> golf.v1.SubmitRepositoryFileBatchResponse
+	5,  // 31: golf.v1.RepositoryFileBatchService.GetRepositoryFileBatchOperation:output_type -> golf.v1.GetRepositoryFileBatchOperationResponse
+	8,  // 32: golf.v1.DiscussionAttachmentService.ListDiscussionAttachments:output_type -> golf.v1.ListDiscussionAttachmentsResponse
+	10, // 33: golf.v1.DiscussionAttachmentService.DownloadDiscussionAttachment:output_type -> golf.v1.DownloadDiscussionAttachmentResponse
+	12, // 34: golf.v1.DiscussionAttachmentUploadService.GetDiscussionAttachmentUploadState:output_type -> golf.v1.GetDiscussionAttachmentUploadStateResponse
+	15, // 35: golf.v1.DiscussionAttachmentUploadService.SubmitDiscussionAttachmentUpload:output_type -> golf.v1.SubmitDiscussionAttachmentUploadResponse
+	17, // 36: golf.v1.DiscussionAttachmentUploadService.GetDiscussionAttachmentUploadOperation:output_type -> golf.v1.GetDiscussionAttachmentUploadOperationResponse
+	30, // [30:37] is the sub-list for method output_type
+	23, // [23:30] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_golf_v1_forge089_proto_init() }
@@ -938,9 +1481,9 @@ func file_golf_v1_forge089_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_golf_v1_forge089_proto_rawDesc), len(file_golf_v1_forge089_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   18,
 			NumExtensions: 0,
-			NumServices:   2,
+			NumServices:   3,
 		},
 		GoTypes:           file_golf_v1_forge089_proto_goTypes,
 		DependencyIndexes: file_golf_v1_forge089_proto_depIdxs,

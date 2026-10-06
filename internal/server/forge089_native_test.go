@@ -128,5 +128,51 @@ func qualifyForge089Native(t *testing.T, s *Server, httpClient *http.Client, ori
 	if _, e = client.ListDiscussionAttachments(ctx, connect.NewRequest(&golfv1.ListDiscussionAttachmentsRequest{Target: wrong})); e == nil {
 		t.Fatal("Native attachment wrong association accepted")
 	}
+	qualifyAttachmentUpload089Native(t, s, httpClient, origin, owner, key, target)
 	// Keep fixture diagnostics free of volatile upload bytes and tokens.
+}
+
+func qualifyAttachmentUpload089Native(t *testing.T, s *Server, httpClient *http.Client, origin *url.URL, owner forgeCredential, key *golfv1.RepositoryKey, target *golfv1.DiscussionTarget) {
+	t.Helper()
+	ctx := t.Context()
+	client := golfv1connect.NewDiscussionAttachmentUploadServiceClient(httpClient, origin.String()+"/rpc", connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			req.Header().Set("Origin", s.config.PublicURL)
+			return next(ctx, req)
+		}
+	})))
+	submit := func(target *golfv1.DiscussionTarget, name string) {
+		t.Helper()
+		state, e := client.GetDiscussionAttachmentUploadState(ctx, connect.NewRequest(&golfv1.GetDiscussionAttachmentUploadStateRequest{Target: target}))
+		if e != nil || !state.Msg.CanUpload {
+			t.Fatalf("Native upload state %s %v", connect.CodeOf(e), e)
+		}
+		content := []byte("native uploaded exact bytes089")
+		m := &golfv1.SubmitDiscussionAttachmentUploadRequest{Target: target, ExpectedTargetRevision: state.Msg.TargetRevision, ExpectedAttachmentsRevision: state.Msg.AttachmentsRevision, OperationId: uuid.NewString(), Name: name, Content: content, ContentSha256: fileMutationHash(content), ContentSizeBytes: uint64(len(content))}
+		out, e := client.SubmitDiscussionAttachmentUpload(ctx, connect.NewRequest(m))
+		if e != nil || out.Msg.Operation.Phase != golfv1.DiscussionResourceOperationPhase_DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED {
+			t.Fatalf("Native upload outcome %s %v %#v", connect.CodeOf(e), e, out)
+		}
+		again, e := client.SubmitDiscussionAttachmentUpload(ctx, connect.NewRequest(m))
+		if e != nil || !proto.Equal(out.Msg.Operation, again.Msg.Operation) {
+			t.Fatal("Native upload original resend/rebind")
+		}
+		inspected, e := client.GetDiscussionAttachmentUploadOperation(ctx, connect.NewRequest(&golfv1.GetDiscussionAttachmentUploadOperationRequest{Target: target, OperationId: m.OperationId}))
+		if e != nil || !proto.Equal(out.Msg.Operation, inspected.Msg.Operation) {
+			t.Fatal("Native upload original inspection")
+		}
+		m.OperationId = uuid.NewString()
+		if _, e = client.SubmitDiscussionAttachmentUpload(ctx, connect.NewRequest(m)); connect.CodeOf(e) != connect.CodeFailedPrecondition {
+			t.Fatalf("Native upload stale proposal accepted %s", connect.CodeOf(e))
+		}
+	}
+	submit(target, "golf-uploaded-body089.txt")
+	base, _ := repositoryPath(keyFrom(key))
+	var comment forgeIssueComment
+	if _, e := s.forgeJSON(ctx, http.MethodPost, base+"/issues/"+strconv.FormatUint(uint64(target.Number), 10)+"/comments", owner, map[string]string{"body": "Owned native comment089"}, &comment, http.StatusCreated); e != nil {
+		t.Fatal("Native comment upload fixture")
+	}
+	commentTarget := proto.Clone(target).(*golfv1.DiscussionTarget)
+	commentTarget.CommentId = strconv.FormatInt(comment.ID, 10)
+	submit(commentTarget, "golf-uploaded-comment089.txt")
 }

@@ -4,7 +4,7 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { DiscussionTarget, RepositoryFileMutationKind, RepositoryFileMutationPhase, RepositoryKey } from "./golf_pb";
+import type { DiscussionResourceOperationPhase, DiscussionTarget, RepositoryFileMutationKind, RepositoryFileMutationPhase, RepositoryKey } from "./golf_pb";
 import { file_golf_v1_golf } from "./golf_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file golf/v1/forge089.proto.
  */
 export const file_golf_v1_forge089: GenFile = /*@__PURE__*/
-  fileDesc("ChZnb2xmL3YxL2ZvcmdlMDg5LnByb3RvEgdnb2xmLnYxIrIBChlSZXBvc2l0b3J5RmlsZUJhdGNoQ2hhbmdlEjEKBGtpbmQYASABKA4yIy5nb2xmLnYxLlJlcG9zaXRvcnlGaWxlTXV0YXRpb25LaW5kEgwKBHBhdGgYAiABKAkSEQoJZnJvbV9wYXRoGAMgASgJEhgKEGV4cGVjdGVkX2Jsb2JfaWQYBCABKAkSDwoHY29udGVudBgFIAEoDBIWCg5jb250ZW50X3NoYTI1NhgGIAEoCSK+AgogU3VibWl0UmVwb3NpdG9yeUZpbGVCYXRjaFJlcXVlc3QSKgoKcmVwb3NpdG9yeRgBIAEoCzIWLmdvbGYudjEuUmVwb3NpdG9yeUtleRIVCg1yZXBvc2l0b3J5X2lkGAIgASgJEhAKCG93bmVyX2lkGAMgASgJEhcKD2FjY2Vzc19yZXZpc2lvbhgEIAEoCRIUCgxvcGVyYXRpb25faWQYBSABKAkSDgoGYnJhbmNoGAYgASgJEhoKEmV4cGVjdGVkX2NvbW1pdF9pZBgHIAEoCRIzCgdjaGFuZ2VzGAggAygLMiIuZ29sZi52MS5SZXBvc2l0b3J5RmlsZUJhdGNoQ2hhbmdlEhYKDmNvbW1pdF9tZXNzYWdlGAkgASgJEh0KFWNvbW1pdF9tZXNzYWdlX3NoYTI1NhgKIAEoCSKFAgocUmVwb3NpdG9yeUZpbGVCYXRjaE9wZXJhdGlvbhIQCghjb250cmFjdBgBIAEoCRI7CghvcmlnaW5hbBgCIAEoCzIpLmdvbGYudjEuU3VibWl0UmVwb3NpdG9yeUZpbGVCYXRjaFJlcXVlc3QSEAoIYWN0b3JfaWQYAyABKAkSMwoFcGhhc2UYBCABKA4yJC5nb2xmLnYxLlJlcG9zaXRvcnlGaWxlTXV0YXRpb25QaGFzZRIRCgljb21taXRfaWQYBSABKAkSEgoKY3JlYXRlZF9hdBgGIAEoCRISCgp1cGRhdGVkX2F0GAcgASgJEhQKDGZhaWx1cmVfY29kZRgIIAEoCSJdCiFTdWJtaXRSZXBvc2l0b3J5RmlsZUJhdGNoUmVzcG9uc2USOAoJb3BlcmF0aW9uGAEgASgLMiUuZ29sZi52MS5SZXBvc2l0b3J5RmlsZUJhdGNoT3BlcmF0aW9uIpMBCiZHZXRSZXBvc2l0b3J5RmlsZUJhdGNoT3BlcmF0aW9uUmVxdWVzdBIqCgpyZXBvc2l0b3J5GAEgASgLMhYuZ29sZi52MS5SZXBvc2l0b3J5S2V5EhUKDXJlcG9zaXRvcnlfaWQYAiABKAkSEAoIb3duZXJfaWQYAyABKAkSFAoMb3BlcmF0aW9uX2lkGAQgASgJImMKJ0dldFJlcG9zaXRvcnlGaWxlQmF0Y2hPcGVyYXRpb25SZXNwb25zZRI4CglvcGVyYXRpb24YASABKAsyJS5nb2xmLnYxLlJlcG9zaXRvcnlGaWxlQmF0Y2hPcGVyYXRpb24iTQogTGlzdERpc2N1c3Npb25BdHRhY2htZW50c1JlcXVlc3QSKQoGdGFyZ2V0GAEgASgLMhkuZ29sZi52MS5EaXNjdXNzaW9uVGFyZ2V0ImoKFERpc2N1c3Npb25BdHRhY2htZW50EgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSEgoKc2l6ZV9ieXRlcxgDIAEoBBISCgpjcmVhdGVkX2F0GAQgASgJEhAKCHJldmlzaW9uGAUgASgJIp0BCiFMaXN0RGlzY3Vzc2lvbkF0dGFjaG1lbnRzUmVzcG9uc2USKQoGdGFyZ2V0GAEgASgLMhkuZ29sZi52MS5EaXNjdXNzaW9uVGFyZ2V0EjIKC2F0dGFjaG1lbnRzGAIgAygLMh0uZ29sZi52MS5EaXNjdXNzaW9uQXR0YWNobWVudBIZChFzbmFwc2hvdF9yZXZpc2lvbhgDIAEoCSKCAQojRG93bmxvYWREaXNjdXNzaW9uQXR0YWNobWVudFJlcXVlc3QSKQoGdGFyZ2V0GAEgASgLMhkuZ29sZi52MS5EaXNjdXNzaW9uVGFyZ2V0EhUKDWF0dGFjaG1lbnRfaWQYAiABKAkSGQoRZXhwZWN0ZWRfcmV2aXNpb24YAyABKAkirQEKJERvd25sb2FkRGlzY3Vzc2lvbkF0dGFjaG1lbnRSZXNwb25zZRIpCgZ0YXJnZXQYASABKAsyGS5nb2xmLnYxLkRpc2N1c3Npb25UYXJnZXQSMQoKYXR0YWNobWVudBgCIAEoCzIdLmdvbGYudjEuRGlzY3Vzc2lvbkF0dGFjaG1lbnQSDwoHY29udGVudBgDIAEoDBIWCg5jb250ZW50X3NoYTI1NhgEIAEoCTKXAgoaUmVwb3NpdG9yeUZpbGVCYXRjaFNlcnZpY2UScgoZU3VibWl0UmVwb3NpdG9yeUZpbGVCYXRjaBIpLmdvbGYudjEuU3VibWl0UmVwb3NpdG9yeUZpbGVCYXRjaFJlcXVlc3QaKi5nb2xmLnYxLlN1Ym1pdFJlcG9zaXRvcnlGaWxlQmF0Y2hSZXNwb25zZRKEAQofR2V0UmVwb3NpdG9yeUZpbGVCYXRjaE9wZXJhdGlvbhIvLmdvbGYudjEuR2V0UmVwb3NpdG9yeUZpbGVCYXRjaE9wZXJhdGlvblJlcXVlc3QaMC5nb2xmLnYxLkdldFJlcG9zaXRvcnlGaWxlQmF0Y2hPcGVyYXRpb25SZXNwb25zZTKOAgobRGlzY3Vzc2lvbkF0dGFjaG1lbnRTZXJ2aWNlEnIKGUxpc3REaXNjdXNzaW9uQXR0YWNobWVudHMSKS5nb2xmLnYxLkxpc3REaXNjdXNzaW9uQXR0YWNobWVudHNSZXF1ZXN0GiouZ29sZi52MS5MaXN0RGlzY3Vzc2lvbkF0dGFjaG1lbnRzUmVzcG9uc2USewocRG93bmxvYWREaXNjdXNzaW9uQXR0YWNobWVudBIsLmdvbGYudjEuRG93bmxvYWREaXNjdXNzaW9uQXR0YWNobWVudFJlcXVlc3QaLS5nb2xmLnYxLkRvd25sb2FkRGlzY3Vzc2lvbkF0dGFjaG1lbnRSZXNwb25zZUIyWjBnaXRodWIuY29tL21qdGVjaGd1eS9nb2xmLWdpdC9nZW4vZ29sZi92MTtnb2xmdjFiBnByb3RvMw", [file_golf_v1_golf]);
+  fileDesc("ChZnb2xmL3YxL2ZvcmdlMDg5LnByb3RvEgdnb2xmLnYxIrIBChlSZXBvc2l0b3J5RmlsZUJhdGNoQ2hhbmdlEjEKBGtpbmQYASABKA4yIy5nb2xmLnYxLlJlcG9zaXRvcnlGaWxlTXV0YXRpb25LaW5kEgwKBHBhdGgYAiABKAkSEQoJZnJvbV9wYXRoGAMgASgJEhgKEGV4cGVjdGVkX2Jsb2JfaWQYBCABKAkSDwoHY29udGVudBgFIAEoDBIWCg5jb250ZW50X3NoYTI1NhgGIAEoCSK+AgogU3VibWl0UmVwb3NpdG9yeUZpbGVCYXRjaFJlcXVlc3QSKgoKcmVwb3NpdG9yeRgBIAEoCzIWLmdvbGYudjEuUmVwb3NpdG9yeUtleRIVCg1yZXBvc2l0b3J5X2lkGAIgASgJEhAKCG93bmVyX2lkGAMgASgJEhcKD2FjY2Vzc19yZXZpc2lvbhgEIAEoCRIUCgxvcGVyYXRpb25faWQYBSABKAkSDgoGYnJhbmNoGAYgASgJEhoKEmV4cGVjdGVkX2NvbW1pdF9pZBgHIAEoCRIzCgdjaGFuZ2VzGAggAygLMiIuZ29sZi52MS5SZXBvc2l0b3J5RmlsZUJhdGNoQ2hhbmdlEhYKDmNvbW1pdF9tZXNzYWdlGAkgASgJEh0KFWNvbW1pdF9tZXNzYWdlX3NoYTI1NhgKIAEoCSKFAgocUmVwb3NpdG9yeUZpbGVCYXRjaE9wZXJhdGlvbhIQCghjb250cmFjdBgBIAEoCRI7CghvcmlnaW5hbBgCIAEoCzIpLmdvbGYudjEuU3VibWl0UmVwb3NpdG9yeUZpbGVCYXRjaFJlcXVlc3QSEAoIYWN0b3JfaWQYAyABKAkSMwoFcGhhc2UYBCABKA4yJC5nb2xmLnYxLlJlcG9zaXRvcnlGaWxlTXV0YXRpb25QaGFzZRIRCgljb21taXRfaWQYBSABKAkSEgoKY3JlYXRlZF9hdBgGIAEoCRISCgp1cGRhdGVkX2F0GAcgASgJEhQKDGZhaWx1cmVfY29kZRgIIAEoCSJdCiFTdWJtaXRSZXBvc2l0b3J5RmlsZUJhdGNoUmVzcG9uc2USOAoJb3BlcmF0aW9uGAEgASgLMiUuZ29sZi52MS5SZXBvc2l0b3J5RmlsZUJhdGNoT3BlcmF0aW9uIpMBCiZHZXRSZXBvc2l0b3J5RmlsZUJhdGNoT3BlcmF0aW9uUmVxdWVzdBIqCgpyZXBvc2l0b3J5GAEgASgLMhYuZ29sZi52MS5SZXBvc2l0b3J5S2V5EhUKDXJlcG9zaXRvcnlfaWQYAiABKAkSEAoIb3duZXJfaWQYAyABKAkSFAoMb3BlcmF0aW9uX2lkGAQgASgJImMKJ0dldFJlcG9zaXRvcnlGaWxlQmF0Y2hPcGVyYXRpb25SZXNwb25zZRI4CglvcGVyYXRpb24YASABKAsyJS5nb2xmLnYxLlJlcG9zaXRvcnlGaWxlQmF0Y2hPcGVyYXRpb24iTQogTGlzdERpc2N1c3Npb25BdHRhY2htZW50c1JlcXVlc3QSKQoGdGFyZ2V0GAEgASgLMhkuZ29sZi52MS5EaXNjdXNzaW9uVGFyZ2V0ImoKFERpc2N1c3Npb25BdHRhY2htZW50EgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSEgoKc2l6ZV9ieXRlcxgDIAEoBBISCgpjcmVhdGVkX2F0GAQgASgJEhAKCHJldmlzaW9uGAUgASgJIp0BCiFMaXN0RGlzY3Vzc2lvbkF0dGFjaG1lbnRzUmVzcG9uc2USKQoGdGFyZ2V0GAEgASgLMhkuZ29sZi52MS5EaXNjdXNzaW9uVGFyZ2V0EjIKC2F0dGFjaG1lbnRzGAIgAygLMh0uZ29sZi52MS5EaXNjdXNzaW9uQXR0YWNobWVudBIZChFzbmFwc2hvdF9yZXZpc2lvbhgDIAEoCSKCAQojRG93bmxvYWREaXNjdXNzaW9uQXR0YWNobWVudFJlcXVlc3QSKQoGdGFyZ2V0GAEgASgLMhkuZ29sZi52MS5EaXNjdXNzaW9uVGFyZ2V0EhUKDWF0dGFjaG1lbnRfaWQYAiABKAkSGQoRZXhwZWN0ZWRfcmV2aXNpb24YAyABKAkirQEKJERvd25sb2FkRGlzY3Vzc2lvbkF0dGFjaG1lbnRSZXNwb25zZRIpCgZ0YXJnZXQYASABKAsyGS5nb2xmLnYxLkRpc2N1c3Npb25UYXJnZXQSMQoKYXR0YWNobWVudBgCIAEoCzIdLmdvbGYudjEuRGlzY3Vzc2lvbkF0dGFjaG1lbnQSDwoHY29udGVudBgDIAEoDBIWCg5jb250ZW50X3NoYTI1NhgEIAEoCSJWCilHZXREaXNjdXNzaW9uQXR0YWNobWVudFVwbG9hZFN0YXRlUmVxdWVzdBIpCgZ0YXJnZXQYASABKAsyGS5nb2xmLnYxLkRpc2N1c3Npb25UYXJnZXQi4wEKKkdldERpc2N1c3Npb25BdHRhY2htZW50VXBsb2FkU3RhdGVSZXNwb25zZRIpCgZ0YXJnZXQYASABKAsyGS5nb2xmLnYxLkRpc2N1c3Npb25UYXJnZXQSEAoIYWN0b3JfaWQYAiABKAkSEgoKY2FuX3VwbG9hZBgDIAEoCBIXCg90YXJnZXRfcmV2aXNpb24YBCABKAkSHAoUYXR0YWNobWVudHNfcmV2aXNpb24YBSABKAkSFQoNYWxsb3dlZF90eXBlcxgGIAEoCRIWCg5tYXhfc2l6ZV9ieXRlcxgHIAEoBCKGAgonU3VibWl0RGlzY3Vzc2lvbkF0dGFjaG1lbnRVcGxvYWRSZXF1ZXN0EikKBnRhcmdldBgBIAEoCzIZLmdvbGYudjEuRGlzY3Vzc2lvblRhcmdldBIgChhleHBlY3RlZF90YXJnZXRfcmV2aXNpb24YAiABKAkSJQodZXhwZWN0ZWRfYXR0YWNobWVudHNfcmV2aXNpb24YAyABKAkSFAoMb3BlcmF0aW9uX2lkGAQgASgJEgwKBG5hbWUYBSABKAkSDwoHY29udGVudBgGIAEoDBIWCg5jb250ZW50X3NoYTI1NhgHIAEoCRIaChJjb250ZW50X3NpemVfYnl0ZXMYCCABKAQiuAIKI0Rpc2N1c3Npb25BdHRhY2htZW50VXBsb2FkT3BlcmF0aW9uEhAKCGNvbnRyYWN0GAEgASgJEkIKCG9yaWdpbmFsGAIgASgLMjAuZ29sZi52MS5TdWJtaXREaXNjdXNzaW9uQXR0YWNobWVudFVwbG9hZFJlcXVlc3QSEAoIYWN0b3JfaWQYAyABKAkSOAoFcGhhc2UYBCABKA4yKS5nb2xmLnYxLkRpc2N1c3Npb25SZXNvdXJjZU9wZXJhdGlvblBoYXNlEjEKCmF0dGFjaG1lbnQYBSABKAsyHS5nb2xmLnYxLkRpc2N1c3Npb25BdHRhY2htZW50EhIKCmNyZWF0ZWRfYXQYBiABKAkSEgoKdXBkYXRlZF9hdBgHIAEoCRIUCgxmYWlsdXJlX2NvZGUYCCABKAkiawooU3VibWl0RGlzY3Vzc2lvbkF0dGFjaG1lbnRVcGxvYWRSZXNwb25zZRI/CglvcGVyYXRpb24YASABKAsyLC5nb2xmLnYxLkRpc2N1c3Npb25BdHRhY2htZW50VXBsb2FkT3BlcmF0aW9uInAKLUdldERpc2N1c3Npb25BdHRhY2htZW50VXBsb2FkT3BlcmF0aW9uUmVxdWVzdBIpCgZ0YXJnZXQYASABKAsyGS5nb2xmLnYxLkRpc2N1c3Npb25UYXJnZXQSFAoMb3BlcmF0aW9uX2lkGAIgASgJInEKLkdldERpc2N1c3Npb25BdHRhY2htZW50VXBsb2FkT3BlcmF0aW9uUmVzcG9uc2USPwoJb3BlcmF0aW9uGAEgASgLMiwuZ29sZi52MS5EaXNjdXNzaW9uQXR0YWNobWVudFVwbG9hZE9wZXJhdGlvbjKXAgoaUmVwb3NpdG9yeUZpbGVCYXRjaFNlcnZpY2UScgoZU3VibWl0UmVwb3NpdG9yeUZpbGVCYXRjaBIpLmdvbGYudjEuU3VibWl0UmVwb3NpdG9yeUZpbGVCYXRjaFJlcXVlc3QaKi5nb2xmLnYxLlN1Ym1pdFJlcG9zaXRvcnlGaWxlQmF0Y2hSZXNwb25zZRKEAQofR2V0UmVwb3NpdG9yeUZpbGVCYXRjaE9wZXJhdGlvbhIvLmdvbGYudjEuR2V0UmVwb3NpdG9yeUZpbGVCYXRjaE9wZXJhdGlvblJlcXVlc3QaMC5nb2xmLnYxLkdldFJlcG9zaXRvcnlGaWxlQmF0Y2hPcGVyYXRpb25SZXNwb25zZTKOAgobRGlzY3Vzc2lvbkF0dGFjaG1lbnRTZXJ2aWNlEnIKGUxpc3REaXNjdXNzaW9uQXR0YWNobWVudHMSKS5nb2xmLnYxLkxpc3REaXNjdXNzaW9uQXR0YWNobWVudHNSZXF1ZXN0GiouZ29sZi52MS5MaXN0RGlzY3Vzc2lvbkF0dGFjaG1lbnRzUmVzcG9uc2USewocRG93bmxvYWREaXNjdXNzaW9uQXR0YWNobWVudBIsLmdvbGYudjEuRG93bmxvYWREaXNjdXNzaW9uQXR0YWNobWVudFJlcXVlc3QaLS5nb2xmLnYxLkRvd25sb2FkRGlzY3Vzc2lvbkF0dGFjaG1lbnRSZXNwb25zZTLZAwohRGlzY3Vzc2lvbkF0dGFjaG1lbnRVcGxvYWRTZXJ2aWNlEo0BCiJHZXREaXNjdXNzaW9uQXR0YWNobWVudFVwbG9hZFN0YXRlEjIuZ29sZi52MS5HZXREaXNjdXNzaW9uQXR0YWNobWVudFVwbG9hZFN0YXRlUmVxdWVzdBozLmdvbGYudjEuR2V0RGlzY3Vzc2lvbkF0dGFjaG1lbnRVcGxvYWRTdGF0ZVJlc3BvbnNlEocBCiBTdWJtaXREaXNjdXNzaW9uQXR0YWNobWVudFVwbG9hZBIwLmdvbGYudjEuU3VibWl0RGlzY3Vzc2lvbkF0dGFjaG1lbnRVcGxvYWRSZXF1ZXN0GjEuZ29sZi52MS5TdWJtaXREaXNjdXNzaW9uQXR0YWNobWVudFVwbG9hZFJlc3BvbnNlEpkBCiZHZXREaXNjdXNzaW9uQXR0YWNobWVudFVwbG9hZE9wZXJhdGlvbhI2LmdvbGYudjEuR2V0RGlzY3Vzc2lvbkF0dGFjaG1lbnRVcGxvYWRPcGVyYXRpb25SZXF1ZXN0GjcuZ29sZi52MS5HZXREaXNjdXNzaW9uQXR0YWNobWVudFVwbG9hZE9wZXJhdGlvblJlc3BvbnNlQjJaMGdpdGh1Yi5jb20vbWp0ZWNoZ3V5L2dvbGYtZ2l0L2dlbi9nb2xmL3YxO2dvbGZ2MWIGcHJvdG8z", [file_golf_v1_golf]);
 
 /**
  * @generated from message golf.v1.RepositoryFileBatchChange
@@ -379,6 +379,230 @@ export const DownloadDiscussionAttachmentResponseSchema: GenMessage<DownloadDisc
   messageDesc(file_golf_v1_forge089, 10);
 
 /**
+ * @generated from message golf.v1.GetDiscussionAttachmentUploadStateRequest
+ */
+export type GetDiscussionAttachmentUploadStateRequest = Message<"golf.v1.GetDiscussionAttachmentUploadStateRequest"> & {
+  /**
+   * @generated from field: golf.v1.DiscussionTarget target = 1;
+   */
+  target?: DiscussionTarget | undefined;
+};
+
+/**
+ * Describes the message golf.v1.GetDiscussionAttachmentUploadStateRequest.
+ * Use `create(GetDiscussionAttachmentUploadStateRequestSchema)` to create a new message.
+ */
+export const GetDiscussionAttachmentUploadStateRequestSchema: GenMessage<GetDiscussionAttachmentUploadStateRequest> = /*@__PURE__*/
+  messageDesc(file_golf_v1_forge089, 11);
+
+/**
+ * @generated from message golf.v1.GetDiscussionAttachmentUploadStateResponse
+ */
+export type GetDiscussionAttachmentUploadStateResponse = Message<"golf.v1.GetDiscussionAttachmentUploadStateResponse"> & {
+  /**
+   * @generated from field: golf.v1.DiscussionTarget target = 1;
+   */
+  target?: DiscussionTarget | undefined;
+
+  /**
+   * @generated from field: string actor_id = 2;
+   */
+  actorId: string;
+
+  /**
+   * @generated from field: bool can_upload = 3;
+   */
+  canUpload: boolean;
+
+  /**
+   * @generated from field: string target_revision = 4;
+   */
+  targetRevision: string;
+
+  /**
+   * @generated from field: string attachments_revision = 5;
+   */
+  attachmentsRevision: string;
+
+  /**
+   * @generated from field: string allowed_types = 6;
+   */
+  allowedTypes: string;
+
+  /**
+   * @generated from field: uint64 max_size_bytes = 7;
+   */
+  maxSizeBytes: bigint;
+};
+
+/**
+ * Describes the message golf.v1.GetDiscussionAttachmentUploadStateResponse.
+ * Use `create(GetDiscussionAttachmentUploadStateResponseSchema)` to create a new message.
+ */
+export const GetDiscussionAttachmentUploadStateResponseSchema: GenMessage<GetDiscussionAttachmentUploadStateResponse> = /*@__PURE__*/
+  messageDesc(file_golf_v1_forge089, 12);
+
+/**
+ * @generated from message golf.v1.SubmitDiscussionAttachmentUploadRequest
+ */
+export type SubmitDiscussionAttachmentUploadRequest = Message<"golf.v1.SubmitDiscussionAttachmentUploadRequest"> & {
+  /**
+   * @generated from field: golf.v1.DiscussionTarget target = 1;
+   */
+  target?: DiscussionTarget | undefined;
+
+  /**
+   * @generated from field: string expected_target_revision = 2;
+   */
+  expectedTargetRevision: string;
+
+  /**
+   * @generated from field: string expected_attachments_revision = 3;
+   */
+  expectedAttachmentsRevision: string;
+
+  /**
+   * @generated from field: string operation_id = 4;
+   */
+  operationId: string;
+
+  /**
+   * @generated from field: string name = 5;
+   */
+  name: string;
+
+  /**
+   * @generated from field: bytes content = 6;
+   */
+  content: Uint8Array;
+
+  /**
+   * @generated from field: string content_sha256 = 7;
+   */
+  contentSha256: string;
+
+  /**
+   * @generated from field: uint64 content_size_bytes = 8;
+   */
+  contentSizeBytes: bigint;
+};
+
+/**
+ * Describes the message golf.v1.SubmitDiscussionAttachmentUploadRequest.
+ * Use `create(SubmitDiscussionAttachmentUploadRequestSchema)` to create a new message.
+ */
+export const SubmitDiscussionAttachmentUploadRequestSchema: GenMessage<SubmitDiscussionAttachmentUploadRequest> = /*@__PURE__*/
+  messageDesc(file_golf_v1_forge089, 13);
+
+/**
+ * @generated from message golf.v1.DiscussionAttachmentUploadOperation
+ */
+export type DiscussionAttachmentUploadOperation = Message<"golf.v1.DiscussionAttachmentUploadOperation"> & {
+  /**
+   * @generated from field: string contract = 1;
+   */
+  contract: string;
+
+  /**
+   * @generated from field: golf.v1.SubmitDiscussionAttachmentUploadRequest original = 2;
+   */
+  original?: SubmitDiscussionAttachmentUploadRequest | undefined;
+
+  /**
+   * @generated from field: string actor_id = 3;
+   */
+  actorId: string;
+
+  /**
+   * @generated from field: golf.v1.DiscussionResourceOperationPhase phase = 4;
+   */
+  phase: DiscussionResourceOperationPhase;
+
+  /**
+   * @generated from field: golf.v1.DiscussionAttachment attachment = 5;
+   */
+  attachment?: DiscussionAttachment | undefined;
+
+  /**
+   * @generated from field: string created_at = 6;
+   */
+  createdAt: string;
+
+  /**
+   * @generated from field: string updated_at = 7;
+   */
+  updatedAt: string;
+
+  /**
+   * @generated from field: string failure_code = 8;
+   */
+  failureCode: string;
+};
+
+/**
+ * Describes the message golf.v1.DiscussionAttachmentUploadOperation.
+ * Use `create(DiscussionAttachmentUploadOperationSchema)` to create a new message.
+ */
+export const DiscussionAttachmentUploadOperationSchema: GenMessage<DiscussionAttachmentUploadOperation> = /*@__PURE__*/
+  messageDesc(file_golf_v1_forge089, 14);
+
+/**
+ * @generated from message golf.v1.SubmitDiscussionAttachmentUploadResponse
+ */
+export type SubmitDiscussionAttachmentUploadResponse = Message<"golf.v1.SubmitDiscussionAttachmentUploadResponse"> & {
+  /**
+   * @generated from field: golf.v1.DiscussionAttachmentUploadOperation operation = 1;
+   */
+  operation?: DiscussionAttachmentUploadOperation | undefined;
+};
+
+/**
+ * Describes the message golf.v1.SubmitDiscussionAttachmentUploadResponse.
+ * Use `create(SubmitDiscussionAttachmentUploadResponseSchema)` to create a new message.
+ */
+export const SubmitDiscussionAttachmentUploadResponseSchema: GenMessage<SubmitDiscussionAttachmentUploadResponse> = /*@__PURE__*/
+  messageDesc(file_golf_v1_forge089, 15);
+
+/**
+ * @generated from message golf.v1.GetDiscussionAttachmentUploadOperationRequest
+ */
+export type GetDiscussionAttachmentUploadOperationRequest = Message<"golf.v1.GetDiscussionAttachmentUploadOperationRequest"> & {
+  /**
+   * @generated from field: golf.v1.DiscussionTarget target = 1;
+   */
+  target?: DiscussionTarget | undefined;
+
+  /**
+   * @generated from field: string operation_id = 2;
+   */
+  operationId: string;
+};
+
+/**
+ * Describes the message golf.v1.GetDiscussionAttachmentUploadOperationRequest.
+ * Use `create(GetDiscussionAttachmentUploadOperationRequestSchema)` to create a new message.
+ */
+export const GetDiscussionAttachmentUploadOperationRequestSchema: GenMessage<GetDiscussionAttachmentUploadOperationRequest> = /*@__PURE__*/
+  messageDesc(file_golf_v1_forge089, 16);
+
+/**
+ * @generated from message golf.v1.GetDiscussionAttachmentUploadOperationResponse
+ */
+export type GetDiscussionAttachmentUploadOperationResponse = Message<"golf.v1.GetDiscussionAttachmentUploadOperationResponse"> & {
+  /**
+   * @generated from field: golf.v1.DiscussionAttachmentUploadOperation operation = 1;
+   */
+  operation?: DiscussionAttachmentUploadOperation | undefined;
+};
+
+/**
+ * Describes the message golf.v1.GetDiscussionAttachmentUploadOperationResponse.
+ * Use `create(GetDiscussionAttachmentUploadOperationResponseSchema)` to create a new message.
+ */
+export const GetDiscussionAttachmentUploadOperationResponseSchema: GenMessage<GetDiscussionAttachmentUploadOperationResponse> = /*@__PURE__*/
+  messageDesc(file_golf_v1_forge089, 17);
+
+/**
  * @generated from service golf.v1.RepositoryFileBatchService
  */
 export const RepositoryFileBatchService: GenService<{
@@ -423,4 +647,35 @@ export const DiscussionAttachmentService: GenService<{
   },
 }> = /*@__PURE__*/
   serviceDesc(file_golf_v1_forge089, 1);
+
+/**
+ * @generated from service golf.v1.DiscussionAttachmentUploadService
+ */
+export const DiscussionAttachmentUploadService: GenService<{
+  /**
+   * @generated from rpc golf.v1.DiscussionAttachmentUploadService.GetDiscussionAttachmentUploadState
+   */
+  getDiscussionAttachmentUploadState: {
+    methodKind: "unary";
+    input: typeof GetDiscussionAttachmentUploadStateRequestSchema;
+    output: typeof GetDiscussionAttachmentUploadStateResponseSchema;
+  },
+  /**
+   * @generated from rpc golf.v1.DiscussionAttachmentUploadService.SubmitDiscussionAttachmentUpload
+   */
+  submitDiscussionAttachmentUpload: {
+    methodKind: "unary";
+    input: typeof SubmitDiscussionAttachmentUploadRequestSchema;
+    output: typeof SubmitDiscussionAttachmentUploadResponseSchema;
+  },
+  /**
+   * @generated from rpc golf.v1.DiscussionAttachmentUploadService.GetDiscussionAttachmentUploadOperation
+   */
+  getDiscussionAttachmentUploadOperation: {
+    methodKind: "unary";
+    input: typeof GetDiscussionAttachmentUploadOperationRequestSchema;
+    output: typeof GetDiscussionAttachmentUploadOperationResponseSchema;
+  },
+}> = /*@__PURE__*/
+  serviceDesc(file_golf_v1_forge089, 2);
 

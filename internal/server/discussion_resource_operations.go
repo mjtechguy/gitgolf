@@ -371,9 +371,13 @@ type discussionResourcePermitKey struct{}
 type discussionResourcePermit struct {
 	record  discussionResourceRecord
 	request *golfv1.SubmitDiscussionResourceOperationRequest
+	upload  *attachmentUploadPermit
 }
 
 func (s *Server) validateDiscussionResourcePermit(ctx context.Context, tx *sql.Tx, p discussionResourcePermit, repo lifecycleNativeRepository, key repositoryKey, method, path string, input any) error {
+	if p.upload != nil {
+		return s.validateAttachmentUploadPermit(ctx, tx, *p.upload, repo, key, method, path, input)
+	}
 	r := p.record
 	base, _ := repositoryPath(key)
 	want, suffix, payload := resourceNative(p.request)
@@ -592,7 +596,7 @@ func (s *Server) SubmitDiscussionResourceOperation(ctx context.Context, req *con
 				if e = s.preflightResourceRequest(held, session, token, r, m); e != nil {
 					return e
 				}
-				held = context.WithValue(held, discussionResourcePermitKey{}, discussionResourcePermit{r, proto.Clone(m).(*golfv1.SubmitDiscussionResourceOperationRequest)})
+				held = context.WithValue(held, discussionResourcePermitKey{}, discussionResourcePermit{record: r, request: proto.Clone(m).(*golfv1.SubmitDiscussionResourceOperationRequest)})
 				observed, nativeErr = s.dispatchDiscussionResource(held, session, token, r, m, result)
 				return nil
 			})

@@ -84,8 +84,65 @@ Attachments are never automatically opened as active HTML/media.
 Issue, PR discussion and ordinary-comment disclosures use current authorized
 inventories and the shared DataTable. Their reads start when the user opens the
 attachment disclosure. Native pending code-review comments remain outside the
-ordinary-comment contract. Creation/replacement/deletion, wiki assets, streaming
+ordinary-comment contract. Bounded creation is described below. Replacement/deletion, wiki assets, streaming
 large downloads and complete notification attachment fanout remain unimplemented.
+
+## Bounded attachment upload
+
+`DiscussionAttachmentUploadService` adds state, submit and original inspection
+methods. A requested Plus form accepts one native multipart file up to256 KiB,
+with a safe255-byte filename, exact size/SHA and immutable UUID. Current native
+attachment settings must positively enable uploads; the displayed allowed types
+remain native policy, enforced again by the native upload. Fresh creation refuses
+an existing same-name attachment; replacement/deletion are not implied.
+
+Body upload requires the current author or exact issues/pulls unit writer.
+Ordinary-comment upload requires that exact unit writer and the current comment
+author or ordinary repository administrator. Native site-administrator ambient
+access does not substitute. Deleted/missing comment authors remain withheld.
+Current active unit, actor, exact issue/comment association and complete attachment
+inventory are checked repeatedly before dispatch. Expected revisions bind the
+observable target and inventory, including native issue content_version when
+present. Native REST comments expose no numeric content_version, and neither
+upload endpoint accepts an expected-version parameter: these are observation
+fences, not native CAS.
+
+Migration089 retains hash-only payload originals and append-only upload events,
+wrapping the existing repository lifecycle domain. The existing discussion permit
+routes the exact original/manifest to the shared native multipart sender also used
+by release assets. Every request is bound to the persisted caller/actor/repository,
+native route, filename/size/hash and sole active operation. Lost/ignored/wrong
+responses, partial native effects and late authority or target drift retain the
+original `DISPATCH_UNKNOWN`; inspection and replay never resend or adopt a match.
+
+Success requires the native receipt, independent exact attachment association and
+metadata reads, downloaded SHA/size, preserved prior attachment collection and
+unchanged original target body/author/title/state. Body upload also requires the
+observed native issue content_version to advance exactly once when available.
+Ordinary comment identity/body is preserved while native updated_at may advance.
+One shared issues/pulls invalidation is appended atomically with qualified SQL
+success. Metadata-only original inspection remains separate from dispatch. Upload
+bytes are volatile and cleared on cancellation/account loss; tab storage retains
+only exact identities/hashes/size, with no automatic retry.
+
+Native upload attempt3 passed in74.100s against1.27.3, rerunning all existing089
+native checks plus own PR-body/comment uploads, exact original replay/inspection,
+stale refusal and independent bytes. All owned fixtures were purged, with0 Docker
+resources. Upload attempt1 preserved a host Go linker disk failure before test
+execution; attempt2 preserved a correctly refused stale proposal whose new-path
+error mapping was internal instead of failed_precondition. Fresh corrected proof
+was used; failed originals are not relabeled. PostgreSQL/race upload coverage
+passes body/comment fresh empty collections, lost/ignored/wrong bytes, disabled
+native uploads, stale target, late denial, immutable originals/events, no resend,
+unknown overlap and one qualified activity signal. The combined affected upload,
+attachment and batch source command passed in15.499s;34 focused browser cases
+passed in16.2s. Dark/light390 upload dialogs were inspected.
+
+Root additionally registers the three upload procedures with managed browser
+interceptors, applies384-KiB submit body cap, and adds
+`golf.attachment-upload.v1:` to account-change storage cleanup. The owned migration
+filename is `202610050089_forge_consumers.sql`; no retained installation had applied
+the earlier060089 name before its coordinated predeployment rename.
 
 ## Supported history and notification limits
 
@@ -121,7 +178,7 @@ Local runnable checks:
 ```sh
 GOLF_TEST_DATABASE_URL=postgres://postgres@127.0.0.1:45472/postgres?sslmode=disable \
  go test -race -p 1 ./internal/server \
- -run '^(TestFileBatch|TestDiscussionAttachment|TestReviewAppend|TestReviewAuthoring.*Postgres|TestFileMutation.*Postgres)' -count=1
+ -run '^(TestAttachmentUpload|TestFileBatch|TestDiscussionAttachment|TestReviewAppend|TestReviewAuthoring.*Postgres|TestFileMutation.*Postgres)' -count=1
 npm --prefix web test -- --config playwright.forge089.config.ts
 npm --prefix web run build
 bin/tools/buf lint
