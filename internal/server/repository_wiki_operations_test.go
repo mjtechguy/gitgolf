@@ -4,13 +4,18 @@ import (
 	"bytes"
 	"connectrpc.com/connect"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 	"github.com/mjtechguy/golf-git/gen/golf/v1/golfv1connect"
 	"google.golang.org/protobuf/proto"
 	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -196,4 +201,133 @@ func TestNative078Actual(t *testing.T) {
 		}
 	}
 	_ = http.StatusOK
+}
+
+func TestWikiOperationJournalPostgres(t *testing.T) {
+	for _, mode := range []string{"success", "unknown", "wrong-content", "stale", "reader", "lost-authority"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newReleasePublicationFixture(t)
+			target, _ := url.Parse(f.s.config.GiteaURL)
+			proxy := httputil.NewSingleHostReverseProxy(target)
+			var writes atomic.Int32
+			var row nativeWikiPage
+			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.Contains(r.URL.Path, "/wiki/") {
+					w.Header().Set("Content-Type", "application/json")
+					if r.Method == http.MethodPost {
+						writes.Add(1)
+						var input struct {
+							Title, Message string
+							Content        string `json:"content_base64"`
+						}
+						if json.NewDecoder(r.Body).Decode(&input) != nil {
+							w.WriteHeader(400)
+							return
+						}
+						row = wikiFixturePage("Useful-page")
+						row.Title = input.Title
+						row.Content = input.Content
+						if mode == "wrong-content" {
+							row.Content = base64.StdEncoding.EncodeToString([]byte("foreign content"))
+						}
+						if mode == "unknown" {
+							w.WriteHeader(502)
+							return
+						}
+						if mode == "lost-authority" {
+							f.mode.Store("reader")
+						}
+						w.WriteHeader(201)
+						json.NewEncoder(w).Encode(row)
+						return
+					}
+					if row.Slug == "" {
+						row = wikiFixturePage("Home")
+					}
+					json.NewEncoder(w).Encode(row)
+					return
+				}
+				proxy.ServeHTTP(w, r)
+			}))
+			t.Cleanup(provider.Close)
+			config := f.s.config
+			config.GiteaURL = provider.URL
+			config.GiteaPublicURL = provider.URL
+			var e error
+			f.s, e = New(config, f.db)
+			if e != nil {
+				t.Fatal(e)
+			}
+			session := f.session(t, "pat")
+			_, _, _, transport, origin := testRPCClients(t, f.s)
+			transport.Jar.SetCookies(origin, []*http.Cookie{f.s.sessionCookie(session.Value, session.Expires, 3600)})
+			client := golfv1connect.NewRepositoryWikiManagementServiceClient(transport, origin.String()+"/rpc")
+			contextReq := connect.NewRequest(&golfv1.GetRepositoryWikiWriteContextRequest{Repository: pullKey, RepositoryId: "11"})
+			contextReq.Header().Set("Origin", config.PublicURL)
+			authority, e := client.GetRepositoryWikiWriteContext(t.Context(), contextReq)
+			if e != nil {
+				t.Fatal(e)
+			}
+			m := &golfv1.SubmitRepositoryWikiOperationRequest{Repository: pullKey, RepositoryId: "11", OwnerId: "42", AccessRevision: authority.Msg.Access.Revision, OperationId: randomUUID(), Kind: 1, Title: "Useful page", Markdown: "# Qualified\n", CommitMessage: "Qualified"}
+			if mode == "stale" {
+				m.Kind = 2
+				m.Slug = "Home"
+				m.ExpectedCommitId = strings.Repeat("b", 40)
+			}
+			if mode == "reader" {
+				f.mode.Store("reader")
+			}
+			req := connect.NewRequest(m)
+			req.Header().Set("Origin", config.PublicURL)
+			result, e := client.SubmitRepositoryWikiOperation(t.Context(), req)
+			if mode == "reader" || mode == "lost-authority" {
+				if e == nil {
+					t.Fatal("lost authority admitted")
+				}
+				return
+			}
+			if e != nil {
+				t.Fatal(e)
+			}
+			want := golfv1.RepositoryReleasePublicationPhase_REPOSITORY_RELEASE_PUBLICATION_PHASE_DISPATCH_UNKNOWN
+			if mode == "success" {
+				want = golfv1.RepositoryReleasePublicationPhase_REPOSITORY_RELEASE_PUBLICATION_PHASE_SUCCEEDED
+			}
+			if mode == "stale" {
+				want = golfv1.RepositoryReleasePublicationPhase_REPOSITORY_RELEASE_PUBLICATION_PHASE_REJECTED
+			}
+			if result.Msg.Operation.Phase != want {
+				t.Fatal("phase differs", result.Msg.Operation.Phase)
+			}
+			replay := connect.NewRequest(m)
+			replay.Header().Set("Origin", config.PublicURL)
+			again, e := client.SubmitRepositoryWikiOperation(t.Context(), replay)
+			if e != nil || !proto.Equal(result.Msg.Operation, again.Msg.Operation) {
+				t.Fatal("original outcome changed", e, result.Msg.Operation, again)
+			}
+			expectedWrites := int32(1)
+			if mode == "stale" {
+				expectedWrites = 0
+			}
+			if writes.Load() != expectedWrites {
+				t.Fatal("native effect resent")
+			}
+			changed := proto.Clone(m).(*golfv1.SubmitRepositoryWikiOperationRequest)
+			changed.Markdown += "changed"
+			other := connect.NewRequest(changed)
+			other.Header().Set("Origin", config.PublicURL)
+			if _, e = client.SubmitRepositoryWikiOperation(t.Context(), other); e == nil {
+				t.Fatal("same key different intent admitted")
+			}
+			if writes.Load() != expectedWrites {
+				t.Fatal("conflicting intent dispatched")
+			}
+			if _, e = f.db.Exec(`UPDATE golf_repository_wiki_operations SET input_fingerprint=decode(repeat('ff',32),'hex')`); e == nil {
+				t.Fatal("journal identity mutated")
+			}
+			if _, e = f.db.Exec(`DELETE FROM golf_repository_wiki_operation_events`); e == nil {
+				t.Fatal("journal events erased")
+			}
+		})
+	}
 }

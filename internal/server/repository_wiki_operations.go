@@ -344,11 +344,21 @@ func (s *Server) SubmitRepositoryWikiOperation(ctx context.Context, req *connect
 					if !validWikiSlug(result.Slug) || result.Title != m.Title || result.Content != base64.StdEncoding.EncodeToString([]byte(m.Markdown)) || result.Commit == nil || !objectID.MatchString(result.Commit.SHA) || m.Kind == 2 && (result.Slug != m.Slug || result.Commit.SHA == m.ExpectedCommitId) {
 						return nil
 					}
+					var repository Repository
+					if _, e = s.forge(held, http.MethodGet, base, token, nil, &repository); e != nil || strconv.FormatInt(repository.ID, 10) != m.RepositoryId {
+						return nil
+					}
+					if _, e = wikiMetadata(result.nativeWikiPageMetadata, repository); e != nil || result.Count == nil || *result.Count < 1 {
+						return nil
+					}
 					var after nativeWikiPage
 					if _, e = s.forge(held, http.MethodGet, base+"/wiki/page/"+result.Slug, token, nil, &after); e != nil {
 						return nil
 					}
 					if after.Slug != result.Slug || after.Title != m.Title || after.Content != result.Content || after.Commit == nil || after.Commit.SHA != result.Commit.SHA {
+						return nil
+					}
+					if _, e = wikiMetadata(after.nativeWikiPageMetadata, repository); e != nil || after.Count == nil || *after.Count < 1 {
 						return nil
 					}
 					resultSlug, resultCommit = after.Slug, after.Commit.SHA
