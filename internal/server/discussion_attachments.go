@@ -22,7 +22,10 @@ func discussionAttachmentWire(a forgeReleaseDownloadAsset) *golfv1.DiscussionAtt
 	return &golfv1.DiscussionAttachment{Id: strconv.FormatInt(a.ID, 10), Name: a.Name, SizeBytes: uint64(*a.Size), CreatedAt: a.CreatedAt, Revision: discussionAttachmentRevision(a)}
 }
 func discussionAttachmentRoute(base string, t *golfv1.DiscussionTarget) string {
-	if t.CommentId != "" { return base + "/issues/comments/" + t.CommentId + "/assets" }; return base + "/issues/" + strconv.FormatUint(uint64(t.Number), 10) + "/assets"
+	if t.CommentId != "" {
+		return base + "/issues/comments/" + t.CommentId + "/assets"
+	}
+	return base + "/issues/" + strconv.FormatUint(uint64(t.Number), 10) + "/assets"
 }
 func (s *Server) discussionAttachments(ctx context.Context, session string, token forgeCredential, t *golfv1.DiscussionTarget) (*golfv1.ListDiscussionAttachmentsResponse, error) {
 	out := &golfv1.ListDiscussionAttachmentsResponse{}
