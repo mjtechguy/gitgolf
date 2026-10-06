@@ -675,7 +675,17 @@ func (s *Server) MutateRepositoryRules(ctx context.Context, req *connect.Request
 			return errUnauthenticated
 		}
 		return s.workflowTransaction(ctx, session, caller.ID, func(tx *sql.Tx, _ database.LockManagedSessionRow, _ []byte) error {
-			writeCtx, err := s.lockRepositoryLifecycleTransaction(ctx, tx, repoID)
+			base, _ := repositoryPath(key)
+			var payload any = write.payload
+			if write.method == http.MethodDelete {
+				payload = nil
+			}
+			digest, err := protectionPayloadHash(payload)
+			if err != nil {
+				return errStorageUnavailable
+			}
+			originalCtx := context.WithValue(ctx, protectionDispatchPermitKey{}, protectionDispatchPermit{r.ID, r.UserID, r.ActorID, repoID, s.config.GiteaURL, write.method, base + write.suffix, digest})
+			writeCtx, err := s.lockRepositoryLifecycleTransaction(originalCtx, tx, repoID)
 			if err != nil {
 				return err
 			}
@@ -695,7 +705,6 @@ func (s *Server) MutateRepositoryRules(ctx context.Context, req *connect.Request
 			if err != nil {
 				return err
 			}
-			base, _ := repositoryPath(key)
 			dispatched = true
 			switch m.Action {
 			case golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_CREATE_BRANCH, golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_EDIT_BRANCH:

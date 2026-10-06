@@ -7,12 +7,13 @@ package database
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 )
 
 const appendRecoveryEvent = `-- name: AppendRecoveryEvent :one
-INSERT INTO golf_recovery_events (backup_id, operation_id, sessions_count, oauth_attempts_count, local_accounts_disabled_count)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO golf_recovery_events (backup_id, operation_id, sessions_count, oauth_attempts_count, local_accounts_disabled_count, quarantine_counts)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING backup_id, operation_id, occurred_at, actor, sessions_count, oauth_attempts_count, local_accounts_disabled_count
 `
 
@@ -22,6 +23,7 @@ type AppendRecoveryEventParams struct {
 	SessionsCount              int64
 	OauthAttemptsCount         int64
 	LocalAccountsDisabledCount int64
+	QuarantineCounts           json.RawMessage
 }
 
 type AppendRecoveryEventRow struct {
@@ -42,6 +44,7 @@ func (q *Queries) AppendRecoveryEvent(ctx context.Context, arg AppendRecoveryEve
 		arg.SessionsCount,
 		arg.OauthAttemptsCount,
 		arg.LocalAccountsDisabledCount,
+		arg.QuarantineCounts,
 	)
 	var i AppendRecoveryEventRow
 	err := row.Scan(

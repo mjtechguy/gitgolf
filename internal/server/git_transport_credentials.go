@@ -191,6 +191,9 @@ func (s *Server) gitWritePrerequisites(ctx context.Context, db database.DBTX, cr
 	if !qualified || *repo.Mirror || *repo.NativeActions {
 		return errGitBackgroundUnqualified
 	}
+	if e := s.protectionDispatchAllowed(ctx, db, repo.ID); e != nil {
+		return e
+	}
 	base, _ := repositoryPath(key)
 	for _, endpoint := range []string{"/branch_protections", "/tag_protections", "/push_mirrors"} {
 		var rows []map[string]any

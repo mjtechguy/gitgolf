@@ -141,6 +141,9 @@ func (s *Server) lockRepositoryLifecycleTransaction(ctx context.Context, tx *sql
 	if blocked {
 		return nil, errLifecycleBlocked
 	}
+	if e := s.protectionDispatchAllowed(ctx, tx, repositoryID); e != nil {
+		return nil, e
+	}
 	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.GiteaURL, repositoryID, tx}), nil
 }
 
@@ -172,6 +175,14 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 		if held.tx == nil || held.forge != s.config.GiteaURL || held.repositoryID != repo.ID {
 			cancel()
 			return nil, errLifecycleBlocked
+		}
+		if e = s.protectionDispatchAllowed(ctx, held.tx, repo.ID); e != nil {
+			cancel()
+			return nil, e
+		}
+		if e = validateProtectionDispatchRequest(ctx, method, path, input); e != nil {
+			cancel()
+			return nil, e
 		}
 		var blocked bool
 		if e = held.tx.QueryRowContext(ctx, `SELECT golf_repository_lifecycle_blocked($1,$2)`, s.config.GiteaURL, repo.ID).Scan(&blocked); e != nil {
@@ -265,6 +276,14 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 	if _, e = tx.ExecContext(ctx, `SELECT golf_repository_lifecycle_lock($1,$2,false)`, s.config.GiteaURL, repo.ID); e != nil {
 		release()
 		return nil, errStorageUnavailable
+	}
+	if e = s.protectionDispatchAllowed(ctx, tx, repo.ID); e != nil {
+		release()
+		return nil, e
+	}
+	if e = validateProtectionDispatchRequest(ctx, method, path, input); e != nil {
+		release()
+		return nil, e
 	}
 	permit, permitted := ctx.Value(lifecyclePermitKey{}).(lifecyclePermit)
 	if permitted {

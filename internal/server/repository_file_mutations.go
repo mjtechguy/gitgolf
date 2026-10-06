@@ -79,6 +79,9 @@ func (s *Server) lockFileMutation(ctx context.Context, tx *sql.Tx, id int64) (co
 	if _, e := tx.ExecContext(ctx, `SELECT golf_file_mutation_lock($1,$2)`, s.config.GiteaURL, id); e != nil {
 		return nil, errStorageUnavailable
 	}
+	if e := s.protectionDispatchAllowed(ctx, tx, id); e != nil {
+		return nil, e
+	}
 	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.GiteaURL, id, tx}), nil
 }
 

@@ -1085,6 +1085,7 @@ type GolfRecoveryEvent struct {
 	SessionsCount              int64
 	OauthAttemptsCount         int64
 	LocalAccountsDisabledCount int64
+	QuarantineCounts           json.RawMessage
 }
 
 type GolfRepositoryAccessGeneration struct {

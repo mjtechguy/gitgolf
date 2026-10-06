@@ -35,7 +35,7 @@ func recoverySnapshot(t *testing.T, db *sql.DB, credentials bool) map[string]str
 	t.Helper()
 	tables := []string{"golf_users", "golf_audit_events", "golf_crypto_events", "golf_encryption_keys", "golf_encryption_policy"}
 	if credentials {
-		tables = append(tables, "golf_sessions", "golf_oauth_attempts", "golf_recovery_events")
+		tables = append(tables, "golf_sessions", "golf_oauth_attempts", "golf_recovery_events", "golf_local_accounts", "golf_local_mfa", "golf_mfa_recovery_codes", "golf_mfa_login_challenges", "golf_mfa_events", "golf_codex_connections", "golf_codex_auth", "golf_agent_tasks", "golf_reviewer_runs", "golf_reviewer_publications", "golf_webhook_deliveries", "golf_email_deliveries")
 	}
 	result := map[string]string{}
 	for _, table := range tables {

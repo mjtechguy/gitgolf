@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"regexp"
 	"time"
@@ -18,13 +19,14 @@ func ValidRecoveryBackupID(value string) bool { return recoveryBackupID.MatchStr
 // RecoveryResult contains committed operator metadata, never session identifiers
 // or credentials. The actor is the PostgreSQL role, not a claimed Golf user.
 type RecoveryResult struct {
-	BackupID                   string    `json:"backup_id"`
-	OperationID                string    `json:"operation_id"`
-	OccurredAt                 time.Time `json:"occurred_at"`
-	Actor                      string    `json:"actor"`
-	SessionsCount              uint64    `json:"sessions_count"`
-	OAuthAttemptsCount         uint64    `json:"oauth_attempts_count"`
-	LocalAccountsDisabledCount uint64    `json:"local_accounts_disabled_count"`
+	BackupID                   string                   `json:"backup_id"`
+	OperationID                string                   `json:"operation_id"`
+	OccurredAt                 time.Time                `json:"occurred_at"`
+	Actor                      string                   `json:"actor"`
+	SessionsCount              uint64                   `json:"sessions_count"`
+	OAuthAttemptsCount         uint64                   `json:"oauth_attempts_count"`
+	LocalAccountsDisabledCount uint64                   `json:"local_accounts_disabled_count"`
+	Quarantine                 RecoveryQuarantineCounts `json:"quarantine"`
 }
 
 // InvalidateRestoredSessions requires ALL writers to be stopped and drained.
@@ -55,6 +57,10 @@ func InvalidateRestoredSessions(ctx context.Context, db *sql.DB, backupID string
 	defer tx.Rollback()
 	queries := database.New(db).WithTx(tx)
 	if err := queries.LockRecoveryCredentials(ctx); err != nil {
+		return fail()
+	}
+	quarantine, err := quarantineRestoredAuthority(ctx, tx, backupID, operation)
+	if err != nil {
 		return fail()
 	}
 	if _, err := tx.ExecContext(ctx, `LOCK TABLE golf_push_materializations,golf_workflow_runs,golf_workflow_dispatch_inputs,golf_automation_grants,golf_automation_credentials,golf_automation_grant_events IN ACCESS EXCLUSIVE MODE`); err != nil {
@@ -88,7 +94,11 @@ func InvalidateRestoredSessions(ctx context.Context, db *sql.DB, backupID string
 			return fail()
 		}
 	}
-	event, err := queries.AppendRecoveryEvent(ctx, database.AppendRecoveryEventParams{BackupID: backupID, OperationID: operation, SessionsCount: sessions, OauthAttemptsCount: attempts, LocalAccountsDisabledCount: int64(len(locals))})
+	counts, err := json.Marshal(quarantine)
+	if err != nil {
+		return fail()
+	}
+	event, err := queries.AppendRecoveryEvent(ctx, database.AppendRecoveryEventParams{BackupID: backupID, OperationID: operation, SessionsCount: sessions, OauthAttemptsCount: attempts, LocalAccountsDisabledCount: int64(len(locals)), QuarantineCounts: counts})
 	if err != nil {
 		return fail()
 	}
@@ -97,5 +107,5 @@ func InvalidateRestoredSessions(ctx context.Context, db *sql.DB, backupID string
 		// counts; the operator must inspect recovery history before retrying.
 		return fail()
 	}
-	return RecoveryResult{BackupID: event.BackupID, OperationID: event.OperationID, OccurredAt: event.OccurredAt.UTC(), Actor: event.Actor, SessionsCount: uint64(event.SessionsCount), OAuthAttemptsCount: uint64(event.OauthAttemptsCount), LocalAccountsDisabledCount: uint64(event.LocalAccountsDisabledCount)}, nil
+	return RecoveryResult{BackupID: event.BackupID, OperationID: event.OperationID, OccurredAt: event.OccurredAt.UTC(), Actor: event.Actor, SessionsCount: uint64(event.SessionsCount), OAuthAttemptsCount: uint64(event.OauthAttemptsCount), LocalAccountsDisabledCount: uint64(event.LocalAccountsDisabledCount), Quarantine: quarantine}, nil
 }

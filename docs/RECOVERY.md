@@ -62,6 +62,33 @@ The corrected actual drill is **pending**. The next run uses its independently p
 
 ## What is captured
 
+The083 restored-authority transaction additionally clears copied MFA setup/sign-in
+challenges and recovery digests, resets enabled/pending local factors with an
+immutable operator audit, and retains all local accounts disabled until deliberate
+reenrollment. A factor's copied counter/recovery state must not be reused after
+restore. Reenroll the account with a fresh password and independently verified
+matching native credential, then enroll a new authenticator under the instance's
+policy before reopening its traffic. Quarantine is not permission to weaken MFA
+policy. Old encrypted content remains historical at-rest data; this is revocation,
+not secure erasure or upstream provider revocation.
+
+The same transaction removes copied managed agent authentication, marks connected
+or pending connections as requiring reauthentication, cancels queued tasks and
+marks running attempts lost with their original identities retained. Reviewers
+are disabled. Reserved/unknown publication journals remain unresolved and cannot
+be treated as successful cancellation. Pending email/webhook deliveries are
+cancelled with possible-duplicate metadata, email verification challenges are
+removed, and managed Git WRITE qualification profiles are suspended. Terminal
+history and private conversation bytes remain unchanged. Committed counts are
+part of the original append-only recovery event; any storage/audit/commit failure
+rolls back the entire transaction.
+
+Source PostgreSQL/race checks qualify these controls on isolated host schemas.
+They are not a coordinated native-volume restore, an effective-write fence or
+proof that an old external effect stopped. The full current-schema fresh-target
+drill, provider tombstone/revocation reconciliation, operator writer drain and
+traffic quarantine remain required before production recovery is advertised.
+
 The encrypted `golf.backup.v1` archive contains a manifest plus these six core payloads, and `rustfs-data.tar` when the validated local RustFS profile is selected:
 
 | Payload | Purpose |
