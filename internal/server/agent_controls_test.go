@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"os"
@@ -31,6 +32,7 @@ func TestAgentControlCommands(t *testing.T) {
 	c.State = "permission"
 	c.Permission = "s/native-request"
 	c.Options = []string{"once"}
+	c.FileTools = true
 	m.Kind = "permission"
 	m.Text = ""
 	m.PermissionId = c.Permission
@@ -38,6 +40,15 @@ func TestAgentControlCommands(t *testing.T) {
 	if !validAgentCommand(m, c) {
 		t.Fatal("exact native once refused")
 	}
+	c.FileTools = false
+	if validAgentCommand(m, c) {
+		t.Fatal("unqualified native file execution accepted")
+	}
+	m.OptionId = ""
+	if !validAgentCommand(m, c) {
+		t.Fatal("unqualified file request could not be rejected")
+	}
+	c.FileTools = true
 	m.OptionId = "always"
 	if validAgentCommand(m, c) {
 		t.Fatal("persistent permission accepted")
@@ -113,7 +124,7 @@ func TestAgentControlManagedSubprocessPostgres(t *testing.T) {
 	f.start(t)
 	s := f.x.f.server
 	s.config.ReviewImage = "sha256:" + strings.Repeat("d", 64)
-	if _, e := s.db.Exec(`INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version) VALUES($1,'worker',$2,$2,$3)`, s.config.GiteaURL, s.config.ReviewImage, runner.ManagedACPVersion); e != nil {
+	if _, e := s.db.Exec(`INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version,acp_file_tools) VALUES($1,'worker',$2,$2,$3,true)`, s.config.GiteaURL, s.config.ReviewImage, runner.ManagedACPVersion); e != nil {
 		t.Fatal(e)
 	}
 	ctx, cookie := controlContext(t, f)
@@ -247,7 +258,7 @@ func TestAgentControlAuthorityLossPostgres(t *testing.T) {
 	if _, e := s.db.Exec(`INSERT INTO golf_agent_controls(task_id,attempt_id,image,native_version,native_session,state) VALUES($1,$2,$3,$4,'native','idle')`, f.t.ID, f.attempt, s.config.ReviewImage, runner.ManagedACPVersion); e != nil {
 		t.Fatal(e)
 	}
-	if _, e := s.db.Exec(`INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version) VALUES($1,'worker',$2,$2,$3)`, s.config.GiteaURL, s.config.ReviewImage, runner.ManagedACPVersion); e != nil {
+	if _, e := s.db.Exec(`INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version,acp_file_tools) VALUES($1,'worker',$2,$2,$3,true)`, s.config.GiteaURL, s.config.ReviewImage, runner.ManagedACPVersion); e != nil {
 		t.Fatal(e)
 	}
 	ctx, cookie := controlContext(t, f)
@@ -255,6 +266,17 @@ func TestAgentControlAuthorityLossPostgres(t *testing.T) {
 	req.Header().Set("Cookie", cookie)
 	if _, e := s.GetAgentControl(ctx, req); e != nil {
 		t.Fatal(e)
+	}
+	originalImage := s.config.ReviewImage
+	s.config.ReviewImage = "sha256:" + strings.Repeat("e", 64)
+	if response, e := s.GetAgentControl(ctx, req); e == nil && response.Msg.Control.Available {
+		t.Fatal("changed configured image adopted an original live control")
+	}
+	s.config.ReviewImage = originalImage
+	changedAccount := f.r
+	changedAccount.Version++
+	if e := s.conversationGuard(ctx, f.t, changedAccount, "worker", f.attempt, func(*sql.Tx) error { t.Fatal("new account generation published to old attempt"); return nil }); e == nil {
+		t.Fatal("new account generation adopted an original live control")
 	}
 	if _, e := s.db.Exec(`UPDATE golf_agent_tasks SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1`, f.t.ID); e != nil {
 		t.Fatal(e)

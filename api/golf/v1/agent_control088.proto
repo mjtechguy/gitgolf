@@ -25,6 +25,7 @@ message AgentControl {
   repeated string allow_once_options = 12;
   bool can_resume = 13; // Native negotiation + preserved original sandbox only.
   repeated AgentControlMessage messages = 14; // Completed text, screened at the native cache checkpoint.
+  bool file_permissions_qualified = 15; // Separate native file-tool/sandbox qualification; init is insufficient.
 }
 message AgentControlMessage { string sequence = 1; string text = 2; }
 message GetAgentControlResponse { AgentControl control = 1; }

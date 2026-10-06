@@ -16,8 +16,12 @@ import (
 // One worker/process owns one live sandbox. Commands are marked claimed before
 // handing them off. Any lost acknowledgement closes it; claims are never replayed.
 func (s *Server) managedACPJob(ctx context.Context, t agentTaskRecord, r codexRecord, worker, attempt string, j *runner.AgentJob) (func(), error) {
+	var fileTools bool
+	if e := s.db.QueryRowContext(ctx, `SELECT acp_file_tools FROM golf_agent_worker_presence WHERE forge_url=$1 AND worker_id=$2 AND acp_image=$3 AND acp_version=$4 AND last_seen>clock_timestamp()-interval '30 seconds'`, s.config.GiteaURL, worker, s.config.ReviewImage, runner.ManagedACPVersion).Scan(&fileTools); e != nil {
+		return nil, errCodexUnavailable
+	}
 	err := s.conversationGuard(ctx, t, r, worker, attempt, func(tx *sql.Tx) error {
-		_, e := tx.ExecContext(ctx, `INSERT INTO golf_agent_controls(task_id,attempt_id,image,native_version) VALUES($1,$2,$3,$4)`, t.ID, attempt, s.config.ReviewImage, runner.ManagedACPVersion)
+		_, e := tx.ExecContext(ctx, `INSERT INTO golf_agent_controls(task_id,attempt_id,image,native_version,file_tools_qualified) VALUES($1,$2,$3,$4,$5)`, t.ID, attempt, s.config.ReviewImage, runner.ManagedACPVersion, fileTools)
 		return e
 	})
 	if err != nil {
@@ -113,7 +117,7 @@ func (s *Server) managedACPJob(ctx context.Context, t agentTaskRecord, r codexRe
 		}
 		// Shell is never approved. These requests are governed by the qualified
 		// file-only native policy; the UI receives no tool arguments or file bodies.
-		if p.Kind == "read" || p.Kind == "fileChange" {
+		if fileTools && (p.Kind == "read" || p.Kind == "fileChange") {
 			for _, o := range p.Options {
 				if o.Kind == "allow_once" {
 					allowed = append(allowed, o.ID)

@@ -13,9 +13,9 @@ const invalid=()=>{throw new ConnectError('The managed agent receipt could not b
 function controlReceipt(control:AgentControl|undefined,task:Task) {
  if(!control||control.taskId!==task.id||control.attemptId!==task.attemptId||control.taskVersion!==task.version||!['initializing','active','idle','permission','dispatching','cancelling','closing','closed'].includes(control.state)||control.messages.length>64)invalid();
  const c=control!;
- if(c.available&&(!/^[1-9][0-9]*$/.test(c.revision)||c.nativeVersion!=='2.0.16'||!/^sha256:[a-f0-9]{64}$/.test(c.image)||task.state!=='running'))invalid();
+ if(c.available&&(!/^[1-9][0-9]*$/.test(c.revision)||c.nativeVersion!=='1.18.34'||!/^sha256:[a-f0-9]{64}$/.test(c.image)||task.state!=='running'))invalid();
  if(!c.available&&(c.canResume||c.messages.length||c.permissionId||c.toolId||c.allowOnceOptions.length))invalid();
- if(c.canResume&&c.state!=='idle'||c.allowOnceOptions.length>8||c.state!=='permission'&&(c.permissionId||c.toolId||c.allowOnceOptions.length))invalid();
+ if(c.filePermissionsQualified&&!c.available||!c.filePermissionsQualified&&c.allowOnceOptions.length||c.canResume&&c.state!=='idle'||c.allowOnceOptions.length>8||c.state!=='permission'&&(c.permissionId||c.toolId||c.allowOnceOptions.length))invalid();
  const safeId=(id:string)=>new TextEncoder().encode(id).length<=128&&!/[\p{Cc}\p{White_Space}\uD800-\uDFFF]/u.test(id);
  if(![c.permissionId,c.toolId,...c.allowOnceOptions].every(safeId)||new Set(c.allowOnceOptions).size!==c.allowOnceOptions.length||c.state==='permission'&&(!c.permissionId||!c.toolId))invalid();
  let sequence=0,total=0;
@@ -62,7 +62,7 @@ export function AgentTaskControls({controller}:{controller:ReturnType<typeof use
  const disabled=state.pending||state.uncertain;
  return <section className="panel-content" aria-label="Managed agent conversation">
  {query.error?<PanelError error={query.error} retry={()=>void controller.refresh()}/>:query.isFetching||query.isPending?<Loading label="Checking managed agent controls…"/>:!control?.available?<p className="panel-footnote">{control?.reason||'Managed conversation is unavailable for this attempt.'}</p>:<>
- <p className="panel-footnote">Preserved native session · {control.state}. Completed messages are screened against the current native credential cache. Workspace file permissions last for one request; shell and external files remain denied.</p>
+ <p className="panel-footnote">Preserved native session · {control.state}. Completed messages are screened against the current native credential cache. {control.filePermissionsQualified?'Qualified workspace file permissions last for one request.':'Native file-tool execution is not qualified; requests can only be rejected or cancelled.'} Shell and external files remain denied.</p>
  {control.messages.map(message=><article className="issue-comment" key={message.sequence}><MarkdownBody text={message.text} label="Screened conversation message"/></article>)}
  {state.notice?<p role="status" className="session-notice">{state.notice}</p>:null}
  <div className="credential-actions">

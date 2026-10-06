@@ -1,11 +1,13 @@
 -- +goose Up
 ALTER TABLE golf_agent_worker_presence ADD COLUMN acp_image text NOT NULL DEFAULT '';
 ALTER TABLE golf_agent_worker_presence ADD COLUMN acp_version text NOT NULL DEFAULT '';
+ALTER TABLE golf_agent_worker_presence ADD COLUMN acp_file_tools boolean NOT NULL DEFAULT false;
 CREATE TABLE golf_agent_controls (
  task_id uuid NOT NULL,
  attempt_id text NOT NULL,
  image text NOT NULL CHECK(image ~ '^sha256:[a-f0-9]{64}$'),
  native_version text NOT NULL,
+ file_tools_qualified boolean NOT NULL DEFAULT false,
  native_session text NOT NULL DEFAULT '',
  resume boolean NOT NULL DEFAULT false,
  state text NOT NULL DEFAULT 'initializing' CHECK(state IN ('initializing','active','idle','permission','dispatching','cancelling','closing','closed')),
@@ -50,7 +52,7 @@ BEGIN
 END $$;
 CREATE FUNCTION golf_agent_control_identity_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
- IF ROW(NEW.task_id,NEW.attempt_id,NEW.image,NEW.native_version) IS DISTINCT FROM ROW(OLD.task_id,OLD.attempt_id,OLD.image,OLD.native_version) OR (OLD.native_session<>'' AND NEW.native_session<>OLD.native_session) OR OLD.state='closed' OR NEW.revision<>OLD.revision+1 OR NEW.screened_sequence<OLD.screened_sequence THEN
+ IF ROW(NEW.task_id,NEW.attempt_id,NEW.image,NEW.native_version,NEW.file_tools_qualified) IS DISTINCT FROM ROW(OLD.task_id,OLD.attempt_id,OLD.image,OLD.native_version,OLD.file_tools_qualified) OR (OLD.native_session<>'' AND NEW.native_session<>OLD.native_session) OR OLD.state='closed' OR NEW.revision<>OLD.revision+1 OR NEW.screened_sequence<OLD.screened_sequence THEN
   RAISE EXCEPTION 'Agent sandbox identity and closure are immutable';
  END IF;
  RETURN NEW;

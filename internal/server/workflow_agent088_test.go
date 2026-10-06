@@ -3,17 +3,36 @@ package server
 import (
 	"archive/tar"
 	"bytes"
+	"connectrpc.com/connect"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"net/http"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
 	"github.com/mjtechguy/golf-git/internal/runner"
 )
 
 func TestWorkflowAgent088OriginalParentAndChildAuthorityPostgres(t *testing.T) {
+	workflowAgent088AuthorityFixture(t, "")
+}
+
+func TestWorkflowAgent088PoolEditWhileWaitingForWorkerPostgres(t *testing.T) {
+	workflowAgent088AuthorityFixture(t, "pool")
+}
+
+func TestWorkflowAgent088RefusesBrokerBindingBeforeApproverLocksPostgres(t *testing.T) {
+	workflowAgent088AuthorityFixture(t, "broker")
+}
+
+func workflowAgent088AuthorityFixture(t *testing.T, mode string) {
+	t.Helper()
+	poolRace := mode == "pool"
 	f := newConversationFixture(t)
 	s := f.x.f.server
 	ctx, _ := controlContext(t, f)
@@ -39,6 +58,18 @@ func TestWorkflowAgent088OriginalParentAndChildAuthorityPostgres(t *testing.T) {
 	}
 	if _, e := s.db.Exec(`INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version) VALUES($1,'worker',$2,$3,$4)`, s.config.GiteaURL, s.config.AgentImage, s.config.ReviewImage, runner.ManagedACPVersion); e != nil {
 		t.Fatal(e)
+	}
+	poolID := uuid.NewString()
+	if poolRace {
+		if _, e := s.db.Exec(`INSERT INTO golf_runner_pools(forge_url,id,name,runtime,state,max_parallel_attempts,repository_assignment_enabled,version,actor_user_id) VALUES($1,$2,'Agent fixture','local-docker','active',1,true,1,$3)`, s.config.GiteaURL, poolID, f.t.UserID); e != nil {
+			t.Fatal(e)
+		}
+		if _, e := s.db.Exec(`INSERT INTO golf_repository_runner_placements(forge_url,repository_id,owner_id,version,pool_id,selected_pool_version,actor_user_id) VALUES($1,11,42,1,$2,1,$3)`, s.config.GiteaURL, poolID, f.t.UserID); e != nil {
+			t.Fatal(e)
+		}
+		if _, e := s.db.Exec(`INSERT INTO golf_runner_pool_workers(forge_url,runner_id,pool_id) VALUES($1,'fixture',$2)`, s.config.GiteaURL, poolID); e != nil {
+			t.Fatal(e)
+		}
 	}
 	workflow := []byte("on: workflow_dispatch\njobs:\n  check:\n    runs-on: linux\n    steps:\n      - id: advice\n        uses: golf/agent@v1\n        with: {prompt: Inspect the original source}\n")
 	source := workflowRunTar(t, []*tar.Header{{Name: runWorkflowPath, Typeflag: tar.TypeReg, Mode: 0644}}, [][]byte{workflow})
@@ -128,6 +159,102 @@ func TestWorkflowAgent088OriginalParentAndChildAuthorityPostgres(t *testing.T) {
 	if e = s.codexGuard(ctx, actor, func(tx *sql.Tx, _ int64) error { return s.agentAttemptFence(ctx, tx, actor, repeated.Account, task) }); e != nil {
 		t.Fatal("current original parent+agent fence refused", e)
 	}
+	if mode == "broker" {
+		binding := uuid.NewString()
+		if _, e = s.db.Exec(`INSERT INTO golf_execution_value_brokers(forge_url,repository_id,owner_id) VALUES($1,11,42)`, run.ForgeURL); e != nil {
+			t.Fatal(e)
+		}
+		if _, e = s.db.Exec(`INSERT INTO golf_execution_bindings(id,forge_url,repository_id,owner_id,version) VALUES($1,$2,11,42,1)`, binding, run.ForgeURL); e != nil {
+			t.Fatal(e)
+		}
+		// Deliberately attach retained broker metadata to this new catalog. It
+		// must be rejected before any approver lock, even if other source checks
+		// would later refuse the mismatched catalog.
+		if _, e = s.db.Exec(`INSERT INTO golf_execution_binding_versions(id,version,workflow_path,commit_id,blob_id,source_sha256,engine_catalog,event,event_ref,value_refs,approver_user_id,approver_native_id,approval_session_hash,expires_at) VALUES($1,1,$2,$3,$4,$5,$6,'manual','', $7,$8,42,$9,clock_timestamp()+interval '1 hour')`, binding, run.WorkflowPath, run.CommitID, run.BlobID, run.SourceSHA256, runner.ActionsCatalog, `[{"id":"00000000-0000-4000-8000-000000000088","version":"1"}]`, run.UserID, run.SessionHash); e != nil {
+			t.Fatal(e)
+		}
+		if _, e = s.db.Exec(`INSERT INTO golf_workflow_execution_bindings(run_id,binding_id,binding_version) VALUES($1,$2,1)`, run.ID, binding); e != nil {
+			t.Fatal(e)
+		}
+		if _, e = s.prepareWorkflowAgent(ctx, run, job, "advice"); !errors.Is(e, errRunnerUnavailable) {
+			t.Fatal("broker-bound parent admitted agent child", e)
+		}
+		if e = s.codexGuard(ctx, actor, func(tx *sql.Tx, _ int64) error { return s.agentAttemptFence(ctx, tx, actor, repeated.Account, task) }); !errors.Is(e, errRunnerUnavailable) {
+			t.Fatal("broker-bound child acquired approver/publication authority", e)
+		}
+		return
+	}
+	if poolRace {
+		holder, e := s.db.BeginTx(ctx, nil)
+		if e != nil {
+			t.Fatal(e)
+		}
+		defer holder.Rollback()
+		if e = s.lockRunnerControl(ctx, holder, run.RunnerID); e != nil {
+			t.Fatal(e)
+		}
+		result := make(chan error, 1)
+		pid := make(chan int, 1)
+		go func() {
+			tx, e := s.db.BeginTx(ctx, nil)
+			if e != nil {
+				result <- e
+				return
+			}
+			defer tx.Rollback()
+			var backend int
+			if e = tx.QueryRowContext(ctx, `SELECT pg_backend_pid()`).Scan(&backend); e != nil {
+				result <- e
+				return
+			}
+			pid <- backend
+			result <- s.agentAttemptFence(ctx, tx, actor, repeated.Account, task)
+		}()
+		backend := <-pid
+		// Wait for the actual advisory-lock wait, not a timing assumption.
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			var waiting bool
+			if e = s.db.QueryRowContext(ctx, `SELECT coalesce(wait_event='advisory',false) FROM pg_stat_activity WHERE pid=$1`, backend).Scan(&waiting); e != nil {
+				t.Fatal(e)
+			}
+			if waiting {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("child did not reach the worker-control lock")
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		edit, e := s.db.BeginTx(ctx, nil)
+		if e != nil {
+			t.Fatal(e)
+		}
+		defer edit.Rollback()
+		if e = s.lockRunnerPool(ctx, edit, poolID); e != nil {
+			t.Fatal(e)
+		}
+		// Exercise the same versioned Golf metadata transition under the same
+		// pool lock as SaveRunnerPool, without taking a second actor lock.
+		if _, e = edit.ExecContext(ctx, `UPDATE golf_runner_pools SET cpu_millis=500,version=version+1 WHERE forge_url=$1 AND id=$2`, s.config.GiteaURL, poolID); e != nil {
+			t.Fatal(e)
+		}
+		if e = edit.Commit(); e != nil {
+			t.Fatal(e)
+		}
+		if e = holder.Commit(); e != nil {
+			t.Fatal(e)
+		}
+		select {
+		case e = <-result:
+			if !errors.Is(e, errRunnerResourcesStale) {
+				t.Fatal("pool edit during worker wait retained child authority", e)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("child resource fence did not settle")
+		}
+		return
+	}
 	copy := task
 	copy.Commit = strings.Repeat("a", 39) + "b"
 	if s.workflowAgentAuthority(ctx, copy) == nil {
@@ -153,5 +280,50 @@ func TestWorkflowAgent088OriginalParentAndChildAuthorityPostgres(t *testing.T) {
 	}
 	if s.workflowAgentAuthority(ctx, task) == nil {
 		t.Fatal("parent cancellation did not stop child authority")
+	}
+}
+
+func TestWorkflowAgent088ChildReadLateReplacementPostgres(t *testing.T) {
+	for _, change := range []string{"repository", "owner"} {
+		t.Run(change, func(t *testing.T) {
+			f := newConversationFixture(t)
+			s := f.x.f.server
+			ctx, cookie := controlContext(t, f)
+			runID := uuid.NewString()
+			f.x.workflow(t, runID, 11, runWorkflowPath, f.x.at)
+			run, e := s.loadWorkflowRun(ctx, runID)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if _, e = s.db.Exec(`INSERT INTO golf_workflow_agent_children(run_id,parent_attempt,instance_id,step_id,task_id,source_sha256) VALUES($1,$2,$3,'private-step',$4,$5)`, run.ID, run.AttemptID, strings.Repeat("f", 32), f.t.ID, run.SourceSHA256); e != nil {
+				t.Fatal(e)
+			}
+			base := s.client.Transport
+			if base == nil {
+				base = http.DefaultTransport
+			}
+			calls := 0
+			s.client.Transport = creationRoundTripper(func(req *http.Request) (*http.Response, error) {
+				if req.URL.Path == "/api/v1/repos/alice/example" {
+					calls++
+					if calls == 2 {
+						f.x.f.mu.Lock()
+						if change == "repository" {
+							f.x.f.row.ID = 99
+						} else {
+							f.x.f.row.Owner.ID = 43
+						}
+						f.x.f.mu.Unlock()
+					}
+				}
+				return base.RoundTrip(req)
+			})
+			request := connect.NewRequest(&golfv1.ListWorkflowAgentChildrenRequest{RunId: run.ID, AttemptId: run.AttemptID})
+			request.Header().Set("Cookie", cookie)
+			response, e := s.ListWorkflowAgentChildren(ctx, request)
+			if e == nil || response != nil || calls < 2 {
+				t.Fatal("same-name replacement released original private child metadata", e)
+			}
+		})
 	}
 }

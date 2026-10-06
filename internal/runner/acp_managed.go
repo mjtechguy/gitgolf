@@ -12,8 +12,8 @@ import (
 )
 
 // Changing this version requires the same no-model protocol/policy qualification.
-// The existing 1.18.34 review image cannot silently acquire interactive authority.
-const ManagedACPVersion = "2.0.16"
+// Initialization, mode/model policy and file execution remain separate gates.
+const ManagedACPVersion = "1.18.34"
 
 var ErrACPTokenBudget = errors.New("native ACP completed-turn token budget exceeded")
 
@@ -112,7 +112,7 @@ func managedACPUsageReceipt(raw []byte, session, model string) (int64, error) {
 			}
 		}
 	}
-	if !complete {
+	if !complete || total == 0 {
 		return 0, ErrACPUnsupported
 	}
 	return total, nil

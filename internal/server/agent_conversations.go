@@ -181,6 +181,9 @@ func conversationMetadata(p conversationPayload) (kind, status, tool string, tok
 // The lease and all original admission fences are rechecked for every durable
 // acknowledgement. A failed/lost acknowledgement stops the native observer.
 func (s *Server) conversationGuard(ctx context.Context, t agentTaskRecord, r codexRecord, worker, attempt string, operation func(*sql.Tx) error) error {
+	if r.ID != t.Connection || r.Version != t.ConnectionVersion {
+		return errCodexConflict
+	}
 	a, e := s.taskActor(ctx, t)
 	if e == nil {
 		e = s.reviewTaskAccess(ctx, t)
@@ -191,6 +194,13 @@ func (s *Server) conversationGuard(ctx context.Context, t agentTaskRecord, r cod
 	return s.codexGuard(ctx, a, func(tx *sql.Tx, _ int64) error {
 		if e := s.agentAttemptFence(ctx, tx, a, r, t); e != nil {
 			return e
+		}
+		control, e := agentControlRow(ctx, tx, t.ID, attempt, false)
+		if e != nil && !errors.Is(e, sql.ErrNoRows) {
+			return errStorageUnavailable
+		}
+		if e == nil && (control.Image != s.config.ReviewImage || control.Version != runner.ManagedACPVersion || control.State == "closed") {
+			return errCodexConflict
 		}
 		var owns bool
 		if e := tx.QueryRowContext(ctx, `SELECT state='running' AND worker_id=$3 AND lease_expires_at>clock_timestamp() FROM golf_agent_tasks WHERE id=$1 AND attempt_id=$2 FOR UPDATE`, t.ID, attempt, worker).Scan(&owns); e != nil || !owns {

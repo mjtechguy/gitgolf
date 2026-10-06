@@ -19,18 +19,19 @@ type agentControlRecord struct {
 	State, Session, Image, Version, Permission, Tool string
 	Revision, Screened                               int64
 	Resume                                           bool
+	FileTools                                        bool
 	Options                                          []string
 }
 
 func agentControlRow(ctx context.Context, q interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }, task, attempt string, lock bool) (v agentControlRecord, err error) {
-	query := `SELECT state,native_session,image,native_version,permission_id,tool_id,revision,screened_sequence,resume,allow_once_options FROM golf_agent_controls WHERE task_id=$1 AND attempt_id=$2`
+	query := `SELECT state,native_session,image,native_version,permission_id,tool_id,revision,screened_sequence,resume,file_tools_qualified,allow_once_options FROM golf_agent_controls WHERE task_id=$1 AND attempt_id=$2`
 	if lock {
 		query += " FOR UPDATE"
 	}
 	var raw []byte
-	err = q.QueryRowContext(ctx, query, task, attempt).Scan(&v.State, &v.Session, &v.Image, &v.Version, &v.Permission, &v.Tool, &v.Revision, &v.Screened, &v.Resume, &raw)
+	err = q.QueryRowContext(ctx, query, task, attempt).Scan(&v.State, &v.Session, &v.Image, &v.Version, &v.Permission, &v.Tool, &v.Revision, &v.Screened, &v.Resume, &v.FileTools, &raw)
 	if err == nil && json.Unmarshal(raw, &v.Options) != nil {
 		err = errStorageUnavailable
 	}
@@ -96,6 +97,7 @@ func (s *Server) GetAgentControl(ctx context.Context, req *connect.Request[golfv
 			return nil, rpcError(err)
 		}
 		out.Available = available
+		out.FilePermissionsQualified = available && c.FileTools
 		out.CanResume = available && c.Resume && c.State == "idle"
 		out.Reason = "Only the original current browser session controls this preserved sandbox. Restart or authority loss ends it; no transcript replay."
 		if available && c.State == "permission" {
@@ -171,6 +173,9 @@ func validAgentCommand(m *golfv1.SubmitAgentCommandRequest, c agentControlRecord
 		}
 		if m.OptionId == "" {
 			return true
+		}
+		if !c.FileTools {
+			return false
 		}
 		for _, v := range c.Options {
 			if v == m.OptionId {

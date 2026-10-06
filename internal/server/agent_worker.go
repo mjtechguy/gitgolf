@@ -103,7 +103,7 @@ func (s *Server) RunAgentWorker(ctx context.Context, worker, seccomp string) err
 		if ctx.Err() != nil {
 			return nil
 		}
-		_, e = s.db.ExecContext(ctx, `INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version) VALUES($1,$2,$3,$4,$5) ON CONFLICT(forge_url,worker_id) DO UPDATE SET image=EXCLUDED.image,acp_image=EXCLUDED.acp_image,acp_version=EXCLUDED.acp_version,last_seen=clock_timestamp()`, s.config.GiteaURL, worker, s.config.AgentImage, acpImage, acpVersion)
+		_, e = s.db.ExecContext(ctx, `INSERT INTO golf_agent_worker_presence(forge_url,worker_id,image,acp_image,acp_version) VALUES($1,$2,$3,$4,$5) ON CONFLICT(forge_url,worker_id) DO UPDATE SET image=EXCLUDED.image,acp_image=EXCLUDED.acp_image,acp_version=EXCLUDED.acp_version,acp_file_tools=false,last_seen=clock_timestamp()`, s.config.GiteaURL, worker, s.config.AgentImage, acpImage, acpVersion)
 		if e != nil {
 			return errStorageUnavailable
 		}

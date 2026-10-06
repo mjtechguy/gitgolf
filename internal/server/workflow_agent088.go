@@ -67,14 +67,25 @@ func (s *Server) ListWorkflowAgentChildren(ctx context.Context, req *connect.Req
 	if e = s.codexGuard(ctx, a, func(*sql.Tx, int64) error { return nil }); e != nil {
 		return nil, rpcError(e)
 	}
-	if _, e = s.agentAuthority(ctx, a, golfv1.AgentUsageScope_AGENT_USAGE_SCOPE_REPOSITORY, "", &golfv1.RepositoryKey{Owner: run.RepositoryOwner, Name: run.RepositoryName}); e != nil {
+	final, e := s.agentAuthority(ctx, a, golfv1.AgentUsageScope_AGENT_USAGE_SCOPE_REPOSITORY, "", &golfv1.RepositoryKey{Owner: run.RepositoryOwner, Name: run.RepositoryName})
+	if e != nil {
 		return nil, rpcError(e)
+	}
+	if final.ID != strconv.FormatInt(run.RepositoryID, 10) || final.OwnerID != run.OwnerID {
+		return nil, rpcError(errResourceNotFound)
 	}
 	return connect.NewResponse(out), nil
 }
 
 func (s *Server) prepareWorkflowAgent(ctx context.Context, run workflowRunRecord, job, step string) (*workflowAgentAdmission, error) {
 	if run.Origin != "manual" || run.EngineCatalog != runner.ActionsAgentCatalog || s.config.ActionsEngineCatalog != runner.ActionsAgentCatalog || !s.agentACPAvailable(ctx) || !attemptIdentifier.MatchString(job) || !actionStepID(step) {
+		return nil, errRunnerUnavailable
+	}
+	approval, e := storedExecutionRunBinding(ctx, s.db, run)
+	if e != nil {
+		return nil, e
+	}
+	if approval != nil {
 		return nil, errRunnerUnavailable
 	}
 	var raw []byte
@@ -228,18 +239,27 @@ func (s *Server) agentAttemptFence(ctx context.Context, tx *sql.Tx, a codexActor
 	if !linked {
 		return s.agentFence(ctx, tx, a, r, t.RepositoryID, t.OwnerID, t.Fingerprint)
 	}
+	approval, e := storedExecutionRunBinding(ctx, tx, run)
+	if e != nil {
+		return e
+	}
+	// This catalog does not consume source-approved broker values. Refuse a
+	// retained binding before acquiring any approver locks: the outer agent
+	// guard already owns the initiating user's lock.
+	if approval != nil {
+		return errRunnerUnavailable
+	}
 	if e = s.runnerPolicyFence(ctx, tx, run); e != nil {
 		return e
 	}
-	if e = s.runnerResourceFence(ctx, tx, run); e != nil {
+	if _, e = s.executionBrokerFence(ctx, tx, run, approval); e != nil {
 		return e
 	}
-	if e = workflowAgentStepRunning(ctx, tx, run, job, step); e != nil {
+	// Match runnerAttempt's placement → worker → pool → run order. Resource
+	// validation must follow these locks: a pool edit can commit while we wait
+	// for worker control, and that edit must fence this original child attempt.
+	if e = s.lockRunnerPlacement(ctx, tx, run.RepositoryID); e != nil {
 		return e
-	}
-	var current bool
-	if tx.QueryRowContext(ctx, `SELECT state='running' AND NOT cancel_requested AND lease_expires_at>clock_timestamp() AND attempt_id=$2 FROM golf_workflow_runs WHERE id=$1 FOR UPDATE`, run.ID, run.AttemptID).Scan(&current) != nil || !current {
-		return errWorkflowRunConflict
 	}
 	if e = s.lockRunnerControl(ctx, tx, run.RunnerID); e != nil {
 		return e
@@ -251,11 +271,19 @@ func (s *Server) agentAttemptFence(ctx context.Context, tx *sql.Tx, a codexActor
 	if control == "revoked" {
 		return errWorkflowRunConflict
 	}
-	approval, e := storedExecutionRunBinding(ctx, tx, run)
-	if e != nil {
+	if run.RunnerPlacement.PoolID.Valid {
+		if e = s.lockRunnerPool(ctx, tx, run.RunnerPlacement.PoolID.String); e != nil {
+			return e
+		}
+	}
+	if e = s.runnerResourceFence(ctx, tx, run); e != nil {
 		return e
 	}
-	if _, e = s.executionBrokerFence(ctx, tx, run, approval); e != nil {
+	var current bool
+	if tx.QueryRowContext(ctx, `SELECT state='running' AND NOT cancel_requested AND lease_expires_at>clock_timestamp() AND attempt_id=$2 FROM golf_workflow_runs WHERE id=$1 FOR UPDATE`, run.ID, run.AttemptID).Scan(&current) != nil || !current {
+		return errWorkflowRunConflict
+	}
+	if e = workflowAgentStepRunning(ctx, tx, run, job, step); e != nil {
 		return e
 	}
 	return s.agentFence(ctx, tx, a, r, t.RepositoryID, t.OwnerID, t.Fingerprint)
