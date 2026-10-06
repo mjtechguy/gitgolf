@@ -125,7 +125,7 @@ func (s *Server) authoringPostflight(ctx context.Context, session string, token 
 			Body string `json:"body"`
 			User *User  `json:"user"`
 		}
-		if json.Unmarshal(raw, &receipt) != nil || receipt.ID != mustDiscussionID(m.CommentId) || receipt.Body != m.Body || receipt.User == nil {
+		if json.Unmarshal(raw, &receipt) != nil || receipt.ID != mustDiscussionID(m.CommentId) || receipt.Body != m.Body {
 			return 0, errInvalidForgeResponse
 		}
 		var original *golfv1.PullRequestReviewComment
@@ -134,7 +134,7 @@ func (s *Server) authoringPostflight(ctx context.Context, session string, token 
 				original = c
 			}
 		}
-		if original == nil || original.User == nil || original.User.Id != strconv.FormatInt(receipt.User.ID, 10) || !authoringHeaderUnchanged(before.wire.Review, w.Review, before.wire.Review.Body, uint32(len(before.wire.Comments))) || !authoringChildrenUnchanged(before.wire.Comments, w.Comments, m.CommentId, m.Body, "") {
+		if original == nil || original.User == nil || receipt.User != nil && receipt.User.ID > 0 && original.User.Id != strconv.FormatInt(receipt.User.ID, 10) || !authoringHeaderUnchanged(before.wire.Review, w.Review, before.wire.Review.Body, uint32(len(before.wire.Comments))) || !authoringChildrenUnchanged(before.wire.Comments, w.Comments, m.CommentId, m.Body, "") {
 			return 0, errPullSnapshotChanged
 		}
 	case authorDelete:

@@ -14,6 +14,9 @@ func (s *Server) enrichReviewReplyParents(ctx context.Context, repoID, pullID in
 	if review.State == "PENDING" || len(comments) == 0 {
 		return nil
 	}
+	if s.db == nil {
+		return errStorageUnavailable
+	}
 	visible := make(map[string]*golfv1.PullRequestReviewComment, len(comments))
 	ids := make([]int64, 0, len(comments))
 	for _, row := range comments {
