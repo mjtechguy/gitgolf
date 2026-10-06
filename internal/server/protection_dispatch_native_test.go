@@ -62,7 +62,14 @@ func TestProtectionUnknownNativeProof(t *testing.T) {
 		}
 	})
 	client := golfv1connect.NewRepositoryRulesServiceClient(transport, origin.String()+"/rpc")
-	get := connect.NewRequest(&golfv1.GetRepositoryRulesRequest{Repository: key})
+	accessClient := golfv1connect.NewRepositoryAccessServiceClient(transport, origin.String()+"/rpc")
+	accessReq := connect.NewRequest(&golfv1.GetRepositoryAccessRequest{Repository: key})
+	accessReq.Header().Set("Origin", s.config.PublicURL)
+	access, e := accessClient.GetRepositoryAccess(t.Context(), accessReq)
+	if e != nil {
+		t.Fatal("owned native access inventory", connect.CodeOf(e))
+	}
+	get := connect.NewRequest(&golfv1.GetRepositoryRulesRequest{Repository: key, RepositoryId: strconv.FormatInt(repo.ID, 10), OwnerId: access.Msg.Access.OwnerId, ExpectedRevision: access.Msg.Access.Revision})
 	get.Header().Set("Origin", s.config.PublicURL)
 	before, e := client.GetRepositoryRules(t.Context(), get)
 	if e != nil {
@@ -89,7 +96,7 @@ func TestProtectionUnknownNativeProof(t *testing.T) {
 	if e != nil || original.Msg.Operation.Phase != "DISPATCH_UNKNOWN" || writes.Load() != 1 {
 		t.Fatal("accepted native response loss not retained")
 	}
-	read := connect.NewRequest(&golfv1.GetRepositoryRulesRequest{Repository: key})
+	read := connect.NewRequest(&golfv1.GetRepositoryRulesRequest{Repository: key, RepositoryId: m.RepositoryId, OwnerId: m.OwnerId, ExpectedRevision: m.ExpectedAccessRevision})
 	read.Header().Set("Origin", s.config.PublicURL)
 	observed, e := client.GetRepositoryRules(t.Context(), read)
 	if e != nil || len(observed.Msg.BranchProtections) != 1 || observed.Msg.BranchProtections[0].RuleName != "golf-fence/*" {
