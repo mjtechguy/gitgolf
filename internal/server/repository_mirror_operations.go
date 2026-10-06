@@ -281,6 +281,11 @@ func (s *Server) SubmitRepositoryMirrorOperation(ctx context.Context, req *conne
 				if e != nil || mirrorRevision(before) != m.ExpectedConfigurationRevision {
 					return errRepositoryAccessConflict
 				}
+				if m.Kind == 2 {
+					if e = s.recordMirrorBaseline086(held, tx, token, r, before); e != nil {
+						return e
+					}
+				}
 				held = context.WithValue(held, mirrorPermitKey{}, mirrorPermit{r, proto.Clone(m).(*golfv1.SubmitRepositoryMirrorOperationRequest)})
 				method, suffix, payload := mirrorNative(m)
 				base, _ := repositoryPath(keyFrom(m.Repository))

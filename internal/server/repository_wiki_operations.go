@@ -68,7 +68,13 @@ func (s *Server) wikiWriteAuthority(ctx context.Context, session string, token f
 				return errRepositoryAccessConflict
 			}
 			if !access.CanManage {
-				return forgeError{http.StatusForbidden}
+				writer, e := s.wikiUnitWriter086(ctx, token, key, user)
+				if e != nil {
+					return e
+				}
+				if !writer {
+					return forgeError{http.StatusForbidden}
+				}
 			}
 			return nil
 		})
@@ -86,7 +92,7 @@ func (s *Server) GetRepositoryWikiWriteContext(ctx context.Context, req *connect
 	if e != nil {
 		return nil, lifecycleRPCError(e)
 	}
-	return connect.NewResponse(&golfv1.GetRepositoryWikiWriteContextResponse{Access: access}), nil
+	return connect.NewResponse(&golfv1.GetRepositoryWikiWriteContextResponse{Access: access, CanWrite: true}), nil
 }
 
 type wikiOperationRecord struct {

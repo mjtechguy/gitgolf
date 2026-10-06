@@ -48,6 +48,8 @@ type nativeWikiPageMetadata struct {
 type nativeWikiPage struct {
 	nativeWikiPageMetadata
 	Content string `json:"content_base64"`
+	Sidebar string `json:"sidebar"`
+	Footer  string `json:"footer"`
 	Count   *int64 `json:"commit_count"`
 }
 
@@ -204,6 +206,23 @@ func (s *Server) GetRepositoryWikiPage(ctx context.Context, req *connect.Request
 				text := string(decoded)
 				result.Markdown = &text
 				result.ContentUnavailableReason = ""
+			}
+		}
+		for _, attachment := range []struct {
+			encoded string
+			target  **string
+		}{{row.Sidebar, &result.SidebarMarkdown}, {row.Footer, &result.FooterMarkdown}} {
+			encoded, target := attachment.encoded, attachment.target
+			if encoded == "" {
+				continue
+			}
+			decoded, e := base64.StdEncoding.Strict().DecodeString(encoded)
+			if e != nil {
+				return errInvalidForgeResponse
+			}
+			if len(decoded) <= 256<<10 && utf8.Valid(decoded) && discussionText(string(decoded), 256<<10) {
+				text := string(decoded)
+				*target = &text
 			}
 		}
 		var after nativeWikiPage

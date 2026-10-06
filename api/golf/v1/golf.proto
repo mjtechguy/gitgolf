@@ -4759,6 +4759,7 @@ message GetRepositoryWikiPageResponse {
  optional string markdown = 3;
  string content_unavailable_reason = 4;
  string commit_count = 5;
+ optional string sidebar_markdown = 6; optional string footer_markdown = 7;
 }
 
 // Native forge completion078: original wiki writes and current package reads.
@@ -4769,7 +4770,7 @@ service RepositoryWikiManagementService {
  rpc ListRepositoryWikiRevisions(ListRepositoryWikiRevisionsRequest) returns (ListRepositoryWikiRevisionsResponse);
 }
 message GetRepositoryWikiWriteContextRequest { RepositoryKey repository = 1; string repository_id = 2; }
-message GetRepositoryWikiWriteContextResponse { RepositoryAccess access = 1; }
+message GetRepositoryWikiWriteContextResponse { RepositoryAccess access = 1; bool can_write = 2; }
 enum RepositoryWikiOperationKind {
  REPOSITORY_WIKI_OPERATION_KIND_UNSPECIFIED = 0;
  REPOSITORY_WIKI_OPERATION_KIND_CREATE = 1;
@@ -5007,3 +5008,10 @@ message SubmitPackagePublicationResponse { PackagePublicationOperation operation
 message GetPackagePublicationResponse { PackagePublicationOperation operation = 1; }
 message DownloadGenericPackageFileRequest { RepositoryKey repository = 1; string repository_id = 2; ForgePackage package = 3; string file_id = 4; }
 message DownloadGenericPackageFileResponse { string repository_id = 1; string package_id = 2; string file_id = 3; string file_name = 4; string sha256 = 5; bytes content = 6; }
+
+// Read-only default-branch sync observations, independent of queue acceptance.
+service MirrorObservationService { rpc GetMirrorSyncObservation(GetMirrorSyncObservationRequest) returns (GetMirrorSyncObservationResponse); }
+message GetMirrorSyncObservationRequest { RepositoryKey repository=1; string repository_id=2; string owner_id=3; string operation_id=4; }
+message GetMirrorSyncObservationResponse {
+ string contract=1; RepositoryMirrorOperation operation=2; string source_url=3; string default_branch=4; string baseline_native_updated_at=5; string native_updated_at=6; string source_head_commit_id=7; string native_head_commit_id=8; bool completion_observed=9; string reason=10;
+}

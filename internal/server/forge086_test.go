@@ -271,6 +271,13 @@ func TestPackage086NamespaceOriginalAndDownloadsPostgres(t *testing.T) {
 			if e != nil || !proto.Equal(r.Msg.Operation, replay.Msg.Operation) || puts.Load() != 1 {
 				t.Fatal("original publication resent", e)
 			}
+			var activities int
+			if e := f.db.QueryRow("SELECT count(*) FROM golf_repository_activity WHERE forge_url=$1 AND repository_id=11 AND topic='source'", f.s.config.GiteaURL).Scan(&activities); e != nil {
+				t.Fatal(e)
+			}
+			if (want == 2 && activities != 0) || (want == 3 && activities != 1) {
+				t.Fatal("publication activity must occur only once on success", activities)
+			}
 			if want == 2 {
 				if mode == "lost-upload" && links.Load() != 0 {
 					t.Fatal("failed upload linked")
@@ -341,5 +348,191 @@ func TestProvider086CredentialRotationPostgres(t *testing.T) {
 		if _, e = f.db.Exec(query); e == nil {
 			t.Fatal("immutable provider/package evidence mutable", query)
 		}
+	}
+}
+
+func TestWiki086OrdinaryUnitWriterPostgres(t *testing.T) {
+	for _, grant := range []string{"write", "read", "site-admin-only"} {
+		t.Run(grant, func(t *testing.T) {
+			f := newReleasePublicationFixture(t)
+			base := f.s.client.Transport
+			if base == nil {
+				base = http.DefaultTransport
+			}
+			f.s.client.Transport = forge086Transport(func(r *http.Request) (*http.Response, error) {
+				switch r.URL.Path {
+				case "/api/v1/repos/alice/private":
+					out, e := base.RoundTrip(r)
+					if e != nil {
+						return out, e
+					}
+					var row map[string]any
+					json.NewDecoder(out.Body).Decode(&row)
+					out.Body.Close()
+					row["permissions"] = map[string]bool{"admin": false, "push": grant != "read", "pull": true}
+					return forge086Response(r, 200, row), nil
+				case "/api/v1/repos/alice/private/collaborators/bob/permission":
+					permission := grant
+					if grant == "site-admin-only" {
+						permission = "admin"
+					}
+					return forge086Response(r, 200, map[string]any{"permission": permission, "user": User{ID: 43, Login: "bob"}}), nil
+				case "/api/v1/repos/alice/private/collaborators/bob":
+					status := 204
+					if grant == "site-admin-only" {
+						status = 404
+					}
+					return forge086Response(r, status, nil), nil
+				}
+				return base.RoundTrip(r)
+			})
+			session, e := f.s.createSession(context.Background(), User{ID: 43, Login: "bob"}, "pat", "other-pat", "")
+			if e != nil {
+				t.Fatal(e)
+			}
+			ctx := context.WithValue(context.Background(), sessionTokenKey{}, forgeCredential{Kind: "pat", Token: "other-pat"})
+			_, _, h := f.scope(session)
+			r, e := f.s.GetRepositoryWikiWriteContext(ctx, forge086Request(&golfv1.GetRepositoryWikiWriteContextRequest{Repository: pullKey, RepositoryId: "11"}, h))
+			if grant == "write" {
+				if e != nil || !r.Msg.CanWrite || r.Msg.Access.CanManage {
+					t.Fatal("ordinary wiki writer mislabeled as administrator", e)
+				}
+			} else if e == nil {
+				t.Fatal("non-writer admitted")
+			}
+		})
+	}
+}
+func TestMirror086CompletionPostgres(t *testing.T) {
+	for _, mode := range []string{"completed", "queued", "wrong-head", "source-drift"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newReleasePublicationFixture(t)
+			session := f.session(t, "pat")
+			ctx, _, h := f.scope(session)
+			base := f.s.client.Transport
+			if base == nil {
+				base = http.DefaultTransport
+			}
+			updated := "2026-10-06T03:00:00Z"
+			var writes atomic.Int32
+			var remoteReads atomic.Int32
+			head := strings.Repeat("b", 40)
+			f.s.client.Transport = forge086Transport(func(r *http.Request) (*http.Response, error) {
+				if r.URL.Host == "api.github.com" {
+					if r.Header.Get("Authorization") != "" {
+						t.Error("mirror observation forwarded credential")
+					}
+					if r.URL.Path == "/repos/owned/project" {
+						return forge086Response(r, 200, map[string]any{"id": 82, "private": false, "clone_url": "https://github.com/owned/project.git", "default_branch": "main"}), nil
+					}
+					remote := head
+					if mode == "source-drift" && remoteReads.Add(1) > 1 {
+						remote = strings.Repeat("a", 40)
+					}
+					return forge086Response(r, 200, map[string]any{"name": "main", "commit": map[string]string{"sha": remote}}), nil
+				}
+				switch r.URL.Path {
+				case "/api/v1/repos/alice/private":
+					out, e := base.RoundTrip(r)
+					if e != nil {
+						return out, e
+					}
+					var row map[string]any
+					json.NewDecoder(out.Body).Decode(&row)
+					out.Body.Close()
+					row["mirror"] = true
+					row["mirror_interval"] = "1h0m0s"
+					row["original_url"] = "https://github.com/owned/project.git"
+					row["mirror_updated"] = updated
+					return forge086Response(r, 200, row), nil
+				case "/api/v1/repos/alice/private/mirror-sync":
+					writes.Add(1)
+					if mode != "queued" {
+						updated = "2026-10-06T03:00:02Z"
+					}
+					return forge086Response(r, 200, nil), nil
+				case "/api/v1/repos/alice/private/branches/main":
+					native := head
+					if mode == "wrong-head" {
+						native = strings.Repeat("a", 40)
+					}
+					return forge086Response(r, 200, map[string]any{"name": "main", "commit": map[string]string{"id": native}}), nil
+				}
+				return base.RoundTrip(r)
+			})
+			_, configuration, e := f.s.mirrorAuthority(ctx, session.Value, forgeCredential{Kind: "pat", Token: "pull-pat"}, keyFrom(pullKey), "11", "42")
+			if e != nil {
+				t.Fatal(e)
+			}
+			m := &golfv1.SubmitRepositoryMirrorOperationRequest{Repository: pullKey, RepositoryId: "11", OwnerId: "42", OperationId: randomUUID(), ExpectedConfigurationRevision: mirrorRevision(configuration), Kind: 2}
+			r, e := f.s.SubmitRepositoryMirrorOperation(ctx, forge086Request(m, h))
+			if e != nil || r.Msg.Operation.Phase != 3 {
+				t.Fatal("sync acceptance", e, r)
+			}
+			o, e := f.s.GetMirrorSyncObservation(ctx, forge086Request(&golfv1.GetMirrorSyncObservationRequest{Repository: pullKey, RepositoryId: "11", OwnerId: "42", OperationId: m.OperationId}, h))
+			if mode == "source-drift" {
+				if e == nil {
+					t.Fatal("unstable remote reported")
+				}
+				return
+			}
+			if e != nil || o.Msg.CompletionObserved != (mode == "completed") {
+				t.Fatal("completion observation", e, o)
+			}
+			if writes.Load() != 1 {
+				t.Fatal("observation resent sync")
+			}
+			if _, e = f.db.Exec("UPDATE golf_mirror_sync_baselines SET native_updated_at=native_updated_at"); e == nil {
+				t.Fatal("baseline mutable")
+			}
+		})
+	}
+}
+
+func TestProvider086UnknownNeverResendsPostgres(t *testing.T) {
+	f := newReleasePublicationFixture(t)
+	session := f.session(t, "pat")
+	ctx, _, h := f.scope(session)
+	base := f.s.client.Transport
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	var calls atomic.Int32
+	f.s.client.Transport = forge086Transport(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host == "api.github.com" {
+			switch r.URL.Path {
+			case "/user":
+				return forge086Response(r, 200, map[string]any{"id": 81, "login": "source-owner"}), nil
+			case "/repos/source-owner/project":
+				return forge086Response(r, 200, map[string]any{"id": 82, "full_name": "source-owner/project", "private": true, "clone_url": "https://github.com/source-owner/project.git", "default_branch": "main"}), nil
+			default:
+				return forge086Response(r, 200, map[string]any{"name": "main", "commit": map[string]string{"sha": strings.Repeat("b", 40)}}), nil
+			}
+		}
+		if r.URL.Path == "/api/v1/repos/migrate" {
+			calls.Add(1)
+			return forge086Response(r, 503, nil), nil
+		}
+		return base.RoundTrip(r)
+	})
+	c := forge086Connection(t, f, ctx, h)
+	p, e := f.s.PreviewProviderImport(ctx, forge086Request(&golfv1.PreviewProviderImportRequest{ConnectionId: c.Id, ConnectionVersion: c.Version, SourceUrl: "https://github.com/source-owner/project"}, h))
+	if e != nil {
+		t.Fatal(e)
+	}
+	m := &golfv1.SubmitProviderImportRequest{Preview: p.Msg.Preview, OperationId: randomUUID(), DestinationName: "unknown-private"}
+	r, e := f.s.SubmitProviderImport(ctx, forge086Request(m, h))
+	if e != nil || r.Msg.Operation.Phase != 2 {
+		t.Fatal("unknown import", e)
+	}
+	again, e := f.s.SubmitProviderImport(ctx, forge086Request(m, h))
+	if e != nil || !proto.Equal(r.Msg.Operation, again.Msg.Operation) || calls.Load() != 1 {
+		t.Fatal("unknown native import resent", e)
+	}
+	next := proto.Clone(m).(*golfv1.SubmitProviderImportRequest)
+	next.OperationId = randomUUID()
+	next.DestinationName = "bypass-attempt"
+	if _, e = f.s.SubmitProviderImport(ctx, forge086Request(next, h)); e == nil || calls.Load() != 1 {
+		t.Fatal("unknown import admission bypassed")
 	}
 }

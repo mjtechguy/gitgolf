@@ -74,7 +74,7 @@ CREATE FUNCTION golf_package_publication_guard() RETURNS trigger LANGUAGE plpgsq
   IF (to_jsonb(NEW)-ARRAY['phase','failure_code','result_package_id','result_file_id']) IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['phase','failure_code','result_package_id','result_file_id']) OR NOT(OLD.phase='RESERVED' AND NEW.phase IN ('REJECTED','DISPATCH_UNKNOWN') OR OLD.phase='DISPATCH_UNKNOWN' AND NEW.phase='SUCCEEDED') THEN RAISE EXCEPTION 'Package publication immutable';END IF;
  END IF;RETURN NEW;
 END; $$;
-CREATE FUNCTION golf_package_publication_event() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN INSERT INTO golf_package_publication_events(operation_id,phase) VALUES(NEW.id,NEW.phase);RETURN NEW;END; $$;
+CREATE FUNCTION golf_package_publication_event() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN INSERT INTO golf_package_publication_events(operation_id,phase) VALUES(NEW.id,NEW.phase);IF NEW.phase='SUCCEEDED' THEN PERFORM golf_append_repository_activity(NEW.forge_url,NEW.repository_id,0,'source');END IF;RETURN NEW;END; $$;
 ALTER FUNCTION golf_repository_lifecycle_active(text,bigint) RENAME TO golf_repository_lifecycle_active_before_package_publication;
 CREATE OR REPLACE FUNCTION golf_repository_lifecycle_active(f text,r bigint) RETURNS bigint LANGUAGE sql AS $$ SELECT golf_repository_lifecycle_active_before_package_publication(f,r)+(SELECT count(*) FROM golf_package_publications WHERE forge_url=f AND repository_id=r AND phase IN ('RESERVED','DISPATCH_UNKNOWN')); $$;
 ALTER FUNCTION golf_repository_lifecycle_blocked(text,bigint) RENAME TO golf_repository_lifecycle_blocked_before_package_publication;
@@ -82,6 +82,14 @@ CREATE OR REPLACE FUNCTION golf_repository_lifecycle_blocked(f text,r bigint) RE
 -- +goose StatementEnd
 CREATE TRIGGER golf_package_publication_guard BEFORE INSERT OR UPDATE ON golf_package_publications FOR EACH ROW EXECUTE FUNCTION golf_package_publication_guard();
 CREATE TRIGGER golf_package_publication_event AFTER INSERT OR UPDATE ON golf_package_publications FOR EACH ROW EXECUTE FUNCTION golf_package_publication_event();
+CREATE TABLE golf_mirror_sync_baselines(operation_id bigint PRIMARY KEY REFERENCES golf_repository_mirror_operations(id),source_url text NOT NULL,default_branch text NOT NULL,native_updated_at text NOT NULL,native_head_commit_id text NOT NULL CHECK(native_head_commit_id ~ '^([a-f0-9]{40}|[a-f0-9]{64})$'));
+CREATE TRIGGER golf_mirror_sync_baseline_immutable BEFORE UPDATE OR DELETE OR TRUNCATE ON golf_mirror_sync_baselines FOR EACH STATEMENT EXECUTE FUNCTION golf_audit_reject_mutation();
+-- +goose StatementBegin
+CREATE FUNCTION golf_mirror_baseline_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM golf_repository_mirror_operations WHERE id=NEW.operation_id AND kind=2 AND phase='DISPATCH_UNKNOWN') THEN RAISE EXCEPTION 'Mirror baseline requires original sync dispatcher';END IF;RETURN NEW;
+END; $$;
+-- +goose StatementEnd
+CREATE TRIGGER golf_mirror_baseline_guard BEFORE INSERT ON golf_mirror_sync_baselines FOR EACH ROW EXECUTE FUNCTION golf_mirror_baseline_guard();
 -- +goose Down
 -- +goose StatementBegin
 DO $$ BEGIN RAISE EXCEPTION 'Provider import evidence/credentials require qualified recovery; no downgrade';END $$;
