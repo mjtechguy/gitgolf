@@ -2,13 +2,40 @@
 
 Local Compose consumers come first. This ordering follows the [complete Settings requirements](REPOSITORY_SETTINGS_IMPLEMENTATION.md); it does not narrow them or turn intermediate slices Ready. [Implementation status](IMPLEMENTATION_STATUS.md) remains the deployment ledger. Kubernetes and optional Cloudflare adapters have separate qualification gates.
 
-## Latest local pass
+## Last recorded deployed baseline for this source pass
 
-The four parallel streams are integrated and deployed at schema076 on clean frozen `fffb28a`. Current source/native,190 browser, PostgreSQL/race, deployment/authentication and independent running receipts are in the [076 ledger](IMPLEMENTATION_STATUS.md#portable-completion076-four-parallel-streams-2026-10-05). Ordinary file writers, individual reviewer requests, reactions/subscriptions/activity, own issue/PR notifications/mark-read, Markdown templates, inherited label selection, release/asset writes, public provider imports/pull mirrors, wiki reads and scoped CLI/MCP collaboration now have bounded consumers. The older071 statements below retain historical scopes rather than overriding076.
+The previous four-stream pass is integrated and deployed at schema076 on clean frozen `fffb28a`. Current source/native,190 browser, PostgreSQL/race, deployment/authentication and independent running receipts are in the [076 ledger](IMPLEMENTATION_STATUS.md#portable-completion076-four-parallel-streams-2026-10-05). Ordinary file writers, individual reviewer requests, reactions/subscriptions/activity, own issue/PR notifications/mark-read, Markdown templates, inherited label selection, release/asset writes, public provider imports/pull mirrors, wiki reads and scoped CLI/MCP collaboration now have bounded consumers. The older071 statements below retain historical scopes rather than overriding076.
 
-Next engineering priorities on existing infrastructure are protected integration/writer fencing; broader PR review threads/CODEOWNERS; organization labels, form templates/attachments and collaboration notification preferences/email; mirror management/connected migration, wiki authoring/projects/packages; broader machine writes and interactive agent/automation contracts. Heavy unchanged upstream CI, executable previews/CD and scale/recovery qualification retain their existing capacity/acceptance gates. No new scheduler, cache service or Cloudflare work is needed merely to continue these portable consumers.
+## Integrated source after076
 
-## Current bounded increments
+The deployed076 paragraph above is the baseline for this pass, not a claim that newer source runs on localhost. Later source/native/browser checks advance the following consumers; matching frozen rollout and actual served proof must be recorded separately in the implementation ledger.
+
+| Packet | New consumer | Explicit boundary |
+| --- | --- | --- |
+|077 | Team review requests, native-regex CODEOWNERS observations, published inline replies and resolve/reopen. [Review interactions](PULL_REVIEW_INTERACTIONS_CONTRACT.md). | Advisory routing/per-comment markers; no protected approval eligibility, complete thread tree, pending review authoring or all team/unit roles. |
+|078 | Wiki CRUD/current history, organization label CRUD, linked package/file reads, mirror interval editing and queued sync requests. [Native forge consumers](NATIVE_FORGE078_CONTRACT.md). | Native/source and full-App controlled browser receipts differ from served deployment. Wiki writes preserve title/slug and require ordinary administration; package registry writes/download mediation and projects remain unavailable. Sync acceptance is not completed synchronization. |
+|079 | Golf-local TOTP/recovery and password-factor authentication, bounded YAML issue forms, notification preferences and bounded workflow fanout consumers. [MFA contract](LOCAL_MFA_CONTRACT.md). | Source/browser checks and separately recorded owned native MFA/template proofs are not new SMTP/inbox acceptance. Recovery disclosure is outside the expired workspace. Verified-email recovery/passkeys/enterprise enforcement, independent provider/native/Git MFA policy, issue/PR fanout completeness and attachments remain open. |
+|080 | Exact-repository source writes and Actions/own-agent inspection via typed CLI/MCP under explicit grants. [Scoped delegation](SCOPED_COLLABORATION_DELEGATION.md). | Shared original-operation journals and current native/source-session authority; no protected writes, merge, execution, cancellation or credential administration. Baseline reviewed reads retain their broader current-native-access scope. |
+|082 | Published approval/change-request dismissal and current-head restoration. [Review lifecycle](PULL_REVIEW_LIFECYCLE_CONTRACT.md). | Ordinary owner/direct-admin slice, `priors=false`, stale-head refusal and original-only outcomes; no pending/comment lifecycle, team-admin parity or protected merge predicate. |
+
+Upcoming081 covers targeted administrator MFA recovery with own password/factor, exact IDs/versions and self/admin guards, plus explicit operator-console inspect/reset and revocation of preexisting PAT-backed Golf browser/API sessions when MFA changes. Independent OAuth/native PAT/Git/background grants stay separate. It is pending integration/qualification in this checkpoint; do not advertise a control, deployment or recovery proof from this planning entry. Private/connected provider import is not part of081 and remains unfinished.
+
+These packets have runnable source/native/browser evidence within their stated contracts. A successful controlled browser test, native handler proof or saved configuration does not establish a retained localhost rollout, new model/workflow execution, latest-schema recovery or an entire Settings row's readiness.
+
+## Prioritized engineering on existing infrastructure
+
+| Order | Packet | Concrete next acceptance |
+| --- | --- | --- |
+|1 | Protected writes and integration | Close P0.8 with every relevant managed/native ingress, exact candidate/base/head/source and current policy/authority, trusted check producers and eligible approvals. Cover stale/concurrent writers and original unknown outcomes. Ordinary merge, advisory CODEOWNERS, dismissal/restoration and native rule settings are not this proof. |
+|2 | Complete review/source consumers | Extend published edits/deletes, pending review lifecycle, richer thread/suggestion behavior and team/unit permissions; qualify contributor refs, batch/rename and supported blame alternatives. Keep native API limitations and non-atomic observations explicit. |
+|3 | Complete native forge and migration | Finish package publishing/download/authorized registry ingress; wiki wider writers/renaming/history content/attachments/relative assets; mirror source/push controls and actual sync completion. Select a supported project contract or explicitly owned Golf boards before implementation. Build connected/private GitHub/GitLab import and metadata/attribution/fidelity/recovery reports separately from tiny public code imports. |
+|4 | Identity and collaboration completion | Integrate and qualify081 before exposing admin recovery; finish verified-email recovery, passkeys/SSO and role/ingress policy. Broaden issue/PR notification fanout, preferences/types/unread counts, attachments and richer templates, preserving verified destinations and current consent/access. |
+|5 | Agent/automation contracts | Add policy-bound interactive ACP reply/steer/resume, PR-comment assignment and agents within ordinary workflow steps; qualify all five harness authentication/reauthentication/version/session paths. Broaden supported workflow events, reusable workflows, cache, job tokens/checkout and fork trust with small serialized fixtures where possible. |
+|6 | Delivery, recovery and performance | Continue original profile/artifact retention and orphan accounting, latest-schema coordinated restore/upgrade/key rotation, authorized live-event cursor/reconnect/backpressure and bounded performance checks. Implement exact artifact/config/environment approval and delivery control-plane behavior without pretending unqualified executable previews/CD work. |
+
+This is engineering and qualification on the existing Go/PostgreSQL core, supported native APIs, RustFS and workers. Reuse those consumers and shared UI first; no new cache, scheduler, service or additional Docker capacity is needed merely to implement these contracts. Unchanged real upstream CI, executable previews/CD, sustained parallel execution, scale/HA and multi-stack recovery still require their original resource and acceptance gates. Do not reduce the2-GiB execution reserve, enable Cloudflare or substitute edited workflows/mocks to bypass them.
+
+## Historical bounded increments (through071)
 
 | Slice | Evidence and limit |
 | --- | --- |
@@ -30,7 +57,7 @@ Next engineering priorities on existing infrastructure are protected integration
 
 The earlier [fork attempt1](../.tmp/standard-fork063-served-attempt1/parent-manifest.json) remains failed with cleanup; attempt2 does not relabel it. Fork source/database qualification passes22.068s ([log](../.tmp/standard-fork-postgres-attempt1.log)).
 
-## Prioritized remaining local work
+## Historical071 deployment and preparation checkpoint
 
 The earlier071 installation ran clean frozen `b8aacec`/core `cf260629` at schema071, with a dedicated actual agent-worker process and verified startup heartbeat. Issue/PR metadata, exact organization-unit writers, label/milestone administration, ordinary comment edit/delete, native query filters and32 CLI/MCP tools now have passing actual proofs. Branch/tag and256-KiB individual web file/upload operations pass on ordinary administrator-owned unprotected repositories. Broader writer file/ref access, protected integration, native atomic mutation fencing, organization-level labels, reactions/timeline/subscriptions/templates/attachments and release asset writes remain open. See the [071 deployment and native receipts](IMPLEMENTATION_STATUS.md#portable-collaboration-source-changes-and-access-control071-2026-10-05).
 
@@ -39,7 +66,12 @@ Trusted Git sandbox69f47ad and parent e2c0c1b have four actual network-none Dock
 
 The static-preview067 qualifier still stops before any stack at the unchanged2-GiB reserve. Full repository/Settings readiness, latest-schema recovery, Kubernetes and Cloudflare qualification remain open.
 
-Issue/PR next consumer: extend the deployed native unit permissions and original-operation journals with organization-level labels, reactions/timeline, subscriptions/templates/attachments and broader source-writer coverage. Retain current-authority masking, exact expected identities/metadata and uncertain-write inspection without automatic resends. Readable branch/tag paths and Copy permalink already exist; they are not a new gap. Pinned native APIs do not expose a supported blame endpoint. Writer branch projections need separate qualification before widening file changes; the current native protection-list403 prevents pretending an administrator-only gate is ordinary writer support. Reuse the existing native APIs, compact shared controls and PostgreSQL engine.
+At this historical071 checkpoint, reactions/timeline/subscriptions/templates, organization labels, wider source writers and release assets were still next consumers. Deployed076 and later077–080/082 source contracts above supersede only their explicitly qualified slices. Ordinary contributor file support now uses a separate native branch projection; the earlier protection-list403 remains preserved evidence, not today's writer implementation. Supported blame alternatives, broader refs and protected writes remain acceptance work. Readable branch/tag paths and Copy permalink already exist and are not a new gap. Reuse native APIs, compact shared controls and the PostgreSQL engine.
+
+### Historical063–066 packet ordering
+
+The original ordering below explains those receipts. It is not the next queue: release asset operations are now deployed076, and newer source work is summarized above. Protected integration, executable delivery and retention/recovery still retain their unmet gates.
+
 | Order | Functional packet | Concrete consumer and acceptance |
 | --- | --- | --- |
 | 1 | Close artifact producer, then private object-backed retention | The bounded producer/upload/finish/download proof passes; retain its exact scope and passing schema063 deployment. The064 adapter and original-lease wait fix are integrated, with bounded native/run functional evidence above; preserve the original overall foreign-status failure and narrower supplement. Deployment passes; next extend retained-profile/orphan/recovery acceptance: original `SourceStorage` profile/version, artifact-only key namespace, verified Put/Get digest, no fallback after object failure, current-reader revocation and orphan/recovery accounting. Existing062 bytes remain unchanged. |
