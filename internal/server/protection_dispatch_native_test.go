@@ -94,7 +94,11 @@ func TestProtectionUnknownNativeProof(t *testing.T) {
 	request.Header().Set("Origin", s.config.PublicURL)
 	original, e := client.MutateRepositoryRules(t.Context(), request)
 	if e != nil || original.Msg.Operation.Phase != "DISPATCH_UNKNOWN" || writes.Load() != 1 {
-		t.Fatal("accepted native response loss not retained")
+		phase := "none"
+		if original != nil && original.Msg.Operation != nil {
+			phase = original.Msg.Operation.Phase
+		}
+		t.Fatal("accepted native response loss not retained", connect.CodeOf(e), phase, writes.Load())
 	}
 	read := connect.NewRequest(&golfv1.GetRepositoryRulesRequest{Repository: key, RepositoryId: m.RepositoryId, OwnerId: m.OwnerId, ExpectedRevision: m.ExpectedAccessRevision})
 	read.Header().Set("Origin", s.config.PublicURL)
