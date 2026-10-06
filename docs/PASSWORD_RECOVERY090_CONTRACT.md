@@ -88,3 +88,13 @@ expiry during the final native wait, enrollment disable/re-enable during deliver
 and redemption, original replay/restart, current account/mailbox revocation and
 coordinated latest-schema recovery. This source slice does not mark the complete
 identity/recovery phase or unified native/Git suspension verified.
+
+## Public recovery and delivery
+
+The login card exposes a requested recovery form. `PasswordRecoveryService` uses the same exact-Origin, no-store browser boundary without creating a session. Request responses are uniform for nonexistent, disabled, unverified, unenrolled, rate-limited or unavailable-delivery accounts. Requests use an original UUID, never resend that original, and queue only to the current verified login mailbox under explicit enrollment. Recovery uses the existing encrypted notification outbox and SMTP current-authority checks, with a distinct challenge purpose and consent version. Old notification verification challenges cannot reset passwords, and recovery challenges cannot verify a mailbox.
+
+The192-bit mailed secret expires in15 minutes, has five charged guesses and works once. Redemption locks actor/account/contact/challenge, repeats the current native identity and consumes only through a final expiry/consent/version-checked SQL update. Disable and reenroll cannot revive old codes; delivery repeats current enrollment after provider waits. Successful reset changes only the password/credential version, revokes all existing Golf browser sessions and dependent API credentials, and removes preissued MFA login challenges. The authenticator and unused MFA recovery codes stay intact: new sign-in still requires them. Independent upstream OAuth/PAT/Git grants are not revoked. Existing sign-in rate limits are not globally cleared because username buckets may collide.
+
+Password/mailbox credential changes invalidate verified-contact and recovery bindings; fresh verification and explicit enrollment are required. The configured email worker must actually run to send mail; a saved/active SMTP profile is not inbox-delivery evidence. Current localhost086 has not gained this feature merely from these source checks.
+
+Runnable source checks use isolated PostgreSQL: `go test -race ./internal/server -run 'TestPasswordRecovery90|TestPasswordRecoveryEnrollment90|TestNotificationVerification' -count=1`. They exercise accepted SMTP/TLS delivery, one-use replay, MFA preservation, purpose separation, expired-provider-wait refusal, consent epochs and public Origin boundaries. Controlled browser tests are `web/tests/password-recovery090.spec.ts` and `web/tests/password-recovery-enrollment90.spec.ts`; their fixtures do not prove external inbox delivery or a retained runtime rollout.
