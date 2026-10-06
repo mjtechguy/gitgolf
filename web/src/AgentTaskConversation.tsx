@@ -86,7 +86,7 @@ export function useAgentTaskConversation({userId,repositoryId,owner,name,task,re
 }
 
 function presentation(event:AgentTaskEvent) {
- if(event.kind==='prompt')return {label:'Task request',Icon:MessageSquare};
+ if(event.kind==='prompt')return {label:'Task prompt',Icon:MessageSquare};
  if(event.kind==='assistant_message')return {label:event.phase==='final_answer'?'Final reply':event.phase==='commentary'?'Agent commentary':'Assistant message',Icon:Bot};
  if(event.kind==='plan_updated')return {label:'Plan updated',Icon:ListTodo};
  if(event.kind==='usage_updated')return {label:'Usage reported',Icon:CheckCircle2};

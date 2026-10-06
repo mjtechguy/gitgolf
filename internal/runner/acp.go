@@ -48,6 +48,21 @@ type acpFrame struct {
 	Error   json.RawMessage `json:"error,omitempty"`
 }
 
+func acpRequestIdentity(raw json.RawMessage) (string, bool) {
+	var id string
+	if json.Unmarshal(raw, &id) == nil {
+		if !agentNativeID(id) {
+			return "", false
+		}
+		return "s/" + id, true
+	}
+	var n uint64
+	if json.Unmarshal(raw, &n) == nil {
+		return "n/" + strconv.FormatUint(n, 10), true
+	}
+	return "", false
+}
+
 // RunACP supports ordinary sequential prompt/reply and cancellation in one
 // process. Resume is negotiated and must name the original sandbox session.
 // In-flight steering and history-loading are intentionally refused; neither is
@@ -197,7 +212,7 @@ func RunACP(ctx context.Context, stream io.ReadWriteCloser, opt ACPOptions) erro
 				return err
 			}
 		case f, open := <-frames:
-			if !open {
+			if !open || opt.Gate(run) != nil {
 				return ErrACPProtocol
 			}
 			if len(f.ID) > 0 && f.Method == "" {
@@ -303,35 +318,70 @@ func RunACP(ctx context.Context, stream io.ReadWriteCloser, opt ACPOptions) erro
 				if !active || len(f.ID) > 128 || json.Unmarshal(f.Params, &p) != nil || p.SessionID != session || !agentNativeID(p.ToolCall.ToolCallID) || len(p.Options) > 8 {
 					return ErrACPProtocol
 				}
-				if permissionIDs[string(f.ID)] || len(permissionIDs) >= 64 {
+				requestID, valid := acpRequestIdentity(f.ID)
+				if !valid || permissionIDs[requestID] || len(permissionIDs) >= 64 {
 					return ErrACPProtocol
 				}
-				permissionIDs[string(f.ID)] = true
-				var remoteID any
-				if json.Unmarshal(f.ID, &remoteID) != nil {
-					return ErrACPProtocol
-				}
-				if _, ok := remoteID.(string); !ok {
-					if _, ok = remoteID.(float64); !ok {
+				permissionIDs[requestID] = true
+				optionIDs := map[string]bool{}
+				for _, option := range p.Options {
+					if !agentNativeID(option.ID) || optionIDs[option.ID] || option.Kind != "allow_once" && option.Kind != "allow_always" && option.Kind != "reject_once" && option.Kind != "reject_always" {
 						return ErrACPProtocol
 					}
+					optionIDs[option.ID] = true
 				}
-				permission := ACPPermission{ID: string(f.ID), Session: session, Tool: p.ToolCall.ToolCallID, Options: p.Options}
+				permission := ACPPermission{ID: requestID, Session: session, Tool: p.ToolCall.ToolCallID, Options: p.Options}
+
 				decision := ""
-				if opt.Permission != nil {
+				if opt.Permission != nil && !cancelRequested {
 					deadline, cancel := context.WithTimeout(run, 30*time.Second)
-					var err error
-					decision, err = opt.Permission(deadline, permission)
-					cancel()
-					if err != nil {
-						return err
+					type permissionDecision struct {
+						option string
+						err    error
 					}
+					answer := make(chan permissionDecision, 1)
+					go func() { option, err := opt.Permission(deadline, permission); answer <- permissionDecision{option, err} }()
+					select {
+					case <-deadline.Done(): // Noninteractive timeout never becomes consent.
+					case reply := <-answer:
+						if reply.err != nil {
+							cancel()
+							return ErrACPProtocol
+						}
+						decision = reply.option
+					case control, open := <-opt.Input:
+						if !open {
+							inputClosed = true
+							opt.Input = nil
+						} else {
+							if control.Kind != "cancel" || !agentNativeID(control.ID) || seen[control.ID] || cancelRequested {
+								cancel()
+								return ErrACPProtocol
+							}
+							if err := opt.BeforeSend(run, control); err != nil {
+								cancel()
+								return err
+							}
+							seen[control.ID] = true
+						}
+						cancelRequested = true
+						if err := notify("session/cancel", map[string]string{"sessionId": session}); err != nil {
+							cancel()
+							return err
+						}
+					}
+					cancel()
 				}
+
 				allowed := false
 				for _, o := range p.Options {
 					allowed = allowed || o.ID == decision && o.Kind == "allow_once" && agentNativeID(o.ID)
 				}
-				if err := opt.BeforeSend(run, ACPInput{ID: "permission/" + string(f.ID), Kind: "permission", Text: decision}); err != nil {
+				effectiveDecision := decision
+				if !allowed {
+					effectiveDecision = ""
+				}
+				if err := opt.BeforeSend(run, ACPInput{ID: "permission/" + requestID, Kind: "permission", Text: effectiveDecision}); err != nil {
 					return err
 				}
 				outcome := map[string]any{"outcome": "cancelled"}
@@ -344,6 +394,9 @@ func RunACP(ctx context.Context, stream io.ReadWriteCloser, opt ACPOptions) erro
 				continue
 			}
 			if len(f.ID) > 0 { // Never expose host fs, terminal, authentication or extensions.
+				if _, valid := acpRequestIdentity(f.ID); !valid {
+					return ErrACPProtocol
+				}
 				if err := send(map[string]any{"jsonrpc": "2.0", "id": json.RawMessage(f.ID), "error": map[string]any{"code": -32601, "message": "Unsupported client method"}}); err != nil {
 					return err
 				}
@@ -402,6 +455,13 @@ func RunACP(ctx context.Context, stream io.ReadWriteCloser, opt ACPOptions) erro
 					messageOrder = append(messageOrder, id)
 				}
 				messages[id] += u.Content.Text
+				totalText := 0
+				for _, text := range messages {
+					totalText += len(text)
+				}
+				if totalText > 256<<10 {
+					return ErrACPProtocol
+				}
 				if len(messages[id]) > 65536 {
 					return ErrACPProtocol
 				}

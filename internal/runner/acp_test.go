@@ -16,14 +16,18 @@ import (
 )
 
 func TestACPInteractiveProtocol(t *testing.T) {
-	for _, scenario := range []string{"reply", "cancel", "permission", "always-refused", "resume", "resume-refused", "lost-ack", "revoked", "foreign-session", "thought-private", "duplicate-permission"} {
+	for _, scenario := range []string{"reply", "cancel", "permission", "always-refused", "resume", "resume-refused", "lost-ack", "revoked", "foreign-session", "thought-private", "duplicate-permission", "cancel-permission", "steer-refused"} {
 		t.Run(scenario, func(t *testing.T) {
 			ctx, stop := context.WithTimeout(t.Context(), 2*time.Second)
 			defer stop()
 			client, agent := net.Pipe()
 			defer agent.Close()
 			input := make(chan ACPInput, 3)
-			input <- ACPInput{ID: "first", Kind: "prompt", Text: "Inspect captured snapshot"}
+			kind := "prompt"
+			if scenario == "steer-refused" {
+				kind = "steer"
+			}
+			input <- ACPInput{ID: "first", Kind: kind, Text: "Inspect captured snapshot"}
 			sent := []ACPInput{}
 			observed := []AgentObservation{}
 			revoked := false
@@ -81,15 +85,24 @@ func TestACPInteractiveProtocol(t *testing.T) {
 				}
 				if strings.Contains(scenario, "permission") || scenario == "always-refused" {
 					permission := map[string]any{"jsonrpc": "2.0", "id": "approval1", "method": "session/request_permission", "params": map[string]any{"sessionId": "session", "toolCall": map[string]string{"toolCallId": "call"}, "options": []any{map[string]string{"optionId": "once", "kind": "allow_once"}, map[string]string{"optionId": "always", "kind": "allow_always"}}}}
+					if scenario == "cancel-permission" {
+						input <- ACPInput{ID: "stop-approval", Kind: "cancel"}
+					}
 					if !write(permission) {
 						return
 					}
 					decision := read()
+					if scenario == "cancel-permission" {
+						if decision == nil || decision["method"] != "session/cancel" {
+							return
+						}
+						decision = read()
+					}
 					if decision == nil {
 						return
 					}
 					want := "selected"
-					if scenario == "always-refused" {
+					if scenario == "always-refused" || scenario == "cancel-permission" {
 						want = "cancelled"
 					}
 					got := decision["result"].(map[string]any)["outcome"].(map[string]any)["outcome"]
@@ -110,6 +123,11 @@ func TestACPInteractiveProtocol(t *testing.T) {
 					close(input)
 					write(map[string]any{"jsonrpc": "2.0", "id": id, "result": map[string]string{"stopReason": "cancelled"}}) // reader closes input emits second cancel only if still active; tolerate below
 					read()
+					return
+				}
+				if scenario == "cancel-permission" {
+					write(map[string]any{"jsonrpc": "2.0", "id": id, "result": map[string]string{"stopReason": "cancelled"}})
+					<-ctx.Done()
 					return
 				}
 				update("agent_message_chunk", "Safe reply")
@@ -150,7 +168,11 @@ func TestACPInteractiveProtocol(t *testing.T) {
 					}
 				}
 				return nil
-			}, Permission: func(context.Context, ACPPermission) (string, error) {
+			}, Permission: func(permissionContext context.Context, _ ACPPermission) (string, error) {
+				if scenario == "cancel-permission" {
+					<-permissionContext.Done()
+					return "once", nil
+				}
 				if scenario == "always-refused" {
 					return "always", nil
 				}
@@ -161,7 +183,7 @@ func TestACPInteractiveProtocol(t *testing.T) {
 			}
 			go func() { result <- RunACP(ctx, client, options) }()
 			err := <-result
-			failure := scenario == "resume-refused" || scenario == "lost-ack" || scenario == "revoked" || scenario == "foreign-session" || scenario == "duplicate-permission"
+			failure := scenario == "resume-refused" || scenario == "lost-ack" || scenario == "revoked" || scenario == "foreign-session" || scenario == "duplicate-permission" || scenario == "steer-refused"
 			if failure != (err != nil) {
 				t.Fatalf("unexpected outcome %v", err)
 			}
@@ -258,6 +280,19 @@ func TestACPRejectsMalformedFrames(t *testing.T) {
 		stop()
 		if err == nil {
 			t.Fatal("accepted malformed protocol")
+		}
+	}
+}
+
+func TestACPRequestIdentityCanonical(t *testing.T) {
+	a, ok := acpRequestIdentity(json.RawMessage(`"approval"`))
+	b, ok2 := acpRequestIdentity(json.RawMessage(`"\u0061pproval"`))
+	if !ok || !ok2 || a != b {
+		t.Fatal("escaped same request became a second approval")
+	}
+	for _, raw := range []string{`1.0`, `{}`, `null`, `-1`, `"bad id"`} {
+		if _, ok := acpRequestIdentity(json.RawMessage(raw)); ok {
+			t.Fatal("ambiguous request ID accepted")
 		}
 	}
 }
