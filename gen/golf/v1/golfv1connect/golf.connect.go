@@ -149,6 +149,11 @@ const (
 	// PullReviewAuthoringServiceName is the fully-qualified name of the PullReviewAuthoringService
 	// service.
 	PullReviewAuthoringServiceName = "golf.v1.PullReviewAuthoringService"
+	// ProviderImportServiceName is the fully-qualified name of the ProviderImportService service.
+	ProviderImportServiceName = "golf.v1.ProviderImportService"
+	// PackagePublicationServiceName is the fully-qualified name of the PackagePublicationService
+	// service.
+	PackagePublicationServiceName = "golf.v1.PackagePublicationService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -964,6 +969,36 @@ const (
 	// PullReviewAuthoringServiceGetPullReviewAuthoringOperationProcedure is the fully-qualified name of
 	// the PullReviewAuthoringService's GetPullReviewAuthoringOperation RPC.
 	PullReviewAuthoringServiceGetPullReviewAuthoringOperationProcedure = "/golf.v1.PullReviewAuthoringService/GetPullReviewAuthoringOperation"
+	// ProviderImportServiceListProviderConnectionsProcedure is the fully-qualified name of the
+	// ProviderImportService's ListProviderConnections RPC.
+	ProviderImportServiceListProviderConnectionsProcedure = "/golf.v1.ProviderImportService/ListProviderConnections"
+	// ProviderImportServiceCreateProviderConnectionProcedure is the fully-qualified name of the
+	// ProviderImportService's CreateProviderConnection RPC.
+	ProviderImportServiceCreateProviderConnectionProcedure = "/golf.v1.ProviderImportService/CreateProviderConnection"
+	// ProviderImportServiceUpdateProviderConnectionProcedure is the fully-qualified name of the
+	// ProviderImportService's UpdateProviderConnection RPC.
+	ProviderImportServiceUpdateProviderConnectionProcedure = "/golf.v1.ProviderImportService/UpdateProviderConnection"
+	// ProviderImportServicePreviewProviderImportProcedure is the fully-qualified name of the
+	// ProviderImportService's PreviewProviderImport RPC.
+	ProviderImportServicePreviewProviderImportProcedure = "/golf.v1.ProviderImportService/PreviewProviderImport"
+	// ProviderImportServiceSubmitProviderImportProcedure is the fully-qualified name of the
+	// ProviderImportService's SubmitProviderImport RPC.
+	ProviderImportServiceSubmitProviderImportProcedure = "/golf.v1.ProviderImportService/SubmitProviderImport"
+	// ProviderImportServiceGetProviderImportProcedure is the fully-qualified name of the
+	// ProviderImportService's GetProviderImport RPC.
+	ProviderImportServiceGetProviderImportProcedure = "/golf.v1.ProviderImportService/GetProviderImport"
+	// PackagePublicationServiceGetPackagePublicationAccessProcedure is the fully-qualified name of the
+	// PackagePublicationService's GetPackagePublicationAccess RPC.
+	PackagePublicationServiceGetPackagePublicationAccessProcedure = "/golf.v1.PackagePublicationService/GetPackagePublicationAccess"
+	// PackagePublicationServiceSubmitPackagePublicationProcedure is the fully-qualified name of the
+	// PackagePublicationService's SubmitPackagePublication RPC.
+	PackagePublicationServiceSubmitPackagePublicationProcedure = "/golf.v1.PackagePublicationService/SubmitPackagePublication"
+	// PackagePublicationServiceGetPackagePublicationProcedure is the fully-qualified name of the
+	// PackagePublicationService's GetPackagePublication RPC.
+	PackagePublicationServiceGetPackagePublicationProcedure = "/golf.v1.PackagePublicationService/GetPackagePublication"
+	// PackagePublicationServiceDownloadGenericPackageFileProcedure is the fully-qualified name of the
+	// PackagePublicationService's DownloadGenericPackageFile RPC.
+	PackagePublicationServiceDownloadGenericPackageFileProcedure = "/golf.v1.PackagePublicationService/DownloadGenericPackageFile"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -10389,4 +10424,353 @@ func (UnimplementedPullReviewAuthoringServiceHandler) SubmitPullReviewAuthoringO
 
 func (UnimplementedPullReviewAuthoringServiceHandler) GetPullReviewAuthoringOperation(context.Context, *connect.Request[v1.GetPullReviewAuthoringOperationRequest]) (*connect.Response[v1.GetPullReviewAuthoringOperationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullReviewAuthoringService.GetPullReviewAuthoringOperation is not implemented"))
+}
+
+// ProviderImportServiceClient is a client for the golf.v1.ProviderImportService service.
+type ProviderImportServiceClient interface {
+	ListProviderConnections(context.Context, *connect.Request[v1.ListProviderConnectionsRequest]) (*connect.Response[v1.ListProviderConnectionsResponse], error)
+	CreateProviderConnection(context.Context, *connect.Request[v1.CreateProviderConnectionRequest]) (*connect.Response[v1.CreateProviderConnectionResponse], error)
+	UpdateProviderConnection(context.Context, *connect.Request[v1.UpdateProviderConnectionRequest]) (*connect.Response[v1.UpdateProviderConnectionResponse], error)
+	PreviewProviderImport(context.Context, *connect.Request[v1.PreviewProviderImportRequest]) (*connect.Response[v1.PreviewProviderImportResponse], error)
+	SubmitProviderImport(context.Context, *connect.Request[v1.SubmitProviderImportRequest]) (*connect.Response[v1.SubmitProviderImportResponse], error)
+	GetProviderImport(context.Context, *connect.Request[v1.GetProviderImportRequest]) (*connect.Response[v1.GetProviderImportResponse], error)
+}
+
+// NewProviderImportServiceClient constructs a client for the golf.v1.ProviderImportService service.
+// By default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped
+// responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewProviderImportServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ProviderImportServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	providerImportServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("ProviderImportService").Methods()
+	return &providerImportServiceClient{
+		listProviderConnections: connect.NewClient[v1.ListProviderConnectionsRequest, v1.ListProviderConnectionsResponse](
+			httpClient,
+			baseURL+ProviderImportServiceListProviderConnectionsProcedure,
+			connect.WithSchema(providerImportServiceMethods.ByName("ListProviderConnections")),
+			connect.WithClientOptions(opts...),
+		),
+		createProviderConnection: connect.NewClient[v1.CreateProviderConnectionRequest, v1.CreateProviderConnectionResponse](
+			httpClient,
+			baseURL+ProviderImportServiceCreateProviderConnectionProcedure,
+			connect.WithSchema(providerImportServiceMethods.ByName("CreateProviderConnection")),
+			connect.WithClientOptions(opts...),
+		),
+		updateProviderConnection: connect.NewClient[v1.UpdateProviderConnectionRequest, v1.UpdateProviderConnectionResponse](
+			httpClient,
+			baseURL+ProviderImportServiceUpdateProviderConnectionProcedure,
+			connect.WithSchema(providerImportServiceMethods.ByName("UpdateProviderConnection")),
+			connect.WithClientOptions(opts...),
+		),
+		previewProviderImport: connect.NewClient[v1.PreviewProviderImportRequest, v1.PreviewProviderImportResponse](
+			httpClient,
+			baseURL+ProviderImportServicePreviewProviderImportProcedure,
+			connect.WithSchema(providerImportServiceMethods.ByName("PreviewProviderImport")),
+			connect.WithClientOptions(opts...),
+		),
+		submitProviderImport: connect.NewClient[v1.SubmitProviderImportRequest, v1.SubmitProviderImportResponse](
+			httpClient,
+			baseURL+ProviderImportServiceSubmitProviderImportProcedure,
+			connect.WithSchema(providerImportServiceMethods.ByName("SubmitProviderImport")),
+			connect.WithClientOptions(opts...),
+		),
+		getProviderImport: connect.NewClient[v1.GetProviderImportRequest, v1.GetProviderImportResponse](
+			httpClient,
+			baseURL+ProviderImportServiceGetProviderImportProcedure,
+			connect.WithSchema(providerImportServiceMethods.ByName("GetProviderImport")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// providerImportServiceClient implements ProviderImportServiceClient.
+type providerImportServiceClient struct {
+	listProviderConnections  *connect.Client[v1.ListProviderConnectionsRequest, v1.ListProviderConnectionsResponse]
+	createProviderConnection *connect.Client[v1.CreateProviderConnectionRequest, v1.CreateProviderConnectionResponse]
+	updateProviderConnection *connect.Client[v1.UpdateProviderConnectionRequest, v1.UpdateProviderConnectionResponse]
+	previewProviderImport    *connect.Client[v1.PreviewProviderImportRequest, v1.PreviewProviderImportResponse]
+	submitProviderImport     *connect.Client[v1.SubmitProviderImportRequest, v1.SubmitProviderImportResponse]
+	getProviderImport        *connect.Client[v1.GetProviderImportRequest, v1.GetProviderImportResponse]
+}
+
+// ListProviderConnections calls golf.v1.ProviderImportService.ListProviderConnections.
+func (c *providerImportServiceClient) ListProviderConnections(ctx context.Context, req *connect.Request[v1.ListProviderConnectionsRequest]) (*connect.Response[v1.ListProviderConnectionsResponse], error) {
+	return c.listProviderConnections.CallUnary(ctx, req)
+}
+
+// CreateProviderConnection calls golf.v1.ProviderImportService.CreateProviderConnection.
+func (c *providerImportServiceClient) CreateProviderConnection(ctx context.Context, req *connect.Request[v1.CreateProviderConnectionRequest]) (*connect.Response[v1.CreateProviderConnectionResponse], error) {
+	return c.createProviderConnection.CallUnary(ctx, req)
+}
+
+// UpdateProviderConnection calls golf.v1.ProviderImportService.UpdateProviderConnection.
+func (c *providerImportServiceClient) UpdateProviderConnection(ctx context.Context, req *connect.Request[v1.UpdateProviderConnectionRequest]) (*connect.Response[v1.UpdateProviderConnectionResponse], error) {
+	return c.updateProviderConnection.CallUnary(ctx, req)
+}
+
+// PreviewProviderImport calls golf.v1.ProviderImportService.PreviewProviderImport.
+func (c *providerImportServiceClient) PreviewProviderImport(ctx context.Context, req *connect.Request[v1.PreviewProviderImportRequest]) (*connect.Response[v1.PreviewProviderImportResponse], error) {
+	return c.previewProviderImport.CallUnary(ctx, req)
+}
+
+// SubmitProviderImport calls golf.v1.ProviderImportService.SubmitProviderImport.
+func (c *providerImportServiceClient) SubmitProviderImport(ctx context.Context, req *connect.Request[v1.SubmitProviderImportRequest]) (*connect.Response[v1.SubmitProviderImportResponse], error) {
+	return c.submitProviderImport.CallUnary(ctx, req)
+}
+
+// GetProviderImport calls golf.v1.ProviderImportService.GetProviderImport.
+func (c *providerImportServiceClient) GetProviderImport(ctx context.Context, req *connect.Request[v1.GetProviderImportRequest]) (*connect.Response[v1.GetProviderImportResponse], error) {
+	return c.getProviderImport.CallUnary(ctx, req)
+}
+
+// ProviderImportServiceHandler is an implementation of the golf.v1.ProviderImportService service.
+type ProviderImportServiceHandler interface {
+	ListProviderConnections(context.Context, *connect.Request[v1.ListProviderConnectionsRequest]) (*connect.Response[v1.ListProviderConnectionsResponse], error)
+	CreateProviderConnection(context.Context, *connect.Request[v1.CreateProviderConnectionRequest]) (*connect.Response[v1.CreateProviderConnectionResponse], error)
+	UpdateProviderConnection(context.Context, *connect.Request[v1.UpdateProviderConnectionRequest]) (*connect.Response[v1.UpdateProviderConnectionResponse], error)
+	PreviewProviderImport(context.Context, *connect.Request[v1.PreviewProviderImportRequest]) (*connect.Response[v1.PreviewProviderImportResponse], error)
+	SubmitProviderImport(context.Context, *connect.Request[v1.SubmitProviderImportRequest]) (*connect.Response[v1.SubmitProviderImportResponse], error)
+	GetProviderImport(context.Context, *connect.Request[v1.GetProviderImportRequest]) (*connect.Response[v1.GetProviderImportResponse], error)
+}
+
+// NewProviderImportServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewProviderImportServiceHandler(svc ProviderImportServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	providerImportServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("ProviderImportService").Methods()
+	providerImportServiceListProviderConnectionsHandler := connect.NewUnaryHandler(
+		ProviderImportServiceListProviderConnectionsProcedure,
+		svc.ListProviderConnections,
+		connect.WithSchema(providerImportServiceMethods.ByName("ListProviderConnections")),
+		connect.WithHandlerOptions(opts...),
+	)
+	providerImportServiceCreateProviderConnectionHandler := connect.NewUnaryHandler(
+		ProviderImportServiceCreateProviderConnectionProcedure,
+		svc.CreateProviderConnection,
+		connect.WithSchema(providerImportServiceMethods.ByName("CreateProviderConnection")),
+		connect.WithHandlerOptions(opts...),
+	)
+	providerImportServiceUpdateProviderConnectionHandler := connect.NewUnaryHandler(
+		ProviderImportServiceUpdateProviderConnectionProcedure,
+		svc.UpdateProviderConnection,
+		connect.WithSchema(providerImportServiceMethods.ByName("UpdateProviderConnection")),
+		connect.WithHandlerOptions(opts...),
+	)
+	providerImportServicePreviewProviderImportHandler := connect.NewUnaryHandler(
+		ProviderImportServicePreviewProviderImportProcedure,
+		svc.PreviewProviderImport,
+		connect.WithSchema(providerImportServiceMethods.ByName("PreviewProviderImport")),
+		connect.WithHandlerOptions(opts...),
+	)
+	providerImportServiceSubmitProviderImportHandler := connect.NewUnaryHandler(
+		ProviderImportServiceSubmitProviderImportProcedure,
+		svc.SubmitProviderImport,
+		connect.WithSchema(providerImportServiceMethods.ByName("SubmitProviderImport")),
+		connect.WithHandlerOptions(opts...),
+	)
+	providerImportServiceGetProviderImportHandler := connect.NewUnaryHandler(
+		ProviderImportServiceGetProviderImportProcedure,
+		svc.GetProviderImport,
+		connect.WithSchema(providerImportServiceMethods.ByName("GetProviderImport")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.ProviderImportService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case ProviderImportServiceListProviderConnectionsProcedure:
+			providerImportServiceListProviderConnectionsHandler.ServeHTTP(w, r)
+		case ProviderImportServiceCreateProviderConnectionProcedure:
+			providerImportServiceCreateProviderConnectionHandler.ServeHTTP(w, r)
+		case ProviderImportServiceUpdateProviderConnectionProcedure:
+			providerImportServiceUpdateProviderConnectionHandler.ServeHTTP(w, r)
+		case ProviderImportServicePreviewProviderImportProcedure:
+			providerImportServicePreviewProviderImportHandler.ServeHTTP(w, r)
+		case ProviderImportServiceSubmitProviderImportProcedure:
+			providerImportServiceSubmitProviderImportHandler.ServeHTTP(w, r)
+		case ProviderImportServiceGetProviderImportProcedure:
+			providerImportServiceGetProviderImportHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedProviderImportServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedProviderImportServiceHandler struct{}
+
+func (UnimplementedProviderImportServiceHandler) ListProviderConnections(context.Context, *connect.Request[v1.ListProviderConnectionsRequest]) (*connect.Response[v1.ListProviderConnectionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ProviderImportService.ListProviderConnections is not implemented"))
+}
+
+func (UnimplementedProviderImportServiceHandler) CreateProviderConnection(context.Context, *connect.Request[v1.CreateProviderConnectionRequest]) (*connect.Response[v1.CreateProviderConnectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ProviderImportService.CreateProviderConnection is not implemented"))
+}
+
+func (UnimplementedProviderImportServiceHandler) UpdateProviderConnection(context.Context, *connect.Request[v1.UpdateProviderConnectionRequest]) (*connect.Response[v1.UpdateProviderConnectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ProviderImportService.UpdateProviderConnection is not implemented"))
+}
+
+func (UnimplementedProviderImportServiceHandler) PreviewProviderImport(context.Context, *connect.Request[v1.PreviewProviderImportRequest]) (*connect.Response[v1.PreviewProviderImportResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ProviderImportService.PreviewProviderImport is not implemented"))
+}
+
+func (UnimplementedProviderImportServiceHandler) SubmitProviderImport(context.Context, *connect.Request[v1.SubmitProviderImportRequest]) (*connect.Response[v1.SubmitProviderImportResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ProviderImportService.SubmitProviderImport is not implemented"))
+}
+
+func (UnimplementedProviderImportServiceHandler) GetProviderImport(context.Context, *connect.Request[v1.GetProviderImportRequest]) (*connect.Response[v1.GetProviderImportResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.ProviderImportService.GetProviderImport is not implemented"))
+}
+
+// PackagePublicationServiceClient is a client for the golf.v1.PackagePublicationService service.
+type PackagePublicationServiceClient interface {
+	GetPackagePublicationAccess(context.Context, *connect.Request[v1.GetPackagePublicationAccessRequest]) (*connect.Response[v1.GetPackagePublicationAccessResponse], error)
+	SubmitPackagePublication(context.Context, *connect.Request[v1.SubmitPackagePublicationRequest]) (*connect.Response[v1.SubmitPackagePublicationResponse], error)
+	GetPackagePublication(context.Context, *connect.Request[v1.GetPackagePublicationRequest]) (*connect.Response[v1.GetPackagePublicationResponse], error)
+	DownloadGenericPackageFile(context.Context, *connect.Request[v1.DownloadGenericPackageFileRequest]) (*connect.Response[v1.DownloadGenericPackageFileResponse], error)
+}
+
+// NewPackagePublicationServiceClient constructs a client for the golf.v1.PackagePublicationService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewPackagePublicationServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) PackagePublicationServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	packagePublicationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("PackagePublicationService").Methods()
+	return &packagePublicationServiceClient{
+		getPackagePublicationAccess: connect.NewClient[v1.GetPackagePublicationAccessRequest, v1.GetPackagePublicationAccessResponse](
+			httpClient,
+			baseURL+PackagePublicationServiceGetPackagePublicationAccessProcedure,
+			connect.WithSchema(packagePublicationServiceMethods.ByName("GetPackagePublicationAccess")),
+			connect.WithClientOptions(opts...),
+		),
+		submitPackagePublication: connect.NewClient[v1.SubmitPackagePublicationRequest, v1.SubmitPackagePublicationResponse](
+			httpClient,
+			baseURL+PackagePublicationServiceSubmitPackagePublicationProcedure,
+			connect.WithSchema(packagePublicationServiceMethods.ByName("SubmitPackagePublication")),
+			connect.WithClientOptions(opts...),
+		),
+		getPackagePublication: connect.NewClient[v1.GetPackagePublicationRequest, v1.GetPackagePublicationResponse](
+			httpClient,
+			baseURL+PackagePublicationServiceGetPackagePublicationProcedure,
+			connect.WithSchema(packagePublicationServiceMethods.ByName("GetPackagePublication")),
+			connect.WithClientOptions(opts...),
+		),
+		downloadGenericPackageFile: connect.NewClient[v1.DownloadGenericPackageFileRequest, v1.DownloadGenericPackageFileResponse](
+			httpClient,
+			baseURL+PackagePublicationServiceDownloadGenericPackageFileProcedure,
+			connect.WithSchema(packagePublicationServiceMethods.ByName("DownloadGenericPackageFile")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// packagePublicationServiceClient implements PackagePublicationServiceClient.
+type packagePublicationServiceClient struct {
+	getPackagePublicationAccess *connect.Client[v1.GetPackagePublicationAccessRequest, v1.GetPackagePublicationAccessResponse]
+	submitPackagePublication    *connect.Client[v1.SubmitPackagePublicationRequest, v1.SubmitPackagePublicationResponse]
+	getPackagePublication       *connect.Client[v1.GetPackagePublicationRequest, v1.GetPackagePublicationResponse]
+	downloadGenericPackageFile  *connect.Client[v1.DownloadGenericPackageFileRequest, v1.DownloadGenericPackageFileResponse]
+}
+
+// GetPackagePublicationAccess calls golf.v1.PackagePublicationService.GetPackagePublicationAccess.
+func (c *packagePublicationServiceClient) GetPackagePublicationAccess(ctx context.Context, req *connect.Request[v1.GetPackagePublicationAccessRequest]) (*connect.Response[v1.GetPackagePublicationAccessResponse], error) {
+	return c.getPackagePublicationAccess.CallUnary(ctx, req)
+}
+
+// SubmitPackagePublication calls golf.v1.PackagePublicationService.SubmitPackagePublication.
+func (c *packagePublicationServiceClient) SubmitPackagePublication(ctx context.Context, req *connect.Request[v1.SubmitPackagePublicationRequest]) (*connect.Response[v1.SubmitPackagePublicationResponse], error) {
+	return c.submitPackagePublication.CallUnary(ctx, req)
+}
+
+// GetPackagePublication calls golf.v1.PackagePublicationService.GetPackagePublication.
+func (c *packagePublicationServiceClient) GetPackagePublication(ctx context.Context, req *connect.Request[v1.GetPackagePublicationRequest]) (*connect.Response[v1.GetPackagePublicationResponse], error) {
+	return c.getPackagePublication.CallUnary(ctx, req)
+}
+
+// DownloadGenericPackageFile calls golf.v1.PackagePublicationService.DownloadGenericPackageFile.
+func (c *packagePublicationServiceClient) DownloadGenericPackageFile(ctx context.Context, req *connect.Request[v1.DownloadGenericPackageFileRequest]) (*connect.Response[v1.DownloadGenericPackageFileResponse], error) {
+	return c.downloadGenericPackageFile.CallUnary(ctx, req)
+}
+
+// PackagePublicationServiceHandler is an implementation of the golf.v1.PackagePublicationService
+// service.
+type PackagePublicationServiceHandler interface {
+	GetPackagePublicationAccess(context.Context, *connect.Request[v1.GetPackagePublicationAccessRequest]) (*connect.Response[v1.GetPackagePublicationAccessResponse], error)
+	SubmitPackagePublication(context.Context, *connect.Request[v1.SubmitPackagePublicationRequest]) (*connect.Response[v1.SubmitPackagePublicationResponse], error)
+	GetPackagePublication(context.Context, *connect.Request[v1.GetPackagePublicationRequest]) (*connect.Response[v1.GetPackagePublicationResponse], error)
+	DownloadGenericPackageFile(context.Context, *connect.Request[v1.DownloadGenericPackageFileRequest]) (*connect.Response[v1.DownloadGenericPackageFileResponse], error)
+}
+
+// NewPackagePublicationServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewPackagePublicationServiceHandler(svc PackagePublicationServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	packagePublicationServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("PackagePublicationService").Methods()
+	packagePublicationServiceGetPackagePublicationAccessHandler := connect.NewUnaryHandler(
+		PackagePublicationServiceGetPackagePublicationAccessProcedure,
+		svc.GetPackagePublicationAccess,
+		connect.WithSchema(packagePublicationServiceMethods.ByName("GetPackagePublicationAccess")),
+		connect.WithHandlerOptions(opts...),
+	)
+	packagePublicationServiceSubmitPackagePublicationHandler := connect.NewUnaryHandler(
+		PackagePublicationServiceSubmitPackagePublicationProcedure,
+		svc.SubmitPackagePublication,
+		connect.WithSchema(packagePublicationServiceMethods.ByName("SubmitPackagePublication")),
+		connect.WithHandlerOptions(opts...),
+	)
+	packagePublicationServiceGetPackagePublicationHandler := connect.NewUnaryHandler(
+		PackagePublicationServiceGetPackagePublicationProcedure,
+		svc.GetPackagePublication,
+		connect.WithSchema(packagePublicationServiceMethods.ByName("GetPackagePublication")),
+		connect.WithHandlerOptions(opts...),
+	)
+	packagePublicationServiceDownloadGenericPackageFileHandler := connect.NewUnaryHandler(
+		PackagePublicationServiceDownloadGenericPackageFileProcedure,
+		svc.DownloadGenericPackageFile,
+		connect.WithSchema(packagePublicationServiceMethods.ByName("DownloadGenericPackageFile")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.PackagePublicationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case PackagePublicationServiceGetPackagePublicationAccessProcedure:
+			packagePublicationServiceGetPackagePublicationAccessHandler.ServeHTTP(w, r)
+		case PackagePublicationServiceSubmitPackagePublicationProcedure:
+			packagePublicationServiceSubmitPackagePublicationHandler.ServeHTTP(w, r)
+		case PackagePublicationServiceGetPackagePublicationProcedure:
+			packagePublicationServiceGetPackagePublicationHandler.ServeHTTP(w, r)
+		case PackagePublicationServiceDownloadGenericPackageFileProcedure:
+			packagePublicationServiceDownloadGenericPackageFileHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedPackagePublicationServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedPackagePublicationServiceHandler struct{}
+
+func (UnimplementedPackagePublicationServiceHandler) GetPackagePublicationAccess(context.Context, *connect.Request[v1.GetPackagePublicationAccessRequest]) (*connect.Response[v1.GetPackagePublicationAccessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PackagePublicationService.GetPackagePublicationAccess is not implemented"))
+}
+
+func (UnimplementedPackagePublicationServiceHandler) SubmitPackagePublication(context.Context, *connect.Request[v1.SubmitPackagePublicationRequest]) (*connect.Response[v1.SubmitPackagePublicationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PackagePublicationService.SubmitPackagePublication is not implemented"))
+}
+
+func (UnimplementedPackagePublicationServiceHandler) GetPackagePublication(context.Context, *connect.Request[v1.GetPackagePublicationRequest]) (*connect.Response[v1.GetPackagePublicationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PackagePublicationService.GetPackagePublication is not implemented"))
+}
+
+func (UnimplementedPackagePublicationServiceHandler) DownloadGenericPackageFile(context.Context, *connect.Request[v1.DownloadGenericPackageFileRequest]) (*connect.Response[v1.DownloadGenericPackageFileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PackagePublicationService.DownloadGenericPackageFile is not implemented"))
 }

@@ -947,6 +947,36 @@ type GolfOrganizationLabelOperationEvent struct {
 	OccurredAt  time.Time
 }
 
+type GolfPackagePublication struct {
+	ID               int64
+	UserID           int64
+	ForgeURL         string
+	ActorID          int64
+	OperationID      uuid.UUID
+	RepositoryOwner  string
+	RepositoryName   string
+	RepositoryID     int64
+	OwnerID          int64
+	AccessRevision   string
+	PackageName      string
+	Version          string
+	FileName         string
+	InputFingerprint []byte
+	ContentSha256    string
+	ContentSize      int64
+	Phase            string
+	ResultPackageID  int64
+	ResultFileID     int64
+	FailureCode      string
+}
+
+type GolfPackagePublicationEvent struct {
+	ID          int64
+	OperationID int64
+	Phase       string
+	OccurredAt  time.Time
+}
+
 type GolfPreviewCredential struct {
 	TokenHash         []byte
 	DeploymentID      uuid.UUID
@@ -955,6 +985,57 @@ type GolfPreviewCredential struct {
 	ParentSessionHash []byte
 	Kind              string
 	ExpiresAt         time.Time
+}
+
+type GolfProviderConnection struct {
+	ID                  uuid.UUID
+	UserID              int64
+	ForgeURL            string
+	ActorID             int64
+	Provider            string
+	Name                string
+	ProviderAccountID   string
+	ProviderLogin       string
+	Version             int64
+	Revoked             bool
+	EncryptedCredential []byte
+	CredentialBinding   []byte
+	CredentialKeyID     string
+	CreatedAt           time.Time
+}
+
+type GolfProviderConnectionEvent struct {
+	ID           int64
+	ConnectionID uuid.UUID
+	Version      int64
+	Action       string
+	OccurredAt   time.Time
+}
+
+type GolfProviderImportEvent struct {
+	ID          int64
+	OperationID int64
+	Phase       string
+	OccurredAt  time.Time
+}
+
+type GolfProviderImportOperation struct {
+	ID                   int64
+	UserID               int64
+	ForgeURL             string
+	ActorID              int64
+	OperationID          uuid.UUID
+	ConnectionID         uuid.UUID
+	ConnectionVersion    int64
+	SourceURL            string
+	ProviderRepositoryID string
+	SourceHeadCommitID   string
+	DestinationName      string
+	InputFingerprint     []byte
+	Phase                string
+	RepositoryID         int64
+	FailureCode          string
+	CreatedAt            time.Time
 }
 
 type GolfPullReviewAuthoringEvent struct {

@@ -309,6 +309,7 @@ FROM (
  UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,count(*),0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint ,0::bigint,0::bigint FROM golf_codex_auth GROUP BY credential_key_id
  UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,count(*),0::bigint FROM golf_organization_execution_versions GROUP BY credential_key_id
  UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,count(*) FROM golf_workflow_dispatch_inputs GROUP BY credential_key_id
+ UNION ALL SELECT credential_key_id,0::bigint,0::bigint,0::bigint,count(*),0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint ,0::bigint,0::bigint FROM golf_provider_connections GROUP BY credential_key_id
 ) counts GROUP BY credential_key_id ORDER BY credential_key_id
 `
 

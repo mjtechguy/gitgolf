@@ -8,23 +8,27 @@ import (
 // Recovery destroys copied authority, never immutable operation identities or
 // uncertain native effects. All original source writers must already be drained.
 type RecoveryQuarantineCounts struct {
-	MFAAccounts       uint64 `json:"mfa_accounts"`
-	MFAChallenges     uint64 `json:"mfa_challenges"`
-	MFARecoveryCodes  uint64 `json:"mfa_recovery_codes"`
-	AgentCredentials  uint64 `json:"agent_credentials"`
-	AgentConnections  uint64 `json:"agent_connections"`
-	AgentTasks        uint64 `json:"agent_tasks"`
-	Reviewers         uint64 `json:"reviewers"`
-	ReviewerRuns      uint64 `json:"reviewer_runs"`
-	WebhookDeliveries uint64 `json:"webhook_deliveries"`
-	EmailDeliveries   uint64 `json:"email_deliveries"`
-	EmailChallenges   uint64 `json:"email_challenges"`
-	GitProfiles       uint64 `json:"git_profiles"`
+	MFAAccounts         uint64 `json:"mfa_accounts"`
+	MFAChallenges       uint64 `json:"mfa_challenges"`
+	MFARecoveryCodes    uint64 `json:"mfa_recovery_codes"`
+	AgentCredentials    uint64 `json:"agent_credentials"`
+	AgentConnections    uint64 `json:"agent_connections"`
+	AgentTasks          uint64 `json:"agent_tasks"`
+	Reviewers           uint64 `json:"reviewers"`
+	ReviewerRuns        uint64 `json:"reviewer_runs"`
+	WebhookDeliveries   uint64 `json:"webhook_deliveries"`
+	EmailDeliveries     uint64 `json:"email_deliveries"`
+	EmailChallenges     uint64 `json:"email_challenges"`
+	GitProfiles         uint64 `json:"git_profiles"`
+	ProviderConnections uint64 `json:"provider_connections"`
 }
 
 func quarantineRestoredAuthority(ctx context.Context, tx *sql.Tx, backup, operation string) (RecoveryQuarantineCounts, error) {
 	var counts RecoveryQuarantineCounts
 	if _, err := tx.ExecContext(ctx, `LOCK TABLE golf_local_mfa,golf_mfa_recovery_codes,golf_mfa_login_challenges,golf_mfa_attempts,golf_mfa_events,golf_codex_connections,golf_codex_auth,golf_agent_tasks,golf_reviewers,golf_reviewer_runs,golf_reviewer_publications,golf_webhook_deliveries,golf_email_deliveries,golf_email_challenges,golf_git_transport_profiles IN ACCESS EXCLUSIVE MODE`); err != nil {
+		return counts, err
+	}
+	if _, err := tx.ExecContext(ctx, `LOCK TABLE golf_provider_connections IN ACCESS EXCLUSIVE MODE`); err != nil {
 		return counts, err
 	}
 	for _, write := range []struct {
@@ -43,6 +47,7 @@ func quarantineRestoredAuthority(ctx context.Context, tx *sql.Tx, backup, operat
 		{`UPDATE golf_email_deliveries SET state='cancelled',failure_code='recovery_quarantine',possible_duplicate=true,lease_id=NULL,lease_until=NULL,completed_at=clock_timestamp() WHERE state IN ('queued','sending','retrying')`, &counts.EmailDeliveries},
 		{`DELETE FROM golf_email_challenges`, &counts.EmailChallenges},
 		{`UPDATE golf_git_transport_profiles SET suspended_at=clock_timestamp() WHERE suspended_at IS NULL`, &counts.GitProfiles},
+		{`UPDATE golf_provider_connections SET revoked=true,version=version+1 WHERE NOT revoked`, &counts.ProviderConnections},
 	} {
 		// Only the MFA audit insert has parameters; all other statements are fixed.
 		var result sql.Result
