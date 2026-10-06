@@ -81,7 +81,7 @@ GITEA_OAUTH_CLIENT_ID=your-registered-client-id
 GITEA_OAUTH_CLIENT_SECRET=your-registered-client-secret
 ```
 
-Run `docker compose up -d golf` to apply the configuration. Golf then offers **Continue with Gitea**; login and consent occur at your configured forge. Golf requests `write:user`, `write:repository`, `write:issue` and `read:organization`, including broader upstream repository/user write authority for repository creation. Use a restricted personal token when read-only access is desired. The browser receives only a Golf session cookie; access and refresh credentials remain encrypted on the server. OAuth configuration is optional, not a Cloudflare requirement.
+Run `docker compose up -d golf` to apply the configuration. Golf then offers **Continue with Gitea**; login and consent occur at your configured forge. Golf requests `write:user`, `write:repository`, `write:issue`, `write:organization`, `read:package` and `write:notification`, including broader upstream repository/user write authority for repository creation. Use a restricted personal token when read-only access is desired. The browser receives only a Golf session cookie; access and refresh credentials remain encrypted on the server. OAuth configuration is optional, not a Cloudflare requirement.
 
 The fixed callback uses single-use ten-minute state, a separate HttpOnly browser binding and S256 PKCE. Sessions retain their absolute twelve-hour expiry despite access-token refresh. Logout removes the Golf session; manage provider consent in Gitea. This is Gitea OAuth, not complete self-service account management or external OIDC, organization policy or CLI OAuth login. See [ADR 0003](docs/decisions/0003-gitea-oauth-and-session-refresh.md).
 

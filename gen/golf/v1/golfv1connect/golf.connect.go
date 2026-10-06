@@ -874,9 +874,24 @@ const (
 	// RepositoryReleaseManagementServiceGetRepositoryReleaseOperationProcedure is the fully-qualified
 	// name of the RepositoryReleaseManagementService's GetRepositoryReleaseOperation RPC.
 	RepositoryReleaseManagementServiceGetRepositoryReleaseOperationProcedure = "/golf.v1.RepositoryReleaseManagementService/GetRepositoryReleaseOperation"
+	// PullReviewRequestServiceGetPullCodeOwnersProcedure is the fully-qualified name of the
+	// PullReviewRequestService's GetPullCodeOwners RPC.
+	PullReviewRequestServiceGetPullCodeOwnersProcedure = "/golf.v1.PullReviewRequestService/GetPullCodeOwners"
+	// PullReviewRequestServiceGetPullReviewCommentStateProcedure is the fully-qualified name of the
+	// PullReviewRequestService's GetPullReviewCommentState RPC.
+	PullReviewRequestServiceGetPullReviewCommentStateProcedure = "/golf.v1.PullReviewRequestService/GetPullReviewCommentState"
+	// PullReviewRequestServiceSubmitPullReviewCommentInteractionProcedure is the fully-qualified name
+	// of the PullReviewRequestService's SubmitPullReviewCommentInteraction RPC.
+	PullReviewRequestServiceSubmitPullReviewCommentInteractionProcedure = "/golf.v1.PullReviewRequestService/SubmitPullReviewCommentInteraction"
+	// PullReviewRequestServiceGetPullReviewCommentOperationProcedure is the fully-qualified name of the
+	// PullReviewRequestService's GetPullReviewCommentOperation RPC.
+	PullReviewRequestServiceGetPullReviewCommentOperationProcedure = "/golf.v1.PullReviewRequestService/GetPullReviewCommentOperation"
 	// PullReviewRequestServiceGetPullReviewRequestsProcedure is the fully-qualified name of the
 	// PullReviewRequestService's GetPullReviewRequests RPC.
 	PullReviewRequestServiceGetPullReviewRequestsProcedure = "/golf.v1.PullReviewRequestService/GetPullReviewRequests"
+	// PullReviewRequestServiceGetPullReviewTeamCandidatesProcedure is the fully-qualified name of the
+	// PullReviewRequestService's GetPullReviewTeamCandidates RPC.
+	PullReviewRequestServiceGetPullReviewTeamCandidatesProcedure = "/golf.v1.PullReviewRequestService/GetPullReviewTeamCandidates"
 	// PullReviewRequestServiceSubmitPullReviewRequestProcedure is the fully-qualified name of the
 	// PullReviewRequestService's SubmitPullReviewRequest RPC.
 	PullReviewRequestServiceSubmitPullReviewRequestProcedure = "/golf.v1.PullReviewRequestService/SubmitPullReviewRequest"
@@ -9273,7 +9288,12 @@ func (UnimplementedRepositoryReleaseManagementServiceHandler) GetRepositoryRelea
 
 // PullReviewRequestServiceClient is a client for the golf.v1.PullReviewRequestService service.
 type PullReviewRequestServiceClient interface {
+	GetPullCodeOwners(context.Context, *connect.Request[v1.GetPullCodeOwnersRequest]) (*connect.Response[v1.GetPullCodeOwnersResponse], error)
+	GetPullReviewCommentState(context.Context, *connect.Request[v1.GetPullReviewCommentStateRequest]) (*connect.Response[v1.GetPullReviewCommentStateResponse], error)
+	SubmitPullReviewCommentInteraction(context.Context, *connect.Request[v1.SubmitPullReviewCommentInteractionRequest]) (*connect.Response[v1.SubmitPullReviewCommentInteractionResponse], error)
+	GetPullReviewCommentOperation(context.Context, *connect.Request[v1.GetPullReviewCommentOperationRequest]) (*connect.Response[v1.GetPullReviewCommentOperationResponse], error)
 	GetPullReviewRequests(context.Context, *connect.Request[v1.GetPullReviewRequestsRequest]) (*connect.Response[v1.GetPullReviewRequestsResponse], error)
+	GetPullReviewTeamCandidates(context.Context, *connect.Request[v1.GetPullReviewTeamCandidatesRequest]) (*connect.Response[v1.GetPullReviewTeamCandidatesResponse], error)
 	SubmitPullReviewRequest(context.Context, *connect.Request[v1.SubmitPullReviewRequestRequest]) (*connect.Response[v1.SubmitPullReviewRequestResponse], error)
 	GetPullReviewRequestOperation(context.Context, *connect.Request[v1.GetPullReviewRequestOperationRequest]) (*connect.Response[v1.GetPullReviewRequestOperationResponse], error)
 }
@@ -9289,10 +9309,40 @@ func NewPullReviewRequestServiceClient(httpClient connect.HTTPClient, baseURL st
 	baseURL = strings.TrimRight(baseURL, "/")
 	pullReviewRequestServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("PullReviewRequestService").Methods()
 	return &pullReviewRequestServiceClient{
+		getPullCodeOwners: connect.NewClient[v1.GetPullCodeOwnersRequest, v1.GetPullCodeOwnersResponse](
+			httpClient,
+			baseURL+PullReviewRequestServiceGetPullCodeOwnersProcedure,
+			connect.WithSchema(pullReviewRequestServiceMethods.ByName("GetPullCodeOwners")),
+			connect.WithClientOptions(opts...),
+		),
+		getPullReviewCommentState: connect.NewClient[v1.GetPullReviewCommentStateRequest, v1.GetPullReviewCommentStateResponse](
+			httpClient,
+			baseURL+PullReviewRequestServiceGetPullReviewCommentStateProcedure,
+			connect.WithSchema(pullReviewRequestServiceMethods.ByName("GetPullReviewCommentState")),
+			connect.WithClientOptions(opts...),
+		),
+		submitPullReviewCommentInteraction: connect.NewClient[v1.SubmitPullReviewCommentInteractionRequest, v1.SubmitPullReviewCommentInteractionResponse](
+			httpClient,
+			baseURL+PullReviewRequestServiceSubmitPullReviewCommentInteractionProcedure,
+			connect.WithSchema(pullReviewRequestServiceMethods.ByName("SubmitPullReviewCommentInteraction")),
+			connect.WithClientOptions(opts...),
+		),
+		getPullReviewCommentOperation: connect.NewClient[v1.GetPullReviewCommentOperationRequest, v1.GetPullReviewCommentOperationResponse](
+			httpClient,
+			baseURL+PullReviewRequestServiceGetPullReviewCommentOperationProcedure,
+			connect.WithSchema(pullReviewRequestServiceMethods.ByName("GetPullReviewCommentOperation")),
+			connect.WithClientOptions(opts...),
+		),
 		getPullReviewRequests: connect.NewClient[v1.GetPullReviewRequestsRequest, v1.GetPullReviewRequestsResponse](
 			httpClient,
 			baseURL+PullReviewRequestServiceGetPullReviewRequestsProcedure,
 			connect.WithSchema(pullReviewRequestServiceMethods.ByName("GetPullReviewRequests")),
+			connect.WithClientOptions(opts...),
+		),
+		getPullReviewTeamCandidates: connect.NewClient[v1.GetPullReviewTeamCandidatesRequest, v1.GetPullReviewTeamCandidatesResponse](
+			httpClient,
+			baseURL+PullReviewRequestServiceGetPullReviewTeamCandidatesProcedure,
+			connect.WithSchema(pullReviewRequestServiceMethods.ByName("GetPullReviewTeamCandidates")),
 			connect.WithClientOptions(opts...),
 		),
 		submitPullReviewRequest: connect.NewClient[v1.SubmitPullReviewRequestRequest, v1.SubmitPullReviewRequestResponse](
@@ -9312,14 +9362,46 @@ func NewPullReviewRequestServiceClient(httpClient connect.HTTPClient, baseURL st
 
 // pullReviewRequestServiceClient implements PullReviewRequestServiceClient.
 type pullReviewRequestServiceClient struct {
-	getPullReviewRequests         *connect.Client[v1.GetPullReviewRequestsRequest, v1.GetPullReviewRequestsResponse]
-	submitPullReviewRequest       *connect.Client[v1.SubmitPullReviewRequestRequest, v1.SubmitPullReviewRequestResponse]
-	getPullReviewRequestOperation *connect.Client[v1.GetPullReviewRequestOperationRequest, v1.GetPullReviewRequestOperationResponse]
+	getPullCodeOwners                  *connect.Client[v1.GetPullCodeOwnersRequest, v1.GetPullCodeOwnersResponse]
+	getPullReviewCommentState          *connect.Client[v1.GetPullReviewCommentStateRequest, v1.GetPullReviewCommentStateResponse]
+	submitPullReviewCommentInteraction *connect.Client[v1.SubmitPullReviewCommentInteractionRequest, v1.SubmitPullReviewCommentInteractionResponse]
+	getPullReviewCommentOperation      *connect.Client[v1.GetPullReviewCommentOperationRequest, v1.GetPullReviewCommentOperationResponse]
+	getPullReviewRequests              *connect.Client[v1.GetPullReviewRequestsRequest, v1.GetPullReviewRequestsResponse]
+	getPullReviewTeamCandidates        *connect.Client[v1.GetPullReviewTeamCandidatesRequest, v1.GetPullReviewTeamCandidatesResponse]
+	submitPullReviewRequest            *connect.Client[v1.SubmitPullReviewRequestRequest, v1.SubmitPullReviewRequestResponse]
+	getPullReviewRequestOperation      *connect.Client[v1.GetPullReviewRequestOperationRequest, v1.GetPullReviewRequestOperationResponse]
+}
+
+// GetPullCodeOwners calls golf.v1.PullReviewRequestService.GetPullCodeOwners.
+func (c *pullReviewRequestServiceClient) GetPullCodeOwners(ctx context.Context, req *connect.Request[v1.GetPullCodeOwnersRequest]) (*connect.Response[v1.GetPullCodeOwnersResponse], error) {
+	return c.getPullCodeOwners.CallUnary(ctx, req)
+}
+
+// GetPullReviewCommentState calls golf.v1.PullReviewRequestService.GetPullReviewCommentState.
+func (c *pullReviewRequestServiceClient) GetPullReviewCommentState(ctx context.Context, req *connect.Request[v1.GetPullReviewCommentStateRequest]) (*connect.Response[v1.GetPullReviewCommentStateResponse], error) {
+	return c.getPullReviewCommentState.CallUnary(ctx, req)
+}
+
+// SubmitPullReviewCommentInteraction calls
+// golf.v1.PullReviewRequestService.SubmitPullReviewCommentInteraction.
+func (c *pullReviewRequestServiceClient) SubmitPullReviewCommentInteraction(ctx context.Context, req *connect.Request[v1.SubmitPullReviewCommentInteractionRequest]) (*connect.Response[v1.SubmitPullReviewCommentInteractionResponse], error) {
+	return c.submitPullReviewCommentInteraction.CallUnary(ctx, req)
+}
+
+// GetPullReviewCommentOperation calls
+// golf.v1.PullReviewRequestService.GetPullReviewCommentOperation.
+func (c *pullReviewRequestServiceClient) GetPullReviewCommentOperation(ctx context.Context, req *connect.Request[v1.GetPullReviewCommentOperationRequest]) (*connect.Response[v1.GetPullReviewCommentOperationResponse], error) {
+	return c.getPullReviewCommentOperation.CallUnary(ctx, req)
 }
 
 // GetPullReviewRequests calls golf.v1.PullReviewRequestService.GetPullReviewRequests.
 func (c *pullReviewRequestServiceClient) GetPullReviewRequests(ctx context.Context, req *connect.Request[v1.GetPullReviewRequestsRequest]) (*connect.Response[v1.GetPullReviewRequestsResponse], error) {
 	return c.getPullReviewRequests.CallUnary(ctx, req)
+}
+
+// GetPullReviewTeamCandidates calls golf.v1.PullReviewRequestService.GetPullReviewTeamCandidates.
+func (c *pullReviewRequestServiceClient) GetPullReviewTeamCandidates(ctx context.Context, req *connect.Request[v1.GetPullReviewTeamCandidatesRequest]) (*connect.Response[v1.GetPullReviewTeamCandidatesResponse], error) {
+	return c.getPullReviewTeamCandidates.CallUnary(ctx, req)
 }
 
 // SubmitPullReviewRequest calls golf.v1.PullReviewRequestService.SubmitPullReviewRequest.
@@ -9336,7 +9418,12 @@ func (c *pullReviewRequestServiceClient) GetPullReviewRequestOperation(ctx conte
 // PullReviewRequestServiceHandler is an implementation of the golf.v1.PullReviewRequestService
 // service.
 type PullReviewRequestServiceHandler interface {
+	GetPullCodeOwners(context.Context, *connect.Request[v1.GetPullCodeOwnersRequest]) (*connect.Response[v1.GetPullCodeOwnersResponse], error)
+	GetPullReviewCommentState(context.Context, *connect.Request[v1.GetPullReviewCommentStateRequest]) (*connect.Response[v1.GetPullReviewCommentStateResponse], error)
+	SubmitPullReviewCommentInteraction(context.Context, *connect.Request[v1.SubmitPullReviewCommentInteractionRequest]) (*connect.Response[v1.SubmitPullReviewCommentInteractionResponse], error)
+	GetPullReviewCommentOperation(context.Context, *connect.Request[v1.GetPullReviewCommentOperationRequest]) (*connect.Response[v1.GetPullReviewCommentOperationResponse], error)
 	GetPullReviewRequests(context.Context, *connect.Request[v1.GetPullReviewRequestsRequest]) (*connect.Response[v1.GetPullReviewRequestsResponse], error)
+	GetPullReviewTeamCandidates(context.Context, *connect.Request[v1.GetPullReviewTeamCandidatesRequest]) (*connect.Response[v1.GetPullReviewTeamCandidatesResponse], error)
 	SubmitPullReviewRequest(context.Context, *connect.Request[v1.SubmitPullReviewRequestRequest]) (*connect.Response[v1.SubmitPullReviewRequestResponse], error)
 	GetPullReviewRequestOperation(context.Context, *connect.Request[v1.GetPullReviewRequestOperationRequest]) (*connect.Response[v1.GetPullReviewRequestOperationResponse], error)
 }
@@ -9348,10 +9435,40 @@ type PullReviewRequestServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewPullReviewRequestServiceHandler(svc PullReviewRequestServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	pullReviewRequestServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("PullReviewRequestService").Methods()
+	pullReviewRequestServiceGetPullCodeOwnersHandler := connect.NewUnaryHandler(
+		PullReviewRequestServiceGetPullCodeOwnersProcedure,
+		svc.GetPullCodeOwners,
+		connect.WithSchema(pullReviewRequestServiceMethods.ByName("GetPullCodeOwners")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pullReviewRequestServiceGetPullReviewCommentStateHandler := connect.NewUnaryHandler(
+		PullReviewRequestServiceGetPullReviewCommentStateProcedure,
+		svc.GetPullReviewCommentState,
+		connect.WithSchema(pullReviewRequestServiceMethods.ByName("GetPullReviewCommentState")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pullReviewRequestServiceSubmitPullReviewCommentInteractionHandler := connect.NewUnaryHandler(
+		PullReviewRequestServiceSubmitPullReviewCommentInteractionProcedure,
+		svc.SubmitPullReviewCommentInteraction,
+		connect.WithSchema(pullReviewRequestServiceMethods.ByName("SubmitPullReviewCommentInteraction")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pullReviewRequestServiceGetPullReviewCommentOperationHandler := connect.NewUnaryHandler(
+		PullReviewRequestServiceGetPullReviewCommentOperationProcedure,
+		svc.GetPullReviewCommentOperation,
+		connect.WithSchema(pullReviewRequestServiceMethods.ByName("GetPullReviewCommentOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
 	pullReviewRequestServiceGetPullReviewRequestsHandler := connect.NewUnaryHandler(
 		PullReviewRequestServiceGetPullReviewRequestsProcedure,
 		svc.GetPullReviewRequests,
 		connect.WithSchema(pullReviewRequestServiceMethods.ByName("GetPullReviewRequests")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pullReviewRequestServiceGetPullReviewTeamCandidatesHandler := connect.NewUnaryHandler(
+		PullReviewRequestServiceGetPullReviewTeamCandidatesProcedure,
+		svc.GetPullReviewTeamCandidates,
+		connect.WithSchema(pullReviewRequestServiceMethods.ByName("GetPullReviewTeamCandidates")),
 		connect.WithHandlerOptions(opts...),
 	)
 	pullReviewRequestServiceSubmitPullReviewRequestHandler := connect.NewUnaryHandler(
@@ -9368,8 +9485,18 @@ func NewPullReviewRequestServiceHandler(svc PullReviewRequestServiceHandler, opt
 	)
 	return "/golf.v1.PullReviewRequestService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case PullReviewRequestServiceGetPullCodeOwnersProcedure:
+			pullReviewRequestServiceGetPullCodeOwnersHandler.ServeHTTP(w, r)
+		case PullReviewRequestServiceGetPullReviewCommentStateProcedure:
+			pullReviewRequestServiceGetPullReviewCommentStateHandler.ServeHTTP(w, r)
+		case PullReviewRequestServiceSubmitPullReviewCommentInteractionProcedure:
+			pullReviewRequestServiceSubmitPullReviewCommentInteractionHandler.ServeHTTP(w, r)
+		case PullReviewRequestServiceGetPullReviewCommentOperationProcedure:
+			pullReviewRequestServiceGetPullReviewCommentOperationHandler.ServeHTTP(w, r)
 		case PullReviewRequestServiceGetPullReviewRequestsProcedure:
 			pullReviewRequestServiceGetPullReviewRequestsHandler.ServeHTTP(w, r)
+		case PullReviewRequestServiceGetPullReviewTeamCandidatesProcedure:
+			pullReviewRequestServiceGetPullReviewTeamCandidatesHandler.ServeHTTP(w, r)
 		case PullReviewRequestServiceSubmitPullReviewRequestProcedure:
 			pullReviewRequestServiceSubmitPullReviewRequestHandler.ServeHTTP(w, r)
 		case PullReviewRequestServiceGetPullReviewRequestOperationProcedure:
@@ -9383,8 +9510,28 @@ func NewPullReviewRequestServiceHandler(svc PullReviewRequestServiceHandler, opt
 // UnimplementedPullReviewRequestServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedPullReviewRequestServiceHandler struct{}
 
+func (UnimplementedPullReviewRequestServiceHandler) GetPullCodeOwners(context.Context, *connect.Request[v1.GetPullCodeOwnersRequest]) (*connect.Response[v1.GetPullCodeOwnersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullReviewRequestService.GetPullCodeOwners is not implemented"))
+}
+
+func (UnimplementedPullReviewRequestServiceHandler) GetPullReviewCommentState(context.Context, *connect.Request[v1.GetPullReviewCommentStateRequest]) (*connect.Response[v1.GetPullReviewCommentStateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullReviewRequestService.GetPullReviewCommentState is not implemented"))
+}
+
+func (UnimplementedPullReviewRequestServiceHandler) SubmitPullReviewCommentInteraction(context.Context, *connect.Request[v1.SubmitPullReviewCommentInteractionRequest]) (*connect.Response[v1.SubmitPullReviewCommentInteractionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullReviewRequestService.SubmitPullReviewCommentInteraction is not implemented"))
+}
+
+func (UnimplementedPullReviewRequestServiceHandler) GetPullReviewCommentOperation(context.Context, *connect.Request[v1.GetPullReviewCommentOperationRequest]) (*connect.Response[v1.GetPullReviewCommentOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullReviewRequestService.GetPullReviewCommentOperation is not implemented"))
+}
+
 func (UnimplementedPullReviewRequestServiceHandler) GetPullReviewRequests(context.Context, *connect.Request[v1.GetPullReviewRequestsRequest]) (*connect.Response[v1.GetPullReviewRequestsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullReviewRequestService.GetPullReviewRequests is not implemented"))
+}
+
+func (UnimplementedPullReviewRequestServiceHandler) GetPullReviewTeamCandidates(context.Context, *connect.Request[v1.GetPullReviewTeamCandidatesRequest]) (*connect.Response[v1.GetPullReviewTeamCandidatesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullReviewRequestService.GetPullReviewTeamCandidates is not implemented"))
 }
 
 func (UnimplementedPullReviewRequestServiceHandler) SubmitPullReviewRequest(context.Context, *connect.Request[v1.SubmitPullReviewRequestRequest]) (*connect.Response[v1.SubmitPullReviewRequestResponse], error) {
