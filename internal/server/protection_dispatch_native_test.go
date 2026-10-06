@@ -89,7 +89,7 @@ func TestProtectionUnknownNativeProof(t *testing.T) {
 		}
 		return response, e
 	})
-	m := &golfv1.MutateRepositoryRulesRequest{Repository: key, RepositoryId: strconv.FormatInt(repo.ID, 10), OwnerId: before.Msg.OwnerId, ExpectedAccessRevision: before.Msg.AccessRevision, ExpectedRulesRevision: before.Msg.RulesRevision, OperationId: uuid.NewString(), Action: golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_CREATE_BRANCH, DesiredBranch: &golfv1.RepositoryBranchProtection{RuleName: "golf-fence/*", Priority: "0", RequiredApprovals: "1", BlockAdminMergeOverride: true}}
+	m := &golfv1.MutateRepositoryRulesRequest{Repository: key, RepositoryId: strconv.FormatInt(repo.ID, 10), OwnerId: before.Msg.OwnerId, ExpectedAccessRevision: before.Msg.AccessRevision, ExpectedRulesRevision: before.Msg.RulesRevision, OperationId: uuid.NewString(), Action: golfv1.RepositoryRuleMutationAction_REPOSITORY_RULE_MUTATION_ACTION_CREATE_BRANCH, RuleName: "golf-fence/*", DesiredBranch: &golfv1.RepositoryBranchProtection{RuleName: "golf-fence/*", Priority: "7", RequiredApprovals: "1", BlockAdminMergeOverride: true}}
 	request := connect.NewRequest(m)
 	request.Header().Set("Origin", s.config.PublicURL)
 	original, e := client.MutateRepositoryRules(t.Context(), request)
