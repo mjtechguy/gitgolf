@@ -9,7 +9,7 @@ These are infrastructure choices, not editions. AI is optional in Golf's core wo
 
 ## What works now
 
-Golf is a developer preview with a custom Golf UI, black/charcoal and light themes, local email-or-username/password sign-in, optional browser OAuth, and PostgreSQL-backed sessions that survive backend restarts. The browser receives an opaque HttpOnly cookie; upstream credentials stay encrypted on the server. Repository work includes exact source/history/diff browsing, issues, PRs, human reviews and saved private inline-review drafts/publication, alongside read-only JSON CLI and stdio MCP interfaces.
+Golf is a developer preview with a custom Golf UI, black/charcoal and light themes, local email-or-username/password sign-in, optional browser OAuth, and PostgreSQL-backed sessions that survive backend restarts. The browser receives an opaque HttpOnly cookie; upstream credentials stay encrypted on the server. Repository work includes exact source/history/diff browsing, issues, PRs, human reviews and saved private inline-review drafts/publication, alongside scoped JSON CLI and stdio MCP interfaces. Explicit repository grants enable collaboration/source writes and Actions/private-task inspection; see [machine delegation](docs/SCOPED_COLLABORATION_DELEGATION.md).
 
 Actions supports bounded manual workflows and explicitly configured automatic push CI, with granular execution policies, durable attempts and enrolled Docker workers. Managed coding-agent connections support qualified, bounded task and PR-review flows; optional workers perform real signed HTTP webhook delivery and verified-mailbox SMTP notices. These capabilities require their own configuration and consent. See the [implementation ledger](docs/IMPLEMENTATION_STATUS.md) for exact source/runtime evidence and remaining gates; saved configuration alone is not an operational integration.
 
@@ -105,7 +105,7 @@ Do not add `--volumes` unless intentionally erasing this installation. Preserve 
 
 The [keyring contract](docs/CREDENTIAL_KEYRING.md) documents `GOLF_ENCRYPTION_KEYS` (a JSON map of labels to base64 32-byte keys) and `GOLF_ACTIVE_ENCRYPTION_KEY`, alongside the compatible single-key variable. Registered labels are permanently bound to their material. Every stored session, pending OAuth verifier and persistent local-account forge credential must retain its read key, including expired records and disabled accounts.
 
-Operator commands live in the server binary, separately from the read-only user CLI. Supply the Golf database/key environment securely, then use `./bin/golf-server keys status`, `keys activate`, `keys rotate --batch-size 100 --max-batches 10`, or `keys retirement-check --key-id legacy`. The container equivalent is `docker compose run --rm --no-deps golf keys status` with an already-built image and available database. Even status can apply migrations and register legacy metadata; partial rotation can exit zero, so inspect its JSON state/counts.
+Operator commands live in the server binary, separately from the scoped user CLI. Supply the Golf database/key environment securely, then use `./bin/golf-server keys status`, `keys activate`, `keys rotate --batch-size 100 --max-batches 10`, or `keys retirement-check --key-id legacy`. The container equivalent is `docker compose run --rm --no-deps golf keys status` with an already-built image and available database. Even status can apply migrations and register legacy metadata; partial rotation can exit zero, so inspect its JSON state/counts.
 
 Before activation, drain all old Golf writers and in-flight OAuth exchanges. Database fencing cannot reverse an issuer's completed refresh, and transparent rolling cutover is not supported. Retirement requires zero uses across all three credential families and does not erase secrets or old backup keys. Targeted database and old-binary PAT/pending-verifier checks pass; live OAuth exchange across activation and wider rollout/recovery qualification remain open. This does not complete P1.3 or add KMS/age/FIPS support.
 
@@ -276,7 +276,7 @@ Open **Organizations** to browse memberships, native team/unit settings, members
 
 Golf records correlated JSON request logs and can export bounded API/Gitea/PostgreSQL traces and private Prometheus metrics. Metrics use a separate authenticated listener; export is disabled by default. See the [configuration and privacy contract](docs/OBSERVABILITY.md) and [local monitoring overlay](deploy/observability/README.md). Job/runner instrumentation and production operational qualification remain open.
 
-Issue discussion creation uses `write:issue` with current user/repository scopes and UUID-backed intents. An unknown result is inspected rather than resent; native address races remain a qualification limit. CLI/MCP provide read-only tools, including comment pages and own-operation status. See [discussion boundaries](docs/ISSUE_DISCUSSION_CONTRACT.md).
+Issue discussion creation uses `write:issue` with current user/repository scopes and UUID-backed intents. An unknown result is inspected rather than resent; native address races remain a qualification limit. CLI/MCP provide reads and explicitly granted journaled writes, including comment pages and own-operation status. See [discussion boundaries](docs/ISSUE_DISCUSSION_CONTRACT.md).
 
 ### Local CI and RustFS development profile
 
