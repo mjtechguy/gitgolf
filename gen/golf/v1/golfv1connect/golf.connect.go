@@ -146,6 +146,9 @@ const (
 	ForgePackageServiceName = "golf.v1.ForgePackageService"
 	// OrganizationLabelServiceName is the fully-qualified name of the OrganizationLabelService service.
 	OrganizationLabelServiceName = "golf.v1.OrganizationLabelService"
+	// PullReviewAuthoringServiceName is the fully-qualified name of the PullReviewAuthoringService
+	// service.
+	PullReviewAuthoringServiceName = "golf.v1.PullReviewAuthoringService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -952,6 +955,15 @@ const (
 	// OrganizationLabelServiceGetOrganizationLabelOperationProcedure is the fully-qualified name of the
 	// OrganizationLabelService's GetOrganizationLabelOperation RPC.
 	OrganizationLabelServiceGetOrganizationLabelOperationProcedure = "/golf.v1.OrganizationLabelService/GetOrganizationLabelOperation"
+	// PullReviewAuthoringServiceGetPullReviewAuthoringStateProcedure is the fully-qualified name of the
+	// PullReviewAuthoringService's GetPullReviewAuthoringState RPC.
+	PullReviewAuthoringServiceGetPullReviewAuthoringStateProcedure = "/golf.v1.PullReviewAuthoringService/GetPullReviewAuthoringState"
+	// PullReviewAuthoringServiceSubmitPullReviewAuthoringOperationProcedure is the fully-qualified name
+	// of the PullReviewAuthoringService's SubmitPullReviewAuthoringOperation RPC.
+	PullReviewAuthoringServiceSubmitPullReviewAuthoringOperationProcedure = "/golf.v1.PullReviewAuthoringService/SubmitPullReviewAuthoringOperation"
+	// PullReviewAuthoringServiceGetPullReviewAuthoringOperationProcedure is the fully-qualified name of
+	// the PullReviewAuthoringService's GetPullReviewAuthoringOperation RPC.
+	PullReviewAuthoringServiceGetPullReviewAuthoringOperationProcedure = "/golf.v1.PullReviewAuthoringService/GetPullReviewAuthoringOperation"
 )
 
 // SessionServiceClient is a client for the golf.v1.SessionService service.
@@ -10252,4 +10264,129 @@ func (UnimplementedOrganizationLabelServiceHandler) SubmitOrganizationLabelOpera
 
 func (UnimplementedOrganizationLabelServiceHandler) GetOrganizationLabelOperation(context.Context, *connect.Request[v1.GetOrganizationLabelOperationRequest]) (*connect.Response[v1.GetOrganizationLabelOperationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.OrganizationLabelService.GetOrganizationLabelOperation is not implemented"))
+}
+
+// PullReviewAuthoringServiceClient is a client for the golf.v1.PullReviewAuthoringService service.
+type PullReviewAuthoringServiceClient interface {
+	GetPullReviewAuthoringState(context.Context, *connect.Request[v1.GetPullReviewAuthoringStateRequest]) (*connect.Response[v1.GetPullReviewAuthoringStateResponse], error)
+	SubmitPullReviewAuthoringOperation(context.Context, *connect.Request[v1.SubmitPullReviewAuthoringOperationRequest]) (*connect.Response[v1.SubmitPullReviewAuthoringOperationResponse], error)
+	GetPullReviewAuthoringOperation(context.Context, *connect.Request[v1.GetPullReviewAuthoringOperationRequest]) (*connect.Response[v1.GetPullReviewAuthoringOperationResponse], error)
+}
+
+// NewPullReviewAuthoringServiceClient constructs a client for the
+// golf.v1.PullReviewAuthoringService service. By default, it uses the Connect protocol with the
+// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
+// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewPullReviewAuthoringServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) PullReviewAuthoringServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	pullReviewAuthoringServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("PullReviewAuthoringService").Methods()
+	return &pullReviewAuthoringServiceClient{
+		getPullReviewAuthoringState: connect.NewClient[v1.GetPullReviewAuthoringStateRequest, v1.GetPullReviewAuthoringStateResponse](
+			httpClient,
+			baseURL+PullReviewAuthoringServiceGetPullReviewAuthoringStateProcedure,
+			connect.WithSchema(pullReviewAuthoringServiceMethods.ByName("GetPullReviewAuthoringState")),
+			connect.WithClientOptions(opts...),
+		),
+		submitPullReviewAuthoringOperation: connect.NewClient[v1.SubmitPullReviewAuthoringOperationRequest, v1.SubmitPullReviewAuthoringOperationResponse](
+			httpClient,
+			baseURL+PullReviewAuthoringServiceSubmitPullReviewAuthoringOperationProcedure,
+			connect.WithSchema(pullReviewAuthoringServiceMethods.ByName("SubmitPullReviewAuthoringOperation")),
+			connect.WithClientOptions(opts...),
+		),
+		getPullReviewAuthoringOperation: connect.NewClient[v1.GetPullReviewAuthoringOperationRequest, v1.GetPullReviewAuthoringOperationResponse](
+			httpClient,
+			baseURL+PullReviewAuthoringServiceGetPullReviewAuthoringOperationProcedure,
+			connect.WithSchema(pullReviewAuthoringServiceMethods.ByName("GetPullReviewAuthoringOperation")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// pullReviewAuthoringServiceClient implements PullReviewAuthoringServiceClient.
+type pullReviewAuthoringServiceClient struct {
+	getPullReviewAuthoringState        *connect.Client[v1.GetPullReviewAuthoringStateRequest, v1.GetPullReviewAuthoringStateResponse]
+	submitPullReviewAuthoringOperation *connect.Client[v1.SubmitPullReviewAuthoringOperationRequest, v1.SubmitPullReviewAuthoringOperationResponse]
+	getPullReviewAuthoringOperation    *connect.Client[v1.GetPullReviewAuthoringOperationRequest, v1.GetPullReviewAuthoringOperationResponse]
+}
+
+// GetPullReviewAuthoringState calls golf.v1.PullReviewAuthoringService.GetPullReviewAuthoringState.
+func (c *pullReviewAuthoringServiceClient) GetPullReviewAuthoringState(ctx context.Context, req *connect.Request[v1.GetPullReviewAuthoringStateRequest]) (*connect.Response[v1.GetPullReviewAuthoringStateResponse], error) {
+	return c.getPullReviewAuthoringState.CallUnary(ctx, req)
+}
+
+// SubmitPullReviewAuthoringOperation calls
+// golf.v1.PullReviewAuthoringService.SubmitPullReviewAuthoringOperation.
+func (c *pullReviewAuthoringServiceClient) SubmitPullReviewAuthoringOperation(ctx context.Context, req *connect.Request[v1.SubmitPullReviewAuthoringOperationRequest]) (*connect.Response[v1.SubmitPullReviewAuthoringOperationResponse], error) {
+	return c.submitPullReviewAuthoringOperation.CallUnary(ctx, req)
+}
+
+// GetPullReviewAuthoringOperation calls
+// golf.v1.PullReviewAuthoringService.GetPullReviewAuthoringOperation.
+func (c *pullReviewAuthoringServiceClient) GetPullReviewAuthoringOperation(ctx context.Context, req *connect.Request[v1.GetPullReviewAuthoringOperationRequest]) (*connect.Response[v1.GetPullReviewAuthoringOperationResponse], error) {
+	return c.getPullReviewAuthoringOperation.CallUnary(ctx, req)
+}
+
+// PullReviewAuthoringServiceHandler is an implementation of the golf.v1.PullReviewAuthoringService
+// service.
+type PullReviewAuthoringServiceHandler interface {
+	GetPullReviewAuthoringState(context.Context, *connect.Request[v1.GetPullReviewAuthoringStateRequest]) (*connect.Response[v1.GetPullReviewAuthoringStateResponse], error)
+	SubmitPullReviewAuthoringOperation(context.Context, *connect.Request[v1.SubmitPullReviewAuthoringOperationRequest]) (*connect.Response[v1.SubmitPullReviewAuthoringOperationResponse], error)
+	GetPullReviewAuthoringOperation(context.Context, *connect.Request[v1.GetPullReviewAuthoringOperationRequest]) (*connect.Response[v1.GetPullReviewAuthoringOperationResponse], error)
+}
+
+// NewPullReviewAuthoringServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewPullReviewAuthoringServiceHandler(svc PullReviewAuthoringServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	pullReviewAuthoringServiceMethods := v1.File_golf_v1_golf_proto.Services().ByName("PullReviewAuthoringService").Methods()
+	pullReviewAuthoringServiceGetPullReviewAuthoringStateHandler := connect.NewUnaryHandler(
+		PullReviewAuthoringServiceGetPullReviewAuthoringStateProcedure,
+		svc.GetPullReviewAuthoringState,
+		connect.WithSchema(pullReviewAuthoringServiceMethods.ByName("GetPullReviewAuthoringState")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pullReviewAuthoringServiceSubmitPullReviewAuthoringOperationHandler := connect.NewUnaryHandler(
+		PullReviewAuthoringServiceSubmitPullReviewAuthoringOperationProcedure,
+		svc.SubmitPullReviewAuthoringOperation,
+		connect.WithSchema(pullReviewAuthoringServiceMethods.ByName("SubmitPullReviewAuthoringOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pullReviewAuthoringServiceGetPullReviewAuthoringOperationHandler := connect.NewUnaryHandler(
+		PullReviewAuthoringServiceGetPullReviewAuthoringOperationProcedure,
+		svc.GetPullReviewAuthoringOperation,
+		connect.WithSchema(pullReviewAuthoringServiceMethods.ByName("GetPullReviewAuthoringOperation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/golf.v1.PullReviewAuthoringService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case PullReviewAuthoringServiceGetPullReviewAuthoringStateProcedure:
+			pullReviewAuthoringServiceGetPullReviewAuthoringStateHandler.ServeHTTP(w, r)
+		case PullReviewAuthoringServiceSubmitPullReviewAuthoringOperationProcedure:
+			pullReviewAuthoringServiceSubmitPullReviewAuthoringOperationHandler.ServeHTTP(w, r)
+		case PullReviewAuthoringServiceGetPullReviewAuthoringOperationProcedure:
+			pullReviewAuthoringServiceGetPullReviewAuthoringOperationHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedPullReviewAuthoringServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedPullReviewAuthoringServiceHandler struct{}
+
+func (UnimplementedPullReviewAuthoringServiceHandler) GetPullReviewAuthoringState(context.Context, *connect.Request[v1.GetPullReviewAuthoringStateRequest]) (*connect.Response[v1.GetPullReviewAuthoringStateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullReviewAuthoringService.GetPullReviewAuthoringState is not implemented"))
+}
+
+func (UnimplementedPullReviewAuthoringServiceHandler) SubmitPullReviewAuthoringOperation(context.Context, *connect.Request[v1.SubmitPullReviewAuthoringOperationRequest]) (*connect.Response[v1.SubmitPullReviewAuthoringOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullReviewAuthoringService.SubmitPullReviewAuthoringOperation is not implemented"))
+}
+
+func (UnimplementedPullReviewAuthoringServiceHandler) GetPullReviewAuthoringOperation(context.Context, *connect.Request[v1.GetPullReviewAuthoringOperationRequest]) (*connect.Response[v1.GetPullReviewAuthoringOperationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("golf.v1.PullReviewAuthoringService.GetPullReviewAuthoringOperation is not implemented"))
 }

@@ -957,6 +957,29 @@ type GolfPreviewCredential struct {
 	ExpiresAt         time.Time
 }
 
+type GolfPullReviewAuthoringEvent struct {
+	ID          int64
+	OperationID int64
+	Phase       string
+	OccurredAt  time.Time
+}
+
+type GolfPullReviewAuthoringOperation struct {
+	ID               int64
+	UserID           int64
+	ForgeURL         string
+	ActorID          int64
+	OperationID      string
+	RepositoryID     int64
+	Original         []byte
+	InputFingerprint []byte
+	ObservedReviewID int64
+	Phase            string
+	FailureCode      string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
 type GolfPullReviewCommentEvent struct {
 	ID          int64
 	OperationID int64

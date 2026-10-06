@@ -190,6 +190,15 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 			return nil, errStorageUnavailable
 		}
 		var reviewBlocked bool
+		var authoringBlocked bool
+		if e = held.tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_pull_review_authoring_operations WHERE forge_url=$1 AND repository_id=$2 AND phase IN ('RESERVED','DISPATCH_UNKNOWN'))`, s.config.GiteaURL, repo.ID).Scan(&authoringBlocked); e != nil {
+			cancel()
+			return nil, errStorageUnavailable
+		}
+		if _, own := ctx.Value(reviewAuthoringPermitKey{}).(reviewAuthoringPermit); authoringBlocked && !own {
+			cancel()
+			return nil, errLifecycleBlocked
+		}
 		if e = held.tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM golf_pull_review_lifecycle_operations WHERE forge_url=$1 AND repository_id=$2 AND phase IN ('RESERVED','DISPATCH_UNKNOWN'))`, s.config.GiteaURL, repo.ID).Scan(&reviewBlocked); e != nil {
 			cancel()
 			return nil, errStorageUnavailable
@@ -229,6 +238,11 @@ func (s *Server) beginRepositoryLifecycleWrite(ctx context.Context, method, path
 			}
 		} else if publication, ok := ctx.Value(releasePublicationPermitKey{}).(releasePublicationPermit); ok {
 			if e := s.validateReleasePublicationPermit(ctx, held.tx, publication, repo, key, method, path, input); e != nil {
+				cancel()
+				return nil, e
+			}
+		} else if authoring, ok := ctx.Value(reviewAuthoringPermitKey{}).(reviewAuthoringPermit); ok {
+			if e := s.validateReviewAuthoringPermit(ctx, held.tx, authoring, repo, key, method, path, input); e != nil {
 				cancel()
 				return nil, e
 			}

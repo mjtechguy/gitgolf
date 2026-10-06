@@ -135,6 +135,9 @@ func (s *Server) lockReviewAuthoring(ctx context.Context, tx *sql.Tx, id int64) 
 	if _, e := tx.ExecContext(ctx, `SELECT golf_review_authoring_lock($1,$2)`, s.config.GiteaURL, id); e != nil {
 		return nil, errStorageUnavailable
 	}
+	if e := s.protectionDispatchAllowed(ctx, tx, id); e != nil {
+		return nil, e
+	}
 	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.GiteaURL, id, tx}), nil
 }
 func (s *Server) advanceReviewAuthoring(ctx context.Context, session string, token forgeCredential, r reviewAuthoringRecord, phase string, observed int64) (reviewAuthoringRecord, error) {
