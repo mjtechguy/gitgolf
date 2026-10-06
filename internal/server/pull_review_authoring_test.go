@@ -226,6 +226,10 @@ func TestReviewAuthoringPendingLifecyclePostgres(t *testing.T) {
 			if f.writes.Load() != 3 {
 				t.Fatal("Wrong number of native writes")
 			}
+			var shared, private int
+			if e := f.db.QueryRow(`SELECT count(*) FILTER (WHERE recipient_user_id=0),count(*) FILTER (WHERE recipient_user_id<>0) FROM golf_repository_activity`).Scan(&shared, &private); e != nil || finish == authorDiscard && (shared != 0 || private != 3) || finish == authorSubmit && (shared != 1 || private != 2) {
+				t.Fatal("Review activity privacy/multiplicity", e, shared, private)
+			}
 		})
 	}
 }
@@ -263,6 +267,10 @@ func TestReviewAuthoringUnknownNoResendPostgres(t *testing.T) {
 	again, e := f.submit(session, reviewAuthoringRetained(m))
 	if e != nil || !proto.Equal(r, again) || f.writes.Load() != 1 {
 		t.Fatal("unknown adopted or resent", e)
+	}
+	var events int
+	if e = f.db.QueryRow(`SELECT count(*) FROM golf_repository_activity`).Scan(&events); e != nil || events != 0 {
+		t.Fatal("Unknown review leaked an invalidation")
 	}
 	f.lost.Store(false)
 	different := f.input(t, session, authorUpdate, "A different operation")
@@ -341,21 +349,19 @@ func TestReviewAuthoringEmptyDraftAndApprovalPostgres(t *testing.T) {
 	f := newAuthoringFixture(t)
 	session := f.session(t, "pat")
 	m := f.input(t, session, authorCreate, "")
-	if r, e := f.submit(session, m); e != nil || r.Phase != golfv1.DiscussionResourceOperationPhase_DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED {
-		t.Fatal("Empty pending draft", e, r)
+	if _, e := f.submit(session, m); e == nil || f.writes.Load() != 0 {
+		t.Fatal("Unsupported native empty pending draft dispatched")
+	}
+	m = f.input(t, session, authorCreate, "Pending summary")
+	if _, e := f.submit(session, m); e != nil {
+		t.Fatal(e)
 	}
 	m = f.input(t, session, authorUpdate, "")
-	if r, e := f.submit(session, m); e != nil || r.Phase != golfv1.DiscussionResourceOperationPhase_DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED {
-		t.Fatal("Empty pending edit", e, r)
+	if _, e := f.submit(session, m); e == nil || f.writes.Load() != 1 {
+		t.Fatal("Empty pending edit dispatched")
 	}
 	m = f.input(t, session, authorSubmit, "")
-	if _, e := f.submit(session, m); e == nil {
-		t.Fatal("Empty COMMENT summary accepted")
-	}
-	f.mu.Lock()
-	f.review.User.ID = 42
-	f.mu.Unlock()
-	if f.writes.Load() != 2 {
+	if _, e := f.submit(session, m); e == nil || f.writes.Load() != 1 {
 		t.Fatal("Empty comment dispatched")
 	}
 	f.pullAuthor.Store(43)

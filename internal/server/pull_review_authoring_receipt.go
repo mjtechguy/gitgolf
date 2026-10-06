@@ -114,7 +114,7 @@ func (s *Server) authoringPostflight(ctx context.Context, session string, token 
 			return 0, errPullSnapshotChanged
 		}
 	case authorPrivate:
-		input, c, e := authoringInlinePayload(draft)
+		input, c, e := inlinePayload(draft, "PENDING")
 		if e != nil {
 			return 0, e
 		}

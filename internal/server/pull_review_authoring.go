@@ -140,7 +140,7 @@ func (s *Server) lockReviewAuthoring(ctx context.Context, tx *sql.Tx, id int64) 
 	}
 	return context.WithValue(ctx, repositoryLifecycleTransactionKey{}, repositoryLifecycleTransaction{s.config.GiteaURL, id, tx}), nil
 }
-func (s *Server) advanceReviewAuthoring(ctx context.Context, session string, token forgeCredential, r reviewAuthoringRecord, phase string, observed int64) (reviewAuthoringRecord, error) {
+func (s *Server) advanceReviewAuthoring(ctx context.Context, session string, token forgeCredential, r reviewAuthoringRecord, phase string, observed, recipient int64) (reviewAuthoringRecord, error) {
 	actor, e := s.currentUser(ctx, token)
 	if e != nil {
 		return r, e
@@ -159,6 +159,15 @@ func (s *Server) advanceReviewAuthoring(ctx context.Context, session string, tok
 			failure = "preflight_refused"
 		}
 		out, e = scanReviewAuthoring(tx.QueryRowContext(held, `UPDATE golf_pull_review_authoring_operations SET phase=$1,failure_code=$2,observed_review_id=$3 WHERE id=$4 AND user_id=$5 AND forge_url=$6 AND phase=$7 RETURNING `+reviewAuthoringColumns, phase, failure, observed, r.ID, r.UserID, r.ForgeURL, r.Phase))
+		if e != nil {
+			return e
+		}
+		if phase == "SUCCEEDED" {
+			if recipient != 0 && recipient != r.UserID {
+				return errStorageUnavailable
+			}
+			_, e = tx.ExecContext(held, `SELECT golf_append_repository_activity($1,$2,$3,'pulls')`, r.ForgeURL, r.RepositoryID, recipient)
+		}
 		return e
 	})
 	return out, e
@@ -225,6 +234,9 @@ func (s *Server) authoringPreflight(ctx context.Context, session string, token f
 	}
 	switch m.Kind {
 	case authorCreate:
+		if strings.TrimSpace(m.Body) == "" {
+			return snap, nil, nil, invalid("The native pending API requires a nonempty summary.")
+		}
 		if !w.CanCreate {
 			return snap, nil, nil, errResourceNotFound
 		}
@@ -242,6 +254,9 @@ func (s *Server) authoringPreflight(ctx context.Context, session string, token f
 		_, _, _, e = s.inlinePreflight(ctx, session, token, m.Target, scope, r, draft)
 		return snap, input, draft, e
 	case authorUpdate:
+		if strings.TrimSpace(m.Body) == "" {
+			return snap, nil, nil, invalid("The native pending API requires a nonempty summary.")
+		}
 		if !w.CanUpdate {
 			return snap, nil, nil, errResourceNotFound
 		}
@@ -378,14 +393,14 @@ func (s *Server) SubmitPullReviewAuthoringOperation(ctx context.Context, req *co
 	}
 	if fresh {
 		if _, _, _, e = s.authoringPreflight(ctx, session, token, m); e != nil {
-			r, e = s.advanceReviewAuthoring(ctx, session, token, r, "REJECTED", 0)
+			r, e = s.advanceReviewAuthoring(ctx, session, token, r, "REJECTED", 0, 0)
 		} else {
-			r, e = s.advanceReviewAuthoring(ctx, session, token, r, "DISPATCH_UNKNOWN", 0)
+			r, e = s.advanceReviewAuthoring(ctx, session, token, r, "DISPATCH_UNKNOWN", 0, 0)
 			if e != nil {
 				return nil, lifecycleRPCError(e)
 			}
 			var nativeErr error
-			var observed int64
+			var observed, recipient int64
 			e = s.workflowTransaction(ctx, session, actor.ID, func(tx *sql.Tx, c database.LockManagedSessionRow, _ []byte) error {
 				held, e := s.lockReviewAuthoring(ctx, tx, scope.repositoryID)
 				if e != nil {
@@ -394,6 +409,10 @@ func (s *Server) SubmitPullReviewAuthoringOperation(ctx context.Context, req *co
 				snap, payload, draft, e := s.authoringPreflight(held, session, token, m)
 				if e != nil {
 					return e
+				}
+				recipient = r.UserID
+				if m.Kind == authorSubmit || (m.Kind == authorEdit || m.Kind == authorDelete) && !snap.wire.OwnPending {
+					recipient = 0
 				}
 				raw, _ := json.Marshal(payload)
 				held = context.WithValue(held, reviewAuthoringPermitKey{}, reviewAuthoringPermit{r, raw})
@@ -418,7 +437,7 @@ func (s *Server) SubmitPullReviewAuthoringOperation(ctx context.Context, req *co
 				return nil, lifecycleRPCError(e)
 			}
 			if nativeErr == nil {
-				r, e = s.advanceReviewAuthoring(ctx, session, token, r, "SUCCEEDED", observed)
+				r, e = s.advanceReviewAuthoring(ctx, session, token, r, "SUCCEEDED", observed, recipient)
 			}
 		}
 		if e != nil {

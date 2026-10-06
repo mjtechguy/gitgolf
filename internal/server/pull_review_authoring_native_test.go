@@ -159,6 +159,15 @@ func TestReviewAuthoringNativeProof(t *testing.T) {
 	submit(proposal(authorDiscard, ""))
 	selection.ReviewId = ""
 	selection.ReviewCommitId = ""
+	emptyPending := proposal(authorCreate, "")
+	emptyRequest := connect.NewRequest(emptyPending)
+	emptyRequest.Header().Set("Origin", s.config.PublicURL)
+	if _, e = client.SubmitPullReviewAuthoringOperation(t.Context(), emptyRequest); connect.CodeOf(e) != connect.CodeInvalidArgument {
+		t.Fatalf("Unsupported empty pending shape was not withheld (%s)", connect.CodeOf(e))
+	}
+	if stable().Review != nil {
+		t.Fatal("Empty pending refusal dispatched or adopted a native draft")
+	}
 	// Save the real bounded comparison once, then transfer the exact immutable encrypted version.
 	snap := stable()
 	var nativePull forgePull
@@ -170,7 +179,7 @@ func TestReviewAuthoringNativeProof(t *testing.T) {
 		t.Fatal("Diff capture")
 	}
 	hash := sha256.Sum256([]byte(raw))
-	save := &golfv1.SavePullRequestReviewDraftRequest{Target: target, DraftId: uuid.NewString(), OperationId: uuid.NewString(), ExpectedVersion: "0", ExpectedTargetGeneration: "0", Summary: "", Entries: []*golfv1.PullReviewDraftEntry{{Id: uuid.NewString(), Coordinate: &golfv1.PullReviewDraftCoordinate{Path: "review-authoring.txt", Line: 1, Side: golfv1.PullReviewDraftSide_PULL_REVIEW_DRAFT_SIDE_NEW}, Body: "Owned saved inline finding"}}, Comparison: &golfv1.SavePullRequestReviewDraftRequest_Capture{Capture: &golfv1.PullReviewDraftCapture{Selection: &golfv1.PullRequestSelection{Repository: key, RepositoryId: target.RepositoryId, PullRequestId: target.PullRequestId, Number: target.Number, BaseCommitId: nativePull.Base.SHA, HeadCommitId: nativePull.Head.SHA}, ExpectedPullRevision: snap.PullRevision, MergeBaseCommitId: nativePull.MergeBase, DiffSha256: hex.EncodeToString(hash[:])}}}
+	save := &golfv1.SavePullRequestReviewDraftRequest{Target: target, DraftId: uuid.NewString(), OperationId: uuid.NewString(), ExpectedVersion: "0", ExpectedTargetGeneration: "0", Summary: "Owned saved inline review", Entries: []*golfv1.PullReviewDraftEntry{{Id: uuid.NewString(), Coordinate: &golfv1.PullReviewDraftCoordinate{Path: "review-authoring.txt", Line: 1, Side: golfv1.PullReviewDraftSide_PULL_REVIEW_DRAFT_SIDE_NEW}, Body: "Owned saved inline finding"}}, Comparison: &golfv1.SavePullRequestReviewDraftRequest_Capture{Capture: &golfv1.PullReviewDraftCapture{Selection: &golfv1.PullRequestSelection{Repository: key, RepositoryId: target.RepositoryId, PullRequestId: target.PullRequestId, Number: target.Number, BaseCommitId: nativePull.Base.SHA, HeadCommitId: nativePull.Head.SHA}, ExpectedPullRevision: snap.PullRevision, MergeBaseCommitId: nativePull.MergeBase, DiffSha256: hex.EncodeToString(hash[:])}}}
 	saved, e := repos.SavePullRequestReviewDraft(t.Context(), connect.NewRequest(save))
 	if e != nil {
 		t.Fatalf("Encrypted private capture %s", connect.CodeOf(e))
@@ -226,7 +235,7 @@ func TestReviewAuthoringNativeProof(t *testing.T) {
 	for _, decision := range []golfv1.PullRequestReviewState{golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_APPROVED, golfv1.PullRequestReviewState_PULL_REQUEST_REVIEW_STATE_REQUEST_CHANGES} {
 		selection.ReviewId = ""
 		selection.ReviewCommitId = ""
-		submit(proposal(authorCreate, ""))
+		submit(proposal(authorCreate, "Owned pending decision"))
 		selectOwn()
 		m := proposal(authorSubmit, "Owned final decision")
 		m.Decision = decision
