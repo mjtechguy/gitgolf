@@ -194,6 +194,15 @@ func TestReviewAuthoringNativeProof(t *testing.T) {
 	if len(pending.Comments) != 1 || !pending.CanSubmit {
 		t.Fatal("Native inline pending context unavailable")
 	}
+	appendDraft := proposal(authorAppend, "")
+	appendDraft.GolfDraftId = saved.Msg.Draft.Id
+	appendDraft.ExpectedDraftVersion = saved.Msg.CurrentVersion
+	appendDraft.ExpectedTargetGeneration = saved.Msg.TargetGeneration
+	submit(appendDraft)
+	appended := stable()
+	if len(appended.Comments) != 2 || appended.Review.Id != pending.Review.Id || appended.Review.Body != pending.Review.Body || !appended.CanSubmit {
+		t.Fatal("Native pending append did not preserve exact original")
+	}
 	selection.CommentId = pending.Comments[0].Id
 	// Native owner knowledge of a private pending ID must not grant Golf visibility.
 	otherSession, ownerRepos, _, otherTransport, otherOrigin := testRPCClients(t, s)
@@ -225,6 +234,13 @@ func TestReviewAuthoringNativeProof(t *testing.T) {
 	submit(proposal(authorEdit, "Owned edited published finding"))
 	submit(proposal(authorDelete, ""))
 	selection.CommentId = ""
+	remaining := stable()
+	if len(remaining.Comments) != 1 {
+		t.Fatal("Append remaining comment disappeared")
+	}
+	selection.CommentId = remaining.Comments[0].Id
+	submit(proposal(authorDelete, ""))
+	selection.CommentId = ""
 	if len(stable().Comments) != 0 {
 		t.Fatal("Deleted native inline still visible")
 	}
@@ -245,6 +261,8 @@ func TestReviewAuthoringNativeProof(t *testing.T) {
 		}
 		submit(m)
 	}
+	qualifyForge089Native(t, s, otherTransport, otherOrigin, owner, key, target, in.Branch)
+
 	// A PR author may prepare native pending inline comments and publish COMMENT,
 	// while Golf still refuses approval/change-request self-review.
 	client = other

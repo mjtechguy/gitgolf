@@ -4946,6 +4946,7 @@ enum PullReviewAuthoringKind {
  PULL_REVIEW_AUTHORING_KIND_DISCARD_DRAFT = 5;
  PULL_REVIEW_AUTHORING_KIND_EDIT_COMMENT = 6;
  PULL_REVIEW_AUTHORING_KIND_DELETE_COMMENT = 7;
+ PULL_REVIEW_AUTHORING_KIND_APPEND_FROM_PRIVATE_DRAFT = 8;
 }
 message GetPullReviewAuthoringStateRequest {
  PullReviewDraftTarget target = 1; string review_id = 2; string review_commit_id = 3; string comment_id = 4;

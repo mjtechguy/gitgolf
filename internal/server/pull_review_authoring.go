@@ -27,6 +27,7 @@ const (
 	authorDiscard = golfv1.PullReviewAuthoringKind_PULL_REVIEW_AUTHORING_KIND_DISCARD_DRAFT
 	authorEdit    = golfv1.PullReviewAuthoringKind_PULL_REVIEW_AUTHORING_KIND_EDIT_COMMENT
 	authorDelete  = golfv1.PullReviewAuthoringKind_PULL_REVIEW_AUTHORING_KIND_DELETE_COMMENT
+	authorAppend  = golfv1.PullReviewAuthoringKind_PULL_REVIEW_AUTHORING_KIND_APPEND_FROM_PRIVATE_DRAFT
 )
 
 func validateReviewAuthoring(m *golfv1.SubmitPullReviewAuthoringOperationRequest) error {
@@ -36,7 +37,7 @@ func validateReviewAuthoring(m *golfv1.SubmitPullReviewAuthoringOperationRequest
 	if !creationKey.MatchString(m.OperationId) || !issueRevisionPattern.MatchString(m.ExpectedPullRevision) || !issueRevisionPattern.MatchString(m.ExpectedSnapshotRevision) {
 		return invalid("Select original review revisions and operation.")
 	}
-	if m.Kind < authorCreate || m.Kind > authorDelete {
+	if m.Kind < authorCreate || m.Kind > authorAppend {
 		return invalid("Select a supported review operation.")
 	}
 	create := m.Kind == authorCreate || m.Kind == authorPrivate
@@ -69,7 +70,7 @@ func validateReviewAuthoring(m *golfv1.SubmitPullReviewAuthoringOperationRequest
 	} else if m.Decision != 0 {
 		return invalid("Only submission selects a decision.")
 	}
-	if m.Kind == authorPrivate {
+	if m.Kind == authorPrivate || m.Kind == authorAppend {
 		if reviewDraftUUID(m.GolfDraftId) != nil {
 			return invalid("Select the saved private draft.")
 		}
@@ -176,7 +177,7 @@ func (s *Server) advanceReviewAuthoring(ctx context.Context, session string, tok
 func authoringRoute(base string, m *golfv1.SubmitPullReviewAuthoringOperationRequest) (string, string) {
 	route := base + "/pulls/" + strconv.FormatUint(uint64(m.Target.Number), 10) + "/reviews"
 	switch m.Kind {
-	case authorCreate, authorPrivate, authorUpdate:
+	case authorCreate, authorPrivate, authorUpdate, authorAppend:
 		return http.MethodPost, route
 	case authorSubmit:
 		return http.MethodPost, route + "/" + m.ReviewId
@@ -241,13 +242,25 @@ func (s *Server) authoringPreflight(ctx context.Context, session string, token f
 			return snap, nil, nil, errResourceNotFound
 		}
 		return snap, reviewerPublicationInput{Body: m.Body, Head: w.CurrentHeadCommitId, Event: "PENDING", Comments: []reviewerPublicationComment{}}, nil, nil
-	case authorPrivate:
-		if !w.CanCreate {
+	case authorPrivate, authorAppend:
+		if m.Kind == authorPrivate && !w.CanCreate || m.Kind == authorAppend && (!w.OwnPending || !w.CanSubmit || w.Review == nil || w.Review.Id != m.ReviewId || w.Review.CommitId != m.ReviewCommitId) {
 			return snap, nil, nil, errResourceNotFound
 		}
 		draft, input, _, e := s.authoringPrivateSource(ctx, session, token, m)
 		if e != nil {
 			return snap, nil, nil, e
+		}
+		if m.Kind == authorAppend {
+			if strings.TrimSpace(w.Review.Body) == "" || !discussionText(w.Review.Body, 6000) {
+				return snap, nil, nil, invalid("Append requires a native summary of 1–6000 UTF-8 bytes.")
+			}
+			if len(w.Comments)+len(input.Comments) > 100 {
+				return snap, nil, nil, errForgeResponseTooLarge
+			}
+			input.Body = w.Review.Body // Append preserves the independently observed native summary.
+			// Review activity can advance the PR timestamp. Source/head/base and exact raw diff are still independently revalidated.
+			draft = proto.Clone(draft).(*golfv1.PullReviewDraft)
+			draft.Comparison.Capture.ExpectedPullRevision = m.ExpectedPullRevision
 		}
 		scope, _ := reviewDraftTarget(m.Target)
 		r := database.GolfInlineReviewMutation{ActorID: snap.actor.ID, ExpectedRevision: m.ExpectedPullRevision, HeadCommit: input.Head, BaseTip: draft.Comparison.Capture.Selection.BaseCommitId, MergeBase: draft.Comparison.Capture.MergeBaseCommitId, Decision: "COMMENT"}

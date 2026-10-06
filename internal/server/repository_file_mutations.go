@@ -63,13 +63,14 @@ type fileMutationRecord struct {
 	ID, UserID, ActorID, RepositoryID, OwnerID, Size                                                                                                             int64
 	ForgeURL, OperationID, Owner, Name, AccessRevision, Kind, Branch, ExpectedCommit, Path, ExpectedBlob, ContentHash, MessageHash, Commit, Blob, Phase, Failure string
 	Fingerprint                                                                                                                                                  []byte
+	BatchOriginal                                                                                                                                                []byte
 	Created, Updated                                                                                                                                             time.Time
 }
 
-const fileMutationColumns = `id,user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,access_revision,kind,branch_name,expected_commit_id,file_path,expected_blob_id,content_sha256,content_size_bytes,message_sha256,result_commit_id,result_blob_id,input_fingerprint,phase,failure_code,created_at,updated_at`
+const fileMutationColumns = `id,user_id,forge_url,actor_id,operation_id,repository_id,owner_id,repository_owner,repository_name,access_revision,kind,branch_name,expected_commit_id,file_path,expected_blob_id,content_sha256,content_size_bytes,message_sha256,result_commit_id,result_blob_id,input_fingerprint,phase,failure_code,created_at,updated_at,batch_original`
 
 func scanFileMutation(row interface{ Scan(...any) error }) (r fileMutationRecord, e error) {
-	e = row.Scan(&r.ID, &r.UserID, &r.ForgeURL, &r.ActorID, &r.OperationID, &r.RepositoryID, &r.OwnerID, &r.Owner, &r.Name, &r.AccessRevision, &r.Kind, &r.Branch, &r.ExpectedCommit, &r.Path, &r.ExpectedBlob, &r.ContentHash, &r.Size, &r.MessageHash, &r.Commit, &r.Blob, &r.Fingerprint, &r.Phase, &r.Failure, &r.Created, &r.Updated)
+	e = row.Scan(&r.ID, &r.UserID, &r.ForgeURL, &r.ActorID, &r.OperationID, &r.RepositoryID, &r.OwnerID, &r.Owner, &r.Name, &r.AccessRevision, &r.Kind, &r.Branch, &r.ExpectedCommit, &r.Path, &r.ExpectedBlob, &r.ContentHash, &r.Size, &r.MessageHash, &r.Commit, &r.Blob, &r.Fingerprint, &r.Phase, &r.Failure, &r.Created, &r.Updated, &r.BatchOriginal)
 	return
 }
 func fileMutationWire(r fileMutationRecord) *golfv1.RepositoryFileMutationOperation {
@@ -230,6 +231,9 @@ func (s *Server) fileMutationAuthority(ctx context.Context, session string, toke
 	return key, nil
 }
 func (s *Server) fileMutationReadback(ctx context.Context, session string, token forgeCredential, r fileMutationRecord) error {
+	if r.Kind == "BATCH" {
+		return s.fileBatchReadback(ctx, session, token, r)
+	}
 	key, e := s.fileMutationAuthority(ctx, session, token, r)
 	if e != nil {
 		return e
@@ -285,10 +289,14 @@ type fileMutationPermit struct {
 	record  fileMutationRecord
 	content []byte
 	message string
+	batch   *golfv1.SubmitRepositoryFileBatchRequest
 }
 
 func (s *Server) validateFileMutationPermit(ctx context.Context, tx *sql.Tx, p fileMutationPermit, repo lifecycleNativeRepository, key repositoryKey, method, path string, input any) error {
 	r := p.record
+	if r.Kind == "BATCH" {
+		return s.validateFileBatchPermit(ctx, tx, p, repo, key, method, path, input)
+	}
 	base, _ := repositoryPath(key)
 	want, suffix, payload := fileMutationNative(r, p.content, p.message)
 	if tx == nil || repo.ID != r.RepositoryID || key.Owner != r.Owner || key.Name != r.Name || method != want || path != base+suffix || fileMutationHash(p.content) != r.ContentHash || int64(len(p.content)) != r.Size || fileMutationHash([]byte(p.message)) != r.MessageHash {
@@ -455,7 +463,7 @@ func (s *Server) SubmitRepositoryFileMutation(ctx context.Context, req *connect.
 				if e = s.fileMutationPreflight(held, session, token, m); e != nil {
 					return e
 				}
-				held = context.WithValue(held, fileMutationPermitKey{}, fileMutationPermit{r, m.Content, m.CommitMessage})
+				held = context.WithValue(held, fileMutationPermitKey{}, fileMutationPermit{record: r, content: m.Content, message: m.CommitMessage})
 				base, _ := repositoryPath(key)
 				method, suffix, payload := fileMutationNative(r, m.Content, m.CommitMessage)
 				var row fileMutationReceipt

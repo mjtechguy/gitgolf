@@ -1,3 +1,6 @@
+import {DiscussionAttachmentDisclosure} from './DiscussionAttachments';
+import {create} from '@bufbuild/protobuf';
+import {DiscussionTargetSchema} from './gen/golf/v1/golf_pb';
 import {PullReviewAuthoring} from "./PullReviewAuthoring";
 import {PullReviewLifecycle} from './PullReviewLifecycle';
 import {PullReviewRequests} from './PullReviewRequests';
@@ -77,7 +80,7 @@ function Reviews({ repositoryKey, queryKey, location, onReview, pull, repository
 }
 function PullDiscussion(props:Props){
  const query=useQuery({...privateQuery,queryKey:[...props.queryKey,'pull-discussion',props.location.pull],queryFn:({signal})=>repositoryClient.getPullRequestDiscussion({repository:props.repositoryKey,number:props.location.pull},{signal,timeoutMs:8000})});
- return query.isError?<PanelError error={query.error} retry={()=>void query.refetch()}/>:query.isSuccess&&query.data.issue?<Comments {...props} issue={query.data.issue} pullRequest onDenied={()=>{}}/>:<Loading label="Reading PR discussion…"/>;
+ return query.isError?<PanelError error={query.error} retry={()=>void query.refetch()}/>:query.isSuccess&&query.data.issue?<><DiscussionAttachmentDisclosure userId={props.userId} target={create(DiscussionTargetSchema,{repository:props.repositoryKey,repositoryId:props.repositoryId,issueId:query.data.issue.id,number:query.data.issue.number,pullRequest:true})}/><Comments {...props} issue={query.data.issue} pullRequest onDenied={()=>{}}/></>:<Loading label="Reading PR discussion…"/>;
 }
 function PullFiles(props: Props & { pull: PullRequest; onReview:()=>void; onReviewChanged?:()=>void }) {
   const { pull, repositoryKey, queryKey, location, repositoryId, onReview }=props;

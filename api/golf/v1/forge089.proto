@@ -1,0 +1,53 @@
+syntax = "proto3";
+package golf.v1;
+import "golf/v1/golf.proto";
+option go_package = "github.com/mjtechguy/golf-git/gen/golf/v1;golfv1";
+
+service RepositoryFileBatchService {
+ rpc SubmitRepositoryFileBatch(SubmitRepositoryFileBatchRequest) returns (SubmitRepositoryFileBatchResponse);
+ rpc GetRepositoryFileBatchOperation(GetRepositoryFileBatchOperationRequest) returns (GetRepositoryFileBatchOperationResponse);
+}
+message RepositoryFileBatchChange {
+ RepositoryFileMutationKind kind = 1;
+ string path = 2;
+ // Rename uses UPDATE with an original source path and absent destination path.
+ string from_path = 3;
+ string expected_blob_id = 4;
+ bytes content = 5;
+ string content_sha256 = 6;
+}
+message SubmitRepositoryFileBatchRequest {
+ RepositoryKey repository = 1; string repository_id = 2; string owner_id = 3;
+ string access_revision = 4; string operation_id = 5; string branch = 6;
+ string expected_commit_id = 7; repeated RepositoryFileBatchChange changes = 8;
+ string commit_message = 9; string commit_message_sha256 = 10;
+}
+message RepositoryFileBatchOperation {
+ string contract = 1; SubmitRepositoryFileBatchRequest original = 2;
+ string actor_id = 3; RepositoryFileMutationPhase phase = 4; string commit_id = 5;
+ string created_at = 6; string updated_at = 7; string failure_code = 8;
+}
+message SubmitRepositoryFileBatchResponse { RepositoryFileBatchOperation operation = 1; }
+message GetRepositoryFileBatchOperationRequest { RepositoryKey repository = 1; string repository_id = 2; string owner_id = 3; string operation_id = 4; }
+message GetRepositoryFileBatchOperationResponse { RepositoryFileBatchOperation operation = 1; }
+
+service DiscussionAttachmentService {
+ rpc ListDiscussionAttachments(ListDiscussionAttachmentsRequest) returns (ListDiscussionAttachmentsResponse);
+ rpc DownloadDiscussionAttachment(DownloadDiscussionAttachmentRequest) returns (DownloadDiscussionAttachmentResponse);
+}
+message ListDiscussionAttachmentsRequest { DiscussionTarget target = 1; }
+message DiscussionAttachment {
+ string id = 1; string name = 2; uint64 size_bytes = 3; string created_at = 4;
+ string revision = 5;
+}
+message ListDiscussionAttachmentsResponse {
+ DiscussionTarget target = 1; repeated DiscussionAttachment attachments = 2;
+ string snapshot_revision = 3;
+}
+message DownloadDiscussionAttachmentRequest {
+ DiscussionTarget target = 1; string attachment_id = 2; string expected_revision = 3;
+}
+message DownloadDiscussionAttachmentResponse {
+ DiscussionTarget target = 1; DiscussionAttachment attachment = 2; bytes content = 3;
+ string content_sha256 = 4;
+}

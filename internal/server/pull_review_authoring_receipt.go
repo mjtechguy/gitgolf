@@ -87,7 +87,7 @@ func (s *Server) authoringPostflight(ctx context.Context, session string, token 
 		selection.CommentId = ""
 	}
 	var receipt forgePullReview
-	if m.Kind == authorCreate || m.Kind == authorPrivate || m.Kind == authorUpdate || m.Kind == authorSubmit {
+	if m.Kind == authorCreate || m.Kind == authorPrivate || m.Kind == authorUpdate || m.Kind == authorSubmit || m.Kind == authorAppend {
 		if json.Unmarshal(raw, &receipt) != nil || receipt.ID <= 0 || receipt.User == nil || receipt.User.ID != before.actor.ID {
 			return 0, errInvalidForgeResponse
 		}
@@ -113,10 +113,25 @@ func (s *Server) authoringPostflight(ctx context.Context, session string, token 
 		if !inlineHeaderMatches(receipt, r, before.pull, input) || !proto.Equal(w.Review, wirePullReview(receipt)) || len(w.Comments) != 0 || !w.OwnPending {
 			return 0, errPullSnapshotChanged
 		}
-	case authorPrivate:
+	case authorPrivate, authorAppend:
 		input, c, e := inlinePayload(draft, "PENDING")
 		if e != nil {
 			return 0, e
+		}
+		if m.Kind == authorAppend {
+			input.Body = before.wire.Review.Body
+			retained := make([]*golfv1.PullRequestReviewComment, 0, len(before.wire.Comments))
+			for _, old := range before.wire.Comments {
+				for _, now := range w.Comments {
+					if old.Id == now.Id {
+						retained = append(retained, now)
+					}
+				}
+				input.Comments = append(input.Comments, reviewerPublicationComment{Path: old.Path, Body: old.Body, NewLine: int(old.NewLine), OldLine: int(old.OldLine)})
+			}
+			if !authoringChildrenUnchanged(before.wire.Comments, retained, "", "", "") || !authoringHeaderUnchanged(before.wire.Review, w.Review, before.wire.Review.Body, uint32(len(input.Comments))) {
+				return 0, errPullSnapshotChanged
+			}
 		}
 		r := database.GolfInlineReviewMutation{ActorID: before.actor.ID, RepositoryID: before.repo.ID, PullRequestID: before.pull.ID, PullNumber: int32(before.pull.Number), HeadCommit: input.Head, Decision: "PENDING", ObservedReviewID: receipt.ID, PayloadFingerprint: inlinePayloadFingerprint(input), EntryCount: int32(len(input.Comments))}
 		if !inlineHeaderMatches(receipt, r, before.pull, input) || !proto.Equal(w.Review, wirePullReview(receipt)) {
