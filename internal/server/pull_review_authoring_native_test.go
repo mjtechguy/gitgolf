@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
