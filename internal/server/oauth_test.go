@@ -163,6 +163,9 @@ func (f *oauthFixture) begin(t *testing.T) (url.Values, *http.Cookie) {
 	if q.Get("code_challenge_method") != "S256" || q.Get("scope") != strings.Join(oauthScopes, " ") || q.Get("response_type") != "code" || q.Get("redirect_uri") != f.s.config.PublicURL+oauthCallbackPath || q.Get("client_secret") != "" {
 		t.Fatal("incorrect authorize parameters")
 	}
+	if !strings.Contains(" "+q.Get("scope")+" ", " write:package ") {
+		t.Fatal("new explicit consent lacks package publication scope")
+	}
 	f.mu.Lock()
 	f.challenge = q.Get("code_challenge")
 	f.mu.Unlock()

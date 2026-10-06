@@ -78,3 +78,7 @@ Open gates include self-service enrollment/invitations, password reset delivery 
 ### Email login qualification
 
 Schema008 native API and real-browser checks pass on `sha256:58601e2d499e044634dc2c9e738ea08956cd5bd58afe8e1466e2c13c19dd902d`: operator-enrolled uppercase email sign-in creates the same immutable account/role and HttpOnly session, while username login remains supported. Real PostgreSQL race tests cover canonicalization, duplicate-address rejection, email-change session revocation, old-address denial and a shared email/username throttle bucket. The updated encrypted restore drill preserves email aliases and disables/fences restored local accounts before re-enablement. These are additional checks, separate from the schema007 runtime provenance above.
+
+## Package publication scope
+
+New native OAuth consent explicitly requests `write:package` for package publication. Existing consent and local account mappings are unchanged. Namespace ownership does not prove credential scopes: a retained read-only credential requires explicit native re-consent or operator rotation of the mapped PAT before publishing. Golf does not silently elevate those credentials or change native profile visibility.

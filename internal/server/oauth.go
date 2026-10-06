@@ -26,7 +26,7 @@ const oauthCallbackPath = "/auth/gitea/callback"
 const oauthAttemptLifetime = 10 * time.Minute
 const maxOAuthResponse = 16 << 10
 
-var oauthScopes = []string{"write:user", "write:repository", "write:issue", "write:organization", "read:package", "write:notification"}
+var oauthScopes = []string{"write:user", "write:repository", "write:issue", "write:organization", "write:package", "write:notification"}
 
 // Kind is stored separately on the session row: PAT bytes are never interpreted
 // as an OAuth envelope. Verified is false only after a rotated token could not
