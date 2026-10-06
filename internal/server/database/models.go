@@ -31,18 +31,19 @@ type GolfAgentCommand struct {
 }
 
 type GolfAgentControl struct {
-	TaskID           uuid.UUID
-	AttemptID        string
-	Image            string
-	NativeVersion    string
-	NativeSession    string
-	Resume           bool
-	State            string
-	Revision         int64
-	ScreenedSequence int64
-	PermissionID     string
-	ToolID           string
-	AllowOnceOptions json.RawMessage
+	TaskID             uuid.UUID
+	AttemptID          string
+	Image              string
+	NativeVersion      string
+	FileToolsQualified bool
+	NativeSession      string
+	Resume             bool
+	State              string
+	Revision           int64
+	ScreenedSequence   int64
+	PermissionID       string
+	ToolID             string
+	AllowOnceOptions   json.RawMessage
 }
 
 type GolfAgentConversation struct {
@@ -159,12 +160,13 @@ type GolfAgentUsageSetting struct {
 }
 
 type GolfAgentWorkerPresence struct {
-	ForgeURL   string
-	WorkerID   string
-	Image      string
-	LastSeen   time.Time
-	AcpImage   string
-	AcpVersion string
+	ForgeURL     string
+	WorkerID     string
+	Image        string
+	LastSeen     time.Time
+	AcpImage     string
+	AcpVersion   string
+	AcpFileTools bool
 }
 
 type GolfApiCredential struct {

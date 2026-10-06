@@ -74,23 +74,24 @@ func (x *GetAgentControlRequest) GetAttemptId() string {
 }
 
 type AgentControl struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	TaskId           string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	AttemptId        string                 `protobuf:"bytes,2,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
-	TaskVersion      string                 `protobuf:"bytes,3,opt,name=task_version,json=taskVersion,proto3" json:"task_version,omitempty"`
-	Revision         string                 `protobuf:"bytes,4,opt,name=revision,proto3" json:"revision,omitempty"`
-	Available        bool                   `protobuf:"varint,5,opt,name=available,proto3" json:"available,omitempty"`
-	State            string                 `protobuf:"bytes,6,opt,name=state,proto3" json:"state,omitempty"` // initializing, active, idle, permission, closed
-	Reason           string                 `protobuf:"bytes,7,opt,name=reason,proto3" json:"reason,omitempty"`
-	NativeVersion    string                 `protobuf:"bytes,8,opt,name=native_version,json=nativeVersion,proto3" json:"native_version,omitempty"`
-	Image            string                 `protobuf:"bytes,9,opt,name=image,proto3" json:"image,omitempty"`
-	PermissionId     string                 `protobuf:"bytes,10,opt,name=permission_id,json=permissionId,proto3" json:"permission_id,omitempty"`
-	ToolId           string                 `protobuf:"bytes,11,opt,name=tool_id,json=toolId,proto3" json:"tool_id,omitempty"`
-	AllowOnceOptions []string               `protobuf:"bytes,12,rep,name=allow_once_options,json=allowOnceOptions,proto3" json:"allow_once_options,omitempty"`
-	CanResume        bool                   `protobuf:"varint,13,opt,name=can_resume,json=canResume,proto3" json:"can_resume,omitempty"` // Native negotiation + preserved original sandbox only.
-	Messages         []*AgentControlMessage `protobuf:"bytes,14,rep,name=messages,proto3" json:"messages,omitempty"`                     // Completed text, screened at the native cache checkpoint.
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	TaskId                   string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	AttemptId                string                 `protobuf:"bytes,2,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	TaskVersion              string                 `protobuf:"bytes,3,opt,name=task_version,json=taskVersion,proto3" json:"task_version,omitempty"`
+	Revision                 string                 `protobuf:"bytes,4,opt,name=revision,proto3" json:"revision,omitempty"`
+	Available                bool                   `protobuf:"varint,5,opt,name=available,proto3" json:"available,omitempty"`
+	State                    string                 `protobuf:"bytes,6,opt,name=state,proto3" json:"state,omitempty"` // initializing, active, idle, permission, closed
+	Reason                   string                 `protobuf:"bytes,7,opt,name=reason,proto3" json:"reason,omitempty"`
+	NativeVersion            string                 `protobuf:"bytes,8,opt,name=native_version,json=nativeVersion,proto3" json:"native_version,omitempty"`
+	Image                    string                 `protobuf:"bytes,9,opt,name=image,proto3" json:"image,omitempty"`
+	PermissionId             string                 `protobuf:"bytes,10,opt,name=permission_id,json=permissionId,proto3" json:"permission_id,omitempty"`
+	ToolId                   string                 `protobuf:"bytes,11,opt,name=tool_id,json=toolId,proto3" json:"tool_id,omitempty"`
+	AllowOnceOptions         []string               `protobuf:"bytes,12,rep,name=allow_once_options,json=allowOnceOptions,proto3" json:"allow_once_options,omitempty"`
+	CanResume                bool                   `protobuf:"varint,13,opt,name=can_resume,json=canResume,proto3" json:"can_resume,omitempty"`                                                // Native negotiation + preserved original sandbox only.
+	Messages                 []*AgentControlMessage `protobuf:"bytes,14,rep,name=messages,proto3" json:"messages,omitempty"`                                                                    // Completed text, screened at the native cache checkpoint.
+	FilePermissionsQualified bool                   `protobuf:"varint,15,opt,name=file_permissions_qualified,json=filePermissionsQualified,proto3" json:"file_permissions_qualified,omitempty"` // Separate native file-tool/sandbox qualification; init is insufficient.
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *AgentControl) Reset() {
@@ -219,6 +220,13 @@ func (x *AgentControl) GetMessages() []*AgentControlMessage {
 		return x.Messages
 	}
 	return nil
+}
+
+func (x *AgentControl) GetFilePermissionsQualified() bool {
+	if x != nil {
+		return x.FilePermissionsQualified
+	}
+	return false
 }
 
 type AgentControlMessage struct {
@@ -689,7 +697,7 @@ const file_golf_v1_agent_control088_proto_rawDesc = "" +
 	"\x16GetAgentControlRequest\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1d\n" +
 	"\n" +
-	"attempt_id\x18\x02 \x01(\tR\tattemptId\"\xd3\x03\n" +
+	"attempt_id\x18\x02 \x01(\tR\tattemptId\"\x91\x04\n" +
 	"\fAgentControl\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1d\n" +
 	"\n" +
@@ -707,7 +715,8 @@ const file_golf_v1_agent_control088_proto_rawDesc = "" +
 	"\x12allow_once_options\x18\f \x03(\tR\x10allowOnceOptions\x12\x1d\n" +
 	"\n" +
 	"can_resume\x18\r \x01(\bR\tcanResume\x128\n" +
-	"\bmessages\x18\x0e \x03(\v2\x1c.golf.v1.AgentControlMessageR\bmessages\"E\n" +
+	"\bmessages\x18\x0e \x03(\v2\x1c.golf.v1.AgentControlMessageR\bmessages\x12<\n" +
+	"\x1afile_permissions_qualified\x18\x0f \x01(\bR\x18filePermissionsQualified\"E\n" +
 	"\x13AgentControlMessage\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\tR\bsequence\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\"J\n" +

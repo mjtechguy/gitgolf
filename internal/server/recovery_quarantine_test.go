@@ -81,7 +81,7 @@ func TestRecoveryAgentQuarantinePreservesOriginalJournalPostgres(t *testing.T) {
 	queued := uuid.NewString()
 	f.x.task(t, queued, 11, f.x.user, f.x.at)
 	image := "sha256:" + strings.Repeat("d", 64)
-	if _, e = s.db.Exec(`INSERT INTO golf_agent_controls(task_id,attempt_id,image,native_version,native_session,state,revision,screened_sequence,permission_id,tool_id,allow_once_options,resume) VALUES($1,$2,$3,$4,'native-thread','dispatching',2,4,'original-permission','workspace-read','["allow-once"]',true)`, f.t.ID, f.attempt, image, runner.ManagedACPVersion); e != nil {
+	if _, e = s.db.Exec(`INSERT INTO golf_agent_controls(task_id,attempt_id,image,native_version,native_session,state,revision,screened_sequence,permission_id,tool_id,allow_once_options,resume,file_tools_qualified) VALUES($1,$2,$3,$4,'native-thread','dispatching',2,4,'original-permission','workspace-read','["allow-once"]',true,true)`, f.t.ID, f.attempt, image, runner.ManagedACPVersion); e != nil {
 		t.Fatal("fixture exact preserved sandbox control", e)
 	}
 	request := &golfv1.SubmitAgentCommandRequest{TaskId: f.t.ID, AttemptId: f.attempt, RequestId: uuid.NewString(), Kind: "permission", PermissionId: "original-permission", OptionId: "allow-once", ExpectedTaskVersion: strconv.FormatInt(f.t.Version, 10), ExpectedRevision: "1"}
