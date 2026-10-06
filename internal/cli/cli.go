@@ -40,6 +40,14 @@ Usage: golf [--url ORIGIN] [--token-stdin | --api-token-stdin] COMMAND
   pr create --input JSON_FILE
   pr update --input JSON_FILE
   pr review --input JSON_FILE
+  source file --input JSON_FILE
+  source ref --input JSON_FILE
+  repo access --input JSON_FILE
+  source access --input JSON_FILE
+  source operation --input JSON_FILE
+  ref operation --input JSON_FILE
+  actions list|view|logs --input JSON_FILE
+  agent list|view|events --input JSON_FILE
   repo list [--page N] [--limit N]
   repo view OWNER/REPO
   repo overview OWNER/REPO
@@ -84,6 +92,8 @@ GOLF_URL defaults to http://localhost:8080. Remote origins require HTTPS.
 Credentials/cookies are never saved. Gitea token commands sign in and sign out.
 Golf API tokens send bearer-authenticated requests without login/logout.
 Write commands require golf_rw_ credentials explicitly scoped to one repository.
+Source tools require source:write; retained Actions/task inspection requires
+actions:read/agents:read. These grants do not dispatch, cancel or resume execution.
 JSON files use the corresponding versioned Protobuf JSON request with exact IDs,
 expected revisions and an original UUID v4 idempotencyKey. No generated key or retries.
 Do not place request text or tokens in command arguments.
@@ -185,7 +195,7 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 		return runMCP(ctx, base, auth, input, output, diagnostic)
 	}
 	if command.writeInput != "" {
-		if !auth.api || !strings.HasPrefix(auth.token, "golf_rw_") {
+		if newWriteRequest(command.name) != nil && (!auth.api || !strings.HasPrefix(auth.token, "golf_rw_")) {
 			fmt.Fprintln(diagnostic, "Writes require an explicitly scoped Golf API credential.")
 			return 2
 		}
@@ -194,7 +204,7 @@ func Run(ctx context.Context, args []string, input io.Reader, output, diagnostic
 			fmt.Fprintln(diagnostic, "Could not read the request file.")
 			return 2
 		}
-		raw, readErr := io.ReadAll(io.LimitReader(file, 16385))
+		raw, readErr := io.ReadAll(io.LimitReader(file, int64(requestBytes(command.name)+1)))
 		file.Close()
 		if readErr != nil || decodeWriteRequest(&command, raw) != nil {
 			fmt.Fprintln(diagnostic, "Invalid write request. Supply exact repository identity and your original idempotency key.")
@@ -298,7 +308,7 @@ func parseCommand(args []string) (command, error) {
 	}
 	result.name = args[0] + " " + args[1]
 	rest := args[2:]
-	if newWriteRequest(result.name) != nil {
+	if newTypedRequest(result.name) != nil {
 		return parseWriteCommand(result, rest)
 	}
 	switch result.name {
@@ -614,10 +624,14 @@ func execute(ctx context.Context, origin string, command command, auth credentia
 	audit := golfv1connect.NewAuditServiceClient(client, origin+"/rpc", options...)
 	var message proto.Message
 	if command.writeRequest != nil {
-		if !auth.api || !strings.HasPrefix(auth.token, "golf_rw_") {
+		if newWriteRequest(command.name) != nil && (!auth.api || !strings.HasPrefix(auth.token, "golf_rw_")) {
 			return nil, errors.New("Writes require an explicitly scoped Golf API credential")
 		}
-		message, err = command.write(ctx, repositories)
+		if newMachineReadRequest(command.name) != nil || command.name == "source file" || command.name == "source ref" {
+			message, err = command.machine(ctx, client, origin, options...)
+		} else {
+			message, err = command.write(ctx, repositories)
+		}
 	} else {
 		message, err = command.read(ctx, repositories, organizations, audit)
 	}

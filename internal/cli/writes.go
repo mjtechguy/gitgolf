@@ -16,6 +16,10 @@ import (
 
 func newWriteRequest(name string) proto.Message {
 	switch name {
+	case "source file":
+		return &golfv1.SubmitRepositoryFileMutationRequest{}
+	case "source ref":
+		return &golfv1.SubmitRepositoryRefMutationRequest{}
 	case "issue create":
 		return &golfv1.CreateIssueRequest{}
 	case "issue comment":
@@ -44,13 +48,24 @@ func parseWriteCommand(c command, args []string) (command, error) {
 	return c, nil
 }
 func decodeWriteRequest(c *command, raw []byte) error {
-	request := newWriteRequest(c.name)
-	if request == nil || len(raw) > 16384 || protojson.Unmarshal(raw, request) != nil {
+	request := newTypedRequest(c.name)
+	if request == nil || len(raw) > requestBytes(c.name) || protojson.Unmarshal(raw, request) != nil {
 		return errors.New("Invalid typed write request")
+	}
+	if newMachineReadRequest(c.name) != nil {
+		if err := validateMachineRead(request); err != nil {
+			return err
+		}
+		c.writeRequest = request
+		return nil
 	}
 	fields := request.ProtoReflect()
 	descriptors := fields.Descriptor().Fields()
-	key := fields.Get(descriptors.ByName("idempotency_key")).String()
+	keyField := descriptors.ByName("idempotency_key")
+	if keyField == nil {
+		keyField = descriptors.ByName("operation_id")
+	}
+	key := fields.Get(keyField).String()
 	id := fields.Get(descriptors.ByName("repository_id")).String()
 	repository := fields.Get(descriptors.ByName("repository")).Message()
 	if !creationKey.MatchString(key) || !canonicalNativeID(id) || !repository.IsValid() {
@@ -108,14 +123,27 @@ func (c command) write(ctx context.Context, client golfv1connect.RepositoryServi
 
 func (c command) operationError(err error) error {
 	safe := operationError(err)
-	if c.writeRequest == nil {
+	if c.writeRequest == nil || newWriteRequest(c.name) == nil {
 		return safe
 	}
 	fields := c.writeRequest.ProtoReflect()
-	key := fields.Get(fields.Descriptor().Fields().ByName("idempotency_key")).String()
+	keyField := fields.Descriptor().Fields().ByName("idempotency_key")
+	if keyField == nil {
+		keyField = fields.Descriptor().Fields().ByName("operation_id")
+	}
+	key := fields.Get(keyField).String()
 	inspect := "issue operation"
+	if c.name == "source file" {
+		inspect = "source operation --input ORIGINAL_INSPECTION_JSON"
+	}
+	if c.name == "source ref" {
+		inspect = "ref operation --input ORIGINAL_INSPECTION_JSON"
+	}
 	if c.name == "pr review" {
 		inspect = "pr review-operation"
+	}
+	if c.name == "source file" || c.name == "source ref" {
+		return fmt.Errorf("%v. Write outcome may be unknown; inspect the original key %s with golf %s before any separate operation", safe, key, inspect)
 	}
 	return fmt.Errorf("%v. Write outcome may be unknown; inspect the original key with golf %s %s before any separate operation", safe, inspect, key)
 }

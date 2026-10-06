@@ -357,7 +357,7 @@ func conversationBodyState(v string) golfv1.AgentEventBodyState {
 }
 
 func (s *Server) ListAgentTaskEvents(ctx context.Context, req *connect.Request[golfv1.ListAgentTaskEventsRequest]) (*connect.Response[golfv1.ListAgentTaskEventsResponse], error) {
-	a, e := s.codexIdentity(ctx, req.Header())
+	a, e := s.agentInspectionIdentity(ctx, req.Header())
 	if e != nil {
 		return nil, rpcError(e)
 	}

@@ -121,6 +121,9 @@ func scanActionSummary(row workflowRunScanner, repositoryID, ownerID int64) (*go
 // Native authority is checked around the complete observation. Task-bearing
 // results additionally require writer permission on the final observation.
 func (s *Server) withActionRepository(ctx context.Context, h http.Header, a codexActor, key repositoryKey, id int64, operation func(*golfv1.RepositoryAccess) (bool, error)) error {
+	if e := s.machineInspectionTarget(ctx, key, id, "agents:read"); e != nil {
+		return e
+	}
 	e := s.withForgeCaller(ctx, s.cookieValue(h), a.Credential, func(user User) error {
 		before, e := s.readRepositoryAccess(ctx, a.Credential, key, user)
 		if e != nil {
@@ -148,7 +151,7 @@ func (s *Server) withActionRepository(ctx context.Context, h http.Header, a code
 	if e != nil {
 		return e
 	}
-	return s.codexGuard(ctx, a, func(*sql.Tx, int64) error { return nil })
+	return s.inspectionGuard(ctx, a)
 }
 
 func (s *Server) ListActionRuns(ctx context.Context, req *connect.Request[golfv1.ListActionRunsRequest]) (*connect.Response[golfv1.ListActionRunsResponse], error) {

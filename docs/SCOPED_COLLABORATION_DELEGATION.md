@@ -2,9 +2,10 @@
 
 Golf API credentials delegate a live browser session; they never store a second
 provider token. Existing `golf_ro_` credentials remain read-only. A newly issued
-`golf_rw_` credential can add `issues:write`, `pulls:write`, or both for one exact
-repository key/native ID. Read permissions retain the existing reviewed read
-surface; the repository binding restricts writes, not all reads.
+`golf_rw_` credential can explicitly grant `issues:write`, `pulls:write`,
+`source:write`, `actions:read` and `agents:read` for one exact repository key/native
+ID. Basic reads retain the reviewed current-native-access surface across repositories;
+source writes and execution/task inspection bind to the selected repository.
 
 The account credential inventory exposes scopes and target. New opens the shared
 TanStack Form editor. The user selects permissions and OWNER/REPO; Golf resolves
@@ -13,7 +14,7 @@ nothing. A lost issuance response still requires inspecting/revoking the origina
 credential before a separate issuance. Secrets are shown once, kept out of query
 and mutation caches and storage, and removed on navigation/sign-out/pagehide.
 
-## Available writes
+## Available operations
 
 | CLI | MCP tool | Required write scope |
 | --- | --- | --- |
@@ -23,6 +24,14 @@ and mutation caches and storage, and removed on navigation/sign-out/pagehide.
 | `golf pr create --input request.json` | `golf_pr_create` | `pulls:write` |
 | `golf pr update --input request.json` | `golf_pr_update` | `pulls:write` |
 | `golf pr review --input request.json` | `golf_pr_review` | `pulls:write` |
+| `golf source file --input request.json` | `golf_source_file` | `source:write` |
+| `golf source ref --input request.json` | `golf_source_ref` | `source:write` |
+| `golf source access --input request.json` | `golf_source_access` | `source:write` |
+| `golf source operation --input request.json` | `golf_source_operation` | `source:write` |
+| `golf ref operation --input request.json` | `golf_ref_operation` | `source:write` |
+| `golf actions list/view/logs --input request.json` | `golf_actions_list`, `golf_actions_view`, `golf_actions_logs` | `actions:read` |
+| `golf agent list/view/events --input request.json` | `golf_agent_list`, `golf_agent_view`, `golf_agent_events` | `agents:read` |
+| `golf repo access --input request.json` | `golf_repo_access` | Existing reviewed read access |
 
 CLI request files and MCP's `request` object use the corresponding versioned
 Protobuf JSON contract. Unknown fields are rejected. Exact repository IDs,
@@ -35,10 +44,12 @@ output and is never converted to success.
 
 Inspect issue/comment/PR create/update operations with `golf issue operation KEY`;
 inspect overall review operations with `golf pr review-operation KEY` or
-`golf_pr_review_operation`. The read catalogue has 33 tools. The six write tools
-are advertised only when the process owner configured a `golf_rw_` API credential;
-server-side scope checks remain authoritative. Native PAT and read-only API modes
-retain their read catalogue. No tool accepts another origin or credential.
+`golf_pr_review_operation`. Source/ref inspection uses the exact typed request
+containing the original operationId and repository/owner IDs. Basic discovery has
+34 read tools; a configured `golf_rw_` process advertises another nine scoped
+inspection tools and eight writes (51 total). Discovery grants no authority:
+server-side scope/target checks remain authoritative. No tool accepts another
+origin or credential.
 
 ## Enforcement
 
@@ -52,9 +63,19 @@ retain their read catalogue. No tool accepts another origin or credential.
 - Expiry, source-session expiry/sign-out/revocation, local user suspension and
   native identity loss retain the existing session and post-wait checks. Restore
   never revives an old credential.
-- Bearer credentials cannot manage credentials/accounts/settings, write Git/source,
-  merge, dispatch workflows, or run coding agents. These are separate reviewed
-  delegation surfaces; enabling issue/PR writes never implies them.
+- Migration080 extends the ordered allowed scope vocabulary, without changing
+  retained grants. Explicit source delegation reuses existing file/ref journals,
+  authority, unknown-outcome and lifecycle fences. Individual files remain capped
+  at256 KiB; refs retain native administrator scope. Protected writes are refused,
+  and native expected-HEAD atomic CAS is not claimed.
+- Execution inspection never grants dispatch/cancel/resume, connection/credential
+  management or merge authority. Task summaries/patches/encrypted journals remain
+  private to their initiating Golf user, require a live local/OAuth source session
+  and native repository authority, and preserve withheld/unavailable bodies.
+  Workflow logs return explicit bounded retained chunks; no silent traversal.
+- Bearer credentials cannot manage credentials/accounts/settings, publish protected
+  Git writes, merge, dispatch workflows, or run coding agents. Issue/PR grants
+  never imply source or execution-inspection permission.
 
 ## Verification and limits
 
@@ -86,3 +107,19 @@ also passes the CLI and actual stdio MCP in both supported protocol revisions
 against those production source handlers and real Gitea. Reusing the original
 comment operation produces exactly one native comment. This remains bounded
 issue/comment qualification, separate from broader PR writes and served rollout.
+
+
+## Machine permissions080 evidence
+
+`TestMachineSourceJournalPostgres`, `TestMachineRefJournalPostgres` and
+`TestMachineSourceProtectionAndUncertaintyPostgres` exercise file create/update/
+delete and branch/tag administration, original replay/revocation, explicit target
+refusals, protected/stale refusal and uncertain outcomes with real PostgreSQL and
+native-protocol fixtures. `TestMachineExecutionInspectionPostgres` exercises real
+retained encrypted journal bodies, own/foreign task access, workflow detail/log
+inspection, cancellation capability suppression and execution/credential denials.
+CLI checks cover every typed inspection route, original selections, discovery and
+no automatic retries. Browser tests cover individual custom permissions and
+one-time secret handling. Actual native CLI/MCP source effects and deployment
+are qualified separately in the implementation ledger; these source checks alone
+are not interactive ACP, model execution, full workflow compatibility or parity.

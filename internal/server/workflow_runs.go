@@ -195,6 +195,11 @@ func (s *Server) withWorkflowRepository(ctx context.Context, session string, cre
 		if err = check(before); err != nil {
 			return err
 		}
+		if !write {
+			if err = s.machineInspectionTarget(ctx, key, mustID(before.RepositoryId), "actions:read"); err != nil {
+				return err
+			}
+		}
 		if err = operation(user, before); err != nil {
 			return err
 		}
@@ -752,7 +757,7 @@ func (s *Server) DispatchWorkflow(ctx context.Context, req *connect.Request[golf
 }
 
 func (s *Server) GetWorkflowRun(ctx context.Context, req *connect.Request[golfv1.GetWorkflowRunRequest]) (*connect.Response[golfv1.GetWorkflowRunResponse], error) {
-	credential, err := workflowBrowserToken(ctx)
+	credential, err := workflowInspectionToken(ctx)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -768,7 +773,7 @@ func (s *Server) GetWorkflowRun(ctx context.Context, req *connect.Request[golfv1
 		if e != nil {
 			return e
 		}
-		result = wireWorkflowRun(record, workflowWritable(a))
+		result = wireWorkflowRun(record, machineCanCancel(ctx, workflowWritable(a)))
 		result.Progress = progress
 		return nil
 	})
@@ -778,7 +783,7 @@ func (s *Server) GetWorkflowRun(ctx context.Context, req *connect.Request[golfv1
 	return connect.NewResponse(&golfv1.GetWorkflowRunResponse{Run: result}), nil
 }
 func (s *Server) ListWorkflowRuns(ctx context.Context, req *connect.Request[golfv1.ListWorkflowRunsRequest]) (*connect.Response[golfv1.ListWorkflowRunsResponse], error) {
-	credential, err := workflowBrowserToken(ctx)
+	credential, err := workflowInspectionToken(ctx)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -826,7 +831,7 @@ func (s *Server) listWorkflowRuns(ctx context.Context, req *connect.Request[golf
 			if e != nil {
 				return e
 			}
-			result.Runs = append(result.Runs, wireWorkflowRun(r, workflowWritable(a)))
+			result.Runs = append(result.Runs, wireWorkflowRun(r, machineCanCancel(ctx, workflowWritable(a))))
 		}
 		return nil
 	})
@@ -871,7 +876,7 @@ func (s *Server) CancelWorkflowRun(ctx context.Context, req *connect.Request[gol
 	return connect.NewResponse(&golfv1.CancelWorkflowRunResponse{Run: wireWorkflowRun(record, false)}), nil
 }
 func (s *Server) GetWorkflowRunLogs(ctx context.Context, req *connect.Request[golfv1.GetWorkflowRunLogsRequest]) (*connect.Response[golfv1.GetWorkflowRunLogsResponse], error) {
-	credential, err := workflowBrowserToken(ctx)
+	credential, err := workflowInspectionToken(ctx)
 	if err != nil {
 		return nil, rpcError(err)
 	}

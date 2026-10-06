@@ -389,9 +389,9 @@ test('write scopes bind an observed repository without exposing identifier forms
   const state = await backend(page);
   await open(page); await edit(page);
   await expect(page.getByLabel('Permissions', { exact: true })).toHaveValue('read');
-  await expect(page.getByLabel('Write repository', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Delegated repository', { exact: true })).toHaveCount(0);
   await page.getByLabel('Permissions', { exact: true }).selectOption('both');
-  await page.getByLabel('Write repository', { exact: true }).fill('alex/example');
+  await page.getByLabel('Delegated repository', { exact: true }).fill('alex/example');
   await page.getByLabel('Credential label', { exact: true }).fill('Review bot');
   await page.getByRole('button', { name: 'Create API credential', exact: true }).click();
   await expect(page.getByLabel('New API credential', { exact: true })).toHaveValue(token);
@@ -407,14 +407,32 @@ test('failed repository preflight issues no credential and permits correcting th
   await open(page); await edit(page);
   await page.getByLabel('Credential label', { exact: true }).fill('Issue bot');
   await page.getByLabel('Permissions', { exact: true }).selectOption('issues:write');
-  await page.getByLabel('Write repository', { exact: true }).fill('alex/missing');
+  await page.getByLabel('Delegated repository', { exact: true }).fill('alex/missing');
   await page.getByRole('button', { name: 'Create API credential', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Credential access denied');
   expect(state.issued).toHaveLength(0);
   await expect(page.getByRole('button', { name: 'I reviewed the list; start a separate credential', exact: true })).toHaveCount(0);
   delete state.errors.GetRepository;
-  await page.getByLabel('Write repository', { exact: true }).fill('alex/example');
+  await page.getByLabel('Delegated repository', { exact: true }).fill('alex/example');
   await page.getByRole('button', { name: 'Create API credential', exact: true }).click();
   await expect(page.getByLabel('New API credential', { exact: true })).toHaveValue(token);
   expect(state.issued).toHaveLength(1);
+});
+
+
+test('custom grants expose source and execution inspection separately and bind the observed repository', async ({ page }) => {
+ const state = await backend(page);
+ await open(page);
+ await page.getByRole('button', { name: 'New API credential', exact: true }).click();
+ await page.getByLabel('Credential label', { exact: true }).fill('Local developer tools');
+ await page.getByLabel('Permissions', { exact: true }).selectOption('custom');
+ await expect(page.getByRole('group', { name: 'Repository permissions', exact: true })).toBeVisible();
+ await page.getByLabel('Edit ordinary files and administer unprotected refs', { exact: true }).check();
+ await page.getByLabel('Inspect workflow runs and terminal logs', { exact: true }).check();
+ await page.getByLabel('Inspect your private coding tasks and recorded activity', { exact: true }).check();
+ await page.getByLabel('Delegated repository', { exact: true }).fill('alex/example');
+ await page.getByRole('button', { name: 'Create API credential', exact: true }).click();
+ await expect(page.getByLabel('New API credential', { exact: true })).toHaveValue(token);
+ expect(state.writeIssued).toEqual([{ scopes: ['source:write', 'actions:read', 'agents:read'], repository: 'alex/example', id: '9007199254740993' }]);
+ await noStoredSecret(page);
 });

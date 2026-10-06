@@ -352,7 +352,7 @@ func (s *Server) advanceRefMutation(ctx context.Context, session string, token f
 	return
 }
 func (s *Server) GetRepositoryRefMutationOperation(ctx context.Context, req *connect.Request[golfv1.GetRepositoryRefMutationOperationRequest]) (*connect.Response[golfv1.GetRepositoryRefMutationOperationResponse], error) {
-	token, session, e := s.reviewDraftCaller(ctx, req.Header())
+	token, session, e := s.sourceMutationCaller(ctx, req.Header(), keyFrom(req.Msg.Repository), req.Msg.RepositoryId)
 	if e != nil {
 		return nil, e
 	}
@@ -397,7 +397,7 @@ func (s *Server) GetRepositoryRefMutationOperation(ctx context.Context, req *con
 	return connect.NewResponse(&golfv1.GetRepositoryRefMutationOperationResponse{Operation: refMutationWire(r)}), nil
 }
 func (s *Server) SubmitRepositoryRefMutation(ctx context.Context, req *connect.Request[golfv1.SubmitRepositoryRefMutationRequest]) (*connect.Response[golfv1.SubmitRepositoryRefMutationResponse], error) {
-	token, session, e := s.reviewDraftCaller(ctx, req.Header())
+	token, session, e := s.sourceMutationCaller(ctx, req.Header(), keyFrom(req.Msg.Repository), req.Msg.RepositoryId)
 	if e != nil {
 		return nil, e
 	}

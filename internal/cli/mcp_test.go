@@ -76,7 +76,7 @@ func TestMCPDiscoveryReadErrorsAndCleanup(t *testing.T) {
 			defer upstream.Close()
 			s := mcpTestSession(t, upstream.URL, version, context.Background())
 			tools, err := s.ListTools(context.Background(), &mcp.ListToolsParams{})
-			if err != nil || len(tools.Tools) != len(mcpReads) || logins.Load() != 0 {
+			if err != nil || len(tools.Tools) != len(mcpReads)+1 || logins.Load() != 0 {
 				t.Fatalf("discovery performed authentication or lost tools: %v", err)
 			}
 			for _, tool := range tools.Tools {

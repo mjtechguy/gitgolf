@@ -72,6 +72,9 @@ func (s *Server) taskRecord(ctx context.Context, id string) (agentTaskRecord, er
 	return v, nil
 }
 func (s *Server) taskAccess(ctx context.Context, a codexActor, t agentTaskRecord) error {
+	if err := s.machineTaskTarget(ctx, t); err != nil {
+		return err
+	}
 	// A repository administrator cannot inspect another user's private agent task.
 	if t.UserID != a.UserID {
 		return errResourceNotFound
@@ -322,12 +325,15 @@ func (s *Server) agentFence(ctx context.Context, tx *sql.Tx, a codexActor, r cod
 	return nil
 }
 func (s *Server) ListAgentTasks(ctx context.Context, req *connect.Request[golfv1.ListAgentTasksRequest]) (*connect.Response[golfv1.ListAgentTasksResponse], error) {
-	a, e := s.codexIdentity(ctx, req.Header())
+	a, e := s.agentInspectionIdentity(ctx, req.Header())
 	if e != nil {
 		return nil, rpcError(e)
 	}
 	auth, e := s.agentAuthority(ctx, a, golfv1.AgentUsageScope_AGENT_USAGE_SCOPE_REPOSITORY, "", req.Msg.Repository)
 	if e != nil {
+		return nil, rpcError(e)
+	}
+	if e = s.machineInspectionTarget(ctx, keyFrom(req.Msg.Repository), mustID(auth.ID), "agents:read"); e != nil {
 		return nil, rpcError(e)
 	}
 	after := req.Msg.AfterId
@@ -345,7 +351,9 @@ func (s *Server) ListAgentTasks(ctx context.Context, req *connect.Request[golfv1
 		if e != nil {
 			return nil, rpcError(errStorageUnavailable)
 		}
-		out.Tasks = append(out.Tasks, v.wire(false))
+		wire := v.wire(false)
+		wire.CanCancel = machineCanCancel(ctx, wire.CanCancel)
+		out.Tasks = append(out.Tasks, wire)
 	}
 	if rows.Err() != nil {
 		return nil, rpcError(errStorageUnavailable)
@@ -354,13 +362,13 @@ func (s *Server) ListAgentTasks(ctx context.Context, req *connect.Request[golfv1
 		out.Tasks = out.Tasks[:25]
 		out.NextAfterId = out.Tasks[24].Id
 	}
-	if e = s.codexGuard(ctx, a, func(*sql.Tx, int64) error { return nil }); e != nil {
+	if e = s.inspectionGuard(ctx, a); e != nil {
 		return nil, rpcError(e)
 	}
 	return connect.NewResponse(out), nil
 }
 func (s *Server) GetAgentTask(ctx context.Context, req *connect.Request[golfv1.GetAgentTaskRequest]) (*connect.Response[golfv1.GetAgentTaskResponse], error) {
-	a, e := s.codexIdentity(ctx, req.Header())
+	a, e := s.agentInspectionIdentity(ctx, req.Header())
 	if e != nil {
 		return nil, rpcError(e)
 	}
@@ -371,10 +379,12 @@ func (s *Server) GetAgentTask(ctx context.Context, req *connect.Request[golfv1.G
 	if e = s.taskAccess(ctx, a, t); e != nil {
 		return nil, rpcError(e)
 	}
-	if e = s.codexGuard(ctx, a, func(*sql.Tx, int64) error { return nil }); e != nil {
+	if e = s.inspectionGuard(ctx, a); e != nil {
 		return nil, rpcError(e)
 	}
-	return connect.NewResponse(&golfv1.GetAgentTaskResponse{Task: t.wire(true)}), nil
+	wire := t.wire(true)
+	wire.CanCancel = machineCanCancel(ctx, wire.CanCancel)
+	return connect.NewResponse(&golfv1.GetAgentTaskResponse{Task: wire}), nil
 }
 func (s *Server) CancelAgentTask(ctx context.Context, req *connect.Request[golfv1.CancelAgentTaskRequest]) (*connect.Response[golfv1.CancelAgentTaskResponse], error) {
 	a, e := s.codexIdentity(ctx, req.Header())

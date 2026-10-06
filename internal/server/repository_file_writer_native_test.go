@@ -54,6 +54,7 @@ func TestFileWriterNativeProof(t *testing.T) {
 		t.Fatal("native writer enrollment failed")
 	}
 	session, _, _, transport, origin := testRPCClients(t, s)
+	s.config.PublicURL = origin.String()
 	if _, e = session.LoginWithPassword(t.Context(), connect.NewRequest(&golfv1.LoginWithPasswordRequest{Username: in.Writer, Password: localTestPassword})); e != nil {
 		t.Fatal("native writer login failed")
 	}
@@ -106,7 +107,23 @@ func TestFileWriterNativeProof(t *testing.T) {
 		}
 		return v.Msg.Operation
 	}
-	first := submit(m)
+	management := golfv1connect.NewApiCredentialServiceClient(transport, origin.String()+"/rpc", connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			req.Header().Set("Origin", s.config.PublicURL)
+			return next(ctx, req)
+		}
+	})))
+	grant, e := management.CreateApiCredential(t.Context(), connect.NewRequest(&golfv1.CreateApiCredentialRequest{Label: "Native contributor machine proof", WriteScopes: []string{"source:write"}, WriteRepository: key, WriteRepositoryId: id}))
+	if e != nil {
+		t.Fatal("native contributor source delegation")
+	}
+	var result golfv1.SubmitRepositoryFileMutationResponse
+	nativeMachineCLI(t, origin.String(), grant.Msg.Token, []string{"source", "file"}, m, &result)
+	first := result.Operation
+	if first == nil {
+		t.Fatal("native delegated original receipt")
+	}
+	nativeMachineMCP(t, origin.String(), grant.Msg.Token, "golf_source_file", m, "REPOSITORY_FILE_MUTATION_PHASE_SUCCEEDED")
 	if first.Phase != golfv1.RepositoryFileMutationPhase_REPOSITORY_FILE_MUTATION_PHASE_SUCCEEDED || first.ActorId == ownerID || first.BlobId != sourceBlobHash(data, 40) || observe().CommitId != first.CommitId {
 		t.Fatal("native contributor effect not verified")
 	}
@@ -121,6 +138,12 @@ func TestFileWriterNativeProof(t *testing.T) {
 	bytes, e := s.sourceBlob(t.Context(), base, owner, entry)
 	if e != nil || string(bytes) != string(data) {
 		t.Fatal("native contributor bytes differ")
+	}
+	if _, e = management.RevokeApiCredential(t.Context(), connect.NewRequest(&golfv1.RevokeApiCredentialRequest{CredentialId: grant.Msg.Credential.Id})); e != nil {
+		t.Fatal("native contributor machine revoke")
+	}
+	if response := apiRequest(s, grant.Msg.Token, golfv1connect.RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure, machineBody(t, m)); response.Code != 401 {
+		t.Fatal("native revoked source grant")
 	}
 	replay := submit(m)
 	if replay.CommitId != first.CommitId || observe().CommitId != first.CommitId {

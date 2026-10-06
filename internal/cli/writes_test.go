@@ -90,7 +90,7 @@ func TestMCPExplicitWriteCatalogueAndTypedDispatch(t *testing.T) {
 		}))
 		session := mcpTestCredentialSession(t, server.URL, version, context.Background(), credential{token: token, api: true})
 		listed, e := session.ListTools(context.Background(), &mcp.ListToolsParams{})
-		if e != nil || len(listed.Tools) != len(mcpReads)+len(mcpWrites) || calls.Load() != 0 {
+		if e != nil || len(listed.Tools) != len(mcpReads)+len(mcpMachineReads)+len(mcpWrites) || calls.Load() != 0 {
 			t.Fatal("unsafe discovery", e)
 		}
 		for _, tool := range listed.Tools {

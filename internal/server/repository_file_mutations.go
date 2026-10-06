@@ -343,7 +343,7 @@ func (s *Server) advanceFileMutation(ctx context.Context, session string, token 
 	return
 }
 func (s *Server) GetRepositoryFileMutationOperation(ctx context.Context, req *connect.Request[golfv1.GetRepositoryFileMutationOperationRequest]) (*connect.Response[golfv1.GetRepositoryFileMutationOperationResponse], error) {
-	token, session, e := s.reviewDraftCaller(ctx, req.Header())
+	token, session, e := s.sourceMutationCaller(ctx, req.Header(), keyFrom(req.Msg.Repository), req.Msg.RepositoryId)
 	if e != nil {
 		return nil, e
 	}
@@ -385,7 +385,7 @@ func (s *Server) GetRepositoryFileMutationOperation(ctx context.Context, req *co
 	return connect.NewResponse(&golfv1.GetRepositoryFileMutationOperationResponse{Operation: fileMutationWire(r)}), nil
 }
 func (s *Server) SubmitRepositoryFileMutation(ctx context.Context, req *connect.Request[golfv1.SubmitRepositoryFileMutationRequest]) (*connect.Response[golfv1.SubmitRepositoryFileMutationResponse], error) {
-	token, session, e := s.reviewDraftCaller(ctx, req.Header())
+	token, session, e := s.sourceMutationCaller(ctx, req.Header(), keyFrom(req.Msg.Repository), req.Msg.RepositoryId)
 	if e != nil {
 		return nil, e
 	}
@@ -492,7 +492,7 @@ func (s *Server) SubmitRepositoryFileMutation(ctx context.Context, req *connect.
 // Ordinary code writers need not enumerate administration-only protection rules.
 // Resolve the effective native branch projection and exact ref namespace instead.
 func (s *Server) GetRepositoryFileMutationAccess(ctx context.Context, req *connect.Request[golfv1.GetRepositoryFileMutationAccessRequest]) (*connect.Response[golfv1.GetRepositoryFileMutationAccessResponse], error) {
-	token, session, e := s.reviewDraftCaller(ctx, req.Header())
+	token, session, e := s.sourceMutationCaller(ctx, req.Header(), keyFrom(req.Msg.Repository), req.Msg.RepositoryId)
 	if e != nil {
 		return nil, e
 	}

@@ -10,14 +10,30 @@ import (
 	"github.com/mjtechguy/golf-git/gen/golf/v1/golfv1connect"
 )
 
-// Only journaled collaboration operations are delegated. Account administration,
-// credentials, source writes, merges and execution never inherit these scopes.
+// Delegation names each reviewed operation explicitly. No account/credential
+// management, merge or execution dispatch inherits an inspection/source grant.
+var apiDelegatedScopes = []string{"actions:read", "agents:read", "issues:write", "pulls:write", "source:write"}
+
 func apiWriteScope(procedure string) string {
 	switch procedure {
 	case golfv1connect.RepositoryServiceCreateIssueProcedure, golfv1connect.RepositoryServiceUpdateIssueProcedure:
 		return "issues:write"
 	case golfv1connect.RepositoryServiceCreatePullRequestProcedure, golfv1connect.RepositoryServiceUpdatePullRequestProcedure, golfv1connect.RepositoryServiceCreatePullRequestReviewProcedure:
 		return "pulls:write"
+	case golfv1connect.RepositoryFileMutationServiceGetRepositoryFileMutationAccessProcedure,
+		golfv1connect.RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure,
+		golfv1connect.RepositoryFileMutationServiceGetRepositoryFileMutationOperationProcedure,
+		golfv1connect.RepositoryRefMutationServiceSubmitRepositoryRefMutationProcedure,
+		golfv1connect.RepositoryRefMutationServiceGetRepositoryRefMutationOperationProcedure:
+		return "source:write"
+	case golfv1connect.WorkflowRunServiceListWorkflowRunsProcedure,
+		golfv1connect.WorkflowRunServiceGetWorkflowRunProcedure,
+		golfv1connect.WorkflowRunServiceGetWorkflowRunLogsProcedure:
+		return "actions:read"
+	case golfv1connect.AgentTaskServiceListAgentTasksProcedure,
+		golfv1connect.AgentTaskServiceGetAgentTaskProcedure,
+		golfv1connect.AgentTaskServiceListAgentTaskEventsProcedure:
+		return "agents:read"
 	case golfv1connect.RepositoryServiceCreateIssueCommentProcedure:
 		return "comment:write" // Native issue vs pull unit is resolved from the request.
 	}
@@ -46,13 +62,13 @@ func (s *Server) validateApiWriteGrant(ctx context.Context, token forgeCredentia
 		}
 		return nil, key, 0, nil
 	}
-	if len(scopes) > 2 {
-		return nil, key, 0, invalid("Choose issues:write and/or pulls:write.")
+	if len(scopes) > len(apiDelegatedScopes) {
+		return nil, key, 0, invalid("Choose reviewed repository permissions.")
 	}
 	slices.Sort(scopes)
 	for i, scope := range scopes {
-		if scope != "issues:write" && scope != "pulls:write" || i > 0 && scopes[i-1] == scope {
-			return nil, key, 0, invalid("Choose unique issues:write and/or pulls:write scopes.")
+		if !slices.Contains(apiDelegatedScopes, scope) || i > 0 && scopes[i-1] == scope {
+			return nil, key, 0, invalid("Choose unique reviewed repository permissions.")
 		}
 	}
 	id, err := discussionID(request.WriteRepositoryId)

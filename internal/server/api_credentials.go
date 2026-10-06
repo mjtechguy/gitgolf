@@ -48,7 +48,7 @@ func apiTokenHash(value string) ([]byte, error) {
 // not an exception, and API credentials cannot manage credentials or sessions.
 func apiReadProcedure(procedure string) bool {
 	switch procedure {
-	case golfv1connect.RepositoryWikiServiceListRepositoryWikiPagesProcedure, golfv1connect.RepositoryWikiServiceGetRepositoryWikiPageProcedure, golfv1connect.RepositoryActivityServiceWatchRepositoryProcedure, golfv1connect.SessionServiceGetSessionProcedure,
+	case golfv1connect.RepositoryAccessServiceGetRepositoryAccessProcedure, golfv1connect.RepositoryWikiServiceListRepositoryWikiPagesProcedure, golfv1connect.RepositoryWikiServiceGetRepositoryWikiPageProcedure, golfv1connect.RepositoryActivityServiceWatchRepositoryProcedure, golfv1connect.SessionServiceGetSessionProcedure,
 		golfv1connect.AuditServiceListAuditEventsProcedure,
 		golfv1connect.RepositoryServiceListRepositoriesProcedure, golfv1connect.RepositoryServiceGetRepositoryProcedure, golfv1connect.RepositoryServiceGetRepositoryOverviewProcedure,
 		golfv1connect.RepositoryServiceGetRepositoryCreationProcedure, golfv1connect.RepositoryServiceListBranchesProcedure,
