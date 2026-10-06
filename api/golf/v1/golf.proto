@@ -246,6 +246,7 @@ service OrganizationAdminService {
 service InstanceAdminService {
   rpc EnrollRegularLocalAccount(EnrollRegularLocalAccountRequest) returns (EnrollRegularLocalAccountResponse);
   rpc ResetRegularLocalPassword(ResetRegularLocalPasswordRequest) returns (ResetRegularLocalPasswordResponse);
+  rpc ResetRegularLocalMFA(ResetRegularLocalMFARequest) returns (ResetRegularLocalMFAResponse);
   rpc EnableRegularLocalAccount(EnableRegularLocalAccountRequest) returns (EnableRegularLocalAccountResponse);
   rpc DisableLocalAccount(DisableLocalAccountRequest) returns (DisableLocalAccountResponse);
   rpc ListLocalAccounts(ListLocalAccountsRequest) returns (ListLocalAccountsResponse);
@@ -1232,11 +1233,16 @@ message LocalAccountInfo {
   string created_at = 8;
   optional string disabled_at = 9;
   string golf_user_id = 10;
+  string mfa_version = 11;
+  bool mfa_enabled = 12;
+  optional string mfa_pending_expires_at = 13;
 }
 message ListLocalAccountsRequest { PageRequest page = 1; }
 message ListLocalAccountsResponse {
   repeated LocalAccountInfo accounts = 1;
   PageResponse page = 2;
+  string admin_mfa_version = 3;
+  bool admin_mfa_enabled = 4;
 }
 
 // Direct membership/requested roles are distinct from effective native access.
@@ -4898,3 +4904,24 @@ message GetPullReviewLifecycleOperationRequest {
  RepositoryKey repository = 1; string repository_id = 2; string pull_request_id = 3; uint32 number = 4; string operation_id = 5;
 }
 message GetPullReviewLifecycleOperationResponse { PullReviewLifecycleOperation operation = 1; }
+
+// Explicit recovery removes only another ordinary account's local factor.
+message ResetRegularLocalMFARequest {
+ string account_id = 1;
+ string golf_user_id = 2;
+ string native_user_id = 3;
+ string expected_credential_version = 4;
+ string expected_mfa_version = 5;
+ string expected_admin_mfa_version = 6;
+ string password_confirmation = 7;
+ string admin_mfa_code = 8;
+ string reason = 9;
+ bool acknowledge_warning = 10;
+}
+message ResetRegularLocalMFAResponse {
+ LocalAccountInfo account = 1;
+ uint64 sessions_revoked = 2;
+ uint64 challenges_revoked = 3;
+ uint64 recovery_codes_revoked = 4;
+ string operation_id = 5;
+}

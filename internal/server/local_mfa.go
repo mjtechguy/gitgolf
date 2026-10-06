@@ -474,7 +474,7 @@ func (s *Server) changeOwnMFA(ctx context.Context, header http.Header, m *golfv1
 		if _, e = tx.ExecContext(ctx, `INSERT INTO golf_mfa_events(account_id,user_id,action,version,operation_id) VALUES($1,$2,$3,$4,$5)`, row.ID, row.UserID, action, expected+1, out.OperationId); e != nil {
 			return e
 		}
-		count, e := database.New(s.db).WithTx(tx).DeleteLocalAccountSessions(ctx, sql.NullInt64{Int64: row.ID, Valid: true})
+		count, e := database.New(s.db).WithTx(tx).DeleteMFABrowserSessions(ctx, database.DeleteMFABrowserSessionsParams{UserID: row.UserID, LocalAccountID: sql.NullInt64{Int64: row.ID, Valid: true}})
 		if e != nil {
 			return e
 		}

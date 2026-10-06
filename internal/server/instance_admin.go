@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strconv"
 	"time"
@@ -69,12 +70,35 @@ func (s *Server) ListLocalAccounts(ctx context.Context, req *connect.Request[gol
 		account := &golfv1.LocalAccountInfo{Id: strconv.FormatInt(row.ID, 10), Username: row.Username, Email: row.Email.String,
 			NativeUserId: strconv.FormatInt(row.ForgeUserID, 10), IsInstanceAdmin: row.IsInstanceAdmin,
 			Disabled: row.DisabledAt.Valid, CredentialVersion: strconv.FormatInt(row.CredentialVersion, 10),
-			CreatedAt: row.CreatedAt.Format(time.RFC3339Nano), GolfUserId: strconv.FormatInt(row.UserID, 10)}
+			CreatedAt: row.CreatedAt.Format(time.RFC3339Nano), GolfUserId: strconv.FormatInt(row.UserID, 10), MfaVersion: row.MfaVersion, MfaEnabled: row.MfaEnabled}
 		if row.DisabledAt.Valid {
 			stamp := row.DisabledAt.Time.Format(time.RFC3339Nano)
 			account.DisabledAt = &stamp
 		}
+		if row.MfaPendingExpiresAt.Valid {
+			stamp := row.MfaPendingExpiresAt.Time.UTC().Format(time.RFC3339Nano)
+			account.MfaPendingExpiresAt = &stamp
+		}
 		accounts = append(accounts, account)
 	}
-	return connect.NewResponse(&golfv1.ListLocalAccountsResponse{Accounts: accounts, Page: wirePage(next)}), nil
+	out := &golfv1.ListLocalAccountsResponse{Accounts: accounts, Page: wirePage(next), AdminMfaVersion: "0"}
+	hash, e := s.authSessionHash(ctx, value, nil)
+	if e != nil {
+		return nil, rpcError(e)
+	}
+	actor, e := database.New(s.db).GetAdminPasswordConfirmation(ctx, database.GetAdminPasswordConfirmationParams{TokenHash: hash, ForgeURL: s.config.GiteaURL})
+	if e != nil {
+		return nil, rpcError(errUnauthenticated)
+	}
+	mfa, e := loadLocalMFA(ctx, s.db, actor.ID, false)
+	if e == nil {
+		out.AdminMfaVersion = strconv.FormatInt(mfa.Version, 10)
+		out.AdminMfaEnabled = mfa.Enabled
+	} else if !errors.Is(e, sql.ErrNoRows) {
+		return nil, rpcError(errStorageUnavailable)
+	}
+	if e = s.requireInstanceAdmin(ctx, value, credential); e != nil {
+		return nil, e
+	}
+	return connect.NewResponse(out), nil
 }

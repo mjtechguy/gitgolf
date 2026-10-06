@@ -14,6 +14,7 @@ import (
 	"time"
 
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
+	"github.com/mjtechguy/golf-git/gen/golf/v1/golfv1connect"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -355,5 +356,26 @@ func TestLocalMFAOwnCredentialAndRotationPostgres(t *testing.T) {
 	w = mfaLoginRequest(f.s, "CompletePasswordMFA", map[string]string{"code": codes[2]}, challengeCookie)
 	if w.Code != 200 {
 		t.Fatal("rotated MFA secret/recovery consumer", w.Code)
+	}
+}
+
+func TestLocalMFARevokesPriorTokenBrowserSessionsPostgres(t *testing.T) {
+	f := newManagementFixture(t)
+	enrollLocal(t, f, "alice", false)
+	pat := f.session(t, "alice", "pat")
+	oauth := f.session(t, "alice", "oauth")
+	delegated := issueApiCredential(t, apiManagementClient(t, f, pat), "old token browser delegate", 0)
+	if w := apiRequest(f.s, delegated.Token, golfv1connect.SessionServiceGetSessionProcedure, "{}"); w.Code != 200 {
+		t.Fatal("pre-enrollment delegate", w.Code)
+	}
+	_, _ = enableMFATest(t, f, "alice")
+	if _, e := f.s.sessionCredential(t.Context(), pat.Value); e == nil {
+		t.Fatal("prior native-token browser session retained after MFA enable")
+	}
+	if w := apiRequest(f.s, delegated.Token, golfv1connect.SessionServiceGetSessionProcedure, "{}"); w.Code != 401 {
+		t.Fatal("prior token-browser API delegation retained", w.Code)
+	}
+	if _, e := f.s.sessionCredential(t.Context(), oauth.Value); e != nil {
+		t.Fatal("independent provider OAuth session revoked", e)
 	}
 }

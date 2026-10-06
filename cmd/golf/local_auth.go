@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -15,7 +16,7 @@ import (
 	"github.com/mjtechguy/golf-git/internal/server/database"
 )
 
-const localAccountUsage = "usage: golf local-account create|reset-password|disable|enable|set-email [--timeout 60s]. Supply one bounded JSON object on stdin; never put passwords or forge tokens in arguments."
+const localAccountUsage = "usage: golf local-account inspect|create|reset-password|reset-mfa|disable|enable|set-email [--timeout 60s]. Supply one bounded JSON object on stdin; never put passwords or forge tokens in arguments."
 
 type localAccountOptions struct {
 	action  string
@@ -30,7 +31,7 @@ func parseLocalAccountCommand(args []string) (localAccountOptions, error) {
 	}
 	options.action = args[1]
 	switch options.action {
-	case "create", "reset-password", "disable", "enable", "set-email":
+	case "inspect", "create", "reset-password", "reset-mfa", "disable", "enable", "set-email":
 	default:
 		return options, invalid
 	}
@@ -63,7 +64,7 @@ func readLocalAccountInput(reader io.Reader, action string) (server.LocalAccount
 			return input, fail
 		}
 		switch key {
-		case "username", "email", "password", "forge_token", "is_instance_admin":
+		case "username", "email", "password", "forge_token", "is_instance_admin", "account_id", "golf_user_id", "expected_native_user_id", "expected_credential_version", "expected_mfa_version", "reason", "acknowledge_warning", "writers_drained":
 		default:
 			return input, fail
 		}
@@ -90,9 +91,11 @@ func readLocalAccountInput(reader io.Reader, action string) (server.LocalAccount
 		expected = append(expected, "email")
 	case "reset-password":
 		expected = append(expected, "password")
+	case "reset-mfa":
+		expected = append(expected, "account_id", "golf_user_id", "expected_native_user_id", "expected_credential_version", "expected_mfa_version", "reason", "acknowledge_warning", "writers_drained")
 	case "enable":
 		expected = append(expected, "password", "forge_token")
-	case "disable":
+	case "disable", "inspect":
 	default:
 		return input, fail
 	}
@@ -160,16 +163,34 @@ func runLocalAccount(parent context.Context, options localAccountOptions, input 
 	if err != nil {
 		return err
 	}
-	keys, err := server.ParseKeyring(os.Getenv("GOLF_ENCRYPTION_KEY"), os.Getenv("GOLF_ENCRYPTION_KEYS"), os.Getenv("GOLF_ACTIVE_ENCRYPTION_KEY"))
-	if err != nil {
-		return errors.New("encryption key configuration is invalid")
+	var keys *server.Keyring
+	if options.action != "inspect" {
+		keys, err = server.ParseKeyring(os.Getenv("GOLF_ENCRYPTION_KEY"), os.Getenv("GOLF_ENCRYPTION_KEYS"), os.Getenv("GOLF_ACTIVE_ENCRYPTION_KEY"))
+		if err != nil {
+			return errors.New("encryption key configuration is invalid")
+		}
 	}
 	if os.Getenv("DATABASE_URL") == "" {
 		return errors.New("DATABASE_URL is required")
 	}
-	db, err := database.Open(ctx, os.Getenv("DATABASE_URL"))
-	if err != nil {
-		return errors.New("database connection or migration failed")
+	var db *sql.DB
+	if options.action == "inspect" {
+		db, err = sql.Open("pgx", os.Getenv("DATABASE_URL"))
+		if err == nil {
+			db.SetMaxOpenConns(1)
+			err = db.PingContext(ctx)
+		}
+		if err != nil {
+			if db != nil {
+				db.Close()
+			}
+			return errors.New("database connection failed")
+		}
+	} else {
+		db, err = database.Open(ctx, os.Getenv("DATABASE_URL"))
+		if err != nil {
+			return errors.New("database connection or migration failed")
+		}
 	}
 	defer db.Close()
 	result, err := server.ManageLocalAccount(ctx, db, keys, env("GITEA_URL", "http://gitea:3000"), options.action, account)

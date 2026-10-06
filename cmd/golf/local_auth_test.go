@@ -74,3 +74,38 @@ func TestLocalAccountStdinCancellation(t *testing.T) {
 		t.Fatal("cancelled stdin remained open")
 	}
 }
+
+func TestLocalAccountMFARecoveryOperatorInput(t *testing.T) {
+	good := `{"username":"golf-admin","account_id":"1","golf_user_id":"2","expected_native_user_id":"42","expected_credential_version":"3","expected_mfa_version":"4","reason":"Console recovery after writer drain","acknowledge_warning":true,"writers_drained":true}`
+	if _, e := parseLocalAccountCommand([]string{"local-account", "reset-mfa"}); e != nil {
+		t.Fatal("operator action unavailable")
+	}
+	value, e := readLocalAccountInput(strings.NewReader(good), "reset-mfa")
+	if e != nil || value.ExpectedNativeUserID != "42" || !value.WritersDrained || value.AccountID != "1" {
+		t.Fatal("operator recovery envelope", e)
+	}
+	for _, body := range []string{strings.Replace(good, `"account_id":"1",`, "", 1), strings.Replace(good, `"reason":`, `"account_id":"2","reason":`, 1), strings.Replace(good, `"writers_drained":true`, `"writers_drained":null`, 1), strings.Replace(good, `"reason":`, `"forge_token":"private-secret","reason":`, 1), good + ` {}`} {
+		if _, e := readLocalAccountInput(strings.NewReader(body), "reset-mfa"); e == nil || strings.Contains(e.Error(), "private-secret") {
+			t.Fatal("unsafe console envelope accepted")
+		}
+	}
+	if _, e := readLocalAccountInput(strings.NewReader(good), "reset-password"); e == nil {
+		t.Fatal("MFA recovery silently became password reset")
+	}
+	var output bytes.Buffer
+	if e := runLocalAccount(context.Background(), localAccountOptions{action: "reset-mfa", timeout: time.Second}, strings.NewReader(`{"username":"admin","forge_token":"private-secret"}`), &output); e == nil || strings.Contains(output.String(), "private-secret") {
+		t.Fatal("operator output exposed secret")
+	}
+}
+
+func TestLocalAccountOperatorInspectionInput(t *testing.T) {
+	if _, e := parseLocalAccountCommand([]string{"local-account", "inspect"}); e != nil {
+		t.Fatal("inspection action rejected")
+	}
+	if _, e := readLocalAccountInput(strings.NewReader(`{"username":"golf-admin"}`), "inspect"); e != nil {
+		t.Fatal("readonly inspection input", e)
+	}
+	if _, e := readLocalAccountInput(strings.NewReader(`{"username":"golf-admin","password":"private-secret"}`), "inspect"); e == nil {
+		t.Fatal("inspection accepted password")
+	}
+}

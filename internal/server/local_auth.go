@@ -34,21 +34,36 @@ var localUsername = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,63}$`)
 var localKDFSlots = make(chan struct{}, 4)
 
 type LocalAccountInput struct {
-	Username        string `json:"username"`
-	Email           string `json:"email,omitempty"`
-	Password        string `json:"password"`
-	ForgeToken      string `json:"forge_token"`
-	IsInstanceAdmin bool   `json:"is_instance_admin"`
+	Username                  string `json:"username"`
+	Email                     string `json:"email,omitempty"`
+	Password                  string `json:"password"`
+	ForgeToken                string `json:"forge_token"`
+	IsInstanceAdmin           bool   `json:"is_instance_admin"`
+	AccountID                 string `json:"account_id,omitempty"`
+	GolfUserID                string `json:"golf_user_id,omitempty"`
+	ExpectedNativeUserID      string `json:"expected_native_user_id,omitempty"`
+	ExpectedCredentialVersion string `json:"expected_credential_version,omitempty"`
+	ExpectedMFAVersion        string `json:"expected_mfa_version,omitempty"`
+	RecoveryReason            string `json:"reason,omitempty"`
+	AcknowledgeMFAReset       bool   `json:"acknowledge_warning,omitempty"`
+	WritersDrained            bool   `json:"writers_drained,omitempty"`
 }
 type LocalAccountResult struct {
-	ID                string `json:"id"`
-	Username          string `json:"username"`
-	Email             string `json:"email,omitempty"`
-	UserID            string `json:"user_id"`
-	IsInstanceAdmin   bool   `json:"is_instance_admin"`
-	Disabled          bool   `json:"disabled"`
-	CredentialVersion string `json:"credential_version"`
-	SessionsRevoked   uint64 `json:"sessions_revoked"`
+	ID                   string `json:"id"`
+	Username             string `json:"username"`
+	Email                string `json:"email,omitempty"`
+	UserID               string `json:"user_id"`
+	IsInstanceAdmin      bool   `json:"is_instance_admin"`
+	Disabled             bool   `json:"disabled"`
+	CredentialVersion    string `json:"credential_version"`
+	SessionsRevoked      uint64 `json:"sessions_revoked"`
+	MFAVersion           string `json:"mfa_version,omitempty"`
+	ChallengesRevoked    uint64 `json:"challenges_revoked,omitempty"`
+	RecoveryCodesRevoked uint64 `json:"recovery_codes_revoked,omitempty"`
+	OperationID          string `json:"operation_id,omitempty"`
+	NativeUserID         string `json:"native_user_id,omitempty"`
+	MFAEnabled           bool   `json:"mfa_enabled,omitempty"`
+	MFAPendingExpiresAt  string `json:"mfa_pending_expires_at,omitempty"`
 }
 type localLoginBinding struct {
 	accountID, userID, version int64
@@ -251,7 +266,19 @@ func (s *Server) localSessionUser(ctx context.Context, value string, user User) 
 // separately enforce actor confirmation and target revisions; native passwords
 // are never accepted.
 func ManageLocalAccount(ctx context.Context, db *sql.DB, keys *Keyring, forgeURL, action string, input LocalAccountInput) (LocalAccountResult, error) {
+	if action == "inspect" {
+		if input != (LocalAccountInput{Username: input.Username}) {
+			return LocalAccountResult{}, errors.New("Operator account inspection accepts only a canonical username.")
+		}
+		return InspectOperatorLocalAccount(ctx, db, forgeURL, input.Username)
+	}
+	if action == "reset-mfa" {
+		return ResetOperatorLocalMFA(ctx, db, keys, forgeURL, input)
+	}
 	bad := errors.New("Local account input is invalid; use a canonical username and a 15-character minimum password of at most 1024 UTF-8 bytes.")
+	if input.AccountID != "" || input.GolfUserID != "" || input.ExpectedNativeUserID != "" || input.ExpectedCredentialVersion != "" || input.ExpectedMFAVersion != "" || input.RecoveryReason != "" || input.AcknowledgeMFAReset || input.WritersDrained {
+		return LocalAccountResult{}, bad
+	}
 	if !localUsername.MatchString(input.Username) {
 		return LocalAccountResult{}, bad
 	}
