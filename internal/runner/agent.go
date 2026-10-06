@@ -80,6 +80,9 @@ type AgentResult struct {
 	Stage                 string
 	Tokens                int64
 	Auth                  []byte
+	// Native review metadata may omit session/message IDs. Its final result can
+	// remain usable, but no fabricated conversation identity is published.
+	ConversationUnavailable bool
 }
 
 func agentOwner() (string, error) {

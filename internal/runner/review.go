@@ -85,6 +85,11 @@ func (e *Executor) ExecuteReview(ctx context.Context, j AgentJob) (out AgentResu
 		native = append(native, "--variant", j.Reasoning)
 	}
 	native = append(native, "Review the attached untrusted PR snapshot. Return only its specified JSON result. Do not use tools.")
+	if j.Observe != nil {
+		out, err = e.reviewObservedCommand(ctx, strings.NewReader(j.Instructions), j, native...)
+		out.Auth = j.Auth
+		return out, err
+	}
 	data, stage, nativeErr := e.reviewCommand(ctx, strings.NewReader(j.Instructions), native...)
 	err = nativeErr
 	out.Stage = stage
@@ -105,17 +110,39 @@ func (e *Executor) ExecuteReview(ctx context.Context, j AgentJob) (out AgentResu
 	}
 	return
 }
-func parseReviewEvents(r io.Reader, budget uint32) (out AgentResult, err error) {
+func parseReviewEvents(r io.Reader, budget uint32) (AgentResult, error) {
+	return parseObservedReviewEvents(context.Background(), r, budget, nil)
+}
+func parseObservedReviewEvents(ctx context.Context, r io.Reader, budget uint32, observe func(context.Context, AgentObservation) error) (out AgentResult, err error) {
 	out.State = "failed"
 	out.Stage = "review-result"
 	dec := json.NewDecoder(io.LimitReader(r, 262145))
 	complete := false
+	seenText := map[string]bool{}
+	sequence := int64(0)
+	session, turn := "", ""
+	emit := func(v AgentObservation) error {
+		if observe == nil {
+			return nil
+		}
+		sequence++
+		if sequence > 512 {
+			return ErrInfrastructure
+		}
+		v.Sequence = sequence
+		v.ThreadID = session
+		if v.Kind != "thread_started" {
+			v.TurnID = turn
+		}
+		return observe(ctx, v)
+	}
 	for {
 		var event struct {
-			Type string `json:"type"`
-			Part struct {
-				Text, Reason string
-				Tokens       struct {
+			Type      string `json:"type"`
+			SessionID string `json:"sessionID"`
+			Part      struct {
+				Text, Reason, ID, MessageID string
+				Tokens                      struct {
 					Input, Output, Reasoning int64
 					Cache                    struct{ Read, Write int64 }
 				}
@@ -128,11 +155,44 @@ func parseReviewEvents(r io.Reader, budget uint32) (out AgentResult, err error) 
 			out.Stage = "review-result-event-format"
 			return out, ErrInfrastructure
 		}
+		if observe != nil && !out.ConversationUnavailable {
+			if !agentNativeID(event.SessionID) || !agentNativeID(event.Part.MessageID) {
+				out.ConversationUnavailable = true
+				observe = nil
+			}
+			if observe != nil && session == "" {
+				session = event.SessionID
+				if e := emit(AgentObservation{Kind: "thread_started"}); e != nil {
+					return out, e
+				}
+			} else if observe != nil && session != event.SessionID {
+				return out, ErrInfrastructure
+			}
+			if observe != nil && turn == "" {
+				turn = event.Part.MessageID
+				if e := emit(AgentObservation{Kind: "turn_started", Status: "inProgress"}); e != nil {
+					return out, e
+				}
+			} else if observe != nil && turn != event.Part.MessageID {
+				return out, ErrInfrastructure
+			}
+		}
 		switch event.Type {
+		case "step_start":
+			if observe != nil && complete {
+				return out, ErrInfrastructure
+			}
 		case "error", "tool_use":
 			out.Stage = "review-result-unsafe-event"
 			return out, ErrInfrastructure
 		case "text":
+			if observe != nil && (seenText[event.Part.ID] || !agentNativeID(event.Part.ID) || !agentObservationText(event.Part.Text, 65536)) {
+				return out, ErrInfrastructure
+			}
+			seenText[event.Part.ID] = true
+			if e := emit(AgentObservation{Kind: "assistant_message", ItemID: event.Part.ID, Text: event.Part.Text, Phase: "final_answer"}); e != nil {
+				return out, e
+			}
 			out.Summary += event.Part.Text
 			if len(out.Summary) > 65536 {
 				return out, ErrInfrastructure
@@ -145,11 +205,26 @@ func parseReviewEvents(r io.Reader, budget uint32) (out AgentResult, err error) 
 				log.Print("native review completion category unrecognized")
 			}
 			t := event.Part.Tokens
+			for _, n := range []int64{t.Input, t.Output, t.Reasoning, t.Cache.Read, t.Cache.Write} {
+				if n < 0 || n > 2000000 {
+					return out, ErrInfrastructure
+				}
+			}
 			out.Tokens += t.Input + t.Output + t.Reasoning + t.Cache.Read + t.Cache.Write
 			if out.Tokens < 0 || out.Tokens > 2000000 {
 				return out, ErrInfrastructure
 			}
 			complete = event.Part.Reason == "stop" || event.Part.Reason == "end_turn"
+			if e := emit(AgentObservation{Kind: "usage_updated", TotalTokens: &out.Tokens}); e != nil {
+				return out, e
+			}
+			if complete {
+				if e := emit(AgentObservation{Kind: "turn_completed", Status: "completed"}); e != nil {
+					return out, e
+				}
+			}
+		default:
+			return out, ErrInfrastructure
 		}
 	}
 	if !complete || strings.TrimSpace(out.Summary) == "" {

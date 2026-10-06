@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	golfv1 "github.com/mjtechguy/golf-git/gen/golf/v1"
@@ -367,6 +368,14 @@ func (s *Server) publishReviewer(ctx context.Context, p reviewerRecord, r review
 			return "", Repository{}, forgePull{}, err
 		}
 		base, repo, pull, err := s.reviewerPublisherTarget(ctx, p, r)
+		if err == nil && strings.HasPrefix(r.Intent, "comment/") {
+			a, actorErr := s.reviewerActor(ctx, p)
+			if actorErr != nil {
+				err = actorErr
+			} else {
+				err = s.revalidateReviewComment(ctx, p, a, pull, r.ID, r.Intent)
+			}
+		}
 		return base, repo, pull, err
 	}
 	base, repo, pull, err := preflight()

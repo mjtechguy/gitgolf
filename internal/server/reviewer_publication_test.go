@@ -64,7 +64,7 @@ func newReviewerPublicationFixtureOnDatabase(t *testing.T, db *sql.DB) *reviewer
 	}
 	local, _ := strconv.ParseInt(account.ID, 10, 64)
 	user, _ := strconv.ParseInt(account.UserID, 10, 64)
-	f.p = reviewerRecord{ID: uuid.NewString(), RepoID: 11, OwnerID: 42, UserID: user, NativeID: 42, LocalID: local, LocalVersion: 1, PublisherID: 43, Revision: 1, Enabled: true, Expiry: time.Now().Add(time.Hour), Config: &golfv1.Reviewer{Name: "Security Reviewer", Repository: &golfv1.RepositoryKey{Owner: "alice", Name: "example"}}}
+	f.p = reviewerRecord{ID: uuid.NewString(), RepoID: 11, OwnerID: 42, UserID: user, NativeID: 42, LocalID: local, LocalVersion: 1, PublisherID: 43, Revision: 1, Enabled: true, Expiry: time.Now().Add(time.Hour), Config: &golfv1.Reviewer{Name: "Security Reviewer", PublisherLogin: "golf-bot", RespondToMentions: true, Repository: &golfv1.RepositoryKey{Owner: "alice", Name: "example"}}}
 	raw, _ := json.Marshal(f.p.Config)
 	_, err = f.s.db.Exec(`INSERT INTO golf_reviewers(id,forge_url,repository_id,owner_id,repository_owner,repository_name,sponsor_user_id,sponsor_native_id,local_account_id,local_version,publisher_id,config,enabled,expires_at) VALUES($1,$2,11,42,'alice','example',$3,42,$4,1,43,$5,true,clock_timestamp()+interval '1 hour')`, f.p.ID, config.GiteaURL, user, local, raw)
 	if err != nil {
@@ -83,6 +83,13 @@ func (f *reviewerPublicationFixture) runWithDiff(t *testing.T, intent, diff stri
 	_, err := f.s.db.Exec(`INSERT INTO golf_reviewer_runs(id,reviewer_id,reviewer_revision,pull_number,base_commit,head_commit,trigger,intent,diff,publisher_id,state,repository_id,pull_request_id,merge_base_commit,diff_fingerprint) VALUES($1,$2,1,7,$3,$4,'pr_comment',$5,$6,43,'queued',11,99,$7,$8)`, id, f.p.ID, strings.Repeat("b", 40), strings.Repeat("a", 40), intent, diff, strings.Repeat("c", 40), hash[:])
 	if err != nil {
 		t.Fatal(err)
+	}
+	if strings.HasPrefix(intent, "comment/") {
+		cid, _ := strconv.ParseInt(strings.TrimPrefix(intent, "comment/"), 10, 64)
+		digest := sha256.Sum256([]byte("@golf-bot review"))
+		if err := f.s.recordReviewComment(t.Context(), id, reviewCommentReceipt{ID: cid, Author: 42, Digest: digest[:]}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	r, err := scanReviewRun(f.s.db.QueryRow(`SELECT `+reviewRunColumns+` FROM golf_reviewer_runs WHERE id=$1`, id))
 	if err != nil {
@@ -133,6 +140,27 @@ func (f *reviewerPublicationFixture) serve(w http.ResponseWriter, r *http.Reques
 	}
 	if r.URL.Path == base+"/collaborators/alice/permission" {
 		write(map[string]any{"permission": "owner", "user": User{ID: 42, Login: "alice"}})
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, base+"/issues/comments/") {
+		id, _ := strconv.ParseInt(strings.TrimPrefix(r.URL.Path, base+"/issues/comments/"), 10, 64)
+		body := "@golf-bot review"
+		if mode == "comment-edited" {
+			body = "@golf-bot changed"
+		}
+		if mode == "comment-deleted" {
+			w.WriteHeader(404)
+			return
+		}
+		write(map[string]any{"id": id, "body": body, "user": User{ID: 42, Login: "alice"}})
+		return
+	}
+	if r.URL.Path == base+"/issues/7/comments" {
+		rows := []map[string]any{}
+		for id := int64(501); id <= 510; id++ {
+			rows = append(rows, map[string]any{"id": id, "body": "@golf-bot review", "user": User{ID: 42, Login: "alice"}})
+		}
+		write(rows)
 		return
 	}
 	no := false
@@ -521,7 +549,7 @@ func TestReviewerPublicationMigrationPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &reviewerPublicationFixture{p: reviewerRecord{ID: uuid.NewString(), RepoID: 11, OwnerID: 42, UserID: user, NativeID: 42, LocalID: account.ID, LocalVersion: 1, PublisherID: 43, Revision: 1, Enabled: true, Expiry: time.Now().Add(time.Hour), Config: &golfv1.Reviewer{Name: "Security Reviewer", Repository: &golfv1.RepositoryKey{Owner: "alice", Name: "example"}}}}
+	f := &reviewerPublicationFixture{p: reviewerRecord{ID: uuid.NewString(), RepoID: 11, OwnerID: 42, UserID: user, NativeID: 42, LocalID: account.ID, LocalVersion: 1, PublisherID: 43, Revision: 1, Enabled: true, Expiry: time.Now().Add(time.Hour), Config: &golfv1.Reviewer{Name: "Security Reviewer", PublisherLogin: "golf-bot", RespondToMentions: true, Repository: &golfv1.RepositoryKey{Owner: "alice", Name: "example"}}}}
 	raw, _ := json.Marshal(f.p.Config)
 	if _, err = db.Exec(`INSERT INTO golf_reviewers(id,forge_url,repository_id,owner_id,repository_owner,repository_name,sponsor_user_id,sponsor_native_id,local_account_id,local_version,publisher_id,config,enabled,expires_at) VALUES($1,$2,11,42,'alice','example',$3,42,$4,1,43,$5,true,clock_timestamp()+interval '1 hour')`, f.p.ID, runtimeConfig.GiteaURL, user, account.ID, raw); err != nil {
 		t.Fatal(err)

@@ -128,6 +128,48 @@ func TestReviewerPublicationNativeProof(t *testing.T) {
 	if err != nil || headers.Get("X-Total-Count") != "1" || len(reviews) != 1 || reviews[0].ID != receipt {
 		t.Fatal("native once-only publication inventory mismatch")
 	}
+	// Actual native PR comments can request bounded read-only work only while
+	// the exact captured author/body remains associated with this PR.
+	actor, err := s.reviewerActor(t.Context(), p)
+	if err != nil {
+		t.Fatal("native command actor unavailable")
+	}
+	publisher, err := s.reviewPublisher(t.Context())
+	if err != nil {
+		t.Fatal("native command bot unavailable")
+	}
+	p.Config.PublisherLogin = publisher.Login
+	p.Config.RespondToMentions = true
+	body := "@" + publisher.Login + " review captured comparison"
+	var comment struct {
+		ID int64 `json:"id"`
+	}
+	commentRoute := base + "/issues/" + strconv.FormatInt(in.Number, 10) + "/comments"
+	if _, err = s.forgeJSON(t.Context(), http.MethodPost, commentRoute, actor.Credential, map[string]string{"body": body}, &comment, http.StatusCreated); err != nil || comment.ID <= 0 {
+		t.Fatal("owned native command creation failed")
+	}
+	intent := "comment/" + strconv.FormatInt(comment.ID, 10)
+	command, err := s.agentCommentSnapshot(t.Context(), p, actor, pull, intent, body)
+	if err != nil || command == nil || command.Author != in.OwnerID {
+		t.Fatal("native command exact author/body capture failed")
+	}
+	commandRun := makeRun(intent)
+	if s.recordReviewComment(t.Context(), commandRun.ID, *command) != nil || s.revalidateReviewComment(t.Context(), p, actor, pull, commandRun.ID, intent) != nil {
+		t.Fatal("native original command receipt invalid")
+	}
+	editRoute := base + "/issues/comments/" + strconv.FormatInt(comment.ID, 10)
+	if _, err = s.forgeJSON(t.Context(), http.MethodPatch, editRoute, actor.Credential, map[string]string{"body": body + " changed"}, &struct{}{}, http.StatusOK); err != nil {
+		t.Fatal("owned native command edit failed")
+	}
+	if s.revalidateReviewComment(t.Context(), p, actor, pull, commandRun.ID, intent) == nil {
+		t.Fatal("edited native command retained authority")
+	}
+	if _, err = s.forgeJSON(t.Context(), http.MethodDelete, editRoute, actor.Credential, nil, nil, http.StatusNoContent); err != nil {
+		t.Fatal("owned native command delete failed")
+	}
+	if s.revalidateReviewComment(t.Context(), p, actor, pull, commandRun.ID, intent) == nil {
+		t.Fatal("deleted native command retained authority")
+	}
 	var sessions int
 	if s.db.QueryRow(`SELECT count(*) FROM golf_sessions`).Scan(&sessions) != nil || sessions != 0 {
 		t.Fatal("temporary native proof session remained")

@@ -86,7 +86,7 @@ export function useAgentTaskConversation({userId,repositoryId,owner,name,task,re
 }
 
 function presentation(event:AgentTaskEvent) {
- if(event.kind==='prompt')return {label:'Task prompt',Icon:MessageSquare};
+ if(event.kind==='prompt')return {label:'Task request',Icon:MessageSquare};
  if(event.kind==='assistant_message')return {label:event.phase==='final_answer'?'Final reply':event.phase==='commentary'?'Agent commentary':'Assistant message',Icon:Bot};
  if(event.kind==='plan_updated')return {label:'Plan updated',Icon:ListTodo};
  if(event.kind==='usage_updated')return {label:'Usage reported',Icon:CheckCircle2};
@@ -107,5 +107,5 @@ export function AgentTaskConversation({reader}:{reader:ReturnType<typeof useAgen
  {(event.kind==='prompt'||event.kind==='assistant_message'||event.kind==='plan_updated')&&event.bodyState!==Body.AVAILABLE?<p className="panel-footnote">{event.bodyState===Body.WITHHELD?'Content withheld pending screening.':'Message content unavailable.'}</p>:null}
  </article></li>})}</ol>
  </>}
- <p className="panel-footnote">Recorded activity currently supports single-turn Codex observations. Raw commands, terminal output and reasoning are not shown. Reply, approvals and continuation are not available here.</p></section>;
+ <p className="panel-footnote">Recorded activity supports Codex tasks and OpenCode read-only PR reviews. Raw commands, terminal output and reasoning are not shown. Reply, approvals and continuation are not available here.</p></section>;
 }

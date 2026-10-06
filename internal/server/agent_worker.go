@@ -291,24 +291,29 @@ func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor
 	job := runner.AgentJob{Job: runner.Job{AttemptID: attempt, JobID: t.ID, SourceCommit: t.Commit, ImageDigest: s.config.AgentImage, Timeout: time.Duration(min(c.TimeoutSeconds, 900)) * time.Second, SourceArchivePath: source.Name()}, Auth: []byte(plain), Model: c.ModelId, Reasoning: c.Reasoning, Instructions: c.Instructions, TokenBudget: c.TokenBudget, SeccompPath: seccomp}
 	var result runner.AgentResult
 	var executionErr error
+	promptReceipt := c.Instructions
+	if r.Harness == "opencode" && r.Provider == "opencode-go" {
+		promptReceipt = reviewConversationPrompt(c.Instructions)
+	}
+	if e = s.startConversation(run, t, r, worker, attempt, promptReceipt, []byte(plain)); e != nil {
+		stop()
+		<-heartbeatDone
+		s.finishAgentFailure(ctx, t.ID, attempt, "Private conversation admission failed; no native task was launched.")
+		return e
+	}
+	job.Observe = func(observeCtx context.Context, v runner.AgentObservation) error {
+		if !codexOwnerAlive(observeCtx, &codexRuntime{conn: owner, ownerID: codexLockID(r.ID)}) {
+			return errCodexUnavailable
+		}
+		return s.observeConversation(observeCtx, t, r, worker, attempt, v, []byte(plain))
+	}
 	if r.Harness == "opencode" && r.Provider == "opencode-go" {
 		job.ImageDigest = s.config.ReviewImage
 		result, executionErr = executor.ExecuteReview(run, job)
 	} else {
-		if e = s.startConversation(run, t, r, worker, attempt, c.Instructions, []byte(plain)); e != nil {
-			stop()
-			<-heartbeatDone
-			s.finishAgentFailure(ctx, t.ID, attempt, "Private conversation admission failed; no native task was launched.")
-			return e
-		}
-		job.Observe = func(observeCtx context.Context, v runner.AgentObservation) error {
-			if !codexOwnerAlive(observeCtx, &codexRuntime{conn: owner, ownerID: codexLockID(r.ID)}) {
-				return errCodexUnavailable
-			}
-			return s.observeConversation(observeCtx, t, r, worker, attempt, v, []byte(plain))
-		}
 		result, executionErr = executor.ExecuteAgent(run, job)
 	}
+
 	journaled := job.Observe != nil
 	stop()
 	<-heartbeatDone
@@ -355,7 +360,10 @@ func (s *Server) executeAgentTask(ctx context.Context, executor *runner.Executor
 			if screenErr != nil {
 				return screenErr
 			}
-			if !conversationSafe && result.State == "succeeded" {
+			if result.ConversationUnavailable {
+				conversationSafe = false
+			}
+			if !conversationSafe && !result.ConversationUnavailable && result.State == "succeeded" {
 				result.State = "failed"
 				result.Summary = ""
 				result.Patch = ""

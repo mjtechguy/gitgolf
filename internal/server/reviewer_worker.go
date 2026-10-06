@@ -163,6 +163,10 @@ func (s *Server) admitReview(ctx context.Context, p reviewerRecord, number uint3
 	diffHash := sha256.Sum256([]byte(diff))
 	ctx = context.WithValue(ctx, reviewTriggerKey{}, trigger)
 	selection := &golfv1.AgentTaskSelection{ConnectionId: p.Config.ConnectionId, ModelId: p.Config.ModelId, Reasoning: p.Config.Reasoning, Trigger: trigger}
+	comment, e := s.agentCommentSnapshot(ctx, p, a, pull, intent, question)
+	if e != nil {
+		return out, e
+	}
 	prompt := reviewPrompt(p, pull, diff, question)
 	auth, settings, account, e := s.taskConfig(ctx, a, p.Config.Repository, selection, prompt)
 	if e != nil {
@@ -177,12 +181,23 @@ func (s *Server) admitReview(ctx context.Context, p reviewerRecord, number uint3
 	if e != nil {
 		return out, errStorageUnavailable
 	}
+	if comment != nil {
+		if e = s.recordReviewComment(ctx, id, *comment); e != nil {
+			_, _ = s.db.ExecContext(ctx, `UPDATE golf_reviewer_runs SET state='failed',reason='Comment admission could not be confirmed.' WHERE id=$1 AND state='admitting'`, id)
+			return out, e
+		}
+	}
 	fail := func(e error) (reviewerRunRecord, error) {
 		clean, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		_, _ = s.db.ExecContext(clean, `UPDATE golf_agent_tasks SET state='cancelled',reason='Reviewer admission failed before dispatch.',version=version+1,finished_at=clock_timestamp() WHERE forge_url=$1 AND idempotency_key=$2 AND state='queued'`, s.config.GiteaURL, id)
 		_, _ = s.db.ExecContext(context.Background(), `UPDATE golf_reviewer_runs SET state='failed',reason='Admission failed; inspect before explicitly retrying.' WHERE id=$1 AND state='admitting'`, id)
 		return out, e
+	}
+	if comment != nil {
+		if e = s.revalidateReviewComment(ctx, p, a, pull, id, intent); e != nil {
+			return fail(e)
+		}
 	}
 	taskCtx := context.WithValue(ctx, sessionTokenKey{}, a.Credential)
 	request := connect.NewRequest(&golfv1.CreateAgentTaskRequest{Repository: p.Config.Repository, Ref: pull.Head.SHA, Instructions: prompt, Selection: selection, ExpectedRevision: settings.Revision, ExpectedAuthorityRevision: auth.Revision, ExpectedConnectionVersion: strconv.FormatInt(account.Version, 10), IdempotencyKey: id})
@@ -260,7 +275,7 @@ func (s *Server) reviewMentions(ctx context.Context, p reviewerRecord, a codexAc
 		return
 	}
 	for _, c := range comments {
-		if c.User == nil || c.User.ID == p.PublisherID || len(c.Body) > 2000 || !reviewMention(c.Body, p.Config.PublisherLogin) {
+		if c.ID <= 0 || c.User == nil || c.User.ID == p.PublisherID || len(c.Body) > 2000 || !reviewMention(c.Body, p.Config.PublisherLogin) {
 			continue
 		}
 		// First conversation boundary: current sponsoring owner or current PR author.
@@ -381,6 +396,9 @@ func (s *Server) publishReviews(ctx context.Context) {
 				pull, e = s.readPull(check, a.Credential, base, repo, uint32(r.Number))
 			}
 		}
+		if e == nil {
+			e = s.revalidateReviewComment(check, p, a, pull, r.ID, r.Intent)
+		}
 		if e != nil || pull.State != "open" || pull.Head == nil || pull.Base == nil || pull.Head.SHA != r.Head || pull.Base.SHA != r.Base {
 			_, _ = s.db.ExecContext(check, `UPDATE golf_reviewer_runs SET state='outdated',reason='PR or delegation authority changed; no review published.' WHERE id=$1 AND state IN ('queued','running') AND NOT EXISTS(SELECT 1 FROM golf_reviewer_publications x WHERE x.run_id=golf_reviewer_runs.id AND x.state IN ('reserved','dispatch_unknown'))`, r.ID)
 			stop()
@@ -500,6 +518,9 @@ func (s *Server) reviewTaskAccess(ctx context.Context, t agentTaskRecord) error 
 	}
 	pull, e := s.readPull(ctx, a.Credential, base, repo, uint32(r.Number))
 	if e != nil {
+		return e
+	}
+	if e = s.revalidateReviewComment(ctx, p, a, pull, r.ID, r.Intent); e != nil {
 		return e
 	}
 	if pull.State != "open" || pull.Head.SHA != r.Head || pull.Base.SHA != r.Base || pull.ID != r.PullID || pull.MergeBase != r.MergeBase || repo.ID != r.RepositoryID {
