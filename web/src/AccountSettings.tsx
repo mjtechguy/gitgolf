@@ -5,7 +5,7 @@ import { ExecutionPolicyPanel } from './ExecutionPolicyPanel';
 import { ExecutionScope } from './gen/golf/v1/golf_pb';
 import { lazy, Suspense, useMemo, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
-import { Rocket, Server, MailPlus, Webhook, History, KeyRound, ShieldCheck, Tags, UserRound } from 'lucide-react';
+import { Rocket, Server, MailPlus, Webhook, History, KeyRound, Plug, ShieldCheck, Tags, UserRound } from 'lucide-react';
 import type { User } from './gen/golf/v1/golf_pb';
 import { DataTable, type DataTableColumn } from './DataTable';
 import { useQuery } from '@tanstack/react-query';
@@ -21,6 +21,7 @@ export function AccountLayout({ children }: { children: ReactNode }) {
     <Link to="/account/settings" activeOptions={{ exact:true }}><UserRound size={18} />Profile</Link>
     <Link to="/account/security" activeOptions={{ exact:true }}><ShieldCheck size={18} />Sign-in and security</Link>
     <Link to="/account/invitations" activeOptions={{ exact:true }}><MailPlus size={18} />Invitations</Link>
+    <Link to="/account/connections" activeOptions={{exact:true}}><Plug size={18}/>Provider connections</Link>
     <Link to="/account/agents" activeOptions={{ exact:true }}><KeyRound size={18} />Coding agents</Link>
     <Link to="/account/sessions" activeOptions={{ exact:true }}><ShieldCheck size={18} />Sessions</Link>
     <Link to="/account/ssh-keys" activeOptions={{ exact:true }}><KeyRound size={18} />SSH keys</Link>
@@ -62,10 +63,11 @@ export function AccountSettings({ user, signingOut }: { user: User; signingOut: 
 }
 
 export type SettingsScope = 'personal' | 'organization' | 'repository' | 'instance';
-type SettingEntry = { id: string; section: string; state: 'Ready' | 'Partial' | 'Read only' | 'Planned'; detail: string; task: string; to?: '/account/agents' | '/account/security' | '/account/sessions' | '/account/ssh-keys' | '/account/api-credentials' | '/audit' | '/' | '/organizations' | '/status' | '/admin/execution' | '/admin/organizations' | '/admin/settings/runners' | '/admin/settings/notifications' | '/admin/settings/infrastructure' | '/admin/settings' | '/admin/agents'; hash?: string };
+type SettingEntry = { id: string; section: string; state: 'Ready' | 'Partial' | 'Read only' | 'Planned'; detail: string; task: string; to?: '/account/connections' | '/account/agents' | '/account/security' | '/account/sessions' | '/account/ssh-keys' | '/account/api-credentials' | '/audit' | '/' | '/organizations' | '/status' | '/admin/execution' | '/admin/organizations' | '/admin/settings/runners' | '/admin/settings/notifications' | '/admin/settings/infrastructure' | '/admin/settings' | '/admin/agents'; hash?: string };
 const inventory: Record<SettingsScope, SettingEntry[]> = {
   personal: [
     { id: 'profile', section: 'Profile and email', state: 'Partial', detail: 'Edit public profile fields above. Golf sign-in email changes have a separate security page; username changes and verified-email password recovery remain planned. Notification mailbox verification is configured separately.', task: 'P1.3 / G1' },
+    { id: 'providers', section: 'GitHub and GitLab connections', state: 'Partial', detail: 'Personal encrypted provider tokens, selected import previews and original code-clone receipts are available. Complete metadata and private-provider migration fidelity remain required.', task: 'P2', to: '/account/connections' },
     { id: 'authentication', section: 'Passwords, recovery and MFA', state: 'Partial', detail: 'Manage your Golf password, sign-in alias, authenticator app and single-use MFA recovery codes. Sensitive changes confirm password and enrolled factor, then revoke local sessions and dependent API credentials. Passkeys and verified-email password recovery remain planned.', task: 'P1.3', to: '/account/security' },
     { id: 'sessions', section: 'Browser sessions', state: 'Ready', detail: 'List active sessions and revoke one or all others. This does not revoke native Git keys or provider grants.', task: 'P1.3', to: '/account/sessions' },
     { id: 'keys', section: 'SSH keys', state: 'Ready', detail: 'Manage persistent native account SSH keys. Signing-key management and scoped/expiring agent Git credentials are still planned.', task: 'P1.8 / P5.5', to: '/account/ssh-keys' },

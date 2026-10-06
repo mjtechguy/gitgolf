@@ -34,6 +34,7 @@ const apiCredentialsRoute = createRoute({
   path: '/account/api-credentials',
   component: () => <App location={{ kind: 'api-credentials' }} />,
 });
+const accountConnectionsRoute=createRoute({getParentRoute:()=>rootRoute,path:'/account/connections',component:()=> <App location={{kind:'account-connections'}}/>});
 const accountAgentsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/account/agents', component: () => <App location={{ kind: 'account-agents' }} /> });
 const accountInvitationsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/account/invitations', component: () => <App location={{ kind: 'account-invitations' }} /> });
 const accountSecurityRoute = createRoute({ getParentRoute: () => rootRoute, path: '/account/security', component: () => <App location={{ kind: 'account-security' }} /> });
@@ -300,7 +301,7 @@ function OrganizationPage() {
 
 // Router owns navigation only. Private server data stays in the cancellable Query cache.
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([homeRoute, notificationInboxRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryDeletionRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWebhooksRoute, canonicalRepositorySecretsRoute, canonicalRepositoryEnvironmentsRoute, canonicalRepositoryRulesRoute, canonicalRepositoryGitRoute, canonicalRepositoryRunnersRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceNotificationsRoute, instanceRunnersRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationLabelsRoute, organizationSecretsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountInvitationsRoute, accountSecurityRoute, accountAgentsRoute, sessionsRoute]),
+  routeTree: rootRoute.addChildren([homeRoute, notificationInboxRoute, statusRoute, canonicalRepositoryPageRoute, repositoryRoute, canonicalRepositorySettingsRoute, canonicalRepositoryDeletionRoute, canonicalRepositoryAccessSettingsRoute, canonicalRepositoryWebhooksRoute, canonicalRepositorySecretsRoute, canonicalRepositoryEnvironmentsRoute, canonicalRepositoryRulesRoute, canonicalRepositoryGitRoute, canonicalRepositoryRunnersRoute, canonicalRepositoryWorkflowsRoute, repositorySettingsRoute, repositoryAccessSettingsRoute, repositoryWorkflowsRoute, instanceOverviewRoute, instanceAgentsRoute, instanceNotificationsRoute, instanceRunnersRoute, instanceInfrastructureRoute, instanceExecutionRoute, instanceOrganizationsRoute, organizationSettingsRoute, organizationLabelsRoute, organizationSecretsRoute, organizationTeamSettingsRoute, instanceSettingsRoute, organizationsRoute, organizationRoute, auditRoute, apiCredentialsRoute, sshKeysRoute, settingsRoute, accountInvitationsRoute, accountSecurityRoute, accountConnectionsRoute,accountAgentsRoute, sessionsRoute]),
   defaultPreload: false,
   // Refs and paths are opaque strings, including names such as "1234" or "true".
   parseSearch: (search) => {
