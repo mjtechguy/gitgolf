@@ -2,4 +2,6 @@ export const reviewRequestIntentPrefix='golf.review-request.v1:';
 export const reviewCommentIntentPrefix='golf.review-comment-interaction.v1:';
 export const reviewLifecycleIntentPrefix='golf.review-lifecycle.v1:';
 export const reviewAuthoringIntentPrefix='golf.review-authoring.v1:';
-export function clearOtherReviewRequestIntents(userId?:string){try{for(const key of Object.keys(sessionStorage))if([reviewRequestIntentPrefix,reviewCommentIntentPrefix,reviewLifecycleIntentPrefix,reviewAuthoringIntentPrefix].some(prefix=>key.startsWith(prefix)&&(!userId||!key.startsWith(`${prefix}${userId}:`))))sessionStorage.removeItem(key);}catch{/* A new write requires readable and writable tab storage. */}}
+export const fileBatchIntentPrefix='golf.file-batch.v1:';
+export const attachmentUploadIntentPrefix='golf.attachment-upload.v1:';
+export function clearOtherReviewRequestIntents(userId?:string){try{for(const key of Object.keys(sessionStorage))if([reviewRequestIntentPrefix,reviewCommentIntentPrefix,reviewLifecycleIntentPrefix,reviewAuthoringIntentPrefix,fileBatchIntentPrefix,attachmentUploadIntentPrefix].some(prefix=>key.startsWith(prefix)&&(!userId||!key.startsWith(`${prefix}${userId}:`))))sessionStorage.removeItem(key);}catch{/* A new write requires readable and writable tab storage. */}}

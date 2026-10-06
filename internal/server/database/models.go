@@ -159,6 +159,29 @@ type GolfApiWriteGrant struct {
 	Scopes          string
 }
 
+type GolfAttachmentUploadEvent struct {
+	ID          int64
+	OperationID int64
+	Phase       string
+	OccurredAt  time.Time
+}
+
+type GolfAttachmentUploadOperation struct {
+	ID               int64
+	UserID           int64
+	ForgeURL         string
+	ActorID          int64
+	RepositoryID     int64
+	OperationID      string
+	Original         []byte
+	InputFingerprint []byte
+	Result           []byte
+	Phase            string
+	FailureCode      string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
 type GolfAuditEvent struct {
 	ID              int64
 	UserID          int64
