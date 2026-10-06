@@ -11,11 +11,11 @@ export function respond<Schema extends DescMessage>(route: Route, schema: Schema
 export function request<Schema extends DescMessage>(route: Route, schema: Schema) {
   return fromJson(schema, route.request().postDataJSON());
 }
-export function reject(route: Route, code: 'unauthenticated' | 'permission_denied' | 'not_found' | 'already_exists' | 'failed_precondition' | 'resource_exhausted' | 'unavailable' | 'unimplemented', message: string) {
+export function reject(route: Route, code: 'invalid_argument' | 'unauthenticated' | 'permission_denied' | 'not_found' | 'already_exists' | 'failed_precondition' | 'resource_exhausted' | 'unavailable' | 'unimplemented', message: string) {
   // Existing unary fixtures deliberately do not implement the new live method.
   // Keep resource denials distinct from an absent fixture procedure.
   if (code === 'not_found' && route.request().url().endsWith('/WatchRepository')) code = 'unimplemented';
-  const status = { unauthenticated: 401, permission_denied: 403, not_found: 404, already_exists: 409, failed_precondition: 400, resource_exhausted: 429, unavailable: 503, unimplemented: 501 }[code];
+  const status = { invalid_argument:400, unauthenticated: 401, permission_denied: 403, not_found: 404, already_exists: 409, failed_precondition: 400, resource_exhausted: 429, unavailable: 503, unimplemented: 501 }[code];
   return route.fulfill({ status, contentType: 'application/json', json: { code, message } });
 }
 

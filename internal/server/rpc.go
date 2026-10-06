@@ -48,7 +48,7 @@ func (s *Server) rpcHandler() http.Handler {
 		connect.WithReadMaxBytes(16 << 10), connect.WithSendMaxBytes(16 << 20), connect.WithRequireConnectProtocolHeader(),
 		connect.WithConditionalHandlerOptions(func(spec connect.Spec) []connect.HandlerOption {
 			switch spec.Procedure {
-			case golfv1connect.PackagePublicationServiceSubmitPackagePublicationProcedure, golfv1connect.RepositoryReleaseManagementServiceSubmitRepositoryReleaseOperationProcedure, golfv1connect.RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure:
+			case golfv1connect.RepositoryFileBatchServiceSubmitRepositoryFileBatchProcedure, golfv1connect.PackagePublicationServiceSubmitPackagePublicationProcedure, golfv1connect.RepositoryReleaseManagementServiceSubmitRepositoryReleaseOperationProcedure, golfv1connect.RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure:
 				return []connect.HandlerOption{connect.WithReadMaxBytes(384 << 10)}
 			case golfv1connect.RepositoryWikiManagementServiceSubmitRepositoryWikiOperationProcedure, golfv1connect.RepositoryServiceSubmitDiscussionResourceOperationProcedure:
 				return []connect.HandlerOption{connect.WithReadMaxBytes(1 << 20)}
@@ -78,6 +78,8 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewAgentTaskServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewReviewerServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewSessionServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewPasswordRecoveryServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewPasswordRecoveryEnrollmentServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewProfileServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewAccountSecurityServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewAutomationGrantServiceHandler(s, options...))
@@ -106,6 +108,8 @@ func (s *Server) rpcHandler() http.Handler {
 	mux.Handle(golfv1connect.NewMirrorObservationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryRefMutationServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryFileMutationServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewRepositoryFileBatchServiceHandler(s, options...))
+	mux.Handle(golfv1connect.NewDiscussionAttachmentServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryWikiServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewRepositoryWikiManagementServiceHandler(s, options...))
 	mux.Handle(golfv1connect.NewForgePackageServiceHandler(s, options...))
@@ -166,9 +170,9 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		}
 		public := false
 		switch procedure {
-		case golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLoginWithPasswordProcedure, golfv1connect.SessionServiceCompletePasswordMFAProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
+		case golfv1connect.PasswordRecoveryServiceRequestPasswordRecoveryProcedure, golfv1connect.PasswordRecoveryServiceCompletePasswordRecoveryProcedure, golfv1connect.SessionServiceGetAuthenticationOptionsProcedure, golfv1connect.SessionServiceBeginGiteaOAuthProcedure, golfv1connect.SessionServiceLoginWithGiteaTokenProcedure, golfv1connect.SessionServiceLoginWithPasswordProcedure, golfv1connect.SessionServiceCompletePasswordMFAProcedure, golfv1connect.SessionServiceLogoutProcedure, golfv1connect.CapabilityServiceListCapabilitiesProcedure:
 			public = true
-		case golfv1connect.ReviewerServiceGetReviewerProcedure, golfv1connect.ReviewerServiceSaveReviewerProcedure, golfv1connect.ReviewerServiceListReviewerRunsProcedure, golfv1connect.ReviewerServiceRequestReviewProcedure, golfv1connect.AgentTaskServiceCreateAgentTaskProcedure, golfv1connect.AgentTaskServiceListAgentTasksProcedure, golfv1connect.AgentTaskServiceGetAgentTaskProcedure, golfv1connect.AgentTaskServiceCancelAgentTaskProcedure, golfv1connect.AgentTaskServiceListAgentTaskEventsProcedure, golfv1connect.AgentUsageServicePreviewAgentTaskProcedure, golfv1connect.AgentUsageServiceGetAgentUsageProcedure, golfv1connect.AgentUsageServiceSaveAgentUsageProcedure, golfv1connect.AgentUsageServiceListAgentModelsProcedure, golfv1connect.CodexAccountServiceCompleteAgentLoginProcedure, golfv1connect.CodexAccountServiceListCodexConnectionsProcedure, golfv1connect.CodexAccountServiceCreateCodexConnectionProcedure, golfv1connect.CodexAccountServiceSetCodexConnectionAccessProcedure, golfv1connect.CodexAccountServiceGetCodexConnectionProcedure, golfv1connect.CodexAccountServiceStartCodexLoginProcedure, golfv1connect.CodexAccountServiceCancelCodexLoginProcedure, golfv1connect.CodexAccountServiceRefreshCodexConnectionProcedure, golfv1connect.CodexAccountServiceDisconnectCodexConnectionProcedure,
+		case golfv1connect.RepositoryFileBatchServiceSubmitRepositoryFileBatchProcedure, golfv1connect.RepositoryFileBatchServiceGetRepositoryFileBatchOperationProcedure, golfv1connect.DiscussionAttachmentServiceListDiscussionAttachmentsProcedure, golfv1connect.DiscussionAttachmentServiceDownloadDiscussionAttachmentProcedure, golfv1connect.PasswordRecoveryEnrollmentServiceGetOwnPasswordRecoveryEnrollmentProcedure, golfv1connect.PasswordRecoveryEnrollmentServiceSaveOwnPasswordRecoveryEnrollmentProcedure, golfv1connect.ReviewerServiceGetReviewerProcedure, golfv1connect.ReviewerServiceSaveReviewerProcedure, golfv1connect.ReviewerServiceListReviewerRunsProcedure, golfv1connect.ReviewerServiceRequestReviewProcedure, golfv1connect.AgentTaskServiceCreateAgentTaskProcedure, golfv1connect.AgentTaskServiceListAgentTasksProcedure, golfv1connect.AgentTaskServiceGetAgentTaskProcedure, golfv1connect.AgentTaskServiceCancelAgentTaskProcedure, golfv1connect.AgentTaskServiceListAgentTaskEventsProcedure, golfv1connect.AgentUsageServicePreviewAgentTaskProcedure, golfv1connect.AgentUsageServiceGetAgentUsageProcedure, golfv1connect.AgentUsageServiceSaveAgentUsageProcedure, golfv1connect.AgentUsageServiceListAgentModelsProcedure, golfv1connect.CodexAccountServiceCompleteAgentLoginProcedure, golfv1connect.CodexAccountServiceListCodexConnectionsProcedure, golfv1connect.CodexAccountServiceCreateCodexConnectionProcedure, golfv1connect.CodexAccountServiceSetCodexConnectionAccessProcedure, golfv1connect.CodexAccountServiceGetCodexConnectionProcedure, golfv1connect.CodexAccountServiceStartCodexLoginProcedure, golfv1connect.CodexAccountServiceCancelCodexLoginProcedure, golfv1connect.CodexAccountServiceRefreshCodexConnectionProcedure, golfv1connect.CodexAccountServiceDisconnectCodexConnectionProcedure,
 			golfv1connect.AutomationGrantServiceListAutomationGrantsProcedure, golfv1connect.AutomationGrantServiceCreateAutomationGrantProcedure, golfv1connect.AutomationGrantServiceRevokeAutomationGrantProcedure,
 			golfv1connect.AccountSecurityServiceGetOwnMFAProcedure, golfv1connect.AccountSecurityServiceBeginOwnMFAProcedure, golfv1connect.AccountSecurityServiceConfirmOwnMFAProcedure, golfv1connect.AccountSecurityServiceDisableOwnMFAProcedure, golfv1connect.AccountSecurityServiceRegenerateOwnMFARecoveryProcedure,
 			golfv1connect.AccountSecurityServiceGetAccountSecurityProcedure, golfv1connect.AccountSecurityServiceChangeOwnPasswordProcedure, golfv1connect.AccountSecurityServiceChangeOwnLoginEmailProcedure,
@@ -251,7 +255,7 @@ func (s *Server) rpcBoundary(next http.Handler) http.Handler {
 		}
 		limit := int64(16 << 10)
 		switch procedure {
-		case golfv1connect.PackagePublicationServiceSubmitPackagePublicationProcedure, golfv1connect.RepositoryReleaseManagementServiceSubmitRepositoryReleaseOperationProcedure, golfv1connect.RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure:
+		case golfv1connect.RepositoryFileBatchServiceSubmitRepositoryFileBatchProcedure, golfv1connect.PackagePublicationServiceSubmitPackagePublicationProcedure, golfv1connect.RepositoryReleaseManagementServiceSubmitRepositoryReleaseOperationProcedure, golfv1connect.RepositoryFileMutationServiceSubmitRepositoryFileMutationProcedure:
 			limit = 384 << 10
 		case golfv1connect.RepositoryWikiManagementServiceSubmitRepositoryWikiOperationProcedure, golfv1connect.RepositoryServiceSubmitDiscussionResourceOperationProcedure:
 			limit = 1 << 20

@@ -333,14 +333,16 @@ type GolfEmailAttempt struct {
 }
 
 type GolfEmailChallenge struct {
-	ID             uuid.UUID
-	UserID         int64
-	ContactVersion int64
-	CodeHash       []byte
-	Attempts       int32
-	ExpiresAt      time.Time
-	ConfirmedAt    sql.NullTime
-	CreatedAt      time.Time
+	ID                                uuid.UUID
+	UserID                            int64
+	ContactVersion                    int64
+	CodeHash                          []byte
+	Attempts                          int32
+	ExpiresAt                         time.Time
+	ConfirmedAt                       sql.NullTime
+	CreatedAt                         time.Time
+	Purpose                           string
+	PasswordRecoveryEnrollmentVersion sql.NullInt64
 }
 
 type GolfEmailConfiguration struct {
@@ -985,6 +987,36 @@ type GolfPackagePublicationEvent struct {
 	OccurredAt  time.Time
 }
 
+type GolfPasswordRecoveryEnrollment struct {
+	UserID            int64
+	LocalAccountID    int64
+	NativeUserID      int64
+	CredentialVersion int64
+	ContactVersion    int64
+	Version           int64
+	Enabled           bool
+	UpdatedAt         time.Time
+}
+
+type GolfPasswordRecoveryEnrollmentEvent struct {
+	ID                int64
+	UserID            int64
+	LocalAccountID    int64
+	NativeUserID      int64
+	CredentialVersion int64
+	ContactVersion    int64
+	Version           int64
+	Enabled           bool
+	ActorSessionID    int64
+	CreatedAt         time.Time
+}
+
+type GolfPasswordRecoveryLimit struct {
+	Bucket   int16
+	Attempts int32
+	ResetsAt time.Time
+}
+
 type GolfPreviewCredential struct {
 	TokenHash         []byte
 	DeploymentID      uuid.UUID
@@ -1397,6 +1429,7 @@ type GolfRepositoryFileMutation struct {
 	FailureCode      string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+	BatchOriginal    []byte
 }
 
 type GolfRepositoryFileMutationEvent struct {

@@ -91,8 +91,11 @@ const scopeLabels: Record<string, string> = {
   all: 'Full account access',
 };
 
+const PasswordRecovery90 = lazy(() => import('./PasswordRecovery90').then(m => ({default:m.PasswordRecovery90})));
+
 function Login({ oauthFailed, notice }: { oauthFailed: boolean; notice?: string }) {
   const client = useQueryClient();
+  const [recovering,setRecovering] = useState(false);
   const loginForm = useForm({ defaultValues: { username: '', password: '', mfaCode: '' }, onSubmit: async () => { await submitPassword(); } });
   const { username, password, mfaCode } = useStore(loginForm.store, (state) => state.values);
   const setUsername = (value: string) => loginForm.setFieldValue('username', value);
@@ -158,6 +161,7 @@ function Login({ oauthFailed, notice }: { oauthFailed: boolean; notice?: string 
         <div className="story-footer"><ShieldCheck size={17} /><span>Your repositories. Your infrastructure.</span></div>
       </section>
       <section className="login-card" aria-labelledby="login-title">
+        {recovering?<Suspense fallback={<p role="status">Opening password recovery…</p>}><PasswordRecovery90 onClose={()=>setRecovering(false)}/></Suspense>:<>
         <span className="small-icon"><KeyRound size={21} /></span>
         <h2 id="login-title">Welcome to Golf</h2>
         <p>Sign in with your Golf account.</p>
@@ -173,6 +177,7 @@ function Login({ oauthFailed, notice }: { oauthFailed: boolean; notice?: string 
           </>}<ErrorMessage error={passwordError} />
           <button className="button primary full" disabled={!passwordAvailable || (mfaChallenge?!mfaCode.trim():!username.trim()||!password) || busy}>{passwordPending ? <LoaderCircle size={17} className="spin" /> : <ArrowRight size={17} />}{passwordPending ? 'Signing in…' : mfaChallenge ? 'Verify and sign in' : 'Sign in'}</button>
         </form>
+        {passwordAvailable&&!mfaChallenge?<button className="text-button" disabled={busy} onClick={()=>{setPassword('');setPasswordError(null);setRecovering(true)}}>Forgot your password?</button>:null}
         {oauthAvailable&&!mfaChallenge ? <section className="oauth-section" aria-label="Provider sign-in">
           <p className="oauth-provider">Continue through your connected provider. Your provider password stays with it.</p>
           <div className="oauth-permissions" id="oauth-permissions"><h3>Requested permissions</h3><p>Golf requests these scopes within your existing account access.</p>{options.data.scopes.length ? <ul>{options.data.scopes.map((scope) => <li key={scope}><code>{scope}</code>{scopeLabels[scope] ? <span>{scopeLabels[scope]}</span> : null}</li>)}</ul> : <p>No additional scopes were listed by this installation.</p>}</div>
@@ -180,6 +185,7 @@ function Login({ oauthFailed, notice }: { oauthFailed: boolean; notice?: string 
           <button className="button secondary full" disabled={busy} aria-describedby="oauth-permissions" onClick={() => { if (passwordAttempt.current) return; setPassword(''); setPasswordError(null); oauth.mutate(); }}>{redirecting ? <LoaderCircle className="spin" size={17} /> : <GitBranch size={17} />}{redirecting ? 'Continuing to provider…' : 'Continue with provider'}{!redirecting ? <ArrowRight size={17} /> : null}</button>
         </section> : null}
         <div className="login-note"><LockKeyhole size={15} /><span>Golf stores provider credentials on the server. They are never saved in browser storage.</span></div>
+        </>}
       </section>
     </main>
     <footer className="login-footer"><span>Golf · Early development</span><span>Built around developers.</span></footer>

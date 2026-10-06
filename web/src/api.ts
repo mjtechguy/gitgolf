@@ -1,3 +1,5 @@
+import {PasswordRecoveryEnrollmentService} from './gen/golf/v1/password_recovery_enrollment090_pb';
+import {PasswordRecoveryService} from './gen/golf/v1/password_recovery090_pb';
 import {ProviderImportService,PackagePublicationService} from './gen/golf/v1/golf_pb';
 import {MirrorObservationService} from './gen/golf/v1/golf_pb';
 import { createClient, ConnectError } from '@connectrpc/connect';
@@ -66,6 +68,7 @@ export const organizationAdminClient = createClient(OrganizationAdminService, tr
 export const repositorySettingsClient = createClient(RepositorySettingsService, transport);
 export const gitAccessClient = createClient(GitAccessService, transport);
 export const sessionClient = createClient(SessionService, transport);
+export const passwordRecoveryClient = createClient(PasswordRecoveryService, transport);
 export const repositoryClient = createClient(RepositoryService, transport);
 export const capabilityClient = createClient(CapabilityService, transport);
 export const organizationClient = createClient(OrganizationService, transport);
@@ -87,3 +90,5 @@ export function repositoryLink(value: string): string | undefined {
 }
 
 export const repositoryFileMutationClient = createClient(RepositoryFileMutationService, transport);
+
+export const passwordRecoveryEnrollmentClient = createClient(PasswordRecoveryEnrollmentService, transport);

@@ -145,7 +145,7 @@ func (s *Server) emailState(ctx context.Context, tx database.DBTX, a emailAccoun
 	if !state.Verified && emailContactCurrent(c, a) {
 		var challengeID string
 		var expires time.Time
-		err := tx.QueryRowContext(ctx, `SELECT id::text,expires_at FROM golf_email_challenges WHERE user_id=$1 AND contact_version=$2 AND confirmed_at IS NULL AND expires_at>clock_timestamp() AND attempts<5 ORDER BY created_at DESC LIMIT 1`, a.UserID, c.Version).Scan(&challengeID, &expires)
+		err := tx.QueryRowContext(ctx, `SELECT id::text,expires_at FROM golf_email_challenges WHERE user_id=$1 AND contact_version=$2 AND purpose='verification' AND confirmed_at IS NULL AND expires_at>clock_timestamp() AND attempts<5 ORDER BY created_at DESC LIMIT 1`, a.UserID, c.Version).Scan(&challengeID, &expires)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, errStorageUnavailable
 		}
@@ -526,11 +526,12 @@ func (s *Server) RequestEmailVerification(ctx context.Context, req *connect.Requ
 			return invalid("Your current Golf sign-in alias must be a plain email address.")
 		}
 		var originalVersion int64
+		var originalPurpose string
 		var expires time.Time
 		var user int64
-		e := tx.QueryRowContext(ctx, `SELECT user_id,contact_version,expires_at FROM golf_email_challenges WHERE id=$1`, m.OperationId).Scan(&user, &originalVersion, &expires)
+		e := tx.QueryRowContext(ctx, `SELECT user_id,contact_version,expires_at,purpose FROM golf_email_challenges WHERE id=$1`, m.OperationId).Scan(&user, &originalVersion, &expires, &originalPurpose)
 		if e == nil {
-			if user != a.UserID || originalVersion != v+1 {
+			if originalPurpose != "verification" || user != a.UserID || originalVersion != v+1 {
 				return errRepositorySettingsConflict
 			}
 			out.State, e = s.emailState(ctx, tx, a)
@@ -628,7 +629,7 @@ func (s *Server) ConfirmEmailVerification(ctx context.Context, req *connect.Requ
 		var attempts int
 		var expires time.Time
 		var confirmed sql.NullTime
-		e = tx.QueryRowContext(ctx, `SELECT code_hash,attempts,expires_at,confirmed_at FROM golf_email_challenges WHERE id=$1 AND user_id=$2 AND contact_version=$3 FOR UPDATE`, m.ChallengeId, a.UserID, v).Scan(&expected, &attempts, &expires, &confirmed)
+		e = tx.QueryRowContext(ctx, `SELECT code_hash,attempts,expires_at,confirmed_at FROM golf_email_challenges WHERE id=$1 AND user_id=$2 AND contact_version=$3 AND purpose='verification' FOR UPDATE`, m.ChallengeId, a.UserID, v).Scan(&expected, &attempts, &expires, &confirmed)
 		if errors.Is(e, sql.ErrNoRows) {
 			return errResourceNotFound
 		}
