@@ -103,17 +103,43 @@ func TestReviewLifecycleNativeProof(t *testing.T) {
 		}
 		return r.Msg
 	}
+	stable := func() *golfv1.GetPullReviewLifecycleStateResponse {
+		deadline := time.Now().Add(10 * time.Second)
+		var previous *golfv1.GetPullReviewLifecycleStateResponse
+		for time.Now().Before(deadline) {
+			req := connect.NewRequest(selection)
+			req.Header().Set("Origin", s.config.PublicURL)
+			r, e := client.GetPullReviewLifecycleState(t.Context(), req)
+			if e != nil {
+				if connect.CodeOf(e) != connect.CodeFailedPrecondition {
+					t.Fatal("native proposal read unavailable")
+				}
+				previous = nil
+			} else {
+				current := r.Msg
+				if previous != nil && current.PullRevision == previous.PullRevision && current.ReviewRevision == previous.ReviewRevision && current.CanManage == previous.CanManage && current.CanRestore == previous.CanRestore {
+					return current
+				}
+				previous = current
+			}
+			time.Sleep(150 * time.Millisecond)
+		}
+		t.Fatal("native proposal observations did not settle")
+		return nil
+	}
 	submit := func(m *golfv1.SubmitPullReviewLifecycleRequest) *golfv1.PullReviewLifecycleOperation {
 		req := connect.NewRequest(m)
 		req.Header().Set("Origin", s.config.PublicURL)
 		r, e := client.SubmitPullReviewLifecycle(t.Context(), req)
 		if e != nil {
-			t.Fatal("native review lifecycle submission")
+			var phase string
+			_ = s.db.QueryRow(`SELECT phase FROM golf_pull_review_lifecycle_operations WHERE operation_id=$1`, m.OperationId).Scan(&phase)
+			t.Fatalf("native review lifecycle submission code %s dismiss=%t phase=%s error=%s", connect.CodeOf(e), m.Dismiss, phase, e.Error())
 		}
 		return r.Msg.Operation
 	}
 	original := func(dismiss bool) *golfv1.SubmitPullReviewLifecycleRequest {
-		snap := get()
+		snap := stable()
 		m := &golfv1.SubmitPullReviewLifecycleRequest{Repository: key, RepositoryId: id, PullRequestId: pid, Number: number, ReviewId: selection.ReviewId, ReviewCommitId: selection.ReviewCommitId, ExpectedPullRevision: snap.PullRevision, ExpectedReviewRevision: snap.ReviewRevision, Dismiss: dismiss, OperationId: uuid.NewString()}
 		if dismiss {
 			m.Reason = "Owned single-review dismissal"
