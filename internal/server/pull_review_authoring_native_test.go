@@ -196,7 +196,7 @@ func TestReviewAuthoringNativeProof(t *testing.T) {
 	}
 	selection.CommentId = pending.Comments[0].Id
 	// Native owner knowledge of a private pending ID must not grant Golf visibility.
-	otherSession, _, _, otherTransport, otherOrigin := testRPCClients(t, s)
+	otherSession, ownerRepos, _, otherTransport, otherOrigin := testRPCClients(t, s)
 	if _, e = otherSession.LoginWithPassword(t.Context(), connect.NewRequest(&golfv1.LoginWithPasswordRequest{Username: in.Owner, Password: localTestPassword})); e != nil {
 		t.Fatal("owner login")
 	}
@@ -248,7 +248,7 @@ func TestReviewAuthoringNativeProof(t *testing.T) {
 	// A PR author may prepare native pending inline comments and publish COMMENT,
 	// while Golf still refuses approval/change-request self-review.
 	client = other
-	repos = golfv1connect.NewRepositoryServiceClient(otherTransport, otherOrigin.String()+"/rpc")
+	repos = ownerRepos
 	selection.ReviewId = ""
 	selection.ReviewCommitId = ""
 	selection.CommentId = ""
