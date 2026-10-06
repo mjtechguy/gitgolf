@@ -18,6 +18,12 @@ protected merge or establish an atomic native expected-head compare-and-swap.
 - Display reply parents only from successful Golf reply receipts with both IDs,
   author and exact native review/path/side visible. External ancestry is unknown.
 
+Native PENDING requires a nonempty summary: pinned1.27.3 returned HTTP422 for
+empty pending headers, including inline batches. Golf withholds that shape before
+dispatch. Empty APPROVED submission is supported; COMMENT and REQUEST_CHANGES
+require a summary. PR authors may prepare pending comments and submit COMMENT;
+approval/change-request self-review remains refused.
+
 Draft submit requires the current header head and every retained native inline
 hunk to match the current bounded comparison. A header rebound by a native client
 cannot alone authorize publishing old inline contexts. Rename/deleted coordinates
@@ -38,6 +44,19 @@ repository read authority. It never resends, adopts an independently found revie
 rebinds a version or reconciles an unknown effect. Unexpected provider status,
 receipt/collection mismatch, concurrent source change, visibility loss, partial
 batch or lost response remains DISPATCH_UNKNOWN.
+
+Native pending-to-published conversion changes review/comment presentation URLs.
+Both comment observations independently validate their exact repository/PR/ID
+URL binding. Publication permits that presentation change while preserving all
+other retained child fields, authors, bodies, coordinates and multiplicity. The
+issue-comment PATCH receipt can have an unloaded poster; authority and canonical
+author are proved through independent complete native review collections.
+
+Qualified outcomes append the existing durable `pulls` invalidation once in the
+same Golf transaction as SUCCEEDED. Pending operations and pending inline edits
+are recipient-only; publication and published edits are shared. Unknown, refusal
+and replay do not signal unverified or duplicated activity. The authoring query
+uses the existing repository/pull live namespace and refuses stale UI proposals.
 
 Native submit selects the current head itself. Golf performs repeated before/after
 observations and exact receipt checks; these are not an every-ingress fence. Native
@@ -66,9 +85,41 @@ no native schema/files are changed. Generate protobuf/Connect/web output normall
 
 ## Qualification
 
-Source/isolated host PostgreSQL tests currently exercise native draft
-create/update/submit/discard and comment edit/delete, terminal replay after target
-deletion, withheld plaintext, lost response no-resend, overlapping unknown refusal,
-stale revision, hidden pending, self-approval, body and repository rebinding.
-Native and browser qualification are pending until their source-bound receipts
-are recorded. Full GitHub/Gitea parity and P0.8 remain open.
+At source `17c2874e130a4bbedec572b24eaf1afd893e02cb`, actual production
+HTTP handlers against pinned native 1.27.3 passed in 59.902s. The disposable launcher
+created ordinary owned actors, one private organization/repository and native
+review changes through supported APIs, then purged every owned fixture and logged
+out temporary Golf sessions. No runtime restart, new Docker resources, workflow
+execution, model usage or provider deployment was involved.
+
+The native proof covers pending create/update/submit/discard; exact encrypted
+saved inline transfer with the Golf draft preserved; pending and published inline
+edit/delete; COMMENT, APPROVED (including empty summary) and REQUEST_CHANGES;
+PR author pending inline COMMENT; terminal original replay after deletion;
+withheld empty PENDING; and native owner's hidden-pending denial.
+
+Local command:
+
+```sh
+GOLF_TEST_DATABASE_URL=postgres://postgres@127.0.0.1:45472/postgres?sslmode=disable \
+python3 scripts/pull-review-authoring-native-proof.py \
+  --stack-root ../golf-git --output .tmp/review084-native-proof
+```
+
+Host PostgreSQL/race review suites passed in 33.270s: lifecycle, inline edit/delete,
+privacy, stale/body/repository/self-review refusals, unknown no-resend and domain
+exclusion, immutable originals/events, terminal replay, qualified reply ancestry,
+and recipient-only versus shared activity without duplicate replay signals.
+The 70 serialized browser tests passed in 1.1 minutes. Browser qualification
+includes requested native draft/inline editors, explicit
+confirmation, exact saved-version transfer, unknown reload/inspection, account
+switch clearing, unsupported empty-draft withholding and empty approval, suggestion
+copy, and dark/light 390px controls. Fixture HTML cleanup must not cause Vite HMR
+reloads in other concurrent fixture pages; run serialized or disable HMR for this
+isolated browser qualifier.
+
+Remaining acceptance criteria: native pending append/rebase and multi-line/ranged
+suggestions; automatic suggestion commits with native expected-head CAS; complete
+external ancestry/thread resolution; protected approval eligibility, merge queues
+and every-ingress fences. Those are not verified by this slice. Full GitHub/Gitea
+parity and P0.8 remain open.
