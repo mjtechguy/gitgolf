@@ -1,3 +1,4 @@
+import {PullReviewSuggestions} from "./PullReviewSuggestions";
 import {PullReviewAuthoring} from "./PullReviewAuthoring";
 import {PullReviewCommentResolution} from './PullReviewCommentResolution';
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -40,6 +41,7 @@ function Comment({comment,response,props,refresh}:{comment:PullRequestReviewComm
   {response.review?.state!==PullRequestReviewState.PENDING?<PullReviewCommentResolution repository={props.repositoryKey} repositoryId={props.repositoryId} userId={props.userId} pull={props.pull} reviewId={props.review.id} reviewCommitId={props.review.commitId} comment={comment} onChanged={refresh}/>:null}
   <PullReviewAuthoring target={{$typeName:"golf.v1.PullReviewDraftTarget",repository:{$typeName:"golf.v1.RepositoryKey",...props.repositoryKey},repositoryId:props.repositoryId,pullRequestId:props.pull.id,number:props.pull.number}} userId={props.userId} pull={props.pull} review={response.review} comment={comment} onChanged={refresh}/>
   <MarkdownBody text={comment.body||'No comment text provided.'} label={`Inline comment ${comment.id} body, rendered Markdown`}/>
+  <PullReviewSuggestions comment={comment}/>
   <details className="metadata-details review-comment-details"><summary>Comment details</summary><dl className="review-metadata"><div><dt>Comment ID</dt><dd><code>{comment.id}</code></dd></div><div><dt>Review commit</dt><dd><code>{response.review?.commitId}</code></dd></div>{comment.commitId?<div><dt>Line / blame commit</dt><dd><code>{comment.commitId}</code></dd></div>:null}{comment.originalCommitId?<div><dt>Native original commit</dt><dd><code>{comment.originalCommitId}</code></dd></div>:null}{comment.resolved?<div><dt>Native resolver</dt><dd>{comment.resolver?.login||'Deleted or unavailable resolver'}</dd></div>:null}</dl>{comment.resolved?<p className="field-help">This comment has a native resolver record. It does not establish resolution of every comment at this location.</p>:null}{comment.diffHunk?<details className="metadata-details"><summary>Recorded diff context</summary><pre className="source-preview" tabIndex={0} aria-label={`Recorded diff context for comment ${comment.id}`}><code>{comment.diffHunk}</code></pre></details>:null}</details>
  </article>;
 }

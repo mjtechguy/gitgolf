@@ -41,6 +41,27 @@ func authoringChildrenUnchanged(before, after []*golfv1.PullRequestReviewComment
 	}
 	return reviewChildrenRevision(expected) == reviewChildrenRevision(after)
 }
+
+// Native pending and published comments have different presentation URLs. Both
+// observations independently validate repository/PR/comment URL binding; the
+// publication must preserve every other retained child field and multiplicity.
+func authoringPublishedChildrenUnchanged(before, after []*golfv1.PullRequestReviewComment) bool {
+	current := map[string]*golfv1.PullRequestReviewComment{}
+	for _, row := range after {
+		current[row.Id] = row
+	}
+	expected := make([]*golfv1.PullRequestReviewComment, 0, len(before))
+	for _, row := range before {
+		now := current[row.Id]
+		if now == nil {
+			return false
+		}
+		c := proto.Clone(row).(*golfv1.PullRequestReviewComment)
+		c.HtmlUrl = now.HtmlUrl
+		expected = append(expected, c)
+	}
+	return authoringChildrenUnchanged(expected, after, "", "", "")
+}
 func (s *Server) authoringPostflight(ctx context.Context, session string, token forgeCredential, m *golfv1.SubmitPullReviewAuthoringOperationRequest, before reviewAuthoringSnapshot, raw json.RawMessage, draft *golfv1.PullReviewDraft) (int64, error) {
 	if m.Kind == authorDiscard {
 		var row forgePullReview
@@ -112,11 +133,12 @@ func (s *Server) authoringPostflight(ctx context.Context, session string, token 
 			return 0, errPullSnapshotChanged
 		}
 	case authorSubmit:
-		if w.OwnPending || w.Review == nil || w.Review.State != m.Decision || w.Review.CommitId != before.pull.Head.SHA || w.Review.Body != m.Body || w.Review.User == nil || w.Review.User.Id != strconv.FormatInt(before.actor.ID, 10) || w.Review.Dismissed || w.Review.Stale || !proto.Equal(w.Review, wirePullReview(receipt)) || !authoringChildrenUnchanged(before.wire.Comments, w.Comments, "", "", "") {
+
+		if w.OwnPending || w.Review == nil || w.Review.State != m.Decision || w.Review.CommitId != before.pull.Head.SHA || w.Review.Body != m.Body || w.Review.User == nil || w.Review.User.Id != strconv.FormatInt(before.actor.ID, 10) || w.Review.Dismissed || w.Review.Stale || !proto.Equal(w.Review, wirePullReview(receipt)) || !authoringPublishedChildrenUnchanged(before.wire.Comments, w.Comments) {
 			return 0, errPullSnapshotChanged
 		}
 		original := before.wire.Review
-		if w.Review.Id != original.Id || w.Review.HtmlUrl != original.HtmlUrl || w.Review.CommentsCount != original.CommentsCount {
+		if w.Review.Id != original.Id || w.Review.CommentsCount != original.CommentsCount {
 			return 0, errPullSnapshotChanged
 		}
 	case authorEdit:

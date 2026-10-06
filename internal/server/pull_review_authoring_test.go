@@ -287,3 +287,39 @@ func TestReviewAuthoringPrivacyAndStalePostgres(t *testing.T) {
 		})
 	}
 }
+
+func TestReviewAuthoringOriginalAndExclusionPostgres(t *testing.T) {
+	f := newAuthoringFixture(t)
+	session := f.session(t, "pat")
+	m := f.input(t, session, authorCreate, "Private original text")
+	r, e := f.submit(session, m)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = f.db.Exec(`UPDATE golf_pull_review_authoring_operations SET original='replacement' WHERE operation_id=$1`, m.OperationId); e == nil {
+		t.Fatal("Original could be overwritten")
+	}
+	if _, e = f.db.Exec(`DELETE FROM golf_pull_review_authoring_operations WHERE operation_id=$1`, m.OperationId); e == nil {
+		t.Fatal("Original could be deleted")
+	}
+	if _, e = f.db.Exec(`UPDATE golf_pull_review_authoring_events SET phase='REJECTED'`); e == nil {
+		t.Fatal("Event history mutable")
+	}
+	duplicate := f.input(t, session, authorCreate, "Do not absorb existing native draft")
+	if _, e = f.submit(session, duplicate); e == nil || f.writes.Load() != 1 {
+		t.Fatal("Existing pending review adopted")
+	}
+	rebound := proto.Clone(m).(*golfv1.SubmitPullReviewAuthoringOperationRequest)
+	rebound.Body = "Different text"
+	rebound.BodyHash = replyBodyHash(rebound.Body)
+	if _, e = f.submit(session, rebound); e == nil {
+		t.Fatal("Original key rebound")
+	}
+	var events int
+	if e = f.db.QueryRow(`SELECT count(*) FROM golf_pull_review_authoring_events WHERE operation_id=(SELECT id FROM golf_pull_review_authoring_operations WHERE operation_id=$1)`, m.OperationId).Scan(&events); e != nil || events != 3 {
+		t.Fatal("Incorrect phase history", e, events)
+	}
+	if r.Phase != golfv1.DiscussionResourceOperationPhase_DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED {
+		t.Fatal("Missing complete outcome")
+	}
+}

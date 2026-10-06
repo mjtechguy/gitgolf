@@ -87,7 +87,8 @@ func TestReviewAuthoringNativeProof(t *testing.T) {
 	selection := &golfv1.GetPullReviewAuthoringStateRequest{Target: target}
 	stable := func() *golfv1.GetPullReviewAuthoringStateResponse {
 		t.Helper()
-		deadline := time.Now().Add(10 * time.Second)
+		deadline := time.Now().Add(20 * time.Second)
+		var settled time.Time
 		var previous *golfv1.GetPullReviewAuthoringStateResponse
 		for time.Now().Before(deadline) {
 			req := connect.NewRequest(selection)
@@ -98,9 +99,14 @@ func TestReviewAuthoringNativeProof(t *testing.T) {
 					t.Fatalf("Native state %s (%s)", connect.CodeOf(e), e.Error())
 				}
 				previous = nil
+				settled = time.Time{}
 			} else {
 				if previous != nil && r.Msg.PullRevision == previous.PullRevision && r.Msg.SnapshotRevision == previous.SnapshotRevision {
-					return r.Msg
+					if !settled.IsZero() && time.Since(settled) >= time.Second {
+						return r.Msg
+					}
+				} else {
+					settled = time.Now()
 				}
 				previous = r.Msg
 			}
@@ -124,7 +130,9 @@ func TestReviewAuthoringNativeProof(t *testing.T) {
 		req.Header().Set("Origin", s.config.PublicURL)
 		r, e := client.SubmitPullReviewAuthoringOperation(t.Context(), req)
 		if e != nil {
-			t.Fatalf("Native operation %s %s (%s)", m.Kind, connect.CodeOf(e), e.Error())
+			var phase string
+			_ = s.db.QueryRow(`SELECT phase FROM golf_pull_review_authoring_operations WHERE operation_id=$1`, m.OperationId).Scan(&phase)
+			t.Fatalf("Native operation %s %s phase=%s (%s)", m.Kind, connect.CodeOf(e), phase, e.Error())
 		}
 		if r.Msg.Operation.Phase != golfv1.DiscussionResourceOperationPhase_DISCUSSION_RESOURCE_OPERATION_PHASE_SUCCEEDED {
 			t.Fatalf("Native %s phase %s", m.Kind, r.Msg.Operation.Phase)

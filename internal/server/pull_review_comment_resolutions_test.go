@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -239,6 +240,19 @@ func TestReviewCommentReplyPostgres(t *testing.T) {
 	replay, e := client.SubmitPullReviewCommentInteraction(t.Context(), replayReq)
 	if e != nil || !proto.Equal(r.Msg.Operation, replay.Msg.Operation) || f.writes.Load() != 1 {
 		t.Fatal("reply replay", e)
+	}
+	var linked []*golfv1.PullRequestReviewComment
+	for _, raw := range []forgePullReviewComment{*f.reply.Load()} {
+		linked = append(linked, &golfv1.PullRequestReviewComment{Id: strconv.FormatInt(raw.ID, 10), ReviewId: "9", User: &golfv1.User{Id: "42"}, Path: raw.Path, NewLine: uint32(raw.Position)})
+	}
+	linked = append(linked, &golfv1.PullRequestReviewComment{Id: "9007199254740995", ReviewId: "9", User: &golfv1.User{Id: "43"}, Path: "space ü/file.go", NewLine: 2})
+	if e := f.s.enrichReviewReplyParents(t.Context(), 11, 9007199254740993, 7, forgePullReview{ID: 9, State: "COMMENT", CommitID: strings.Repeat("a", 40)}, linked); e != nil || linked[0].ReplyToCommentId != "9007199254740995" {
+		t.Fatal("Verified reply ancestry missing", e)
+	}
+	linked[0].ReplyToCommentId = ""
+	linked[1].Path = "another.go"
+	if e := f.s.enrichReviewReplyParents(t.Context(), 11, 9007199254740993, 7, forgePullReview{ID: 9, State: "COMMENT", CommitID: strings.Repeat("a", 40)}, linked); e != nil || linked[0].ReplyToCommentId != "" {
+		t.Fatal("Unmatched visible ancestry inferred", e)
 	}
 	var retained []byte
 	if e = f.db.QueryRow(`SELECT original FROM golf_pull_review_comment_operations WHERE operation_id=$1`, m.OperationId).Scan(&retained); e != nil || strings.Contains(string(retained), body) {
