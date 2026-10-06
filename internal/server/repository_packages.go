@@ -30,13 +30,13 @@ func packageSegment(v string) bool {
 func packageType(v string) bool {
 	return strings.Contains("|alpine|cargo|chef|composer|conan|conda|container|cran|debian|generic|go|helm|maven|npm|nuget|pub|pypi|rpm|rubygems|swift|terraform|vagrant|", "|"+v+"|") && v != "" && !strings.Contains(v, "|")
 }
-func packageWire(row nativePackage, repo Repository) (*golfv1.ForgePackage, error) {
-	if row.ID < 1 || !packageSegment(row.Name) || !packageType(row.Type) || !packageSegment(row.Version) || !validPullTime(row.Created) || row.Owner == nil || !validPullUser(row.Owner) || row.Repository == nil || !validRepository(*row.Repository) || row.Repository.ID != repo.ID || !strings.EqualFold(row.Repository.FullName, repo.FullName) || !strings.EqualFold(row.Owner.Login, strings.Split(repo.FullName, "/")[0]) || row.Creator == nil || !validPullUser(row.Creator) {
+func packageWire(row nativePackage, repo Repository, ownerID int64) (*golfv1.ForgePackage, error) {
+	if row.ID < 1 || !packageSegment(row.Name) || !packageType(row.Type) || !packageSegment(row.Version) || !validPullTime(row.Created) || row.Owner == nil || !validPullUser(row.Owner) || row.Owner.ID != ownerID || row.Repository == nil || !validRepository(*row.Repository) || row.Repository.ID != repo.ID || !strings.EqualFold(row.Repository.FullName, repo.FullName) || !strings.EqualFold(row.Owner.Login, strings.Split(repo.FullName, "/")[0]) || row.Creator == nil || !validPullUser(row.Creator) {
 		return nil, errInvalidForgeResponse
 	}
 	return &golfv1.ForgePackage{Id: strconv.FormatInt(row.ID, 10), Name: row.Name, Type: row.Type, Version: row.Version, CreatedAt: row.Created, CreatorLogin: row.Creator.Login}, nil
 }
-func (s *Server) withPackageRead(ctx context.Context, session string, token forgeCredential, key repositoryKey, id string, fn func(string, Repository) error) error {
+func (s *Server) withPackageRead(ctx context.Context, session string, token forgeCredential, key repositoryKey, id string, fn func(string, Repository, int64) error) error {
 	if _, e := discussionID(id); e != nil {
 		return e
 	}
@@ -47,25 +47,27 @@ func (s *Server) withPackageRead(ctx context.Context, session string, token forg
 		var config struct {
 			ID          int64 `json:"id"`
 			HasPackages *bool `json:"has_packages"`
+			Owner       *User `json:"owner"`
 		}
 		base, _ := repositoryPath(key)
 		if _, e := s.forge(ctx, http.MethodGet, base, token, nil, &config); e != nil {
 			return e
 		}
-		if config.ID != repo.ID || config.HasPackages == nil || !*config.HasPackages {
+		if config.ID != repo.ID || config.HasPackages == nil || !*config.HasPackages || config.Owner == nil || !validPullUser(config.Owner) || !strings.EqualFold(config.Owner.Login, key.Owner) {
 			return forgeError{http.StatusNotFound}
 		}
-		if e := fn("/packages/"+url.PathEscape(key.Owner), repo); e != nil {
+		if e := fn("/packages/"+url.PathEscape(key.Owner), repo, config.Owner.ID); e != nil {
 			return e
 		}
 		var after struct {
 			ID          int64 `json:"id"`
 			HasPackages *bool `json:"has_packages"`
+			Owner       *User `json:"owner"`
 		}
 		if _, e := s.forge(ctx, http.MethodGet, base, token, nil, &after); e != nil {
 			return e
 		}
-		if after.ID != repo.ID || after.HasPackages == nil || !*after.HasPackages {
+		if after.ID != repo.ID || after.HasPackages == nil || !*after.HasPackages || after.Owner == nil || after.Owner.ID != config.Owner.ID || !strings.EqualFold(after.Owner.Login, config.Owner.Login) {
 			return forgeError{http.StatusNotFound}
 		}
 		return nil
@@ -84,7 +86,7 @@ func (s *Server) ListRepositoryPackages(ctx context.Context, req *connect.Reques
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	result := &golfv1.ListRepositoryPackagesResponse{RepositoryId: m.RepositoryId, Page: &golfv1.PageResponse{}}
-	e = s.withPackageRead(ctx, s.cookieValue(req.Header()), token, keyFrom(m.Repository), m.RepositoryId, func(base string, repo Repository) error {
+	e = s.withPackageRead(ctx, s.cookieValue(req.Header()), token, keyFrom(m.Repository), m.RepositoryId, func(base string, repo Repository, ownerID int64) error {
 		return s.withNativePageSize(ctx, token, limit, func(span uint32) error {
 			path := base + "?" + pageQuery(page, span).Encode()
 			var rows []nativePackage
@@ -104,7 +106,7 @@ func (s *Server) ListRepositoryPackages(ctx context.Context, req *connect.Reques
 				if row.Repository == nil || row.Repository.ID != repo.ID {
 					continue
 				}
-				wire, e := packageWire(row, repo)
+				wire, e := packageWire(row, repo, ownerID)
 				if e != nil {
 					return e
 				}
@@ -143,13 +145,13 @@ func (s *Server) GetRepositoryPackageFiles(ctx context.Context, req *connect.Req
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	result := &golfv1.GetRepositoryPackageFilesResponse{RepositoryId: m.RepositoryId, PackageId: p.Id}
-	e = s.withPackageRead(ctx, s.cookieValue(req.Header()), token, keyFrom(m.Repository), m.RepositoryId, func(base string, repo Repository) error {
+	e = s.withPackageRead(ctx, s.cookieValue(req.Header()), token, keyFrom(m.Repository), m.RepositoryId, func(base string, repo Repository, ownerID int64) error {
 		path := base + "/" + p.Type + "/" + url.PathEscape(p.Name) + "/" + url.PathEscape(p.Version)
 		var before nativePackage
 		if _, e := s.forge(ctx, http.MethodGet, path, token, nil, &before); e != nil {
 			return e
 		}
-		wire, e := packageWire(before, repo)
+		wire, e := packageWire(before, repo, ownerID)
 		if e != nil {
 			return e
 		}
