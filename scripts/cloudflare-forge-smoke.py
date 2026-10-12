@@ -54,6 +54,7 @@ def main():
     parser.add_argument('--evidence', action='store_true', help='Qualify native Queues/Workflows/R2 PR evidence')
     parser.add_argument('--evidence-ai', action='store_true', help='Add one real Clef call through a private AI Gateway')
     parser.add_argument('--container-tests', action='store_true', help='Execute exact native PR head tests in a real container')
+    parser.add_argument('--workflow-shell', choices=['actions', 'gitlab'], help='With container tests: qualify one bounded native workflow shell profile')
     parser.add_argument('--ci-resilience', action='store_true', help='With container tests: concurrent replay, allocation cap, admitted cancellation and cross-repository denial')
     parser.add_argument('--agents', action='store_true', help='Execute two native-authorized concurrent PR agents in separate private forks')
     parser.add_argument('--delivery', action='store_true', help='Qualify automatic static delivery, real preview service RPC and one Browser Run snapshot; human Access login remains separate')
@@ -75,6 +76,8 @@ def main():
         parser.error('--evidence-ai requires --evidence')
     if args.container_tests and not args.evidence:
         parser.error('--container-tests requires --evidence')
+    if args.workflow_shell and (not args.container_tests or args.agents or args.delivery or args.ci_resilience or args.registry_host):
+        parser.error('--workflow-shell requires standalone --container-tests without agents, delivery, resilience or registry')
     if args.ci_resilience and (not args.container_tests or args.agents or args.demo_host):
         parser.error('--ci-resilience requires --container-tests and a standalone non-agent proof')
     if args.agents and not (args.container_tests and args.evidence_ai):
@@ -218,7 +221,7 @@ def main():
             data = response.read(maximum + 1)
             if len(data) > maximum:
                 raise RuntimeError('HTTP response exceeds proof bound')
-            if data in [b'error code: 1042\n', b'error code: 1104\n'] and routing_attempt < 10 and (method == 'GET' or path.rsplit('/', 1)[-1] in ['GetSession', 'CreateRepository', 'GetRepository', 'GetContents', 'ListBranches', 'ResolveRepositorySource', 'GetIssue', 'ListIssues', 'GetPullRequest', 'GetPullRequestDiscussion', 'ListIssueComments', 'ListPullRequestReviews', 'ListPullRequestChecks', 'GetIssueMutation', 'GetPullRequestReviewMutation'] or bool((payload or {}).get('idempotencyKey'))):
+            if data in [b'error code: 1042\n', b'error code: 1104\n'] and routing_attempt < 10 and (method == 'GET' or path.rsplit('/', 1)[-1] in ['GetSession', 'ListCapabilities', 'CreateRepository', 'GetRepository', 'GetContents', 'ListBranches', 'ResolveRepositorySource', 'GetIssue', 'ListIssues', 'GetPullRequest', 'GetPullRequestDiscussion', 'ListIssueComments', 'ListPullRequestReviews', 'ListPullRequestChecks', 'GetIssueMutation', 'GetPullRequestReviewMutation'] or bool((payload or {}).get('idempotencyKey'))):
                 time.sleep(1)
                 return http(path, payload, token, expected, routing_attempt + 1, method, raw)
             if response.status not in (expected if isinstance(expected, tuple) else (expected,)):
@@ -430,7 +433,8 @@ def main():
             state['resources']['test_image'] = {'tag': image, 'id': metadata['Id']}
             save()
             command('tag approved test image', ['docker', 'tag', metadata['Id'], image])
-            settings['tests'] = {'module': 'test_calc', 'image': image, 'image_id': metadata['Id']}
+            settings['tests'] = {'image': image, 'image_id': metadata['Id'],
+                                 **({'workflow': {'format': args.workflow_shell, 'path': '.gitlab-ci.yml' if args.workflow_shell == 'gitlab' else '.github/workflows/lint.yml'}} if args.workflow_shell else {'module': 'test_calc'})}
             if args.agents:
                 if cf('fresh agent container target', 'containers', 'applications', 'list', '--name', name + '-agents', '--per-page', '10'):
                     raise RuntimeError('Agent container target already exists')
@@ -573,6 +577,10 @@ def main():
             (source/'.github/workflows').mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT/'docs/compatibility/fixtures/requests-lint.yml', source/'.github/workflows/lint.yml')
             shutil.copyfile(ROOT/'docs/compatibility/fixtures/gitlab-shell.yml', source/'.gitlab-ci.yml')
+            if args.workflow_shell == 'actions':
+                (source/'.github/workflows/lint.yml').write_text('on: pull_request\njobs:\n  check:\n    runs-on: golf-native-linux\n    steps:\n      - run: export LOCAL=transient\n      - run: |\n          test -z "${LOCAL:-}"\n          test -f README.md\n          test "$(curl -s -o /dev/null -w \'%{http_code}\' https://example.com/)" = 403\n          printf "actions proof\\n"\n        shell: bash\n')
+            if args.workflow_shell == 'gitlab':
+                (source/'.gitlab-ci.yml').write_text('check:\n  before_script: export VALUE=ready\n  script:\n    - test "$VALUE" = ready\n    - test -f README.md\n    - test "$(curl -s -o /dev/null -w \'%{http_code}\' https://example.com/)" = 403\n    - printf "gitlab proof\\n"\n  after_script: printf "cleanup\\n"\n')
             (source/'README.md').write_text('Disposable pipeline qualification source.\n')
             git('stage canonical pipeline fixtures', '-C', source, 'add', '.github/workflows/lint.yml', '.gitlab-ci.yml', 'README.md')
         (source/'hello.txt').write_text('Canonical Git stored in Cloudflare Artifacts.\n')
@@ -777,7 +785,13 @@ def main():
             if args.container_tests:
                 tests = report.get('tests', {})
                 expected_tree = git('exact native PR test tree', '-C', source, 'rev-parse', 'HEAD^{tree}').stdout.decode().strip()
-                if tests.get('state') != 'PASSED' or tests.get('exitCode') != 0 or tests.get('cleanup') != 'destroyed' or tests.get('commitId') != head or tests.get('treeId') != expected_tree or 'Ran 2 tests' not in tests.get('stderr', '') or tests.get('deniedRequests', 0) < 1:
+                if args.workflow_shell == 'actions':
+                    output_ok = 'actions proof' in tests.get('stdout', '')
+                elif args.workflow_shell == 'gitlab':
+                    output_ok = 'gitlab proof' in tests.get('stdout', '') and 'cleanup' in tests.get('stdout', '')
+                else:
+                    output_ok = 'Ran 2 tests' in tests.get('stderr', '')
+                if tests.get('state') != 'PASSED' or tests.get('exitCode') != 0 or tests.get('cleanup') != 'destroyed' or tests.get('commitId') != head or tests.get('treeId') != expected_tree or not output_ok or tests.get('deniedRequests', 0) < 1 or args.workflow_shell and tests.get('contract') != 'golf.native.workflow-shell.v1':
                     state['checks']['container_test_failure'] = tests
                     save()
                     raise RuntimeError('Real exact-commit native container tests did not pass')
@@ -1075,8 +1089,15 @@ def main():
         (source/'hello.txt').write_text('New push invalidates old approvals and check selections.\n')
         git('stage later native push', '-C', source, 'add', 'hello.txt')
         if args.container_tests:
-            (source/'calc.py').write_text('def add(a, b):\n    return a - b\n')
-            git('stage deliberate native test failure', '-C', source, 'add', 'calc.py')
+            if args.workflow_shell == 'actions':
+                (source/'.github/workflows/lint.yml').write_text('on: pull_request\njobs:\n  check:\n    runs-on: golf-native-linux\n    steps:\n      - run: |\n          printf "actions fail\\n"\n          exit 7\n')
+                git('stage deliberate native workflow failure', '-C', source, 'add', '.github/workflows/lint.yml')
+            elif args.workflow_shell == 'gitlab':
+                (source/'.gitlab-ci.yml').write_text('check:\n  script: exit 7\n  after_script: echo cleanup\n')
+                git('stage deliberate native workflow failure', '-C', source, 'add', '.gitlab-ci.yml')
+            else:
+                (source/'calc.py').write_text('def add(a, b):\n    return a - b\n')
+                git('stage deliberate native test failure', '-C', source, 'add', 'calc.py')
         git('commit later native push', '-C', source, 'commit', '-m', 'Invalidate old review')
         next_head = git('later feature identity', '-C', source, 'rev-parse', 'HEAD').stdout.decode().strip()
         git('advance native feature branch', '-C', source, 'push', repository['cloneUrl'], 'HEAD:refs/heads/feature')
@@ -1129,7 +1150,13 @@ def main():
             failed_report = http('/native/pr-evidence', {**failed_inspection, 'action': 'report'}, token=reader)
             tests = failed_report['report']['tests']
             failed_tree = git('exact failing native PR tree', '-C', source, 'rev-parse', 'HEAD^{tree}').stdout.decode().strip()
-            if tests['state'] != 'FAILED' or tests['exitCode'] != 1 or tests['cleanup'] != 'destroyed' or tests['commitId'] != next_head or tests['treeId'] != failed_tree or 'FAIL: test_add' not in tests['stderr'] or failed_report['job']['stale']:
+            if args.workflow_shell == 'actions':
+                failed_output = 'actions fail' in tests.get('stdout', '')
+            elif args.workflow_shell == 'gitlab':
+                failed_output = 'cleanup' in tests.get('stdout', '')
+            else:
+                failed_output = 'FAIL: test_add' in tests['stderr']
+            if tests['state'] != 'FAILED' or tests['exitCode'] != (7 if args.workflow_shell else 1) or tests['cleanup'] != 'destroyed' or tests['commitId'] != next_head or tests['treeId'] != failed_tree or not failed_output or failed_report['job']['stale']:
                 raise RuntimeError('Native failed tests became successful or lost source authority')
             state['checks']['native_failed_tests'] = tests
             state['checks']['failed_test_job_id'] = failed_job['id']

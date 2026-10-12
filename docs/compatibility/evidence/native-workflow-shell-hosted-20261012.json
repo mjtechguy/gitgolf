@@ -1,0 +1,83 @@
+{
+  "schema": "golf.native.workflow-shell.hosted.v1",
+  "date": "2026-10-12",
+  "contract": "golf.native.workflow-shell.v1",
+  "profiles": {
+    "gitlab": {
+      "run": "golf-native-20261012-80d88cc7",
+      "outcome": "passed",
+      "passing": {
+        "state": "PASSED",
+        "exitCode": 0,
+        "cleanup": "destroyed",
+        "commitId": "c7ba8f4750a83424f262fdb1ec5c8bd3fb291ad4",
+        "treeId": "ad519f061f6a45ca76d8703b5d0bcb355bc291ba",
+        "workflowSha256": "e19dcc3d7a022576433e024dc4fcbdc28dc31f59cb33a942f9ff85ba0a11d95d",
+        "policySha256": "f83d493684c1908cadbd31ea639b3a64948163d81f6a973f5f94fb0f30e976f4",
+        "deniedRequests": 1,
+        "workflowPath": ".gitlab-ci.yml",
+        "workflowBlobId": "704e18cbf0c7877e3fea9df559215b98e6a0ad48",
+        "publicReportOmittedScriptBody": true
+      },
+      "deliberateFailure": {
+        "state": "FAILED",
+        "exitCode": 7,
+        "cleanup": "destroyed",
+        "commitId": "ac89e9385b8e948a41b4c29a81ca9aa3a3ca0f55",
+        "treeId": "c4a88b1f68d6db3874eaa26bb4d002882feca12e",
+        "workflowSha256": "ea2b999313928c36d01010081f319be0263d1d9a2d9979168bdc2265f3c23435",
+        "policySha256": "f83d493684c1908cadbd31ea639b3a64948163d81f6a973f5f94fb0f30e976f4",
+        "deniedRequests": 0,
+        "workflowPath": ".gitlab-ci.yml",
+        "workflowBlobId": "6b0374a0a721ccf20bf57e2e53a58f0e857b0857",
+        "publicReportOmittedScriptBody": true
+      },
+      "staleAfterPush": true,
+      "readerRevocation": true,
+      "ownedCleanupCategories": 11,
+      "allOwnedCategoriesAbsent": true
+    },
+    "actions": {
+      "run": "golf-native-20261012-de634d00",
+      "outcome": "passed",
+      "passing": {
+        "state": "PASSED",
+        "exitCode": 0,
+        "cleanup": "destroyed",
+        "commitId": "2ac07d1b0fd261c26fb340f2b4502868210c90b3",
+        "treeId": "ad877dfc7b437104fda04cfd0492daa09e49e13b",
+        "workflowSha256": "c804749aafc1186f8eaada69f687182159bc9004cf8b0f62ba3d21b74a4f41aa",
+        "policySha256": "4a259e3cdf0efd6a1e554aae827dba428997f6a3ae236593c9668c61396a5b0b",
+        "deniedRequests": 1,
+        "workflowPath": ".github/workflows/lint.yml",
+        "workflowBlobId": "d6ef5e5e822c7ffb94b383e6465ae050a33587f8",
+        "publicReportOmittedScriptBody": true
+      },
+      "deliberateFailure": {
+        "state": "FAILED",
+        "exitCode": 7,
+        "cleanup": "destroyed",
+        "commitId": "b910f875de2f22ce4819585c10eedc7ecff73920",
+        "treeId": "db74c1fc8b1c8880625be2cbd15528aaa0b7b021",
+        "workflowSha256": "cf3ddaaa31002e427352809efb1d1d830ff60741a7a774cc97709769ff60b4bd",
+        "policySha256": "4a259e3cdf0efd6a1e554aae827dba428997f6a3ae236593c9668c61396a5b0b",
+        "deniedRequests": 0,
+        "workflowPath": ".github/workflows/lint.yml",
+        "workflowBlobId": "b0cdc242e740772fb86b17ad87d2ce6182ee2538",
+        "publicReportOmittedScriptBody": true
+      },
+      "staleAfterPush": true,
+      "readerRevocation": true,
+      "ownedCleanupCategories": 11,
+      "allOwnedCategoriesAbsent": true
+    }
+  },
+  "interruptedAttempt": {
+    "run": "golf-native-20261012-f08f0a59",
+    "outcome": "failed",
+    "reason": "Cloudflare routing error 1042 during read-only ListCapabilities after Git push and clone",
+    "ownedCleanupCategories": 11,
+    "allOwnedCategoriesAbsent": true
+  },
+  "remaining": "This qualifies only the bounded single-job shell profile on disposable hosted Containers. Full Actions/GitLab syntax, user-managed runner pools, production profile migration, and retained load/recovery remain open."
+}

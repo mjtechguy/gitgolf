@@ -58,9 +58,9 @@ from that customer, not hardware attestation or proof of an honest host.
 |---|---|---|
 | CFCR distribution | Docker/regctl/Cosign; hosted OCI 71 passed, eight conditional skips | Broader client/version and large-object hosted matrix |
 | Scanner engines | Real Docker matrix; hosted standard-3 OpenSSL and standard-4 Java five-report scans | Full registry release, burst/load and larger hosted images |
-| Native CI publishing | Exact-commit image publication and Docker pull | General container builds and Actions/GitLab native execution |
+| Native CI publishing | Exact-commit image publication and Docker pull | General container builds and broader Actions/GitLab execution |
 | Portable Actions | Maintained engine, actual Requests workflow, Forgejo execution | Broader compatibility catalog and isolated runner enrollment |
-| Native job execution | Approved Python-module tests and lifecycle gates | General Linux workflow executor adapter |
+| Native job execution | Approved Python-module tests and hosted single-job Actions/GitLab shell profile | General Linux workflow executor adapter |
 | Self-hosted runners | Existing portable Docker runner, leases and named pools | Native/CFCR outbound protocol and complete admin UX |
 | Native collaboration | Shared UI with bounded implemented adapters | Full repository parity checklist remains open |
 | Deployment lifecycle | Protected previews, permissions, cleanup and bounded schema18 release/rollback rehearsal | Migration-bearing rollback and retained rollout |
@@ -507,6 +507,16 @@ container cleanup. Jobs captured before the contract was added can finish during
 rollout. This is the existing managed PR-test recipe with a versioned boundary.
 The portable Actions catalogs, GitLab shell plan, lease generation, pool placement
 and customer runner transport still need their native adapter and acceptance runs.
+
+An opt-in `golf.native.workflow-shell.v1` PR evidence profile now admits one
+operator-selected Actions or GitLab shell job from the exact PR head blob. It
+uses the existing Container authority, Git/registry brokers and cleanup fence;
+unknown syntax is refused before execution. [The supported forms and setup](NATIVE_WORKFLOW_SHELL.md)
+are deliberately narrow. Local parser, admission, worker and report tests pass.
+[Disposable hosted Actions and GitLab jobs](compatibility/evidence/native-workflow-shell-hosted-20261012.json)
+also passed success, deliberate failure, stale evidence, revocation and cleanup
+checks. The profile does not reuse the portable `act` catalog or add runner
+enrollment, pool placement or full language compatibility.
 
 ### P6 — Complete build/publish/evidence/deploy vertical
 

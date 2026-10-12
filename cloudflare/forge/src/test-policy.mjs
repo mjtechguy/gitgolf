@@ -1,14 +1,18 @@
 export const testTerminal = new Set(['PASSED', 'FAILED', 'TIMED_OUT', 'CANCELLED', 'LOST']);
 export const nativeTestContract = 'golf.native.pr-test.v1';
+export { nativeWorkflowContract } from './native-workflow.mjs';
+import { nativeWorkflowContract, nativeWorkflowPath } from './native-workflow.mjs';
 export const testModuleOK = value => typeof value === 'string' && /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,8}$/.test(value) && value.length <= 128;
 export const executionDiagnostic = error => String(error?.message || 'Native execution failed')
   .replace(/golf_native_[A-Za-z0-9_-]+|art_v1_[^\s"']+|cfcr\.[A-Za-z0-9_-]+\.[a-f0-9]{64}|(?:Bearer|Basic)\s+[^\s"']+|https?:\/\/[^\s"']+/gi, '[private]').slice(0, 512);
 export function testPolicy(env) {
-  return env.TEST_EXECUTION_ENABLED === 'true' && testModuleOK(env.TEST_MODULE) && /^[a-f0-9]{64}$/.test(env.TEST_POLICY_SHA256 || '') && Boolean(env.testTasks);
+  return env.TEST_EXECUTION_ENABLED === 'true' && (env.TEST_WORKFLOW_FORMAT ? nativeWorkflowPath(env.TEST_WORKFLOW_FORMAT, env.TEST_WORKFLOW_PATH) : testModuleOK(env.TEST_MODULE)) &&
+    /^[a-f0-9]{64}$/.test(env.TEST_POLICY_SHA256 || '') && Boolean(env.testTasks);
 }
 export function testResult(value, jobId, source) {
-  if (!value || source.contract !== undefined && source.contract !== nativeTestContract || value.contract !== source.contract || value.jobId !== jobId || value.commitId !== source.commitId || value.treeId !== source.treeId ||
-      !testTerminal.has(value.state) || value.cleanup !== 'destroyed' || value.module !== source.module || value.policySha256 !== source.policySha256 ||
+  const workflow = source?.contract === nativeWorkflowContract;
+  if (!value || source.contract !== undefined && ![nativeTestContract, nativeWorkflowContract].includes(source.contract) || value.contract !== source.contract || value.jobId !== jobId || value.commitId !== source.commitId || value.treeId !== source.treeId ||
+      !testTerminal.has(value.state) || value.cleanup !== 'destroyed' || (workflow ? !/^[a-f0-9]{64}$/.test(source.workflowSha256 || '') || value.workflowSha256 !== source.workflowSha256 : value.module !== source.module) || value.policySha256 !== source.policySha256 ||
       !Number.isSafeInteger(value.finishedAt) || typeof value.stdout !== 'string' || typeof value.stderr !== 'string' ||
       !Number.isSafeInteger(value.deniedRequests) || value.deniedRequests < 0 || value.deniedRequests > 1000000 ||
       new TextEncoder().encode(value.stdout + value.stderr).length > 65536 ||
@@ -16,7 +20,8 @@ export function testResult(value, jobId, source) {
       value.state === 'PASSED' && value.exitCode !== 0 || value.state === 'FAILED' && (value.exitCode === null || value.exitCode === 0) ||
       value.state === 'LOST' && (!['admitted', 'dispatch', 'start', 'clone', 'test', 'terminal'].includes(value.failureStage) || typeof value.diagnostic !== 'string' || value.diagnostic.length > 512)) throw Error('Invalid test execution result');
   if(value.image && (!source.registry || value.state!=='PASSED' || value.image.registry!==source.registry.origin || value.image.repository!==source.registry.name || value.image.tag!=='ci-'+jobId || value.image.commitId!==source.commitId || !/^sha256:[a-f0-9]{64}$/.test(value.image.digest||'') || Object.keys(value.image).some(k=>!['registry','repository','tag','digest','commitId'].includes(k)))) throw Error('Invalid job image receipt');
-  return { ...(source.contract ? { contract: source.contract } : {}), jobId, commitId: source.commitId, treeId: source.treeId, module: source.module, policySha256: source.policySha256,
+  return { ...(source.contract ? { contract: source.contract } : {}), jobId, commitId: source.commitId, treeId: source.treeId,
+    ...(workflow ? { workflowSha256: source.workflowSha256 } : { module: source.module }), policySha256: source.policySha256,
     ...(value.image?{image:value.image}:{}),
     state: value.state, cleanup: 'destroyed', deniedRequests: value.deniedRequests, exitCode: value.exitCode, stdout: value.stdout, stderr: value.stderr, finishedAt: value.finishedAt,
     ...(value.state === 'LOST' ? { failureStage: value.failureStage, diagnostic: value.diagnostic } : {}) };

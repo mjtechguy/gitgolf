@@ -3,6 +3,7 @@ import { Files } from '@cloudflare/sandbox';
 import { digest, uuidOK } from './common.mjs';
 import { bounded, sha, validRef } from './git.mjs';
 import { executionDiagnostic, nativeTestContract, testModuleOK, testTerminal } from './test-policy.mjs';
+import { nativeWorkflowContract, nativeWorkflowPath, nativeWorkflowPlanOK } from './native-workflow.mjs';
 
 const trust = { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: '/auth',
   GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0',
@@ -32,9 +33,15 @@ export class PRTestTask extends DurableObject {
   set record(value) { this.ctx.storage.kv.put('test', value); }
   owner() { return this.ctx.exports.Workspace.getByName(this.env.WORKSPACE_SLUG); }
   async create(input) {
-    if (!input || input.contract !== undefined && input.contract !== nativeTestContract || Object.keys(input).some(key => !['contract', 'jobId', 'commitId', 'treeId', 'branch', 'module', 'policySha256', 'remote', 'deadline', 'registry'].includes(key)) ||
+    const workflow = input?.contract === nativeWorkflowContract;
+    if (!input || input.contract !== undefined && ![nativeTestContract, nativeWorkflowContract].includes(input.contract) ||
+        Object.keys(input).some(key => !(workflow ? ['contract', 'jobId', 'commitId', 'treeId', 'branch', 'workflow', 'workflowSha256', 'policySha256', 'remote', 'deadline', 'registry'] :
+          ['contract', 'jobId', 'commitId', 'treeId', 'branch', 'module', 'policySha256', 'remote', 'deadline', 'registry']).includes(key)) ||
         !uuidOK(input.jobId) || !sha(input.commitId) || !sha(input.treeId) || typeof input.branch !== 'string' || !validRef('refs/heads/' + input.branch) ||
-        !testModuleOK(input.module) || !/^[a-f0-9]{64}$/.test(input.policySha256 || '') || !Number.isSafeInteger(input.deadline) || input.deadline <= Date.now() || input.deadline > Date.now() + 600000 ||
+        (workflow ? !input.workflow || Object.keys(input.workflow).some(key => !['path', 'blobId', 'plan'].includes(key)) ||
+          !nativeWorkflowPath(input.workflow.plan?.format, input.workflow.path) || !sha(input.workflow.blobId) || !nativeWorkflowPlanOK(input.workflow.plan) ||
+          !/^[a-f0-9]{64}$/.test(input.workflowSha256 || '') || input.workflowSha256 !== await digest(JSON.stringify(input.workflow)) : !testModuleOK(input.module)) ||
+        !/^[a-f0-9]{64}$/.test(input.policySha256 || '') || !Number.isSafeInteger(input.deadline) || input.deadline <= Date.now() || input.deadline > Date.now() + 600000 ||
         typeof input.remote !== 'string' || !/^https:\/\/[a-f0-9]{32}\.artifacts\.cloudflare\.net\/git\/[a-z0-9-]{3,63}\/repo-[a-f0-9]{32}\.git$/.test(input.remote)) throw Error('Invalid test admission');
     if(input.registry && (typeof input.registry !== 'object' || Array.isArray(input.registry) || Object.keys(input.registry).some(key=>!['origin','name'].includes(key)) || this.env.REGISTRY_CI_ENABLED!=='true' || input.registry.origin!==this.env.REGISTRY_ORIGIN || !new RegExp('^'+this.env.WORKSPACE_SLUG+'/[a-z0-9][a-z0-9._-]{0,99}$').test(input.registry.name))) throw Error('Invalid registry admission');
     const hash = await digest(JSON.stringify(input));
@@ -75,15 +82,45 @@ export class PRTestTask extends DurableObject {
     await this.checked(['timeout', '--signal=TERM', '--kill-after=5s', '60s', 'git', 'clone', '--depth', '1', '--branch', r.branch, '--', r.remote, '/workspace/repo'], '/workspace');
     const head = await this.checked(['git', 'rev-parse', 'HEAD']), tree = await this.checked(['git', 'rev-parse', 'HEAD^{tree}']);
     if (head !== r.commitId || tree !== r.treeId) throw Error('Selected source moved');
+    if (r.contract === nativeWorkflowContract && await this.checked(['git', 'rev-parse', 'HEAD:' + r.workflow.path]) !== r.workflow.blobId) throw Error('Selected workflow moved');
     if ((await this.owner().evidence(r.jobId, 'authorize-test')).state !== 'AUTHORIZED') return this.finish('CANCELLED');
     this.phase('test');
-    const script = 'ulimit -f 32; timeout --signal=TERM --kill-after=5s 60s python3 -m unittest -v "$1" > /workspace/task/stdout 2> /workspace/task/stderr';
-    const process = await this.container.exec(['/bin/sh', '-c', script, 'golf-test', r.module],
-      { cwd: '/workspace/repo', env: { ...trust, ...(r.registry?{GOLF_REGISTRY:r.registry.origin,GOLF_IMAGE:r.registry.name+':ci-'+r.jobId,GOLF_COMMIT:r.commitId}:{}) }, user: '1000:1000' });
-    const output = await process.output();
+    const environment = { ...trust, ...(r.registry?{GOLF_REGISTRY:r.registry.origin,GOLF_IMAGE:r.registry.name+':ci-'+r.jobId,GOLF_COMMIT:r.commitId}:{}) };
+    const run = async (argv, suffix = '', extraEnv = {}) => {
+      const seconds = Math.min(60, Math.ceil((r.deadline - Date.now()) / 1000));
+      if (seconds <= 0) return { exitCode: 124, stdout: '', stderr: '' };
+      const script = `ulimit -f 32; timeout --signal=TERM --kill-after=5s ${seconds}s "$@" > /workspace/task/stdout${suffix} 2> /workspace/task/stderr${suffix}`;
+      const process = await this.container.exec(['/bin/sh', '-c', script, 'golf-test', ...argv], { cwd: '/workspace/repo', env: { ...environment, ...extraEnv }, user: '1000:1000' });
+      const output = await process.output();
+      const read = async path => new TextDecoder('utf-8', { fatal: true }).decode(await bounded((await this.files.readFile(path + suffix)).body, 32768));
+      return { exitCode: output.exitCode, stdout: await read('/workspace/task/stdout'), stderr: await read('/workspace/task/stderr') };
+    };
+    let output;
+    if (r.contract === nativeWorkflowContract) {
+      const logs = { stdout: '', stderr: '' };
+      for (let i = 0; i < r.workflow.plan.steps.length; i++) {
+        if (this.record.stage !== 'test') return;
+        if (Date.now() >= r.deadline) return this.finish('TIMED_OUT');
+        if ((await this.owner().evidence(r.jobId, 'authorize-test')).state !== 'AUTHORIZED') return this.finish('CANCELLED');
+        const step = r.workflow.plan.steps[i];
+        const argv = step.shell === 'sh' ? ['/bin/sh', '-e', '-c', step.run] : step.shell === 'bash' ? ['/bin/bash', '--noprofile', '--norc', '-eo', 'pipefail', '-c', step.run] : ['/bin/bash', '-e', '-c', step.run];
+        output = await run(argv, String(i));
+        logs.stdout += output.stdout; logs.stderr += output.stderr;
+        if (new TextEncoder().encode(logs.stdout + logs.stderr).length > 65536) throw Error('Native workflow log limit');
+        if (output.exitCode !== 0) break;
+      }
+      if (r.workflow.plan.afterScript && output?.exitCode !== 124 && output?.exitCode !== 137) {
+        if (this.record.stage !== 'test') return;
+        if (Date.now() >= r.deadline) return this.finish('TIMED_OUT');
+        if ((await this.owner().evidence(r.jobId, 'authorize-test')).state !== 'AUTHORIZED') return this.finish('CANCELLED');
+        const after = await run(['/bin/sh', '-e', '-c', r.workflow.plan.afterScript], 'after', { CI_JOB_STATUS: output.exitCode === 0 ? 'success' : 'failed' });
+        logs.stdout += after.stdout; logs.stderr += after.stderr;
+        if (new TextEncoder().encode(logs.stdout + logs.stderr).length > 65536) throw Error('Native workflow log limit');
+        if (Date.now() >= r.deadline) return this.finish('TIMED_OUT');
+      }
+      output = { ...output, ...logs };
+    } else output = await run(['python3', '-m', 'unittest', '-v', r.module]);
     if (this.record.stage !== 'test') return;
-    const read = async path => new TextDecoder('utf-8', { fatal: true }).decode(await bounded((await this.files.readFile(path)).body, 32768));
-    const stdout = await read('/workspace/task/stdout'), stderr = await read('/workspace/task/stderr');
     let image;
     if(output.exitCode===0 && r.registry) {
       const tag='ci-'+r.jobId, response=await this.owner().testRegistry(r.jobId,new Request(r.registry.origin+'/v2/'+r.registry.name+'/manifests/'+tag));
@@ -95,7 +132,7 @@ export class PRTestTask extends DurableObject {
       }
     }
     await this.finish([124, 137].includes(output.exitCode) ? 'TIMED_OUT' : output.exitCode === 0 ? 'PASSED' : 'FAILED',
-      { exitCode: output.exitCode, stdout, stderr, ...(image?{image}:{}) });
+      { exitCode: output.exitCode, stdout: output.stdout, stderr: output.stderr, ...(image?{image}:{}) });
   }
   async finish(state, output = {}) {
     const r = this.record;
@@ -117,7 +154,8 @@ export class PRTestTask extends DurableObject {
   status() {
     const r = this.record;
     if (!r) return { state: 'ABSENT' };
-    return { ...(r.contract ? { contract: r.contract } : {}), jobId: r.jobId, commitId: r.commitId, treeId: r.treeId, module: r.module, policySha256: r.policySha256,
+    return { ...(r.contract ? { contract: r.contract } : {}), jobId: r.jobId, commitId: r.commitId, treeId: r.treeId,
+      ...(r.contract === nativeWorkflowContract ? { workflowSha256: r.workflowSha256 } : { module: r.module }), policySha256: r.policySha256,
       state: r.cleanup === 'failed' ? 'CLEANUP_FAILED' : testTerminal.has(r.state) && !r.cleanup ? 'FINALIZING' : r.state,
       cleanup: r.cleanup, deniedRequests: r.deniedRequests, exitCode: r.exitCode, stdout: r.stdout || '', stderr: r.stderr || '', finishedAt: r.finishedAt,
       ...(r.image && r.state==='PASSED' && r.cleanup==='destroyed'?{image:r.image}:{}),

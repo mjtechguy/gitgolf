@@ -220,6 +220,27 @@ class NativeSetup(unittest.TestCase):
             initialize(*args, evidence, policy)
             self.assertEqual(json.loads((root/'forge.json').read_text())['tests'], policy)
 
+    def test_native_workflow_setup_requires_one_exact_profile_and_keeps_agents_separate(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)/'native'
+            args = (root, 'a'*32, 'golf.example.com', 'golf-native', 'team', 'golf-native',
+                    '12345678-1234-4234-8234-123456789012', 'golf-native', 'owner')
+            evidence = {'bucket': 'golf-evidence', 'queue': 'golf-evidence', 'workflow': 'golf-evidence', 'daily_limit': 2, 'allow_ai': False}
+            base = {'image': 'golf-cf-agent:qualification', 'image_id': 'sha256:' + 'e'*64}
+            for workflow in [{'format': 'actions', 'path': '../private.yml'}, {'format': 'gitlab', 'path': 'ci.yml'},
+                             {'format': 'actions'}, {'format': 'unknown', 'path': '.gitlab-ci.yml'}]:
+                with self.assertRaises(ValueError):
+                    initialize(*args, evidence, {**base, 'workflow': workflow})
+                self.assertFalse(root.exists())
+            for format, path in [('actions', '.github/workflows/pr.yml'), ('gitlab', '.gitlab-ci.yml')]:
+                target = root.with_name(format)
+                profile = {**base, 'workflow': {'format': format, 'path': path}}
+                initialize(target, *args[1:], evidence, profile)
+                self.assertEqual(json.loads((target/'forge.json').read_text())['tests'], profile)
+            with self.assertRaises(ValueError):
+                initialize(*args, {**evidence, 'allow_ai': True}, {**base, 'workflow': {'format': 'gitlab', 'path': '.gitlab-ci.yml'}}, agent_path='calc.py')
+            self.assertFalse(root.exists())
+
     def test_existing_native_evidence_migration_preserves_job_identity(self):
         schema = (ROOT/'cloudflare/forge/schema.sql').read_text()
         before_webhooks = schema.split('-- Native webhook configuration and transactional outbox.')[0]

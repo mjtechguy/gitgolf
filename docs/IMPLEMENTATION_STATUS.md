@@ -2939,3 +2939,27 @@ records the failed attempts and this passing path. This proves a bounded static
 OCI bundle flow under a permissive severity setting; it does not qualify
 container execution, a general runner, signature/provenance approvals, or a
 retained rollout. Browser interaction remains unqualified.
+
+## Native Actions/GitLab shell profile (2026-10-12)
+
+Cloudflare native now has an opt-in versioned single-job shell profile for PR
+evidence. The operator pins either an Actions workflow under
+`.github/workflows/` or `.gitlab-ci.yml`; source is compiled from the exact PR
+head blob and checked again after the Container clone. Actions `run` steps keep
+fresh shell boundaries. GitLab `before_script` and `script` share a shell, while
+`after_script` is separate and does not mask the main result. The existing
+authority and registry brokers, deadline, duplicate-admission and container
+cleanup fences remain in force. Evidence reports include workflow identity and
+hashes, without the compiled script body. See [profile and limitations](NATIVE_WORKFLOW_SHELL.md).
+
+Local qualification: the complete `make cloudflare-check`, isolated worker and
+parser tests, and the native entry esbuild bundle pass; the pinned YAML runtime
+has no production dependency audit findings. The [sanitized hosted receipt](compatibility/evidence/native-workflow-shell-hosted-20261012.json)
+records disposable Actions and GitLab Container runs. Both profiles passed a
+job, reported an intentional exit-7 failure, rejected stale evidence after a
+push, revoked reader access and removed all 11 owned resource categories. The
+public reports omitted compiled script bodies. A separate Actions attempt hit
+Cloudflare routing error 1042 during a read-only capability call; its resources
+were removed and the read-only retry list was corrected before the passing run.
+No production profile migration, user-managed pool, maintained Actions `uses`
+execution, broad GitLab feature set, or runner UI is qualified.

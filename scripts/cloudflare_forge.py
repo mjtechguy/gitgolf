@@ -43,15 +43,24 @@ def initialize(directory, account, host, worker, workspace, namespace, database_
         if evidence['allow_ai'] and (not isinstance(evidence.get('gateway'), str) or not re.fullmatch('[a-z0-9][a-z0-9-]{1,61}[a-z0-9]', evidence['gateway'])):
             raise ValueError('AI advice requires an allocated private AI Gateway')
     if tests is not None:
-        if evidence is None or not isinstance(tests.get('module'), str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,8}', tests['module']) or len(tests['module']) > 128:
-            raise ValueError('Container tests require evidence allocation and an approved Python unittest module')
+        if not isinstance(tests, dict) or set(tests) - {'module', 'workflow', 'image', 'image_id'} or evidence is None:
+            raise ValueError('Container tests require an evidence allocation')
+        workflow = tests.get('workflow')
+        if workflow is not None:
+            if 'module' in tests or not isinstance(workflow, dict) or set(workflow) != {'format', 'path'} or not (
+                    workflow['format'] == 'actions' and isinstance(workflow['path'], str) and
+                    re.fullmatch(r'\.github/workflows/[A-Za-z0-9][A-Za-z0-9._-]{0,95}\.ya?ml', workflow['path']) or
+                    workflow['format'] == 'gitlab' and workflow['path'] == '.gitlab-ci.yml'):
+                raise ValueError('Choose one approved native Actions or GitLab workflow path')
+        elif not isinstance(tests.get('module'), str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,8}', tests['module']) or len(tests['module']) > 128:
+            raise ValueError('Container tests require an approved Python unittest module')
         if not isinstance(tests.get('image'), str) or not re.fullmatch(r'[a-z0-9][a-z0-9._/-]{0,127}:[a-z0-9][a-z0-9._-]{0,63}', tests['image']):
             raise ValueError('Explicit built container image tag required')
         if not isinstance(tests.get('image_id'), str) or not re.fullmatch('sha256:[a-f0-9]{64}', tests['image_id']):
             raise ValueError('Approved local Docker image ID required')
     if analytics is not None and (evidence is None or not isinstance(analytics, str) or not re.fullmatch('[A-Za-z_][A-Za-z0-9_]{0,63}', analytics)):
         raise ValueError('Evidence allocation and canonical Analytics Engine dataset required')
-    if agent_path is not None and (tests is None or evidence is None or not evidence['allow_ai'] or not isinstance(agent_path, str) or
+    if agent_path is not None and (tests is None or tests.get('workflow') or evidence is None or not evidence['allow_ai'] or not isinstance(agent_path, str) or
             len(agent_path) > 200 or len(worker) > 56 or any(not re.fullmatch('[A-Za-z0-9][A-Za-z0-9_.-]{0,63}', p) or '..' in p for p in agent_path.split('/')) or
             agent_path == tests['module'].replace('.', '/') + '.py'):
         raise ValueError('Agent execution requires approved source path, container tests and private AI allocation')
@@ -164,7 +173,9 @@ def main():
     parser.add_argument('--evidence-ai', action='store_true')
     parser.add_argument('--evidence-gateway')
     parser.add_argument('--test-module', help='Operator-approved Python unittest module; enables container tests')
-    parser.add_argument('--test-image', help='Built native container image tag, paired with --test-module')
+    parser.add_argument('--test-workflow-format', choices=['actions', 'gitlab'], help='Operator-approved PR shell workflow format')
+    parser.add_argument('--test-workflow-path', help='Exact workflow path in each PR head')
+    parser.add_argument('--test-image', help='Built native container image tag, paired with a module or workflow')
     parser.add_argument('--test-image-id', help='Approved immutable local Docker image ID, sha256:HEX')
     parser.add_argument('--analytics-dataset', help='Optional Analytics Engine completion metrics; creates data on first event')
     parser.add_argument('--agent-path', help='Optional single approved source file; enables isolated native agent proposals')
@@ -208,7 +219,11 @@ def main():
                         'daily_limit': args.evidence_daily_limit, 'allow_ai': args.evidence_ai, 'gateway': args.evidence_gateway}
             if args.evidence_dead_letter_queue:
                 evidence['dead_letter'] = args.evidence_dead_letter_queue
-        tests = {'module': args.test_module, 'image': args.test_image, 'image_id': args.test_image_id} if args.test_module or args.test_image or args.test_image_id else None
+        tests = {'image': args.test_image, 'image_id': args.test_image_id,
+                 **({'module': args.test_module} if args.test_module else {}),
+                 **({'workflow': {'format': args.test_workflow_format, 'path': args.test_workflow_path}} if args.test_workflow_format or args.test_workflow_path else {})}
+        if not any([args.test_module, args.test_workflow_format, args.test_workflow_path, args.test_image, args.test_image_id]):
+            tests = None
         previews = None
         if any([args.preview_hostname, args.preview_worker, args.preview_access_aud, args.preview_path, args.preview_browser_snapshots, args.preview_manual]):
             previews = {'hostname': args.preview_hostname, 'worker': args.preview_worker, 'access_aud': args.preview_access_aud, 'path': args.preview_path, 'ttl': args.preview_ttl, 'browser': args.preview_browser_snapshots, 'automatic': not args.preview_manual}

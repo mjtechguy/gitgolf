@@ -76,15 +76,23 @@ if (mode === 'retire') {
   if (settings.evidence && !settings.previews && !settings.automatic_ci) config.triggers = [...(config.triggers || []), { type: 'scheduled', schedule: '*/5 * * * *' }];
   if (settings.tests) {
     const { testModuleOK } = await import('./src/test-policy.mjs');
-    if (!settings.evidence || !testModuleOK(settings.tests.module) || typeof settings.tests.image !== 'string' ||
+    const { nativeWorkflowPath } = await import('./src/native-workflow.mjs');
+    const workflow = settings.tests.workflow;
+    if (!settings.evidence || (workflow !== undefined ?
+      !workflow || typeof workflow !== 'object' || Array.isArray(workflow) || Object.keys(workflow).some(key => !['format', 'path'].includes(key)) ||
+        !nativeWorkflowPath(workflow.format, workflow.path) || settings.tests.module !== undefined : !testModuleOK(settings.tests.module))) throw Error('Invalid approved native test source');
+    if (typeof settings.tests.image !== 'string' ||
       !/^[a-z0-9][a-z0-9._/-]{0,127}:[a-z0-9][a-z0-9._-]{0,63}$/.test(settings.tests.image) ||
       !/^sha256:[a-f0-9]{64}$/.test(settings.tests.image_id || '')) throw Error('Invalid approved container test allocation');
     const imageId = execFileSync('docker', ['image', 'inspect', settings.tests.image, '--format', '{{.Id}}'], { encoding: 'utf8', timeout: 10000 }).trim();
     if (imageId !== settings.tests.image_id) throw Error('Approved container image changed');
     config.compatibilityFlags = ['nodejs_compat'];
     config.env.TEST_EXECUTION_ENABLED = { type: 'text', value: 'true' };
-    config.env.TEST_MODULE = { type: 'text', value: settings.tests.module };
-    config.env.TEST_POLICY_SHA256 = { type: 'text', value: createHash('sha256').update(JSON.stringify([settings.tests.module, imageId])).digest('hex') };
+    if (workflow) {
+      config.env.TEST_WORKFLOW_FORMAT = { type: 'text', value: workflow.format };
+      config.env.TEST_WORKFLOW_PATH = { type: 'text', value: workflow.path };
+    } else config.env.TEST_MODULE = { type: 'text', value: settings.tests.module };
+    config.env.TEST_POLICY_SHA256 = { type: 'text', value: createHash('sha256').update(JSON.stringify([workflow || settings.tests.module, imageId])).digest('hex') };
     config.exports.PRTestTask = { type: 'durable-object', storage: 'sqlite', container: settings.worker };
     config.exports.TestOutbound = { type: 'worker' };
     await u.writeContainerConfig({ root, directoryName: 'pr-tests', config: { name: settings.worker, schedulingPolicy: 'durable-object',
@@ -92,7 +100,7 @@ if (mode === 'retire') {
   }
   if (settings.agent_path !== undefined) {
     const { agentPathOK, filePolicy } = await import('./src/agent-policy.mjs');
-    if (!settings.tests || !settings.evidence?.allow_ai || !agentPathOK(settings.agent_path) || settings.worker.length > 56 ||
+    if (!settings.tests || settings.tests.workflow || !settings.evidence?.allow_ai || !agentPathOK(settings.agent_path) || settings.worker.length > 56 ||
         settings.agent_path === settings.tests.module.replaceAll('.', '/') + '.py') throw Error('Invalid approved native agent allocation');
     config.env.AGENT_EXECUTION_ENABLED = { type: 'text', value: 'true' };
     config.env.AGENT_PATH = { type: 'text', value: settings.agent_path };

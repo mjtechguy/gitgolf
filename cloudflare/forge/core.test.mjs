@@ -598,6 +598,41 @@ test('PR tests require allocation, deduplicate execution and bind private result
   assert.equal((await testGit(f.env, job.id, get, f.env.workflow, f.providerFetch)).status, 403);
 });
 
+test('native GitLab workflow admission binds the exact PR blob and keeps scripts out of reports', async t => {
+  const f = await evidenceFixture(t), execution = allocateTests(f), blobId = '9'.repeat(40);
+  delete f.env.TEST_MODULE;
+  Object.assign(f.env, { TEST_WORKFLOW_FORMAT: 'gitlab', TEST_WORKFLOW_PATH: '.gitlab-ci.yml', TEST_POLICY_SHA256: '8'.repeat(64) });
+  const config = await value(await f.call('', {}, ownerToken, '/native/config'));
+  assert.equal(config.testWorkflowFormat, 'gitlab'); assert.equal(config.testWorkflowPath, '.gitlab-ci.yml');
+  const capabilities = await value(await f.call('', {}, ownerToken, '/rpc/golf.v1.CapabilityService/ListCapabilities'));
+  assert.match(capabilities.capabilities.find(c => c.id === 'native-pr-tests').reason, /GitLab shell workflow/);
+  let source = 'check:\n  before_script: export VALUE=ready\n  script: test "$VALUE" = ready\n  after_script: echo cleanup\n';
+  const get = f.env.ARTIFACTS.get;
+  f.env.ARTIFACTS.get = async name => {
+    const repo = await get(name), readTree = repo.readTree, readBlob = repo.readBlob;
+    return { ...repo,
+      async readTree(hash) { const entries = await readTree(hash); return hash === 'f'.repeat(40) ? [...entries, { name: '.gitlab-ci.yml', hash: blobId, type: 'blob' }] : entries; },
+      async readBlob(hash) { return hash === blobId ? new Blob([source]) : readBlob(hash); },
+    };
+  };
+  const input = { ...f.input, advice: false, runTests: true };
+  const job = (await value(await f.evidence(input))).job;
+  await f.advance(job.id, 'tests');
+  const task = execution.tasks.get(job.id);
+  assert.equal(task.contract, 'golf.native.workflow-shell.v1');
+  assert.equal(task.workflow.blobId, blobId);
+  assert.equal(task.workflow.plan.steps[0].run, 'export VALUE=ready\ntest "$VALUE" = ready');
+  assert.equal(task.workflow.plan.afterScript, 'echo cleanup');
+  Object.assign(task, { state: 'PASSED', cleanup: 'destroyed', exitCode: 0, stdout: 'ok', stderr: '', finishedAt: Date.now() });
+  await f.advance(job.id, 'tests'); await f.advance(job.id, 'advice'); await f.advance(job.id, 'store');
+  const report = await value(await f.read(job.id, 'report'));
+  assert.equal(report.report.tests.workflowSha256, task.workflowSha256);
+  assert.equal(JSON.stringify(report).includes('export VALUE=ready'), false);
+  source = 'check:\n  script: echo approved\n  rules: [{ when: always }]\n';
+  assert.equal((await f.evidence({ ...input, idempotencyKey: nonce() })).status, 412);
+  assert.equal(execution.admissions(), 1);
+});
+
 test('test failures are evidence, while malformed identity and cleanup failure cannot become success', async t => {
   const f = await evidenceFixture(t), execution = allocateTests(f);
   const job = (await value(await f.evidence({ ...f.input, advice: false, runTests: true }))).job;

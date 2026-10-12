@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { nativeTestContract, testResult } from './src/test-policy.mjs';
+import { nativeWorkflow, nativeWorkflowContract } from './src/native-workflow.mjs';
 
 const hooks = registerHooks({ resolve(specifier, context, next) {
   if (specifier === 'cloudflare:workers') return { url: 'data:text/javascript,' + encodeURIComponent('export class DurableObject {constructor(ctx,env){this.ctx=ctx;this.env=env}} export class WorkerEntrypoint extends DurableObject {}'), shortCircuit: true };
@@ -187,4 +188,72 @@ test('recreated task retries unfinished destruction without changing its termina
   assert.equal(restarted.status().cleanup, 'destroyed');
   assert.equal(f.counters().destroyed, 1);
   assert.equal(f.commands.length, 0);
+});
+
+test('native Actions workflow checks its exact blob and runs isolated shell steps once', async () => {
+  const f = fixture(), blobId = 'f'.repeat(40);
+  const workflow = { path: '.github/workflows/check.yml', blobId, plan: nativeWorkflow('actions',
+    'on: pull_request\njobs:\n  check:\n    runs-on: golf-native-linux\n    steps:\n      - run: echo first\n      - run: echo second\n        shell: sh\n') };
+  const bytes = new TextEncoder().encode(JSON.stringify(workflow));
+  f.input = { ...f.input, contract: nativeWorkflowContract, workflow, workflowSha256: Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('') };
+  delete f.input.module;
+  const execute = f.container.exec;
+  f.container.exec = (args, options) => args[0] === 'git' && args[2] === 'HEAD:' + workflow.path
+    ? Promise.resolve({ output: async () => ({ exitCode: 0, stdout: new TextEncoder().encode(blobId), stderr: new Uint8Array() }) })
+    : execute(args, options);
+  await assert.rejects(f.task.create({ ...f.input, workflowSha256: '0'.repeat(64) }), /Invalid test admission/);
+  await f.task.create(f.input); await f.task.alarm();
+  assert.equal(f.task.status().state, 'PASSED');
+  assert.equal(f.commands.filter(args => args[0] === '/bin/sh').length, 2);
+  assert.deepEqual(testResult(f.task.status(), f.input.jobId, f.input), f.task.status());
+  assert.throws(() => testResult({ ...f.task.status(), workflowSha256: '0'.repeat(64) }, f.input.jobId, f.input), /Invalid test execution/);
+  await f.task.create(f.input); await f.task.alarm();
+  assert.equal(f.commands.filter(args => args[0] === '/bin/sh').length, 2);
+  const changed = fixture(); changed.input = f.input;
+  await changed.task.create(changed.input); await changed.task.alarm();
+  assert.equal(changed.task.status().state, 'LOST');
+  assert.equal(changed.commands.some(args => args[0] === '/bin/sh'), false);
+});
+
+test('native GitLab after_script runs in a separate shell without masking main failure', async () => {
+  const f = fixture(), blobId = 'f'.repeat(40);
+  const workflow = { path: '.gitlab-ci.yml', blobId, plan: nativeWorkflow('gitlab',
+    'check:\n  before_script: export VALUE=ready\n  script: test "$VALUE" = ready\n  after_script: echo cleanup\n') };
+  const bytes = new TextEncoder().encode(JSON.stringify(workflow));
+  f.input = { ...f.input, contract: nativeWorkflowContract, workflow, workflowSha256: Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('') };
+  delete f.input.module;
+  const execute = f.container.exec;
+  f.container.exec = async (args, options) => {
+    if (args[0] === 'git' && args[2] === 'HEAD:' + workflow.path) return { output: async () => ({ exitCode: 0, stdout: new TextEncoder().encode(blobId), stderr: new Uint8Array() }) };
+    if (args.includes('echo cleanup')) assert.equal(options.env.CI_JOB_STATUS, 'failed');
+    const process = await execute(args, options);
+    if (args[0] === '/bin/sh' && args.includes(workflow.plan.steps[0].run)) return { output: async () => ({ ...await process.output(), exitCode: 7 }) };
+    return process;
+  };
+  await f.task.create(f.input); await f.task.alarm();
+  assert.equal(f.task.status().state, 'FAILED');
+  assert.equal(f.task.status().exitCode, 7);
+  assert.equal(f.commands.filter(args => args[0] === '/bin/sh').length, 2);
+  assert.equal(f.commands.some(args => args.includes('echo cleanup')), true);
+  assert.deepEqual(testResult(f.task.status(), f.input.jobId, f.input), f.task.status());
+});
+
+test('native GitLab after_script failure does not change a successful main result', async () => {
+  const f = fixture(), blobId = 'f'.repeat(40);
+  const workflow = { path: '.gitlab-ci.yml', blobId, plan: nativeWorkflow('gitlab', 'check:\n  script: echo passed\n  after_script: exit 4\n') };
+  const bytes = new TextEncoder().encode(JSON.stringify(workflow));
+  f.input = { ...f.input, contract: nativeWorkflowContract, workflow,
+    workflowSha256: Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('') };
+  delete f.input.module;
+  const execute = f.container.exec;
+  f.container.exec = async (args, options) => {
+    if (args[0] === 'git' && args[2] === 'HEAD:' + workflow.path) return { output: async () => ({ exitCode: 0, stdout: new TextEncoder().encode(blobId), stderr: new Uint8Array() }) };
+    const process = await execute(args, options);
+    if (args.includes('exit 4')) { assert.equal(options.env.CI_JOB_STATUS, 'success'); return { output: async () => ({ ...await process.output(), exitCode: 4 }) }; }
+    return process;
+  };
+  await f.task.create(f.input); await f.task.alarm();
+  assert.equal(f.task.status().state, 'PASSED');
+  assert.equal(f.task.status().exitCode, 0);
+  assert.equal(f.commands.filter(args => args[0] === '/bin/sh').length, 2);
 });
