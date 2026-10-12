@@ -9,6 +9,7 @@ import { engagement, engagementMethods } from './discussion-engagement.mjs';
 import { resourceMethods, discussionResources, resourceOperation } from './discussion-resources.mjs';
 import { invitations, ownInvitationMethods } from './invitations.mjs';
 import { operationsAdmin, operationsDashboard } from './operations.mjs';
+import { nativeRunnerAdmin, nativeRunnerPlacement, nativeRunnerMachine } from './native-runners.mjs';
 import { commits, resolveSource, wireCommit } from './repository-reads.mjs';
 import { cachedRepository } from './repository-cache.mjs';
 import { indexedRead } from './repository-indexes.mjs';
@@ -291,6 +292,10 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
     const origin = request.headers.get('Origin');
     if (origin && origin !== env.PUBLIC_ORIGIN) throw new Fault('permission_denied', 403, 'Cross-origin request denied.');
     const db = env.DB.withSession('first-primary');
+    if (url.pathname.startsWith('/native/runner-machine/')) return await nativeRunnerMachine(db,env,request,
+      url.pathname.includes('/git/') ? null : await input(request),
+      async id => (await advanceEvidence(env,id,'authorize-test')).state === 'AUTHORIZED',
+      (id,source) => testGit(env,id,source,undefined,providerFetch));
     const person = await env.timings.measure('actor', () => actor(db, request));
     // Connect streaming bodies must receive an availability error, not JSON parsing errors that retry forever.
     if (url.pathname === '/rpc/golf.v1.RepositoryActivityService/WatchRepository') {
@@ -312,7 +317,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       const budget = await db.prepare('PRAGMA table_info(repository_index_budget)').all();
       const operations = await db.prepare('PRAGMA table_info(operations_maintenance)').all();
       const access = await db.prepare('PRAGMA table_info(repository_access_operations)').all();
-      return reply({ release, contract: 1, schema: (await db.prepare('PRAGMA table_info(pull_review_operations)').all()).results.length ? 18 : (await db.prepare('PRAGMA table_info(git_credentials)').all()).results.length ? 17 : (await db.prepare('PRAGMA table_info(repository_rule_operations)').all()).results.length ? 16 : (await db.prepare('PRAGMA table_info(webhook_subscriptions)').all()).results.length ? 15 : (await db.prepare('PRAGMA table_info(discussion_events)').all()).results.length ? 14 : (await db.prepare('PRAGMA table_info(discussion_resources)').all()).results.length ? 13 : (await db.prepare('PRAGMA table_info(repository_invitations)').all()).results.length ? 12 : access.results.length ? 11 : operations.results.length ? 10 : budget.results.length ? 9 : indexes.results.some(column => column.name === 'payload_hash') ? 8 : columns.results.some(column => column.name === 'default_branch') ? 7 : 6,
+      return reply({ release, contract: 1, schema: (await db.prepare('PRAGMA table_info(native_runner_pools)').all()).results.length ? 19 : (await db.prepare('PRAGMA table_info(pull_review_operations)').all()).results.length ? 18 : (await db.prepare('PRAGMA table_info(git_credentials)').all()).results.length ? 17 : (await db.prepare('PRAGMA table_info(repository_rule_operations)').all()).results.length ? 16 : (await db.prepare('PRAGMA table_info(webhook_subscriptions)').all()).results.length ? 15 : (await db.prepare('PRAGMA table_info(discussion_events)').all()).results.length ? 14 : (await db.prepare('PRAGMA table_info(discussion_resources)').all()).results.length ? 13 : (await db.prepare('PRAGMA table_info(repository_invitations)').all()).results.length ? 12 : access.results.length ? 11 : operations.results.length ? 10 : budget.results.length ? 9 : indexes.results.some(column => column.name === 'payload_hash') ? 8 : columns.results.some(column => column.name === 'default_branch') ? 7 : 6,
         configuration, runtimeProfile: 'cloudflare-native', workspace: env.WORKSPACE_SLUG });
     }
     if (url.pathname === '/native/preview-resume') {
@@ -330,6 +335,12 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
       browser: Boolean(env.BROWSER && env.PREVIEW_BROWSER === 'true'), previewPath: env.PREVIEW_PATH || '', agentPath: env.AGENT_PATH || '',
       testModule: env.TEST_MODULE || '', testWorkflowFormat: env.TEST_WORKFLOW_FORMAT || '', testWorkflowPath: env.TEST_WORKFLOW_PATH || '',
       dailyLimit: Number(env.EVIDENCE_DAILY_LIMIT) || 0, previewTTL: Number(env.PREVIEW_TTL) || 0, appTTL: appPolicy(env)?.ttl || 0 });
+    if (url.pathname === '/native/runner-admin') return await nativeRunnerAdmin(db, env, person, request, body);
+    if (url.pathname === '/native/runner-placement') {
+      const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
+      if (body.repositoryId !== String(row.id)) deny();
+      return await nativeRunnerPlacement(db, env, row, body);
+    }
     if (url.pathname === '/native/repository-access') {
       const row = await authorizedRepository(db, person, body.repository, env, body.repositoryId);
       if (body.repositoryId !== String(row.id)) deny();
@@ -403,6 +414,7 @@ async function handleRequest(request, env, providerFetch, imageFetch) {
         ['repository.releases', 'Releases'], ['repository.wiki', 'Wiki workspace'],
       ].map(([id, label, reason]) => ({ id, label, state: 'CAPABILITY_STATE_DISABLED', reason: reason || 'This feature is not available in the Cloudflare-native installation yet.' })),
       { id: 'settings.native', label: 'Cloudflare allocation settings', state: 'CAPABILITY_STATE_READY', reason: 'Current allocations are readable. Operators change the separate native installation configuration; provider credentials are never exposed in the UI.' },
+      { id: 'settings.native-runners', label: 'Customer-hosted native runners', state: 'CAPABILITY_STATE_READY', reason: 'Workspace administrators can enroll outbound machines and manage native pools. Repository administrators select an untrusted pool for approved PR jobs.' },
       ...[['settings.infrastructure', 'Portable database and storage profiles'], ['settings.runners', 'Portable runner pools'], ['settings.local-auth', 'Golf passwords, MFA and SSH keys'], ['settings.notifications', 'Portable SMTP settings'], ['settings.cloudflare-resources', 'Origin bridge resource allocation']].map(([id, label]) => ({ id, label, state: 'CAPABILITY_STATE_DISABLED', reason: 'This editor belongs to the portable/origin installation. Cloudflare native uses its separate identity, binding and allocation setup.' })),
       { id: 'discussion.activity', label: 'Discussion activity, reactions and inbox', state: 'CAPABILITY_STATE_READY', reason: 'Native reactions, subscriptions, permission-filtered inbox and activity recorded since schema14. In-app notifications; email and issue templates are separate.' },
       { id: 'discussion.comments', label: 'Comment editing', state: 'CAPABILITY_STATE_READY', reason: 'Authors and current administrators can edit or delete an exact discussion comment; atomic original receipts and revision checks.' },

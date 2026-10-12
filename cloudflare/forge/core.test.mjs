@@ -88,6 +88,29 @@ async function fixture(t) {
   return { sql, env, call, create, sendPush, tokens, providerFetch, dispatch, advance: (id, phase) => dispatch({ id, phase }), setRefs: refs => { for (const r of repos.values()) r.refs = new Map(refs); }, counts: () => ({ creates, effects, forks }), losePush: () => { losePush = true; }, loseFork: () => { loseFork = true; }, forks: () => forks };
 }
 
+test('native runner HTTP routes separate current admin sign-in from machine credentials', async t => {
+  const f = await fixture(t);
+  f.sql.prepare("UPDATE users SET email='alice@example.invalid' WHERE id=1").run();
+  f.sql.prepare('INSERT INTO operations_admins(user_id) VALUES(1)').run();
+  f.env.TEST_EXECUTION_ENABLED = 'true'; f.env.TEST_IMAGE_ID = 'sha256:'+'a'.repeat(64);
+  const origin = f.env.PUBLIC_ORIGIN;
+  const admin = body => f.dispatch(new Request(origin+'/native/runner-admin',{method:'POST',headers:{'X-Golf-Native-Access-Email':'alice@example.invalid','Content-Type':'application/json','Connect-Protocol-Version':'1'},body:JSON.stringify(body)}));
+  const listed = await admin({action:'list'});
+  assert.equal(listed.status,200); assert.deepEqual((await listed.json()).pools,[]);
+  const poolId = crypto.randomUUID(), machineId = crypto.randomUUID();
+  const saved = await admin({action:'savePool',id:poolId,expectedVersion:0,name:'http-pool',state:'ACTIVE',trustClass:'UNTRUSTED',maxParallel:1});
+  assert.equal(saved.status,200); assert.equal((await saved.json()).pool.name,'http-pool');
+  const enrolled = await admin({action:'enroll',id:machineId,poolId,poolVersion:1,name:'http-host',ttlHours:1,trustExecution:true});
+  assert.equal(enrolled.status,200);
+  const credential = (await enrolled.json()).credential;
+  const validMachine = await f.dispatch(new Request(origin+'/native/runner-machine/claim',{method:'POST',headers:{Authorization:'Bearer '+credential,'Content-Type':'application/json'},body:JSON.stringify({claimId:crypto.randomUUID()})}));
+  assert.equal(validMachine.status,200); assert.deepEqual(await validMachine.json(),{assignment:null});
+  const bearer = await f.dispatch(new Request(origin+'/native/runner-admin',{method:'POST',headers:{Authorization:'Bearer '+ownerToken,'Content-Type':'application/json','Connect-Protocol-Version':'1'},body:JSON.stringify({action:'list'})}));
+  assert.equal(bearer.status,403);
+  const machine = await f.dispatch(new Request(origin+'/native/runner-machine/claim',{method:'POST',headers:{Authorization:'Bearer golf_runner_11111111-1111-4111-8111-111111111111_'+ '0'.repeat(64),'Content-Type':'application/json'},body:JSON.stringify({claimId:crypto.randomUUID()})}));
+  assert.equal(machine.status,403);
+});
+
 test('default metadata overlaps independent provider reads and withholds mismatched identity', async t => {
   const f = await fixture(t); await f.create(); await f.sendPush();
   const get = f.env.ARTIFACTS.get; let started = false, finished = false, disposed = false, mismatch = false;
@@ -631,6 +654,14 @@ test('native GitLab workflow admission binds the exact PR blob and keeps scripts
   source = 'check:\n  script: echo approved\n  rules: [{ when: always }]\n';
   assert.equal((await f.evidence({ ...input, idempotencyKey: nonce() })).status, 412);
   assert.equal(execution.admissions(), 1);
+  const pinned = 'alpine:3.23@sha256:'+'a'.repeat(64);
+  source = `check:\n  image: ${pinned}\n  script: echo pinned\n`;
+  f.env.TEST_IMAGE_REF = 'alpine:3.23@sha256:'+'b'.repeat(64);
+  assert.equal((await f.evidence({ ...input, idempotencyKey: nonce() })).status, 412);
+  f.env.TEST_IMAGE_REF = pinned;
+  const pinnedJob = (await value(await f.evidence({ ...input, idempotencyKey: nonce() }))).job;
+  await f.advance(pinnedJob.id,'tests');
+  assert.equal(execution.tasks.get(pinnedJob.id).workflow.plan.image,pinned);
 });
 
 test('test failures are evidence, while malformed identity and cleanup failure cannot become success', async t => {

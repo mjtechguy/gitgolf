@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -258,6 +259,28 @@ func TestDockerIsolation(t *testing.T) {
 		clean(job.AttemptID)
 		if err != nil || r.ExitCode != 0 {
 			t.Fatalf("result=%+v err=%v", r, err)
+		}
+	})
+	t.Run("gitlab_after_script_keeps_workspace_and_main_status", func(t *testing.T) {
+		for _, mainExit := range []int{0, 7} {
+			job := testJob(t)
+			job.ImageDigest = image
+			job.Steps = []Step{{Shell: "sh", Script: fmt.Sprintf("printf ready > marker; exit %d", mainExit)}}
+			job.AfterScript = "test -f marker\ntest \"$CI_JOB_STATUS\" = " + map[bool]string{true: "success", false: "failed"}[mainExit == 0] + "\nprintf after-script"
+			var logs bytes.Buffer
+			result, err := e.Execute(context.Background(), job, func(_ context.Context, chunk LogChunk) error { _, _ = logs.Write(chunk.Data); return nil })
+			clean(job.AttemptID)
+			if err != nil || result.ExitCode != mainExit || !strings.Contains(logs.String(), "after-script") {
+				t.Fatalf("main exit %d: result=%+v err=%v logs=%q", mainExit, result, err, logs.String())
+			}
+		}
+		job := testJob(t)
+		job.ImageDigest = image
+		job.AfterScript = "exit 4"
+		result, err := e.Execute(context.Background(), job, nil)
+		clean(job.AttemptID)
+		if err != nil || result.ExitCode != 0 {
+			t.Fatalf("after-script masked success: %+v %v", result, err)
 		}
 	})
 	t.Run("timeout", func(t *testing.T) {

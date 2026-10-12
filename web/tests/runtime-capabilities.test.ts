@@ -41,6 +41,8 @@ test('native feature mounts and direct settings routes require reported support'
 
 test('native operations route is available explicitly while unsupported portable administration stays gated',()=>{
  assert.equal(settingForRoute('instance-settings','operations',true),'operations.dashboard');
+ assert.equal(settingForRoute('instance-settings','runners',true),'settings.native-runners');
+ assert.equal(settingForRoute('repository-runners',undefined,true),'settings.runners');
  for(const view of ['execution','organizations','agents'])assert.ok(settingForRoute('instance-settings',view,true)?.startsWith('settings.'));
  assert.equal(settingForRoute('instance-settings','overview',true),null);
 });

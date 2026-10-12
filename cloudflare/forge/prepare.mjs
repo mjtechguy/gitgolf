@@ -60,7 +60,7 @@ if (mode === 'retire') {
       e.allow_ai && !(typeof e.gateway === 'string' && /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(e.gateway))) throw Error('Invalid evidence allocation');
     config.env.EVIDENCE_BUCKET = { type: 'r2', name: e.bucket };
     config.env.EVIDENCE_QUEUE = { type: 'queue', name: e.queue };
-    config.exports.EvidenceWorkflow = { type: 'workflow', name: e.workflow, concurrency: { limit: settings.tests ? 2 : 1 }, limits: { steps: settings.agent_path ? 90 : settings.tests ? 45 : 3 },
+    config.exports.EvidenceWorkflow = { type: 'workflow', name: e.workflow, concurrency: { limit: settings.tests ? 2 : 1 }, limits: { steps: settings.agent_path ? 100 : settings.tests ? 85 : 3 },
       defaultRetention: { successRetention: '1 day', errorRetention: '1 day' } };
     config.triggers = [{ type: 'queue', name: e.queue, maxBatchSize: 1, maxBatchTimeout: 1, maxConcurrency: 1, maxRetries: 3 }];
     if (e.dead_letter) {
@@ -82,12 +82,14 @@ if (mode === 'retire') {
       !workflow || typeof workflow !== 'object' || Array.isArray(workflow) || Object.keys(workflow).some(key => !['format', 'path'].includes(key)) ||
         !nativeWorkflowPath(workflow.format, workflow.path) || settings.tests.module !== undefined : !testModuleOK(settings.tests.module))) throw Error('Invalid approved native test source');
     if (typeof settings.tests.image !== 'string' ||
-      !/^[a-z0-9][a-z0-9._/-]{0,127}:[a-z0-9][a-z0-9._-]{0,63}$/.test(settings.tests.image) ||
+      !/^[a-z0-9][a-z0-9._/-]{0,127}:[a-z0-9][a-z0-9._-]{0,63}(?:@sha256:[a-f0-9]{64})?$/.test(settings.tests.image) ||
       !/^sha256:[a-f0-9]{64}$/.test(settings.tests.image_id || '')) throw Error('Invalid approved container test allocation');
     const imageId = execFileSync('docker', ['image', 'inspect', settings.tests.image, '--format', '{{.Id}}'], { encoding: 'utf8', timeout: 10000 }).trim();
     if (imageId !== settings.tests.image_id) throw Error('Approved container image changed');
     config.compatibilityFlags = ['nodejs_compat'];
     config.env.TEST_EXECUTION_ENABLED = { type: 'text', value: 'true' };
+    config.env.TEST_IMAGE_ID = { type: 'text', value: imageId };
+    config.env.TEST_IMAGE_REF = { type: 'text', value: settings.tests.image };
     if (workflow) {
       config.env.TEST_WORKFLOW_FORMAT = { type: 'text', value: workflow.format };
       config.env.TEST_WORKFLOW_PATH = { type: 'text', value: workflow.path };

@@ -3,6 +3,7 @@ import { digest, uuidOK, Fault, deny, invalid, reply, conflict } from './common.
 import { remote } from './git.mjs';
 import { nativeTestContract, testPolicy, testResult } from './test-policy.mjs';
 import { nativeWorkflowContract, nativeWorkflowSource } from './native-workflow.mjs';
+import { nativeRunnerAdmission, nativeRunnerProgress } from './native-runners.mjs';
 import { agentPolicy } from './agent-policy.mjs';
 import { agentStep, agentSource } from './agents.mjs';
 
@@ -112,9 +113,12 @@ export async function evidenceAPI(db, env, person, row, artifact, body) {
             if (/^(Unsupported native|Native workflow)/.test(error.message)) throw new Fault('failed_precondition', 412, 'The selected PR head needs one supported native shell workflow at the approved path.');
             throw error;
           }
+          if (workflow.plan.image && workflow.plan.image !== env.TEST_IMAGE_REF) throw new Fault('failed_precondition', 412, 'The GitLab image must match the operator-approved container image reference.');
         }
+        const runner = await nativeRunnerAdmission(db, env, row.id);
         return { contract: workflow ? nativeWorkflowContract : nativeTestContract, commitId: s.headCommitId, treeId: commit.treeHash, branch: observed.pr.head.ref,
           ...(workflow ? { workflow, workflowSha256: await digest(JSON.stringify(workflow)) } : { module: env.TEST_MODULE }), policySha256: env.TEST_POLICY_SHA256,
+          ...(runner ? { runner } : {}),
           ...(env.REGISTRY_CI_ENABLED === 'true' && env.REGISTRY ? { registry: { origin:env.REGISTRY_ORIGIN, name:env.WORKSPACE_SLUG+'/'+row.name } } : {}) };
       });
       const snapshot = JSON.stringify({ selection: s, pullRequest: observed.pr, reviews: reviews.reviews, reportedChecks: checks.checks,
@@ -138,8 +142,11 @@ export async function evidenceAPI(db, env, person, row, artifact, body) {
       if (!terminal.has(job.state)) await update(db, job, 'REFUSED');
       if (job.agent_state !== 'NONE') await agentStep(db, env, job, JSON.parse(job.snapshot), artifact, 'finish-agents');
       if (job.test_state !== 'NONE') {
-        const result = await env.testTasks.getByName(job.id).cancel();
-        if (result.state !== 'ABSENT') await saveTests(db, job, JSON.parse(job.snapshot), result);
+        if (JSON.parse(job.snapshot).execution?.runner) await nativeRunnerProgress(db, job, 'finish-tests');
+        else {
+          const result = await env.testTasks.getByName(job.id).cancel();
+          if (result.state !== 'ABSENT') await saveTests(db, job, JSON.parse(job.snapshot), result);
+        }
       }
     }
     return reply({ job: await view(db, env, person, row, artifact, job) });
@@ -172,6 +179,7 @@ export async function evidenceStep(db, env, job, context, phase, workflows) {
   const { person, row, artifact } = context, snapshot = JSON.parse(job.snapshot);
   if (snapshot.execution && (!testPolicy(env) || snapshot.execution.contract !== undefined && snapshot.execution.contract !== (env.TEST_WORKFLOW_FORMAT ? nativeWorkflowContract : nativeTestContract) ||
       (env.TEST_WORKFLOW_FORMAT ? snapshot.execution.workflow?.plan?.format !== env.TEST_WORKFLOW_FORMAT || snapshot.execution.workflow?.path !== env.TEST_WORKFLOW_PATH : snapshot.execution.module !== env.TEST_MODULE) ||
+      snapshot.execution.workflow?.plan?.image && snapshot.execution.workflow.plan.image !== env.TEST_IMAGE_REF ||
       snapshot.execution.policySha256 !== env.TEST_POLICY_SHA256)) return update(db, job, 'REFUSED');
   if (snapshot.agent && (!agentPolicy(env) || snapshot.agent.allowedPath !== env.AGENT_PATH || snapshot.agent.policySha256 !== env.AGENT_POLICY_SHA256 || snapshot.agent.module !== env.TEST_MODULE)) return update(db, job, 'REFUSED');
   if (row.write_pending) return update(db, job, 'REFUSED');
@@ -183,6 +191,7 @@ export async function evidenceStep(db, env, job, context, phase, workflows) {
   if (phase === 'tests' || phase === 'finish-tests') {
     if (job.test_state === 'NONE') return { id: job.id, state: 'NONE' };
     if (!['REQUESTED', 'RUNNING'].includes(job.test_state)) return { id: job.id, state: job.test_state };
+    if (snapshot.execution?.runner) return nativeRunnerProgress(db, job, phase);
     if (job.test_state === 'REQUESTED') {
       const active = await db.prepare("SELECT count(*) AS total FROM evidence_jobs WHERE (test_state='RUNNING' OR agent_state IN ('FORK_PENDING','RUNNING')) AND state='QUEUED' AND expires_at>?").bind(time()).first();
       if (active.total >= 2) return update(db, job, 'REFUSED');
@@ -257,7 +266,9 @@ export async function evidenceStep(db, env, job, context, phase, workflows) {
   const report = JSON.stringify({ schema: 'golf.native.pr-evidence.v1', jobId: job.id, capturedAt: job.created_at, advisoryOnly: true,
     limitations: [snapshot.agent ? 'An isolated agent proposal and its observed tests; no merge authorization or canonical publication.' : snapshot.execution?.contract === nativeWorkflowContract ?
       'Only the operator-approved single-job shell workflow was executed; no full Actions/GitLab compatibility or merge authorization.' : snapshot.execution ?
-        'Only the operator-approved test module was executed; no code review or merge authorization.' : 'Metadata snapshot; no code diff or tests executed.', 'Reviews and reported checks do not authorize merge.'],
+        'Only the operator-approved test module was executed; no code review or merge authorization.' : 'Metadata snapshot; no code diff or tests executed.',
+      ...(snapshot.execution?.runner ? ['A customer-hosted runner reported its own isolation and cleanup; Golf cannot independently attest the host.'] : []),
+      'Reviews and reported checks do not authorize merge.'],
     ...publicSnapshot, agentResult: job.agent_result ? JSON.parse(job.agent_result) : { state: job.agent_state }, tests: job.test_result ? JSON.parse(job.test_result) : { state: job.test_state }, advice: { state: job.advice_state, ...(job.advice ? JSON.parse(job.advice) : {}) } });
   const hash = await digest(report), key = `pr-evidence/${env.WORKSPACE_SLUG}/${job.repository_id}/${job.id}/${hash}.json`;
   const bytes = new TextEncoder().encode(report).length;

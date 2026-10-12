@@ -237,6 +237,8 @@ class NativeSetup(unittest.TestCase):
                 profile = {**base, 'workflow': {'format': format, 'path': path}}
                 initialize(target, *args[1:], evidence, profile)
                 self.assertEqual(json.loads((target/'forge.json').read_text())['tests'], profile)
+            pinned = {**base, 'image': 'alpine:3.23@sha256:' + 'a'*64, 'workflow': {'format': 'gitlab', 'path': '.gitlab-ci.yml'}}
+            initialize(root.with_name('pinned-gitlab'), *args[1:], evidence, pinned)
             with self.assertRaises(ValueError):
                 initialize(*args, {**evidence, 'allow_ai': True}, {**base, 'workflow': {'format': 'gitlab', 'path': '.gitlab-ci.yml'}}, agent_path='calc.py')
             self.assertFalse(root.exists())

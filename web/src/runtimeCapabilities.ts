@@ -14,7 +14,7 @@ export function settingForRoute(kind: string, view?: string, native = false) {
     if (repositoryRoutes[kind]) return 'settings.repository-' + repositoryRoutes[kind];
   }
   if (native && kind === 'instance-settings') {
-    const nativeAdmin: Record<string, string> = { operations: 'operations.dashboard', execution: 'settings.execution', organizations: 'settings.organization-creation', agents: 'settings.agents-admin' };
+    const nativeAdmin: Record<string, string> = { operations: 'operations.dashboard', execution: 'settings.execution', organizations: 'settings.organization-creation', agents: 'settings.agents-admin', runners: 'settings.native-runners' };
     if (view && nativeAdmin[view]) return nativeAdmin[view];
   }
   if (kind === 'instance-settings') return view === 'infrastructure' ? 'settings.infrastructure' : view === 'runners' ? 'settings.runners' : view === 'notifications' ? 'settings.notifications' : view === 'accounts' || !view ? 'settings.local-auth' : null;

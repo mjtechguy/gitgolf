@@ -1,0 +1,3 @@
+verify:
+  script: test -f README.md && echo main && exit 7
+  after_script: echo after-script

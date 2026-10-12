@@ -61,6 +61,7 @@ type StepEvent struct {
 }
 type Job struct {
 	ArtifactPaths     []string                               `json:"artifact_paths,omitempty"`
+	AfterScript       string                                 `json:"after_script,omitempty"`
 	OnArtifacts       func(context.Context, []byte) error    `json:"-"`
 	Resources         *JobLimits                             `json:"job_resources,omitempty"`
 	AttemptID         string                                 `json:"attempt_id"`
@@ -136,6 +137,12 @@ func (e *Executor) validate(job Job) error {
 	for _, step := range job.Steps {
 		total += len(step.Script)
 		if strings.TrimSpace(step.Script) == "" || !utf8.ValidString(step.Script) || strings.IndexByte(step.Script, 0) >= 0 || (step.Shell != "default" && step.Shell != "sh" && step.Shell != "bash") {
+			return ErrInvalidJob
+		}
+	}
+	if job.AfterScript != "" {
+		total += len(job.AfterScript)
+		if strings.TrimSpace(job.AfterScript) == "" || !utf8.ValidString(job.AfterScript) || strings.IndexByte(job.AfterScript, 0) >= 0 {
 			return ErrInvalidJob
 		}
 	}
@@ -228,6 +235,14 @@ func (e *Executor) snapshot(job Job) ([]byte, error) {
 			return nil, ErrSource
 		}
 		if _, err := writer.Write([]byte(step.Script)); err != nil {
+			return nil, ErrSource
+		}
+	}
+	if job.AfterScript != "" {
+		if err := writer.WriteHeader(&tar.Header{Name: "after", Typeflag: tar.TypeReg, Mode: 0444, Size: int64(len(job.AfterScript))}); err != nil {
+			return nil, ErrSource
+		}
+		if _, err := writer.Write([]byte(job.AfterScript)); err != nil {
 			return nil, ErrSource
 		}
 	}
@@ -454,8 +469,9 @@ func (e *Executor) Execute(ctx context.Context, job Job, onLog func(context.Cont
 	}
 	// Each native exec has a fresh explicit environment. Docker exec otherwise
 	// inherits image/container variables; worker credentials never enter the job.
-	execArgs := func(command string) []string {
-		return []string{"container", "exec", "--user=1000:1000", "--workdir=/workspace", container, "/usr/bin/env", "-i", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME=/tmp", "GOLF_SOURCE_COMMIT=" + job.SourceCommit, "GOLF_JOB_ID=" + job.JobID, "/bin/sh", "-c", command}
+	execArgs := func(command string, extraEnv ...string) []string {
+		args := []string{"container", "exec", "--user=1000:1000", "--workdir=/workspace", container, "/usr/bin/env", "-i", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME=/tmp", "GOLF_SOURCE_COMMIT=" + job.SourceCommit, "GOLF_JOB_ID=" + job.JobID}
+		return append(append(args, extraEnv...), "/bin/sh", "-c", command)
 	}
 	if _, err = e.command(runCtx, nil, execArgs("set -e\ncp -R /golf/source/. /workspace/\nchmod -R u+w /workspace")...); err != nil {
 		return
@@ -503,8 +519,43 @@ func (e *Executor) Execute(ctx context.Context, job Job, onLog func(context.Cont
 			return result, ErrInfrastructure
 		}
 		if result.ExitCode != 0 {
+			break
+		}
+	}
+	if job.AfterScript != "" {
+		status := "success"
+		if result.ExitCode != 0 {
+			status = "failed"
+		}
+		cmd := exec.CommandContext(attachCtx, e.config.DockerBinary, execArgs("exec /bin/sh -e /golf/after", "CI_JOB_STATUS="+status)...)
+		cmd.Stdout = streamWriter{sink, "stdout"}
+		cmd.Stderr = streamWriter{sink, "stderr"}
+		cmd.WaitDelay = 2 * time.Second
+		afterErr := cmd.Run()
+		sink.mu.Lock()
+		result.LogLimitExceeded = sink.exceeded
+		result.LogsTruncated = sink.exceeded
+		callbackFailed := sink.failed
+		sink.mu.Unlock()
+		result.TimedOut = errors.Is(runCtx.Err(), context.DeadlineExceeded)
+		result.Cancelled = ctx.Err() != nil && !result.TimedOut
+		if callbackFailed {
+			return result, ErrInfrastructure
+		}
+		if result.LogLimitExceeded || result.TimedOut || result.Cancelled {
 			return result, nil
 		}
+		var exited *exec.ExitError
+		if afterErr != nil && (!errors.As(afterErr, &exited) || exited.ExitCode() < 0 || exited.ExitCode() > 255) {
+			return result, ErrInfrastructure
+		}
+		var records []containerInfo
+		if e.inspect(runCtx, "container", container, &records) != nil || len(records) != 1 || records[0].ID != container || !records[0].State.Running || !owned(records[0].Config.Labels, job.AttemptID, owner, e.config.WorkerID) {
+			return result, ErrInfrastructure
+		}
+	}
+	if result.ExitCode != 0 {
+		return result, nil
 	}
 
 	if len(job.ArtifactPaths) > 0 {

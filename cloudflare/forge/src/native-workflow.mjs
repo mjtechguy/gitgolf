@@ -25,6 +25,7 @@ const label = value => typeof value === 'string' && value.length <= 128 && !/[\x
 const script = value => typeof value === 'string' && value.trim() && !value.includes('${{') && !value.includes('\0') &&
   new TextEncoder().encode(value).length <= 8192;
 const scripts = value => typeof value === 'string' ? [value] : Array.isArray(value) && value.length <= 10 ? value : null;
+const pinnedImage = value => typeof value === 'string' && /^[a-z0-9][a-z0-9._/-]{0,127}:[a-z0-9][a-z0-9._-]{0,63}@sha256:[a-f0-9]{64}$/.test(value);
 
 // Only the declared syntax is executable. A partial parse must never become a job.
 export function nativeWorkflow(format, source) {
@@ -57,20 +58,20 @@ export function nativeWorkflow(format, source) {
   const names = Object.keys(root).filter(key => key !== 'stages');
   if (names.length !== 1 || root.stages !== undefined && (!Array.isArray(root.stages) || root.stages.length !== 1 || typeof root.stages[0] !== 'string')) throw Error('Unsupported native GitLab workflow');
   const [jobId] = names, job = root[jobId];
-  if (!/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(jobId) || !fields(job, ['stage', 'before_script', 'script', 'after_script']) || job.stage !== undefined && (typeof job.stage !== 'string' || root.stages && job.stage !== root.stages[0])) throw Error('Unsupported native GitLab job');
+  if (!/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(jobId) || !fields(job, ['stage', 'image', 'before_script', 'script', 'after_script']) || job.stage !== undefined && (typeof job.stage !== 'string' || root.stages && job.stage !== root.stages[0]) || job.image !== undefined && !pinnedImage(job.image)) throw Error('Unsupported native GitLab job');
   const before = job.before_script === undefined ? [] : scripts(job.before_script), main = scripts(job.script), after = job.after_script === undefined ? [] : scripts(job.after_script);
   if (!before || !main?.length || !after || before.length + main.length + after.length > 10 || ![...before, ...main, ...after].every(script)) throw Error('Unsupported native GitLab script');
   const run = [...before, ...main].join('\n'), cleanup = after.join('\n');
   if (new TextEncoder().encode(run + cleanup).length > 16384) throw Error('Native workflow script limit');
-  return { format, name: '', jobId, steps: [{ name: jobId, run, shell: 'sh' }], ...(cleanup ? { afterScript: cleanup } : {}) };
+  return { format, name: '', jobId, steps: [{ name: jobId, run, shell: 'sh' }], ...(job.image ? { image: job.image } : {}), ...(cleanup ? { afterScript: cleanup } : {}) };
 }
 
 export function nativeWorkflowPlanOK(plan) {
-  return fields(plan, ['format', 'name', 'jobId', 'steps', 'afterScript']) && ['actions', 'gitlab'].includes(plan.format) && label(plan.name) &&
+  return fields(plan, ['format', 'name', 'jobId', 'steps', 'image', 'afterScript']) && ['actions', 'gitlab'].includes(plan.format) && label(plan.name) &&
     typeof plan.jobId === 'string' && /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(plan.jobId) &&
     Array.isArray(plan.steps) && plan.steps.length >= 1 && plan.steps.length <= (plan.format === 'actions' ? 10 : 1) &&
     plan.steps.every(step => fields(step, ['name', 'run', 'shell']) && label(step.name) && script(step.run) && ['default', 'sh', 'bash'].includes(step.shell)) &&
-    (plan.format === 'actions' ? plan.afterScript === undefined : plan.steps[0].shell === 'sh' && (plan.afterScript === undefined || script(plan.afterScript))) &&
+    (plan.format === 'actions' ? plan.afterScript === undefined && plan.image === undefined : plan.steps[0].shell === 'sh' && (plan.image === undefined || pinnedImage(plan.image)) && (plan.afterScript === undefined || script(plan.afterScript))) &&
     new TextEncoder().encode(plan.steps.map(step => step.run).join('') + (plan.afterScript || '')).length <= 16384;
 }
 

@@ -54,8 +54,8 @@ def initialize(directory, account, host, worker, workspace, namespace, database_
                 raise ValueError('Choose one approved native Actions or GitLab workflow path')
         elif not isinstance(tests.get('module'), str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,8}', tests['module']) or len(tests['module']) > 128:
             raise ValueError('Container tests require an approved Python unittest module')
-        if not isinstance(tests.get('image'), str) or not re.fullmatch(r'[a-z0-9][a-z0-9._/-]{0,127}:[a-z0-9][a-z0-9._-]{0,63}', tests['image']):
-            raise ValueError('Explicit built container image tag required')
+        if not isinstance(tests.get('image'), str) or not re.fullmatch(r'[a-z0-9][a-z0-9._/-]{0,127}:[a-z0-9][a-z0-9._-]{0,63}(?:@sha256:[a-f0-9]{64})?', tests['image']):
+            raise ValueError('Explicit built container image tag or pinned digest required')
         if not isinstance(tests.get('image_id'), str) or not re.fullmatch('sha256:[a-f0-9]{64}', tests['image_id']):
             raise ValueError('Approved local Docker image ID required')
     if analytics is not None and (evidence is None or not isinstance(analytics, str) or not re.fullmatch('[A-Za-z_][A-Za-z0-9_]{0,63}', analytics)):

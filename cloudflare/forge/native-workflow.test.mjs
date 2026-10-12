@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { nativeWorkflow, nativeWorkflowPath, nativeWorkflowPlanOK, nativeWorkflowSource } from './src/native-workflow.mjs';
 
 const actions = `name: Verify
@@ -73,4 +74,19 @@ test('workflow source is read from an exact regular Git blob with bounded bytes'
   assert.equal(result.blobId, blobId);
   assert.equal(result.plan.jobId, 'check');
   await assert.rejects(nativeWorkflowSource(repo, tree, 'actions', '.github/workflows/missing.yml'), /missing/);
+});
+
+test('native Actions and GitLab host fixtures are admitted with exact shell plans', async () => {
+  const base = new URL('../../docs/compatibility/fixtures/', import.meta.url);
+  const action = nativeWorkflow('actions', await readFile(new URL('native-actions-shell.yml', base), 'utf8'));
+  const lab = nativeWorkflow('gitlab', await readFile(new URL('native-gitlab-shell.yml', base), 'utf8'));
+  assert.equal(action.jobId, 'verify');
+  assert.equal(action.steps[0].run, 'test -f README.md && cat README.md');
+  assert.equal(lab.jobId, 'verify');
+  assert.equal(lab.steps[0].run, 'test -f README.md && echo main && exit 7');
+  assert.equal(lab.afterScript, 'echo after-script');
+  const portable = nativeWorkflow('gitlab', await readFile(new URL('gitlab-shell.yml', base), 'utf8'));
+  assert.match(portable.image, /^alpine:3\.23@sha256:/);
+  assert.equal(portable.steps[0].run.includes('printf "gitlab proof\\n"'), true);
+  assert.equal(nativeWorkflowPlanOK(portable), true);
 });

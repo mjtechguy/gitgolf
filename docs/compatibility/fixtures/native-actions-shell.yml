@@ -1,0 +1,7 @@
+on: pull_request
+jobs:
+  verify:
+    runs-on: golf-native-linux
+    steps:
+      - run: test -f README.md && cat README.md
+        shell: sh

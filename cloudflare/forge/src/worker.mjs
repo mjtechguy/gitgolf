@@ -13,6 +13,7 @@ import { activityAuthority } from './core.mjs';
 import { registryAuthority } from './repository-settings.mjs';
 import { PerformanceHistory } from './performance.mjs';
 import { executionDiagnostic } from './test-policy.mjs';
+import { nativeRunnerStop } from './native-runners.mjs';
 
 
 export class Workspace extends DurableObject {
@@ -133,10 +134,10 @@ export class EvidenceWorkflow extends WorkflowEntrypoint {
     try {
       for (const [phase, tasks] of executions) if (tasks) {
         let result;
-        for (let i = 0; i < (phase === 'agents' ? 80 : 40); i++) {
+        for (let i = 0; i < (phase === 'agents' ? 80 : 70); i++) {
           result = await step.do('container ' + phase + ' ' + i, { retries: { limit: 2, delay: '1 second' }, timeout: '45 seconds' }, () => owner.evidence(id, phase));
           if (result.state !== 'RUNNING') break;
-          await step.sleep('wait for ' + phase + ' ' + i, '5 seconds');
+          await step.sleep('wait for ' + phase + ' ' + i, phase === 'tests' ? '9 seconds' : '5 seconds');
         }
         if (result.state === 'RUNNING') await step.do('stop overdue ' + phase, () => owner.evidence(id, 'finish-' + phase));
       }
@@ -166,8 +167,11 @@ export default {
       ['previews', () => owner.cleanupPreviews()],
       ['evidence', async () => { const result = await reconcileEvidence(env, async job => {
         if (job.test_state === 'RUNNING') {
-          if (!ctx.exports.PRTestTask) throw Error('Test cleanup allocation is missing');
-          await ctx.exports.PRTestTask.getByName(job.id).cancel();
+          if (JSON.parse(job.snapshot).execution?.runner) await nativeRunnerStop(env,job);
+          else {
+            if (!ctx.exports.PRTestTask) throw Error('Test cleanup allocation is missing');
+            await ctx.exports.PRTestTask.getByName(job.id).cancel();
+          }
         }
         if (['FORK_PENDING', 'RUNNING'].includes(job.agent_state)) {
           if (!ctx.exports.PRAgentTask) throw Error('Agent cleanup allocation is missing');

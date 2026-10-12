@@ -492,8 +492,8 @@ or cost improvement and an expired/incompatible handle safely falls back.
 
 - [ ] Map existing portable job semantics to versioned native execution contract.
 - [ ] Reuse existing engine catalogs and credential brokers; preserve source fences.
-- [ ] Add workspace enrollment/pool placement to native backend with matching UI.
-- [ ] Implement machine rotation, revoke, drain, capacity and trusted/untrusted pools.
+- [x] Add workspace enrollment/pool placement to native backend with matching UI.
+- [x] Implement machine rotation, revoke, drain, capacity and trusted/untrusted pools.
 - [ ] Run real Actions and GitLab fixture corpus on local and native control paths.
 - [ ] Show explicit unsupported forms; don't silently reduce workflow semantics.
 - [ ] Test worker loss, duplicate dispatch, cancellation, reboot and cleanup failure.
@@ -505,8 +505,20 @@ repository-scoped OCI publication destination. Admission rejects unknown fields;
 the result repeats the contract and exact source and is released only after
 container cleanup. Jobs captured before the contract was added can finish during
 rollout. This is the existing managed PR-test recipe with a versioned boundary.
-The portable Actions catalogs, GitLab shell plan, lease generation, pool placement
-and customer runner transport still need their native adapter and acceptance runs.
+The first customer-hosted adapter now carries the approved exact-source Python
+module or one-job Actions/GitLab shell plan over an outbound, lease-bound host
+protocol. It reuses the portable Docker isolation executor, verifies the Git
+commit/tree/workflow blob through the existing credential broker, journals
+unknown claims and completion receipts, and quarantines capacity on lease loss.
+Workspace admins can enroll, rotate, drain, revoke and reconcile machines; repo
+admins place an untrusted pool. The [host guide](../cmd/golf-native-runner/README.md)
+documents setup and interrupted-attempt recovery. Local tests exercise real
+leased Git clones and Docker completion for Actions shell, GitLab shell and the
+existing pinned GitLab image fixture. A hosted customer-runner enrollment and
+execution proof is still required. Full portable Actions catalogs, native
+GitLab Runner protocol, broad failure/load matrix and socketless build
+publication remain open. The bounded shell profile rejects
+unsupported forms explicitly; it does not represent full runner compatibility.
 
 An opt-in `golf.native.workflow-shell.v1` PR evidence profile now admits one
 operator-selected Actions or GitLab shell job from the exact PR head blob. It

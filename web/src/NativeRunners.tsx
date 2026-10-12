@@ -1,0 +1,102 @@
+import { useEffect, useState } from 'react';
+import { useForm } from '@tanstack/react-form';
+import { useQuery } from '@tanstack/react-query';
+import { CopyButton, privateQuery } from './RepositoryUI';
+import { DataTable } from './DataTable';
+import type { DataTableColumn } from './DataTable';
+import { nativeAPI } from './NativeForge';
+
+type Pool = { id: string; name: string; version: number; state: 'ACTIVE' | 'DRAINING'; trust_class: 'UNTRUSTED' | 'TRUSTED'; max_parallel: number; image_id: string };
+type Machine = { id: string; pool_id: string; name: string; version: number; state: 'ACTIVE' | 'DRAINING' | 'QUARANTINED' | 'REVOKED'; expires_at: number; last_seen_at: string | null; active_job_id: string | null; cleanup_state: 'CONFIRMED' | 'UNKNOWN' };
+type Inventory = { pools: Pool[]; machines: Machine[]; truncated: boolean };
+type Placement = { repository_id: number; pool_id: string | null; pool_version: number | null; version: number };
+const message = (error: unknown) => error instanceof Error ? error.message : 'The runner operation could not be confirmed.';
+
+function PoolEditor({ pool, busy, save, close }: { pool?: Pool; busy: boolean; save: (value: { name: string; state: Pool['state']; trustClass: Pool['trust_class']; maxParallel: number }) => Promise<void>; close: () => void }) {
+  const form = useForm({ defaultValues: { name: pool?.name || '', state: pool?.state || 'ACTIVE' as Pool['state'], trustClass: pool?.trust_class || 'UNTRUSTED' as Pool['trust_class'], maxParallel: pool?.max_parallel || 1 }, onSubmit: async ({ value }) => save(value) });
+  return <form className="credential-form-content" onSubmit={event => { event.preventDefault(); void form.handleSubmit(); }}>
+    <h3>{pool ? `Edit ${pool.name}` : 'New runner pool'}</h3><p className="field-help">Untrusted pools can run approved PR code. Trusted pools are reserved from PR placement.</p>
+    <form.Field name="name">{field => <label>Pool name<input required maxLength={80} disabled={busy} value={field.state.value} onChange={event => field.handleChange(event.target.value)} /></label>}</form.Field>
+    <form.Field name="state">{field => <label>Admission<select disabled={busy} value={field.state.value} onChange={event => field.handleChange(event.target.value as Pool['state'])}><option value="ACTIVE">Active</option><option value="DRAINING">Draining</option></select></label>}</form.Field>
+    <form.Field name="trustClass">{field => <label>Trust class<select disabled={busy} value={field.state.value} onChange={event => field.handleChange(event.target.value as Pool['trust_class'])}><option value="UNTRUSTED">Untrusted PR code</option><option value="TRUSTED">Trusted only</option></select></label>}</form.Field>
+    <form.Field name="maxParallel">{field => <label>Maximum parallel jobs<input type="number" min={1} max={20} required disabled={busy} value={field.state.value} onChange={event => field.handleChange(Number(event.target.value))} /></label>}</form.Field>
+    <div className="credential-actions"><button className="button primary" disabled={busy}>Save pool</button><button type="button" className="button secondary" disabled={busy} onClick={close}>Cancel</button></div>
+  </form>;
+}
+
+function MachineEditor({ pool, busy, enroll, close }: { pool: Pool; busy: boolean; enroll: (name: string, ttlHours: number) => Promise<void>; close: () => void }) {
+  const form = useForm({ defaultValues: { name: '', ttlHours: 4, trustExecution: false }, onSubmit: async ({ value }) => { if (value.trustExecution) await enroll(value.name, value.ttlHours); } });
+  return <form className="credential-form-content" onSubmit={event => { event.preventDefault(); void form.handleSubmit(); }}>
+    <h3>Enroll machine in {pool.name}</h3><p className="field-help">The one-time credential gives this host access to approved source and jobs until expiry. Keep it in a private host secret store.</p>
+    <form.Field name="name">{field => <label>Machine name<input required maxLength={80} disabled={busy} value={field.state.value} onChange={event => field.handleChange(event.target.value)} /></label>}</form.Field>
+    <form.Field name="ttlHours">{field => <label>Credential lifetime in hours<input type="number" min={1} max={24} required disabled={busy} value={field.state.value} onChange={event => field.handleChange(Number(event.target.value))} /></label>}</form.Field>
+    <form.Field name="trustExecution">{field => <label><input type="checkbox" required disabled={busy} checked={field.state.value} onChange={event => field.handleChange(event.target.checked)} /> I trust this host to isolate customer jobs and report cleanup honestly.</label>}</form.Field>
+    <div className="credential-actions"><button className="button primary" disabled={busy}>Enroll machine</button><button type="button" className="button secondary" disabled={busy} onClick={close}>Cancel</button></div>
+  </form>;
+}
+
+export function NativeRunnerAdmin() {
+  const inventory = useQuery({ ...privateQuery, queryKey: ['native-runner-inventory'], queryFn: ({ signal }) => nativeAPI<Inventory>('/native/runner-admin', { action: 'list' }, signal), refetchInterval: 15000 });
+  const [pool, setPool] = useState<Pool | 'new'>();
+  const [newPoolId, setNewPoolId] = useState('');
+  const [enrollment, setEnrollment] = useState<Pool>();
+  const [newMachineId, setNewMachineId] = useState('');
+  const [reconcile, setReconcile] = useState<Machine>();
+  const [credential, setCredential] = useState<{ machine: string; value: string }>();
+  const [busy, setBusy] = useState(false), [error, setError] = useState<unknown>();
+  useEffect(() => { const clear = () => setCredential(undefined); window.addEventListener('pagehide', clear); return () => window.removeEventListener('pagehide', clear); }, []);
+  async function mutate<T>(body: object, done?: (value: T) => void): Promise<boolean> {
+    setBusy(true); setError(undefined);
+    try { const value = await nativeAPI<T>('/native/runner-admin', body); done?.(value); await inventory.refetch(); return true; }
+    catch (cause) { setError(cause); await inventory.refetch(); return false; }
+    finally { setBusy(false); }
+  }
+  const pools: DataTableColumn<Pool>[] = [
+    { accessorKey: 'name', header: 'Pool' }, { accessorKey: 'trust_class', header: 'Trust' }, { accessorKey: 'state', header: 'Admission' },
+    { accessorKey: 'max_parallel', header: 'Capacity' }, { id: 'machines', header: 'Machines', accessorFn: p => inventory.data?.machines.filter(m => m.pool_id === p.id).length || 0 },
+    { id: 'actions', header: 'Actions', enableSorting: false, cell: ({ row }) => <div className="credential-actions"><button className="button secondary" disabled={busy} onClick={() => setPool(row.original)}>Edit</button><button className="button secondary" disabled={busy || row.original.state !== 'ACTIVE'} onClick={() => { setNewMachineId(crypto.randomUUID()); setEnrollment(row.original); }}>Enroll host</button></div> },
+  ];
+  const machines: DataTableColumn<Machine>[] = [
+    { accessorKey: 'name', header: 'Host' }, { id: 'pool', header: 'Pool', accessorFn: m => inventory.data?.pools.find(p => p.id === m.pool_id)?.name || m.pool_id },
+    { accessorKey: 'state', header: 'State' }, { accessorKey: 'cleanup_state', header: 'Cleanup' },
+    { id: 'lease', header: 'Current job', accessorFn: m => m.active_job_id || 'Idle' },
+    { id: 'expiry', header: 'Credential expiry', accessorFn: m => new Date(m.expires_at).toLocaleString() },
+    { id: 'actions', header: 'Actions', enableSorting: false, cell: ({ row }) => { const m = row.original; return <div className="credential-actions">
+      <button className="button secondary" disabled={busy || m.state === 'REVOKED' || !!m.active_job_id || m.cleanup_state !== 'CONFIRMED'} onClick={() => void mutate<{ credential: string }>({ action: 'rotate', id: m.id, expectedVersion: m.version, ttlHours: 4 }, value => setCredential({ machine: m.name, value: value.credential }))}>Rotate 4h</button>
+      {m.state === 'ACTIVE' ? <button className="button secondary" disabled={busy} onClick={() => void mutate({ action: 'control', id: m.id, expectedVersion: m.version, state: 'DRAINING' })}>Drain</button> : m.state === 'DRAINING' && m.cleanup_state === 'CONFIRMED' ? <button className="button secondary" disabled={busy} onClick={() => void mutate({ action: 'control', id: m.id, expectedVersion: m.version, state: 'ACTIVE' })}>Activate</button> : null}
+      {m.state !== 'REVOKED' && <button className="button secondary" disabled={busy} onClick={() => void mutate({ action: 'control', id: m.id, expectedVersion: m.version, state: 'REVOKED' })}>Revoke</button>}
+      {m.cleanup_state === 'UNKNOWN' && m.active_job_id && ['QUARANTINED','REVOKED'].includes(m.state) && <button className="button secondary" disabled={busy} onClick={() => setReconcile(m)}>Reconcile cleanup</button>}
+    </div>; } },
+  ];
+  return <section className="page-stack"><header className="repository-intro"><div><h2>Native runner pools</h2><p>Customer hosts poll outbound for approved PR jobs. A host must have the approved image installed and a private state directory.</p></div></header>
+    {error ? <p className="error" role="alert">{message(error)} Refresh inventory and inspect the original operation before retrying.</p> : null}
+    {credential && <section className="browser-panel"><h3>One-time credential for {credential.machine}</h3><p className="field-help">Store it on the host now. Closing this panel removes it from the page.</p><code>{credential.value}</code><div className="credential-actions"><CopyButton text={credential.value} label="Copy runner credential" /><button className="button secondary" onClick={() => setCredential(undefined)}>Close credential</button></div></section>}
+    <section className="browser-panel"><div className="browser-panel-heading"><h3>Pools</h3><button className="button primary" disabled={busy || !!inventory.data?.truncated} onClick={() => { setNewPoolId(crypto.randomUUID()); setPool('new'); }}>New pool</button><button className="button secondary" disabled={inventory.isFetching || busy} onClick={() => void inventory.refetch()}>Refresh</button></div>
+      {inventory.error && <p className="error" role="alert">{message(inventory.error)}</p>}{inventory.isSuccess && <DataTable data={inventory.data.pools} columns={pools} getRowId={p => p.id} label="native runner pools" />}</section>
+    {pool && <PoolEditor key={pool === 'new' ? newPoolId : pool.id + '/' + pool.version} pool={pool === 'new' ? undefined : pool} busy={busy} close={() => setPool(undefined)} save={async value => { if (await mutate({ action: 'savePool', id: pool === 'new' ? newPoolId : pool.id, expectedVersion: pool === 'new' ? 0 : pool.version, ...value })) setPool(undefined); }} />}
+    {enrollment && <MachineEditor key={newMachineId} pool={enrollment} busy={busy} close={() => setEnrollment(undefined)} enroll={async (name, ttlHours) => { if (await mutate<{ credential: string }>({ action: 'enroll', id: newMachineId, poolId: enrollment.id, poolVersion: enrollment.version, name, ttlHours, trustExecution: true }, value => setCredential({ machine: name, value: value.credential }))) setEnrollment(undefined); }} />}
+    <section className="browser-panel"><div className="browser-panel-heading"><h3>Machines</h3></div>{inventory.isSuccess && <DataTable data={inventory.data.machines} columns={machines} getRowId={m => m.id} label="native runner machines" />}{inventory.data?.truncated && <p className="field-help">Inventory limit reached. Inspect the full inventory through the API before adding hosts.</p>}</section>
+    {reconcile && <form className="credential-form-content" onSubmit={event => { event.preventDefault(); void mutate({ action: 'reconcile', id: reconcile.id, expectedVersion: reconcile.version, jobId: reconcile.active_job_id, cleanupConfirmed: true }).then(ok => { if (ok) setReconcile(undefined); }); }}><h3>Confirm physical cleanup of {reconcile.name}</h3><p>Verify all containers, volumes and local source files for job <code>{reconcile.active_job_id}</code> are gone before clearing quarantine.</p><label><input type="checkbox" required disabled={busy} /> I inspected the exact host and confirmed cleanup.</label><div className="credential-actions"><button className="button primary" disabled={busy}>Confirm cleanup</button><button type="button" className="button secondary" disabled={busy} onClick={() => setReconcile(undefined)}>Cancel</button></div></form>}
+  </section>;
+}
+
+export function NativeRunnerPlacement({ context }: { context: { repository: { owner: string; name: string }; repositoryId: string } }) {
+  const inventory = useQuery({ ...privateQuery, queryKey: ['native-runner-placement', context.repositoryId], queryFn: ({ signal }) => nativeAPI<{ placement: Placement; pools: Pool[]; canEdit: boolean }>('/native/runner-placement', { ...context, action: 'get' }, signal), refetchInterval: 30000 });
+  const [choice, setChoice] = useState<string>();
+  const [busy, setBusy] = useState(false), [error, setError] = useState<unknown>();
+  const current = inventory.data;
+  async function save() {
+    if (!current || choice === undefined) return;
+    const pool = current.pools.find(p => p.id === choice);
+    setBusy(true); setError(undefined);
+    try { await nativeAPI('/native/runner-placement', { ...context, action: 'set', expectedVersion: current.placement.version, poolId: pool?.id || null, poolVersion: pool?.version || null }); setChoice(undefined); await inventory.refetch(); }
+    catch (cause) { setError(cause); setChoice(undefined); await inventory.refetch(); }
+    finally { setBusy(false); }
+  }
+  return <section className="browser-panel"><div className="browser-panel-heading"><h3>PR runner placement</h3><button className="button secondary" disabled={busy || inventory.isFetching} onClick={() => void inventory.refetch()}>Refresh</button></div>
+    <p className="field-help">Jobs use the selected active untrusted pool. A changed pool or placement stops a queued job until it is admitted again.</p>
+    {inventory.error && <p className="error" role="alert">{message(inventory.error)}</p>}{error ? <p className="error" role="alert">{message(error)} Inspect the refreshed placement before another edit.</p> : null}
+    {current && <><p>Current: {current.pools.find(p => p.id === current.placement.pool_id)?.name || (current.placement.pool_id ? 'Unavailable pool' : 'Managed Cloudflare Container')} · version {current.placement.version}</p>
+      {current.canEdit && <form className="credential-actions" onSubmit={event => { event.preventDefault(); void save(); }}><label>Runner pool <select value={choice ?? current.placement.pool_id ?? ''} disabled={busy} onChange={event => setChoice(event.target.value)}><option value="">Managed Cloudflare Container</option>{current.pools.map(p => <option key={p.id} value={p.id} disabled={p.state !== 'ACTIVE'}>{p.name} · {p.state.toLowerCase()} · capacity {p.max_parallel}</option>)}</select></label><button className="button primary" disabled={busy || choice === undefined || choice === (current.placement.pool_id || '')}>Save placement</button></form>}</>}
+  </section>;
+}
