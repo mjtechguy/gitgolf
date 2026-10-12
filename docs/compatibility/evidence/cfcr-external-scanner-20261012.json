@@ -1,0 +1,87 @@
+{
+  "state": "passed",
+  "at": "2026-10-12T03:28:35.935Z",
+  "runtime": "local workerd + isolated real Docker; not hosted Cloudflare",
+  "subject": "sha256:450a3aef8802c6b8bf413c8c95c46140065d59547fbdd23a847ee7c869bfcca7",
+  "imageId": "sha256:95315c8132a87ec99eb2438362af93d975c92f2a9540675b5e17b42326fc217e",
+  "results": [
+    {
+      "jobId": "47822dd318ab1016cc3320b61827c78351fec0ab81773ba67236339ef44fcfdb",
+      "state": "succeeded",
+      "elapsedMs": 7885,
+      "cleanup": "confirmed",
+      "reports": [
+        "syft",
+        "spdx",
+        "cyclonedx",
+        "grype",
+        "trivy"
+      ],
+      "severities": {
+        "high": 20,
+        "medium": 19,
+        "critical": 1,
+        "low": 2
+      }
+    },
+    {
+      "jobId": "f322f1addad3df39d84fb68ae82db4e86ffb0de9753df31e1eb2232711bc596f",
+      "state": "succeeded",
+      "elapsedMs": 8107,
+      "cleanup": "confirmed",
+      "reports": [
+        "syft",
+        "spdx",
+        "cyclonedx",
+        "grype",
+        "trivy"
+      ],
+      "severities": {
+        "high": 20,
+        "medium": 19,
+        "critical": 1,
+        "low": 2
+      }
+    }
+  ],
+  "faultChecks": [
+    "cancel after Docker engine start",
+    "SIGKILL supervisor",
+    "independent engine and broker stop",
+    "restart refuses retained journal",
+    "admin reconciles exact terminal cleanup"
+  ],
+  "cleanup": "owned containers and networks absent",
+  "sourceFiles": {
+    "src/runners.mjs": "cc9b05e68e9810d417a512a0fe8c9d329514f7496cce77f63f6238055feecc6c",
+    "src/jobs.mjs": "84d9dbf02d391823490314c9b936beaf0f225244d4736edad507afcb16bd2b7e",
+    "src/management.mjs": "2da81d3f86a5a1ffd8e7ecf8f25aa5e7250f9b5b8b43ea4ee6795749bb08afea",
+    "src/worker.mjs": "44b20e363d69327972b27b32c9ca233452f6a62dff7b3efb3daa6ba60c42fbbf",
+    "src/policy.mjs": "9db461bed153e9ea909cdd319357418985b84d8f766cb0cd6232bec6324f835f",
+    "scripts/scanner-runner.mjs": "3d030cec08a15ef289f90f6b4c6ca8c45a2f701661c5540ad8bee5d7d8f3d43d",
+    "scripts/external-scanner-check.mjs": "33758414b353bfca3f114172126cd9205f9d9264a93cbf47c185804023a2620d",
+    "scanner/scan.py": "5524658fc36097e9658432fe5fdf4ea415f81fb9cc04c9381142f7695874b3fd",
+    "scanner/broker.py": "ff9276b11cb5f07503b4c2fa0eaa3571a22ad027c4821199c2d49f1230ce2b66"
+  },
+  "qualificationCommand": "npm run check:external-scanner",
+  "additionalChecks": {
+    "npm test": {
+      "javascriptPassed": 54,
+      "pythonPassed": 2
+    },
+    "npm run conformance": {
+      "passed": 75,
+      "failed": 0,
+      "conditionalSkipped": 4
+    },
+    "npm run build -- .tmp/hybrid-prepare": "passed; no Container application emitted; no deployment"
+  },
+  "limits": [
+    "Local workerd and rootless Docker only; not hosted Cloudflare",
+    "Small vulnerable fixture; not representative large-image performance",
+    "External mode one job per invocation; one active scan per repository",
+    "Existing native scanner startup and rollback gates remain open"
+  ],
+  "severityAggregation": "Existing per-severity maximum across engines, not a deduplicated issue count",
+  "cfcrCommit": "9b34797"
+}

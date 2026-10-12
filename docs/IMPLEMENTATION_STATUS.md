@@ -1,5 +1,27 @@
 # Golf implementation status
 
+## 2026-10-12 — Hybrid execution plan and independent external scanner
+
+Existing work is checkpointed on Golf main `36f7d01` and independent CFCR main
+`1a2470b`; development continues on `feat/hybrid-runners-cfcr` in both repositories.
+The [detailed hybrid execution plan](HYBRID_EXECUTION_AND_CFCR_PLAN.md) records
+P0–P9, service choices, execution/trust/cache contracts and acceptance gates.
+
+Independent CFCR now has an opt-in outbound external scanner path: current-admin
+machine enrollment, exact-job leases, immutable reports, producer revocation,
+cleanup quarantine and explicit recovery. Its rootless-compatible Docker
+supervisor keeps credentials out of the scan container. Real local workerd +
+Docker qualification produced five reports twice in about eight seconds per
+small vulnerable fixture, with running cancellation, SIGKILL recovery and owned
+cleanup. Trivy uses read-only database files without a per-job database copy.
+[Sanitized evidence](compatibility/evidence/cfcr-external-scanner-20261012.json)
+records the scope; this is not a hosted or large-image performance claim.
+
+Golf's full checkpoint `make check` passed. No hosted resources were deployed for
+this slice. The previous managed scanner startup and D1 rollback-preflight gates
+remain open, along with general native workflow execution, fleet/UI enrollment,
+evidence reuse and the rest of the phased plan.
+
 ## 2026-10-12 — Cloudflare/CFCR qualification and preview discoverability
 
 See the [qualification packet](CLOUDFLARE_FULL_QUALIFICATION_2026-10-12.md) for real hosted results, failed attempts, timing receipts and cleanup. Native CI now publishes an exact-commit OCI image into separate CFCR: the full agent/test bundles had omitted the private authorization entrypoint. Both exports are repaired and production preparation checks configured exports against the built bundle. Registry infrastructure failures preserve bounded diagnostics, terminate as LOST and destroy the job container.

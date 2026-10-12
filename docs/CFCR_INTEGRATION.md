@@ -73,3 +73,10 @@ Docker/regctl roundtrips, Cosign signature/attestation, policy enforcement and l
 Golf permission revocation passed. Hosted OCI v1.1.1: 71 passed, eight conditional
 skips. Native scanner startup still fails before reports; standalone scanner
 success does not close that gate. See the qualification packet for receipts.
+
+## Hybrid execution work
+
+The [hybrid execution and CFCR plan](HYBRID_EXECUTION_AND_CFCR_PLAN.md) defines
+the independent registry, customer runner, managed execution, database/evidence
+reuse and CI-to-preview delivery phases. CFCR owns its scanner jobs; this does not
+turn scanner enrollment into general Golf Actions/GitLab runner support.
