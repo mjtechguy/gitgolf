@@ -518,9 +518,11 @@ tested Git commit, requires a current passing registry scan/trust policy, and
 rechecks that policy for each reviewer request. The preview serves the copied
 image assets through the existing Access protected R2 path and shows its image
 digest on the PR. This path does not run the container, build arbitrary source,
-or claim a general Actions/GitLab runner. The hosted CI fixture used for scanner
-qualification contains deliberate vulnerable packages, so positive hosted
-deployment still needs a clean scanned image and a separate paid rehearsal.
+or claim a general Actions/GitLab runner. A disposable hosted rehearsal served
+the scanned CI image's static assets after explicitly relaxing its severity
+threshold, then revoked access when the original threshold was restored. The
+fixture contains deliberate vulnerable packages; a positive run under the
+default severity threshold and a running container deployment remain open.
 
 - [ ] Build immutable commit in an admitted isolated job.
 - [ ] Publish exact OCI digest using existing scoped job credential.

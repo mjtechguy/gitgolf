@@ -84,7 +84,7 @@ def main():
     if args.apps and (not args.delivery or not re.fullmatch('[a-f0-9]{32}', args.app_zone or '') or not re.fullmatch(r'[a-z0-9-]+(?:\.[a-z0-9-]+)+', args.app_host or '')):
         parser.error('--apps requires --delivery, canonical --app-zone and --app-host')
     demo = bool(args.demo_host or args.demo_email)
-    evidence_limit = 3 if args.ci_resilience else 8 if demo else 4 if args.agents else 2
+    evidence_limit = 8 if demo else 4 if args.agents else 3 if args.ci_resilience or args.registry_scanner_image else 2
     if args.unattended and (not args.demo_host or args.demo_email):
         parser.error('--unattended requires --demo-host and forbids --demo-email')
     if args.operations_rehearsal and not demo:
@@ -279,7 +279,7 @@ def main():
     signal.signal(signal.SIGTERM, interrupt)
     signal.signal(signal.SIGINT, interrupt)
     signal.signal(signal.SIGALRM, interrupt)
-    signal.alarm(2700 if args.operations_rehearsal or args.unattended else 900)
+    signal.alarm(2700 if args.operations_rehearsal or args.unattended or args.registry_scanner_image else 900)
     save()
     try:
         if args.unattended:
@@ -314,12 +314,12 @@ def main():
         query('INSERT INTO workspaces(slug,artifact_namespace) VALUES(?,?)', ['alice', name])
         query("INSERT INTO users(id,login,can_create) VALUES(1,'alice',1),(2,'bob',0)")
         for token, user in [(owner, 1), (reader, 2)]:
-            query('INSERT INTO credentials(digest,user_id,expires_at) VALUES(?,?,?)', [hashlib.sha256(token.encode()).hexdigest(), user, int(time.time()) + (3600 if args.unattended else 18000 if demo else 900)])
+            query('INSERT INTO credentials(digest,user_id,expires_at) VALUES(?,?,?)', [hashlib.sha256(token.encode()).hexdigest(), user, int(time.time()) + (3600 if args.unattended or args.registry_scanner_image else 18000 if demo else 900)])
         settings = {'account': args.account_id, 'worker': name, 'namespace': name, 'workspace': 'alice',
                     'database': state['resources']['database'], 'origin': f'https://{name}.{args.workers_subdomain}.workers.dev', 'workers_dev': True}
         if args.delivery:
             preview_name = name + '-preview'
-            machine = cf('owned short-lived preview service token', 'zero-trust', 'access', 'service-tokens', 'create', '--name', preview_name, '--duration', '1h' if args.unattended else '5h' if demo else '20m')
+            machine = cf('owned short-lived preview service token', 'zero-trust', 'access', 'service-tokens', 'create', '--name', preview_name, '--duration', '1h' if args.unattended or args.registry_scanner_image else '5h' if demo else '20m')
             redactions.append(machine['client_secret'])
             state['resources']['preview_service_token'] = {'id': machine['id'], 'name': machine['name']}
             save()
@@ -967,6 +967,45 @@ def main():
                 'sourceRepositoryId': second['id'], 'title': 'Try the Cloudflare collaboration loop', 'idempotencyKey': str(uuid.uuid4())})['pullRequest']
         if registry:
             registry.qualify(http, rpc, repository, tests)
+            if args.registry_scanner_image and args.delivery:
+                image_digest = tests['image']['digest']
+                deployment = {**preview_context, 'action': 'create', 'kind': 'IMAGE_STATIC', 'jobId': job['id'],
+                              'imageDigest': image_digest, 'idempotencyKey': str(uuid.uuid4())}
+                http('/native/pr-preview', deployment, expected=412)
+                initial = registry.package(http, repository, 'settings')
+                if registry.package(http, repository, 'policy', reference=image_digest)['allowed']:
+                    raise RuntimeError('Vulnerable image unexpectedly passed the original preview policy')
+                preview = None
+                try:
+                    relaxed = {**initial['settings'], 'maxSeverity': 'none'}
+                    registry.package(http, repository, 'updateSettings', settings=relaxed, expectedRevision=initial['revision'])
+                    if not registry.package(http, repository, 'policy', reference=image_digest)['allowed']:
+                        raise RuntimeError('Complete managed scan did not satisfy the explicitly relaxed disposable policy')
+                    preview = http('/native/pr-preview', deployment)['preview']
+                    if preview['state'] != 'READY' or preview['kind'] != 'IMAGE_STATIC' or preview['imageDigest'] != image_digest or preview['commitId'] != head:
+                        raise RuntimeError('Image preview receipt differs from the scanned CI image and tested commit')
+                    admission = http('/native/pr-preview', {**preview_context, 'action': 'grant', 'previewId': preview['id']}, token=reader)
+                    redactions.append(admission['grant'])
+                    exchange = {'previewId': preview['id'], 'email': 'bob@example.invalid', 'method': 'POST', 'path': '__golf/auth',
+                                'origin': url, 'grant': admission['grant']}
+                    session = preview_rpc(exchange)['session']
+                    redactions.append(session)
+                    read_image_preview = {'previewId': preview['id'], 'email': 'bob@example.invalid', 'method': 'GET', 'path': '', 'credential': session}
+                    actual = preview_rpc(read_image_preview)
+                    if actual['content'] != (source/'public/index.html').read_text() or actual['commitId'] != head:
+                        raise RuntimeError('Protected preview did not serve the exact image bundle assets')
+                finally:
+                    current = registry.package(http, repository, 'settings')
+                    if current['settings'] != initial['settings']:
+                        registry.package(http, repository, 'updateSettings', settings=initial['settings'], expectedRevision=current['revision'])
+                if registry.package(http, repository, 'policy', reference=image_digest)['allowed']:
+                    raise RuntimeError('Original severity policy did not revoke the image preview')
+                preview_rpc(read_image_preview, expected=404)
+                http('/native/pr-preview', {**preview_context, 'action': 'grant', 'previewId': preview['id']}, token=reader, expected=404)
+                http('/native/pr-preview', {**preview_context, 'action': 'revoke', 'previewId': preview['id']})
+                state['checks']['registry_image_preview'] = {'imageDigest': image_digest, 'previewId': preview['id'],
+                    'scannedImageServed': True, 'defaultPolicyDenied': True, 'policyChangeRevokedAccess': True}
+                save()
         if args.unattended:
             from cloudflare_hosted_check import qualify
             state['checks']['hosted_schema18'] = qualify(http, rpc, git, repository, pr, selection, query, reader, source)

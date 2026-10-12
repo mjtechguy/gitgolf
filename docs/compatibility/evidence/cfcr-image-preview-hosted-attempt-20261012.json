@@ -1,0 +1,72 @@
+{
+  "schema": "golf.cfcr.image-preview-hosted-attempt.v1",
+  "date": "2026-10-12",
+  "golfProductCommit": "ffc79ac",
+  "cfcrProductCommit": "44bee5f",
+  "positiveHostedImagePreviewQualified": true,
+  "attempts": [
+    {
+      "run": "golf-native-20261012-efca69c1",
+      "outcome": "failed",
+      "failedStage": "overall 900-second deadline during registry scanner-image deployment",
+      "confirmedChecks": [],
+      "ownedCleanupCategories": 21,
+      "allOwnedCategoriesAbsent": true,
+      "cleanupErrors": 0
+    },
+    {
+      "run": "golf-native-20261012-b751b3d8",
+      "outcome": "failed",
+      "failedStage": "429 daily preview quota after managed scan and default policy denial",
+      "confirmedChecks": [
+        "native_container_tests",
+        "native_preview_rpc",
+        "native_browser_capture",
+        "managed_app",
+        "registry_ci",
+        "registry_clients",
+        "registry_scanner_sizes",
+        "registry_scanner",
+        "registry_ci_policy"
+      ],
+      "ownedCleanupCategories": 23,
+      "allOwnedCategoriesAbsent": true,
+      "cleanupErrors": 0
+    },
+    {
+      "run": "golf-native-20261012-92cecfa0",
+      "outcome": "failed",
+      "failedStage": "Cloudflare managed Container manifest unavailable during Worker deployment",
+      "confirmedChecks": [],
+      "ownedCleanupCategories": 17,
+      "allOwnedCategoriesAbsent": true,
+      "cleanupErrors": 0
+    },
+    {
+      "run": "golf-native-20261012-6693234c",
+      "outcome": "passed",
+      "confirmedChecks": [
+        "native_container_tests",
+        "native_preview_rpc",
+        "native_browser_capture",
+        "managed_app",
+        "registry_ci",
+        "registry_clients",
+        "registry_scanner_sizes",
+        "registry_scanner",
+        "registry_ci_policy",
+        "registry_image_preview"
+      ],
+      "imagePreview": {
+        "imageDigest": "sha256:5e4d9abf49fe890135149aeacca81100c358db772b2f3afe80449f032c28be63",
+        "scannedImageServed": true,
+        "defaultPolicyDenied": true,
+        "policyChangeRevokedAccess": true
+      },
+      "ownedCleanupCategories": 23,
+      "allOwnedCategoriesAbsent": true,
+      "cleanupErrors": 0
+    }
+  ],
+  "remaining": "General native workflow runners, a runnable OCI build and container deployment, signature/provenance and environment approval qualification, retained rollout, scale and cost work remain open."
+}

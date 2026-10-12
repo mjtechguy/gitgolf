@@ -2913,5 +2913,29 @@ authority. The PR shows the image digest and expiry. A CFCR local registry test,
 149 Golf core tests, the complete native Cloudflare check, native web build,
 72 CFCR JavaScript plus three Python tests and publisher fixture tests pass. This
 is a static image bundle, not container execution. The hosted qualification image
-has deliberate vulnerabilities and cannot pass default policy, so positive hosted
-deployment and browser interaction are still unqualified.
+has deliberate vulnerabilities and cannot pass the default policy. The positive
+hosted path below used an explicitly relaxed disposable severity threshold, then
+restored the original threshold.
+
+The next disposable hosted image-preview qualification required four attempts.
+The first hit the harness's old 15-minute deadline during the
+1.9 GiB scanner-image deployment; all 21 owned resource categories were absent
+after cleanup. With the corrected 45-minute scanner window, native CI, protected
+source preview, managed app, real OCI clients, managed size scans and vulnerable
+CI policy denial passed. The image preview create then correctly returned 429
+because the harness had allocated only two daily preview slots for its existing
+static and Worker previews. That run cleaned all 23 owned categories. The quota
+is now three for scanner rehearsals. A fresh retry failed before CI when the
+Cloudflare Worker deployment could not find its managed container manifest while
+applying Container settings; its 17 owned categories were absent after cleanup.
+The fourth disposable run passed. Its CI image completed the managed five-report
+scan. The default policy denied preview admission; an explicitly relaxed
+disposable severity threshold allowed the static image bundle through the
+protected reviewer path. The served bytes matched the tested Git asset. Restoring
+the original threshold denied the already issued reviewer session and a new
+grant. All 23 owned resource categories were absent after cleanup. The
+[sanitized hosted receipt](compatibility/evidence/cfcr-image-preview-hosted-attempt-20261012.json)
+records the failed attempts and this passing path. This proves a bounded static
+OCI bundle flow under a permissive severity setting; it does not qualify
+container execution, a general runner, signature/provenance approvals, or a
+retained rollout. Browser interaction remains unqualified.
