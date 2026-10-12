@@ -33,25 +33,27 @@ export async function nativeRunnerAdmission(db, env, repositoryId) {
 }
 
 export async function nativeRunnerProgress(db, job, phase) {
+  const settle = async state => {
+    const changed = await db.prepare("UPDATE evidence_jobs SET test_state=?,updated_at=? WHERE id=? AND test_state IN ('REQUESTED','RUNNING')").bind(state,now(),job.id).run();
+    const current = changed.meta.changes === 1 ? state : (await db.prepare('SELECT test_state FROM evidence_jobs WHERE id=?').bind(job.id).first())?.test_state;
+    return { id: job.id, state: current || state };
+  };
   const machine = await db.prepare('SELECT * FROM native_runner_machines WHERE active_job_id=?').bind(job.id).first();
   if (machine && (machine.lease_expires_at <= Date.now() || machine.state === 'REVOKED' || machine.expires_at <= Date.now())) {
     await db.prepare("UPDATE native_runner_machines SET state=CASE WHEN state='REVOKED' THEN state ELSE 'QUARANTINED' END,cleanup_state='UNKNOWN' WHERE id=? AND active_job_id=?")
       .bind(machine.id,job.id).run();
     const state = job.state === 'REFUSED' ? 'CANCELLED' : 'LOST';
-    await db.prepare("UPDATE evidence_jobs SET test_state=?,updated_at=? WHERE id=? AND test_state IN ('REQUESTED','RUNNING')").bind(state,now(),job.id).run();
-    return { id: job.id, state };
+    return settle(state);
   }
   if (phase !== 'finish-tests') {
     if (job.test_state === 'RUNNING' && !machine) {
-      await db.prepare("UPDATE evidence_jobs SET test_state='LOST',updated_at=? WHERE id=? AND test_state='RUNNING'").bind(now(),job.id).run();
-      return { id: job.id, state: 'LOST' };
+      return settle('LOST');
     }
     return { id: job.id, state: 'RUNNING' };
   }
   if (machine) await db.prepare("UPDATE native_runner_machines SET state='QUARANTINED',cleanup_state='UNKNOWN' WHERE id=? AND active_job_id=? AND state!='REVOKED'").bind(machine.id,job.id).run();
   const state = job.state === 'REFUSED' ? 'CANCELLED' : 'TIMED_OUT';
-  await db.prepare("UPDATE evidence_jobs SET test_state=?,updated_at=? WHERE id=? AND test_state IN ('REQUESTED','RUNNING')").bind(state,now(),job.id).run();
-  return { id: job.id, state };
+  return settle(state);
 }
 
 export async function nativeRunnerStop(env, job) {
@@ -228,8 +230,6 @@ export async function nativeRunnerMachine(db, env, request, body, authorize, git
     if (machine.state !== 'ACTIVE' || machine.cleanup_state !== 'CONFIRMED') return reply({ assignment: null });
     const pool = await db.prepare('SELECT * FROM native_runner_pools WHERE id=?').bind(machine.pool_id).first();
     if (!pool || pool.state !== 'ACTIVE' || pool.trust_class !== 'UNTRUSTED' || pool.image_id !== env.TEST_IMAGE_ID) return reply({ assignment: null });
-    const busy = await db.prepare('SELECT COUNT(*) AS total FROM native_runner_machines WHERE pool_id=? AND active_job_id IS NOT NULL').bind(pool.id).first();
-    if (busy.total >= pool.max_parallel) return reply({ assignment: null });
     const candidates = (await db.prepare("SELECT * FROM evidence_jobs WHERE state='QUEUED' AND test_state='REQUESTED' AND expires_at>? ORDER BY created_at,id LIMIT 20").bind(now()).all()).results;
     for (const job of candidates) {
       const execution = JSON.parse(job.snapshot).execution;
@@ -243,10 +243,17 @@ export async function nativeRunnerMachine(db, env, request, body, authorize, git
       if (!await authorize(job.id)) continue;
       const generation = machine.attempt_generation + 1, secret = await lease(credential,body.claimId,job.id,generation);
       const expires = Math.min(machine.expires_at,Date.parse(job.expires_at),Date.now()+90000);
-      const changed = await db.prepare("UPDATE native_runner_machines SET active_job_id=?,attempt_generation=?,claim_id=?,lease_digest=?,lease_expires_at=?,cleanup_state='UNKNOWN',last_seen_at=? WHERE id=? AND active_job_id IS NULL AND state='ACTIVE' AND cleanup_state='CONFIRMED'")
-        .bind(job.id,generation,body.claimId,await digest(secret),expires,now(),machine.id).run();
-      if (changed.meta.changes !== 1) refuse('Runner claim changed; inspect the current assignment.');
-      await db.prepare("UPDATE evidence_jobs SET test_state='RUNNING',updated_at=? WHERE id=? AND state='QUEUED' AND test_state='REQUESTED'").bind(now(),job.id).run();
+      const changed = await db.prepare(`UPDATE native_runner_machines SET active_job_id=?,attempt_generation=?,claim_id=?,lease_digest=?,lease_expires_at=?,cleanup_state='UNKNOWN',last_seen_at=?
+        WHERE id=? AND active_job_id IS NULL AND state='ACTIVE' AND cleanup_state='CONFIRMED'
+          AND (SELECT COUNT(*) FROM native_runner_machines WHERE pool_id=? AND active_job_id IS NOT NULL)<(SELECT max_parallel FROM native_runner_pools WHERE id=?)
+          AND NOT EXISTS(SELECT 1 FROM native_runner_machines WHERE active_job_id=?)
+          AND EXISTS(SELECT 1 FROM native_runner_pools WHERE id=? AND version=? AND state='ACTIVE' AND trust_class='UNTRUSTED' AND image_id=?)
+          AND EXISTS(SELECT 1 FROM native_runner_placements WHERE repository_id=? AND pool_id=? AND pool_version=? AND version=?)
+          AND EXISTS(SELECT 1 FROM evidence_jobs WHERE id=? AND state='QUEUED' AND test_state='REQUESTED' AND expires_at>?)`)
+        .bind(job.id,generation,body.claimId,await digest(secret),expires,now(),machine.id,pool.id,pool.id,job.id,pool.id,execution.runner.poolVersion,pool.image_id,job.repository_id,pool.id,execution.runner.poolVersion,execution.runner.placementVersion,job.id,now()).run();
+      if (changed.meta.changes !== 1) return reply({ assignment: null });
+      const started = await db.prepare("UPDATE evidence_jobs SET test_state='RUNNING',updated_at=? WHERE id=? AND state='QUEUED' AND test_state='REQUESTED'").bind(now(),job.id).run();
+      if (started.meta.changes !== 1) refuse('Runner claim needs reconciliation.');
       const current = await db.prepare('SELECT * FROM native_runner_machines WHERE id=?').bind(machine.id).first();
       const result = await assignment(db, env, current, credential);
       if (!result) refuse('Runner claim needs reconciliation.');

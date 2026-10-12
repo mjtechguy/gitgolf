@@ -514,8 +514,10 @@ Workspace admins can enroll, rotate, drain, revoke and reconcile machines; repo
 admins place an untrusted pool. The [host guide](../cmd/golf-native-runner/README.md)
 documents setup and interrupted-attempt recovery. Local tests exercise real
 leased Git clones and Docker completion for Actions shell, GitLab shell and the
-existing pinned GitLab image fixture. A hosted customer-runner enrollment and
-execution proof is still required. Full portable Actions catalogs, native
+existing pinned GitLab image fixture. Control tests cover simultaneous claims,
+capacity, stale completion polls, cancellation and lost-lease quarantine. A
+hosted customer-runner enrollment and execution proof is still required. Full
+portable Actions catalogs, native
 GitLab Runner protocol, broad failure/load matrix and socketless build
 publication remain open. The bounded shell profile rejects
 unsupported forms explicitly; it does not represent full runner compatibility.

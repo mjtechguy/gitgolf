@@ -78,16 +78,27 @@ test('native machine claim, heartbeat and result bind one source and one cleanup
   assert.equal((await (await call('claim',{ claimId: crypto.randomUUID() },'',spare.credential)).json()).assignment,null);
   const renewed = await (await call(jobId+'/heartbeat',{},claimed.assignment.lease)).json();
   assert.ok(renewed.leaseExpiresAt > Date.now());
+  const pendingJob = f.sql.prepare('SELECT * FROM evidence_jobs WHERE id=?').get(jobId);
   const completed = {state:'PASSED',exitCode:0,stdout:'ok\n',stderr:'',cleanup:'confirmed'};
   const result = await (await call(jobId+'/finish',completed,claimed.assignment.lease)).json();
   assert.equal(result.result.state,'PASSED'); assert.equal(result.result.producer.machineId,machineId);
   assert.equal(result.result.producer.cleanup,'asserted');
   assert.equal(f.sql.prepare('SELECT test_state FROM evidence_jobs WHERE id=?').get(jobId).test_state,'PASSED');
   assert.equal(f.sql.prepare('SELECT active_job_id FROM native_runner_machines WHERE id=?').get(machineId).active_job_id,null);
+  assert.deepEqual(await nativeRunnerProgress(f.db,pendingJob,'tests'),{id:jobId,state:'PASSED'});
+  assert.deepEqual(await nativeRunnerProgress(f.db,pendingJob,'finish-tests'),{id:jobId,state:'PASSED'});
   assert.deepEqual((await (await call(jobId+'/finish',completed,claimed.assignment.lease)).json()).result,result.result);
   await assert.rejects(call(jobId+'/finish',{...completed,stdout:'changed'},claimed.assignment.lease),/no longer authorized/);
   await assert.rejects(call(jobId+'/heartbeat',{},claimed.assignment.lease),/no longer authorized/);
   await assert.rejects(call('claim',{claimId:crypto.randomUUID()},'','golf_runner_'+machineId+'_'+'0'.repeat(64)),/identity unavailable/);
+  const waiting = [crypto.randomUUID(),crypto.randomUUID()];
+  for (const [index,id] of waiting.entries()) f.sql.prepare("INSERT INTO evidence_jobs(id,repository_id,user_id,operation_key,input_hash,snapshot,advice_state,created_at,updated_at,expires_at,test_state) VALUES(?,1,1,?,'hash',?,'NONE',?,?,?,'REQUESTED')")
+    .run(id,'parallel-'+index,JSON.stringify({execution}),stamp,stamp,expires);
+  const claims = await Promise.all([call('claim',{claimId:crypto.randomUUID()}),call('claim',{claimId:crypto.randomUUID()},'',spare.credential)]);
+  const assignments = await Promise.all(claims.map(response => response.json()));
+  assert.equal(assignments.filter(value => value.assignment).length,1);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS total FROM native_runner_machines WHERE active_job_id IS NOT NULL').get().total,1);
+  assert.equal(f.sql.prepare("SELECT COUNT(*) AS total FROM evidence_jobs WHERE id IN (?,?) AND test_state='RUNNING'").get(...waiting).total,1);
 });
 
 test('lost heartbeat quarantines capacity and prevents late success', async t => {
@@ -172,4 +183,27 @@ test('cancel before claim records cancellation without starting a managed contai
   const job = f.sql.prepare('SELECT * FROM evidence_jobs WHERE id=?').get(jobId);
   assert.deepEqual(await nativeRunnerProgress(f.db,job,'finish-tests'),{id:jobId,state:'CANCELLED'});
   assert.equal(f.sql.prepare('SELECT test_state FROM evidence_jobs WHERE id=?').get(jobId).test_state,'CANCELLED');
+});
+
+test('cancelling an active machine attempt fences its lease and quarantine remains until cleanup', async t => {
+  const f = await fixture(t), poolId = crypto.randomUUID(), machineId = crypto.randomUUID(), jobId = crypto.randomUUID();
+  await f.call({action:'savePool',id:poolId,expectedVersion:0,name:'cancel-pool',state:'ACTIVE',trustClass:'UNTRUSTED',maxParallel:1});
+  const enrolled = await f.call({action:'enroll',id:machineId,poolId,poolVersion:1,name:'cancel-host',ttlHours:1,trustExecution:true});
+  await nativeRunnerPlacement(f.db,f.env,{id:1,role:'admin'},{action:'set',repository:{owner:'workspace',name:'project'},repositoryId:'1',expectedVersion:0,poolId,poolVersion:1});
+  const workflow = {path:'.gitlab-ci.yml',blobId:'f'.repeat(40),plan:nativeWorkflow('gitlab','verify:\n  script: echo ok\n')};
+  const execution = {contract:nativeWorkflowContract,commitId:'a'.repeat(40),treeId:'b'.repeat(40),branch:'feature',workflow,workflowSha256:await digest(JSON.stringify(workflow)),policySha256:'c'.repeat(64),runner:{poolId,poolVersion:1,placementVersion:1,imageId:f.env.TEST_IMAGE_ID}};
+  const stamp = new Date().toISOString();
+  f.sql.prepare("INSERT INTO evidence_jobs(id,repository_id,user_id,operation_key,input_hash,snapshot,advice_state,created_at,updated_at,expires_at,test_state) VALUES(?,1,1,'cancel-active','hash',?,'NONE',?,?,?,'REQUESTED')")
+    .run(jobId,JSON.stringify({execution}),stamp,stamp,new Date(Date.now()+600000).toISOString());
+  const origin = 'https://golf.example.invalid/native/runner-machine/';
+  const request = (path,lease) => new Request(origin+path,{method:'POST',headers:{Authorization:'Bearer '+enrolled.credential,...(lease?{'X-Golf-Runner-Lease':lease}:{})}});
+  const claimed = await (await nativeRunnerMachine(f.db,{...f.env,PUBLIC_ORIGIN:'https://golf.example.invalid'},request('claim'),{claimId:crypto.randomUUID()},async()=>true,()=>assert.fail())).json();
+  f.sql.prepare("UPDATE evidence_jobs SET state='REFUSED' WHERE id=?").run(jobId);
+  const job = f.sql.prepare('SELECT * FROM evidence_jobs WHERE id=?').get(jobId);
+  assert.deepEqual(await nativeRunnerProgress(f.db,job,'finish-tests'),{id:jobId,state:'CANCELLED'});
+  const fenced = f.sql.prepare('SELECT state,cleanup_state FROM native_runner_machines WHERE id=?').get(machineId);
+  assert.equal(fenced.state,'QUARANTINED'); assert.equal(fenced.cleanup_state,'UNKNOWN');
+  await assert.rejects(nativeRunnerMachine(f.db,f.env,request(jobId+'/finish',claimed.assignment.lease),{state:'PASSED',exitCode:0,stdout:'',stderr:'',cleanup:'confirmed'},async()=>true,()=>assert.fail()),/identity unavailable/);
+  const recovered = await f.call({action:'reconcile',id:machineId,expectedVersion:1,jobId,cleanupConfirmed:true});
+  assert.equal(recovered.machine.cleanup_state,'CONFIRMED'); assert.equal(recovered.machine.state,'DRAINING');
 });
