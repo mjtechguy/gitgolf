@@ -436,31 +436,35 @@ through the external transport and the isolation/cleanup negatives pass.
 
 ### P2 — Fast database reuse and measured scanner execution
 
-- [ ] Add monotonic stage durations/bytes to bounded scanner receipts.
+- [x] Add monotonic stage durations/bytes to bounded scanner receipts.
 - [x] Eliminate per-job Trivy DB copy using qualified read-only DB access and
   private analysis cache; test actual pinned Trivy, not just path construction.
-- [ ] Verify immutable database installation once in a trusted supervisor lifecycle.
+- [x] Verify immutable database installation once in a trusted supervisor lifecycle.
+- [x] Atomically persist image-bound verification under the exclusive private journal.
 - [ ] Implement versioned local cache install with atomic activation and locks.
-- [ ] Enforce recipe freshness and updater integrity/rollback rules.
+- [x] Enforce freshness of all three database feeds without refreshing age on cache hits.
+- [ ] Implement updater integrity/rollback rules and versioned cache installation.
 - [ ] Compare warm and cold scans with vulnerable/clean/Java/multi-layer fixtures.
 - [ ] Concurrent jobs cannot corrupt DB/analysis caches or see another tenant's files.
 - [ ] Publish p50/p95, bytes transferred, CPU/memory, cache identity and cleanup.
 
 ### P3 — Inventory/evidence reuse and policy correctness
 
-- [ ] Separate inventory, matching and policy cache identities.
-- [ ] Reuse Syft SBOM only when cataloger/config/platform identities agree.
-- [ ] Keep Trivy-native analysis and Java identification data dependencies.
+- [x] Separate inventory, matching and policy cache identities.
+- [x] Reuse Syft SBOM only when cataloger/config/platform identities agree.
+- [x] Keep Trivy-native analysis and Java identification data dependencies.
 - [ ] Accept CI evidence through separately authorized producer contract.
-- [ ] Require exact digest/platform/recipe/trust/freshness and bounded schemas.
+- [x] Require exact digest/platform/recipe/trust/freshness and bounded schemas
+  for registry-generated evidence reuse (CI import remains separate).
 - [ ] Schedule only missing required scans after push.
-- [ ] Revoked producer, expired evidence, changed recipe and removed report fail closed.
+- [x] Revoked producer, expired evidence, changed recipe and removed report fail closed,
+  including revocation of an upstream inventory producer after admission.
 - [ ] Index approval requires all required platforms; deduplicate DAG traversal.
 - [ ] UI distinguishes supplied/generated/trusted/current without conflating them.
 
 ### P4 — Cloudflare managed execution qualification
 
-- [ ] Reproduce current native startup failure with bounded stage diagnostics.
+- [x] Reproduce current native startup failure with bounded stage diagnostics.
 - [ ] Qualify baked-image startup across expected instance sizes and image versions.
 - [ ] Qualify clean filesystem snapshot create/restore/expiry/fallback.
 - [ ] Reject snapshots containing tenant state; never snapshot after tenant execution.
@@ -631,3 +635,66 @@ by P1. See the [sanitized execution receipt](compatibility/evidence/cfcr-externa
 Final local regression: 54 JavaScript tests and two Python tests passed; OCI
 conformance passed 75 specs with four conditional skips. No hosted deployment
 was made. All scanner proof containers and networks were removed.
+
+
+## 22. Database, inventory and evidence reuse packet — 2026-10-12
+
+P2/P3 now have a concrete partial implementation in independent CFCR commit
+`e5812ee`. Database
+verification is cached by immutable Docker image ID and embedded recipe hash in
+a private, atomic receipt, under the existing exclusive supervisor journal. The
+verifier has a hard timeout, an ownership label and explicit recovery identity.
+Each scan still checks the Grype, Trivy and Java feed timestamps. Seven-day
+freshness is never extended by use. Database image updates remain operator
+approved; this is not an automatic snapshot installer or updater.
+
+Registry-generated exact evidence can satisfy a new scan request without any
+container execution. It must match the same repository, immutable image digest,
+engine image/recipe, retained reports, current producer trust and age limits.
+The new audit job records its source and original evidence age. Severity/signature
+policy continues to evaluate independently. A separate inventory key binds the
+Syft tool, explicit cataloger profile and input limits; changed vulnerability data
+need not invalidate matching inventory. The scanner verifies all downloaded
+inventory bytes, then runs Grype and independent Trivy analysis. Transitive
+producer dependencies preserve revocation through reuse. There is no cross-tenant
+sharing or implicit acceptance of arbitrary CI-supplied SBOMs.
+
+Bounded immutable receipts record monotonic per-stage durations, input bytes,
+feed versions/expiry and hit flags. `force: true` with a new idempotency key
+bypasses both inventory and result reuse. Old evidence without the new receipt
+never satisfies the full result cache. Manual fresh requests are still necessary
+to refresh an old terminal scan; automatic post-push freshness scheduling is open.
+
+Final local workerd + real Docker results for the **524-byte compressed input
+fixture**, with the scanner image already installed:
+
+| Path | End-to-end supervisor time | Database verification | Scanner containers |
+| --- | ---: | ---: | --- |
+| First verification receipt | 8.476 s | 3.735 s | One engine plus broker |
+| Verified image reused, forced full scan | 4.782 s | 0.006 s | One engine plus broker |
+| Verified image and Syft inventory reused | 4.386 s | 0.010 s | One engine plus broker |
+| Exact complete evidence reused | Not benchmarked | None | None; attempt zero |
+
+These are individual samples, not p50/p95, initial-download timings, hosted
+latencies or representative large/Java image results. The inventory test expires
+matching evidence metadata without replacing its DB image; a real DB-version
+rollout remains unqualified. Five reports and genuine vulnerable findings were
+checked. Running cancellation, supervisor SIGKILL, independent shutdown, restart
+refusal and owned cleanup passed again. Regression: 62 JavaScript and three Python
+tests; OCI conformance 75 passed, zero failed, four conditional skips; production
+external-mode preparation passed without creating cloud resources.
+
+The new paid managed check deployed the same immutable scanner image through the
+production `ScannerTask`/`ScannerOutbound`, with synthetic fixture authority and
+standard-3. It failed at readiness before producing reports:
+`internal error; reference = vojbhl2v9qopuuisshrub9v7`. The three-minute job deadline
+and independent fifteen-minute host cleaner bounded the attempt. Worker, container
+application and uploaded image absence were verified, then the timer was stopped.
+The test does not qualify managed scanning, hosted external-runner transport,
+full Golf/D1 integration, snapshot restore, or general Actions/GitLab execution.
+
+The [sanitized source/timing/cleanup receipt](compatibility/evidence/cfcr-scanner-cache-20261012.json)
+records both the passing local checks and failed managed attempt. Operator setup
+and the separately invoked paid helper are documented in CFCR's
+`docs/EXTERNAL_SCANNER.md`. P2/P3/P4 remain partially complete; their remaining
+checkboxes are release gates, not implied capabilities.

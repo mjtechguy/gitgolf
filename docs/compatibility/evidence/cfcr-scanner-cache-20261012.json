@@ -1,0 +1,220 @@
+{
+  "state": "passed",
+  "at": "2026-10-12T03:51:00.554Z",
+  "runtime": "local workerd + isolated real Docker; not hosted Cloudflare",
+  "subject": "sha256:450a3aef8802c6b8bf413c8c95c46140065d59547fbdd23a847ee7c869bfcca7",
+  "imageId": "sha256:4c3ad68c18b052df08565a9675d7215d9e6ec719d85d9a009c26cea16c3c55fe",
+  "results": [
+    {
+      "jobId": "9f561dd640dffdb1e66f7c545d0fe274b3703a9f8ac1fc95521346695a6afdac",
+      "state": "succeeded",
+      "totalElapsedMs": 8476,
+      "elapsedMs": 4676,
+      "databaseVerificationMs": 3735,
+      "databaseVerificationCacheHit": false,
+      "cleanup": "confirmed",
+      "receipt": {
+        "schema": 1,
+        "databaseBuiltAt": {
+          "grype": "2026-10-09 06:32:32+00:00",
+          "trivy": "2026-10-10T01:03:02.007870471Z",
+          "trivyJava": "2026-10-10T00:59:51.613822988Z"
+        },
+        "databaseValidUntil": 1792132352000,
+        "stagesMs": {
+          "database": 1,
+          "download": 82,
+          "syft": 715,
+          "grype": 1717,
+          "trivy": 114,
+          "publish": 397
+        },
+        "inputBytes": 524,
+        "databaseCacheHit": true,
+        "inventoryCacheHit": false
+      },
+      "reports": [
+        "syft",
+        "spdx",
+        "cyclonedx",
+        "grype",
+        "trivy"
+      ],
+      "severities": {
+        "high": 20,
+        "medium": 19,
+        "critical": 1,
+        "low": 2
+      }
+    },
+    {
+      "jobId": "88c3cad8904742ca20af5b52db05139d912ccb965212a0a7297c298743a063a7",
+      "state": "succeeded",
+      "totalElapsedMs": 4782,
+      "elapsedMs": 4723,
+      "databaseVerificationMs": 6,
+      "databaseVerificationCacheHit": true,
+      "cleanup": "confirmed",
+      "receipt": {
+        "schema": 1,
+        "databaseBuiltAt": {
+          "grype": "2026-10-09 06:32:32+00:00",
+          "trivy": "2026-10-10T01:03:02.007870471Z",
+          "trivyJava": "2026-10-10T00:59:51.613822988Z"
+        },
+        "databaseValidUntil": 1792132352000,
+        "stagesMs": {
+          "database": 1,
+          "download": 78,
+          "syft": 715,
+          "grype": 1667,
+          "trivy": 114,
+          "publish": 396
+        },
+        "inputBytes": 524,
+        "databaseCacheHit": true,
+        "inventoryCacheHit": false
+      },
+      "reports": [
+        "syft",
+        "spdx",
+        "cyclonedx",
+        "grype",
+        "trivy"
+      ],
+      "severities": {
+        "high": 20,
+        "medium": 19,
+        "critical": 1,
+        "low": 2
+      }
+    },
+    {
+      "jobId": "181cc2f7a543bdcedb196b952ba6af4746263d5a01b63179e07cf29f9bbcf7d7",
+      "state": "succeeded",
+      "totalElapsedMs": 4386,
+      "elapsedMs": 4295,
+      "databaseVerificationMs": 10,
+      "databaseVerificationCacheHit": true,
+      "cleanup": "confirmed",
+      "inventoryReusedFrom": "88c3cad8904742ca20af5b52db05139d912ccb965212a0a7297c298743a063a7",
+      "receipt": {
+        "schema": 1,
+        "databaseBuiltAt": {
+          "grype": "2026-10-09 06:32:32+00:00",
+          "trivy": "2026-10-10T01:03:02.007870471Z",
+          "trivyJava": "2026-10-10T00:59:51.613822988Z"
+        },
+        "databaseValidUntil": 1792132352000,
+        "stagesMs": {
+          "database": 1,
+          "download": 91,
+          "syft": 125,
+          "grype": 1717,
+          "trivy": 114,
+          "publish": 422
+        },
+        "inputBytes": 524,
+        "databaseCacheHit": true,
+        "inventoryCacheHit": true
+      },
+      "reports": [
+        "syft",
+        "spdx",
+        "cyclonedx",
+        "grype",
+        "trivy"
+      ]
+    }
+  ],
+  "fullEvidenceReuse": {
+    "state": "succeeded",
+    "attempt": 0,
+    "sourceJobId": "88c3cad8904742ca20af5b52db05139d912ccb965212a0a7297c298743a063a7"
+  },
+  "faultChecks": [
+    "cancel after Docker engine start",
+    "SIGKILL supervisor",
+    "independent engine and broker stop",
+    "restart refuses retained journal",
+    "admin reconciles exact terminal cleanup"
+  ],
+  "cleanup": "owned containers and networks absent",
+  "sourceFiles": {
+    "src/jobs.mjs": "029e2a3b33dea791381b93016bc4bb38e32b68bfdeeb80f17c6192fa669e4e72",
+    "src/policy.mjs": "da272d10273444ee0918d3e214a04b88fb546051f8bd194477c938d871223f8f",
+    "src/scan-cache.mjs": "a1b1a5a8425ee777e9f2b64fce6651415b4881af39a130875b6c5032297c09c1",
+    "src/runners.mjs": "61bd0881725c18eb91444fc9d945493a7067579aa8c5c6a570c8e231437be9a9",
+    "src/scanner.mjs": "69a2d47fbf6b185c4b6f20151fd92191dbb259882d44c73237d499a753f07692",
+    "src/worker.mjs": "f0f09ce4e8a79548a565638891bbe2442b9328b208de77da76a0fd6e306535a2",
+    "scripts/scanner-runner.mjs": "51124fb2fc8bc83e26dd32ba588703f7cf06fb9d87d3ecaa351b61e3e99e861e",
+    "scripts/database-cache.mjs": "d5dd40a88c46c8ce0f3039e773ab0fe00e12d667b6dd137f3ed5d870029421b4",
+    "scripts/external-scanner-check.mjs": "34f47bd5e2c9dc635d88aadf923e03d4ac4af7479cbd5478e694dceb0a9f51a5",
+    "scripts/scanner-check.py": "23bfdb98d4a571a17e5eda9f06bbd15673eb01c3a3d77633282832c3be69ffb9",
+    "scripts/hosted-scanner-check.mjs": "b068fd17be8bab655751c238aed8658892b835e30a9fae00c19ce5850f2983b1",
+    "scanner/scan.py": "bf0acc758533c6e978b350e67b4a34ef97a3f4937b29a1db6a1fffbcc6cec85c",
+    "scanner/databases.py": "50a01ae81a14adff3191d7268d889dbced887d52c527af1968485b3c9d1746ef",
+    "scanner/broker.py": "ff9276b11cb5f07503b4c2fa0eaa3571a22ad027c4821199c2d49f1230ce2b66",
+    "scanner/snapshot.py": "a3d1f0e4eb5c7114f7937a62f3a26555b02ef0a15a055cb93f35d42c97240659",
+    "scanner/Dockerfile": "44ebc8b1a3a161b6d54b614b2d09a3dc1e3369b9a3fef344fb4531c23eb614bf"
+  },
+  "imageFiles": {
+    "scan.py": "bf0acc758533c6e978b350e67b4a34ef97a3f4937b29a1db6a1fffbcc6cec85c",
+    "broker.py": "ff9276b11cb5f07503b4c2fa0eaa3571a22ad027c4821199c2d49f1230ce2b66",
+    "databases.py": "50a01ae81a14adff3191d7268d889dbced887d52c527af1968485b3c9d1746ef",
+    "recipe.json": "110d7f06106a6ec56919928754268c2c418cc44302ec98e8c00b1f1dd9c3acd9"
+  },
+  "qualificationCommand": "CFCR_SCANNER_TEST_IMAGE=golf-cfcr-scanner:cache npm run check:external-scanner",
+  "additionalChecks": {
+    "npm test": {
+      "javascriptPassed": 62,
+      "pythonPassed": 3
+    },
+    "npm run conformance": {
+      "passed": 75,
+      "failed": 0,
+      "conditionalSkipped": 4
+    },
+    "npm run build -- .tmp/hybrid-prepare": "passed; external mode emits no Container application; no deployment",
+    "CFCR_SCANNER_TEST_IMAGE=golf-cfcr-scanner:cache npm run check:scanner": {
+      "state": "passed",
+      "grypeFindings": 42,
+      "trivyFindings": 11
+    }
+  },
+  "limits": [
+    "Small Alpine/OpenSSL fixture, not Java, large-image, burst-load or percentile qualification",
+    "Cold means a missing verification receipt with the image already installed; excludes initial image/database download",
+    "Inventory refresh check expires matching evidence metadata; it does not install a new database image",
+    "Approved image declares the cataloger profile; changing Syft invocation requires bumping that profile",
+    "No CI-imported evidence, automatic database updater or shared Trivy analysis cache",
+    "Local Docker execution with local workerd registry; no external-runner-to-hosted-registry test in this packet"
+  ],
+  "severityAggregation": "Per-severity maximum across engines, not a deduplicated issue count",
+  "managedCloudflare": {
+    "state": "failed",
+    "scope": "Production ScannerTask and ScannerOutbound, synthetic fixture authority; not full Golf/OCI/D1 qualification",
+    "imageId": "sha256:4c3ad68c18b052df08565a9675d7215d9e6ec719d85d9a009c26cea16c3c55fe",
+    "instance": "standard-3",
+    "deployStartedAt": "2026-10-12T03:48:44.466Z",
+    "deployedAt": "2026-10-12T03:50:53.585Z",
+    "startedAt": "2026-10-12T03:50:53.585Z",
+    "finishedAt": "2026-10-12T03:50:56.609Z",
+    "result": {
+      "error": "Scanner readiness failed: internal error; reference = vojbhl2v9qopuuisshrub9v7",
+      "receipt": null,
+      "reports": {}
+    },
+    "cleanup": {
+      "worker": "absent",
+      "applications": "absent",
+      "images": "absent"
+    },
+    "cleanedAt": "2026-10-12T03:51:11.565Z",
+    "timer": "Independent fifteen-minute systemd timer installed before deployment; cancelled after verified cleanup",
+    "jobDeadlineSeconds": 180,
+    "observationDeadlineSeconds": 210,
+    "cliVersion": "1.0.0-beta.13",
+    "limitation": "No managed scanner evidence produced; native startup remains unqualified"
+  }
+}

@@ -1,5 +1,31 @@
 # Golf implementation status
 
+
+## 2026-10-12 — Scanner cache reuse and managed requalification
+
+Independent CFCR commit `e5812ee` reuses verified immutable database images, compatible Syft
+inventory, and exact current registry-generated scan evidence. Reuse preserves
+original age and upstream producer trust; revoked producers, changed recipes,
+stale feeds and removed reports fail closed. Trivy still analyzes the image
+independently. Bounded stage/byte receipts make cache behavior inspectable.
+
+The [P2/P3/P4 packet](HYBRID_EXECUTION_AND_CFCR_PLAN.md#22-database-inventory-and-evidence-reuse-packet--2026-10-12)
+and [sanitized receipt](compatibility/evidence/cfcr-scanner-cache-20261012.json)
+record real local results: first verification plus execution 8.476 s, verified
+full scan 4.782 s, inventory reuse 4.386 s, and an exact evidence hit with no
+container. This is a tiny 524-byte input fixture with the scanner image already
+installed, not a large-image benchmark. Cancellation/crash recovery/owned cleanup,
+62 JavaScript + three Python tests, 75 OCI specs (four conditional skips), and
+production preparation passed.
+
+A disposable managed Cloudflare check reproduced the readiness internal error
+before any reports. Its exact Worker, container application and uploaded image
+were removed and verified absent; the independent cleanup timer was cancelled.
+The native startup gate remains open. No retained demo or product rollout was
+made. Automatic DB updates, imported CI evidence, broader workload benchmarks,
+snapshot qualification, general native workflow runners and previous D1 rollback
+gates remain unfinished. Golf application code did not change in this slice.
+
 ## 2026-10-12 — Hybrid execution plan and independent external scanner
 
 Existing work is checkpointed on Golf main `36f7d01` and independent CFCR main
