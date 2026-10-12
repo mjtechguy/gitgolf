@@ -2902,4 +2902,16 @@ Newly admitted native PR tests use the versioned `golf.native.pr-test.v1` envelo
 
 The [sanitized hosted size proof](compatibility/evidence/cfcr-managed-size-20261012.json) passed automatic five-report scans for the native CI image and real 7 MiB Docker and 128 MiB regctl images. Their created-to-finished samples were 35.783 and 37.756 seconds; the larger download stage took 16.968 seconds. CI and 7 MiB scans overlapped. CFCR refused promotion of the vulnerable CI digest. Real clients, live authority revocation, protected source previews and schema18 checks passed. The disposable run exited zero with all 25 expected resource categories absent and its stop timer cancelled. A prior passing proof had a transient dispatch absence readback; bounded retry and the repeat resolved it. Local `make cloudflare-check`, web native typecheck/build, CFCR 71 JavaScript plus three Python tests, and the focused registry checks passed. The collaborative browser could not connect to the local Packages fixture (`ERR_CONNECTION_REFUSED`), so visual interaction remains unqualified.
 
-The broader P5/P6 objective remains open: native general workflow/pool execution, CI-imported scan evidence, a source build producing a runnable OCI image, policy and signature admission into an image-backed protected deployment, and retained production recovery/load/cost qualification. Current protected previews use source content rather than the scanned OCI digest. Single synthetic size samples do not support production latency or billing claims.
+The broader P5/P6 objective remains open: native general workflow/pool execution, CI-imported scan evidence, a source build producing a runnable OCI image, policy and signature admission into a running container deployment, and retained production recovery/load/cost qualification. Single synthetic size samples do not support production latency or billing claims.
+
+A new manual PR action can deploy a bounded static bundle carried in the exact
+published OCI image config. CFCR verifies the config blob and current repository
+read grant; Golf checks scan/trust policy, revision and every asset against the
+passing canonical Git job, then copies those image bytes to the existing protected
+static preview. Each reviewer request rechecks policy and current Git/repository
+authority. The PR shows the image digest and expiry. A CFCR local registry test,
+149 Golf core tests, the complete native Cloudflare check, native web build,
+72 CFCR JavaScript plus three Python tests and publisher fixture tests pass. This
+is a static image bundle, not container execution. The hosted qualification image
+has deliberate vulnerabilities and cannot pass default policy, so positive hosted
+deployment and browser interaction are still unqualified.

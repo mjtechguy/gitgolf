@@ -11,10 +11,34 @@ from cloudflare_registry_check import RegistryProof
 from types import SimpleNamespace
 from pathlib import Path
 import tempfile
+from contextlib import chdir
 from cloudflare_setup import stop_owned_image_uploads
 from unittest.mock import Mock
 
 class PublicationTests(unittest.TestCase):
+    def test_static_bundle_is_embedded_in_the_published_image_config(self):
+        calls = []
+        class Response:
+            def __init__(self, status, headers): self.status, self.headers = status, headers
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+            def read(self, _): return b''
+        def request(req, timeout):
+            calls.append(req)
+            return Response(403 if req.full_url.endswith('/unauthorized') else 201,
+                            {'Docker-Content-Digest': 'sha256:' + hashlib.sha256(req.data).hexdigest()})
+        with tempfile.TemporaryDirectory() as directory, chdir(directory):
+            (Path('public')).mkdir()
+            (Path('public') / 'index.html').write_text('<h1>image preview</h1>')
+            with patch.dict(os.environ, {'GOLF_REGISTRY': 'https://registry.test', 'GOLF_IMAGE': 'alice/repo:ci-owned', 'GOLF_COMMIT': 'a'*40}, clear=True), \
+                 patch('urllib.request.urlopen', request), patch('subprocess.check_output', return_value='f'*40):
+                registry_publish.publish()
+        config = json.loads(calls[0].data)
+        bundle = json.loads(config['config']['Labels']['dev.golf.static-preview.v1'])
+        self.assertEqual(bundle['commitId'], 'a'*40)
+        self.assertEqual(bundle['treeId'], 'f'*40)
+        self.assertEqual(bundle['files'], [{'path': 'index.html', 'contentType': 'text/html; charset=utf-8', 'content': '<h1>image preview</h1>'}])
+
     def test_brokered_publication_has_valid_content_and_rejects_other_tags(self):
         calls = []
         class Response:

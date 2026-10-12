@@ -4,6 +4,8 @@ import hashlib
 import io
 import json
 import os
+import pathlib
+import subprocess
 import tarfile
 import urllib.error
 import urllib.request
@@ -33,7 +35,18 @@ def publish():
             data = value.encode(); entry = tarfile.TarInfo(name); entry.size = len(data)
             archive.addfile(entry, io.BytesIO(data))
     compressed = gzip.compress(layer.getvalue(), mtime=0)
-    config = encoded({'architecture': 'amd64', 'os': 'linux', 'config': {'Labels': {'org.opencontainers.image.revision': os.environ['GOLF_COMMIT']}},
+    labels = {'org.opencontainers.image.revision': os.environ['GOLF_COMMIT']}
+    public = pathlib.Path('public')
+    if public.is_dir() and (public / 'index.html').is_file():
+        types = {'html': 'text/html; charset=utf-8', 'css': 'text/css; charset=utf-8', 'js': 'text/javascript; charset=utf-8',
+                 'json': 'application/json; charset=utf-8', 'svg': 'image/svg+xml', 'txt': 'text/plain; charset=utf-8'}
+        files = [{'path': str(path.relative_to(public)), 'contentType': types[path.suffix[1:]], 'content': path.read_text('utf-8')}
+                 for path in sorted(public.rglob('*')) if path.is_file()]
+        bundle = {'schema': 'golf.native.static-preview.v1', 'commitId': os.environ['GOLF_COMMIT'],
+                  'treeId': subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], text=True).strip(),
+                  'sourcePath': 'public', 'files': files}
+        labels['dev.golf.static-preview.v1'] = json.dumps(bundle, separators=(',', ':'))
+    config = encoded({'architecture': 'amd64', 'os': 'linux', 'config': {'Labels': labels},
                       'rootfs': {'type': 'layers', 'diff_ids': [sha(layer.getvalue())]}})
     descriptors = []
     for data, media in [(config, 'application/vnd.oci.image.config.v1+json'), (compressed, 'application/vnd.oci.image.layer.v1.tar+gzip')]:

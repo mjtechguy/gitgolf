@@ -1098,6 +1098,44 @@ test('tested native preview publication is immutable, replay-bound and private t
   assert.equal((await f.preview({ action: 'list' }, readerToken)).status, 404);
 });
 
+test('scanned image preview serves matching OCI assets and revokes access when registry policy changes', async t => {
+  const f = await deliveryFixture(t), imageDigest = 'sha256:' + 'a'.repeat(64);
+  const job = f.sql.prepare('SELECT report_key FROM evidence_jobs WHERE id=?').get(f.job.id);
+  const report = JSON.parse(f.objects.get(job.report_key));
+  report.tests.image = { registry: 'https://registry.example.com', repository: 'alice/project', tag: 'ci-' + f.job.id,
+    digest: imageDigest, commitId: f.selection.headCommitId };
+  const data = JSON.stringify(report);
+  f.objects.set(job.report_key, data);
+  f.sql.prepare('UPDATE evidence_jobs SET report_hash=?,report_bytes=? WHERE id=?').run(await digest(data), Buffer.byteLength(data), f.job.id);
+  f.env.REGISTRY_ORIGIN = report.tests.image.registry;
+  let allowed = false, content = '<h1>private canonical preview</h1>';
+  f.env.REGISTRY = { async manage(input) {
+    assert.equal(input.binding.name, report.tests.image.repository);
+    assert.equal(input.reference, imageDigest);
+    if (input.action === 'policy') return { digest: imageDigest, allowed };
+    assert.equal(input.action, 'downloadImageConfig');
+    const bundle = { schema: 'golf.native.static-preview.v1', commitId: f.selection.headCommitId,
+      treeId: 'f'.repeat(40), sourcePath: 'public', files: [{ path: 'index.html', contentType: 'text/html; charset=utf-8', content }] };
+    const bytes = Buffer.from(JSON.stringify({ config: { Labels: { 'org.opencontainers.image.revision': f.selection.headCommitId,
+      'dev.golf.static-preview.v1': JSON.stringify(bundle) } } }));
+    return { subject: imageDigest, encoding: 'base64', size: bytes.length, content: bytes.toString('base64') };
+  } };
+  const input = { ...f.publication, kind: 'IMAGE_STATIC', imageDigest };
+  assert.equal((await f.preview(input)).status, 412);
+  allowed = true; content = '<h1>different image content</h1>';
+  assert.equal((await f.preview(input)).status, 412);
+  content = '<h1>private canonical preview</h1>';
+  const preview = (await value(await f.preview(input))).preview;
+  assert.equal(preview.kind, 'IMAGE_STATIC'); assert.equal(preview.imageDigest, imageDigest);
+  const { grant } = await value(await f.preview({ action: 'grant', previewId: preview.id }));
+  const { session } = await f.broker({ previewId: preview.id, email: 'alice@example.com', method: 'POST', path: '__golf/auth', origin: f.env.PUBLIC_ORIGIN, grant });
+  const request = { previewId: preview.id, email: 'alice@example.com', method: 'GET', path: '', credential: session };
+  assert.equal((await f.broker(request)).content, content);
+  allowed = false;
+  await assert.rejects(f.broker(request), /unavailable/);
+  assert.equal((await f.preview({ action: 'grant', previewId: preview.id })).status, 404);
+});
+
 test('preview lifetime, session expiry, PR changes and inactive identities fail closed', async t => {
   const f = await deliveryFixture(t), preview = (await value(await f.preview(f.publication))).preview;
   const { grant } = await value(await f.preview({ action: 'grant', previewId: preview.id }, readerToken));

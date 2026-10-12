@@ -510,6 +510,18 @@ and customer runner transport still need their native adapter and acceptance run
 
 ### P6 — Complete build/publish/evidence/deploy vertical
 
+The native PR page now offers a manual protected static deployment from the
+exact image digest returned by a passing test job. CFCR reads the bounded OCI
+config under current repository authority and verifies its blob digest. Golf
+requires the embedded static assets and revision label to match the canonical
+tested Git commit, requires a current passing registry scan/trust policy, and
+rechecks that policy for each reviewer request. The preview serves the copied
+image assets through the existing Access protected R2 path and shows its image
+digest on the PR. This path does not run the container, build arbitrary source,
+or claim a general Actions/GitLab runner. The hosted CI fixture used for scanner
+qualification contains deliberate vulnerable packages, so positive hosted
+deployment still needs a clean scanned image and a separate paid rehearsal.
+
 - [ ] Build immutable commit in an admitted isolated job.
 - [ ] Publish exact OCI digest using existing scoped job credential.
 - [ ] Reuse qualifying CI evidence or wait for independent scanner result.

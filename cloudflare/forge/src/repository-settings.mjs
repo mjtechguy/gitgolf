@@ -152,7 +152,7 @@ export async function repositoryCollaborators(db, env, person, row, method, body
 
 export async function repositoryPackages(env, person, row, body) {
   if (!env.REGISTRY || !env.REGISTRY_ORIGIN) unsupported();
-  const operations = ['trust', 'updateTrust', 'verification', 'verify', 'scan', 'jobs', 'cancelScan', 'settings', 'updateSettings', 'policy', 'hold', 'promote', 'retention', 'retentionApply', 'inventory', 'artifact', 'attachments', 'activity', 'report', 'downloadReport', 'compareSbom', 'link'];
+  const operations = ['trust', 'updateTrust', 'verification', 'verify', 'scan', 'jobs', 'cancelScan', 'settings', 'updateSettings', 'policy', 'hold', 'promote', 'retention', 'retentionApply', 'inventory', 'artifact', 'attachments', 'activity', 'report', 'downloadReport', 'downloadImageConfig', 'compareSbom', 'link'];
   if (body.repositoryId !== String(row.id) || !['status', 'enable', 'credential', 'revoke', ...operations].includes(body.action)) invalid('Use the current repository and a supported package action.');
   if (body.action === 'enable' && row.role !== 'admin') deny();
   const binding = { contract: 1, installation: env.PUBLIC_ORIGIN, name: `${env.WORKSPACE_SLUG}/${row.name}`, repositoryId: String(row.id), artifactName: row.artifact_name };

@@ -6,6 +6,7 @@ import { sha, bounded } from './git.mjs';
 import { testPolicy } from './test-policy.mjs';
 import { appPolicy, appOrigin, appPolicyHash } from './app-policy.mjs';
 import { appBundle, provisionApp, appDispatch, purgeApp } from './apps.mjs';
+import { repositoryPackages } from './repository-settings.mjs';
 
 const now = () => new Date().toISOString();
 const tokenOK = value => typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value);
@@ -20,8 +21,9 @@ export function previewPolicy(env) {
       origin.origin !== env.PUBLIC_ORIGIN && Number.isInteger(Number(env.PREVIEW_TTL)) && Number(env.PREVIEW_TTL) >= 60 && Number(env.PREVIEW_TTL) <= 14400);
   } catch { return false; }
 }
+const imageOf = row => row.selection ? JSON.parse(row.selection).imageDigest : undefined;
 const wire = (row, env) => ({ id: row.id, jobId: row.job_id, state: row.state, commitId: row.commit_id, treeId: row.tree_id,
-  kind: row.kind || 'STATIC', url: row.kind === 'WORKER' ? appOrigin(env, row.id) + '/' : `${env.PREVIEW_ORIGIN}/${row.id}/`, expiresAt: row.expires_at, createdAt: row.created_at, sha256: row.bundle_hash,
+  kind: imageOf(row) ? 'IMAGE_STATIC' : row.kind || 'STATIC', ...(imageOf(row) ? { imageDigest: imageOf(row) } : {}), url: row.kind === 'WORKER' ? appOrigin(env, row.id) + '/' : `${env.PREVIEW_ORIGIN}/${row.id}/`, expiresAt: row.expires_at, createdAt: row.created_at, sha256: row.bundle_hash,
   bytes: row.bundle_bytes, sourcePath: row.source_path, purged: Boolean(row.purged),
   captureState: row.capture_state || 'NONE', captureSha256: row.capture_hash || '', captureBytes: row.capture_bytes || 0, browserMs: row.browser_ms });
 const byteDigest = async bytes => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(b => b.toString(16).padStart(2, '0')).join('');
@@ -31,7 +33,7 @@ async function storedBundle(env, preview) {
   const data = await object.text();
   if (await digest(data) !== preview.bundle_hash) throw Error('Preview assets changed');
   const bundle = JSON.parse(data);
-  if (bundle.schema !== 'golf.native.static-preview.v1' || bundle.commitId !== preview.commit_id || bundle.treeId !== preview.tree_id) throw Error('Preview manifest differs');
+  if (bundle.schema !== 'golf.native.static-preview.v1' || bundle.commitId !== preview.commit_id || bundle.treeId !== preview.tree_id || bundle.imageDigest !== imageOf(preview)) throw Error('Preview manifest differs');
   return bundle;
 }
 
@@ -43,6 +45,40 @@ async function current(db, env, person, row, artifact, preview) {
   const pr = (await collaboration(db, env, person, 'GetPullRequest', { repository: selection.repository, number: selection.number }, row, artifact)).pullRequest;
   if (pr.state !== 'ISSUE_STATE_OPEN' || pr.revision !== preview.pr_revision || pr.id !== selection.pullRequestId ||
       pr.head.commitId !== preview.commit_id || pr.base.commitId !== selection.baseCommitId || pr.head.retainedSnapshot || pr.base.retainedSnapshot) deny();
+  if (selection.imageDigest) {
+    if (!env.REGISTRY || !env.REGISTRY_ORIGIN) deny();
+    const decision = await repositoryPackages(env, person, row, { repositoryId: String(row.id), action: 'policy', reference: selection.imageDigest });
+    if (decision.digest !== selection.imageDigest || decision.allowed !== true) deny();
+  }
+}
+
+async function imageBundle(env, person, row, image, canonical) {
+  // shortcut: static assets live in a bounded OCI config label; extract image layers when general build and container deployment land.
+  if (!env.REGISTRY || !env.REGISTRY_ORIGIN || image.registry !== env.REGISTRY_ORIGIN || image.repository !== `${env.WORKSPACE_SLUG}/${row.name}` ||
+      image.commitId !== canonical.commitId) throw new Fault('failed_precondition', 412, 'The tested image receipt does not match this repository and commit.');
+  const input = { repositoryId: String(row.id), reference: image.digest };
+  const decision = await repositoryPackages(env, person, row, { ...input, action: 'policy' });
+  if (decision.digest !== image.digest || decision.allowed !== true) throw new Fault('failed_precondition', 412, 'The image does not satisfy the current registry scan and trust policy.');
+  const config = await repositoryPackages(env, person, row, { ...input, action: 'downloadImageConfig' });
+  if (config.subject !== image.digest || config.encoding !== 'base64' || !Number.isSafeInteger(config.size) || config.size > 2 * 1024 * 1024 ||
+      typeof config.content !== 'string' || config.content.length > 3 * 1024 * 1024) throw Error('Registry image config receipt differs');
+  let document, bundle;
+  try {
+    const raw = Uint8Array.from(atob(config.content), c => c.charCodeAt(0));
+    if (raw.length !== config.size) throw Error();
+    document = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(raw));
+    bundle = JSON.parse(document.config.Labels['dev.golf.static-preview.v1']);
+  } catch { throw new Fault('failed_precondition', 412, 'The image has no valid static preview bundle.'); }
+  const expectedFiles = [...canonical.files].sort((a, b) => a.path.localeCompare(b.path));
+  const sameFiles = Array.isArray(bundle.files) && bundle.files.length === expectedFiles.length &&
+    bundle.files.every(file => file && typeof file.path === 'string' && typeof file.contentType === 'string' && typeof file.content === 'string') &&
+    [...bundle.files].sort((a, b) => a.path.localeCompare(b.path)).every((file, index) =>
+      file.path === expectedFiles[index].path && file.contentType === expectedFiles[index].contentType && file.content === expectedFiles[index].content);
+  if (document.config.Labels['org.opencontainers.image.revision'] !== canonical.commitId ||
+      bundle.schema !== canonical.schema || bundle.commitId !== canonical.commitId || bundle.treeId !== canonical.treeId ||
+      bundle.sourcePath !== canonical.sourcePath || !sameFiles) throw new Fault('failed_precondition', 412, 'Image preview assets differ from the tested Git commit.');
+  return { schema: canonical.schema, commitId: canonical.commitId, treeId: canonical.treeId, sourcePath: canonical.sourcePath,
+    files: bundle.files.map(file => ({ path: file.path, contentType: file.contentType, content: file.content })), imageDigest: image.digest };
 }
 
 export async function renewPreview(db, env, person, row, preview, body, authorize) {
@@ -111,9 +147,10 @@ export async function previewAPI(db, env, person, row, artifact, body) {
     if (!['admin', 'write'].includes(row.role)) deny();
     if (!uuidOK(body.jobId) || !uuidOK(body.idempotencyKey)) invalid('Use a completed test job and UUID v4 operation key.');
     const kind = body.kind || 'STATIC', p = kind === 'WORKER' ? appPolicy(env) : null;
-    if (!['STATIC', 'WORKER'].includes(kind) || kind === 'WORKER' && !p) throw new Fault('failed_precondition', 412, 'An operator-approved managed application allocation is required.');
+    if (!['STATIC', 'WORKER', 'IMAGE_STATIC'].includes(kind) || kind === 'WORKER' && !p) throw new Fault('failed_precondition', 412, 'An operator-approved managed application allocation is required.');
+    if (kind === 'IMAGE_STATIC' && (!env.REGISTRY || !/^sha256:[a-f0-9]{64}$/.test(body.imageDigest || ''))) invalid('Use an immutable tested image digest.');
     const sourcePath = p?.entry || env.PREVIEW_PATH, ttl = p?.ttl || Number(env.PREVIEW_TTL), policyHash = p ? await appPolicyHash(env) : null;
-    const hash = await digest(JSON.stringify([row.id, body.jobId, sourcePath, String(ttl), env.PREVIEW_ORIGIN, ...(p ? [kind, policyHash] : [])]));
+    const hash = await digest(JSON.stringify([row.id, body.jobId, sourcePath, String(ttl), env.PREVIEW_ORIGIN, ...(p ? [kind, policyHash] : kind === 'IMAGE_STATIC' ? [kind, body.imageDigest] : [])]));
     let saved = await db.prepare('SELECT * FROM previews WHERE user_id=? AND operation_key=?').bind(person.id, body.idempotencyKey).first();
     if (saved) {
       if (saved.repository_id !== row.id || saved.input_hash !== hash) throw new Fault('already_exists', 409, 'Operation key belongs to different inputs.');
@@ -131,13 +168,16 @@ export async function previewAPI(db, env, person, row, artifact, body) {
         evidence.report.execution?.policySha256 !== env.TEST_POLICY_SHA256 || evidence.report.pullRequest.state !== 'ISSUE_STATE_OPEN' || row.write_pending) {
       throw new Fault('failed_precondition', 412, 'Preview requires current passing canonical PR tests under the approved test policy.');
     }
-    const bundle = await artifact(repo => p ? appBundle(repo, evidence.job.selection.headCommitId, p) : previewBundle(repo, evidence.job.selection.headCommitId, sourcePath));
+    const canonical = await artifact(repo => p ? appBundle(repo, evidence.job.selection.headCommitId, p) : previewBundle(repo, evidence.job.selection.headCommitId, sourcePath));
+    const image = evidence.report.tests.image;
+    if (kind === 'IMAGE_STATIC' && (!image || image.digest !== body.imageDigest)) throw new Fault('failed_precondition', 412, 'The passing test job did not publish this image digest.');
+    const bundle = kind === 'IMAGE_STATIC' ? await imageBundle(env, person, row, image, canonical) : canonical;
     const data = JSON.stringify(bundle), bytes = new TextEncoder().encode(data).length, bundleHash = await digest(data);
     if (bytes > 2 * 1024 * 1024) invalid('Serialized preview exceeds its limit.');
     const id = crypto.randomUUID(), key = `native-previews/${env.WORKSPACE_SLUG}/${id}/${bundleHash}.json`;
     saved = await db.prepare(`INSERT INTO previews(id,repository_id,user_id,job_id,operation_key,input_hash,selection,pr_revision,commit_id,tree_id,source_path,bundle_key,bundle_hash,bundle_bytes,state,created_at,expires_at,kind,policy_hash)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'PUBLISHING',?,?,?,?) RETURNING *`).bind(id, row.id, person.id, body.jobId, body.idempotencyKey, hash,
-        JSON.stringify(evidence.job.selection), evidence.report.pullRequest.revision, bundle.commitId, bundle.treeId, sourcePath, key, bundleHash, bytes, now(), new Date(Date.now() + ttl * 1000).toISOString(), kind, policyHash).first();
+        JSON.stringify({ ...evidence.job.selection, ...(kind === 'IMAGE_STATIC' ? { imageDigest: image.digest } : {}) }), evidence.report.pullRequest.revision, bundle.commitId, bundle.treeId, sourcePath, key, bundleHash, bytes, now(), new Date(Date.now() + ttl * 1000).toISOString(), kind === 'IMAGE_STATIC' ? 'STATIC' : kind, policyHash).first();
     await env.EVIDENCE_BUCKET.put(key, data, { onlyIf: { etagDoesNotMatch: '*' }, httpMetadata: { contentType: 'application/json' }, customMetadata: { sha256: bundleHash } });
     const stored = await env.EVIDENCE_BUCKET.get(key);
     if (!stored || stored.size !== bytes || await digest(await stored.text()) !== bundleHash) throw Error('Preview publication unconfirmed');
@@ -148,7 +188,14 @@ export async function previewAPI(db, env, person, row, artifact, body) {
       if (pending?.state !== 'PUBLISHING') deny();
       await current(db, env, writer, row, artifact, { ...saved, state: 'READY' });
     });
-    await db.prepare("UPDATE previews SET state='READY' WHERE id=? AND state='PUBLISHING'").bind(id).run();
+    if (kind === 'IMAGE_STATIC') {
+      const writer = await db.prepare("SELECT u.* FROM users u JOIN grants g ON g.user_id=u.id WHERE u.id=? AND u.active=1 AND g.repository_id=? AND g.role IN ('admin','write')").bind(person.id, row.id).first();
+      if (!writer) deny();
+      await current(db, env, writer, row, artifact, { ...saved, state: 'READY' });
+    }
+    await db.prepare("UPDATE previews SET state='READY' WHERE id=? AND state='PUBLISHING' AND EXISTS(SELECT 1 FROM users u JOIN grants g ON g.user_id=u.id WHERE u.id=? AND u.active=1 AND g.repository_id=previews.repository_id AND g.role IN ('admin','write'))")
+      .bind(id, person.id).run();
+    if ((await db.prepare('SELECT state FROM previews WHERE id=?').bind(id).first())?.state !== 'READY') deny();
     return reply({ preview: wire({ ...saved, state: 'READY' }, env) });
   }
   if (!uuidOK(body.previewId)) invalid('Use the original preview ID.');
